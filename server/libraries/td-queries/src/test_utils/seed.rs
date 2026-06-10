@@ -14,6 +14,7 @@
 //! Only the `test-utils` feature exposes this surface — production code
 //! cannot reach it.
 
+use crate::QueryExecutor;
 use crate::test_utils::seed_collection::{seed_collection, seed_collection_in_group};
 use crate::test_utils::seed_execution::{seed_cron_execution, seed_execution};
 use crate::test_utils::seed_function::seed_function;
@@ -32,7 +33,6 @@ use crate::test_utils::seed_transaction::seed_transaction;
 use crate::test_utils::seed_user::seed_user;
 use crate::test_utils::seed_user_role::seed_user_role;
 use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
-use crate::QueryExecutor;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;

@@ -96,6 +96,7 @@ mod tests {
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::collection::CollectionCreateDB;
@@ -116,13 +117,12 @@ mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LiveEntry};
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_collection(db: TdPool) {
-        use td_tower::metadata::type_of_val;
         use td_database::scoped::Scoped;
+        use td_tower::metadata::type_of_val;
 
         DeleteCollectionService::with_defaults(db)
             .metadata()

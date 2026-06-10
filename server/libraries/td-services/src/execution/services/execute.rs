@@ -73,6 +73,7 @@ pub(crate) mod tests {
     use ta_services::service::TdService;
     use td_authz::tower::AuthzError;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_error::{ApiError, TdError};
     use td_execution::EXECUTION_GRAPH_OPTIONS;
@@ -94,7 +95,6 @@ pub(crate) mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -107,11 +107,16 @@ pub(crate) mod tests {
             build_transaction_map, build_transactions, resolve_execution_plan_versions,
             update_initial_function_run_status, validate_execution_plan, with_recursion_options,
         };
+        use crate::execution::layers::execution_version::{
+            dedup_lock, reject_if_external_uid_in_use, reject_if_running,
+        };
         use crate::graph::layers::FunctionOrTable;
         use crate::graph::layers::build::GraphBuilder;
+        use crate::scheduler::layers::request::notify_scheduler;
         use td_authz::Authz;
         use td_authz::tower::InterColl;
         use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
+        use td_database::scoped::Scoped;
         use td_objects::dxo::crudl::RequestContext;
         use td_objects::dxo::dependency::DependencyDBWithNames;
         use td_objects::dxo::execution::{ExecutionDB, ExecutionDBBuilder, ExecutionRequest};
@@ -125,10 +130,6 @@ pub(crate) mod tests {
         };
         use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
         use td_objects::dxo::trigger::TriggerDBWithNames;
-        use crate::execution::layers::execution_version::{
-            dedup_lock, reject_if_external_uid_in_use, reject_if_running,
-        };
-        use crate::scheduler::layers::request::notify_scheduler;
         use td_objects::tower_service::with::With;
         use td_objects::types::basic::ProjectId;
         use td_objects::types::basic::{
@@ -137,7 +138,6 @@ pub(crate) mod tests {
         use td_objects::types::recursion::RecursionOptions;
         use td_queries::{insert, insert_vec};
         use td_tower::metadata::type_of_val;
-        use td_database::scoped::Scoped;
 
         ExecuteFunctionService::with_defaults(db)
             .metadata()
@@ -622,9 +622,7 @@ pub(crate) mod tests {
                 .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
-        let response = service
-            .raw_oneshot(request)
-            .await;
+        let response = service.raw_oneshot(request).await;
 
         // Test assertions
         let expected_all_functions = match graph_depth {
@@ -1127,9 +1125,7 @@ pub(crate) mod tests {
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
 
-        Ok(service
-            .raw_oneshot(request)
-            .await)
+        Ok(service.raw_oneshot(request).await)
     }
 
     #[td_test::test(db)]

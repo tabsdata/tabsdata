@@ -46,6 +46,7 @@ mod tests {
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_error::TdError;
     use td_objects::Buildable;
@@ -61,7 +62,6 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
 
     #[td_test::test(db)]
     async fn test_inflight_empty_db(db: TdPool) -> Result<(), TdError> {

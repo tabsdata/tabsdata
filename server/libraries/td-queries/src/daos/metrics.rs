@@ -42,8 +42,8 @@ use sea_query::{
     Alias, Expr, ExprTrait, Func, IntoIden, JoinType, NullOrdering, Order, Query, SelectStatement,
     SimpleExpr, UnionType, Value,
 };
-use ta_objects::errors::SqlError;
 use ta_objects::SeaValue;
+use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::collection::CollectionDBIden;
 use td_objects::dxo::group::GroupDBIden;
@@ -1526,11 +1526,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::SeedEntry;
     use crate::CurrentEntry;
     use crate::LiveEntry;
-    use ta_objects::and;
+    use crate::test_utils::SeedEntry;
     use ta_objects::Buildable;
+    use ta_objects::and;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::collection::CollectionDB;

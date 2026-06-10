@@ -61,7 +61,7 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use td_database::dynamic::DynamicConnection;
 use td_error::DisplayVec;
-use td_error::{td_error, TdError};
+use td_error::{TdError, td_error};
 use td_objects::dxo::logical::ActiveLogicalTableDataVersionDB;
 use td_objects::types::basic::{FunctionId, LogicalTableDataVersionId, TableId, TriggeredOn};
 use td_objects::types::table_ref::{Version, Versions};
@@ -446,6 +446,7 @@ impl<'a> VersionResolver<'a> {
 mod tests {
     use super::*;
     use td_database::pool::TdPool;
+    use td_objects::Buildable;
     use td_objects::and;
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -460,7 +461,6 @@ mod tests {
         PhysicalTableDataVersionId, TableName, TableNameDto, TransactionKey, UserId,
     };
     use td_objects::types::basic::{LogicalFunctionRunStatus, ProjectId};
-    use td_objects::Buildable;
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LtdvEntry};
 

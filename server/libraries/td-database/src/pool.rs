@@ -17,8 +17,8 @@ use std::fmt::Display;
 use std::sync::Arc;
 use td_schema::schema::SchemaVersion;
 use td_schema::{
-    TabsdataSystem, CURRENT_TABSDATA_VERSION, CURRENT_VERSION, DB_EDITION_NAME,
-    DB_VERSION_NAME, TABSDATA_VERSION_NAME,
+    CURRENT_TABSDATA_VERSION, CURRENT_VERSION, DB_EDITION_NAME, DB_VERSION_NAME,
+    TABSDATA_VERSION_NAME, TabsdataSystem,
 };
 use te_system::edition::{Compatible, Edition, TabsdataEdition};
 use tracing::{debug, info, instrument, warn};

@@ -61,7 +61,7 @@ pub fn id_from_file(file: &str) -> &str {
     }
 }
 
-pub fn to_fn_pod_name(worker: &str, runid: &str) -> Result<String, NamingError> {
+pub fn to_fn_pod_name(worker: &str, worker_id: &str) -> Result<String, NamingError> {
     let scope_str = Scope::Fn.as_str();
     let mut assembled = String::with_capacity(
         TABSDATA_NAME_PREFIX.len()
@@ -69,14 +69,14 @@ pub fn to_fn_pod_name(worker: &str, runid: &str) -> Result<String, NamingError> 
             + KUBE_NAME_SEPARATOR.len()
             + worker.len()
             + KUBE_NAME_SEPARATOR.len()
-            + runid.len(),
+            + worker_id.len(),
     );
     assembled.push_str(TABSDATA_NAME_PREFIX);
     assembled.push_str(scope_str);
     assembled.push_str(KUBE_NAME_SEPARATOR);
     assembled.push_str(&normalize_segment(NameSegment::Component, worker)?);
     assembled.push_str(KUBE_NAME_SEPARATOR);
-    assembled.push_str(&normalize_segment(NameSegment::Runid, runid)?);
+    assembled.push_str(&normalize_segment(NameSegment::WorkerId, worker_id)?);
     if assembled.len() > KUBE_IDENTIFIER_MAX_LENGTH {
         return Err(NamingError::AssembledIdentifierTooLong {
             identifier: assembled,

@@ -12,6 +12,7 @@ use ta_services::extension::ContextExt;
 use ta_services::factory::ServiceFactory;
 use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
+use td_common::server::BridgeProviderHandle;
 use td_common::server_runner::ServerRunnable;
 use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;
@@ -41,6 +42,7 @@ impl ApiServerCtx {
         storage: Arc<Storage>,
         runtime_context: Arc<RuntimeContext>,
         scheduler_notify: SchedulerNotify,
+        bridge: Arc<BridgeProviderHandle>,
     ) -> Self {
         let scheduler_notify = Arc::new(scheduler_notify);
         let context = Context {
@@ -60,6 +62,7 @@ impl ApiServerCtx {
             runtime_context: runtime_context.clone(),
             transaction_by: Arc::new(config.transaction_by.clone()),
             scheduler_notify: scheduler_notify.clone(),
+            bridge,
         };
         let services = Services::build(&context);
         let extended_context = ExtendedContext::build(&context, &config.extended_config);

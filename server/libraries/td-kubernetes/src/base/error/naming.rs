@@ -10,7 +10,7 @@ use td_error::td_error;
 pub enum NameSegment {
     Component,
     Name,
-    Runid,
+    WorkerId,
 }
 
 #[td_error]

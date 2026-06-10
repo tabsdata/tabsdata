@@ -29,8 +29,8 @@ use td_objects::dxo::logical::{
 use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    CollectionId, ExternalUid, FunctionId, FunctionOnly, FunctionVersionId, OverrideDisabledTrigger,
-    SkipIfRunning, TriggerType,
+    CollectionId, ExternalUid, FunctionId, FunctionOnly, FunctionVersionId,
+    OverrideDisabledTrigger, SkipIfRunning, TriggerType,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_queries::{By, insert, insert_vec};

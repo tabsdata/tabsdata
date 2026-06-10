@@ -50,13 +50,13 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName, ProjectId,
         RoleId, RoleName, UserEnabled, UserId, UserName,
     };
-    use td_objects::Buildable;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 

@@ -29,6 +29,7 @@ pub mod client;
 pub mod cluster;
 pub mod companions;
 pub mod configmap;
+pub mod helpers;
 pub mod job;
 pub mod namespace;
 pub mod pod;

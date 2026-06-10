@@ -78,8 +78,8 @@ pub(crate) async fn seed_project(db: &TdPool, name: ProjectName) -> Result<Proje
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::SeedEntry;
     use crate::LiveEntry;
+    use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
     use td_objects::dxo::project::ProjectDB;

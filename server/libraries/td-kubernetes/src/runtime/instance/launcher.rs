@@ -8,7 +8,7 @@ use k8s_openapi::api::core::v1::Pod;
 use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
 
-use crate::base::constants::TIER_LABEL;
+use crate::base::constants::{POD_PHASE_FAILED, TIER_LABEL};
 use crate::base::error::launcher::LauncherError;
 use crate::client::tdkserver::widgets::{phase_spinner_in, spinner};
 use crate::core::pod::ValidationError;
@@ -27,7 +27,6 @@ const JOB_CONDITION_FAILED: &str = "Failed";
 const JOB_CONDITION_STATUS_TRUE: &str = "True";
 const POD_CONDITION_READY: &str = "Ready";
 const POD_CONDITION_STATUS_TRUE: &str = "True";
-const POD_PHASE_FAILED: &str = "Failed";
 
 pub async fn start_workload(
     context: &KubeContext,

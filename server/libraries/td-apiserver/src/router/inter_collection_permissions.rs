@@ -15,6 +15,7 @@ mod routes {
     use ta_apiserver::status::ok_status::{CreateStatus, DeleteStatus, ListStatus, NoContent};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
+    use td_database::scoped::InProject;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::inter_collection_permission::{
         InterCollectionPermission, InterCollectionPermissionCreate,
@@ -25,7 +26,6 @@ mod routes {
     };
     use td_objects::types::basic::ProjectId;
     use td_services::inter_coll_permission::services::InterCollectionPermissionServices;
-    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const INTER_COLLECTION_PERMISSIONS_TAG: &str = "Inter Collection Permissions";

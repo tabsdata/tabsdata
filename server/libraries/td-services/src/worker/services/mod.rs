@@ -9,7 +9,7 @@ mod resolve;
 
 use crate::worker::services::callback::WorkerCallbackService;
 use crate::worker::services::list::WorkerListService;
-use crate::worker::services::logs::WorkerLogService;
+use crate::worker::services::logs::{WorkerLogService, WorkerLogTailService};
 use crate::worker::services::resolve::ResolveWorkerMessageService;
 use ta_services::factory::ServiceFactory;
 
@@ -17,6 +17,7 @@ use ta_services::factory::ServiceFactory;
 pub struct WorkerServices {
     pub list: WorkerListService,
     pub logs: WorkerLogService,
+    pub logs_tail: WorkerLogTailService,
     pub callback: WorkerCallbackService,
     pub resolve_message: ResolveWorkerMessageService,
 }

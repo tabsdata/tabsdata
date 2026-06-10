@@ -56,6 +56,7 @@ mod tests {
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -69,13 +70,12 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_download_bundle(db: TdPool) {
-        use td_tower::metadata::type_of_val;
         use td_database::scoped::Scoped;
+        use td_tower::metadata::type_of_val;
 
         DownloadBundleService::with_defaults(db)
             .metadata()

@@ -459,6 +459,7 @@ pub struct WorkerParam {
 
 pub const WORKERS_LIST: &str = url!(WORKERS);
 pub const WORKER_LOGS: &str = url!(WORKER, "/logs");
+pub const WORKER_LOGS_TAIL: &str = url!(WORKER, "/logs/tail");
 
 #[ta_objects::typed_enum]
 #[serde(rename_all = "lowercase")]

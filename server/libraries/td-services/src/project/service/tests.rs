@@ -228,11 +228,11 @@ mod postgres_delete_guards {
     use crate::collection::service::CollectionServices;
     use crate::project::ProjectError;
     use ta_services::factory::ServiceFactory;
+    use td_database::scoped::InProject;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_error::TdDomainError;
     use td_objects::dxo::collection::CollectionCreate;
     use td_objects::types::basic::CollectionName;
-    use td_database::scoped::InProject;
 
     /// On Postgres sandbox is an ordinary project: deletable once empty (a
     /// fresh DB seeds it with no collections). Nothing in the schema requires

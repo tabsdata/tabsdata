@@ -28,6 +28,7 @@ use ta_services::factory::{FieldAccessors, ServiceFactory};
 use td_authz::AuthzContext;
 use td_authz::jwt::JwtConfig;
 use td_authz::session_provider::Sessions;
+use td_common::server::BridgeProviderHandle;
 use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;
 use td_execution::TransactionBy;
@@ -93,6 +94,7 @@ pub struct Context {
     pub runtime_context: Arc<RuntimeContext>,
     pub transaction_by: Arc<TransactionBy>,
     pub scheduler_notify: Arc<SchedulerNotify>,
+    pub bridge: Arc<BridgeProviderHandle>,
 }
 
 #[cfg(feature = "test-utils")]
@@ -110,6 +112,7 @@ impl Context {
             runtime_context: Arc::new(RuntimeContext::default()),
             transaction_by: Arc::new(TransactionBy::default()),
             scheduler_notify: Arc::new(SchedulerNotify::new()),
+            bridge: Arc::new(BridgeProviderHandle::default()),
         }
     }
 }

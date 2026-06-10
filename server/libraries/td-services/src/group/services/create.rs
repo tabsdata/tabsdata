@@ -66,10 +66,10 @@ mod tests {
     use crate::Context;
     use crate::project::service::ProjectServices;
     use ta_services::factory::ServiceFactory;
+    use td_database::scoped::InProject;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_objects::dxo::project::ProjectCreate;
     use td_objects::types::basic::ProjectName;
-    use td_database::scoped::InProject;
 
     #[td_test::test(db)]
     async fn test_create_group(db: TdPool) -> Result<(), TdError> {

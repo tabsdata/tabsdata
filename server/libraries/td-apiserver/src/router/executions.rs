@@ -17,6 +17,7 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
+    use td_database::scoped::InProject;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::execution::{
         Execution, ExecutionDetails, ExecutionRequest, ExecutionResponse,
@@ -29,7 +30,6 @@ mod routes {
     };
     use td_objects::types::basic::ProjectId;
     use td_services::execution::services::ExecutionServices;
-    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const EXECUTION_TAG: &str = "Execution";

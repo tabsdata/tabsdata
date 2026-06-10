@@ -2,10 +2,11 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::worker::layers::logs::{get_worker_logs, resolve_worker_log_path};
+use crate::worker::layers::logs::{worker_logs, worker_logs_tail};
 use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
 use td_authz::{Authz, AuthzContext};
+use td_common::server::BridgeProviderHandle;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::rest_urls::{LogsExtension, WorkerLogsParams};
@@ -24,25 +25,44 @@ use td_tower::layers;
     connection = ConnectionProvider,
     scope = "Project",
     context = AuthzContext,
+    context = BridgeProviderHandle,
 )]
 fn service() {
     layers!(
-        // Extract parameters
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>),
-        // find collection ID
         from_fn(With::<WorkerLogsParams>::extract::<WorkerIdName>),
         from_fn(By::<WorkerIdName>::fetch_one::<WorkerDB>),
         from_fn(With::<WorkerDB>::extract::<CollectionId>),
-        // check requester has collection permissions
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
-        // Resolve worker message path.
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
-        from_fn(resolve_worker_log_path),
-        // Get worker message logs.
-        from_fn(get_worker_logs),
+        from_fn(worker_logs),
+    )
+}
+
+#[service_factory(
+    name = WorkerLogTailService,
+    request = ReadRequest<WorkerLogsParams>,
+    response = BoxedSyncStream,
+    connection = ConnectionProvider,
+    scope = "Project",
+    context = AuthzContext,
+    context = BridgeProviderHandle,
+)]
+fn logs_tail_service() {
+    layers!(
+        from_fn(With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
+        from_fn(With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>),
+        from_fn(With::<WorkerLogsParams>::extract::<WorkerIdName>),
+        from_fn(By::<WorkerIdName>::fetch_one::<WorkerDB>),
+        from_fn(With::<WorkerDB>::extract::<CollectionId>),
+        from_fn(AuthzOn::<CollectionId>::set),
+        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
+        from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
+        from_fn(worker_logs_tail),
     )
 }
 
@@ -58,19 +78,19 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId,
         RoleId, TransactionKey, UserId, WorkerMessageStatus,
     };
-    use td_objects::Buildable;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
-    async fn test_tower_metadata_read_workers_logs(db: TdPool) {
+    async fn test_tower_metadata_worker_logs(db: TdPool) {
         use td_database::scoped::Scoped;
         use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
@@ -80,30 +100,52 @@ mod tests {
             .await
             .assert_service::<Scoped<ReadRequest<WorkerLogsParams>, ProjectId>, BoxedSyncStream>(
                 &[
-                    // Extract parameters
                     type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
                     type_of_val(
                         &With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>,
                     ),
-                    // find collection ID
                     type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
                     type_of_val(&By::<WorkerIdName>::fetch_one::<WorkerDB>),
                     type_of_val(&With::<WorkerDB>::extract::<CollectionId>),
-                    // check requester has collection permissions
                     type_of_val(&AuthzOn::<CollectionId>::set),
                     type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
-                    // Resolve worker message path.
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
-                    type_of_val(&resolve_worker_log_path),
-                    // Get worker message logs.
-                    type_of_val(&get_worker_logs),
+                    type_of_val(&worker_logs),
+                ],
+            );
+    }
+
+    #[cfg(feature = "test_tower_metadata")]
+    #[td_test::test(db)]
+    async fn test_tower_metadata_worker_logs_tail(db: TdPool) {
+        use td_database::scoped::Scoped;
+        use td_objects::types::basic::ProjectId;
+        use td_tower::metadata::type_of_val;
+
+        WorkerLogTailService::with_defaults(db)
+            .metadata()
+            .await
+            .assert_service::<Scoped<ReadRequest<WorkerLogsParams>, ProjectId>, BoxedSyncStream>(
+                &[
+                    type_of_val(&With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
+                    type_of_val(
+                        &With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>,
+                    ),
+                    type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
+                    type_of_val(&By::<WorkerIdName>::fetch_one::<WorkerDB>),
+                    type_of_val(&With::<WorkerDB>::extract::<CollectionId>),
+                    type_of_val(&AuthzOn::<CollectionId>::set),
+                    type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                    type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
+                    type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
+                    type_of_val(&worker_logs_tail),
                 ],
             );
     }
 
     #[td_test::test(db)]
-    async fn test_read_workers_logs(db: TdPool) -> Result<(), TdError> {
+    async fn test_worker_logs(db: TdPool) -> Result<(), TdError> {
         let collection = db
             .scoped(ProjectId::sandbox())
             .seed()

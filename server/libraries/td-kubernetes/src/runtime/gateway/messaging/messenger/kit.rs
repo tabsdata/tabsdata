@@ -17,14 +17,14 @@ use crate::base::error::kubernetes::messaging::KubeMessagingError;
 
 use const_format::concatcp;
 
-const LABEL_COLLECTION_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "collection-id");
-const LABEL_COLLECTION: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "collection");
-const LABEL_FUNCTION_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "function-id");
-const LABEL_FUNCTION: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "function");
-const LABEL_RUNID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "runid");
+pub(crate) const LABEL_COLLECTION_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "collection-id");
+pub(crate) const LABEL_COLLECTION: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "collection");
+pub(crate) const LABEL_FUNCTION_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "function-id");
+pub(crate) const LABEL_FUNCTION: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "function");
+pub(crate) const LABEL_WORKER_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "worker-id");
 
 const ENV_TD_WORKER: &str = "TD_WORKER";
-const ENV_TD_RUNID: &str = "TD_RUNID";
+const ENV_TD_WORKER_ID: &str = "TD_WORKER_ID";
 const ENV_TD_DECORATOR: &str = "TD_DECORATOR";
 
 const ENV_TD_RESOLVER_URL: &str = "TD_RESOLVER_URL";
@@ -55,12 +55,12 @@ pub fn build_function_run_kit(
     namespace: &str,
     request: &FunctionStartRequest,
 ) -> Result<FunctionRunKit, KubeMessagingError> {
-    let resolver = expect_http(&request.resolver, &request.worker, &request.run_id)?;
-    let responder = expect_http(&request.responder, &request.worker, &request.run_id)?;
+    let resolver = expect_http(&request.resolver, &request.worker, &request.worker_id)?;
+    let responder = expect_http(&request.responder, &request.worker, &request.worker_id)?;
 
     let mut config_data = BTreeMap::new();
     config_data.insert(ENV_TD_WORKER.to_owned(), request.worker.clone());
-    config_data.insert(ENV_TD_RUNID.to_owned(), request.run_id.clone());
+    config_data.insert(ENV_TD_WORKER_ID.to_owned(), request.worker_id.clone());
     config_data.insert(
         ENV_TD_DECORATOR.to_owned(),
         request.decorator.as_ref().to_owned(),
@@ -112,7 +112,7 @@ pub fn build_function_run_kit(
         (LABEL_COLLECTION.to_owned(), request.collection.clone()),
         (LABEL_FUNCTION_ID.to_owned(), request.function_id.clone()),
         (LABEL_FUNCTION.to_owned(), request.function.clone()),
-        (LABEL_RUNID.to_owned(), request.run_id.clone()),
+        (LABEL_WORKER_ID.to_owned(), request.worker_id.clone()),
     ];
 
     Ok(FunctionRunKit {
@@ -188,14 +188,14 @@ fn inject_envfrom_into_containers(
 fn expect_http<'a>(
     callback: &'a Callback,
     worker: &str,
-    runid: &str,
+    worker_id: &str,
 ) -> Result<&'a HttpCallback, KubeMessagingError> {
     match callback {
         Callback::Http(http) => Ok(http),
         #[allow(unreachable_patterns)]
         _ => Err(KubeMessagingError::UnsupportedCallbackVariant {
             worker: worker.to_owned(),
-            runid: runid.to_owned(),
+            worker_id: worker_id.to_owned(),
         }),
     }
 }

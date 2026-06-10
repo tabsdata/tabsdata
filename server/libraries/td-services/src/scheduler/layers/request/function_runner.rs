@@ -269,7 +269,7 @@ pub async fn create_locked_function_runner_workers_start_request(
                     RequestMessagePayload::<serde_yaml::Value> {
                         class: WorkerClass::Ephemeral,
                         worker: WorkerName::Function.as_ref().to_string(),
-                        run_id: worker_id.to_string(),
+                        worker_id: worker_id.to_string(),
                         action: MessageAction::Start,
                         arguments: Vec::new(),
                         callback: Some(responder),
@@ -287,7 +287,7 @@ pub async fn create_locked_function_runner_workers_start_request(
                 OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
                     FunctionRequest::Start(FunctionStartRequest {
                         worker: WorkerName::Function.as_ref().to_string(),
-                        run_id: worker_id.to_string(),
+                        worker_id: worker_id.to_string(),
                         decorator: f.decorator.to_message(),
                         resolver,
                         responder,

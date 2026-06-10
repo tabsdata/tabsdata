@@ -45,6 +45,7 @@ mod tests {
         PayloadType,
     };
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -61,7 +62,6 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     #[cfg(feature = "test_tower_metadata")]

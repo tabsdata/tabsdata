@@ -40,6 +40,7 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::types::basic::{
@@ -47,7 +48,6 @@ mod tests {
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
 
     #[td_test::test(db)]
     async fn test_list_groups_includes_seeds(db: TdPool) -> Result<(), TdError> {

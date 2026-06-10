@@ -61,6 +61,7 @@ mod tests {
     use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
@@ -78,7 +79,6 @@ mod tests {
     use td_storage::location::StorageLocation;
     use td_storage::{MountDef, Storage};
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
     use url::Url;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -89,8 +89,8 @@ mod tests {
         use td_objects::dxo::table::TableDBWithNames;
         use td_objects::types::basic::{TableId, TableIdName, TriggeredOn, UncommittedStatus};
 
-        use td_tower::metadata::type_of_val;
         use td_database::scoped::Scoped;
+        use td_tower::metadata::type_of_val;
 
         TableSchemaService::with_defaults(db)
             .metadata()

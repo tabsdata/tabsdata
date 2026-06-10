@@ -56,6 +56,7 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
@@ -65,7 +66,6 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
 
     use crate::collection::service::list::ListCollectionsService;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
@@ -74,8 +74,8 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_create_collection(db: TdPool) {
-        use td_tower::metadata::type_of_val;
         use td_database::scoped::Scoped;
+        use td_tower::metadata::type_of_val;
 
         CreateCollectionService::with_defaults(db)
             .metadata()

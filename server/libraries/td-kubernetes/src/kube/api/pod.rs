@@ -4,15 +4,16 @@
 
 use std::time::Instant;
 
+use futures::AsyncBufRead;
 use k8s_openapi::api::core::v1::{ConfigMap, Pod, Secret};
 use kube::Api;
-use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
+use kube::api::{DeleteParams, ListParams, LogParams, PostParams, PropagationPolicy};
 use kube::runtime::wait::{Condition, await_condition};
 
 use crate::base::constants::{DELETE_POD_POLL_INTERVAL, DELETE_POD_WAIT_TIMEOUT};
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
-use crate::kube::api::{label_tabsdata, owner_ref_for_pod, tabsdata_selector};
+use crate::kube::api::{LabelFilter, label_tabsdata, owner_ref_for_pod, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
 pub async fn create_pod(
@@ -135,4 +136,68 @@ pub async fn await_pod_condition(
             }
             .into()
         })
+}
+
+pub async fn get_pods(
+    context: &KubeContext,
+    label: Option<LabelFilter<'_>>,
+) -> Result<Vec<Pod>, KubernetesError> {
+    let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
+    let selector = tabsdata_selector(label);
+    let list_params = ListParams::default().labels_from(&selector);
+    api.list(&list_params)
+        .await
+        .map(|list| list.items)
+        .map_err(|error| {
+            KubePodError::ListFailed {
+                namespace: context.namespace().to_owned(),
+                label_selector: selector.to_string(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}
+
+pub async fn require_pod(
+    context: &KubeContext,
+    label: Option<LabelFilter<'_>>,
+) -> Result<Pod, KubernetesError> {
+    let selector = tabsdata_selector(label);
+    let mut pods = get_pods(context, label).await?;
+    match pods.len() {
+        1 => Ok(pods.remove(0)),
+        0 => Err(KubePodError::NotFound {
+            namespace: context.namespace().to_owned(),
+            label_selector: selector.to_string(),
+        }
+        .into()),
+        count => Err(KubePodError::MultipleFound {
+            namespace: context.namespace().to_owned(),
+            label_selector: selector.to_string(),
+            count,
+        }
+        .into()),
+    }
+}
+
+pub async fn stream_pod_log(
+    context: &KubeContext,
+    name: &str,
+    container: &str,
+    follow: bool,
+) -> Result<impl AsyncBufRead, KubernetesError> {
+    let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
+    let log_params = LogParams {
+        container: Some(container.to_owned()),
+        follow,
+        ..LogParams::default()
+    };
+    api.log_stream(name, &log_params).await.map_err(|error| {
+        KubePodError::LogStreamFailed {
+            namespace: context.namespace().to_owned(),
+            name: name.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()
+    })
 }

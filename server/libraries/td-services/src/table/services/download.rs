@@ -65,6 +65,7 @@ pub(crate) mod tests {
     use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -80,7 +81,6 @@ pub(crate) mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_storage::location::StorageLocation;
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -89,9 +89,9 @@ pub(crate) mod tests {
         use td_objects::dxo::table::TableDBWithNames;
         use td_objects::types::basic::{TableId, TableIdName, TriggeredOn, UncommittedStatus};
 
+        use td_database::scoped::Scoped;
         use td_objects::And;
         use td_tower::metadata::type_of_val;
-        use td_database::scoped::Scoped;
 
         TableDownloadService::with_defaults(db)
             .metadata()

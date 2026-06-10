@@ -87,7 +87,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                 let message_payload = RequestMessagePayload::<serde_yaml::Value> {
                     class: WorkerClass::Ephemeral,
                     worker: WorkerName::CronTrigger.as_ref().to_string(),
-                    run_id: worker_id.clone(),
+                    worker_id: worker_id.clone(),
                     action: MessageAction::Start,
                     arguments: Vec::new(),
                     callback: Some(callback),
@@ -153,7 +153,7 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
                 let message_payload = RequestMessagePayload::<serde_yaml::Value> {
                     class: WorkerClass::Ephemeral,
                     worker: WorkerName::CronTrigger.as_ref().to_string(),
-                    run_id: worker_id,
+                    worker_id,
                     action: MessageAction::Stop,
                     arguments: Vec::new(),
                     callback: Some(callback),

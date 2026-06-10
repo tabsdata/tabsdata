@@ -4,22 +4,22 @@
 
 use crate::sea_query::kind::DatabaseBackend;
 use sqlx::pool::PoolConnection;
+use sqlx::{Connection, Decode, Error, FromRow, Transaction, Type};
 #[cfg(mysql)]
 use sqlx::{
-    mysql::{MySqlQueryResult, MySqlRow}, MySql,
-    MySqlPool,
+    MySql, MySqlPool,
+    mysql::{MySqlQueryResult, MySqlRow},
 };
 #[cfg(postgres)]
 use sqlx::{
-    postgres::{PgQueryResult, PgRow}, PgPool,
-    Postgres,
+    PgPool, Postgres,
+    postgres::{PgQueryResult, PgRow},
 };
 #[cfg(sqlite)]
 use sqlx::{
-    sqlite::{SqliteQueryResult, SqliteRow}, Sqlite,
-    SqlitePool,
+    Sqlite, SqlitePool,
+    sqlite::{SqliteQueryResult, SqliteRow},
 };
-use sqlx::{Connection, Decode, Error, FromRow, Transaction, Type};
 use std::ops::DerefMut;
 use tracing::debug;
 

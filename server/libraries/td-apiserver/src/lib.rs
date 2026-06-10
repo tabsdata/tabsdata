@@ -9,8 +9,8 @@ use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
 use td_common::server::{
-    BridgeProvider, Orchestrator, OrchestratorMessagingProvider, SupervisorBridgeProvider,
-    SupervisorMessagingProvider,
+    BridgeProvider, BridgeProviderHandle, Orchestrator, OrchestratorMessagingProvider,
+    SupervisorBridgeProvider, SupervisorMessagingProvider,
 };
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
@@ -187,8 +187,8 @@ pub fn run() {
                     })?,
             );
 
-            let bridge_provider: Box<dyn BridgeProvider> = match config.orchestrator {
-                Orchestrator::Supervisor => Box::new(SupervisorBridgeProvider::new()),
+            let bridge_provider: Arc<dyn BridgeProvider> = match config.orchestrator {
+                Orchestrator::Supervisor => Arc::new(SupervisorBridgeProvider::new()),
                 Orchestrator::Kubernetes => {
                     let provider = KubernetesBridgeProvider::from_pod_environment()
                         .await
@@ -196,13 +196,14 @@ pub fn run() {
                             error!("Error creating kubernetes bridge provider: {e:#?}");
                             ExitStatus::GeneralError
                         })?;
-                    Box::new(provider)
+                    Arc::new(provider)
                 }
             };
             let server_catalog = bridge_provider.server_catalog().await.map_err(|e| {
                 error!("Error creating server catalog: {e:#?}");
                 ExitStatus::GeneralError
             })?;
+            let bridge = Arc::new(BridgeProviderHandle::new(bridge_provider));
 
             // Create runtime context
             let runtime_context = RuntimeContext::new(server_catalog).await.map_err(|e| {
@@ -221,6 +222,7 @@ pub fn run() {
                 storage.clone(),
                 runtime_context.clone(),
                 scheduler_notify.clone(),
+                bridge,
             );
 
             // Create required servers

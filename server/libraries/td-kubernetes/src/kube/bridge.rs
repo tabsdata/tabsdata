@@ -2,15 +2,21 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+pub mod helpers;
+
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::Serialize;
 use td_common::crypto::install_crypto_provider;
-use td_common::server::{BridgeProvider, EtcContent, EtcError, ServerCatalog, ServerCatalogHandle};
+use td_common::server::{
+    BridgeProvider, EtcContent, EtcError, LogBridgeError, ServerCatalog, ServerCatalogHandle,
+    WorkerLogStream, WorkerLogTarget,
+};
 
 use crate::base::error::kubernetes::KubernetesError;
 use crate::client::session::pod::PodContext;
+use crate::kube::bridge::helpers::log::stream_worker_logs;
 use crate::kube::context::KubeContext;
 use crate::runtime::reporting::build_pod_kube_client;
 
@@ -57,6 +63,20 @@ impl BridgeProvider for KubernetesBridgeProvider {
         Ok(ServerCatalogHandle::new(Arc::new(
             KubernetesServerCatalog::new(),
         )))
+    }
+
+    async fn worker_logs(
+        &self,
+        target: &WorkerLogTarget,
+    ) -> Result<WorkerLogStream, LogBridgeError> {
+        Ok(stream_worker_logs(&self.context, &target.worker_id, false))
+    }
+
+    async fn worker_logs_tail(
+        &self,
+        target: &WorkerLogTarget,
+    ) -> Result<WorkerLogStream, LogBridgeError> {
+        Ok(stream_worker_logs(&self.context, &target.worker_id, true))
     }
 }
 

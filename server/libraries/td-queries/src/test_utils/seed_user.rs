@@ -51,8 +51,8 @@ pub(crate) async fn seed_user(
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::SeedEntry;
     use crate::LiveEntry;
+    use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::user::UserDB;
     use td_objects::types::basic::{UserEnabled, UserName};

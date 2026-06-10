@@ -572,7 +572,7 @@ impl Supervisor {
         debug!("Attempting to mark remaining tasks as shutdown in progress...");
         if let Ok(mut map) = self.running_tasks_map.try_lock() {
             for (_worker_name, tasks) in map.iter_mut() {
-                for (_run_id, run_info) in tasks.iter_mut() {
+                for (_worker_id, run_info) in tasks.iter_mut() {
                     run_info.shutdown_in_progress.store(true, SeqCst);
                 }
             }
@@ -857,14 +857,14 @@ impl Supervisor {
 
         for message in stop_messages {
             if let OrchestratorRequestMessagePayload(payload) = &message.payload {
-                let run_id = payload.run_id.clone();
+                let worker_id = payload.worker_id.clone();
                 let worker_name = payload.worker.clone();
 
                 let mut map = self.running_tasks_map.lock().await;
                 let total_tasks: usize = map.values().map(|tasks| tasks.len()).sum();
                 debug!(
-                    "Checking running_tasks_map for stop: worker='{}', run_id='{}'. Total running tasks: {}",
-                    worker_name, run_id, total_tasks
+                    "Checking running_tasks_map for stop: worker='{}', worker_id='{}'. Total running tasks: {}",
+                    worker_name, worker_id, total_tasks
                 );
 
                 let mut run_pid = None;
@@ -872,14 +872,14 @@ impl Supervisor {
                 let mut stop_already_requested = false;
                 if let Some(run_info) = map
                     .get_mut(&worker_name)
-                    .and_then(|tasks| tasks.get_mut(&run_id))
+                    .and_then(|tasks| tasks.get_mut(&worker_id))
                 {
                     stop_already_requested = run_info.intentionally_stopped.load(SeqCst)
                         || run_info.interceptor.is_some();
                     if stop_already_requested {
                         debug!(
-                            "Stop state already set for worker '{}' (run_id: {}); skipping overwrite",
-                            worker_name, run_id
+                            "Stop state already set for worker '{}' (worker_id: {}); skipping overwrite",
+                            worker_name, worker_id
                         );
                         task_found = true;
                     } else {
@@ -888,8 +888,8 @@ impl Supervisor {
                         debug!("Stored stop interceptor message: {:?}", message.file);
                         // run_info.abort_handle.abort();
                         info!(
-                            "Marked worker '{}' (run_id: {}) as intentionally stopped.",
-                            worker_name, run_id
+                            "Marked worker '{}' (worker_id: {}) as intentionally stopped.",
+                            worker_name, worker_id
                         );
                         run_pid = run_info.pid;
                         task_found = true;
@@ -898,22 +898,22 @@ impl Supervisor {
 
                 if !stop_already_requested {
                     debug!(
-                        "Stop not yet requested for: worker='{}', run_id='{}' & message file: {:?}",
-                        worker_name, run_id, message.file
+                        "Stop not yet requested for: worker='{}', worker_id='{}' & message file: {:?}",
+                        worker_name, worker_id, message.file
                     );
                     if task_found {
                         debug!(
-                            "Task for stop request found: worker='{}', run_id='{}' & message file: {:?}",
-                            worker_name, run_id, message.file
+                            "Task for stop request found: worker='{}', worker_id='{}' & message file: {:?}",
+                            worker_name, worker_id, message.file
                         );
                         if let Some(pid) = run_pid {
                             debug!(
-                                "Found pid {} for worker '{}' (run_id: {}) in running_tasks_map",
-                                pid, worker_name, run_id
+                                "Found pid {} for worker '{}' (worker_id: {}) in running_tasks_map",
+                                pid, worker_name, worker_id
                             );
                             info!(
-                                "Terminating os process with pid {} for worker '{}' (run_id: {})",
-                                pid, worker_name, run_id
+                                "Terminating os process with pid {} for worker '{}' (worker_id: {})",
+                                pid, worker_name, worker_id
                             );
                             if let Err(error) = terminate_process(pid as i32, Kill) {
                                 error!(
@@ -921,28 +921,32 @@ impl Supervisor {
                                     pid, error
                                 );
                                 if !stop_already_requested {
-                                    Supervisor::reset_stop_state(&mut map, &worker_name, &run_id);
+                                    Supervisor::reset_stop_state(
+                                        &mut map,
+                                        &worker_name,
+                                        &worker_id,
+                                    );
                                 }
                             }
                         } else {
                             warn!(
-                                "No pid found in running_tasks_map for worker '{}' (run_id: {}); it may not have started yet or already stopped.",
-                                worker_name, run_id
+                                "No pid found in running_tasks_map for worker '{}' (worker_id: {}); it may not have started yet or already stopped.",
+                                worker_name, worker_id
                             );
                             if !stop_already_requested {
-                                Supervisor::reset_stop_state(&mut map, &worker_name, &run_id);
+                                Supervisor::reset_stop_state(&mut map, &worker_name, &worker_id);
                             }
                         }
                     } else {
                         debug!(
-                            "Task for stop request not found: worker='{}', run_id='{}' & message file: {:?}",
-                            worker_name, run_id, message.file
+                            "Task for stop request not found: worker='{}', worker_id='{}' & message file: {:?}",
+                            worker_name, worker_id, message.file
                         );
                     }
                 } else {
                     debug!(
-                        "Stop already requested for: worker='{}', run_id='{}' & message file: {:?}",
-                        worker_name, run_id, message.file
+                        "Stop already requested for: worker='{}', worker_id='{}' & message file: {:?}",
+                        worker_name, worker_id, message.file
                     );
                 }
                 drop(map);
@@ -952,16 +956,16 @@ impl Supervisor {
         Ok(())
     }
 
-    fn reset_stop_state(map: &mut RunningTasksMap, worker_name: &str, run_id: &str) {
+    fn reset_stop_state(map: &mut RunningTasksMap, worker_name: &str, worker_id: &str) {
         if let Some(run_info) = map
             .get_mut(worker_name)
-            .and_then(|tasks| tasks.get_mut(run_id))
+            .and_then(|tasks| tasks.get_mut(worker_id))
         {
             run_info.intentionally_stopped.store(false, SeqCst);
             run_info.interceptor = None;
             debug!(
-                "Reset intentionally stopped state for worker '{}' (run_id: {})",
-                worker_name, run_id
+                "Reset intentionally stopped state for worker '{}' (worker_id: {})",
+                worker_name, worker_id
             );
         }
     }
@@ -1383,13 +1387,13 @@ impl Supervisor {
 
             select! {
                 biased;
-                Some((worker_name, run_id, result)) = running_tasks.next(), if can_poll_task => {
-                    debug!("{} branch: task completed for worker '{}' (run_id: {})", controller_class, worker_name, run_id);
+                Some((worker_name, worker_id, result)) = running_tasks.next(), if can_poll_task => {
+                    debug!("{} branch: task completed for worker '{}' (worker_id: {})", controller_class, worker_name, worker_id);
                     match result {
-                        Ok((worker, _run_id, outcome)) => {
+                        Ok((worker, _worker_id, outcome)) => {
                             let mut map = running_tasks_map.lock().await;
                             if let Some(worker_tasks) = map.get_mut(&worker_name) {
-                                worker_tasks.remove(&run_id);
+                                worker_tasks.remove(&worker_id);
                             }
                             drop(map);
 
@@ -1398,19 +1402,19 @@ impl Supervisor {
 
                             match outcome {
                                 Ok(()) if restart_requested => {
-                                    info!("{} worker '{}' (run_id: {}) exited normally but restart requested via .ctl — re-spawning",
-                                        controller_class, worker_name, run_id);
+                                    info!("{} worker '{}' (worker_id: {}) exited normally but restart requested via .ctl — re-spawning",
+                                        controller_class, worker_name, worker_id);
 
                                     let new_worker = worker.clone();
                                     let new_worker_name = worker.name().clone();
-                                    let new_run_id = new_worker_name.clone();
+                                    let new_worker_id = new_worker_name.clone();
                                     let new_self_arc = Arc::clone(&self);
                                     let new_log_prefix = controller_class.clone();
-                                    let new_run_id_clone = new_run_id.clone();
+                                    let new_worker_id_clone = new_worker_id.clone();
                                     let new_handle = tokio::spawn(async move {
                                         let outcome = start_worker_function(new_self_arc, new_worker.clone(), None).await
                                             .map_err(|e| RuntimeError::new(format!("{new_log_prefix} RunnerError: {e:?} - {new_worker:?}")));
-                                        (new_worker, new_run_id_clone, outcome)
+                                        (new_worker, new_worker_id_clone, outcome)
                                     });
 
                                     let new_abort_handle = new_handle.abort_handle();
@@ -1426,34 +1430,34 @@ impl Supervisor {
                                     let mut map = running_tasks_map.lock().await;
                                     map.entry(new_worker_name.clone())
                                         .or_insert_with(HashMap::new)
-                                        .insert(new_run_id.clone(), new_run_info);
+                                        .insert(new_worker_id.clone(), new_run_info);
                                     drop(map);
 
-                                    let new_run_id_for_future = new_run_id.clone();
+                                    let new_worker_id_for_future = new_worker_id.clone();
                                     let new_wrapped_future = Box::pin(async move {
                                         let result = new_handle.await;
-                                        (new_worker_name, new_run_id_for_future, result)
+                                        (new_worker_name, new_worker_id_for_future, result)
                                     });
                                     running_tasks.push(new_wrapped_future);
                                 }
                                 Ok(()) => {
-                                    info!("{} task for worker '{}' (run_id: {}) finished successfully",
-                                        controller_class, worker_name, run_id);
+                                    info!("{} task for worker '{}' (worker_id: {}) finished successfully",
+                                        controller_class, worker_name, worker_id);
                                 }
                                 Err(_e) if restart_requested => {
-                                    info!("{} worker '{}' (run_id: {}) restart requested via .ctl — re-spawning",
-                                        controller_class, worker_name, run_id);
+                                    info!("{} worker '{}' (worker_id: {}) restart requested via .ctl — re-spawning",
+                                        controller_class, worker_name, worker_id);
 
                                     let new_worker = worker.clone();
                                     let new_worker_name = worker.name().clone();
-                                    let new_run_id = new_worker_name.clone();
+                                    let new_worker_id = new_worker_name.clone();
                                     let new_self_arc = Arc::clone(&self);
                                     let new_log_prefix = controller_class.clone();
-                                    let new_run_id_clone = new_run_id.clone();
+                                    let new_worker_id_clone = new_worker_id.clone();
                                     let new_handle = tokio::spawn(async move {
                                         let outcome = start_worker_function(new_self_arc, new_worker.clone(), None).await
                                             .map_err(|e| RuntimeError::new(format!("{new_log_prefix} RunnerError: {e:?} - {new_worker:?}")));
-                                        (new_worker, new_run_id_clone, outcome)
+                                        (new_worker, new_worker_id_clone, outcome)
                                     });
 
                                     let new_abort_handle = new_handle.abort_handle();
@@ -1469,19 +1473,19 @@ impl Supervisor {
                                     let mut map = running_tasks_map.lock().await;
                                     map.entry(new_worker_name.clone())
                                         .or_insert_with(HashMap::new)
-                                        .insert(new_run_id.clone(), new_run_info);
+                                        .insert(new_worker_id.clone(), new_run_info);
                                     drop(map);
 
-                                    let new_run_id_for_future = new_run_id.clone();
+                                    let new_worker_id_for_future = new_worker_id.clone();
                                     let new_wrapped_future = Box::pin(async move {
                                         let result = new_handle.await;
-                                        (new_worker_name, new_run_id_for_future, result)
+                                        (new_worker_name, new_worker_id_for_future, result)
                                     });
                                     running_tasks.push(new_wrapped_future);
                                 }
                                 Err(e) => {
-                                    error!("{} task for worker '{}' (run_id: {}) finished unsuccessfully: {:?}",
-                                        controller_class, worker_name, run_id, e);
+                                    error!("{} task for worker '{}' (worker_id: {}) finished unsuccessfully: {:?}",
+                                        controller_class, worker_name, worker_id, e);
                                     return Err(e);
                                 }
                             }
@@ -1491,7 +1495,7 @@ impl Supervisor {
                                 let mut map = running_tasks_map.lock().await;
                                 let (intentionally_stopped, interceptor) = map
                                     .get(&worker_name)
-                                    .and_then(|tasks| tasks.get(&run_id))
+                                    .and_then(|tasks| tasks.get(&worker_id))
                                     .map(|info| {
                                         (
                                             info.intentionally_stopped.load(SeqCst),
@@ -1501,7 +1505,7 @@ impl Supervisor {
                                     .unwrap_or((false, None));
 
                                 if let Some(worker_tasks) = map.get_mut(&worker_name) {
-                                    worker_tasks.remove(&run_id);
+                                    worker_tasks.remove(&worker_id);
                                 }
                                 drop(map);
 
@@ -1513,20 +1517,20 @@ impl Supervisor {
                                     );
 
                                     if restart_requested {
-                                        info!("{} worker '{}' (run_id: {}) restart requested via .ctl after cancellation — re-spawning",
-                                            controller_class, worker_name, run_id);
+                                        info!("{} worker '{}' (worker_id: {}) restart requested via .ctl after cancellation — re-spawning",
+                                            controller_class, worker_name, worker_id);
 
                                         if let Some(worker) = controller.workers.get(&worker_name) {
                                             let new_worker = worker.clone();
                                             let new_worker_name = worker.name().clone();
-                                            let new_run_id = new_worker_name.clone();
+                                            let new_worker_id = new_worker_name.clone();
                                             let new_self_arc = Arc::clone(&self);
                                             let new_log_prefix = controller_class.clone();
-                                            let new_run_id_clone = new_run_id.clone();
+                                            let new_worker_id_clone = new_worker_id.clone();
                                             let new_handle = tokio::spawn(async move {
                                                 let outcome = start_worker_function(new_self_arc, new_worker.clone(), None).await
                                                     .map_err(|e| RuntimeError::new(format!("{new_log_prefix} RunnerError: {e:?} - {new_worker:?}")));
-                                                (new_worker, new_run_id_clone, outcome)
+                                                (new_worker, new_worker_id_clone, outcome)
                                             });
 
                                             let new_abort_handle = new_handle.abort_handle();
@@ -1542,13 +1546,13 @@ impl Supervisor {
                                             let mut map = running_tasks_map.lock().await;
                                             map.entry(new_worker_name.clone())
                                                 .or_insert_with(HashMap::new)
-                                                .insert(new_run_id.clone(), new_run_info);
+                                                .insert(new_worker_id.clone(), new_run_info);
                                             drop(map);
 
-                                            let new_run_id_for_future = new_run_id.clone();
+                                            let new_worker_id_for_future = new_worker_id.clone();
                                             let new_wrapped_future = Box::pin(async move {
                                                 let result = new_handle.await;
-                                                (new_worker_name, new_run_id_for_future, result)
+                                                (new_worker_name, new_worker_id_for_future, result)
                                             });
                                             running_tasks.push(new_wrapped_future);
                                         } else {
@@ -1566,8 +1570,8 @@ impl Supervisor {
                                     error!(message);
                                     return Err(RuntimeError::new(message));
                                 } else {
-                                    info!("{} ephemeral task '{}' (run_id: {}) was intentionally stopped via stop request (interceptor: {:?})",
-                                        controller_class, worker_name, run_id, interceptor.as_ref().map(|m| &m.file));
+                                    info!("{} ephemeral task '{}' (worker_id: {}) was intentionally stopped via stop request (interceptor: {:?})",
+                                        controller_class, worker_name, worker_id, interceptor.as_ref().map(|m| &m.file));
                                 }
                             } else if e.is_panic() {
                                 let message = format!("{controller_class} task panicked: {e:?}");
@@ -1585,14 +1589,14 @@ impl Supervisor {
                     debug!("{} branch: spawning worker from iterator", controller_class);
                     let worker_clone = worker.clone();
                     let worker_name = worker.name().clone();
-                    let run_id = worker_name.clone();
+                    let worker_id = worker_name.clone();
                     let self_arc = Arc::clone(&self);
                     let log_prefix_clone = controller_class.clone();
-                    let run_id_clone = run_id.clone();
+                    let worker_id_clone = worker_id.clone();
                     let handle = tokio::spawn(async move {
                         let outcome = start_worker_function(self_arc, worker_clone.clone(), None).await
                             .map_err(|e| RuntimeError::new(format!("{log_prefix_clone} RunnerError: {e:?} - {worker_clone:?}")));
-                        (worker_clone, run_id_clone, outcome)
+                        (worker_clone, worker_id_clone, outcome)
                     });
 
                     let abort_handle = handle.abort_handle();
@@ -1608,13 +1612,13 @@ impl Supervisor {
                     let mut map = running_tasks_map.lock().await;
                     map.entry(worker_name.clone())
                         .or_insert_with(HashMap::new)
-                        .insert(run_id.clone(), run_info);
+                        .insert(worker_id.clone(), run_info);
                     drop(map);
 
-                    let run_id_for_future = run_id.clone();
+                    let worker_id_for_future = worker_id.clone();
                     let wrapped_future = Box::pin(async move {
                         let result = handle.await;
-                        (worker_name.clone(), run_id_for_future, result)
+                        (worker_name.clone(), worker_id_for_future, result)
                     });
                     running_tasks.push(wrapped_future);
                 }
@@ -1656,14 +1660,14 @@ impl Supervisor {
                                 Some(worker) => {
                                     let worker_clone = worker.clone();
                                     let worker_name = worker.name().clone();
-                                    let run_id = payload.run_id.clone();
+                                    let worker_id = payload.worker_id.clone();
                                     let self_arc = Arc::clone(&self);
                                     let log_prefix_clone = controller_class.clone();
-                                    let run_id_clone = run_id.clone();
+                                    let worker_id_clone = worker_id.clone();
                                     let handle = tokio::spawn(async move {
                                         let outcome = start_worker_function(self_arc, worker_clone.clone(), Some(message)).await
                                             .map_err(|e| RuntimeError::new(format!("{log_prefix_clone} RunnerError: {e:?} - {worker_clone:?}")));
-                                        (worker_clone, run_id_clone, outcome)
+                                        (worker_clone, worker_id_clone, outcome)
                                     });
 
                                     let abort_handle = handle.abort_handle();
@@ -1679,17 +1683,17 @@ impl Supervisor {
                                     let mut map = running_tasks_map.lock().await;
                                     map.entry(worker_name.clone())
                                         .or_insert_with(HashMap::new)
-                                        .insert(run_id.clone(), run_info);
+                                        .insert(worker_id.clone(), run_info);
                                     let total_tasks: usize = map.values().map(|tasks| tasks.len()).sum();
-                                    info!("{} Added worker '{}' (run_id: {}) to running_tasks_map. Total running tasks: {}",
-                                        controller_class, worker_name, run_id, total_tasks);
+                                    info!("{} Added worker '{}' (worker_id: {}) to running_tasks_map. Total running tasks: {}",
+                                        controller_class, worker_name, worker_id, total_tasks);
                                     drop(map);
 
                                     let worker_name_for_future = worker_name.clone();
-                                    let run_id_for_future = run_id.clone();
+                                    let worker_id_for_future = worker_id.clone();
                                     let wrapped_future = Box::pin(async move {
                                         let result = handle.await;
-                                        (worker_name_for_future, run_id_for_future, result)
+                                        (worker_name_for_future, worker_id_for_future, result)
                                     });
                                     running_tasks.push(wrapped_future);
                                 }
@@ -1702,7 +1706,7 @@ impl Supervisor {
                         }
                         MessageAction::Stop => {
                             warn!("Received stop action; ignoring for now. Stop messages shouldn't be arriving to this queue.");
-                            let run_id = payload.run_id.clone();
+                            let worker_id = payload.worker_id.clone();
                             let worker_name = payload.worker.clone();
 
                             let map = running_tasks_map.lock().await;
@@ -1714,7 +1718,7 @@ impl Supervisor {
 
                             if let Some(run_info) = map
                                 .get(&worker_name)
-                                .and_then(|tasks| tasks.get(&run_id))
+                                .and_then(|tasks| tasks.get(&worker_id))
                             {
                                 task_found = true;
                                 run_pid = run_info.pid;
@@ -1726,9 +1730,9 @@ impl Supervisor {
                             drop(map);
 
                             warn!(
-                                "Received stop message for worker='{}', run_id='{}', task_found={}, run_pid={:?}, stop_already_requested={}, interceptor={:?}, message file: {:?}",
+                                "Received stop message for worker='{}', worker_id='{}', task_found={}, run_pid={:?}, stop_already_requested={}, interceptor={:?}, message file: {:?}",
                                 worker_name,
-                                run_id,
+                                worker_id,
                                 task_found,
                                 run_pid,
                                 stop_already_requested,
@@ -1790,10 +1794,11 @@ impl Supervisor {
 
         let start = Utc::now().timestamp_millis();
 
-        let (worker_name, run_id) = match &message.payload {
-            OrchestratorRequestMessagePayload(payload) => {
-                (Some(payload.worker.clone()), Some(payload.run_id.clone()))
-            }
+        let (worker_name, worker_id) = match &message.payload {
+            OrchestratorRequestMessagePayload(payload) => (
+                Some(payload.worker.clone()),
+                Some(payload.worker_id.clone()),
+            ),
             _ => (None, None),
         };
 
@@ -1804,7 +1809,7 @@ impl Supervisor {
                 Some(start),
                 Ephemeral,
                 worker_name,
-                run_id,
+                worker_id,
             )
             .await;
 
@@ -1868,7 +1873,7 @@ impl Supervisor {
                 let map = self.running_tasks_map.lock().await;
                 let info = map
                     .get(&payload.worker)
-                    .and_then(|tasks| tasks.get(&payload.run_id))
+                    .and_then(|tasks| tasks.get(&payload.worker_id))
                     .map(|info| {
                         (
                             info.intentionally_stopped.load(SeqCst),
@@ -1888,7 +1893,7 @@ impl Supervisor {
                 "Worker '{}' run '{}' completed during shutdown; skipping notification and message handling",
                 worker.name(),
                 if let OrchestratorRequestMessagePayload(payload) = &message.payload {
-                    payload.run_id.as_str()
+                    payload.worker_id.as_str()
                 } else {
                     "<no payload>"
                 }
@@ -1901,7 +1906,7 @@ impl Supervisor {
                 "Worker '{}' run '{}' intentionally stopped via stop request (interceptor: {:?})",
                 worker.name(),
                 if let OrchestratorRequestMessagePayload(payload) = &message.payload {
-                    payload.run_id.as_str()
+                    payload.worker_id.as_str()
                 } else {
                     ""
                 },
@@ -2004,7 +2009,7 @@ impl Supervisor {
         start: Option<i64>,
         class: WorkerClass,
         worker_name: Option<String>,
-        run_id: Option<String>,
+        worker_id: Option<String>,
     ) -> (Option<TabsDataWorker>, Result<(), RunnerError>) {
         info!(
             "Entering {} worker... '{}'",
@@ -2127,17 +2132,17 @@ impl Supervisor {
         let td_worker = TabsDataWorker::new(describer.clone());
         match td_worker.work(work_get_state, false) {
             Ok((mut child, _out, _err)) => {
-                if let (Some(pid), Some(worker_name), Some(run_id)) =
-                    (child.id(), &worker_name, &run_id)
+                if let (Some(pid), Some(worker_name), Some(worker_id)) =
+                    (child.id(), &worker_name, &worker_id)
                 {
                     let mut map = self.running_tasks_map.lock().await;
                     if let Some(worker_tasks) = map.get_mut(worker_name)
-                        && let Some(run_info) = worker_tasks.get_mut(run_id)
+                        && let Some(run_info) = worker_tasks.get_mut(worker_id)
                     {
                         run_info.pid = Some(pid);
                         debug!(
-                            "Updated pid '{}' for worker '{}' (run_id: {})",
-                            pid, worker_name, run_id
+                            "Updated pid '{}' for worker '{}' (worker_id: {})",
+                            pid, worker_name, worker_id
                         );
                     }
                     drop(map);
@@ -2591,7 +2596,7 @@ impl Supervisor {
         debug!("Marking all running tasks as shutdown in progress before stopping...");
         let mut map = self.running_tasks_map.lock().await;
         for (_worker_name, tasks) in map.iter_mut() {
-            for (_run_id, run_info) in tasks.iter_mut() {
+            for (_worker_id, run_info) in tasks.iter_mut() {
                 run_info.shutdown_in_progress.store(true, SeqCst);
             }
         }

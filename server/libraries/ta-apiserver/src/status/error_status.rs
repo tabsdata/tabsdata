@@ -48,7 +48,7 @@ impl From<ErrorResponse> for ErrorStatus {
 mod tests {
     use super::*;
     use axum::response::IntoResponse;
-    use td_error::{api_error, ApiError, TdError};
+    use td_error::{ApiError, TdError, api_error};
 
     async fn run(td_error: TdError) -> (StatusCode, serde_json::Value) {
         let response = ErrorStatus::from(td_error).into_response();

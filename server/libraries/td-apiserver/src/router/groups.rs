@@ -17,6 +17,7 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
+    use td_database::scoped::InProject;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::group::{Group, GroupCreate, GroupUpdate};
     use td_objects::rest_urls::{
@@ -24,7 +25,6 @@ mod routes {
     };
     use td_objects::types::basic::ProjectId;
     use td_services::group::services::GroupServices;
-    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const GROUPS_TAG: &str = "Groups";

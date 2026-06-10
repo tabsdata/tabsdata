@@ -40,4 +40,29 @@ pub enum KubePodError {
         name: String,
         cause: String,
     } = 5007,
+    #[error("Could not stream logs of pod '{name}' in namespace '{namespace}': {cause}.")]
+    LogStreamFailed {
+        namespace: String,
+        name: String,
+        cause: String,
+    } = 5008,
+    #[error("Could not watch pod '{name}' in namespace '{namespace}': {cause}.")]
+    WatchFailed {
+        namespace: String,
+        name: String,
+        cause: String,
+    } = 5009,
+    #[error("No pod matching '{label_selector}' found in namespace '{namespace}'.")]
+    NotFound {
+        namespace: String,
+        label_selector: String,
+    } = 5010,
+    #[error(
+        "Expected a single pod matching '{label_selector}' in namespace '{namespace}', found {count}."
+    )]
+    MultipleFound {
+        namespace: String,
+        label_selector: String,
+        count: usize,
+    } = 5011,
 }

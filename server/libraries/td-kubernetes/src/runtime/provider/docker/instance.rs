@@ -16,7 +16,8 @@ use crate::runtime::provider::{ClusterProvider, Instance};
 use crate::runtime::reporting::build_kube_client;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    CONFIGMAP_TABSDATA_MANIFEST, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, POD_PHASE_FAILED,
+    POD_PHASE_SUCCEEDED,
 };
 use crate::base::error::provider::ProviderError;
 use crate::kube::api::require_configmap;
@@ -72,7 +73,7 @@ impl Instance for DockerInstance {
                 pod.status
                     .as_ref()
                     .and_then(|status| status.phase.as_deref()),
-                Some("Succeeded") | Some("Failed"),
+                Some(POD_PHASE_SUCCEEDED) | Some(POD_PHASE_FAILED),
             )
         })
     }

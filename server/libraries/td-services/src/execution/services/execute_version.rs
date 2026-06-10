@@ -75,6 +75,7 @@ mod tests {
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_error::{ApiError, TdError};
     use td_objects::Buildable;
     use td_objects::dxo::execution::ExecutionDB;
@@ -90,7 +91,6 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -103,15 +103,16 @@ mod tests {
             build_transaction_map, build_transactions, resolve_execution_plan_versions,
             update_initial_function_run_status, validate_execution_plan, with_recursion_options,
         };
-        use crate::graph::layers::FunctionOrTable;
-        use crate::graph::layers::build::GraphBuilder;
-        use td_authz::Authz;
-        use td_authz::tower::InterColl;
         use crate::execution::layers::execution_version::{
             dedup_lock, reject_if_external_uid_in_use, reject_if_running,
         };
+        use crate::graph::layers::FunctionOrTable;
+        use crate::graph::layers::build::GraphBuilder;
         use crate::scheduler::layers::request::notify_scheduler;
+        use td_authz::Authz;
+        use td_authz::tower::InterColl;
         use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
+        use td_database::scoped::Scoped;
         use td_objects::And;
         use td_objects::dxo::crudl::RequestContext;
         use td_objects::dxo::dependency::DependencyDBWithNames;
@@ -136,7 +137,6 @@ mod tests {
         use td_objects::types::recursion::RecursionOptions;
         use td_queries::{insert, insert_vec};
         use td_tower::metadata::type_of_val;
-        use td_database::scoped::Scoped;
 
         ExecuteFunctionVersionService::with_defaults(db)
             .metadata()
@@ -276,7 +276,8 @@ mod tests {
     // Tests in execute assert the correctness of the execution.
     #[td_test::test(db)]
     async fn test_execute_version_no_previous_execution(db: TdPool) -> Result<(), TdError> {
-        let (function, response) = test_execute_version(db, None, SkipIfRunning::FALSE).await?;        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        let (function, response) = test_execute_version(db, None, SkipIfRunning::FALSE).await?;
+        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
         Ok(())
     }
 
@@ -284,7 +285,8 @@ mod tests {
     async fn test_execute_version_no_previous_execution_skip_if_running(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let (function, response) = test_execute_version(db, None, SkipIfRunning::TRUE).await?;        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        let (function, response) = test_execute_version(db, None, SkipIfRunning::TRUE).await?;
+        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
         Ok(())
     }
 
@@ -298,7 +300,8 @@ mod tests {
             }),
             SkipIfRunning::FALSE,
         )
-        .await?;        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        .await?;
+        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
         Ok(())
     }
 
@@ -339,7 +342,8 @@ mod tests {
             }),
             SkipIfRunning::FALSE,
         )
-        .await?;        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        .await?;
+        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
         Ok(())
     }
 
@@ -355,7 +359,8 @@ mod tests {
             }),
             SkipIfRunning::TRUE,
         )
-        .await?;        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        .await?;
+        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
         Ok(())
     }
 
@@ -371,7 +376,8 @@ mod tests {
             }),
             SkipIfRunning::FALSE,
         )
-        .await?;        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        .await?;
+        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
         Ok(())
     }
 
@@ -387,7 +393,8 @@ mod tests {
             }),
             SkipIfRunning::TRUE,
         )
-        .await?;        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
+        .await?;
+        assert_eq!(response.triggered_functions, HashSet::from([function.id]));
         Ok(())
     }
 
@@ -664,16 +671,16 @@ mod tests {
             trigger_with_external_uid(&db, &function.id, Some(uid.clone())),
         );
 
-        let executed = [&a, &b]
-            .into_iter()
-            .filter(|r| r.is_ok())
-            .count();
+        let executed = [&a, &b].into_iter().filter(|r| r.is_ok()).count();
         let conflicts = [&a, &b]
             .into_iter()
             .filter(|r| matches!(r, Err(e) if e.api_error() == ApiError::Any(409)))
             .count();
         assert_eq!(executed, 1, "exactly one trigger executes: {a:?} / {b:?}");
-        assert_eq!(conflicts, 1, "the racing trigger conflicts (409): {a:?} / {b:?}");
+        assert_eq!(
+            conflicts, 1,
+            "the racing trigger conflicts (409): {a:?} / {b:?}"
+        );
 
         let executions: Vec<ExecutionDB> = db
             .live()

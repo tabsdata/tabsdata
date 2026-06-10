@@ -12,7 +12,7 @@ use tracing::info;
 
 use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, CONFIGMAP_TABSDATA_MANIFEST, FOLDER_PROFILE, Family,
-    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, POD_PHASE_FAILED, POD_PHASE_SUCCEEDED,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
@@ -253,7 +253,7 @@ impl Instance for KminusInstance {
                 pod.status
                     .as_ref()
                     .and_then(|status| status.phase.as_deref()),
-                Some("Succeeded") | Some("Failed"),
+                Some(POD_PHASE_SUCCEEDED) | Some(POD_PHASE_FAILED),
             )
         })
     }

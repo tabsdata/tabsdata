@@ -14,6 +14,7 @@ mod routes {
     use ta_apiserver::status::ok_status::{ListStatus, NoContent, UpdateStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
+    use td_database::scoped::InProject;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::synchrotron::SynchrotronResponse;
     use td_objects::dxo::transaction::Transaction;
@@ -23,7 +24,6 @@ mod routes {
     };
     use td_objects::types::basic::ProjectId;
     use td_services::transaction::services::TransactionServices;
-    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const TRANSACTIONS_TAG: &str = "Transactions";

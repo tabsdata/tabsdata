@@ -47,12 +47,12 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
+    use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::dxo::metrics::Dim;
     use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
     use td_objects::types::basic::ProjectId;
     use td_tower::ctx_service::RawOneshot;
-    use td_database::scoped::InProject;
 
     #[td_test::test(db)]
     async fn test_metrics_empty_window(db: TdPool) -> Result<(), TdError> {

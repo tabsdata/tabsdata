@@ -15,6 +15,7 @@ mod routes {
     use ta_apiserver::status::ok_status::GetStatus;
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
+    use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::dxo::metrics::{
         Dim, InflightQuery, InflightRequest, InflightResponse, InflightStatusQuery, MetricsQuery,
@@ -26,7 +27,6 @@ mod routes {
     use td_objects::rest_urls::{INFLIGHT, METRICS, SNAPSHOT};
     use td_objects::types::basic::{EpochMs, LogicalFunctionRunStatus, ProjectId};
     use td_services::metrics::services::OperationalMetricsServices;
-    use td_database::scoped::InProject;
     use tower::ServiceExt;
 
     const METRICS_TAG: &str = "Metrics";

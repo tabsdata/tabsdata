@@ -116,4 +116,11 @@ pub const VALUE_NO: &str = "no";
 pub const DELETE_POD_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 pub const DELETE_POD_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
+pub const POD_PHASE_PENDING: &str = "Pending";
+pub const POD_PHASE_RUNNING: &str = "Running";
+pub const POD_PHASE_SUCCEEDED: &str = "Succeeded";
+pub const POD_PHASE_FAILED: &str = "Failed";
+
+pub const LOG_POD_POLL_INTERVAL: Duration = Duration::from_millis(500);
+
 pub const KMINUS_MIN_NOFILE: u64 = 65536;
