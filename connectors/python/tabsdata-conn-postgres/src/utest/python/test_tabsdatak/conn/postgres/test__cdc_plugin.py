@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.spi import StreamStageSrc
 from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.postgres import (
@@ -53,7 +54,7 @@ def test_stream_src_def_is_for_postgres_cdc():
     assert POSTGRES_CDC_STREAM_SRC.src is PostgresCdcStreamSrc
     assert POSTGRES_CDC_STREAM_SRC.plugin is PostgresCdcStreamSrcPlugin
     assert POSTGRES_CDC_STREAM_SRC.src_type == "postgres-cdc"
-    assert POSTGRES_CDC_STREAM_SRC.uses_manifest is True
+    assert POSTGRES_CDC_STREAM_SRC.publisher_src is StreamStageSrc
 
 
 def test_stream_src_def_cardinality_matches_table_count():

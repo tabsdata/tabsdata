@@ -17,6 +17,7 @@ from tabsdatak.spi import (
     StreamSrcPluginCtx,
     StreamSrcDef,
     StreamSrcPlugin,
+    StreamStageSrc,
     DestContext,
     DestDef,
     DestPlugin,
@@ -213,8 +214,8 @@ def test_stream_src_def_constructs_with_valid_fields():
         src_version="v1",
         src=_SDStreamSrc,
         cardinality=lambda s: 1,
-        uses_manifest=False,
         plugin=_SDStreamSrcPlugin,
+        publisher_src=StreamStageSrc,
         explorer=_SDExplorer,
     )
 
@@ -320,8 +321,8 @@ def test_stream_src_def_rejects_plugin_with_mismatched_stream_src_param():
             src_version="v1",
             src=_SDStreamSrc,
             cardinality=lambda s: 1,
-            uses_manifest=False,
             plugin=_MismatchStreamSrcPlugin,
+            publisher_src=StreamStageSrc,
             explorer=None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_15

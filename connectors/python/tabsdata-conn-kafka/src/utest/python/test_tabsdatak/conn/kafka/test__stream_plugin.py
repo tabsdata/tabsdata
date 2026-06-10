@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.spi import StreamStageSrc
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.kafka import KafkaStreamSrcConn, KafkaStreamSrc
 
@@ -58,7 +59,7 @@ def test_kafka_stream_src_def_shape():
     assert KAFKA_STREAM_SRC.src is KafkaStreamSrc
     assert KAFKA_STREAM_SRC.plugin is KafkaStreamSrcPlugin
     assert KAFKA_STREAM_SRC.explorer is KafkaExplorer
-    assert KAFKA_STREAM_SRC.uses_manifest is True
+    assert KAFKA_STREAM_SRC.publisher_src is StreamStageSrc
 
 
 def test_kafka_stream_src_def_cardinality_always_one():

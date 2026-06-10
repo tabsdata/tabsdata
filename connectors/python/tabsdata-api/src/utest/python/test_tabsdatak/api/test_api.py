@@ -98,8 +98,8 @@ _STREAM_SRC_DEFX = spi.StreamSrcDef(
     src_version="v1",
     src=_StreamSrc,
     cardinality=lambda src: 1,
-    uses_manifest=False,
     plugin=_TestStreamSrcPlugin,
+    publisher_src=spi.StreamStageSrc,
     explorer=None,
 )
 _connectors.register_stream_src(_STREAM_SRC_DEFX)
@@ -1042,7 +1042,7 @@ def test_auto_src_defx_resolves_via_registry():
     assert isinstance(defx, spi.StreamSrcDef)
     assert defx.src is _StreamSrc
     assert defx.src_type == "watch"
-    assert defx.uses_manifest is False
+    assert defx.publisher_src is spi.StreamStageSrc
 
 
 # ===========================================================================
