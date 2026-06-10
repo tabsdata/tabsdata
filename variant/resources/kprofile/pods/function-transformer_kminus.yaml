@@ -269,6 +269,69 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
+        - name: 0040-prep-localize-state
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_prep_localize_state"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --execution-meta-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - --in-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/in
+            - --state-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/state
+            - --out
+            - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-download.yaml
+            - --inputs-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/inputs-manifest.yaml
+            - --state-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/state-manifest.yaml
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${sys:TDK_INSTANCE_NAME}"
+          volumeMounts:
+            - name: config-prep-localize-state
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
       containers:
         - name: 1000-report-completion
           image: function
@@ -350,6 +413,11 @@ spec:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
         - name: config-localize-fn-bundle
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+        - name: config-prep-localize-state
           projected:
             sources:
               - configMap:
