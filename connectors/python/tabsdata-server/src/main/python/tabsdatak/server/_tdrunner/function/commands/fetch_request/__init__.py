@@ -111,8 +111,14 @@ def _fetch(url: str, method: str, authorization: str) -> bytes:
     try:
         return _fetch_request(request)
     except urllib.error.HTTPError as exc:
+        # Surface the apiserver's response body in the detail so a 4xx
+        # carrying a JSON error description (auth scope mismatch, bad
+        # bindings, ...) diagnoses itself instead of bottoming out at a
+        # bare "Not Found" / "Bad Request".
+        body = exc.read().decode("utf-8", errors="replace")
+        detail = f"{exc.reason}: {body}" if body else exc.reason
         raise FetchRequestErrorCode.FR_1.exception(
-            cause=exc, url=url, status=exc.code, detail=exc.reason
+            cause=exc, url=url, status=exc.code, detail=detail
         )
     except urllib.error.URLError as exc:
         raise FetchRequestErrorCode.FR_2.exception(

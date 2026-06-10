@@ -27,6 +27,7 @@ def _envelope_bytes(data) -> bytes:
         "data": data,
     }).encode("utf-8")
 
+
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
@@ -74,6 +75,33 @@ def test_fetch_http_error_raises_typed_exception(monkeypatch):
         _fetch("https://api/r", "GET", "Bearer tok")
     assert exc_info.value.exit_code == HttpFetchError.exit_code
     assert "404" in str(exc_info.value)
+
+
+def test_fetch_http_error_includes_response_body_in_detail(monkeypatch):
+    """HTTPError's response body (apiserver's specific complaint) must
+    end up in the raised HttpFetchError's detail — otherwise a 4xx like
+    'token scope mismatch' bottoms out at a bare 'Not Found' and forces
+    a manual chase to figure out what the apiserver objected to.
+    """
+    import io
+
+    apiserver_body = b'{"code":"AuthError::0001","error":"scope_mismatch"}'
+
+    def fake(req):
+        raise urllib.error.HTTPError(
+            "https://api/r",
+            404,
+            "Not Found",
+            {},
+            io.BytesIO(apiserver_body),
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    with pytest.raises(HttpFetchError) as exc_info:
+        _fetch("https://api/r", "GET", "Bearer tok")
+    rendered = str(exc_info.value)
+    assert "Not Found" in rendered
+    assert apiserver_body.decode("utf-8") in rendered
 
 
 def test_fetch_url_error_raises_typed_exception(monkeypatch):
