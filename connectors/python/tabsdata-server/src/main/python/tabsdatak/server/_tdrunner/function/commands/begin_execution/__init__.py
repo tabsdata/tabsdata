@@ -5,14 +5,14 @@
 """begin-execution command.
 
 First step of the function-run pod chain (publisher / subscriber /
-transformer). Initializes the shared ``ExecutionMeta`` YAML with the
+transformer). Initializes the shared ``Journal`` YAML with the
 run's startup-phase data — today just the start time (unix-epoch
 seconds, matching the apiserver callback envelope's ``start`` field),
 but the file is the agreed home for any additional startup-phase
 information later steps want to expose to the rest of the chain.
 
 Runs exactly once per pod, before ``fetch-request``. The shared volume
-is overlaid on the image-template-provided ``shared/execution_meta/``
+is overlaid on the image-template-provided ``shared/journal/``
 dir, so the parent always exists; only the file itself needs to be
 written.
 """
@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.execution_meta import ExecutionMeta
+from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function.commands.begin_execution.error import (
     BeginExecutionErrorCode,
 )
@@ -45,7 +45,7 @@ MAN = (
     "    --responder-authorization <AUTH>\n"
     "    --execution-meta-file <PATH>\n\n"
     "First step of the function-run pod chain. Writes the shared "
-    "ExecutionMeta YAML with the run's startup-phase data (start time "
+    "Journal YAML with the run's startup-phase data (start time "
     "today; additional fields/steps may grow the schema in the future)."
 )
 
@@ -53,7 +53,7 @@ MAN = (
 def _build_parser():
     return build_parser(
         prog="begin-execution",
-        description="Initialize the shared ExecutionMeta YAML for the run.",
+        description="Initialize the shared Journal YAML for the run.",
         version=VERSION,
         info=INFO,
         man=MAN,
@@ -62,14 +62,14 @@ def _build_parser():
 
 @command(name="td_begin_execution", parser=_build_parser)
 def main(args: argparse.Namespace) -> int:
-    out_path = Path(args.execution_meta_file)
-    logger.info("Initializing ExecutionMeta for the function run")
+    out_path = Path(args.journal_file)
+    logger.info("Initializing Journal for the function run")
     # i64 unix epoch seconds — matches ResponseMessagePayload.start in
     # td-common/src/server.rs so the value can flow through to the
     # eventual report-completion POST body unchanged.
     start = int(datetime.now(tz=timezone.utc).timestamp())
-    meta = ExecutionMeta(start=start)
-    logger.debug("ExecutionMeta start=%s; writing to %s", start, out_path)
+    meta = Journal(start=start)
+    logger.debug("Journal start=%s; writing to %s", start, out_path)
     try:
         meta.save(out_path)
     except OSError as exc:

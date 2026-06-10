@@ -44,7 +44,7 @@ def _set_argv(monkeypatch, *args):
 def _required_args(
     monkeypatch,
     *,
-    execution_meta_file,
+    journal_file,
     liveness,
     responder_url="https://api/w/1",
     responder_method="POST",
@@ -54,7 +54,7 @@ def _required_args(
     _set_argv(
         monkeypatch,
         "--execution-meta-file",
-        str(execution_meta_file),
+        str(journal_file),
         "--liveness",
         str(liveness),
         "--responder-url",
@@ -67,12 +67,12 @@ def _required_args(
     )
 
 
-def test_main_writes_execution_meta_yaml(monkeypatch, tmp_path):
-    meta_file = tmp_path / "execution_meta.yaml"
+def test_main_writes_journal_yaml(monkeypatch, tmp_path):
+    meta_file = tmp_path / "journal.yaml"
     before = int(datetime.now(tz=timezone.utc).timestamp())
     _required_args(
         monkeypatch,
-        execution_meta_file=meta_file,
+        journal_file=meta_file,
         liveness=tmp_path / "live",
     )
     assert main() == 0
@@ -85,11 +85,11 @@ def test_main_writes_execution_meta_yaml(monkeypatch, tmp_path):
 
 
 def test_main_creates_parent_folders_when_absent(monkeypatch, tmp_path):
-    nested = tmp_path / "deep" / "nested" / "path" / "execution_meta.yaml"
+    nested = tmp_path / "deep" / "nested" / "path" / "journal.yaml"
     assert not nested.parent.exists()
     _required_args(
         monkeypatch,
-        execution_meta_file=nested,
+        journal_file=nested,
         liveness=tmp_path / "live",
     )
     assert main() == 0
@@ -101,13 +101,13 @@ def test_main_write_error_returns_command_specific_exit(
     monkeypatch, tmp_path, http_ok_url
 ):
     # Parent path component is an existing file → mkdir(parents=True)
-    # inside ExecutionMeta.save fails with NotADirectoryError (subclass
+    # inside Journal.save fails with NotADirectoryError (subclass
     # of OSError) → BeginExecutionErrorCode.BE_1 → WriteFailedError.
     blocker = tmp_path / "blocker"
     blocker.write_text("not a directory")
     _required_args(
         monkeypatch,
-        execution_meta_file=blocker / "subdir" / "execution_meta.yaml",
+        journal_file=blocker / "subdir" / "journal.yaml",
         liveness=tmp_path / "live",
         responder_url=http_ok_url,
     )

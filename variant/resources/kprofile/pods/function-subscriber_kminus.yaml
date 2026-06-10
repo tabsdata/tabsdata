@@ -67,7 +67,7 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
           resources:
             requests:
               cpu: "50m"
@@ -118,7 +118,7 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
           resources:
             requests:
               cpu: "50m"
@@ -169,7 +169,7 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --resolver-url
             - env:SECRET__TD_RESOLVER_URL
             - --resolver-method
@@ -228,7 +228,7 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --bundle-dir
@@ -289,7 +289,7 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --in-dir
@@ -299,9 +299,9 @@ spec:
             - --out
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-download.yaml
             - --inputs-manifest
-            - $(CONTAINER_ROOT)/tabsdata/shared/inputs-manifest.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/inputs-manifest.yaml
             - --state-manifest
-            - $(CONTAINER_ROOT)/tabsdata/shared/state-manifest.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/state-manifest.yaml
           resources:
             requests:
               cpu: "50m"
@@ -352,7 +352,7 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-download.yaml
             - --report
@@ -407,17 +407,17 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --bundle-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --inputs-manifest
-            - $(CONTAINER_ROOT)/tabsdata/shared/inputs-manifest.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/inputs-manifest.yaml
             - --out-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/out
             - --outputs-manifest
-            - $(CONTAINER_ROOT)/tabsdata/shared/outputs-manifest.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
             - --state-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/state
           resources:
@@ -470,13 +470,13 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --bundle-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --outputs-manifest
-            - $(CONTAINER_ROOT)/tabsdata/shared/outputs-manifest.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
           resources:
             requests:
               cpu: "50m"
@@ -527,7 +527,7 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --state-dir
@@ -584,7 +584,7 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-upload.yaml
             - --report
@@ -640,7 +640,7 @@ spec:
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --execution-meta-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/execution_meta/execution_meta.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --url
             - env:SECRET__TD_RESPONDER_URL
             - --authorization
@@ -648,7 +648,7 @@ spec:
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --outputs-manifest
-            - $(CONTAINER_ROOT)/tabsdata/shared/outputs-manifest.yaml
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
             - --state-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/state
             - --out

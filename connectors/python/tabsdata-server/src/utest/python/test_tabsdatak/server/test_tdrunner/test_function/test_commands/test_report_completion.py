@@ -46,7 +46,7 @@ def _set_argv(
     responder_url,
     responder_method="POST",
     responder_authorization="Bearer tok",
-    execution_meta_file="/tmp/execution_meta.yaml",
+    journal_file="/tmp/journal.yaml",
 ):
     monkeypatch.setattr(
         sys,
@@ -74,7 +74,7 @@ def _set_argv(
             "--responder-authorization",
             responder_authorization,
             "--execution-meta-file",
-            str(execution_meta_file),
+            str(journal_file),
         ],
     )
 

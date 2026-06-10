@@ -24,4 +24,4 @@ class BeginExecutionErrorCode(ErrorCode):
         WriteFailedError,
         "failed to write {path}: {detail}",
     )
-    # Raised when ``ExecutionMeta.save`` hits an ``OSError``.
+    # Raised when ``Journal.save`` hits an ``OSError``.
