@@ -1,0 +1,122 @@
+"""Hook mechanism (no provenance policy lives here).
+
+Augmenting ops on ``TableFrame`` wrap the result, then call ``run_hook(op, ...)``.
+A hook has the signature ``(frame, sources, params) -> frame``: it reads the
+source frames' ``_state`` and the raw op ``params``, writes its own
+(namespaced) key into ``frame._state``, and returns the frame. With no hook
+registered, ``run_hook`` returns the frame unchanged (pure wrapping).
+
+Provenance implementations (e.g. column lineage) live OUTSIDE the generated code
+and register hooks via ``set_hook`` / ``chain``. Everything here is private
+framework API — never part of the public surface.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, TypedDict, TypeVar
+
+from .translate import unwrap, validate_schema
+
+if TYPE_CHECKING:
+    import polars as pl
+
+    from __ROOT_MODULE__ import TableFrame
+
+_P = TypeVar("_P")
+
+# Generic hook type (op-agnostic), used by the registry / dispatch below.
+Hook = Callable[["TableFrame", tuple, dict], "TableFrame"]
+
+
+# Per-op hook types. Each augmenting op dispatches a hook with the signature
+# (frame, sources, params) -> frame; the ``*Params`` TypedDicts document exactly
+# what each op passes and ``*Hook`` is the typed callable to annotate a hook with.
+# Generated from the manifest (one per hookable op).
+__HOOK_TYPES__
+
+
+def polars_of(instance, polars_type: type[_P]) -> _P:
+    """Return the underlying polars object of a delegation instance.
+
+    The controlled, type-checked way for hook code to reach polars internals —
+    instead of a misusable ``_pl`` accessor on the wrappers. Raises ``TypeError``
+    if the unwrapped object is not an instance of ``polars_type``.
+    """
+    inner = unwrap(instance)
+    if not isinstance(inner, polars_type):
+        raise TypeError(
+            f"{type(instance).__name__} does not wrap {polars_type.__name__} "
+            f"(got {type(inner).__name__})"
+        )
+    return inner
+
+
+def tableframe_of(lf: "pl.LazyFrame") -> "TableFrame":
+    """Wrap a polars LazyFrame into a TableFrame (empty hook state). The inverse
+    of ``polars_of`` — lives here so TableFrame needs no public constructor. As an
+    external entry point it enforces the allowed-datatype set on ``lf``'s schema."""
+    from __ROOT_MODULE__ import TableFrame  # lazy: TableFrame's module imports this one
+
+    validate_schema(lf)
+    return TableFrame._wrap(lf)
+
+
+# --------------------------------------------------------------------------- #
+# Hook registry (per-class, MRO-resolved) + dispatch + composition.
+# --------------------------------------------------------------------------- #
+def set_hook(cls, op: str, hook: Hook) -> None:
+    if "_hooks" not in cls.__dict__:
+        cls._hooks = {}
+    cls._hooks[op] = hook
+
+
+def get_hook(cls, op: str) -> "Hook | None":
+    for klass in cls.__mro__:
+        hook = klass.__dict__.get("_hooks", {}).get(op)
+        if hook is not None:
+            return hook
+    return None
+
+
+def run_hook(op: str, frame: "TableFrame", sources: tuple, params: dict) -> "TableFrame":
+    hook = get_hook(type(frame), op)
+    return hook(frame, sources, params) if hook is not None else frame
+
+
+def chain(*hooks: Hook) -> Hook:
+    """Compose hooks into one that threads the frame through each, in order."""
+
+    def chained(frame, sources, params):
+        for hook in hooks:
+            frame = hook(frame, sources, params)
+        return frame
+
+    return chained
+
+
+@dataclass
+class HookStatus:
+    registered: dict[str, str]  # op -> "module.qualname" of the registered hook
+    unregistered: tuple[str, ...]  # hookable ops with no registration
+
+
+def hook_status(cls) -> HookStatus:
+    registered: dict[str, str] = {}
+    unregistered: list[str] = []
+    for op in getattr(cls, "_HOOKABLE_OPS", ()):
+        hook = get_hook(cls, op)
+        if hook is None:
+            unregistered.append(op)
+        else:
+            registered[op] = f"{hook.__module__}.{hook.__qualname__}"
+    return HookStatus(registered, tuple(unregistered))
+
+
+def verify_hooks(cls, fail_if: bool) -> HookStatus:
+    """Report which hookable ops have a registered hook. If ``fail_if`` and any
+    are missing, raise."""
+    status = hook_status(cls)
+    if fail_if and status.unregistered:
+        raise RuntimeError(f"Unregistered hooks on {cls.__name__}: {list(status.unregistered)}")
+    return status

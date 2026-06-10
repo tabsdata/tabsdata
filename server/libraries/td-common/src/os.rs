@@ -20,7 +20,8 @@ use libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use std::env::consts::OS;
 use std::path::{Path, PathBuf};
 use std::process;
-use sysinfo::{Pid, Process, Signal, System};
+use std::time::{Duration, Instant};
+use sysinfo::{Pid, Process, ProcessesToUpdate, Signal, System};
 use tracing::{info, warn};
 
 #[allow(dead_code)]
@@ -37,6 +38,9 @@ const EXECUTABLE_MASK: u32 = S_IXUSR | S_IXGRP | S_IXOTH;
 
 #[cfg(target_os = "macos")]
 const EXECUTABLE_MASK: u32 = (S_IXUSR | S_IXGRP | S_IXOTH) as u32;
+
+const TERMINATE_TREE_GRACE: Duration = Duration::from_secs(32);
+const TERMINATE_TREE_POLL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, thiserror::Error)]
 pub enum OsProcessError {
@@ -86,6 +90,95 @@ pub fn terminate_process(pid: i32, signal: Signal) -> Result<(), OsProcessError>
     } else {
         Err(OsProcessError::ProcessNotFound(pid))
     }
+}
+
+pub fn terminate_process_tree(pid: i32, signal: Signal) -> Result<(), OsProcessError> {
+    let mut system = System::new_all();
+    system.refresh_all();
+    let Some(process) = system.process(Pid::from_u32(pid as u32)) else {
+        return Err(OsProcessError::ProcessNotFound(pid));
+    };
+    info!("Process with pid '{}' found: '{:?}'", pid, process.name());
+    kill_children_with(process, signal);
+    kill_parent_with(process, signal);
+
+    let deadline = Instant::now() + TERMINATE_TREE_GRACE;
+    while Instant::now() < deadline {
+        if !is_subtree_alive(pid as u32) {
+            return Ok(());
+        }
+        std::thread::sleep(TERMINATE_TREE_POLL);
+    }
+
+    force_kill_tree(pid as u32);
+    if is_subtree_alive(pid as u32) {
+        Err(OsProcessError::TerminationFailure(pid, signal))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_subtree_alive(root: u32) -> bool {
+    if check_process(root as i32) {
+        return true;
+    }
+    collect_descendants(root)
+        .into_iter()
+        .any(|pid| check_process(pid as i32))
+}
+
+#[cfg(target_os = "windows")]
+fn is_subtree_alive(root: u32) -> bool {
+    check_process(root as i32)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn force_kill_tree(root: u32) {
+    let descendants = collect_descendants(root);
+    let _ = process::Command::new("kill")
+        .arg("-KILL")
+        .arg(root.to_string())
+        .output();
+    for descendant in descendants {
+        let _ = process::Command::new("kill")
+            .arg("-KILL")
+            .arg(descendant.to_string())
+            .output();
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn force_kill_tree(root: u32) {
+    let mut command = process::Command::new("taskkill.exe");
+    if check_flag_env(TD_DETACHED_SUBPROCESSES) {
+        use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let _ = command
+        .arg("/PID")
+        .arg(root.to_string())
+        .arg("/T")
+        .arg("/F")
+        .output();
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn collect_descendants(root: u32) -> Vec<u32> {
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    let mut descendants: Vec<u32> = Vec::new();
+    let mut frontier: Vec<Pid> = vec![Pid::from_u32(root)];
+    while let Some(current) = frontier.pop() {
+        for (pid, process) in system.processes() {
+            if process.parent() == Some(current) {
+                descendants.push(pid.as_u32());
+                frontier.push(*pid);
+            }
+        }
+    }
+    descendants
 }
 
 /// Interceptor of 'sysinfo' crate function kill_with to run "taskkill /F /T ..." on Windows
@@ -219,9 +312,9 @@ mod tests {
     use std::process::Command;
     use std::sync::mpsc::channel;
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
-    use sysinfo::Signal;
+    use sysinfo::{ProcessesToUpdate, Signal};
 
     use super::*;
 
@@ -299,23 +392,26 @@ mod tests {
 
     // Helper function to terminate a process with a specified signal and verify termination
     fn kill_process(signal: Signal) {
+        fn is_process_alive(pid: Pid) -> bool {
+            let mut system = System::new();
+            system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+            system.process(pid).is_some()
+        }
+
         let pid = spawn_dummy_process();
-        let mut system = System::new_all();
-        system.refresh_all();
+        let target = Pid::from_u32(pid as u32);
         assert!(
-            system.process(Pid::from_u32(pid as u32)).is_some(),
+            is_process_alive(target),
             "The dummy process should be running"
         );
         terminate_process(pid, signal).expect("Failed to terminate the dummy process");
-        let mut attempts = 10;
-        while attempts > 0 {
-            let mut system = System::new_all();
-            system.refresh_all();
-            if system.process(Pid::from_u32(pid as u32)).is_none() {
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while Instant::now() < deadline {
+            if !is_process_alive(target) {
                 return;
             }
-            thread::sleep(Duration::from_secs(1));
-            attempts -= 1;
+            thread::sleep(Duration::from_millis(20));
         }
         panic!("The dummy process should be terminated after '{signal}' signal");
     }

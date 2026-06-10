@@ -59,7 +59,8 @@ tdx-harvester = "tabsdatax.pytest.plugins.harvester.plugin"
 
 [project.scripts]
 tdkdocker = "tabsdatax.docker.cli:main"
-tdx_gconnector = "tabsdatax.generator.connector:main"
+tdx_gconnector = "tabsdatax.generator.connector.cli:main"
+tdx_gtableframe = "tabsdatax.generator.tableframe.cli:main"
 tdx_pyoutdated = "tabsdatax.cmake.pyoutdated:main"
 tdx-harvester-monitor = "tabsdatax.pytest.plugins.harvester.client:main"
 
@@ -71,6 +72,7 @@ Source = "https://github.com/tabsdata/tabsdata"
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
+testpaths = ["src/utest/python"]
 markers = [
     "agent: mark tests that require the tabsdata-agent package.",
     "ai_provider: mark tests that require an ai provider (accepted values: openai).",
@@ -150,6 +152,7 @@ namespaces = true
 
 [tool.setuptools.package-data]
 "*" = ["!.gitkeep", "!*.pyc", "!__pycache__/*"]
+"tabsdatax.generator.tableframe.emit" = ["templates/*.tmpl"]
 
 [tool.tabsdata]
 name = "tabsdata-toolkit"
