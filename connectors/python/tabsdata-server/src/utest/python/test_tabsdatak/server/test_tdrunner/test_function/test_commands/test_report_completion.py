@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import http.server
+import json
 import socket
 import sys
 import threading
@@ -17,7 +18,7 @@ import pyarrow.parquet as pq
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function.commands.report_completion import main
+from tabsdatak.server._tdrunner.function.commands.report_completion import _post, main
 from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
     BadManifestError,
     BadRequestError,
@@ -36,7 +37,7 @@ def _set_argv(
     monkeypatch,
     *,
     url,
-    token,
+    authorization,
     request,
     outputs_manifest,
     state_dir,
@@ -45,6 +46,7 @@ def _set_argv(
     responder_url,
     responder_method="POST",
     responder_authorization="Bearer tok",
+    execution_meta_file="/tmp/execution_meta.yaml",
 ):
     monkeypatch.setattr(
         sys,
@@ -53,8 +55,8 @@ def _set_argv(
             "report-completion",
             "--url",
             str(url),
-            "--token",
-            str(token),
+            "--authorization",
+            str(authorization),
             "--request",
             str(request),
             "--outputs-manifest",
@@ -71,6 +73,8 @@ def _set_argv(
             responder_method,
             "--responder-authorization",
             responder_authorization,
+            "--execution-meta-file",
+            str(execution_meta_file),
         ],
     )
 
@@ -112,8 +116,7 @@ def _write_request(path, *, output=None, system_output=None):
         "FunctionV2": {
             "info": _info(),
             "output": [
-                _output_table(entry, index)
-                for index, entry in enumerate(output or [])
+                _output_table(entry, index) for index, entry in enumerate(output or [])
             ],
             "system_output": [
                 _output_table(entry, index)
@@ -201,7 +204,7 @@ def test_main_writes_response_and_posts(
     _set_argv(
         monkeypatch,
         url=f"{base_url}/api/v1/done",
-        token="tok",
+        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=state_dir,
@@ -211,21 +214,31 @@ def test_main_writes_response_and_posts(
     )
     assert main() == 0
 
-    body = out.read_bytes()
-    parsed = yaml.safe_load(body)
-    by_name = {e["table"]: e for e in parsed["output"]}
+    # The on-disk artifact stays YAML for human readability/audit; the
+    # wire body is JSON (the apiserver expects application/json).
+    yaml_artifact = yaml.safe_load(out.read_bytes())
+    by_name = {e["table"]: e for e in yaml_artifact["output"]}
     assert by_name["customers"]["info"]["row_count"] == 3
     assert by_name["customers"]["info"]["column_count"] == 2
     assert by_name["customers"]["info"]["schema_hash"].startswith("sha256:")
+    assert by_name["customers"]["info"]["data_bytes"] > 0
     assert by_name["td-initial-values"]["info"]["row_count"] == 1
     assert by_name["td-initial-values"]["info"]["column_count"] == 1
+    assert by_name["td-initial-values"]["info"]["data_bytes"] > 0
 
-    # POST happened with correct headers and body
+    # POST happened with JSON content-type and a body that decodes to
+    # the same structure as the YAML artifact.
     assert len(request_log) == 1
     posted = request_log[0]
     assert posted["path"] == "/api/v1/done"
     assert posted["headers"]["Authorization"] == "Bearer tok"
-    assert posted["body"] == body
+    assert posted["headers"]["Content-Type"] == "application/json"
+    posted_payload = json.loads(posted["body"])
+    posted_by_name = {e["table"]: e for e in posted_payload["output"]}
+    assert (
+        posted_by_name["customers"]["info"]["row_count"]
+        == by_name["customers"]["info"]["row_count"]
+    )
 
 
 def test_main_no_info_when_manifest_file_is_null(
@@ -245,7 +258,7 @@ def test_main_no_info_when_manifest_file_is_null(
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
-        token="tok",
+        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
@@ -273,7 +286,7 @@ def test_main_no_info_when_state_parquet_missing(
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
-        token="tok",
+        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
@@ -289,13 +302,13 @@ def test_main_no_info_when_state_parquet_missing(
 def test_main_resolves_env_refs(monkeypatch, tmp_path, http_server, http_ok_url):
     base_url, request_log, _ = http_server
     monkeypatch.setenv("TD_TEST_RC_URL", f"{base_url}/done")
-    monkeypatch.setenv("TD_TEST_RC_TOK", "secret")
+    monkeypatch.setenv("TD_TEST_RC_TOK", "Bearer secret")
     request_yaml = _write_request(tmp_path / "request.yaml")
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     _set_argv(
         monkeypatch,
         url="env:TD_TEST_RC_URL",
-        token="env:TD_TEST_RC_TOK",
+        authorization="env:TD_TEST_RC_TOK",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
@@ -318,7 +331,7 @@ def test_main_missing_request_returns_bad_request(
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
-        token="tok",
+        authorization="Bearer tok",
         request=tmp_path / "no-request.yaml",
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
@@ -337,7 +350,7 @@ def test_main_missing_manifest_returns_bad_manifest(
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
-        token="tok",
+        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=tmp_path / "no-manifest.yaml",
         state_dir=tmp_path / "state",
@@ -358,7 +371,7 @@ def test_main_malformed_manifest_returns_bad_manifest(
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
-        token="tok",
+        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=bad,
         state_dir=tmp_path / "state",
@@ -378,7 +391,7 @@ def test_main_output_table_missing_from_manifest_returns_mismatch(
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
-        token="tok",
+        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
@@ -400,7 +413,7 @@ def test_main_http_error_returns_http_error_but_writes_out(
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
-        token="tok",
+        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
@@ -429,7 +442,7 @@ def test_main_url_error_returns_http_error(monkeypatch, tmp_path, http_ok_url):
     _set_argv(
         monkeypatch,
         url="http://127.0.0.1:1/done",
-        token="tok",
+        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
@@ -440,20 +453,52 @@ def test_main_url_error_returns_http_error(monkeypatch, tmp_path, http_ok_url):
     assert main() == HttpPostError.exit_code
 
 
+def test_post_http_error_includes_response_body_in_detail(monkeypatch):
+    """HTTPError's response body (apiserver's specific complaint) must
+    end up in the raised HttpPostError's detail — otherwise a 400 like
+    'missing field `status`' bottoms out at a bare 'Bad Request' and
+    forces a manual chase to figure out what the apiserver objected to.
+    """
+    import io
+
+    apiserver_body = b'{"error":"missing field `status` at line 1 column 9"}'
+
+    def fake_urlopen(req, *args, **kwargs):
+        raise urllib.error.HTTPError(
+            req.full_url,
+            400,
+            "Bad Request",
+            {},
+            io.BytesIO(apiserver_body),
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(HttpPostError) as exc_info:
+        _post("http://api/done", "Bearer t", b"{}")
+    rendered = str(exc_info.value)
+    assert "Bad Request" in rendered
+    assert apiserver_body.decode("utf-8") in rendered
+
+
 def test_main_write_error_returns_write_failed(
     monkeypatch, tmp_path, http_server, http_ok_url
 ):
     base_url, _, _ = http_server
     request_yaml = _write_request(tmp_path / "request.yaml")
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
+    # Make the write fail by pointing `--out` *under* a regular file:
+    # `write_response` mkdirs missing parents (TD-2338), but mkdir into
+    # a path that already exists as a file raises OSError.
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a dir")
     _set_argv(
         monkeypatch,
         url=f"{base_url}/done",
-        token="tok",
+        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
-        out=tmp_path / "no" / "such" / "response.yaml",
+        out=blocker / "nested" / "response.yaml",
         liveness=tmp_path / "live",
         responder_url=http_ok_url,
     )

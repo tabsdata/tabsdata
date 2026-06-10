@@ -110,11 +110,15 @@ def test_write_produces_plain_yaml(tmp_path):
 # --- write_response error paths ---
 
 
-def test_write_to_missing_parent_raises_oserror(tmp_path):
-    """Writing into a non-existent directory should raise OSError."""
+def test_write_creates_missing_parent_dirs(tmp_path):
+    # Under the publisher chain `report-completion` writes
+    # `shared/response/response.yaml` on the shared emptyDir which
+    # starts out empty (the image-template subdir is overlaid by the
+    # mount); the writer creates the chain on demand rather than
+    # raising OSError.
     target = tmp_path / "no" / "such" / "dir" / "response.yaml"
-    with pytest.raises(OSError):
-        write_response(Response(output=()), target)
+    write_response(Response(output=()), target)
+    assert target.exists()
 
 
 def test_write_to_directory_path_raises_oserror(tmp_path):

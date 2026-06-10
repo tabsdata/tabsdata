@@ -18,6 +18,7 @@ Schema:
           column_count: 5
           row_count: 1000
           schema_hash: abc123
+          data_bytes: 4096   # optional; bytes the parquet occupies on disk
       - table: orders   # no `info` → table was not modified
 """
 
@@ -39,6 +40,11 @@ class TableInfo(BaseModel):
     column_count: int
     row_count: int
     schema_hash: str
+    # Bytes the produced parquet file occupies on disk. Optional so
+    # callers that can't / don't want to populate it can omit it; the
+    # apiserver aggregates per-table values via sum() and treats a
+    # missing field as "no contribution".
+    data_bytes: int | None = None
 
 
 class TableEntry(BaseModel):
@@ -63,11 +69,18 @@ class Response(BaseModel):
 def write_response(resp: Response, path: Path) -> None:
     """Serialise the response to plain YAML at `path`.
 
+    Parent directories of `path` are created if missing — under the
+    publisher init-container chain the `report-completion` main
+    container writes to a subpath of the `shared/` emptyDir which
+    starts out empty (the image-template-provided `shared/response/`
+    subdir is overlaid by the emptyDir mount).
+
     Raises:
-        OSError: if `path` is not writable (e.g. missing parent directory,
-            permission denied, target is a directory).
+        OSError: if `path` is not writable (permission denied, target
+            is a directory, etc.).
     """
     data = resp.model_dump(mode="python", exclude_none=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         yaml.safe_dump(data, fh, sort_keys=False)
 
