@@ -1122,6 +1122,33 @@ mod tests {
     }
 
     #[test]
+    fn test_fetch_runs_for_dispatch_query_projects_base_paths() {
+        let ids = vec![PhysicalFunctionRunId::new()];
+        let sql = fetch_runs_for_dispatch_query(&ids).to_string(SqliteQueryBuilder);
+        // The scheduler reads every prefix it needs off this row — no per-run fetches.
+        // Head-side function stage/checkpoint prefix (stable across patches).
+        assert!(
+            sql.contains(r#""functions"."stage_base_path""#),
+            "must project the function stage_base_path: {sql}"
+        );
+        // Collection's live prefix (function-run content dir).
+        assert!(
+            sql.contains(r#"AS "collection_base_path""#),
+            "must project the collection base_path as collection_base_path: {sql}"
+        );
+        // bundle_base_path = stamped bundle prefix, falling back to the collection
+        // prefix via COALESCE when the bundle row is absent (so it never decodes NULL).
+        assert!(
+            sql.contains(r#"COALESCE("bundles"."base_path", "collections_active"."base_path")"#),
+            "bundle_base_path must coalesce bundle.base_path then collection.base_path: {sql}"
+        );
+        assert!(
+            sql.contains(r#"AS "bundle_base_path""#),
+            "bundle prefix must be aliased bundle_base_path: {sql}"
+        );
+    }
+
+    #[test]
     fn test_fetch_lfrs_to_execute_query_sql_logical_chain() {
         let sql = fetch_lfrs_to_execute_query(&AtTime::now()).to_string(SqliteQueryBuilder);
         assert!(

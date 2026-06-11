@@ -794,6 +794,70 @@ mod tests {
     }
 
     #[test]
+    fn test_function_builder_root() -> Result<(), TdError> {
+        let data_location = BasePath::default();
+        let collection = CollectionId::default();
+        let bundle = BundleId::default();
+        let builder = StorageLocation::V1
+            .builder(&data_location)
+            .collection(&collection)
+            .function(&bundle);
+        assert_eq!(
+            builder.build()?.0,
+            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz"))?
+        );
+        assert_eq!(
+            builder.build_meta("foo")?.0,
+            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz-foo.meta"))?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_stage_builder_root() -> Result<(), TdError> {
+        let data_location = BasePath::default();
+        let collection = CollectionId::default();
+        let function = StageId::default();
+        let builder = StorageLocation::V1
+            .builder(&data_location)
+            .collection(&collection)
+            .stage(&function);
+        assert_eq!(
+            builder.build()?.0,
+            SPath::parse(format!("/stages/c/{collection}/f/{function}"))?
+        );
+        assert_eq!(
+            builder.build_meta("foo")?.0,
+            SPath::parse(format!("/stages/c/{collection}/f/{function}-foo.meta"))?
+        );
+        Ok(())
+    }
+
+    // Checkpoints render under their own `checkpoints/...` subtree, distinct from
+    // `stages/...`, so checkpoint and stage data never share a directory. (Regression
+    // guard: `checkpoint()` once returned a `StageBuilder` and produced a `stages/...`
+    // path, colliding with the stage location.) The "/" root prefix collapses cleanly.
+    #[test]
+    fn test_checkpoint_builder_root() -> Result<(), TdError> {
+        let data_location = BasePath::default();
+        let collection = CollectionId::default();
+        let function = StageId::default();
+        let builder = StorageLocation::V1
+            .builder(&data_location)
+            .collection(&collection)
+            .checkpoint(&function);
+        assert_eq!(
+            builder.build()?.0,
+            SPath::parse(format!("/checkpoints/c/{collection}/f/{function}"))?
+        );
+        assert_eq!(
+            builder.build_meta("foo")?.0,
+            SPath::parse(format!("/checkpoints/c/{collection}/f/{function}-foo.meta"))?
+        );
+        Ok(())
+    }
+
+    #[test]
     fn test_transaction_function_version_builder_v2() -> Result<(), TdError> {
         let data_location = BasePath::try_from("/L")?;
         let collection = CollectionId::default();

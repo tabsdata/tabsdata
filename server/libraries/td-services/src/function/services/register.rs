@@ -155,13 +155,58 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::errors::SqlError;
+    use crate::collection::service::update::UpdateCollectionService;
+    use td_objects::dxo::bundle::BundleDB;
+    use td_objects::dxo::collection::CollectionUpdate;
+    use td_objects::dxo::function::FunctionDB;
     use td_objects::types::basic::{
-        AccessTokenId, Decorator, FunctionRuntimeValues, ProjectId, RoleId, ToCollectionId, UserId,
-        WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, BasePath, BundleStatus, Decorator, FunctionName, FunctionRuntimeValues,
+        FunctionStatus, ProjectId, RoleId, ToCollectionId, UserId, WorkerMessageStatus,
+        WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
+
+    // Helper: the current Active version of the function named `name`.
+    async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
+        let active: Vec<FunctionDB> =
+            db.live().fetch_all::<FunctionDB>(&FunctionStatus::Active).await?;
+        let function = active
+            .into_iter()
+            .find(|f| f.name == *name)
+            .expect("matching active function exists");
+        Ok(function)
+    }
+
+    // Helper: move `collection_name` onto a non-default base_path via the
+    // collection update service, returning the applied BasePath.
+    async fn set_collection_base_path(
+        db: &TdPool,
+        collection_name: &CollectionName,
+        base_path: &str,
+    ) -> Result<BasePath, TdError> {
+        let base_path = BasePath::try_from(base_path)?;
+        let update = CollectionUpdate::builder()
+            .name(None)
+            .description(None)
+            .base_path(Some(base_path.clone()))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
+                .update(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    update,
+                )
+                .in_project(ProjectId::sandbox());
+        UpdateCollectionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(request)
+            .await?;
+        Ok(base_path)
+    }
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
@@ -1392,6 +1437,173 @@ mod tests {
         assert!(res.is_err());
         let err = res.err().unwrap();
         assert!(format!("{err}").contains("Multiple workers are not supported."));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_stamps_stage_base_path_from_collection(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("prod_coll")?;
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        // Move the collection onto a non-default base_path before registering.
+        let prod = set_collection_base_path(&db, &collection_name, "/prod").await?;
+
+        let create = FunctionRegister::builder()
+            .try_name("stamped_fn")?
+            .try_description("description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
+        service.raw_oneshot(request).await?;
+
+        let function = active_function(&db, &FunctionName::try_from("stamped_fn")?).await?;
+        assert_eq!(
+            function.stage_base_path, prod,
+            "stage_base_path is stamped from the collection base_path at register"
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_flips_bundle_to_registered(db: TdPool) -> Result<(), TdError> {
+        use crate::function::services::upload::UploadFunctionService;
+        use crate::Context;
+        use axum::body::Body;
+        use axum::extract::Request;
+        use ta_services::factory::ServiceFactory;
+        use td_objects::dxo::function_upload::FunctionUpload;
+
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+        let context = Context::with_defaults(db.clone());
+
+        // Upload a bundle so a Pending BundleDB row exists for the function to claim.
+        let upload_request = Request::builder().body(Body::from(b"PAYLOAD".to_vec())).unwrap();
+        let upload = FunctionUpload::new(upload_request);
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    upload,
+                )
+                .in_project(ProjectId::sandbox());
+        let bundle = UploadFunctionService::build(&context)
+            .service()
+            .raw_oneshot(request)
+            .await?;
+        assert_eq!(
+            db.live().fetch_all::<BundleDB>(&bundle.id).await?[0].status,
+            BundleStatus::Pending,
+            "bundle starts Pending right after upload"
+        );
+
+        let create = FunctionRegister::builder()
+            .try_name("flip_fn")?
+            .try_description("description")?
+            .bundle_id(bundle.id)
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
+        service.raw_oneshot(request).await?;
+
+        // The bundle the function claimed is flipped Pending -> Registered.
+        let function = active_function(&db, &FunctionName::try_from("flip_fn")?).await?;
+        let bundles: Vec<BundleDB> =
+            db.live().fetch_all::<BundleDB>(&function.bundle_id).await?;
+        assert_eq!(bundles.len(), 1);
+        assert_eq!(bundles[0].status, BundleStatus::Registered);
+        assert_eq!(bundles[0].collection_id, collection.id);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_base_path_override(db: TdPool) -> Result<(), TdError> {
+        let collection_name = CollectionName::try_from("prod_coll")?;
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        // Non-default collection base_path so we can tell override from stamping.
+        let prod = set_collection_base_path(&db, &collection_name, "/prod").await?;
+
+        let create = FunctionRegister::builder()
+            .try_name("override_fn")?
+            .try_description("description")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .base_path(Some(BasePath::try_from("/fn")?))
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
+        let service = RegisterFunctionService::with_defaults(db.clone()).service();
+        service.raw_oneshot(request).await?;
+
+        let function = active_function(&db, &FunctionName::try_from("override_fn")?).await?;
+        assert_eq!(
+            function.base_path,
+            Some(BasePath::try_from("/fn")?),
+            "base_path override is persisted on the function version"
+        );
+        assert_eq!(
+            function.stage_base_path, prod,
+            "stage_base_path still comes from the collection, not the override"
+        );
         Ok(())
     }
 }

@@ -159,9 +159,9 @@ mod tests {
     use td_objects::rest_urls::CollectionParam;
     use td_objects::system::TD_FN_STATE_PREFIX;
     use td_objects::types::basic::{
-        AccessTokenId, Decorator, Depth, FunctionRuntimeValues, ProjectId, RoleId, TableId,
-        TableName, TableStatus, ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus,
-        WorkerType,
+        AccessTokenId, BasePath, Decorator, Depth, FunctionName, FunctionRuntimeValues,
+        FunctionStatus, ProjectId, ResetStage, RoleId, TableId, TableName, TableStatus,
+        ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::recursion::RecursionOptions;
     use td_objects::{Buildable, and};
@@ -706,6 +706,242 @@ mod tests {
         assert_eq!(
             state_id_before, state_id_after,
             "without reset_state the state table id is reused"
+        );
+        Ok(())
+    }
+
+    // Helper: the current Active version of the function named `name`.
+    async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
+        let active: Vec<FunctionDB> =
+            db.live().fetch_all::<FunctionDB>(&FunctionStatus::Active).await?;
+        let function = active
+            .into_iter()
+            .find(|f| f.name == *name)
+            .expect("matching active function exists");
+        Ok(function)
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_reset_stage_keeps_stage_base_path(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&CollectionName::try_from("stage_coll")?, &UserId::admin())
+            .await?;
+
+        let create = FunctionRegister::builder()
+            .try_name("stage_fn")?
+            .try_description("desc")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let register =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
+        RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(register)
+            .await?;
+
+        let fn_name = FunctionName::try_from("stage_fn")?;
+        let before = active_function(&db, &fn_name).await?;
+        let stage_id_before = before.stage_id.clone();
+        let stage_base_path_before = before.stage_base_path.clone();
+
+        let update = FunctionUpdate::builder()
+            .name(Some("stage_fn".try_into()?))
+            .reset_stage(ResetStage::TRUE)
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .update(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .function(FunctionIdName::from_str("stage_fn")?)
+                        .build()?,
+                    update,
+                )
+                .in_project(ProjectId::sandbox());
+        let service = UpdateFunctionService::with_defaults(db.clone()).service();
+        let _ = service.raw_oneshot(request).await?;
+
+        let after = active_function(&db, &fn_name).await?;
+        assert_ne!(
+            stage_id_before, after.stage_id,
+            "reset_stage should regenerate the stage id"
+        );
+        assert_eq!(
+            stage_base_path_before, after.stage_base_path,
+            "reset_stage should keep the stage base_path"
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_no_reset_stage_carries_stage_id(db: TdPool) -> Result<(), TdError> {
+        let collection = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(
+                &CollectionName::try_from("nostage_coll")?,
+                &UserId::admin(),
+            )
+            .await?;
+
+        let create = FunctionRegister::builder()
+            .try_name("nostage_fn")?
+            .try_description("desc")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let register =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
+        RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(register)
+            .await?;
+
+        let fn_name = FunctionName::try_from("nostage_fn")?;
+        let stage_id_before = active_function(&db, &fn_name).await?.stage_id;
+
+        // Default reset_stage = false.
+        let update = FunctionUpdate::builder()
+            .name(Some("nostage_fn".try_into()?))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .update(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .function(FunctionIdName::from_str("nostage_fn")?)
+                        .build()?,
+                    update,
+                )
+                .in_project(ProjectId::sandbox());
+        let service = UpdateFunctionService::with_defaults(db.clone()).service();
+        let _ = service.raw_oneshot(request).await?;
+
+        let stage_id_after = active_function(&db, &fn_name).await?.stage_id;
+        assert_eq!(
+            stage_id_before, stage_id_after,
+            "without reset_stage the stage id is reused"
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_base_path_override_sets_function_base_path(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let collection = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(
+                &CollectionName::try_from("override_coll")?,
+                &UserId::admin(),
+            )
+            .await?;
+
+        let create = FunctionRegister::builder()
+            .try_name("override_fn")?
+            .try_description("desc")?
+            .bundle_id(BundleId::default())
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let register =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .build()?,
+                    create,
+                )
+                .in_project(ProjectId::sandbox());
+        RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(register)
+            .await?;
+
+        let fn_name = FunctionName::try_from("override_fn")?;
+
+        // Update with an explicit base_path override.
+        let update = FunctionUpdate::builder()
+            .name(Some("override_fn".try_into()?))
+            .base_path(Some(BasePath::try_from("/over")?))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .update(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .function(FunctionIdName::from_str("override_fn")?)
+                        .build()?,
+                    update,
+                )
+                .in_project(ProjectId::sandbox());
+        let service = UpdateFunctionService::with_defaults(db.clone()).service();
+        let _ = service.raw_oneshot(request).await?;
+
+        let after = active_function(&db, &fn_name).await?;
+        assert_eq!(
+            after.base_path,
+            Some(BasePath::try_from("/over")?),
+            "base_path override should be persisted on the new version"
+        );
+
+        // A subsequent update without an override carries the previous value forward.
+        let update = FunctionUpdate::builder()
+            .name(Some("override_fn".try_into()?))
+            .build()?;
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .update(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                        .function(FunctionIdName::from_str("override_fn")?)
+                        .build()?,
+                    update,
+                )
+                .in_project(ProjectId::sandbox());
+        let service = UpdateFunctionService::with_defaults(db.clone()).service();
+        let _ = service.raw_oneshot(request).await?;
+
+        let after = active_function(&db, &fn_name).await?;
+        assert_eq!(
+            after.base_path,
+            Some(BasePath::try_from("/over")?),
+            "without an override the previous base_path carries forward"
         );
         Ok(())
     }

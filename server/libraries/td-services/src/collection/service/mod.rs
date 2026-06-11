@@ -14,7 +14,7 @@ mod delete;
 mod layer;
 mod list;
 mod read;
-mod update;
+pub mod update;
 
 #[cfg(test)]
 mod test_errors;

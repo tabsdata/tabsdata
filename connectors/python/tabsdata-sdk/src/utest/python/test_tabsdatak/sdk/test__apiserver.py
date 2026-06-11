@@ -223,6 +223,133 @@ def test_get_params_dict_returns_empty_when_all_none():
     assert out == {}
 
 
+def test_get_params_dict_includes_base_path_when_set():
+    out = a.APIServer.get_params_dict(["name", "base_path"], ["c", "/data/x"])
+    assert out == {"name": "c", "base_path": "/data/x"}
+
+
+def test_get_params_dict_omits_base_path_when_none():
+    out = a.APIServer.get_params_dict(["name", "base_path"], ["c", None])
+    assert out == {"name": "c"}
+
+
+def test_get_params_dict_keeps_false_reset_flags():
+    # ``False`` is a meaningful reset value and must survive the filter
+    # (only ``None`` is dropped).
+    out = a.APIServer.get_params_dict(
+        ["reset_state", "reset_stage"], [False, True]
+    )
+    assert out == {"reset_state": False, "reset_stage": True}
+
+
+# ---------------------------------------------------------------------------
+# Request-payload assembly for the base_path / reset_* params.
+#
+# These methods build the JSON body and hand it to ``self.post``; we
+# stub ``post`` to capture the body without any network I/O.
+# ---------------------------------------------------------------------------
+
+
+class _CapturePost:
+    """A ``post`` replacement that records its ``json=`` payload and
+    returns a dummy 200 response so ``raise_for_status`` is a no-op."""
+
+    def __init__(self):
+        self.seen: dict = {}
+
+    def __call__(self, path, data=None, json=None, params=None, **kw):
+        self.seen["path"] = path
+        self.seen["json"] = json
+        return _DummyResponse()
+
+
+class _DummyResponse:
+    status_code = 200
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"data": {}}
+
+
+def _server_with_captured_post(monkeypatch):
+    server = a.APIServer("host")
+    capture = _CapturePost()
+    monkeypatch.setattr(server, "post", capture)
+    return server, capture
+
+
+def test_collection_create_includes_base_path_in_body(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.collection_create("coll", "desc", base_path="/data/coll")
+    assert capture.seen["json"]["base_path"] == "/data/coll"
+
+
+def test_collection_create_omits_base_path_when_none(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.collection_create("coll", "desc")
+    assert "base_path" not in capture.seen["json"]
+
+
+def test_collection_update_includes_base_path_in_body(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.collection_update("coll", base_path="/data/new")
+    assert capture.seen["json"]["base_path"] == "/data/new"
+
+
+def test_collection_update_omits_unset_fields(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.collection_update("coll", description="d")
+    body = capture.seen["json"]
+    assert body == {"description": "d"}
+    assert "base_path" not in body
+
+
+def test_function_register_includes_base_path_in_body(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.function_register(
+        collection_name="coll",
+        function_name="fn",
+        description="d",
+        tables=["t"],
+        table_types={},
+        dependencies=[],
+        trigger_by=None,
+        function_snippet="<src>",
+        bundle_id="b1",
+        decorator="P",
+        runtime_values="{}",
+        reuse_frozen_tables=False,
+        base_path="/data/fn",
+    )
+    assert capture.seen["json"]["base_path"] == "/data/fn"
+
+
+def test_function_update_forwards_base_path_and_reset_flags(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.function_update(
+        collection_name="coll",
+        function_name="fn",
+        base_path="/data/fn",
+        reset_state=True,
+        reset_stage=True,
+    )
+    body = capture.seen["json"]
+    assert body["base_path"] == "/data/fn"
+    assert body["reset_state"] is True
+    assert body["reset_stage"] is True
+
+
+def test_function_update_omits_reset_flags_when_none(monkeypatch):
+    server, capture = _server_with_captured_post(monkeypatch)
+    server.function_update(collection_name="coll", function_name="fn")
+    body = capture.seen["json"]
+    assert "reset_state" not in body
+    assert "reset_stage" not in body
+    assert "base_path" not in body
+
+
 def test_obtain_connection_returns_apiserver_without_login():
     conn = a.obtain_connection("host")
     assert isinstance(conn, a.APIServer)

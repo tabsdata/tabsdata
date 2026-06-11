@@ -84,7 +84,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::types::basic::{
-        AccessTokenId, BasePath, BundleStatus, CollectionName, ProjectId, RoleId, UserId,
+        AccessTokenId, AtTime, BasePath, BundleStatus, CollectionName, ProjectId, RoleId, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -198,6 +198,81 @@ mod tests {
             .build()?;
         let content = context.storage.read(&bundle_location).await?;
         let content = String::from_utf8(content).unwrap();
+        assert_eq!(content, payload);
+
+        Ok(())
+    }
+
+    /// The upload service runs a best-effort GC of abandoned (stale `Pending`)
+    /// bundles. Recent pending bundles must be spared: two uploads to the same
+    /// collection leave two pending rows (neither is older than the cutoff).
+    /// Drives the upload service once against `collection`, returning the response.
+    async fn upload_once(
+        context: &Context,
+        collection_name: &CollectionName,
+        payload: &str,
+    ) -> Result<Bundle, TdError> {
+        let request = Request::builder()
+            .body(Body::new(payload.to_string()))
+            .unwrap();
+        let function_upload = FunctionUpload::new(request);
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    CollectionParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{collection_name}"))?)
+                        .build()?,
+                    function_upload,
+                )
+                .in_project(ProjectId::sandbox());
+        let service = UploadFunctionService::build(context).service();
+        service.raw_oneshot(request).await
+    }
+
+    /// A bundle is stamped with the collection's base_path at upload time. Here the
+    /// collection carries a non-default base_path ("/prod"), so the bundle must too.
+    #[td_test::test(db)]
+    async fn test_upload_bundle_base_path_non_default(db: TdPool) -> Result<(), TdError> {
+        use td_objects::dxo::collection::{CollectionUpdateDB, CollectionUpdateDBBuilder};
+
+        let collection_name = CollectionName::try_from("prod_coll")?;
+        let collection = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+        let context = Context::with_defaults(db.clone());
+
+        // Move the collection onto a non-default base_path (the upload service's
+        // public surface offers no base_path knob; the live update is the seam used
+        // elsewhere to mutate seeded rows directly).
+        let prod = BasePath::try_from("/prod")?;
+        let update: CollectionUpdateDB = CollectionUpdateDBBuilder::try_from(&collection)?
+            .modified_on(AtTime::now())
+            .modified_by_id(UserId::admin())
+            .base_path(prod.clone())
+            .build()?;
+        db.live()
+            .update::<CollectionUpdateDB, CollectionDB>(&update, &collection.id)
+            .await?;
+        let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
+        assert_eq!(reloaded.base_path, prod);
+
+        // Upload: the bundle must inherit the collection's non-default base_path.
+        let payload = "TEXT";
+        upload_once(&context, &collection_name, payload).await?;
+
+        let bundle_db: Vec<BundleDB> = db.live().fetch_all::<BundleDB>(()).await?;
+        assert_eq!(bundle_db.len(), 1);
+        assert_eq!(bundle_db[0].base_path, prod);
+
+        // And the object lands under that base_path in storage.
+        let (location, _) = StorageLocation::current()
+            .builder(&prod)
+            .collection(&bundle_db[0].collection_id)
+            .function(&bundle_db[0].id)
+            .build()?;
+        let content = String::from_utf8(context.storage.read(&location).await?).unwrap();
         assert_eq!(content, payload);
 
         Ok(())

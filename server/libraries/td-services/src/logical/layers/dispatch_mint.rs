@@ -270,3 +270,177 @@ pub async fn mint_function_runs_on_dispatch(
     );
     Ok(output)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use td_database::pool::TdPool;
+    use td_objects::Buildable;
+    use td_objects::TryUpdater;
+    use td_objects::and;
+    use td_objects::dxo::collection::{CollectionDB, CollectionUpdateDB, CollectionUpdateDBBuilder};
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::logical::LogicalPointerDao;
+    use td_objects::types::basic::{
+        AccessTokenId, BasePath, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
+        LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus, ProjectId, RoleId,
+        TableNameDto, TransactionKey, UserId,
+    };
+    use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
+    use td_tower::extractors::{MutRef, Ref};
+
+    /// Set a collection's `base_path` via the live-update seam (no
+    /// service oneshot): seed the updater from the current `CollectionDB`,
+    /// stamp modified_on/by from a RequestContext, override base_path,
+    /// then `live().update`.
+    async fn set_collection_base_path(
+        db: &TdPool,
+        collection: &CollectionDB,
+        base_path: &BasePath,
+    ) -> Result<(), TdError> {
+        let request_context = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sec_admin(),
+        )
+        .read::<String>("")
+        .context;
+        let mut builder = CollectionUpdateDBBuilder::try_from(collection)?;
+        let builder = TryUpdater::try_update_from(&mut builder, &request_context)?;
+        let update = builder.clone().base_path(base_path.clone()).build()?;
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .update::<CollectionUpdateDB, CollectionDB>(&update, &collection.id)
+            .await?;
+        Ok(())
+    }
+
+    /// Seed a function with a single regular output table and mint a
+    /// Scheduled LFR/PFR pair (plus the LFR/LTDV pointer events the
+    /// dispatch loop reads) against it. `base_path` becomes the
+    /// function-version override (`FunctionRegister::base_path`).
+    async fn seed_dispatch_lfr(
+        db: &TdPool,
+        collection: &CollectionDB,
+        name: &str,
+        base_path: Option<BasePath>,
+    ) -> Result<LogicalFunctionRunDB, TdError> {
+        let create = FunctionRegister::builder()
+            .try_name(name)?
+            .try_description("d")?
+            .bundle_id(BundleId::default())
+            .try_snippet("s")?
+            .decorator(Decorator::Publisher)
+            .base_path(base_path)
+            .dependencies(None)
+            .triggers(None)
+            .tables(Some(vec![TableNameDto::try_from("t0")?]))
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let func = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(collection, &create)
+            .await?;
+        let exec = db.scoped(ProjectId::sandbox()).seed().execution(&func).await?;
+        let txn = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&exec, &TransactionKey::try_from("ANY")?)
+            .await?;
+        let pfr = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .physical_function_run(
+                collection,
+                &func,
+                &exec,
+                &txn,
+                &LogicalFunctionRunStatus::Scheduled,
+            )
+            .await?;
+        let lfr = db
+            .live()
+            .fetch_one::<LogicalFunctionRunDB>(and!(&pfr.execution_id, &pfr.function_id))
+            .await?;
+
+        // `seed().physical_function_run` leaves the LFR pointer Bound to its
+        // seeded PFR. Real dispatch sees a Pending (InitialMint) LFR pointer and
+        // binds it to the freshly-minted PFR. Append that Pending event so the
+        // mint loop has an unbound pointer to bind, matching plan-build output.
+        let pending = LogicalFunctionRunPointerDB::build_event(
+            lfr.project_id,
+            &lfr.id,
+            LogicalPointerStatus::Pending,
+            None,
+            AtTime::now(),
+            UserId::admin(),
+            LogicalPointerReason::InitialMint,
+        )?;
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .insert::<LogicalFunctionRunPointerDB>(&pending)
+            .await?;
+        Ok(lfr)
+    }
+
+    /// Two functions in one collection (base_path "/coll") dispatched in
+    /// the same tick: function A overrides base_path to "/a", function B
+    /// has no override. Minting must stamp A's output TDVs with "/a" and
+    /// B's with the collection's "/coll" — proving per-LFR resolution
+    /// (override vs collection fallback) within a single batch.
+    #[td_test::test(db)]
+    async fn test_dispatch_batch_stamps_per_lfr_base_path(db: TdPool) -> Result<(), TdError> {
+        let coll = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let coll_base = BasePath::try_from("/coll")?;
+        set_collection_base_path(&db, &coll, &coll_base).await?;
+        let coll: CollectionDB = db.live().fetch_one::<CollectionDB>(&coll.id).await?;
+        assert_eq!(coll.base_path, coll_base);
+
+        let override_base = BasePath::try_from("/a")?;
+        let lfr_a = seed_dispatch_lfr(&db, &coll, "fa", Some(override_base.clone())).await?;
+        let lfr_b = seed_dispatch_lfr(&db, &coll, "fb", None).await?;
+        let fvid_a = lfr_a.function_version_id.clone();
+        let fvid_b = lfr_b.function_version_id.clone();
+
+        let conn = MutRef::new(db.begin().await.unwrap().into_connection());
+        let ready = Ref::new(vec![lfr_a, lfr_b]);
+        let at = Ref::new(AtTime::now());
+        let minted = mint_function_runs_on_dispatch(conn, ready, at).await?;
+
+        assert_eq!(minted.len(), 2, "both LFRs minted in one batch");
+        let a = minted
+            .iter()
+            .find(|m| m.lfr.function_version_id == fvid_a)
+            .expect("function A minted");
+        let b = minted
+            .iter()
+            .find(|m| m.lfr.function_version_id == fvid_b)
+            .expect("function B minted");
+
+        assert!(!a.tdvs.is_empty(), "function A produced output TDVs");
+        for tdv in &a.tdvs {
+            assert_eq!(
+                tdv.base_path, override_base,
+                "function A's output TDVs carry its base_path override, not the collection's"
+            );
+        }
+        assert!(!b.tdvs.is_empty(), "function B produced output TDVs");
+        for tdv in &b.tdvs {
+            assert_eq!(
+                tdv.base_path, coll_base,
+                "function B (no override) falls back to the collection base_path"
+            );
+        }
+        // Distinct, sanity check the two branches actually diverged.
+        assert_ne!(override_base, coll_base);
+        Ok(())
+    }
+}

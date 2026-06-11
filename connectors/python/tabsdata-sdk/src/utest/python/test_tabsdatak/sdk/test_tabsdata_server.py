@@ -447,3 +447,159 @@ def test_build_and_upload_bundle_invokes_bundle_and_upload(
     # The archive carries the v2 metadata extracted from ``info``.
     assert archive.function_type == "P"
     assert archive.function_name == "pub_fn"
+
+
+# ---------------------------------------------------------------------------
+# Collection base_path field wiring.
+#
+# ``Collection.__init__`` keeps two distinct slots:
+#   * ``_base_path`` -- the *create-time* override (what ``create()``
+#     forwards to ``collection_create``); None unless the caller passed
+#     ``base_path=`` explicitly.
+#   * ``base_path``  -- the *effective* value; falls back to the server
+#     value carried in the data dict / kwargs when no override is given.
+# ---------------------------------------------------------------------------
+
+
+def test_collection_stores_explicit_base_path_in_both_slots():
+    coll = ts.Collection(connection=None, name="c", base_path="/data/c")
+    assert coll._base_path == "/data/c"
+    assert coll.base_path == "/data/c"
+
+
+def test_collection_base_path_none_when_not_supplied():
+    coll = ts.Collection(connection=None, name="c")
+    # No create-time override...
+    assert coll._base_path is None
+    # ...and nothing in kwargs to fall back to.
+    assert coll.base_path is None
+
+
+def test_collection_base_path_from_server_data_dict_splat():
+    # Read path: ``Collection(conn, **raw_collection)`` splats the
+    # server's data dict. ``base_path`` is a named __init__ param, so a
+    # server-provided value binds it directly and surfaces on both slots.
+    raw_collection = {"name": "c", "base_path": "/server/resolved"}
+    coll = ts.Collection(None, **raw_collection)
+    assert coll.base_path == "/server/resolved"
+    assert coll._base_path == "/server/resolved"
+
+
+# ---------------------------------------------------------------------------
+# Collection.update_function: forwards base_path / reset_state /
+# reset_stage into the apiserver ``function_update`` call. The bundle
+# producer and upload are mocked (reusing the same machinery as the
+# _build_and_upload_bundle test); we capture the kwargs handed to the
+# connection's ``function_update``.
+# ---------------------------------------------------------------------------
+
+
+def _coll_with_fake_connection(_no_op_bundle):
+    """A Collection whose connection records the ``function_update``
+    kwargs and stubs out the bundle upload + runtime-info calls."""
+    seen: dict = {}
+
+    class _FakeResponse:
+        def json(self):
+            return {"data": {"id": "bundle-xyz"}}
+
+    class _FakeConnection:
+        def runtime_info_get(self):
+            class R:
+                @staticmethod
+                def json():
+                    return {"data": {"python_versions": ["3.12"]}}
+
+            return R()
+
+        def function_upload_bundle(self, collection_name, bundle, raise_for_status):
+            return _FakeResponse()
+
+        def function_update(self, **kwargs):
+            seen.update(kwargs)
+
+    coll = ts.Collection.__new__(ts.Collection)
+    coll.connection = _FakeConnection()
+    coll.name = "my_coll"
+    return coll, seen
+
+
+def test_update_function_forwards_base_path_and_reset_flags(
+    project_root, _no_op_bundle
+):
+    coll, seen = _coll_with_fake_connection(_no_op_bundle)
+    info = _publisher_info()
+
+    coll.update_function(
+        "old_fn",
+        info,
+        project_root,
+        base_path="/data/fn",
+        reset_state=True,
+        reset_stage=True,
+    )
+
+    assert seen["base_path"] == "/data/fn"
+    assert seen["reset_state"] is True
+    assert seen["reset_stage"] is True
+
+
+def test_update_function_defaults_reset_flags_to_false(project_root, _no_op_bundle):
+    coll, seen = _coll_with_fake_connection(_no_op_bundle)
+    info = _publisher_info()
+
+    coll.update_function("old_fn", info, project_root)
+
+    # The SDK-level defaults: reset flags off, no base_path override.
+    assert seen["reset_state"] is False
+    assert seen["reset_stage"] is False
+    assert seen["base_path"] is None
+
+
+def _coll_with_fake_register_connection():
+    """A Collection whose connection records the ``function_register``
+    kwargs and stubs out the bundle upload + runtime-info calls."""
+    seen: dict = {}
+
+    class _FakeResponse:
+        def json(self):
+            return {"data": {"id": "bundle-xyz"}}
+
+    class _FakeConnection:
+        def runtime_info_get(self):
+            class R:
+                @staticmethod
+                def json():
+                    return {"data": {"python_versions": ["3.12"]}}
+
+            return R()
+
+        def function_upload_bundle(self, collection_name, bundle, raise_for_status):
+            return _FakeResponse()
+
+        def function_register(self, **kwargs):
+            seen.update(kwargs)
+
+    coll = ts.Collection.__new__(ts.Collection)
+    coll.connection = _FakeConnection()
+    coll.name = "my_coll"
+    return coll, seen
+
+
+def test_register_function_forwards_base_path(project_root, _no_op_bundle):
+    coll, seen = _coll_with_fake_register_connection()
+    info = _publisher_info()
+
+    coll.register_function(info, project_root, base_path="/data/fn")
+
+    assert seen["base_path"] == "/data/fn"
+
+
+def test_register_function_base_path_defaults_none(project_root, _no_op_bundle):
+    coll, seen = _coll_with_fake_register_connection()
+    info = _publisher_info()
+
+    coll.register_function(info, project_root)
+
+    # No override supplied -> the server applies the collection default.
+    assert seen["base_path"] is None

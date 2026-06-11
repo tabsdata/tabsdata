@@ -59,6 +59,7 @@ mod tests {
     use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
+    use td_objects::dxo::bundle::BundleDB;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDBBuilder, FunctionRegister};
     use td_objects::dxo::function_upload::FunctionUpload;
@@ -183,6 +184,80 @@ mod tests {
             }
             assert_eq!(Bytes::from(buf).as_ref(), expected_payload.as_slice());
         }
+
+        Ok(())
+    }
+
+    /// When the (durable) bundle row has been reaped, the download layer falls
+    /// back to the collection's live base_path and still streams the bytes.
+    #[td_test::test(db)]
+    async fn test_download_bundle_falls_back_to_collection_base_path_when_bundle_row_missing(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let context = Context::with_defaults(db.clone());
+
+        let collection_name = CollectionName::try_from("cofnig")?;
+        let collection = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let payload = b"BUNDLE-PAYLOAD".to_vec();
+        let bundle_id = upload_bundle(&context, &collection.name, payload.clone()).await?;
+
+        let create = FunctionRegister::builder()
+            .try_name("joaquin")?
+            .try_description("desc")?
+            .bundle_id(bundle_id)
+            .try_snippet("snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .try_runtime_values("rv")?
+            .reuse_frozen_tables(false)
+            .build()?;
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
+
+        // Reap the bundle row, leaving only the storage object and the live
+        // collection base_path to locate it.
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .delete::<BundleDB>(&bundle_id)
+            .await?;
+        assert!(
+            db.live()
+                .fetch_optional::<BundleDB>(&bundle_id)
+                .await?
+                .is_none(),
+            "bundle row must be gone before downloading"
+        );
+
+        let function_param = FunctionParam::builder()
+            .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+            .function(FunctionIdName::from_str("joaquin")?)
+            .build()?;
+        let service = DownloadBundleService::build(&context).service();
+        let download_request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .read(FunctionMaybeAtIdName::new(
+                    function_param,
+                    OptionalAtTimeParam { at: None },
+                ))
+                .in_project(ProjectId::sandbox());
+        let response = service.raw_oneshot(download_request).await?;
+        assert_eq!(response.bundle_id, bundle_id);
+
+        let mut stream = response.stream.into_inner();
+        let mut buf = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            buf.extend_from_slice(&chunk?);
+        }
+        assert_eq!(Bytes::from(buf).as_ref(), payload.as_slice());
 
         Ok(())
     }

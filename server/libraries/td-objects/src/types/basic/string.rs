@@ -303,3 +303,50 @@ impl WorkerConfig {
 
 #[ta_objects::typed(string(min_len = 1, max_len = 10, default = "V1"))]
 pub struct WorkerVersion;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // BasePath is validated by DATA_LOCATION_REGEX:
+    //   ^(/|(/[a-zA-Z][a-zA-Z0-9_]{0,99})*)$
+    // i.e. a lone "/" or one-or-more "/<identifier>" segments, where each
+    // identifier starts with a letter and continues with letters/digits/'_'.
+
+    #[test]
+    fn test_base_path_accepts_valid() {
+        for valid in [
+            "",             // empty: matches the zero-repetition branch of (/...)*
+            "/",            // root
+            "/abc",         // single segment
+            "/abc/def",     // nested path
+            "/A1_b/c2",     // letters, digits and underscores
+        ] {
+            assert!(
+                BasePath::try_from(valid).is_ok(),
+                "expected '{valid}' to be a valid BasePath"
+            );
+        }
+    }
+
+    #[test]
+    fn test_base_path_rejects_invalid() {
+        for invalid in [
+            "abc",     // missing leading slash
+            "/abc/",   // trailing slash
+            "/1abc",   // segment starting with a digit
+            "/ab-c",   // illegal character in segment
+            "//abc",   // empty segment
+        ] {
+            assert!(
+                BasePath::try_from(invalid).is_err(),
+                "expected '{invalid}' to be an invalid BasePath"
+            );
+        }
+    }
+
+    #[test]
+    fn test_base_path_default_is_root() {
+        assert_eq!(BasePath::default().0, "/");
+    }
+}
