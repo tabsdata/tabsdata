@@ -7,8 +7,8 @@ use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
 use crate::dxo::table::TableDBWithNames;
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
-    FunctionVersionId, GroupId, InputIdx, SelfDependency, System, TableFunctionParamPos, TableId,
-    TableName, TableVersionId,
+    FunctionVersionId, GroupId, InputIdx, Private, SelfDependency, System, TableFunctionParamPos,
+    TableId, TableName, TableVersionId,
 };
 use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
@@ -52,6 +52,7 @@ pub struct TableNode {
     pub table_version_id: TableVersionId,
     pub name: TableName,
     pub system: System,
+    pub private: Private,
 }
 
 impl Display for TableNode {
@@ -102,6 +103,7 @@ impl GraphNode<FunctionNode, TableNode> {
                     .table_version_id(table.id)
                     .name(table.name.clone())
                     .system(table.system)
+                    .private(table.private)
                     .build()?,
             ),
         ))

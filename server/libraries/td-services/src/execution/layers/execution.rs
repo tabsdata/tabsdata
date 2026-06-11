@@ -264,6 +264,7 @@ pub async fn build_logical_table_data_versions(
                 .table_id(t.table_id)
                 .producer_logical_function_run_id(Some(producer.clone()))
                 .function_param_pos(edge.output_pos().cloned())
+                .private(t.private)
                 .triggered_on(execution.triggered_on)
                 .triggered_by_id(execution.triggered_by_id)
                 .group_id(*group_id)

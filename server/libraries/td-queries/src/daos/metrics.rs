@@ -26,15 +26,19 @@
 //! race-free "right now" signal (replays can transiently null the
 //! bound PFR's `ended_on` during the bind window).
 //!
-//! ## System-table exclusion invariant
+//! ## System/private-table exclusion invariant
 //!
 //! Anywhere LTDVs/PTDVs are touched we filter
 //! `LTDV.function_param_pos >= 0` (mirrors the `system` derivation in
-//! the schema view). Input-side joins additionally enforce
-//! `LFRI.dep_pos >= 0`, which excludes `td.fn_state__*` plumbing on
-//! the consumer side. Output-side magnitudes use the worker-side
-//! aggregated PFR columns, which exclude `system_output` by
-//! construction.
+//! the schema view) AND `LTDV.private = FALSE` (snapshot of the output
+//! table's privateness, stamped at mint). Input-side joins additionally
+//! enforce `LFRI.dep_pos >= 0`, which excludes `td.fn_state__*`
+//! plumbing on the consumer side.
+//!
+//! Output-side magnitudes come from the producer's output LTDVs at
+//! query time, NOT from the PFR's worker-aggregated metric columns —
+//! those keep the full totals (private included) so a future flag can
+//! expose them.
 
 use crate::QueryExecutor;
 use chrono::{DateTime, Utc};
@@ -57,7 +61,7 @@ use td_objects::dxo::metrics::{
 };
 use td_objects::dxo::project::ProjectDBIden;
 use td_objects::dxo::query_filters::{DimensionFilter, WindowUnit};
-use td_objects::types::basic::LogicalFunctionRunStatus;
+use td_objects::types::basic::{HasData, LogicalFunctionRunStatus, Private};
 
 query_handle! {
     /// Entry trait providing [`metrics`](MetricsEntry::metrics) on every
@@ -91,10 +95,9 @@ where
 
     /// Node aggregates for `/metrics`: one row per
     /// `(bucket, dim_id, group_id, status)`. `*_out` magnitudes come
-    /// from PFR (worker-aggregated, system-excluded). `*_in` magnitudes
-    /// come from the LFRI subquery joined to source-LTDV via the LTDV
-    /// view; system tables excluded via `dep_pos >= 0` and
-    /// `function_param_pos >= 0`.
+    /// from the per-LFR output-LTDV subquery; `*_in` magnitudes from
+    /// the LFRI subquery joined to source-LTDV via the LTDV view.
+    /// System/private tables excluded on both sides.
     pub async fn metrics_nodes(self, req: &MetricsRequest) -> Result<Vec<NodeRow>, SqlError> {
         let rows = node_aggregates_query(req)
             .build_query_as()
@@ -130,6 +133,7 @@ where
 fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     let bucket_iden = bucket_column(req.unit);
     let in_alias = Alias::new("ins").into_iden();
+    let out_alias = Alias::new("outs").into_iden();
 
     let mut stmt = Query::select();
 
@@ -221,26 +225,18 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         Alias::new("transactions"),
     );
 
-    // OUT magnitudes — worker-aggregated, system-excluded.
+    // OUT magnitudes from the per-LFR output-LTDV subquery (see the
+    // module-level invariant note for why not the PFR metric columns).
     stmt.expr_as(
-        coalesce_sum((
-            FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::MetricTableVersions,
-        )),
+        coalesce_sum((out_alias.clone(), Alias::new("tables_out"))),
         Alias::new("table_versions_out"),
     );
     stmt.expr_as(
-        coalesce_sum((
-            FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::MetricRows,
-        )),
+        coalesce_sum((out_alias.clone(), Alias::new("rows_out"))),
         Alias::new("row_count_out"),
     );
     stmt.expr_as(
-        coalesce_sum((
-            FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::MetricDataBytes,
-        )),
+        coalesce_sum((out_alias.clone(), Alias::new("bytes_out"))),
         Alias::new("data_bytes_out"),
     );
 
@@ -258,15 +254,25 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         Alias::new("data_bytes_in"),
     );
 
-    stmt.from(FunctionRunDBWithNamesIden::Table).join_subquery(
-        JoinType::LeftJoin,
-        per_lfr_input_aggregates_subquery(req),
-        in_alias.clone(),
-        Expr::col((in_alias.clone(), Alias::new("lfr_id"))).equals((
-            FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::Id,
-        )),
-    );
+    stmt.from(FunctionRunDBWithNamesIden::Table)
+        .join_subquery(
+            JoinType::LeftJoin,
+            per_lfr_input_aggregates_subquery(req),
+            in_alias.clone(),
+            Expr::col((in_alias.clone(), Alias::new("lfr_id"))).equals((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Id,
+            )),
+        )
+        .join_subquery(
+            JoinType::LeftJoin,
+            per_lfr_output_aggregates_subquery(req),
+            out_alias.clone(),
+            Expr::col((out_alias.clone(), Alias::new("lfr_id"))).equals((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Id,
+            )),
+        );
 
     apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     apply_status_filter(
@@ -422,19 +428,74 @@ fn per_lfr_input_aggregates_subquery(req: &MetricsRequest) -> SelectStatement {
         ))
         .is_not_null(),
     )
-    // Defensive system-table exclusion alongside `dep_pos >= 0`.
-    .and_where(
-        Expr::col((
-            TableDataVersionDBWithNamesIden::Table,
-            LogicalTableDataVersionDBIden::FunctionParamPos,
-        ))
-        .gte(0),
-    )
     .group_by_col((
         LogicalFunctionRunInputDBIden::Table,
         LogicalFunctionRunInputDBIden::LogicalFunctionRunId,
     ));
 
+    // System/private-table exclusion (defensive alongside `dep_pos >= 0`).
+    apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
+    apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
+    stmt
+}
+
+/// Subquery: per-LFR aggregates over the LFR's own non-system,
+/// non-private output LTDVs with data (`has_data = TRUE` mirrors the
+/// worker's "written tables" count — NoData outputs don't count). Each
+/// output row carries `(lfr_id, tables_out, rows_out, bytes_out)`.
+/// Window-scoped via an INNER JOIN to the LFR view, like the input
+/// subquery.
+fn per_lfr_output_aggregates_subquery(req: &MetricsRequest) -> SelectStatement {
+    let mut stmt = Query::select();
+    stmt.expr_as(
+        Expr::col((
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
+        )),
+        Alias::new("lfr_id"),
+    )
+    .expr_as(Func::count(Expr::val(1)), Alias::new("tables_out"))
+    .expr_as(
+        coalesce_sum((
+            TableDataVersionDBWithNamesIden::Table,
+            TableDataVersionDBWithNamesIden::RowCount,
+        )),
+        Alias::new("rows_out"),
+    )
+    .expr_as(
+        coalesce_sum((
+            TableDataVersionDBWithNamesIden::Table,
+            TableDataVersionDBWithNamesIden::DataBytes,
+        )),
+        Alias::new("bytes_out"),
+    )
+    .from(TableDataVersionDBWithNamesIden::Table)
+    // Scope to window: only outputs whose producer LFR ended in window.
+    .join(
+        JoinType::InnerJoin,
+        FunctionRunDBWithNamesIden::Table,
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Id,
+        ))
+        .equals((
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
+        )),
+    )
+    .and_where(
+        Expr::col((
+            TableDataVersionDBWithNamesIden::Table,
+            TableDataVersionDBWithNamesIden::HasData,
+        ))
+        .eq(HasData::TRUE.as_sea_value()),
+    )
+    .group_by_col((
+        TableDataVersionDBWithNamesIden::Table,
+        LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
+    ));
+
+    apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
     apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     stmt
 }
@@ -639,16 +700,10 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
                 LogicalFunctionRunInputDBIden::RequirementDependencyPos,
             ))
             .gte(0),
-        )
-        // System-table exclusion (defense-in-depth alongside dep_pos).
-        .and_where(
-            Expr::col((
-                TableDataVersionDBWithNamesIden::Table,
-                LogicalTableDataVersionDBIden::FunctionParamPos,
-            ))
-            .gte(0),
         );
 
+    // System/private-table exclusion (defense-in-depth alongside dep_pos).
+    apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
     apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     apply_status_filter(
         &mut stmt,
@@ -819,16 +874,10 @@ fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
             LogicalFunctionRunInputDBIden::LogicalFunctionRunId,
         ))
         .is_null(),
-    )
-    // System-table exclusion on the publisher's output LTDVs.
-    .and_where(
-        Expr::col((
-            TableDataVersionDBWithNamesIden::Table,
-            LogicalTableDataVersionDBIden::FunctionParamPos,
-        ))
-        .gte(0),
     );
 
+    // System/private-table exclusion on the publisher's output LTDVs.
+    apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
     apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     apply_status_filter(
         &mut stmt,
@@ -999,18 +1048,10 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
             ))
             .gte(0),
         )
-        // System-table exclusion on source LTDV.
-        .and_where(
-            Expr::col((
-                TableDataVersionDBWithNamesIden::Table,
-                LogicalTableDataVersionDBIden::FunctionParamPos,
-            ))
-            .gte(0),
-        )
-        // Topological subscriber: LFR has no non-system output LTDV.
-        // Correlated NOT EXISTS lets the planner use the LTDV
-        // (producer_lfr_id) index and short-circuit on first match,
-        // unlike a NOT IN over a non-NULL-checked subquery.
+        // Topological subscriber: LFR has no non-system, non-private
+        // output LTDV. Correlated NOT EXISTS lets the planner use the
+        // LTDV (producer_lfr_id) index and short-circuit on first
+        // match, unlike a NOT IN over a non-NULL-checked subquery.
         .and_where(
             Expr::exists({
                 let mut sub = Query::select();
@@ -1025,19 +1066,15 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
                             FunctionRunDBWithNamesIden::Table,
                             FunctionRunDBWithNamesIden::Id,
                         )),
-                    )
-                    .and_where(
-                        Expr::col((
-                            LogicalTableDataVersionDBIden::Table,
-                            LogicalTableDataVersionDBIden::FunctionParamPos,
-                        ))
-                        .gte(0),
                     );
+                apply_user_table_filter(&mut sub, LogicalTableDataVersionDBIden::Table);
                 sub
             })
             .not(),
         );
 
+    // System/private-table exclusion on source LTDV.
+    apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
     apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     apply_status_filter(
         &mut stmt,
@@ -1170,14 +1207,6 @@ fn edge_unused_branch(req: &MetricsRequest) -> SelectStatement {
             FunctionRunDBWithNamesIden::Id,
         )),
     )
-    // System-table exclusion on the producer's output LTDVs.
-    .and_where(
-        Expr::col((
-            TableDataVersionDBWithNamesIden::Table,
-            LogicalTableDataVersionDBIden::FunctionParamPos,
-        ))
-        .gte(0),
-    )
     // Anti-join across full LFRI: LTDV has never been consumed by a
     // user-dep LFRI. Correlated NOT EXISTS lets the planner use the
     // LFRI (requirement_ltdv_id) index and short-circuit on first
@@ -1211,6 +1240,8 @@ fn edge_unused_branch(req: &MetricsRequest) -> SelectStatement {
         .not(),
     );
 
+    // System/private-table exclusion on the producer's output LTDVs.
+    apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
     apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     apply_status_filter(
         &mut stmt,
@@ -1469,6 +1500,27 @@ fn coalesce_sum<C: sea_query::IntoColumnRef + Clone>(col: C) -> SimpleExpr {
     Func::coalesce([cast, zero]).into()
 }
 
+/// System- and private-table exclusion on an LTDV-shaped table/view:
+/// `function_param_pos >= 0 AND private = FALSE`. See the module-level
+/// invariant note.
+fn apply_user_table_filter<T>(stmt: &mut SelectStatement, table: T)
+where
+    T: IntoIden,
+{
+    let table = table.into_iden();
+    stmt.and_where(
+        Expr::col((
+            table.clone(),
+            LogicalTableDataVersionDBIden::FunctionParamPos,
+        ))
+        .gte(0),
+    )
+    .and_where(
+        Expr::col((table, LogicalTableDataVersionDBIden::Private))
+            .eq(Private::FALSE.as_sea_value()),
+    );
+}
+
 fn apply_dim_filter<Id, C>(stmt: &mut SelectStatement, filter: &DimensionFilter<Id>, col: C)
 where
     Id: SeaValue,
@@ -1583,6 +1635,19 @@ mod tests {
         collection: &td_objects::dxo::collection::CollectionDB,
         name: &str,
     ) -> Result<FunctionDB, TdError> {
+        make_publisher_function_with_tables(db, collection, name, &["out"]).await
+    }
+
+    async fn make_publisher_function_with_tables(
+        db: &TdPool,
+        collection: &td_objects::dxo::collection::CollectionDB,
+        name: &str,
+        tables: &[&str],
+    ) -> Result<FunctionDB, TdError> {
+        let tables = tables
+            .iter()
+            .map(|t| TableNameDto::try_from(*t))
+            .collect::<Result<Vec<_>, _>>()?;
         let create = FunctionRegister::builder()
             .try_name(name)?
             .try_description("test fn")?
@@ -1591,7 +1656,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .dependencies(None)
             .triggers(None)
-            .tables(vec![TableNameDto::try_from("out")?])
+            .tables(tables)
             .try_runtime_values("rv")?
             .reuse_frozen_tables(false)
             .build()?;
@@ -1602,6 +1667,20 @@ mod tests {
     }
 
     async fn stamp_buckets_on_pfr(db: &TdPool, pfr: &PhysicalFunctionRunDB) -> Result<(), TdError> {
+        stamp_buckets_and_metrics_on_pfr(db, pfr, 1, 10, 100).await
+    }
+
+    /// The PFR metric columns store the worker's FULL per-attempt
+    /// totals (private tables included); /metrics excludes private
+    /// tables query-side, so tests stamp totals that differ from the
+    /// expected response when private outputs are in play.
+    async fn stamp_buckets_and_metrics_on_pfr(
+        db: &TdPool,
+        pfr: &PhysicalFunctionRunDB,
+        tables: i64,
+        rows: i64,
+        bytes: i64,
+    ) -> Result<(), TdError> {
         let bucket = EpochMs::try_from(IN_WINDOW)?;
         let ended_on = AtTime::try_from(Timestamp::try_from(IN_WINDOW)?)?;
         let update = UpdatePhysicalFunctionRunDB::builder()
@@ -1611,9 +1690,9 @@ mod tests {
             .ended_on_day_ms(Some(bucket))
             .ended_on_week_ms(Some(bucket))
             .ended_on_month_ms(Some(bucket))
-            .metric_table_versions(Some(TableVersionCount::try_from(1)?))
-            .metric_rows(Some(RowCount::try_from(10)?))
-            .metric_data_bytes(Some(ByteCount::try_from(100)?))
+            .metric_table_versions(Some(TableVersionCount::try_from(tables)?))
+            .metric_rows(Some(RowCount::try_from(rows)?))
+            .metric_data_bytes(Some(ByteCount::try_from(bytes)?))
             .build()?;
         db.scoped(ProjectId::sandbox())
             .live()
@@ -1675,6 +1754,16 @@ mod tests {
         Ok(ptdv)
     }
 
+    async fn seed_collection(db: &TdPool, name: &str) -> Result<CollectionDB, TdError> {
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .collection(
+                &CollectionName::try_from(name)?,
+                &UserId::try_from(ENCODED_ID_SYSTEM)?,
+            )
+            .await
+    }
+
     /// Seed a publisher (no inputs) with a terminated PFR, stamped
     /// metrics, and a bound PTDV carrying row_count + data_bytes. The
     /// LTDV's view-resolved magnitudes will reflect the PTDV.
@@ -1690,14 +1779,7 @@ mod tests {
         ),
         TdError,
     > {
-        let coll = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(
-                &CollectionName::try_from(coll_name)?,
-                &UserId::try_from(ENCODED_ID_SYSTEM)?,
-            )
-            .await?;
+        let coll = seed_collection(db, coll_name).await?;
         let func = make_publisher_function(db, &coll, fn_name).await?;
         let exec = db
             .scoped(ProjectId::sandbox())
@@ -1736,6 +1818,57 @@ mod tests {
         bind_ptdv_with_magnitudes(db, &ltdv, table, &pfr, 10, 100).await?;
 
         Ok((coll, lfr, ltdv))
+    }
+
+    /// Seed an execution/transaction/PFR (Done) for the function and
+    /// return the LFR + PFR. Buckets/metrics are NOT stamped — callers
+    /// pick the stamp helper.
+    async fn seed_done_run(
+        db: &TdPool,
+        coll: &CollectionDB,
+        func: &FunctionDB,
+    ) -> Result<(LogicalFunctionRunDB, PhysicalFunctionRunDB), TdError> {
+        let exec = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(func)
+            .await?;
+        let trx = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&exec, &TransactionKey::try_from("ANY")?)
+            .await?;
+        let pfr = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .physical_function_run(coll, func, &exec, &trx, &LogicalFunctionRunStatus::Done)
+            .await?;
+        let lfr: LogicalFunctionRunDB = db
+            .live()
+            .fetch_one(and!(&pfr.execution_id, &pfr.function_id))
+            .await?;
+        Ok((lfr, pfr))
+    }
+
+    /// Bind every output LTDV of the run to a PTDV: regular tables get
+    /// (10, 100), private tables (7, 77).
+    async fn bind_all_outputs(
+        db: &TdPool,
+        func: &FunctionDB,
+        lfr: &LogicalFunctionRunDB,
+        pfr: &PhysicalFunctionRunDB,
+    ) -> Result<(), TdError> {
+        let ltdvs: Vec<LogicalTableDataVersionDB> = db.live().fetch_all(&lfr.execution_id).await?;
+        let tables: Vec<TableDB> = db.current().fetch_all::<TableDB>(&func.id).await?;
+        for table in &tables {
+            let ltdv = ltdvs
+                .iter()
+                .find(|l| l.table_id == table.table_id)
+                .expect("one LTDV per output table");
+            let (rows, bytes) = if *table.private { (7, 77) } else { (10, 100) };
+            bind_ptdv_with_magnitudes(db, ltdv, table, pfr, rows, bytes).await?;
+        }
+        Ok(())
     }
 
     // ----- /inflight ---------------------------------------------------
@@ -2035,6 +2168,187 @@ mod tests {
             .collect();
         assert_eq!(ingress.len(), 1);
         assert_eq!(ingress[0].target, Some(producer_coll.id.to_string()));
+        Ok(())
+    }
+
+    // ----- private-table exclusion --------------------------------------
+
+    #[td_test::test(db)]
+    async fn test_private_output_excluded_from_nodes_and_edges(db: TdPool) -> Result<(), TdError> {
+        // Publisher with a regular and a private output. The PFR metric
+        // columns store the full worker totals (private included); the
+        // /metrics response must only reflect the regular table.
+        let coll = seed_collection(&db, "priv_out").await?;
+        let func =
+            make_publisher_function_with_tables(&db, &coll, "priv_out_fn", &["out", "_priv"])
+                .await?;
+        let (lfr, pfr) = seed_done_run(&db, &coll, &func).await?;
+        stamp_buckets_and_metrics_on_pfr(&db, &pfr, 2, 17, 177).await?;
+        bind_all_outputs(&db, &func, &lfr, &pfr).await?;
+
+        let nodes = db
+            .metrics()
+            .metrics_nodes(&empty_request(Dim::Collection))
+            .await?;
+        assert_eq!(nodes.len(), 1, "one node expected, got {nodes:?}");
+        let n = &nodes[0];
+        assert_eq!(
+            *n.table_versions_out.as_ref(),
+            1,
+            "private output must not count, got {n:?}"
+        );
+        assert_eq!(*n.row_count_out.as_ref(), 10);
+        assert_eq!(*n.data_bytes_out.as_ref(), 100);
+
+        let edges = db
+            .metrics()
+            .metrics_edges(&empty_request(Dim::Collection))
+            .await?;
+        let ingress: Vec<_> = edges
+            .iter()
+            .filter(|e| e.source_kind == NodeKind::ExternalSource)
+            .collect();
+        let unused: Vec<_> = edges
+            .iter()
+            .filter(|e| e.target_kind == NodeKind::Unused)
+            .collect();
+        assert_eq!(ingress.len(), 1, "one ingress edge, got {edges:?}");
+        assert_eq!(ingress[0].tables, 1);
+        assert_eq!(*ingress[0].row_count.as_ref(), 10);
+        assert_eq!(unused.len(), 1, "one unused edge, got {edges:?}");
+        assert_eq!(unused[0].tables, 1);
+        assert_eq!(*unused[0].row_count.as_ref(), 10);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_private_input_excluded_from_in_and_real_edges(db: TdPool) -> Result<(), TdError> {
+        // Producer emits ONLY a private table; a consumer in another
+        // collection references it via LFRI. The private LTDV must not
+        // surface anywhere: no IN magnitudes, no real edge, no ingress
+        // for the producer, no unused edge for the private output.
+        let prod_coll = seed_collection(&db, "priv_in_prod").await?;
+        let prod_fn =
+            make_publisher_function_with_tables(&db, &prod_coll, "priv_in_prod_fn", &["_priv"])
+                .await?;
+        let (prod_lfr, prod_pfr) = seed_done_run(&db, &prod_coll, &prod_fn).await?;
+        stamp_buckets_on_pfr(&db, &prod_pfr).await?;
+        bind_all_outputs(&db, &prod_fn, &prod_lfr, &prod_pfr).await?;
+        let prod_ltdvs: Vec<LogicalTableDataVersionDB> =
+            db.live().fetch_all(&prod_lfr.execution_id).await?;
+        let private_ltdv = &prod_ltdvs[0];
+
+        let cons_coll = seed_collection(&db, "priv_in_cons").await?;
+        let cons_fn = make_publisher_function(&db, &cons_coll, "priv_in_cons_fn").await?;
+        let (cons_lfr, cons_pfr) = seed_done_run(&db, &cons_coll, &cons_fn).await?;
+        stamp_buckets_on_pfr(&db, &cons_pfr).await?;
+
+        let input = LogicalFunctionRunInputDB::builder()
+            .collection_id(cons_coll.id)
+            .execution_id(&cons_lfr.execution_id)
+            .transaction_id(&cons_lfr.transaction_id)
+            .logical_function_run_id(cons_lfr.id.clone())
+            .requirement_logical_table_data_version_id(Some(private_ltdv.id.clone()))
+            .requirement_input_idx(Some(InputIdx::try_from(0)?))
+            .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
+            .requirement_version_pos(VersionPos::try_from(0)?)
+            .build()?;
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .insert(&input)
+            .await?;
+
+        let nodes = db
+            .metrics()
+            .metrics_nodes(&empty_request(Dim::Collection))
+            .await?;
+        let prod_node = nodes
+            .iter()
+            .find(|n| n.collection_id.as_ref() == Some(&prod_coll.id))
+            .expect("producer node");
+        assert_eq!(
+            *prod_node.table_versions_out.as_ref(),
+            0,
+            "private-only producer must report zero OUT, got {prod_node:?}"
+        );
+        assert_eq!(*prod_node.row_count_out.as_ref(), 0);
+        let cons_node = nodes
+            .iter()
+            .find(|n| n.collection_id.as_ref() == Some(&cons_coll.id))
+            .expect("consumer node");
+        assert_eq!(
+            *cons_node.table_versions_in.as_ref(),
+            0,
+            "private input must not count, got {cons_node:?}"
+        );
+        assert_eq!(*cons_node.row_count_in.as_ref(), 0);
+
+        let edges = db
+            .metrics()
+            .metrics_edges(&empty_request(Dim::Collection))
+            .await?;
+        let prod_id = prod_coll.id.to_string();
+        assert!(
+            edges
+                .iter()
+                .all(|e| e.source.as_deref() != Some(prod_id.as_str())
+                    && e.target.as_deref() != Some(prod_id.as_str())),
+            "private-only producer must have no edges, got {edges:?}"
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_private_only_outputs_make_topological_subscriber(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        // A consumer whose only outputs are private has no visible
+        // outputs: /metrics classifies it as a topological subscriber
+        // and reports its consumed input as an egress edge.
+        let (_prod_coll, _, prod_ltdv) =
+            seed_publisher_with_ltdv(&db, "priv_egr_prod", "priv_egr_prod_fn").await?;
+
+        let cons_coll = seed_collection(&db, "priv_egr_cons").await?;
+        let cons_fn =
+            make_publisher_function_with_tables(&db, &cons_coll, "priv_egr_cons_fn", &["_state"])
+                .await?;
+        let (cons_lfr, cons_pfr) = seed_done_run(&db, &cons_coll, &cons_fn).await?;
+        stamp_buckets_on_pfr(&db, &cons_pfr).await?;
+
+        let input = LogicalFunctionRunInputDB::builder()
+            .collection_id(cons_coll.id)
+            .execution_id(&cons_lfr.execution_id)
+            .transaction_id(&cons_lfr.transaction_id)
+            .logical_function_run_id(cons_lfr.id.clone())
+            .requirement_logical_table_data_version_id(Some(prod_ltdv.id))
+            .requirement_input_idx(Some(InputIdx::try_from(0)?))
+            .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
+            .requirement_version_pos(VersionPos::try_from(0)?)
+            .build()?;
+        db.scoped(ProjectId::sandbox())
+            .live()
+            .insert(&input)
+            .await?;
+
+        let edges = db
+            .metrics()
+            .metrics_edges(&empty_request(Dim::Collection))
+            .await?;
+        let egress: Vec<_> = edges
+            .iter()
+            .filter(|e| e.target_kind == NodeKind::ExternalDestination)
+            .collect();
+        assert_eq!(egress.len(), 1, "one egress edge, got {edges:?}");
+        assert_eq!(egress[0].source, Some(cons_coll.id.to_string()));
+        assert_eq!(*egress[0].row_count.as_ref(), 10);
+        // The consumer's private output must not show as unused.
+        assert!(
+            edges
+                .iter()
+                .all(|e| e.target_kind != NodeKind::Unused
+                    || e.source != Some(cons_coll.id.to_string())),
+            "private output must not appear as unused, got {edges:?}"
+        );
         Ok(())
     }
 }

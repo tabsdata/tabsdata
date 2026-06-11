@@ -174,6 +174,7 @@ pub fn table_node(table: &TableName) -> TableNode {
         .table_version_id(TABLE_VERSION_IDS.get(table).unwrap())
         .name(table.clone())
         .system(false)
+        .private(false)
         .build()
         .unwrap()
 }

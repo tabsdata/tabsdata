@@ -136,6 +136,7 @@ pub(crate) async fn seed_physical_function_run(
             .table_id(t.table_id)
             .producer_logical_function_run_id(Some(logical.id.clone()))
             .function_param_pos(t.function_param_pos)
+            .private(t.private)
             .triggered_on(transaction.triggered_on)
             .triggered_by_id(transaction.triggered_by_id)
             .build()?;

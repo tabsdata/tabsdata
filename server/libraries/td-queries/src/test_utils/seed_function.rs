@@ -52,10 +52,12 @@ pub(crate) async fn seed_function(
         let builder = builder.try_update_from(&request_context)?;
 
         for (pos, table_name) in tables.iter().enumerate() {
+            let name = TableName::try_from(table_name)?;
             let table = builder
                 .clone()
                 .table_id(TableId::default())
-                .name(TableName::try_from(table_name)?)
+                .private(name.is_private())
+                .name(name)
                 .function_param_pos(Some(TableFunctionParamPos::try_from(pos as i32)?))
                 .status(TableStatus::Active)
                 .build()?;

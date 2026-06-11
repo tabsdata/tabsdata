@@ -77,6 +77,7 @@ pub(crate) async fn seed_logical_input(
             .transaction_id(&transaction.id)
             .table_id(requirement_table.table_id)
             .producer_logical_function_run_id(Some(producer_lfr_id))
+            .private(requirement_table.private)
             .triggered_on(transaction.triggered_on)
             .triggered_by_id(transaction.triggered_by_id)
             .build()?;

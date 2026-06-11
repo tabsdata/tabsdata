@@ -47,6 +47,10 @@ pub enum LogicalTableDataVersions {
     TableId,
     ProducerLogicalFunctionRunId,
     FunctionParamPos,
+    // Table privateness snapshot, copied from the output table's
+    // `tables.private` at LTDV mint. Lets metrics filter private
+    // tables without joining the versioned `tables` table.
+    Private,
     TriggeredOn,
     TriggeredById,
     // Group snapshot, copied from collections.group_id at LTDV mint.
@@ -75,6 +79,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(LogicalTableDataVersions::ProducerLogicalFunctionRunId).text().null())
                 // Nullable for the same reason as ProducerLogicalFunctionRunId.
                 .col(ColumnDef::new(LogicalTableDataVersions::FunctionParamPos).integer().null())
+                .col(ColumnDef::new(LogicalTableDataVersions::Private).boolean().not_null())
                 .col(ColumnDef::new(LogicalTableDataVersions::TriggeredOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(LogicalTableDataVersions::TriggeredById).text().not_null())
                 .col(ColumnDef::new(LogicalTableDataVersions::GroupId).text().not_null())

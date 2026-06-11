@@ -105,6 +105,7 @@ pub async fn _seed_physical_table_data_version(
         .table_id(table.table_id)
         .producer_logical_function_run_id(Some(producer_lfr.id.clone()))
         .function_param_pos(Some(TableFunctionParamPos::try_from(0)?))
+        .private(table.private)
         .triggered_on(physical_function_run.triggered_on)
         .triggered_by_id(transaction.triggered_by_id)
         .build()?;

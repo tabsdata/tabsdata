@@ -52,7 +52,7 @@ pub struct Partitioned;
 pub struct PasswordMustChange;
 
 #[ta_objects::typed(bool)]
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct Private;
 
 #[ta_objects::typed(bool(default = false))]

@@ -114,7 +114,7 @@ mod definitions {
         LogicalFunctionRunInputId, LogicalFunctionRunPointerId, LogicalFunctionRunStatus,
         LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId,
         LogicalTableDataVersionPointerId, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-        PhysicalTableDataVersionId, ProjectId, ProjectName, RowCount, SchemaChanged,
+        PhysicalTableDataVersionId, Private, ProjectId, ProjectName, RowCount, SchemaChanged,
         SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
         TableVersionCount, TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName,
         VersionPos,
@@ -408,6 +408,11 @@ mod definitions {
         pub producer_logical_function_run_id: Option<LogicalFunctionRunId>,
         #[builder(default)]
         pub function_param_pos: Option<TableFunctionParamPos>,
+        // Table privateness snapshot, copied from the output table at
+        // mint. Lets metrics exclude private tables without joining
+        // the versioned `tables` table.
+        #[builder(default = "Private::FALSE")]
+        pub private: Private,
         // Logical table identity is on `table_id` above. The *table version*
         // (i.e. which schema) the LTDV's concrete attempts produce lives
         // on each concrete TDV row, not here — replays can attach a
