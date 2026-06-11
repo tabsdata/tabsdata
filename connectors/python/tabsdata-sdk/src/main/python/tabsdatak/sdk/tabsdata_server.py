@@ -140,6 +140,7 @@ class Collection:
         name: str,
         description: str | None = None,
         group: str | None = None,
+        base_path: str | None = None,
         **kwargs,
     ):
         """
@@ -159,6 +160,10 @@ class Collection:
         self.name = name
         self.description = description
         self._group = group
+        # Logical storage prefix for the collection's artifacts. None at read time
+        # falls back to the server value via the data dict / kwargs.
+        self._base_path = base_path
+        self.base_path = base_path if base_path is not None else kwargs.get("base_path")
         self.created_on = created_on
         if created_on:
             self.created_on_str = _convert_timestamp_to_string(created_on)
@@ -198,6 +203,7 @@ class Collection:
             self.name,
             description,
             group=self._group,
+            base_path=self._base_path,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -508,6 +514,7 @@ class Collection:
         enabled: bool = True,
         raise_for_status: bool = True,
         requirements: str | Path | None = None,
+        base_path: str | None = None,
     ) -> Function:
         """Register a function in this collection from a tabsdatak ``FunctionInfo``.
 
@@ -569,6 +576,7 @@ class Collection:
             plugin_name=archive.source_or_destination,
             workers=archive.workers,
             enabled=enabled,
+            base_path=base_path,
             raise_for_status=raise_for_status,
         )
         return Function(self.connection, self, function_name)
@@ -683,12 +691,17 @@ class Collection:
             first_page = False
 
     def update(
-        self, name: str, description: str = None, raise_for_status: bool = True
+        self,
+        name: str,
+        description: str = None,
+        base_path: str = None,
+        raise_for_status: bool = True,
     ) -> Collection:
         response = self.connection.collection_update(
             self.name,
             new_collection_name=name,
             description=description,
+            base_path=base_path,
             raise_for_status=raise_for_status,
         )
         self.name = name
@@ -709,6 +722,9 @@ class Collection:
         enabled: bool = True,
         raise_for_status: bool = True,
         requirements: str | Path | None = None,
+        base_path: str | None = None,
+        reset_state: bool = False,
+        reset_stage: bool = False,
     ) -> Function:
         """Update a function in this collection from a tabsdatak ``FunctionInfo``.
 
@@ -765,6 +781,9 @@ class Collection:
             plugin_name=archive.source_or_destination,
             workers=archive.workers,
             enabled=enabled,
+            base_path=base_path,
+            reset_state=reset_state,
+            reset_stage=reset_stage,
             raise_for_status=raise_for_status,
         )
 
@@ -3743,6 +3762,7 @@ class TabsdataServer:
         name: str,
         description: str = None,
         group: str | None = None,
+        base_path: str | None = None,
         raise_for_status: bool = True,
     ) -> Collection:
         """
@@ -3760,7 +3780,11 @@ class TabsdataServer:
             APIServerError: If the collection could not be created.
         """
         collection = Collection(
-            self.connection, name, description=description, group=group
+            self.connection,
+            name,
+            description=description,
+            group=group,
+            base_path=base_path,
         )
         collection.create(raise_for_status=raise_for_status)
         return collection
@@ -3869,6 +3893,7 @@ class TabsdataServer:
         name: str,
         new_name: str = None,
         new_description: str = None,
+        new_base_path: str = None,
         raise_for_status: bool = True,
     ) -> Collection:
         """
@@ -3888,6 +3913,7 @@ class TabsdataServer:
         return collection.update(
             name=new_name,
             description=new_description,
+            base_path=new_base_path,
             raise_for_status=raise_for_status,
         )
 
@@ -4022,6 +4048,7 @@ class TabsdataServer:
         enabled: bool = True,
         raise_for_status: bool = True,
         requirements: str | Path | None = None,
+        base_path: str | None = None,
     ) -> Function:
         """Register a function in ``collection_name`` from a tabsdatak
         ``FunctionInfo``.
@@ -4047,6 +4074,7 @@ class TabsdataServer:
             enabled=enabled,
             raise_for_status=raise_for_status,
             requirements=requirements,
+            base_path=base_path,
         )
 
     def delete_function(
@@ -4216,6 +4244,9 @@ class TabsdataServer:
         enabled: bool = True,
         raise_for_status: bool = True,
         requirements: str | Path | None = None,
+        base_path: str | None = None,
+        reset_state: bool = False,
+        reset_stage: bool = False,
     ) -> Function:
         """Update a function in ``collection_name`` from a tabsdatak
         ``FunctionInfo``.
@@ -4242,6 +4273,9 @@ class TabsdataServer:
             enabled=enabled,
             raise_for_status=raise_for_status,
             requirements=requirements,
+            base_path=base_path,
+            reset_state=reset_state,
+            reset_stage=reset_stage,
         )
 
     def patch_function(

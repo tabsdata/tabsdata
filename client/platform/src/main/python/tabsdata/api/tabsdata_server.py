@@ -104,6 +104,7 @@ class Collection:
     created_on = _LazyProperty("created_on")
     created_on_str = _LazyProperty("created_on_str", subordinate_time_string=True)
     description = _LazyProperty("description")
+    base_path = _LazyProperty("base_path")
 
     def __init__(
         self,
@@ -111,6 +112,7 @@ class Collection:
         name: str,
         description: str | None = None,
         group: str | None = None,
+        base_path: str | None = None,
         **kwargs,
     ):
         """
@@ -122,6 +124,9 @@ class Collection:
             description (str, optional): The description of the collection.
             group (str, optional): The name of the group to assign at
                 creation time. Ignored when reading an existing collection.
+            base_path (str, optional): The logical storage prefix for the
+                collection's artifacts. None at read time falls back to the
+                server value.
             **kwargs: Additional keyword arguments.
         """
         created_on = kwargs.get("created_on")
@@ -130,6 +135,7 @@ class Collection:
         self.name = name
         self.description = description
         self._group = group
+        self.base_path = base_path
         self.created_on = created_on
         if created_on:
             self.created_on_str = _convert_timestamp_to_string(created_on)
@@ -169,6 +175,7 @@ class Collection:
             self.name,
             description,
             group=self._group,
+            base_path=self._base_path,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -426,6 +433,7 @@ class Collection:
         reuse_tables: bool = False,
         enabled: bool = True,
         raise_for_status: bool = True,
+        base_path: str | None = None,
     ) -> Function:
         """
         Create a function in the server.
@@ -518,6 +526,7 @@ class Collection:
             plugin_name=source_or_destination_name,
             workers=workers,
             enabled=enabled,
+            base_path=base_path,
             raise_for_status=raise_for_status,
         )
         return Function(self.connection, self, function_name)
@@ -660,12 +669,17 @@ class Collection:
             first_page = False
 
     def update(
-        self, name: str, description: str = None, raise_for_status: bool = True
+        self,
+        name: str,
+        description: str = None,
+        base_path: str = None,
+        raise_for_status: bool = True,
     ) -> Collection:
         response = self.connection.collection_update(
             self.name,
             new_collection_name=name,
             description=description,
+            base_path=base_path,
             raise_for_status=raise_for_status,
         )
         self.name = name
@@ -685,6 +699,9 @@ class Collection:
         reuse_tables: bool = False,
         enabled: bool = True,
         raise_for_status: bool = True,
+        base_path: str | None = None,
+        reset_state: bool = False,
+        reset_stage: bool = False,
     ) -> Function:
         """
         Update a function in the server.
@@ -775,6 +792,9 @@ class Collection:
             plugin_name=source_or_destination_name,
             workers=workers,
             enabled=enabled,
+            base_path=base_path,
+            reset_state=reset_state,
+            reset_stage=reset_stage,
             raise_for_status=raise_for_status,
         )
 
@@ -3753,6 +3773,7 @@ class TabsdataServer:
         name: str,
         description: str = None,
         group: str | None = None,
+        base_path: str | None = None,
         raise_for_status: bool = True,
     ) -> Collection:
         """
@@ -3763,6 +3784,8 @@ class TabsdataServer:
             description (str, optional): The description of the collection.
             group (str, optional): The name of the group to assign. If
                 omitted, the server assigns the default group.
+            base_path (str, optional): The logical storage prefix for the
+                collection's artifacts. Defaults to '/' when omitted.
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
 
@@ -3770,7 +3793,11 @@ class TabsdataServer:
             APIServerError: If the collection could not be created.
         """
         collection = Collection(
-            self.connection, name, description=description, group=group
+            self.connection,
+            name,
+            description=description,
+            group=group,
+            base_path=base_path,
         )
         collection.create(raise_for_status=raise_for_status)
         return collection
@@ -3879,6 +3906,7 @@ class TabsdataServer:
         name: str,
         new_name: str = None,
         new_description: str = None,
+        new_base_path: str = None,
         raise_for_status: bool = True,
     ) -> Collection:
         """
@@ -3888,6 +3916,9 @@ class TabsdataServer:
             name (str): The name of the collection.
             new_name (str, optional): The new name of the collection.
             new_description (str, optional): The new description of the collection.
+            new_base_path (str, optional): The new logical storage prefix for the
+                collection's artifacts. Existing data versions keep their stamped
+                path; only new artifacts use the new prefix.
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
 
@@ -3898,6 +3929,7 @@ class TabsdataServer:
         return collection.update(
             name=new_name,
             description=new_description,
+            base_path=new_base_path,
             raise_for_status=raise_for_status,
         )
 
@@ -4031,6 +4063,7 @@ class TabsdataServer:
         reuse_tables: bool = False,
         enabled: bool = True,
         raise_for_status: bool = True,
+        base_path: str | None = None,
     ) -> Function:
         """
         Create a function in the server.
@@ -4070,6 +4103,7 @@ class TabsdataServer:
             reuse_tables=reuse_tables,
             enabled=enabled,
             raise_for_status=raise_for_status,
+            base_path=base_path,
         )
 
     def delete_function(
@@ -4238,6 +4272,9 @@ class TabsdataServer:
         reuse_tables: bool = False,
         enabled: bool = True,
         raise_for_status: bool = True,
+        base_path: str | None = None,
+        reset_state: bool = False,
+        reset_stage: bool = False,
     ) -> Function:
         """
         Update a function in the server.
@@ -4278,6 +4315,9 @@ class TabsdataServer:
             reuse_tables=reuse_tables,
             enabled=enabled,
             raise_for_status=raise_for_status,
+            base_path=base_path,
+            reset_state=reset_state,
+            reset_stage=reset_stage,
         )
 
     def patch_function(

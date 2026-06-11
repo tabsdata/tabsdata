@@ -8,7 +8,7 @@ use td_error::{TdError, td_error};
 use td_objects::and;
 use td_objects::dxo::function::{FunctionDBBuilder, FunctionDBWithNames, FunctionUpdate};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, FunctionName, FunctionStatus, FunctionVersionId,
+    CollectionId, CollectionName, FunctionName, FunctionStatus, FunctionVersionId, StageId,
 };
 use td_queries::CurrentEntry;
 use td_tower::extractors::{MutRef, Ref};
@@ -81,6 +81,12 @@ pub async fn update_function_db_builder(
     }
     if let Some(base_path) = &update.base_path {
         builder.base_path(Some(base_path.clone()));
+    }
+    // reset-stage: fresh stage id (new stage/checkpoint dir). The stage_base_path is
+    // carried forward from the previous version, so the fresh stage lands at the same
+    // stamped prefix — it is not relocated by an unrelated collection base_path change.
+    if *update.reset_stage {
+        builder.stage_id(StageId::default());
     }
     Ok(builder)
 }

@@ -71,12 +71,20 @@ def add_perm(ctx: click.Context, name: str, to_coll: str):
         "Use 'td group list' to see available groups."
     ),
 )
+@click.option(
+    "--base-path",
+    help=(
+        "Logical storage prefix for the collection's artifacts. Defaults to '/'. "
+        "The physical backend is selected by the server's configured mounts."
+    ),
+)
 @click.pass_context
 def create(
     ctx: click.Context,
     name: str,
     description: str,
     group: str,
+    base_path: str,
 ):
     """Create a new collection"""
     verify_login_or_prompt(ctx)
@@ -90,7 +98,7 @@ def create(
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.create_collection(name, description, group=group)
+        server.create_collection(name, description, group=group, base_path=base_path)
         click.echo("Collection created successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -316,12 +324,20 @@ def list_perm(ctx: click.Context, name: str):
 @click.option("--name", "-n", help="Name of the collection to update.")
 @click.option("--new-name", help="New name for the collection.")
 @click.option("--description", help="New description for the collection.")
+@click.option(
+    "--base-path",
+    help=(
+        "New logical storage prefix for the collection's artifacts. Existing data "
+        "versions keep their stamped path; only new artifacts use the new prefix."
+    ),
+)
 @click.pass_context
 def update(
     ctx: click.Context,
     name: str,
     new_name: str,
     description: str,
+    base_path: str,
 ):
     """Update a collection by name"""
     verify_login_or_prompt(ctx)
@@ -334,7 +350,12 @@ def update(
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.update_collection(name, new_name=new_name, new_description=description)
+        server.update_collection(
+            name,
+            new_name=new_name,
+            new_description=description,
+            new_base_path=base_path,
+        )
         click.echo("Collection updated successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)

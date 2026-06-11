@@ -283,6 +283,13 @@ def list(ctx: click.Context, coll: str):
     help="Enable or disable the feature",
 )
 @click.option(
+    "--base-path",
+    help=(
+        "Optional storage-prefix override for this function's output table data. "
+        "When omitted, the collection's base_path is used."
+    ),
+)
+@click.option(
     "--update",
     is_flag=True,
     help="If provided, update the function if it already exists.",
@@ -298,6 +305,7 @@ def register(
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
     enabled: bool,
+    base_path: str = None,
     update: bool = False,
 ):
     """Register a function"""
@@ -347,6 +355,7 @@ def register(
                     local_packages=local_pkg,
                     reuse_tables=reuse_tables,
                     enabled=enabled,
+                    base_path=base_path,
                 )
                 click.echo("Function updated successfully")
                 return
@@ -364,6 +373,7 @@ def register(
             local_pkg,
             reuse_tables=reuse_tables,
             enabled=enabled,
+            base_path=base_path,
         )
         click.echo("Function registered successfully")
     except Exception as e:
@@ -671,6 +681,29 @@ def _monitor_execution_or_transaction(
     default=True,
     help="Enable or disable the feature",
 )
+@click.option(
+    "--base-path",
+    help=(
+        "Optional storage-prefix override for this function's output table data. "
+        "When omitted, the previous version's value is carried forward."
+    ),
+)
+@click.option(
+    "--reset-state",
+    is_flag=True,
+    help=(
+        "Regenerate the function's state table id instead of carrying it forward, "
+        "so publishers re-read their initial configuration values from scratch."
+    ),
+)
+@click.option(
+    "--reset-stage",
+    is_flag=True,
+    help=(
+        "Regenerate the function's stage id (a fresh stage/checkpoint dir), discarding "
+        "accumulated stage state. The stage's storage prefix is unchanged."
+    ),
+)
 @click.pass_context
 def update(
     ctx: click.Context,
@@ -683,6 +716,9 @@ def update(
     local_pkg: Tuple[str, ...],
     reuse_tables: bool,
     enabled: bool,
+    base_path: str = None,
+    reset_state: bool = False,
+    reset_stage: bool = False,
 ):
     """Update a function"""
     verify_login_or_prompt(ctx)
@@ -716,6 +752,9 @@ def update(
             local_packages=local_pkg,
             reuse_tables=reuse_tables,
             enabled=enabled,
+            base_path=base_path,
+            reset_state=reset_state,
+            reset_stage=reset_stage,
         )
         click.echo("Function updated successfully")
     except Exception as e:

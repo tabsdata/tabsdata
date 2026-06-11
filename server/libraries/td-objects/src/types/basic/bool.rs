@@ -59,6 +59,9 @@ pub struct Private;
 pub struct ResetState;
 
 #[ta_objects::typed(bool(default = false))]
+pub struct ResetStage;
+
+#[ta_objects::typed(bool(default = false))]
 pub struct ReuseFrozen;
 
 #[ta_objects::typed(bool(default = false))]

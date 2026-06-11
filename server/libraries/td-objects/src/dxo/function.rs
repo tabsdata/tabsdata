@@ -8,7 +8,7 @@ mod definitions {
     use crate::types::basic::{
         AtTime, BasePath, BundleId, CollectionId, CollectionName, Connector,
         Decorator, Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues,
-        FunctionStatus, FunctionVersionId, GroupId, ResetState, ReuseFrozen, Snippet,
+        FunctionStatus, FunctionVersionId, GroupId, ResetStage, ResetState, ReuseFrozen, Snippet,
         StageId, StorageVersion, TableName, TableNameDto, TableType, UserId, UserName, WorkerConfig,
         WorkerId, WorkerTypeDto,
     };
@@ -88,6 +88,10 @@ mod definitions {
         /// carrying it forward, so publishers re-read initial config values.
         #[dxo(extractor)]
         pub reset_state: ResetState,
+        /// When true, regenerate the function's stage id (a fresh stage/checkpoint
+        /// dir) instead of carrying it forward, discarding accumulated stage state.
+        #[dxo(extractor)]
+        pub reset_stage: ResetStage,
     }
 
     #[ta_objects::Dto]

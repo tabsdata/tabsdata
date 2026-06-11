@@ -540,12 +540,15 @@ class APIServer:
         name: str,
         description: str,
         group: str | None = None,
+        base_path: str | None = None,
         raise_for_status: bool = True,
     ):
         endpoint = "/collections"
         data = {"name": name, "description": description}
         if group is not None:
             data["group"] = group
+        if base_path is not None:
+            data["base_path"] = base_path
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -584,11 +587,13 @@ class APIServer:
         collection_name: str,
         new_collection_name: str = None,
         description: str = None,
+        base_path: str = None,
         raise_for_status: bool = True,
     ):
         endpoint = f"/collections/{collection_name}"
         data = self.get_params_dict(
-            ["name", "description"], [new_collection_name, description]
+            ["name", "description", "base_path"],
+            [new_collection_name, description, base_path],
         )
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
@@ -687,6 +692,7 @@ class APIServer:
         enabled: bool = None,
         plugin_name: str = None,
         workers: dict = None,
+        base_path: str = None,
         raise_for_status: bool = True,
     ):
         endpoint = f"/collections/{collection_name}/functions"
@@ -706,6 +712,7 @@ class APIServer:
             "enabled",
             "connector",
             "workers",
+            "base_path",
         ]
         values = [
             function_name,
@@ -722,6 +729,7 @@ class APIServer:
             enabled,
             plugin_name,
             workers,
+            base_path,
         ]
         data = self.get_params_dict(names, values)
         response = self.post(endpoint, json=data)
@@ -828,6 +836,9 @@ class APIServer:
         enabled: bool = None,
         plugin_name: str = None,
         workers: dict = None,
+        base_path: str = None,
+        reset_state: bool = None,
+        reset_stage: bool = None,
         raise_for_status: bool = True,
     ):
         endpoint = f"/collections/{collection_name}/functions/{function_name}"
@@ -848,6 +859,9 @@ class APIServer:
                 "enabled",
                 "connector",
                 "workers",
+                "base_path",
+                "reset_state",
+                "reset_stage",
             ],
             [
                 new_function_name,
@@ -864,6 +878,9 @@ class APIServer:
                 enabled,
                 plugin_name,
                 workers,
+                base_path,
+                reset_state,
+                reset_stage,
             ],
         )
         response = self.post(endpoint, json=data)
