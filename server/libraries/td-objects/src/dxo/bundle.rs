@@ -39,4 +39,14 @@ mod definitions {
     pub struct Bundle {
         pub id: BundleId,
     }
+
+    /// Update applied when a function register/update/patch claims an
+    /// uploaded bundle: flips its status to `Registered` (the row is kept,
+    /// not deleted, so the bundle artifact stays a durable record).
+    /// Constructed by struct literal at the call site.
+    #[ta_objects::Dao]
+    #[dao(update, sql_table = "bundles")]
+    pub struct BundleRegisteredDB {
+        pub status: BundleStatus,
+    }
 }

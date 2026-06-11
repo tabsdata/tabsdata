@@ -3,10 +3,11 @@
 //
 
 use crate::function::layers::patch::{assert_patch_parent_matches_url, build_patch_function};
+use crate::function::layers::register::bundle_registered;
 use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
 use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::bundle::BundleDB;
+use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::function::{
@@ -50,7 +51,8 @@ fn service() {
         from_fn(insert::<FunctionPatchDB>),
         // Consume the bundle the patch ships.
         from_fn(With::<FunctionPatchDB>::extract::<BundleId>),
-        from_fn(By::<BundleId>::delete::<BundleDB>),
+        from_fn(bundle_registered),
+        from_fn(By::<BundleId>::update::<BundleRegisteredDB, BundleDB>),
         from_fn(With::<FunctionPatchDB>::try_convert_to::<FunctionPatchRecordBuilder, _>),
         from_fn(With::<FunctionPatchRecordBuilder>::build::<FunctionPatchRecord>),
     )
@@ -112,7 +114,8 @@ mod tests {
                 type_of_val(&insert::<FunctionPatchDB>),
                 // Consume the bundle the patch ships.
                 type_of_val(&With::<FunctionPatchDB>::extract::<BundleId>),
-                type_of_val(&By::<BundleId>::delete::<BundleDB>),
+                type_of_val(&bundle_registered),
+                type_of_val(&By::<BundleId>::update::<BundleRegisteredDB, BundleDB>),
                 type_of_val(
                     &With::<FunctionPatchDB>::try_convert_to::<FunctionPatchRecordBuilder, _>,
                 ),

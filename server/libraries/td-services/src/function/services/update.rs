@@ -3,7 +3,7 @@
 //
 
 use crate::do_authz::DO_AUTHZ;
-use crate::function::layers::register::validate_tables_do_not_exist;
+use crate::function::layers::register::{bundle_registered, validate_tables_do_not_exist};
 use crate::function::layers::update::{
     assert_function_name_not_exists, update_function_db_builder,
 };
@@ -18,7 +18,7 @@ use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
 use td_authz::{Authz, AuthzContext};
 use td_execution::SchedulerNotify;
 use td_objects::And;
-use td_objects::dxo::bundle::BundleDB;
+use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::dependency::DependencyDB;
@@ -93,9 +93,10 @@ fn service() {
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
         from_fn(With::<FunctionDBBuilder>::build::<FunctionDB>),
         from_fn(insert::<FunctionDB>),
-        // Remove from bundles
+        // Mark the uploaded bundle as Registered (kept as a durable record, not deleted)
         from_fn(With::<FunctionDB>::extract::<BundleId>),
-        from_fn(By::<BundleId>::delete::<BundleDB>),
+        from_fn(bundle_registered),
+        from_fn(By::<BundleId>::update::<BundleRegisteredDB, BundleDB>),
         // Register associations
         // Find previous versions
         from_fn(With::<FunctionVersionId>::some),
@@ -230,9 +231,10 @@ mod tests {
                 type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB>),
                 type_of_val(&insert::<FunctionDB>),
-                // Remove from bundles
+                // Mark the uploaded bundle as Registered (kept, not deleted)
                 type_of_val(&With::<FunctionDB>::extract::<BundleId>),
-                type_of_val(&By::<BundleId>::delete::<BundleDB>),
+                type_of_val(&bundle_registered),
+                type_of_val(&By::<BundleId>::update::<BundleRegisteredDB, BundleDB>),
                 // Register associations
                 // Find previous versions
                 type_of_val(&With::<FunctionVersionId>::some),
