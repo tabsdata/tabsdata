@@ -14,6 +14,8 @@ pub enum Bundles {
     ProjectId,
     CollectionId,
     Hash,
+    BasePath,
+    Status,
     CreatedOn,
     CreatedById,
 }
@@ -29,6 +31,12 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Bundles::ProjectId).text().not_null())
                 .col(ColumnDef::new(Bundles::CollectionId).text().not_null())
                 .col(ColumnDef::new(Bundles::Hash).text().not_null())
+                // Storage prefix frozen at upload = collection.base_path. The bundle
+                // row is durable (kept, marked on claim), so it self-locates its .tgz.
+                .col(ColumnDef::new(Bundles::BasePath).text().not_null())
+                // Lifecycle marker: Pending (uploaded) → Registered (claimed by a
+                // function register/update/patch). Rows are never deleted.
+                .col(ColumnDef::new(Bundles::Status).text().not_null())
                 .col(ColumnDef::new(Bundles::CreatedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Bundles::CreatedById).text().not_null())
                 .foreign_key(

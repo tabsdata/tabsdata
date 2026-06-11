@@ -6,10 +6,11 @@
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
-        AtTime, BundleId, CollectionId, CollectionName, Connector, DataLocation, Decorator,
-        Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
-        FunctionVersionId, GroupId, ResetState, ReuseFrozen, Snippet, StorageVersion, TableName,
-        TableNameDto, TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
+        AtTime, BasePath, BundleId, CollectionId, CollectionName, Connector,
+        Decorator, Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues,
+        FunctionStatus, FunctionVersionId, GroupId, ResetState, ReuseFrozen, Snippet,
+        StageId, StorageVersion, TableName, TableNameDto, TableType, UserId, UserName, WorkerConfig,
+        WorkerId, WorkerTypeDto,
     };
     use crate::types::composed::{
         TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -27,6 +28,10 @@ mod definitions {
         pub decorator: Decorator,
         #[builder(default)]
         pub connector: Option<Connector>,
+        // Optional storage-prefix override for this function's output table data.
+        #[serde(default)]
+        #[builder(default)]
+        pub base_path: Option<BasePath>,
         #[dxo(extractor)]
         pub dependencies: Option<Vec<TableDependencyDto>>,
         #[dxo(extractor)]
@@ -74,6 +79,9 @@ mod definitions {
         #[dxo(extractor)]
         pub reuse_frozen_tables: ReuseFrozen,
         pub enabled: Option<Enabled>, // added in v4
+        /// Storage-prefix override. Some sets the override for the new version;
+        /// None carries forward the previous version's value.
+        pub base_path: Option<BasePath>,
         #[dxo(extractor)]
         pub workers: Option<HashMap<WorkerTypeDto, WorkerConfig>>, // added in v4
         /// When true, regenerate the function's state table id instead of
@@ -153,8 +161,24 @@ mod definitions {
         #[builder(default)]
         #[dxo(setter, extractor)]
         pub function_id: FunctionId,
+        // Optional storage-prefix override for this version's output table data.
+        // NULL → inherit the collection base_path at mint. Mapped from
+        // `FunctionRegister::base_path`; carried forward from the previous version on
+        // update unless `FunctionUpdate::base_path` overrides it.
+        #[dxo(builder(include))]
+        #[builder(default)]
+        pub base_path: Option<BasePath>,
+        // Stage/checkpoint identity. Fresh at register, carried forward on update
+        // (via try_from FunctionDB), regenerated when FunctionUpdate::reset_stage.
         #[dxo(setter)]
-        pub data_location: DataLocation,
+        #[builder(default)]
+        pub stage_id: StageId,
+        // Storage prefix for the stage/checkpoint dirs, stamped at register from the
+        // collection base_path and carried forward, so a function's state does not
+        // silently relocate when the collection base_path later changes.
+        #[dxo(setter)]
+        #[builder(default)]
+        pub stage_base_path: BasePath,
         #[dxo(setter)]
         pub storage_version: StorageVersion,
         #[dxo(extractor)]
@@ -268,6 +292,20 @@ mod definitions {
         /// No default: the group is project-scoped and must be set explicitly.
         pub group_id: GroupId,
         pub defined_by: UserName,
+    }
+
+    /// FunctionDB enriched with the effective bundle's stamped
+    /// `base_path`, populated by a single `functions ⋈ bundles` query so
+    /// the stage-trigger builder reads the bundle prefix off the same row
+    /// rather than issuing a second per-bundle fetch. Not a Dao — a
+    /// logical-layer projection (like PhysicalFunctionRunToExecute): the
+    /// query SELECTs all FunctionDB columns plus
+    /// `COALESCE(bundles.base_path, functions.stage_base_path) AS bundle_base_path`.
+    #[ta_objects::Dlo]
+    #[derive(sqlx::FromRow)]
+    #[inherits(FunctionDB)]
+    pub struct FunctionDBWithBundleBasePath {
+        pub bundle_base_path: BasePath,
     }
 
     #[ta_objects::Dto]

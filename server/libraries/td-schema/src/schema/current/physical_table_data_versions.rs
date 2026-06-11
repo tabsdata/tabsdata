@@ -50,6 +50,7 @@ pub enum PhysicalTableDataVersions {
     FunctionParamPos,
     WithDataTableDataVersionId,
     TriggeredOn,
+    BasePath,
 }
 
 pub(super) struct Defs;
@@ -88,6 +89,10 @@ impl Entity for Defs {
                 .col(ColumnDef::new(PhysicalTableDataVersions::FunctionParamPos).integer().not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::WithDataTableDataVersionId).text().null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::TriggeredOn).timestamp_with_time_zone().not_null())
+                // Storage prefix frozen at mint = function.base_path ?? collection.base_path.
+                // Self-describing: reads use this directly, never recompute, so data stays
+                // findable after the collection/function base_path later changes.
+                .col(ColumnDef::new(PhysicalTableDataVersions::BasePath).text().not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::CollectionId)
@@ -180,7 +185,6 @@ impl Entity for Defs {
                     .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::StartedOn)), Alias::new("started_on"))
                     .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOn)), Alias::new("ended_on"))
                     .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Status)), Alias::new("status"))
-                    .expr_as(Expr::col((Functions::Table, Functions::DataLocation)), Alias::new("data_location"))
                     .expr_as(Expr::col((Functions::Table, Functions::StorageVersion)), Alias::new("storage_version"))
                     .from(PhysicalTableDataVersions::Table)
                     .join(

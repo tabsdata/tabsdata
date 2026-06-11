@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::function::layers::register::data_location;
 use crate::function::layers::upload::upload_function_write_to_storage;
 use ta_services::factory::service_factory;
 use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
@@ -14,7 +13,7 @@ use td_objects::dxo::function_upload::FunctionUpload;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    BundleHash, BundleId, CollectionId, CollectionIdName, StorageVersion,
+    BasePath, BundleHash, BundleId, CollectionId, CollectionIdName, StorageVersion,
 };
 use td_queries::By;
 use td_queries::insert;
@@ -41,24 +40,26 @@ fn service() {
         from_fn(
             With::<CreateRequest<CollectionParam, FunctionUpload>>::extract_data::<FunctionUpload>
         ),
-        // Extract function (TODO also use FunctionId to generate data_location)
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         // Extract collection
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        // The bundle is stored under the collection's base_path, stamped onto the
+        // bundle row so it self-locates regardless of later collection changes.
+        from_fn(With::<CollectionDB>::extract::<BasePath>),
         // check requester is coll_admin or coll_dev for the function's collection
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollDev>::check),
-        // Get location and storage version.
+        // Get storage version.
         from_fn(With::<StorageVersion>::default),
-        from_fn(data_location),
         // Write to storage with new bundle id.
         from_fn(With::<BundleId>::default),
         from_fn(upload_function_write_to_storage),
-        // Build BundleDB
+        // Build BundleDB (status defaults to Pending until a function claims it).
         from_fn(With::<RequestContext>::try_convert_to::<BundleDBBuilder, _>),
         from_fn(With::<BundleId>::set::<BundleDBBuilder>),
         from_fn(With::<CollectionId>::set::<BundleDBBuilder>),
+        from_fn(With::<BasePath>::set::<BundleDBBuilder>),
         from_fn(With::<BundleHash>::set::<BundleDBBuilder>),
         from_fn(With::<BundleDBBuilder>::build::<BundleDB>),
         from_fn(insert::<BundleDB>),
@@ -83,7 +84,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::types::basic::{
-        AccessTokenId, CollectionName, DataLocation, ProjectId, RoleId, UserId,
+        AccessTokenId, BasePath, BundleStatus, CollectionName, ProjectId, RoleId, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -115,17 +116,16 @@ mod tests {
                         FunctionUpload,
                     >,
                 ),
-                // Extract function (TODO also use FunctionId to generate data_location)
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 // Extract collection
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                type_of_val(&With::<CollectionDB>::extract::<BasePath>),
                 // check requester is coll_admin or coll_dev for the function's collection
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<CollAdmin, CollDev>::check),
-                // Get location and storage version.
+                // Get storage version.
                 type_of_val(&With::<StorageVersion>::default),
-                type_of_val(&data_location),
                 // Write to storage with new bundle id.
                 type_of_val(&With::<BundleId>::default),
                 type_of_val(&upload_function_write_to_storage),
@@ -133,6 +133,7 @@ mod tests {
                 type_of_val(&With::<RequestContext>::try_convert_to::<BundleDBBuilder, _>),
                 type_of_val(&With::<BundleId>::set::<BundleDBBuilder>),
                 type_of_val(&With::<CollectionId>::set::<BundleDBBuilder>),
+                type_of_val(&With::<BasePath>::set::<BundleDBBuilder>),
                 type_of_val(&With::<BundleHash>::set::<BundleDBBuilder>),
                 type_of_val(&With::<BundleDBBuilder>::build::<BundleDB>),
                 type_of_val(&insert::<BundleDB>),
@@ -184,10 +185,14 @@ mod tests {
         assert_eq!(bundle.hash.to_string(), hash);
         assert_eq!(bundle.created_by_id, UserId::admin());
 
+        // Bundle is stamped with the collection base_path and starts Pending.
+        assert_eq!(bundle.base_path, collection.base_path);
+        assert_eq!(bundle.status, BundleStatus::Pending);
+
         // Assert storage
-        let data_location = DataLocation::default();
+        let base_path = BasePath::default();
         let (bundle_location, _) = StorageLocation::current()
-            .builder(&data_location)
+            .builder(&base_path)
             .collection(&collection.id)
             .function(&bundle.id)
             .build()?;

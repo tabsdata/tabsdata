@@ -5,7 +5,7 @@
 use crate::{SPath, StorageError};
 use std::fmt::Debug;
 use td_objects::types::basic::{
-    BundleId, CollectionId, DataLocation, FunctionId, FunctionVersionId, Partition,
+    BundleId, CollectionId, BasePath, StageId, FunctionVersionId, Partition,
     PhysicalTableDataVersionId, StorageVersion, TableId, TableVersionId, TransactionId,
 };
 
@@ -19,7 +19,8 @@ pub enum StorageLocation {
     /// Variant `V1` produces [`SPath`] in the following format (words in uppercase are placeholders
     /// for IDs):
     ///
-    /// * LOCATION: function datalocation
+    /// * LOCATION: base path (collection / function-version override, or the value
+    ///   stamped on the data version / bundle)
     /// * COLLECTION: collection ID
     /// * FUNCTION: function ID
     /// * FUNCTION_VERSION: function_version ID
@@ -34,8 +35,9 @@ pub enum StorageLocation {
     /// * `/LOCATION/c/COLLECTION/x/TRANSACTION/f/FUNCTION_VERSION` (physical_function_run contents)
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION.t`
     /// * `/LOCATION/c/COLLECTION/d/DATA_VERSION/t/TABLE/TABLE_VERSION/p/PARTITION.p`
-    /// * `/bundles/c/COLLECTION/f/BUNDLE.tgz`
-    /// * `/stages/c/COLLECTION/f/FUNCTION`
+    /// * `/LOCATION/bundles/c/COLLECTION/f/BUNDLE.tgz`
+    /// * `/LOCATION/stages/c/COLLECTION/f/FUNCTION`
+    /// * `/LOCATION/checkpoints/c/COLLECTION/f/FUNCTION`
     #[default]
     V1,
 }
@@ -47,7 +49,7 @@ impl StorageLocation {
     }
 
     /// Return a builder for the storage location variant
-    pub fn builder(&self, location: &DataLocation) -> LocationBuilder {
+    pub fn builder(&self, location: &BasePath) -> LocationBuilder {
         match self {
             StorageLocation::V1 => {
                 LocationBuilder::new(location.clone(), Box::new(V1LocationBuilder))
@@ -68,7 +70,7 @@ impl From<&StorageVersion> for StorageLocation {
 
 #[derive(Debug, Clone, Default)]
 struct LocationBuilderInfo {
-    location: DataLocation,
+    location: BasePath,
     collection: Option<String>,
     bundle: Option<String>,
     stage: Option<String>,
@@ -224,7 +226,7 @@ pub struct StageBuilder {
 
 impl StageBuilder {
     /// Set the function.
-    pub fn function(&mut self, function: &FunctionId) -> &mut Self {
+    pub fn function(&mut self, function: &StageId) -> &mut Self {
         self.info.stage = Some(function.to_string());
         self
     }
@@ -254,8 +256,8 @@ pub struct CheckpointBuilder {
 
 impl CheckpointBuilder {
     /// Set the function.
-    pub fn function(&mut self, function: &FunctionId) -> &mut Self {
-        self.info.stage = Some(function.to_string());
+    pub fn function(&mut self, function: &StageId) -> &mut Self {
+        self.info.checkpoint = Some(function.to_string());
         self
     }
 
@@ -301,7 +303,7 @@ impl CollectionBuilder {
     }
 
     /// Return a [`StageBuilder`] based on the [`CollectionBuilder`]
-    pub fn stage(self, function: &FunctionId) -> StageBuilder {
+    pub fn stage(self, function: &StageId) -> StageBuilder {
         let mut builder = StageBuilder {
             info: self.info,
             version_builder: self.version_builder,
@@ -311,8 +313,8 @@ impl CollectionBuilder {
     }
 
     /// Return a [`CheckpointBuilder`] based on the [`CollectionBuilder`]
-    pub fn checkpoint(self, function: &FunctionId) -> StageBuilder {
-        let mut builder = StageBuilder {
+    pub fn checkpoint(self, function: &StageId) -> CheckpointBuilder {
+        let mut builder = CheckpointBuilder {
             info: self.info,
             version_builder: self.version_builder,
         };
@@ -437,7 +439,7 @@ pub struct LocationBuilder {
 }
 
 impl LocationBuilder {
-    fn new(location: DataLocation, version_builder: Box<dyn VersionLocationBuilder>) -> Self {
+    fn new(location: BasePath, version_builder: Box<dyn VersionLocationBuilder>) -> Self {
         Self {
             info: LocationBuilderInfo {
                 location,
@@ -448,7 +450,7 @@ impl LocationBuilder {
     }
 
     /// Set the location for the location builder.
-    pub fn location(&mut self, location: &DataLocation) -> &mut Self {
+    pub fn location(&mut self, location: &BasePath) -> &mut Self {
         self.info.location = location.clone();
         self
     }
@@ -507,25 +509,26 @@ impl VersionLocationBuilder for V1LocationBuilder {
         if let Some(collection) = &info.collection {
             path = path.child("c")?.child(collection)?;
             if let Some(bundle) = &info.bundle {
-                // Bundles are stored at /bundles/c/COLLECTION/f/BUNDLE.tgz
-                // we need to recalculate the base path accordingly.
-                path = SPath::default()
+                // Bundles are stored at {LOCATION}/bundles/c/COLLECTION/f/BUNDLE.tgz
+                // we need to recalculate the base path accordingly (prefixed by the
+                // base path, not the collection segment built above).
+                path = SPath::parse(info.location.as_str())?
                     .child("bundles")?
                     .child("c")?
                     .child(collection)?;
 
                 path = path.child("f")?.child(&format!("{bundle}.tgz"))?;
             } else if let Some(stage) = &info.stage {
-                // Stages are stored at /stages/c/COLLECTION/f
+                // Stages are stored at {LOCATION}/stages/c/COLLECTION/f
                 // we need to recalculate the base path accordingly.
-                path = SPath::default()
+                path = SPath::parse(info.location.as_str())?
                     .child("stages")?
                     .child("c")?
                     .child(collection)?;
                 path = path.child("f")?.child(stage)?;
             } else if let Some(stage) = &info.checkpoint {
-                // Checkpoints are stored at /checkpoints/c/COLLECTION/f
-                path = SPath::default()
+                // Checkpoints are stored at {LOCATION}/checkpoints/c/COLLECTION/f
+                path = SPath::parse(info.location.as_str())?
                     .child("checkpoints")?
                     .child("c")?
                     .child(collection)?;
@@ -585,7 +588,7 @@ mod tests {
     use super::*;
     use td_error::TdError;
     use td_objects::types::basic::{
-        BundleId, CollectionId, DataLocation, FunctionVersionId, Partition,
+        BundleId, CollectionId, BasePath, FunctionVersionId, Partition,
         PhysicalTableDataVersionId, TableId, TableVersionId, TransactionId,
     };
 
@@ -596,7 +599,7 @@ mod tests {
 
     #[test]
     fn test_location_current_builder_version() -> Result<(), TdError> {
-        let data_location = DataLocation::try_from("/")?;
+        let data_location = BasePath::try_from("/")?;
         assert!(matches!(
             StorageLocation::current()
                 .builder(&data_location)
@@ -609,11 +612,11 @@ mod tests {
 
     #[test]
     fn test_location_builder_v2() -> Result<(), TdError> {
-        let data_location = DataLocation::try_from("/L")?;
+        let data_location = BasePath::try_from("/L")?;
         let mut builder = StorageLocation::V1.builder(&data_location);
         assert_eq!(builder.build()?.0, SPath::parse("/L")?);
         assert_eq!(builder.build_meta("foo")?.0, SPath::parse("/L-foo.meta")?);
-        let data_location = DataLocation::try_from("/LL")?;
+        let data_location = BasePath::try_from("/LL")?;
         builder.location(&data_location);
         assert_eq!(builder.build()?.0, SPath::parse("/LL")?);
         Ok(())
@@ -621,7 +624,7 @@ mod tests {
 
     #[test]
     fn test_collection_builder_v2() -> Result<(), TdError> {
-        let data_location = DataLocation::try_from("/L")?;
+        let data_location = BasePath::try_from("/L")?;
         let collection = CollectionId::default();
         let mut builder = StorageLocation::V1
             .builder(&data_location)
@@ -645,7 +648,7 @@ mod tests {
 
     #[test]
     fn test_function_builder_v2() -> Result<(), TdError> {
-        let data_location = DataLocation::try_from("/L")?;
+        let data_location = BasePath::try_from("/L")?;
         let collection = CollectionId::default();
         let bundle = BundleId::default();
         let mut builder = StorageLocation::V1
@@ -654,52 +657,52 @@ mod tests {
             .function(&bundle);
         assert_eq!(
             builder.build()?.0,
-            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz"))?
+            SPath::parse(format!("/L/bundles/c/{collection}/f/{bundle}.tgz"))?
         );
         assert_eq!(
             builder.build_meta("foo")?.0,
-            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz-foo.meta"))?
+            SPath::parse(format!("/L/bundles/c/{collection}/f/{bundle}.tgz-foo.meta"))?
         );
 
         let bundle = BundleId::default();
         builder.function(&bundle);
         assert_eq!(
             builder.build()?.0,
-            SPath::parse(format!("/bundles/c/{collection}/f/{bundle}.tgz"))?
+            SPath::parse(format!("/L/bundles/c/{collection}/f/{bundle}.tgz"))?
         );
         Ok(())
     }
 
     #[test]
     fn test_stage_builder_v2() -> Result<(), TdError> {
-        let data_location = DataLocation::try_from("/L")?;
+        let data_location = BasePath::try_from("/L")?;
         let collection = CollectionId::default();
-        let function = FunctionId::default();
+        let function = StageId::default();
         let mut builder = StorageLocation::V1
             .builder(&data_location)
             .collection(&collection)
             .stage(&function);
         assert_eq!(
             builder.build()?.0,
-            SPath::parse(format!("/stages/c/{collection}/f/{function}"))?
+            SPath::parse(format!("/L/stages/c/{collection}/f/{function}"))?
         );
         assert_eq!(
             builder.build_meta("foo")?.0,
-            SPath::parse(format!("/stages/c/{collection}/f/{function}-foo.meta"))?
+            SPath::parse(format!("/L/stages/c/{collection}/f/{function}-foo.meta"))?
         );
 
-        let function = FunctionId::default();
+        let function = StageId::default();
         builder.function(&function);
         assert_eq!(
             builder.build()?.0,
-            SPath::parse(format!("/stages/c/{collection}/f/{function}"))?
+            SPath::parse(format!("/L/stages/c/{collection}/f/{function}"))?
         );
         Ok(())
     }
 
     #[test]
     fn test_data_builder_v2() -> Result<(), TdError> {
-        let data_location = DataLocation::try_from("/L")?;
+        let data_location = BasePath::try_from("/L")?;
         let collection = CollectionId::default();
         let physical_table_data_version = PhysicalTableDataVersionId::new();
         let mut builder = StorageLocation::V1
@@ -728,7 +731,7 @@ mod tests {
 
     #[test]
     fn test_table_builder_v2() -> Result<(), TdError> {
-        let data_location = DataLocation::try_from("/L")?;
+        let data_location = BasePath::try_from("/L")?;
         let collection = CollectionId::default();
         let physical_table_data_version = PhysicalTableDataVersionId::new();
         let table = TableId::default();
@@ -792,7 +795,7 @@ mod tests {
 
     #[test]
     fn test_transaction_function_version_builder_v2() -> Result<(), TdError> {
-        let data_location = DataLocation::try_from("/L")?;
+        let data_location = BasePath::try_from("/L")?;
         let collection = CollectionId::default();
         let transaction = TransactionId::new();
         let function_version = FunctionVersionId::new();

@@ -5,7 +5,9 @@
 #[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::types::basic::{AtTime, BundleHash, BundleId, CollectionId, UserId};
+    use crate::types::basic::{
+        AtTime, BasePath, BundleHash, BundleId, BundleStatus, CollectionId, UserId,
+    };
 
     #[ta_objects::Dao]
     #[dao(sql_table = "bundles")]
@@ -17,6 +19,15 @@ mod definitions {
         pub collection_id: CollectionId,
         #[dxo(setter)]
         pub hash: BundleHash,
+        // Storage prefix frozen at upload = collection.base_path. The bundle row is
+        // durable, so it self-locates its .tgz regardless of later collection changes.
+        #[dxo(setter)]
+        #[builder(default)]
+        pub base_path: BasePath,
+        // Pending at upload; flipped to Registered when a function claims it.
+        #[dxo(setter)]
+        #[builder(default = BundleStatus::Pending)]
+        pub status: BundleStatus,
         #[dxo(builder(include, field = "time"))]
         pub created_on: AtTime,
         #[dxo(builder(include, field = "user_id"))]

@@ -3,7 +3,7 @@
 //
 
 use crate::do_authz::DO_AUTHZ;
-use crate::function::layers::register::{data_location, validate_tables_do_not_exist};
+use crate::function::layers::register::validate_tables_do_not_exist;
 use crate::function::layers::{
     check_private_tables, register_dependencies, register_tables, register_triggers,
     register_workers,
@@ -27,7 +27,7 @@ use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, Enabled,
+    AtTime, BasePath, BundleId, CollectionId, CollectionIdName, CollectionName, Enabled,
     FunctionId, FunctionName, FunctionVersionId, ResetState, ReuseFrozen, StorageVersion,
     TableNameDto, TableType, WorkerConfig, WorkerTypeDto,
 };
@@ -69,6 +69,8 @@ fn service() {
         from_fn(AuthzOn::<CollectionId>::set),
         from_fn(Authz::<CollAdmin, CollDev>::check),
         from_fn(With::<CollectionDB>::extract::<CollectionName>),
+        // Stage/checkpoint storage prefix is stamped from the collection base_path.
+        from_fn(With::<CollectionDB>::extract::<BasePath>),
         // Get function.
         from_fn(With::<FunctionRegister>::extract::<FunctionName>),
         // Check function name does not exist in collection at the time of register.
@@ -80,9 +82,8 @@ fn service() {
                 FunctionDBWithNames,
             >
         ),
-        // Get location and storage version.
+        // Get storage version.
         from_fn(With::<StorageVersion>::default),
-        from_fn(data_location),
         // Get enabled flag
         from_fn(With::<FunctionRegister>::extract::<Option<Enabled>>),
         from_fn(With::<Option<Enabled>>::unwrap_or_default),
@@ -91,7 +92,8 @@ fn service() {
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
         from_fn(With::<CollectionId>::set::<FunctionDBBuilder>),
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
-        from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
+        // Stamp stage_base_path from the collection base_path (BasePath in context).
+        from_fn(With::<BasePath>::set::<FunctionDBBuilder>),
         from_fn(With::<Enabled>::set::<FunctionDBBuilder>),
         from_fn(With::<FunctionDBBuilder>::build::<FunctionDB>),
         from_fn(insert::<FunctionDB>),
@@ -209,6 +211,7 @@ mod tests {
                 type_of_val(&AuthzOn::<CollectionId>::set),
                 type_of_val(&Authz::<CollAdmin, CollDev>::check),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
+                type_of_val(&With::<CollectionDB>::extract::<BasePath>),
                 // Get function.
                 type_of_val(&With::<FunctionRegister>::extract::<FunctionName>),
                 // Check function name does not exist in collection.
@@ -219,9 +222,8 @@ mod tests {
                         FunctionDBWithNames,
                     >,
                 ),
-                // Get location and storage version.
+                // Get storage version.
                 type_of_val(&With::<StorageVersion>::default),
-                type_of_val(&data_location),
                 // Get enabled flag
                 type_of_val(&With::<FunctionRegister>::extract::<Option<Enabled>>),
                 type_of_val(&With::<Option<Enabled>>::unwrap_or_default),
@@ -230,7 +232,7 @@ mod tests {
                 type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
                 type_of_val(&With::<CollectionId>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),
-                type_of_val(&With::<DataLocation>::set::<FunctionDBBuilder>),
+                type_of_val(&With::<BasePath>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<Enabled>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB>),
                 type_of_val(&insert::<FunctionDB>),

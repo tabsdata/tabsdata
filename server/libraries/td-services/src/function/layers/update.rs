@@ -79,5 +79,8 @@ pub async fn update_function_db_builder(
     if let Some(enabled) = &update.enabled {
         builder.enabled(enabled);
     }
+    if let Some(base_path) = &update.base_path {
+        builder.base_path(Some(base_path.clone()));
+    }
     Ok(builder)
 }

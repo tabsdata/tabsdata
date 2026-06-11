@@ -9,7 +9,6 @@ use td_database::dynamic::DynamicConnection;
 use td_error::DisplayVec;
 use td_error::{ApiError, TdError, api_error, td_error};
 use td_execution::VersionResolver;
-use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
 use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
@@ -18,7 +17,7 @@ use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES, TD_FN_STATE_PREFIX,
 };
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, DataLocation, DependencyId, DependencyPos,
+    AtTime, CollectionId, CollectionName, DependencyId, DependencyPos,
     DependencyStatus, FunctionId, FunctionVersionId, ResetState, ReuseFrozen,
     TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus, TableType, TriggerId,
     TriggerStatus, TriggerVersionId, TriggeredOn, WorkerConfig, WorkerStatus, WorkerType,
@@ -49,13 +48,6 @@ pub enum RegisterFunctionError {
     PrivateTableDependency(CollectionName, TableName) = 5,
     #[error("Duplicate output tables defined: [{0}]")]
     DuplicateTableDefinition(DisplayVec<TableName>) = 6,
-}
-
-pub async fn data_location(
-    _collection: Ref<CollectionDB>,
-    // _function: Ref<FunctionDBWithNames>,
-) -> Result<DataLocation, TdError> {
-    Ok(DataLocation::default())
 }
 
 pub async fn validate_tables_do_not_exist(

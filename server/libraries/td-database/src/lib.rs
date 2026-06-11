@@ -1086,9 +1086,9 @@ mod tests {
             .unwrap();
             sqlx::query(
                 "INSERT INTO functions \
-                 (id, collection_id, name, description, decorator, runtime_values, function_id, data_location, \
+                 (id, collection_id, name, description, decorator, runtime_values, function_id, \
                   storage_version, bundle_id, snippet, defined_on, defined_by_id, status) \
-                 VALUES ('fn1', 'col', 'f', 'd', 'dec', '{}', 'fid', 'loc', '1', 'bun', 'snip', now(), 'u', 'active')",
+                 VALUES ('fn1', 'col', 'f', 'd', 'dec', '{}', 'fid', '1', 'bun', 'snip', now(), 'u', 'active')",
             )
             .execute(&mut **h)
             .await

@@ -354,7 +354,7 @@ pub(crate) async fn resolve_input_tables(
 
                 if let Some(data_version_with_data) = data_version_with_data.as_ref() {
                     let (path, _) = storage_location
-                        .builder(&data_version_with_data.data_location)
+                        .builder(&data_version_with_data.base_path)
                         .collection(&data_version_with_data.collection_id)
                         .data(&data_version_with_data.id)
                         .table(

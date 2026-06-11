@@ -15,7 +15,7 @@ use td_objects::dxo::table::{TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBBuilder;
 use td_objects::dxo::worker::WorkerDBBuilder;
 use td_objects::types::basic::{
-    AccessTokenId, DataLocation, DependencyPos, DependencyStatus, RoleId, StorageVersion,
+    AccessTokenId, DependencyPos, DependencyStatus, RoleId, StorageVersion,
     TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId,
 };
 
@@ -38,7 +38,6 @@ pub(crate) async fn seed_function(
     let function_db = builder
         .try_update_from(&request_context)?
         .collection_id(collection.id)
-        .data_location(DataLocation::default())
         .storage_version(StorageVersion::default())
         .enabled(function_create.enabled.unwrap_or_default())
         .build()?;
@@ -224,7 +223,6 @@ mod tests {
         assert_eq!(function.description, found.description);
         assert_eq!(function.runtime_values, found.runtime_values);
         assert_eq!(function.function_id, found.function_id);
-        assert_eq!(function.data_location, found.data_location);
         assert_eq!(function.storage_version, found.storage_version);
         assert_eq!(function.bundle_id, found.bundle_id);
         assert_eq!(function.snippet, found.snippet);

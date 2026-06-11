@@ -9,7 +9,7 @@ use crate::dxo::table::TableDBWithNames;
 use crate::dxo::trigger::TriggerDBWithNames;
 use crate::graph::{TdGraph, TdGraphBuilder};
 use crate::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionName, DataLocation, Decorator, DependencyId,
+    AtTime, BundleId, CollectionId, CollectionName, Decorator, DependencyId,
     DependencyPos, DependencyStatus, DependencyVersionId, Description, Enabled, FunctionId,
     FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, Snippet,
     StorageVersion, TableId, TableName, TableStatus, TableType, TableVersionId, TriggerId,
@@ -212,7 +212,6 @@ pub async fn function(function: &FunctionName) -> FunctionDBWithNames {
         .connector(None)
         .runtime_values(FunctionRuntimeValues::default())
         .function_id(FUNCTION_IDS.get(function).unwrap())
-        .data_location(DataLocation::default())
         .storage_version(StorageVersion::default())
         .bundle_id(BundleId::default())
         .snippet(Snippet::try_from("test").unwrap())

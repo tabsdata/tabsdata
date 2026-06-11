@@ -289,7 +289,7 @@ pub(crate) mod tests {
                         .await?;
 
                     let (path, _) = StorageLocation::from(&storage_location)
-                        .builder(&function.data_location)
+                        .builder(&physical_table_data_version.base_path)
                         .collection(&physical_table_data_version.collection_id)
                         .data(&physical_table_data_version.id)
                         .table(

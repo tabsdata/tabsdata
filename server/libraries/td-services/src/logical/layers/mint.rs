@@ -19,9 +19,25 @@ use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
-    AtTime, PhysicalFunctionRunStatus, TableFunctionParamPos, TriggeredOn,
+    AtTime, BasePath, FunctionVersionId, PhysicalFunctionRunStatus, TableFunctionParamPos,
+    TriggeredOn,
 };
-use td_queries::{ChunkedQueries, LiveEntry};
+use td_queries::{ChunkedQueries, LfrEntry, LiveEntry};
+
+/// Effective storage prefix for a function run's output table data:
+/// the function version's `base_path` override if set, else the
+/// collection's `base_path`. Stamped (frozen) onto every output TDV at
+/// mint so reads never recompute it.
+pub async fn resolve_output_base_path(
+    conn: &mut DynamicConnection<'_>,
+    function_version_id: &FunctionVersionId,
+) -> Result<BasePath, TdError> {
+    let effective = conn
+        .lfr()
+        .effective_output_base_paths(std::slice::from_ref(function_version_id))
+        .await?;
+    Ok(effective.into_values().next().unwrap_or_default())
+}
 
 /// Pure builder for a `PhysicalFunctionRunDB` row — no DB I/O.
 ///
@@ -72,6 +88,7 @@ pub fn build_output_table_data_versions(
     runnable: &RunnableVersion,
     fr: &PhysicalFunctionRunDB,
     tables: &[TableDB],
+    base_path: &BasePath,
 ) -> Result<Vec<PhysicalTableDataVersionDB>, TdError> {
     let mut tdvs = Vec::with_capacity(tables.len());
     for t in tables {
@@ -91,6 +108,7 @@ pub fn build_output_table_data_versions(
             .physical_function_run_id(&fr.id)
             .function_param_pos(function_param_pos)
             .triggered_on(fr.triggered_on)
+            .base_path(base_path.clone())
             .build()?;
         tdvs.push(tdv);
     }
@@ -107,7 +125,8 @@ pub async fn mint_output_table_data_versions(
         .live()
         .fetch_all::<TableDB>(&runnable.function_version_id)
         .await?;
-    let tdvs = build_output_table_data_versions(lfr, runnable, fr, &tables)?;
+    let base_path = resolve_output_base_path(conn, &runnable.function_version_id).await?;
+    let tdvs = build_output_table_data_versions(lfr, runnable, fr, &tables, &base_path)?;
     if !tdvs.is_empty() {
         conn.insert_vec::<PhysicalTableDataVersionDB>(&tdvs).await?;
     }
@@ -124,13 +143,15 @@ mod tests {
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::table::TableDBBuilder;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        FunctionVersionId, LogicalFunctionRunStatus, Private, ProjectId, RoleId,
+        AccessTokenId, AtTime, BasePath, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
+        FunctionVersionId, LogicalFunctionRunStatus, Private, ProjectId, RoleId, StorageVersion,
         TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus, TransactionKey,
         UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
+    use td_storage::SPath;
+    use td_storage::location::StorageLocation;
 
     const PRIVATE_TABLE_NAME: &str = "_internal";
 
@@ -300,7 +321,8 @@ mod tests {
             function_version_id: fx.func.id.clone(),
             function_version_patch_id: None,
         };
-        let tdvs = build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables)?;
+        let tdvs =
+            build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables, &BasePath::default())?;
 
         assert_eq!(tdvs.len(), fx.tables.len(), "one TDV per output table");
         for table in &fx.tables {
@@ -317,7 +339,8 @@ mod tests {
             function_version_id: fx.func.id.clone(),
             function_version_patch_id: None,
         };
-        let tdvs = build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &[])?;
+        let tdvs =
+            build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &[], &BasePath::default())?;
         assert!(tdvs.is_empty());
         Ok(())
     }
@@ -330,12 +353,73 @@ mod tests {
             function_version_id: fx.func.id.clone(),
             function_version_patch_id: Some(patch_id.clone()),
         };
-        let tdvs = build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables)?;
+        let tdvs =
+            build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables, &BasePath::default())?;
         assert!(
             tdvs.iter()
                 .all(|t| t.function_version_patch_id.as_ref() == Some(&patch_id)),
             "every output TDV must carry the resolved patch id",
         );
+        Ok(())
+    }
+
+    /// Core base_path correctness: the effective base_path is *stamped* on each
+    /// output data version at mint, and reads rebuild the storage path from that
+    /// stamped value — it is never recomputed. So changing the collection's
+    /// base_path between runs leaves earlier data versions resolving under their
+    /// original prefix and only routes new ones to the new prefix.
+    #[td_test::test(db)]
+    async fn test_output_tdv_base_path_stamped_and_used_for_reads(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let fx = seed_mint_fixture(&db).await?;
+        let runnable = RunnableVersion {
+            function_version_id: fx.func.id.clone(),
+            function_version_patch_id: None,
+        };
+
+        // Run 1: the effective base_path resolved at mint is "/proj_a".
+        let base_a = BasePath::try_from("/proj_a")?;
+        let tdvs_a =
+            build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables, &base_a)?;
+        assert!(!tdvs_a.is_empty());
+        for tdv in &tdvs_a {
+            assert_eq!(
+                tdv.base_path, base_a,
+                "every output TDV is stamped with the run's effective base_path"
+            );
+        }
+
+        // Reads rebuild the path from the *stamped* base_path, not from any live
+        // collection/function lookup.
+        let tdv = &tdvs_a[0];
+        let (path, _) = StorageLocation::from(&StorageVersion::default())
+            .builder(&tdv.base_path)
+            .collection(&tdv.collection_id)
+            .data(&tdv.id)
+            .table(&tdv.table_id, &tdv.table_version_id)
+            .build()?;
+        assert_eq!(
+            path,
+            SPath::parse(format!(
+                "/proj_a/c/{}/d/{}/t/{}/{}.t",
+                tdv.collection_id, tdv.id, tdv.table_id, tdv.table_version_id
+            ))?,
+            "read path is prefixed by the data version's stamped base_path"
+        );
+
+        // Run 2: the collection's base_path has since changed to "/proj_b".
+        let base_b = BasePath::try_from("/proj_b")?;
+        let tdvs_b =
+            build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables, &base_b)?;
+        for tdv in &tdvs_b {
+            assert_eq!(tdv.base_path, base_b, "the new run stamps the new base_path");
+        }
+        // The earlier run's versions keep their original prefix — unaffected by
+        // the change.
+        for tdv in &tdvs_a {
+            assert_eq!(tdv.base_path, base_a);
+        }
         Ok(())
     }
 }

@@ -20,19 +20,20 @@ pub(crate) fn build_function_info(
 ) -> Result<FunctionInfo, TdError> {
     let storage_location = StorageLocation::from(&f.storage_version);
 
-    // Bundle location
+    // Bundle location — the effective bundle's stamped base_path (from the to_execute join).
     let (path, _) = storage_location
-        .builder(&f.data_location)
+        .builder(&f.bundle_base_path)
         .collection(&f.collection_id)
         .function(&f.bundle_id)
         .build()?;
     let (bundle_location, _) = build_external_location(storage, &path)?;
 
-    // Staging location
+    // Staging location — the function's stamped stage_base_path + stage_id, so it does
+    // not relocate when the collection base_path later changes.
     let (path, _) = storage_location
-        .builder(&f.data_location)
+        .builder(&f.stage_base_path)
         .collection(&f.collection_id)
-        .stage(&f.function_id)
+        .stage(&f.stage_id)
         .build()?;
     let (stage_location, _) = build_external_location(storage, &path)?;
 
@@ -44,9 +45,9 @@ pub(crate) fn build_function_info(
         .as_ref()
         .unwrap_or(&f.function_version_id);
 
-    // Function run content location
+    // Function run content location — the collection's (live) base_path.
     let (path, _) = storage_location
-        .builder(&f.data_location)
+        .builder(&f.collection_base_path)
         .collection(&f.collection_id)
         .transaction(&f.transaction_id)
         .function_version(effective_fvid)

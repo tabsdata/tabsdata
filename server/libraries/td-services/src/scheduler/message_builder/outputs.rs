@@ -16,13 +16,15 @@ use td_storage::location::StorageLocation;
 /// minted output PTDVs, partitioned into (system, user) by param position.
 pub(crate) fn build_output_tables(
     storage: &Storage,
-    f: &PhysicalFunctionRunToExecute,
+    // Output table paths use each PTDV's own stamped base_path, so the FR itself
+    // is no longer needed here.
+    _f: &PhysicalFunctionRunToExecute,
     tables: &[PhysicalTableDataVersionDBWithNames],
 ) -> Result<(Vec<OutputTable>, Vec<OutputTable>), TdError> {
     let mut output_tables_map = HashMap::new();
     for table in tables.iter() {
         let (path, _) = StorageLocation::current()
-            .builder(&f.data_location)
+            .builder(&table.base_path)
             .collection(&table.collection_id)
             .data(&table.id)
             .table(&table.table_id, &table.table_version_id)

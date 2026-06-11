@@ -68,9 +68,13 @@ impl CronMask {
     }
 }
 
+/// Logical storage prefix for an entity's artifacts. The physical backend
+/// (s3/az/gcs/local) is selected by mounts matching this prefix. Mandatory on
+/// collections (default `/`), an optional override on function versions, and
+/// stamped (frozen) on physical table data versions and bundles at creation.
 #[ta_objects::typed(string(regex = DATA_LOCATION_REGEX, default = "/"))]
 #[derive(Eq, PartialEq, Hash)]
-pub struct DataLocation;
+pub struct BasePath;
 
 #[ta_objects::typed(string(min_len = 0, max_len = 200, default = ""))]
 #[derive(Eq, PartialEq)]

@@ -6,8 +6,8 @@
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, Description, GroupId, GroupName, ProjectId, UserId,
-        UserName,
+        AtTime, BasePath, CollectionId, CollectionName, Description, GroupId, GroupName, ProjectId,
+        UserId, UserName,
     };
     use td_common::id::Id;
 
@@ -38,6 +38,10 @@ mod definitions {
         // Resolved from `CollectionCreate::group` (id-or-name) by the create service.
         #[dxo(setter)]
         pub group_id: GroupId,
+        // Logical storage prefix, mapped from `CollectionCreate::base_path` (defaults `/`).
+        #[dxo(builder(include))]
+        #[builder(default)]
+        pub base_path: BasePath,
     }
 
     #[ta_objects::Dao]
@@ -59,6 +63,8 @@ mod definitions {
         pub modified_on: AtTime,
         pub modified_by_id: UserId,
         pub group_id: GroupId,
+        #[dxo(extractor)]
+        pub base_path: BasePath,
     }
 
     #[ta_objects::Dao]
@@ -103,12 +109,19 @@ mod definitions {
         #[serde(default = "GroupName::default_group")]
         #[builder(default = "GroupName::default_group()")]
         pub group: GroupName,
+        // Logical storage prefix for the collection's artifacts. Defaults to `/`.
+        #[serde(default)]
+        #[builder(default)]
+        pub base_path: BasePath,
     }
 
     #[ta_objects::Dto]
     pub struct CollectionUpdate {
         pub name: Option<CollectionName>,
         pub description: Option<Description>,
+        #[serde(default)]
+        #[builder(default)]
+        pub base_path: Option<BasePath>,
     }
 
     #[ta_objects::Dao]
@@ -124,6 +137,9 @@ mod definitions {
         pub modified_on: AtTime,
         #[dxo(updater(include, field = "user_id"))]
         pub modified_by_id: UserId,
+        // Seeded from the current `CollectionDB`; overridden by the update layer when
+        // `CollectionUpdate::base_path` is provided.
+        pub base_path: BasePath,
     }
 
     #[ta_objects::Dto]
@@ -138,5 +154,7 @@ mod definitions {
         pub description: Description,
         #[dto(list(filter, filter_like, order_by))]
         pub group: GroupName,
+        #[dto(list(filter, filter_like, order_by))]
+        pub base_path: BasePath,
     }
 }

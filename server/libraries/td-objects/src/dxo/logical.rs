@@ -108,7 +108,7 @@ pub trait LogicalPointerDao:
 mod definitions {
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
-        AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation,
+        AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged,
         DependencyPos, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
         FunctionVersionId, GroupId, GroupName, HasData, InputIdx, LogicalFunctionRunId,
         LogicalFunctionRunInputId, LogicalFunctionRunPointerId, LogicalFunctionRunStatus,
@@ -465,7 +465,6 @@ mod definitions {
         // PFR-side per-attempt status (Running, Done, …).
         pub physical_status: Option<PhysicalFunctionRunStatus>,
         pub function: Option<FunctionName>,
-        pub data_location: Option<DataLocation>,
         pub storage_version: Option<StorageVersion>,
     }
 
@@ -543,7 +542,6 @@ mod definitions {
         pub physical_status: Option<PhysicalFunctionRunStatus>,
         #[dto(list(filter, filter_like, order_by))]
         pub function: Option<FunctionName>,
-        pub data_location: Option<DataLocation>,
         pub storage_version: Option<StorageVersion>,
     }
 

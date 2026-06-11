@@ -348,7 +348,6 @@ mod tests {
         assert_eq!(response.connector, created_function.connector);
         assert_eq!(response.runtime_values, created_function.runtime_values);
         assert_eq!(response.function_id, created_function.function_id);
-        assert_eq!(response.data_location, created_function.data_location);
         assert_eq!(response.storage_version, created_function.storage_version);
         assert_eq!(response.bundle_id, created_function.bundle_id);
         assert_eq!(response.snippet, created_function.snippet);

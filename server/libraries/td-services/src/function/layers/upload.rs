@@ -6,7 +6,7 @@ use futures::TryStreamExt;
 use sha2::{Digest, Sha256};
 use td_error::{TdError, td_error};
 use td_objects::dxo::function_upload::FunctionUpload;
-use td_objects::types::basic::{BundleHash, BundleId, CollectionId, DataLocation, StorageVersion};
+use td_objects::types::basic::{BasePath, BundleHash, BundleId, CollectionId, StorageVersion};
 use td_storage::location::StorageLocation;
 use td_storage::{Storage, StorageError};
 use td_tower::extractors::Ref;
@@ -27,7 +27,7 @@ pub async fn upload_function_write_to_storage(
     storage: Ref<Storage>,
     bundle_id: Ref<BundleId>,
     storage_version: Ref<StorageVersion>,
-    data_location: Ref<DataLocation>,
+    base_path: Ref<BasePath>,
     collection_id: Ref<CollectionId>,
     request: Ref<FunctionUpload>,
 ) -> Result<BundleHash, TdError> {
@@ -46,7 +46,7 @@ pub async fn upload_function_write_to_storage(
 
     let storage_location = StorageLocation::from(&*storage_version);
     let (location, _) = storage_location
-        .builder(&data_location)
+        .builder(&base_path)
         .collection(&collection_id)
         .function(&bundle_id)
         .build()?;

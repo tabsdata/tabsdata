@@ -7,12 +7,14 @@ use sync_wrapper::SyncStream;
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::and;
+use td_objects::dxo::bundle::BundleDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionIdName, FunctionIdName, FunctionName, FunctionVersionId,
 };
 use td_objects::types::stream::BoxedSyncStream;
-use td_queries::{CurrentEntry, HistoricEntry};
+use td_queries::{CurrentEntry, HistoricEntry, LiveEntry};
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{MutRef, Ref};
@@ -56,11 +58,23 @@ pub async fn resolve_function_with_names(
 }
 
 pub async fn build_bundle_download(
+    mut conn: MutRef<DynamicConnection<'static>>,
     storage: Ref<Storage>,
     function: Ref<FunctionDBWithNames>,
 ) -> Result<BundleDownload, TdError> {
+    // The bundle's storage prefix is frozen on the (durable) bundle row; fall back
+    // to the collection's live base_path if the bundle row predates retention.
+    let bundle: Option<BundleDB> = conn.live().fetch_optional::<BundleDB>(&function.bundle_id).await?;
+    let base_path = match bundle {
+        Some(bundle) => bundle.base_path,
+        None => {
+            let collection: CollectionDB =
+                conn.live().fetch_one::<CollectionDB>(&function.collection_id).await?;
+            collection.base_path
+        }
+    };
     let (path, _) = StorageLocation::from(&function.storage_version)
-        .builder(&function.data_location)
+        .builder(&base_path)
         .collection(&function.collection_id)
         .function(&function.bundle_id)
         .build()?;

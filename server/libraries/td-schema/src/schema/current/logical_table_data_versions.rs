@@ -239,7 +239,6 @@ impl Entity for Defs {
                     // PFR-side per-attempt status (Running, Done, Error, …).
                     .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Status)), Alias::new("physical_status"))
                     .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
-                    .expr_as(Expr::col((Functions::Table, Functions::DataLocation)), Alias::new("data_location"))
                     .expr_as(Expr::col((Functions::Table, Functions::StorageVersion)), Alias::new("storage_version"))
                     .from(LogicalTableDataVersions::Table)
                     .join(

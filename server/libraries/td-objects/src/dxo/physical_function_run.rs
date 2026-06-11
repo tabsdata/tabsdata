@@ -7,10 +7,10 @@ mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
-        AtTime, BundleId, ByteCount, CollectionId, CollectionName, DataLocation, Decorator,
+        AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, Decorator,
         EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
-        PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, RowCount, StorageVersion,
-        TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId, UserName,
+        PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, RowCount, StageId,
+        StorageVersion, TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId, UserName,
     };
 
     #[ta_objects::Dao]
@@ -98,11 +98,17 @@ mod definitions {
         #[dxo(extractor)]
         pub id: PhysicalFunctionRunId,
 
-        pub data_location: DataLocation,
         pub storage_version: StorageVersion,
         pub bundle_id: BundleId,
         pub defined_on: AtTime,
         pub decorator: Decorator,
+        // Joined base paths (see function_run_to_execute_select): the effective
+        // bundle's stamped prefix, the function version's stage identity + stamped
+        // stage prefix, and the collection's live prefix (for run-content).
+        pub bundle_base_path: BasePath,
+        pub stage_id: StageId,
+        pub stage_base_path: BasePath,
+        pub collection_base_path: BasePath,
     }
 
     #[ta_objects::Dto]

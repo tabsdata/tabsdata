@@ -27,7 +27,9 @@ pub enum FunctionsCurrent {
     Decorator,
     RuntimeValues,
     FunctionId,
-    DataLocation,
+    BasePath,
+    StageId,
+    StageBasePath,
     StorageVersion,
     BundleId,
     Snippet,
@@ -55,7 +57,9 @@ impl Entity for Defs {
                 .col(ColumnDef::new(FunctionsCurrent::Decorator).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::RuntimeValues).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::FunctionId).text().not_null().unique_key())
-                .col(ColumnDef::new(FunctionsCurrent::DataLocation).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::BasePath).text().null())
+                .col(ColumnDef::new(FunctionsCurrent::StageId).text().not_null())
+                .col(ColumnDef::new(FunctionsCurrent::StageBasePath).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::StorageVersion).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::BundleId).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::Snippet).text().not_null())

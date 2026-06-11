@@ -29,7 +29,9 @@ pub enum Functions {
     Decorator,
     RuntimeValues,
     FunctionId,
-    DataLocation,
+    BasePath,
+    StageId,
+    StageBasePath,
     StorageVersion,
     BundleId,
     Snippet,
@@ -55,7 +57,15 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Functions::Decorator).text().not_null())
                 .col(ColumnDef::new(Functions::RuntimeValues).text().not_null())
                 .col(ColumnDef::new(Functions::FunctionId).text().not_null())
-                .col(ColumnDef::new(Functions::DataLocation).text().not_null())
+                // Optional storage-prefix override for this function version's output
+                // table data. NULL → inherit the collection base_path at mint time.
+                .col(ColumnDef::new(Functions::BasePath).text().null())
+                // Stage/checkpoint identity and storage prefix. Stamped at register
+                // (prefix = collection base_path then), carried forward across updates
+                // so a function's accumulating state stays put when the collection
+                // base_path later changes; stage_id is regenerated on --reset-stage.
+                .col(ColumnDef::new(Functions::StageId).text().not_null())
+                .col(ColumnDef::new(Functions::StageBasePath).text().not_null())
                 .col(ColumnDef::new(Functions::StorageVersion).text().not_null())
                 .col(ColumnDef::new(Functions::BundleId).text().not_null())
                 .col(ColumnDef::new(Functions::Snippet).text().not_null())

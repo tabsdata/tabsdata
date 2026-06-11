@@ -5,7 +5,7 @@
 #[ta_objects::dxo]
 mod definitions {
     use crate::types::basic::{
-        AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged, DataLocation,
+        AtTime, BasePath, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged,
         ExecutionId, FunctionName, FunctionVersionId, HasData, PhysicalFunctionRunId,
         PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId, RowCount, SchemaChanged,
         SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
@@ -47,6 +47,11 @@ mod definitions {
         pub physical_function_run_id: PhysicalFunctionRunId,
         pub function_param_pos: TableFunctionParamPos,
         pub triggered_on: TriggeredOn,
+        // Storage prefix frozen at mint = function.base_path ?? collection.base_path.
+        // Reads use this directly (never recompute), so the data stays findable after
+        // the collection/function base_path later changes.
+        #[builder(default)]
+        pub base_path: BasePath,
 
         // Data information
         // Even if the version !has_data, data information might come from previous version,
@@ -95,7 +100,6 @@ mod definitions {
         pub started_on: Option<AtTime>,
         pub ended_on: Option<AtTime>,
         pub status: PhysicalFunctionRunStatus,
-        pub data_location: DataLocation,
         pub storage_version: StorageVersion,
     }
 

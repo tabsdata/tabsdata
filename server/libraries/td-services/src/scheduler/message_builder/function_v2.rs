@@ -23,6 +23,8 @@ pub(crate) async fn build_function_v2(
     f: &PhysicalFunctionRunToExecute,
     prefetch: &DispatchPrefetch,
 ) -> Result<FunctionInput, TdError> {
+    // All base paths the info block needs are carried on `f` via the to_execute join,
+    // so no per-run collection/bundle fetches here.
     let info = build_function_info(storage, f)?;
     let (system_input, input) = resolve_input_tables(conn, storage, f, prefetch).await?;
     let (system_output, output) =

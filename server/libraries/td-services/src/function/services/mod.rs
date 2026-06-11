@@ -390,6 +390,7 @@ pub(crate) mod tests {
             reuse_frozen_tables: update.reuse_frozen_tables,
             enabled: update.enabled,
             workers: None,
+            base_path: update.base_path.or(create.base_path),
         };
         assert_register(db, user_id, collection, &update_as_register, response).await?;
         Ok(())

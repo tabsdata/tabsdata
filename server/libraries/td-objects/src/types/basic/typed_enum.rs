@@ -314,6 +314,19 @@ impl From<&LogicalFunctionRunStatus> for PhysicalFunctionRunStatus {
     }
 }
 
+/// Lifecycle marker for an uploaded function bundle. A bundle is `Pending`
+/// from upload until a function register/update/patch claims it, at which
+/// point it flips to `Registered`. Rows are never deleted, so `Pending` rows
+/// that are never claimed are orphan-GC candidates.
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
+pub enum BundleStatus {
+    #[typed_enum(rename = "P")]
+    Pending,
+    #[typed_enum(rename = "R")]
+    Registered,
+}
+
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq)]
 pub enum FunctionStatus {

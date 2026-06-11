@@ -127,6 +127,16 @@ pub async fn mint_function_runs_on_dispatch(
             .push(t);
     }
 
+    // Effective output base_path per run: function-version override
+    // (functions.base_path) if set, else the collection base_path, resolved in a
+    // single functions ⋈ collections_active COALESCE query (chunked internally).
+    // Stamped onto every output TDV so reads never recompute it after a later
+    // base_path change.
+    let effective = conn
+        .lfr()
+        .effective_output_base_paths(&distinct_head_fvids)
+        .await?;
+
     // Build all FRs and TDVs in-memory, then bulk-insert each set. The
     // post-insert loop drains both Vecs in order via iterators rather
     // than cloning rows out by index — `frs` and `all_tdvs` aren't
@@ -152,7 +162,11 @@ pub async fn mint_function_runs_on_dispatch(
         let tables = tables_by_head_fvid
             .get(&runnable.function_version_id)
             .unwrap_or(&empty);
-        let tdvs = build_output_table_data_versions(lfr, runnable, &fr, tables)?;
+        let base_path = effective
+            .get(&runnable.function_version_id)
+            .cloned()
+            .unwrap_or_default();
+        let tdvs = build_output_table_data_versions(lfr, runnable, &fr, tables, &base_path)?;
         let tdv_count = tdvs.len();
         all_tdvs.extend(tdvs);
         frs.push(fr);

@@ -50,7 +50,7 @@ fn get_spath(
     data_version: &PhysicalTableDataVersionDBWithNames,
 ) -> Result<(SPath, StorageLocation), TdError> {
     Ok(StorageLocation::from(&data_version.storage_version)
-        .builder(&data_version.data_location)
+        .builder(&data_version.base_path)
         .collection(&data_version.collection_id)
         .data(&data_version.id)
         .table(&data_version.table_id, &data_version.table_version_id)

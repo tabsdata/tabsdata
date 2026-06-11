@@ -284,7 +284,6 @@ mod tests {
         assert_eq!(function.name, response.name);
         assert_eq!(function.description, response.description);
         assert_eq!(function.function_id, response.function_id);
-        assert_eq!(function.data_location, response.data_location);
         assert_eq!(function.storage_version, response.storage_version);
         assert_eq!(function.bundle_id, response.bundle_id);
         assert_eq!(function.snippet, response.snippet);

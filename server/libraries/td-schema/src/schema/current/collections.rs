@@ -25,6 +25,7 @@ pub enum Collections {
     ModifiedById,
     NameWhenDeleted,
     GroupId,
+    BasePath,
 }
 
 #[derive(Iden, Clone, Copy)]
@@ -56,6 +57,10 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Collections::ModifiedById).text().not_null())
                 .col(ColumnDef::new(Collections::NameWhenDeleted).text().null())
                 .col(ColumnDef::new(Collections::GroupId).text().not_null())
+                // Logical storage prefix for the collection's artifacts. Mandatory;
+                // the `/` default is applied by the BasePath Rust newtype, not here.
+                // Mutable; physical backend is selected by mounts.
+                .col(ColumnDef::new(Collections::BasePath).text().not_null())
                 .to_owned(),
         ]
     }
@@ -98,6 +103,7 @@ impl Entity for Defs {
                     .column(Collections::ModifiedOn)
                     .column(Collections::ModifiedById)
                     .column(Collections::GroupId)
+                    .column(Collections::BasePath)
                     .from(Collections::Table)
                     .and_where(Expr::col(Collections::NameWhenDeleted).is_null())
                     .to_owned(),

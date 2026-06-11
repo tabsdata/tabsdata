@@ -60,8 +60,8 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, CollectionName, Description, GroupName, ProjectId, ProjectName,
-        RoleId, UserId, UserName,
+        AccessTokenId, AtTime, BasePath, CollectionName, Description, GroupName, ProjectId,
+        ProjectName, RoleId, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -136,6 +136,9 @@ mod tests {
         assert_eq!(created.name, name);
         assert_eq!(created.description, description);
         assert_eq!(created.group, GroupName::default_group());
+        // base_path was omitted on create: the `/` default comes from the BasePath
+        // newtype (the DB column carries no DEFAULT), and is stored NOT NULL.
+        assert_eq!(created.base_path, BasePath::default());
         assert!(created.created_on >= before);
         assert_eq!(created.created_by_id, UserId::admin());
         assert_eq!(created.created_by, UserName::admin());

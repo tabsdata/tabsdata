@@ -10,7 +10,7 @@ use td_objects::tower_service::with::With;
 use td_tower::extractors::Ref;
 
 pub async fn update_collection_validate(update: Ref<CollectionUpdate>) -> Result<(), TdError> {
-    if update.name.is_none() && update.description.is_none() {
+    if update.name.is_none() && update.description.is_none() && update.base_path.is_none() {
         return Err(CollectionError::UpdateRequestHasNothingToUpdate)?;
     }
     Ok(())
@@ -34,6 +34,9 @@ impl UpdateCollectionDBBuilderUpdate for With<CollectionUpdate> {
         }
         if let Some(description) = &update.description {
             builder.description(description);
+        }
+        if let Some(base_path) = &update.base_path {
+            builder.base_path(base_path);
         }
 
         Ok(builder)

@@ -12,17 +12,22 @@
 
 use crate::QueryExecutor;
 use crate::daos::pointers::{LogicalPointers, ProducerLfr};
+use crate::primitives::chunked::MAX_QUERY_CONDITIONS;
 use sea_query::{
-    Asterisk, CommonTableExpression, Expr, ExprTrait, Func, Iden, JoinType, Order, Query,
+    Alias, Asterisk, CommonTableExpression, Expr, ExprTrait, Func, Iden, JoinType, Order, Query,
     SelectStatement, SimpleExpr, SubQueryStatement, WithClause,
 };
+use std::collections::HashMap;
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use ta_objects::{Dao, DaoCore};
 use td_database::sea_query::builder::SeaQueryExt;
+use td_objects::dxo::bundle::BundleDBIden;
 use td_objects::dxo::collection::CollectionDBIden;
 use td_objects::dxo::execution::ExecutionDBIden;
-use td_objects::dxo::function::{FunctionDBIden, FunctionPatchDBIden};
+use td_objects::dxo::function::{
+    FunctionDB, FunctionDBIden, FunctionDBWithBundleBasePath, FunctionPatchDBIden,
+};
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden,
     LogicalFunctionRunPointerDB, LogicalTableDataVersionDBIden,
@@ -35,8 +40,8 @@ use td_objects::dxo::physical_function_run::{
 use td_objects::dxo::user::UserDBIden;
 use td_objects::dxo::worker::WorkerDBIden;
 use td_objects::types::basic::{
-    AtTime, ExecutionId, FunctionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
-    LogicalPointerStatus, PhysicalFunctionRunId, TriggeredOn,
+    AtTime, BasePath, ExecutionId, FunctionId, FunctionVersionId, LogicalFunctionRunId,
+    LogicalFunctionRunStatus, LogicalPointerStatus, PhysicalFunctionRunId, TriggeredOn,
 };
 
 query_handle! {
@@ -163,6 +168,51 @@ where
             .await
             .map_err(SqlError::on_read::<PhysicalFunctionRunDB>)?;
         Ok(result)
+    }
+
+    /// Effective output base_path per function version: the
+    /// function-version override (`functions.base_path`) if set, else the
+    /// owning collection's `base_path`, resolved in a single
+    /// `functions ⋈ collections_active` COALESCE query. Chunked internally
+    /// (like [`fetch_all_chunked`]) so callers pass the full fvid set. The
+    /// `(id, base_path)` pair is a throwaway projection — decoded straight
+    /// into the result map via tuple `FromRow`, no named Dlo.
+    pub async fn effective_output_base_paths(
+        mut self,
+        fvids: &[FunctionVersionId],
+    ) -> Result<HashMap<FunctionVersionId, BasePath>, SqlError> {
+        let mut out = HashMap::new();
+        for chunk in fvids.chunks(MAX_QUERY_CONDITIONS) {
+            let rows: Vec<(FunctionVersionId, BasePath)> =
+                fetch_effective_output_base_paths_query(chunk)
+                    .build_query_as()
+                    .fetch_all(self.executor.reuse())
+                    .await
+                    .map_err(SqlError::on_read::<FunctionDB>)?;
+            out.extend(rows);
+        }
+        Ok(out)
+    }
+
+    /// FunctionDB rows enriched with the effective bundle's stamped
+    /// `base_path`, resolved in a single `functions ⋈ bundles` query so
+    /// the stage-trigger builder reads every prefix off one row. Chunked
+    /// internally like [`fetch_all_chunked`].
+    pub async fn with_bundle_base_path(
+        mut self,
+        fvids: &[FunctionVersionId],
+    ) -> Result<Vec<FunctionDBWithBundleBasePath>, SqlError> {
+        let mut out = Vec::new();
+        for chunk in fvids.chunks(MAX_QUERY_CONDITIONS) {
+            let rows: Vec<FunctionDBWithBundleBasePath> =
+                fetch_functions_with_bundle_base_path_query(chunk)
+                    .build_query_as()
+                    .fetch_all(self.executor.reuse())
+                    .await
+                    .map_err(SqlError::on_read::<FunctionDB>)?;
+            out.extend(rows);
+        }
+        Ok(out)
     }
 
     /// LFR ids in `execution_id` whose upstream LFR is Failed or OnHold
@@ -562,10 +612,10 @@ pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime) -> sea_query::SelectState
 fn function_run_to_execute_select() -> sea_query::SelectStatement {
     Query::select()
         .expr(Expr::col((PhysicalFunctionRunDBIden::Table, Asterisk)))
-        // Name / data_location / storage_version are head-side
-        // attributes (patches don't override them). FunctionDB joins on
-        // the bare `function_version_id` which always holds the head
-        // fvid, so these reads are direct — no COALESCE.
+        // Name / storage_version are head-side attributes (patches don't
+        // override them). FunctionDB joins on the bare `function_version_id`
+        // which always holds the head fvid, so these reads are direct — no
+        // COALESCE.
         .expr_as(
             Expr::col((FunctionDBIden::Table, FunctionDBIden::Name)),
             PhysicalFunctionRunDBWithNamesIden::Name,
@@ -593,12 +643,35 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
             PhysicalFunctionRunDBWithNamesIden::TriggeredBy,
         )
         .expr_as(
-            Expr::col((FunctionDBIden::Table, FunctionDBIden::DataLocation)),
-            FunctionDBIden::DataLocation,
-        )
-        .expr_as(
             Expr::col((FunctionDBIden::Table, FunctionDBIden::StorageVersion)),
             FunctionDBIden::StorageVersion,
+        )
+        // Base paths the worker-yaml builder needs, joined here so dispatch avoids
+        // per-run fetches. stage_id / stage_base_path are head-side (the function
+        // version's, stable across patches). collection_base_path is the collection's
+        // live prefix (used for the function-run content dir). bundle_base_path is the
+        // stamped prefix of the *effective* bundle (patch's if patched, else head's).
+        .expr_as(
+            Expr::col((FunctionDBIden::Table, FunctionDBIden::StageId)),
+            FunctionDBIden::StageId,
+        )
+        .expr_as(
+            Expr::col((FunctionDBIden::Table, FunctionDBIden::StageBasePath)),
+            FunctionDBIden::StageBasePath,
+        )
+        .expr_as(
+            Expr::col((CollectionDBIden::Table, CollectionDBIden::BasePath)),
+            Alias::new("collection_base_path"),
+        )
+        // COALESCE to the collection base_path so a missing bundle row (anomaly in
+        // prod; common in seeds that don't stage a bundle) decodes to a valid prefix
+        // rather than NULL.
+        .expr_as(
+            Expr::expr(Func::coalesce([
+                Expr::col((BundleDBIden::Table, BundleDBIden::BasePath)),
+                Expr::col((CollectionDBIden::Table, CollectionDBIden::BasePath)),
+            ])),
+            Alias::new("bundle_base_path"),
         )
         // Decorator is head-side (patches don't override it).
         .expr_as(
@@ -652,6 +725,17 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
             ))
             .equals((CollectionDBIden::Table, CollectionDBIden::Id)),
         )
+        // Bundle join on the *effective* bundle id (patch's if patched, else head's),
+        // matching the coalesced bundle_id projection, to read the bundle's stamped
+        // base_path.
+        .join(
+            JoinType::LeftJoin,
+            BundleDBIden::Table,
+            Expr::col((BundleDBIden::Table, BundleDBIden::Id)).eq(Func::coalesce([
+                Expr::col((FunctionPatchDBIden::Table, FunctionPatchDBIden::BundleId)),
+                Expr::col((FunctionDBIden::Table, FunctionDBIden::BundleId)),
+            ])),
+        )
         .join(
             JoinType::LeftJoin,
             ExecutionDBIden::Table,
@@ -696,6 +780,75 @@ pub(crate) fn fetch_runs_for_dispatch_query(
         .is_in(id_values),
     );
     stmt
+}
+
+/// Effective output base_path per function version, resolved in one
+/// `functions ⋈ collections_active` join:
+/// `COALESCE(functions.base_path, collections_active.base_path)` keyed by
+/// function version id. SELECT order (id, then base_path) maps
+/// positionally onto the `(FunctionVersionId, BasePath)` tuple that
+/// `build_query_as` decodes each row into.
+pub(crate) fn fetch_effective_output_base_paths_query(
+    fvids: &[FunctionVersionId],
+) -> sea_query::SelectStatement {
+    let id_values: Vec<_> = fvids.iter().map(|id| id.as_sea_value()).collect();
+    Query::select()
+        .expr_as(
+            Expr::col((FunctionDBIden::Table, FunctionDBIden::Id)),
+            FunctionDBIden::Id,
+        )
+        .expr_as(
+            Expr::expr(Func::coalesce([
+                Expr::col((FunctionDBIden::Table, FunctionDBIden::BasePath)),
+                Expr::col((CollectionDBIden::Table, CollectionDBIden::BasePath)),
+            ])),
+            Alias::new("base_path"),
+        )
+        .from(FunctionDBIden::Table)
+        .join(
+            JoinType::Join,
+            CollectionDBIden::Table,
+            Expr::col((CollectionDBIden::Table, CollectionDBIden::Id))
+                .equals((FunctionDBIden::Table, FunctionDBIden::CollectionId)),
+        )
+        .and_where(Expr::col((FunctionDBIden::Table, FunctionDBIden::Id)).is_in(id_values))
+        .take()
+}
+
+/// All FunctionDB columns plus the effective bundle's stamped
+/// `base_path`, resolved in one `functions ⋈ bundles` join keyed by
+/// `bundles.id = functions.bundle_id`. The `bundles.base_path AS
+/// bundle_base_path` alias matches the `FunctionDBWithBundleBasePath`
+/// field so `build_query_as` maps the rows.
+pub(crate) fn fetch_functions_with_bundle_base_path_query(
+    fvids: &[FunctionVersionId],
+) -> sea_query::SelectStatement {
+    let id_values: Vec<_> = fvids.iter().map(|id| id.as_sea_value()).collect();
+    let mut stmt = Query::select();
+    for col in <FunctionDB as ta_objects::Dao>::columns() {
+        stmt.column((FunctionDBIden::Table, col));
+    }
+    // LEFT JOIN (not INNER): a function whose bundle row is absent (anomaly in
+    // prod; common in seeds that don't stage a bundle) must still be returned, or
+    // its stage-trigger worker would be silently dropped. COALESCE to the
+    // function's stamped stage_base_path reproduces the prior unwrap fallback in
+    // SQL, so bundle_base_path is never NULL (stage_base_path is NOT NULL).
+    stmt.expr_as(
+        Expr::expr(Func::coalesce([
+            Expr::col((BundleDBIden::Table, BundleDBIden::BasePath)),
+            Expr::col((FunctionDBIden::Table, FunctionDBIden::StageBasePath)),
+        ])),
+        Alias::new("bundle_base_path"),
+    )
+    .from(FunctionDBIden::Table)
+    .join(
+        JoinType::LeftJoin,
+        BundleDBIden::Table,
+        Expr::col((BundleDBIden::Table, BundleDBIden::Id))
+            .equals((FunctionDBIden::Table, FunctionDBIden::BundleId)),
+    )
+    .and_where(Expr::col((FunctionDBIden::Table, FunctionDBIden::Id)).is_in(id_values));
+    stmt.take()
 }
 
 /// Replay-side dispatch readiness. `physical_function_runs` rows whose

@@ -80,6 +80,12 @@ pub struct FromCollectionId;
 #[ta_objects::typed(id)]
 pub struct FunctionId;
 
+/// Identity of a function's stage/checkpoint directory. Stable across function
+/// versions (carried forward on update) so a function's accumulating state
+/// persists; regenerated only on `--reset-stage` to start fresh.
+#[ta_objects::typed(id)]
+pub struct StageId;
+
 #[ta_objects::typed(idlogic(key = FV))]
 pub struct FunctionVersionId;
 

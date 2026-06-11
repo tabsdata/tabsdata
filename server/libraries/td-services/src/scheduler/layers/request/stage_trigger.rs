@@ -15,7 +15,7 @@ use td_common::server::{
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::TaggedExt;
-use td_objects::dxo::function::FunctionDB;
+use td_objects::dxo::function::FunctionDBWithBundleBasePath;
 use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::dxo::yaml::stage_trigger::v1::StageTriggerInput;
 use td_objects::dxo::yaml::{WorkerInput, stage_trigger};
@@ -25,7 +25,7 @@ use td_objects::rest_urls::internal::{
 };
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{AtTime, FunctionVersionId, ProjectIdName, WorkerConfig};
-use td_queries::ChunkedQueries;
+use td_queries::LfrEntry;
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{MutRef, Ref};
@@ -45,20 +45,23 @@ pub async fn create_locked_stage_trigger_workers_start_request(
     mut conn: MutRef<DynamicConnection<'static>>,
     stage_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
-    // Pre-fetch every function record in one chunked query instead of
-    // a per-worker round-trip inside the loop.
+    // Pre-fetch every function record — joined with its effective bundle's
+    // stamped base_path — in one chunked query instead of per-worker round-trips
+    // inside the loop. The bundle base_path is frozen on the bundle row;
+    // stage/checkpoint use the function's own stamped stage_base_path + stage_id
+    // (carried on FunctionDB), so they don't relocate when the collection
+    // base_path later changes.
     let fvids: Vec<FunctionVersionId> = stage_trigger_workers
         .iter()
         .map(|w| w.function_version_id.clone())
         .collect();
-    let functions: Vec<FunctionDB> = if fvids.is_empty() {
-        Vec::new()
-    } else {
-        conn.fetch_all_chunked::<FunctionDB, FunctionVersionId>(&fvids)
-            .await?
-    };
-    let function_by_fvid: HashMap<FunctionVersionId, FunctionDB> =
-        functions.into_iter().map(|f| (f.id.clone(), f)).collect();
+    let function_by_fvid: HashMap<FunctionVersionId, FunctionDBWithBundleBasePath> = conn
+        .lfr()
+        .with_bundle_base_path(&fvids)
+        .await?
+        .into_iter()
+        .map(|f| (f.id.clone(), f))
+        .collect();
 
     for stage_trigger_worker in stage_trigger_workers.iter() {
         let worker_id = stage_trigger_worker.id.to_string();
@@ -118,28 +121,32 @@ pub async fn create_locked_stage_trigger_workers_start_request(
                 )
             })?;
 
-        // Function bundle
         let storage_location = StorageLocation::from(&f.storage_version);
+        // Bundle: stamped base_path on the durable bundle row, joined onto the
+        // function row in `with_bundle_base_path`.
+        let bundle_base_path = f.bundle_base_path.clone();
+
+        // Function bundle
         let (path, _) = storage_location
-            .builder(&f.data_location)
+            .builder(&bundle_base_path)
             .collection(&f.collection_id)
             .function(&f.bundle_id)
             .build()?;
         let (function_bundle, _) = build_external_location(&storage, &path)?;
 
-        // Function stage
+        // Function stage (stamped stage_base_path + stage_id)
         let (path, _) = storage_location
-            .builder(&f.data_location)
+            .builder(&f.stage_base_path)
             .collection(&f.collection_id)
-            .stage(&f.function_id)
+            .stage(&f.stage_id)
             .build()?;
         let (function_stage, _) = build_external_location(&storage, &path)?;
 
-        // Function checkpoint
+        // Function checkpoint (stamped stage_base_path + stage_id)
         let (path, _) = storage_location
-            .builder(&f.data_location)
+            .builder(&f.stage_base_path)
             .collection(&f.collection_id)
-            .checkpoint(&f.function_id)
+            .checkpoint(&f.stage_id)
             .build()?;
         let (function_checkpoint, _) = build_external_location(&storage, &path)?;
 

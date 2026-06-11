@@ -3,7 +3,7 @@
 //
 
 use crate::do_authz::DO_AUTHZ;
-use crate::function::layers::register::{data_location, validate_tables_do_not_exist};
+use crate::function::layers::register::validate_tables_do_not_exist;
 use crate::function::layers::update::{
     assert_function_name_not_exists, update_function_db_builder,
 };
@@ -30,7 +30,7 @@ use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, DataLocation, FunctionId,
+    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, FunctionId,
     FunctionIdName, FunctionVersionId, ResetState, ReuseFrozen, StorageVersion, TableNameDto,
     TableType, WorkerConfig, WorkerTypeDto,
 };
@@ -83,16 +83,14 @@ fn service() {
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
         // If function has a new name, check new name does not exist in collection.
         from_fn(assert_function_name_not_exists),
-        // Get location and storage version.
+        // Get storage version.
         from_fn(With::<StorageVersion>::default),
-        from_fn(data_location),
         // Insert into function_versions(sql) status=Active.
         from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDB>),
         from_fn(With::<FunctionDB>::try_convert_to::<FunctionDBBuilder, _>),
         from_fn(update_function_db_builder),
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
-        from_fn(With::<DataLocation>::set::<FunctionDBBuilder>),
         from_fn(With::<FunctionDBBuilder>::build::<FunctionDB>),
         from_fn(insert::<FunctionDB>),
         // Remove from bundles
@@ -222,16 +220,14 @@ mod tests {
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
                 // If function has a new name, check new name does not exist in collection.
                 type_of_val(&assert_function_name_not_exists),
-                // Get location and storage version.
+                // Get storage version.
                 type_of_val(&With::<StorageVersion>::default),
-                type_of_val(&data_location),
                 // Insert into function_versions(sql) status=Active.
                 type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDB>),
                 type_of_val(&With::<FunctionDB>::try_convert_to::<FunctionDBBuilder, _>),
                 type_of_val(&update_function_db_builder),
                 type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
                 type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),
-                type_of_val(&With::<DataLocation>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB>),
                 type_of_val(&insert::<FunctionDB>),
                 // Remove from bundles
