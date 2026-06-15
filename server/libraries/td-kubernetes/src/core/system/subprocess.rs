@@ -91,7 +91,7 @@ pub fn is_alive(pid: u32) -> bool {
 
 pub fn terminate_process(pid: u32, grace: Duration) {
     let descendants = collect_descendants(pid);
-    request_graceful_shutdown(pid);
+    request_graceful_shutdown(pid, &descendants);
     if wait_for_tree_exit(pid, &descendants, grace) {
         return;
     }
@@ -115,20 +115,35 @@ fn collect_descendants(root: u32) -> Vec<u32> {
     descendants
 }
 
-fn request_graceful_shutdown(pid: u32) {
+fn request_graceful_shutdown(root: u32, descendants: &[u32]) {
     #[cfg(unix)]
     {
-        unsafe {
-            libc::kill(-(pid as i32), libc::SIGTERM);
+        for group in process_groups(root, descendants) {
+            unsafe {
+                libc::kill(-group, libc::SIGTERM);
+            }
         }
     }
     #[cfg(target_os = "windows")]
     {
         use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent};
+        let _ = descendants;
         unsafe {
-            GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid);
+            GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, root);
         }
     }
+}
+
+#[cfg(unix)]
+fn process_groups(root: u32, descendants: &[u32]) -> Vec<i32> {
+    let mut groups: Vec<i32> = Vec::new();
+    for pid in std::iter::once(&root).chain(descendants) {
+        let group = unsafe { libc::getpgid(*pid as i32) };
+        if group > 0 && !groups.contains(&group) {
+            groups.push(group);
+        }
+    }
+    groups
 }
 
 fn wait_for_tree_exit(root: u32, descendants: &[u32], timeout: Duration) -> bool {
@@ -148,9 +163,17 @@ fn wait_for_tree_exit(root: u32, descendants: &[u32], timeout: Duration) -> bool
 fn force_kill_tree(root: u32, descendants: &[u32]) {
     #[cfg(unix)]
     {
+        let mut survivors = collect_descendants(root);
+        for pid in descendants {
+            if !survivors.contains(pid) {
+                survivors.push(*pid);
+            }
+        }
         unsafe {
-            libc::kill(-(root as i32), libc::SIGKILL);
-            for pid in descendants {
+            for group in process_groups(root, &survivors) {
+                libc::kill(-group, libc::SIGKILL);
+            }
+            for pid in &survivors {
                 libc::kill(*pid as i32, libc::SIGKILL);
             }
         }

@@ -132,6 +132,16 @@ impl KminusCluster {
         .await
         .is_ok()
     }
+
+    async fn poll_process_dead(&self, pid: u32) -> bool {
+        tokio::time::timeout(KM_POLL_DEAD_TIMEOUT, async {
+            while process_is_alive(pid) {
+                tokio::time::sleep(KM_POLL_INTERVAL).await;
+            }
+        })
+        .await
+        .is_ok()
+    }
 }
 
 impl Cluster for KminusCluster {
@@ -187,14 +197,14 @@ impl Cluster for KminusCluster {
     }
 
     async fn stop(&self) -> CommandResult<bool> {
-        if self.is_dead().await {
-            return Ok(false);
-        }
         let Some(pid) = read_km_pid(&self.pids_path()) else {
             return Ok(false);
         };
+        if !process_is_alive(pid) {
+            return Ok(false);
+        }
         terminate_process(pid, KM_TERMINATE_GRACE);
-        if !self.poll_dead().await {
+        if !self.poll_process_dead(pid).await {
             return Err(ProviderError::KminusStopFailed(format!(
                 "process still alive after {} seconds",
                 KM_POLL_DEAD_TIMEOUT.as_secs()
@@ -214,16 +224,6 @@ impl Cluster for KminusCluster {
     async fn poll_alive(&self) -> bool {
         tokio::time::timeout(KM_POLL_ALIVE_TIMEOUT, async {
             while !self.is_alive().await {
-                tokio::time::sleep(KM_POLL_INTERVAL).await;
-            }
-        })
-        .await
-        .is_ok()
-    }
-
-    async fn poll_dead(&self) -> bool {
-        tokio::time::timeout(KM_POLL_DEAD_TIMEOUT, async {
-            while !self.is_dead().await {
                 tokio::time::sleep(KM_POLL_INTERVAL).await;
             }
         })
