@@ -4,10 +4,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from tabsdatak.tableframe._engine.column.generator import (
     GeneratorContext,
+    as_expression,
     seed_default,
     temp_column,
 )
@@ -27,8 +28,8 @@ if TYPE_CHECKING:
 class IdentifierGenerator:
     def __init__(
         self,
-        dtype: Callable[[], SystemColumnDataType_],
-        default: Callable[[], SystemColumnDefault_],
+        dtype: SystemColumnDataType_,
+        default: SystemColumnDefault_,
     ) -> None:
         self.dtype = dtype
         self.default = default
@@ -61,8 +62,8 @@ class IdentifierGenerator:
 class ConstantVersionGenerator:
     def __init__(
         self,
-        dtype: Callable[[], SystemColumnDataType_],
-        default: Callable[[], SystemColumnDefault_],
+        dtype: SystemColumnDataType_,
+        default: SystemColumnDefault_,
     ) -> None:
         self.dtype = dtype
         self.default = default
@@ -73,12 +74,10 @@ class ConstantVersionGenerator:
         column: str,
         context: GeneratorContext,
     ) -> pl_.LazyFrame:
-        import polars as pl
-
-        value = self.default()
+        value = self.default
         if context.properties is not None:
             property_name = column.removeprefix(TD_VERSION_SYSTEM_COLUMN_PREFIX)
             from_properties = getattr(context.properties, property_name, None)
             if from_properties is not None:
                 value = from_properties
-        return lf.with_columns(pl.lit(value, dtype=self.dtype()).alias(column))
+        return lf.with_columns(as_expression(value, self.dtype).alias(column))

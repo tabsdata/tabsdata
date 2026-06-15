@@ -26,6 +26,10 @@ class DataVersionProperties:
     def builder(cls) -> DataVersionPropertiesBuilder:
         return DataVersionPropertiesBuilder()
 
+    def clone(self) -> DataVersionProperties:
+        # No need to clone as its dataclass is frozen and immutable.
+        return self
+
 
 class DataVersionPropertiesBuilder:
     def __init__(self) -> None:
@@ -74,7 +78,8 @@ class DataVersionPropertiesBuilder:
     @staticmethod
     def empty() -> DataVersionProperties:
         return (
-            DataVersionProperties.builder()
+            DataVersionProperties
+            .builder()
             .with_execution(EMPTY_EXECUTION)
             .with_transaction(EMPTY_TRANSACTION)
             .with_version(EMPTY_VERSION)
@@ -83,11 +88,29 @@ class DataVersionPropertiesBuilder:
         )
 
     def build(self) -> DataVersionProperties:
+        execution = self.execution
+        transaction = self.transaction
+        version = self.version
+        timestamp = self.timestamp
+        if (
+            execution is None
+            or transaction is None
+            or version is None
+            or timestamp is None
+        ):
+            from tabsdatak.tableframe._engine.event.error import TableFrameErrorCode
+
+            raise TableFrameErrorCode.TF2.exception(
+                execution=execution,
+                transaction=transaction,
+                version=version,
+                timestamp=timestamp,
+            )
         return DataVersionProperties(
-            execution=self.execution,
-            transaction=self.transaction,
-            version=self.version,
-            timestamp=self.timestamp,
+            execution=execution,
+            transaction=transaction,
+            version=version,
+            timestamp=timestamp,
         )
 
 
@@ -100,4 +123,6 @@ class TableFrameState:
         return cls(properties=None)
 
     def clone(self) -> TableFrameState:
-        return TableFrameState(properties=self.properties)
+        return TableFrameState(
+            properties=None if self.properties is None else self.properties.clone(),
+        )

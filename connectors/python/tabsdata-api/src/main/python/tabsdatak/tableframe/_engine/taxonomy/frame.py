@@ -10,7 +10,7 @@ from enum import Enum
 class CreationMode(Enum):
     # Create every system column from scratch (drop any existing first).
     RAW = "raw"
-    # Apply each column's inception policy: keep PROPAGATE, regenerate REGENERATE.
+    # Apply each column's inception policy: PROPAGATE is kept, REGENERATE is rebuilt.
     SYS = "sys"
     # Create only the system columns that are missing; keep existing ones.
     TAB = "tab"

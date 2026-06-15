@@ -24,22 +24,33 @@ class PyiEntry:
 
 @dataclass
 class PyiDoc:
-    """Docstrings recovered from an existing .pyi, for preservation on regen."""
+    """Docstrings recovered from an existing .pyi, for preservation on regen.
+
+    ``funcs`` is keyed by ``(class_name | None, method_name)`` so same-named
+    methods in different classes (e.g. dunders across the when/then builders) do
+    not collide.
+    """
 
     module_doc: str | None = None
     class_docs: dict[str, str | None] = field(default_factory=dict)
-    funcs: dict[str, PyiEntry] = field(default_factory=dict)
+    funcs: dict[tuple[str | None, str], PyiEntry] = field(default_factory=dict)
 
 
 def parse_pyi(text: str) -> PyiDoc:
     """Recover module / class / function docstrings (and signatures) from a .pyi."""
     tree = ast.parse(text)
     doc = PyiDoc(module_doc=ast.get_docstring(tree))
-    for node in ast.walk(tree):
+    for node in tree.body:
         if isinstance(node, ast.ClassDef):
             doc.class_docs[node.name] = ast.get_docstring(node)
+            for member in node.body:
+                if isinstance(member, ast.FunctionDef):
+                    doc.funcs[(node.name, member.name)] = PyiEntry(
+                        _canonical(member.args, member.returns),
+                        ast.get_docstring(member),
+                    )
         elif isinstance(node, ast.FunctionDef):
-            doc.funcs[node.name] = PyiEntry(
+            doc.funcs[(None, node.name)] = PyiEntry(
                 _canonical(node.args, node.returns), ast.get_docstring(node)
             )
     return doc

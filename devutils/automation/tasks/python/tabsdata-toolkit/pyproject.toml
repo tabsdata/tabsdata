@@ -55,14 +55,14 @@ dependencies = [
 ]
 
 [project.entry-points.pytest11]
-tdx-harvester = "tabsdatax.pytest.plugins.harvester.plugin"
+tdx-harvester = "tabsdatax.pytesting.plugins.harvester.plugin"
 
 [project.scripts]
 tdkdocker = "tabsdatax.docker.cli:main"
 tdx_gconnector = "tabsdatax.generator.connector.cli:main"
 tdx_gtableframe = "tabsdatax.generator.tableframe.cli:main"
 tdx_pyoutdated = "tabsdatax.cmake.pyoutdated:main"
-tdx-harvester-monitor = "tabsdatax.pytest.plugins.harvester.client:main"
+tdx-harvester-monitor = "tabsdatax.pytesting.plugins.harvester.client:main"
 
 [project.urls]
 Homepage = "https://tabsdata.com"
@@ -152,7 +152,7 @@ namespaces = true
 
 [tool.setuptools.package-data]
 "*" = ["!.gitkeep", "!*.pyc", "!__pycache__/*"]
-"tabsdatax.generator.tableframe.emit" = ["templates/*.tmpl"]
+"tabsdatax.generator.tableframe.emit" = ["templates/*.tmpl", "ruff.toml"]
 
 [tool.tabsdata]
 name = "tabsdata-toolkit"

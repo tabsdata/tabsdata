@@ -135,6 +135,7 @@ markers = [
     "tdfnjob: automatically add behaviours to 'tdfnjob' tests.",
     "tdfnrun: automatically add behaviours to 'tdfnrun' tests.",
     "tdfntrigger: automatically add behaviours to 'tdfntrigger' tests.",
+    "tfgen: mark a generated TableFrame API delegation test (emitted by tdx_gtableframe).",
     "timeout: mark tests with a timeout via pytest-timeout.",
     "tool_operation: tool operations against a real Tabsdata server.",
     "unit: mark a test as a unit test.",

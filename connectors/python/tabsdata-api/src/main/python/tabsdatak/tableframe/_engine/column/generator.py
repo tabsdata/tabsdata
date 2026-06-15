@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from tabsdatak.tableframe._engine.constant.column.prefixes import (
     TD_TEMP_COLUMN_PREFIX,
@@ -45,11 +45,22 @@ def temp_column() -> str:
     return f"{TD_TEMP_COLUMN_PREFIX}{uuid.uuid4().hex}"
 
 
+def as_expression(
+    value: SystemColumnDefault_,
+    dtype: SystemColumnDataType_,
+) -> pl_.Expr:
+    import polars as pl
+
+    if isinstance(value, pl.Expr):
+        return value
+    return pl.lit(value, dtype=dtype)
+
+
 def seed_default(
     lf: pl_.LazyFrame,
     column: str,
-    dtype: Callable[[], SystemColumnDataType_],
-    default: Callable[[], SystemColumnDefault_],
+    dtype: SystemColumnDataType_,
+    default: SystemColumnDefault_,
     context: GeneratorContext,
 ) -> pl_.LazyFrame:
     # A 0-column, 0-row frame would gain a spurious single row when a literal is
@@ -57,5 +68,5 @@ def seed_default(
     if context.is_void:
         import polars as pl
 
-        return pl.DataFrame(schema=[(column, dtype())]).lazy()
-    return lf.with_columns(default().alias(column))
+        return pl.DataFrame(schema=[(column, dtype)]).lazy()
+    return lf.with_columns(as_expression(default, dtype).alias(column))

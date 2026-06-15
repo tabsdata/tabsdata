@@ -8,8 +8,9 @@ Module kinds:
 
 * functions      -> free functions delegating to ``pl.<name>``.
 * value class    -> ``Expr`` / Expr namespaces: ``_inner`` wrappers (transparent).
-* TableFrame     -> the package ``__init__.py``: a ``BaseFrame`` carrying an opaque
-                    ``_state`` dict, with transparent ops and augmenting ops
+* TableFrame     -> the package ``__init__.py``: subclasses ``EngineFrame`` (the
+                    hand-written engine frame), with transparent ops and augmenting
+                    ops
                     (``project``/``join``/``group_by``/``drop``/``rename``) that wrap
                     the result and dispatch ``run_hook(op, ...)``; ``_HOOKABLE_OPS``
                     lists the dispatching ops.
@@ -35,8 +36,6 @@ from ..model.model import Report, Symbol
 from ..scan.spec import datatype_names
 from .pyi import PyiDoc, canonical_signature, parse_pyi
 from .typing_gen import TypingGen
-
-_LINE_LENGTH = 88
 
 _PYI_CHANGED = "#CHANGED SIGNATURE, VALIDATE/FIX PYDOC"
 _PYI_NEW = "#NEW SIGNATURE, CREATE PYDOC"
@@ -165,7 +164,7 @@ def generate(
         written.append(py_path)
 
         # Regenerate the .pyi, preserving hand-written docstrings: rename any
-        # existing stub to .pyi-ori, then merge.
+        # existing stub to a transient .pyi-ori, read it, then drop it.
         pyi_path = base / f"{filename}.pyi"
         previous: PyiDoc | None = None
         if pyi_path.exists():
@@ -175,12 +174,15 @@ def generate(
                 previous = parse_pyi(ori_path.read_text())
             except SyntaxError:
                 previous = None  # a corrupt prior stub shouldn't block regeneration
-        text, aliases = _render_pyi(syms, previous, typing_gen, module)
+            finally:
+                ori_path.unlink()
+        text, aliases = _render_pyi(syms, previous, typing_gen, module, root_module)
         pyi_path.write_text(text)
         written.append(pyi_path)
         all_aliases |= aliases
         if previous is not None:
-            dropped = sorted(set(previous.funcs) - {_member(s) for s in syms})
+            current = {(s.target_class, _member(s)) for s in syms}
+            dropped = sorted(name for (_, name) in set(previous.funcs) - current)
             if dropped:
                 result.dropped[module] = dropped
 
@@ -324,40 +326,64 @@ def _default_testdir(root_dir: str, root_module: str) -> str:
     if "main" in parts:  # Maven layout: src/main/python -> src/utest/python
         parts[parts.index("main")] = "utest"
     first, *rest = root_module.split(".")
-    return str(Path(*parts).joinpath("test_" + first, *rest))
+    return str(Path(*parts).joinpath("test_" + first, *rest, "generator"))
 
 
 def _format(paths: list[Path]) -> None:
-    """Format the generated files with ruff (the house formatter, line length 88;
-    best-effort: skip if ruff is absent or can't format a file)."""
-    try:
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "ruff",
-                "format",
-                "--line-length",
-                str(_LINE_LENGTH),
-                *map(str, paths),
-            ],
-            check=True,
-            capture_output=True,
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        pass  # ruff not installed, or a file it couldn't format — leave as-is
+    config = str(Path(__file__).parent / "ruff.toml")
+    sources = [str(path) for path in paths]
+    # .pyi stubs are formatted but NOT lint-fixed: `ruff check --fix` would strip
+    # imports it reads as unused (a stub's names are used only in annotations),
+    # breaking the stub. `.py` files get both passes (matches cargo make format_py).
+    code = [str(path) for path in paths if path.suffix != ".pyi"]
+    commands = [
+        [sys.executable, "-m", "ruff", "format", "--config", config, *sources],
+    ]
+    if code:
+        commands.append([
+            sys.executable,
+            "-m",
+            "ruff",
+            "check",
+            "--fix",
+            "--config",
+            config,
+            *code,
+        ])
+    for command in commands:
+        try:
+            subprocess.run(command, check=True, capture_output=True)
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            pass  # ruff not installed, or a file it couldn't fix — leave as-is
 
 
 # --------------------------------------------------------------------------- #
 # Test generation — mock-spy that each wrapper call reaches polars.
 # --------------------------------------------------------------------------- #
+def _write_test_namespace_inits(base: Path) -> list[Path]:
+    template = Path(__file__).parent / "templates" / "namespace_init.py.tmpl"
+    copyright = _copyright().removeprefix("# ")
+    text = template.read_text().replace("__COPYRIGHT__", copyright)
+    parts = base.parts
+    root = parts.index("python") + 1
+    written: list[Path] = []
+    folder = Path(*parts[:root])
+    for part in parts[root:]:
+        folder = folder / part
+        init = folder / "__init__.py"
+        if not init.exists():
+            init.write_text(text)
+            written.append(init)
+    return written
+
+
 def _generate_tests(
     by_module: dict[str, list[Symbol]], root_module: str, testdir: str
 ) -> tuple[list[str], list[Path]]:
     base = Path(testdir)
     base.mkdir(parents=True, exist_ok=True)
     names: list[str] = []
-    paths: list[Path] = []
+    paths: list[Path] = _write_test_namespace_inits(base)
     for module, syms in sorted(by_module.items()):
         is_root = module == root_module
         # Test files mirror the module name; the root (an __init__.py) becomes
@@ -411,12 +437,26 @@ def _live_test(safe: str, result_stmt: str) -> list[str]:
 def _render_test_module(syms: list[Symbol], root: str, is_root: bool) -> str:
     target_class = syms[0].target_class
     if target_class is None:
-        return _render_functions_test(syms, root)
-    if is_root:
-        return _render_tableframe_test(syms, root)
-    if target_class == "LazyGroupBy":
-        return _render_lazygroupby_test(syms, root)
-    return _render_value_test(syms, root)
+        text = _render_functions_test(syms, root)
+    elif is_root:
+        text = _render_tableframe_test(syms, root)
+    elif target_class == "LazyGroupBy":
+        text = _render_lazygroupby_test(syms, root)
+    else:
+        text = _render_value_test(syms, root)
+    return _with_test_marker(text)
+
+
+def _with_test_marker(text: str) -> str:
+    lines = text.splitlines()
+    if "import pytest" not in lines:
+        future = lines.index("from __future__ import annotations")
+        lines.insert(future + 1, "import pytest")
+    first_def = next(
+        i for i, line in enumerate(lines) if line.startswith(("def ", "@"))
+    )
+    lines[first_def:first_def] = ["pytestmark = pytest.mark.tfgen", "", ""]
+    return "\n".join(lines) + "\n"
 
 
 def _render_value_test(syms: list[Symbol], root: str) -> str:
@@ -499,12 +539,14 @@ def _render_tableframe_test(syms: list[Symbol], root: str) -> str:
         "",
         f"from {root} import TableFrame",
         f"from {root}._core.hooks import tableframe_of",
+        f"from {root}._engine.model.tableframe import TableFrameState",
         "",
         "",
         "def _frame():",
-        "    frame = TableFrame.__new__(TableFrame)",
+        "    grant = {TableFrame._ACCESS_KEY: TableFrame._ACCESS_SECRET}",
+        "    frame = TableFrame.__new__(TableFrame, **grant)",
         "    frame._lf = MagicMock()",
-        "    frame._state = {}",
+        "    frame._state = TableFrameState.empty()",
         "    return frame",
         "",
         "",
@@ -543,13 +585,15 @@ def _render_lazygroupby_test(syms: list[Symbol], root: str) -> str:
         "",
         f"from {root} import TableFrame",
         f"from {root}._core.hooks import tableframe_of",
+        f"from {root}._engine.model.tableframe import TableFrameState",
         f"from {root}.group_by import LazyGroupBy",
         "",
         "",
         "def _group_by():",
-        "    parent = TableFrame.__new__(TableFrame)",
+        "    grant = {TableFrame._ACCESS_KEY: TableFrame._ACCESS_SECRET}",
+        "    parent = TableFrame.__new__(TableFrame, **grant)",
         "    parent._lf = MagicMock()",
-        "    parent._state = {}",
+        "    parent._state = TableFrameState.empty()",
         "    return LazyGroupBy(MagicMock(), parent, ((), {}))",
         "",
         "",
@@ -672,12 +716,12 @@ def _render_tableframe_py(
         _py_header(),
         "from __future__ import annotations",
         "",
-        f"from {root}._core.base import BaseFrame",
         f"from {root}._core.hooks import run_hook",
         f"from {root}._core.translate import register_loader, unwrap, wrap",
+        f"from {root}._engine.frame.frame import EngineFrame",
         "",
         "",
-        "class TableFrame(BaseFrame):",
+        "class TableFrame(EngineFrame):",
     ]
     if hookable:
         lines.append(f"    _HOOKABLE_OPS = ({', '.join(repr(op) for op in hookable)},)")
@@ -863,11 +907,16 @@ def _agg_body() -> list[str]:
 # .pyi rendering (first cut; merge/preserve comes next).
 # --------------------------------------------------------------------------- #
 def _render_pyi(
-    syms: list[Symbol], previous: PyiDoc | None, typing_gen: TypingGen, module: str
+    syms: list[Symbol],
+    previous: PyiDoc | None,
+    typing_gen: TypingGen,
+    module: str,
+    root: str,
 ) -> tuple[str, set[str]]:
     body: list[str] = []
     used_our: set[str] = set()
     used_aliases: set[str] = set()
+    engine_base = False
     # module docstring placeholder (preserved if the user filled it)
     body += _docstring_lines(
         _preserved(previous.module_doc if previous else None), body_indent=""
@@ -875,7 +924,9 @@ def _render_pyi(
     body.append("")
     if syms[0].target_class is None:
         for sym in syms:
-            entry, our, aliases = _pyi_entry(sym, previous, typing_gen, indent="")
+            entry, our, aliases = _pyi_entry(
+                sym, previous, typing_gen, indent="", cls_name=None
+            )
             body += entry
             used_our |= our
             used_aliases |= aliases
@@ -884,24 +935,38 @@ def _render_pyi(
             class_doc = _preserved(
                 previous.class_docs.get(cls_name) if previous else None
             )
-            body += ["", f"class {cls_name}:"]
+            # TableFrame subclasses EngineFrame so the engine surface (the gated
+            # constructor plus _state / _lf / _ACCESS_*) resolves through the real
+            # base instead of looking unbound on the stubbed class.
+            if cls_name == "TableFrame":
+                engine_base = True
+                body += ["", f"class {cls_name}(EngineFrame):"]
+            else:
+                body += ["", f"class {cls_name}:"]
             body += _docstring_lines(class_doc, body_indent="    ")
             for sym in cls_syms:
                 entry, our, aliases = _pyi_entry(
-                    sym, previous, typing_gen, indent="    "
+                    sym, previous, typing_gen, indent="    ", cls_name=cls_name
                 )
                 body += entry
                 used_our |= our
                 used_aliases |= aliases
 
     head = [_pyi_header(), "from __future__ import annotations", ""]
+    if engine_base:
+        head.append(f"from {root}._engine.frame.frame import EngineFrame")
     head += typing_gen.imports_for(used_our, used_aliases, in_module=module)
     head.append("")
     return "\n".join(head + body) + "\n", used_aliases
 
 
 def _pyi_entry(
-    sym: Symbol, previous: PyiDoc | None, typing_gen: TypingGen, *, indent: str
+    sym: Symbol,
+    previous: PyiDoc | None,
+    typing_gen: TypingGen,
+    *,
+    indent: str,
+    cls_name: str | None,
 ) -> tuple[list[str], set[str], set[str]]:
     name = _member(sym)
     signature, used_our, used_aliases = typing_gen.rewrite_signature(sym.signature)
@@ -909,7 +974,7 @@ def _pyi_entry(
     lines: list[str] = []
 
     if previous is not None:
-        existing = previous.funcs.get(name)
+        existing = previous.funcs.get((cls_name, name))
         if existing is None:
             lines.append(f"{indent}{_PYI_NEW}")
         elif existing.canonical_signature != canonical_signature(signature):

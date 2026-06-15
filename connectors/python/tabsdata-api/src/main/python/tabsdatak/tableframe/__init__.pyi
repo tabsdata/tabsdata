@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from tabsdatak.tableframe._engine.frame.frame import EngineFrame
 from typing import (
     Any,
     Awaitable,
@@ -58,7 +59,7 @@ from tabsdatak.tableframe._typing import (
 
 """ """
 
-class TableFrame:
+class TableFrame(EngineFrame):
     """ """
     def __or__(value, /):
         """ """

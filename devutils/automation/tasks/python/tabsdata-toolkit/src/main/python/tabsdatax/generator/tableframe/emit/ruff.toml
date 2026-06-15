@@ -1,0 +1,46 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+line-length = 88
+target-version = "py312"
+
+[format]
+preview = true
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "W",
+    "C90",
+]
+extend-select = [
+    "E9",
+    "F63",
+    "F7",
+    "F82",
+    "TID251",
+]
+ignore = []
+fixable = ["ALL"]
+
+[lint.flake8-tidy-imports.banned-api]
+"tabsdata".msg = "Code in tabsdatak must not import tabsdata."
+"tabsdata.*".msg = "Code in tabsdatak must not import tabsdata."
+
+[lint.per-file-ignores]
+"!**/tabsdatak/**/*.py" = ["TID251"]
+
+[lint.isort]
+known-first-party = [
+    "tabsdata",
+    "tabsdatak",
+    "test_tabsdatak",
+]
+combine-as-imports = true

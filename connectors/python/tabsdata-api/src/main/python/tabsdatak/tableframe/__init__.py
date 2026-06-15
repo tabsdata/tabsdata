@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 
-from tabsdatak.tableframe._core.base import BaseFrame
 from tabsdatak.tableframe._core.hooks import run_hook
 from tabsdatak.tableframe._core.translate import register_loader, unwrap, wrap
+from tabsdatak.tableframe._engine.frame.frame import EngineFrame
 
 
-class TableFrame(BaseFrame):
+class TableFrame(EngineFrame):
     _HOOKABLE_OPS = (
         "agg",
         "drop",
