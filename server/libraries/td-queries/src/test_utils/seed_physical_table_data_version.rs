@@ -85,9 +85,12 @@ pub async fn _seed_physical_table_data_version(
         .triggered_on(physical_function_run.triggered_on)
         .build()?;
 
-    // Mint the LTDV identity row + a Bound pointer event so the seed
-    // mirrors what plan-build + dispatch produce. The producer LFR is
-    // derived via (execution_id, function_id) from the FR.
+    // Bind an LTDV to the TDV so the seed mirrors what plan-build +
+    // dispatch produce: reuse the LTDV minted by the function-run seed
+    // when present (real flows bind the plan-minted row, they never mint
+    // a second one), minting only if the table has none for this
+    // execution. The producer LFR is derived via (execution_id,
+    // function_id) from the FR.
     let producer_lfr: LogicalFunctionRunDB = executor
         .reuse()
         .live()
@@ -96,29 +99,40 @@ pub async fn _seed_physical_table_data_version(
             &physical_function_run.function_id
         ))
         .await?;
-    let logical = LogicalTableDataVersionDB::builder()
-        .project_id(producer_lfr.project_id)
-        .group_id(producer_lfr.group_id)
-        .collection_id(collection.id)
-        .execution_id(&execution.id)
-        .transaction_id(&transaction.id)
-        .table_id(table.table_id)
-        .producer_logical_function_run_id(Some(producer_lfr.id.clone()))
-        .function_param_pos(Some(TableFunctionParamPos::try_from(0)?))
-        .private(table.private)
-        .triggered_on(physical_function_run.triggered_on)
-        .triggered_by_id(transaction.triggered_by_id)
-        .build()?;
+    let existing: Option<LogicalTableDataVersionDB> = executor
+        .reuse()
+        .live()
+        .fetch_optional(and!(&execution.id, &table.table_id))
+        .await?;
+    let logical = match existing {
+        Some(ltdv) => ltdv,
+        None => {
+            let ltdv = LogicalTableDataVersionDB::builder()
+                .project_id(producer_lfr.project_id)
+                .group_id(producer_lfr.group_id)
+                .collection_id(collection.id)
+                .execution_id(&execution.id)
+                .transaction_id(&transaction.id)
+                .table_id(table.table_id)
+                .producer_logical_function_run_id(Some(producer_lfr.id.clone()))
+                .function_param_pos(Some(TableFunctionParamPos::try_from(0)?))
+                .private(table.private)
+                .triggered_on(physical_function_run.triggered_on)
+                .triggered_by_id(transaction.triggered_by_id)
+                .build()?;
+            executor
+                .reuse()
+                .live()
+                .insert::<LogicalTableDataVersionDB>(&ltdv)
+                .await?;
+            ltdv
+        }
+    };
 
     executor
         .reuse()
         .live()
         .insert(&table_data_version_db)
-        .await?;
-    executor
-        .reuse()
-        .live()
-        .insert::<LogicalTableDataVersionDB>(&logical)
         .await?;
     let pointer = LogicalTableDataVersionPointerDB::build_event(
         logical.project_id,

@@ -32,9 +32,10 @@ use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
-    AtTime, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, LogicalFunctionRunStatus,
-    LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId, OverrideDisabledTrigger,
-    PhysicalTableDataVersionId, ProjectId, TableId, Trigger, TriggerType, VersionPos,
+    AtTime, DependencyPos, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, InputIdx,
+    LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
+    LogicalTableDataVersionId, OverrideDisabledTrigger, PhysicalTableDataVersionId, ProjectId,
+    TableId, Trigger, TriggerType, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
@@ -489,6 +490,13 @@ pub async fn resolve_execution_plan_versions(
 ///   version, with `requirement_version_pos = SINGLE_VERSION` (single)
 ///   or the iteration index (multiple).
 ///
+/// Provenance `input_idx`: a single index across the plan's resolved input
+/// versions — every row bound to a data version gets its own value. Edges
+/// are walked in `(function_id, dep_pos)` order so the assignment is
+/// reproducible whenever the plan is rebuilt. Rows without a bound version
+/// (unresolved slots and the NO_VERSIONS placeholder) carry
+/// `InputIdx::NO_DATA`; trigger rows carry NULL.
+///
 /// The `requirement_logical_table_data_version_id` is resolved per row
 /// via the logic version resolver, which consults the in-plan LTDV
 /// map first (LTDVs minted earlier in this same plan-build pass) and
@@ -519,8 +527,15 @@ pub async fn build_logical_function_run_inputs(
         Vec<Option<ActiveLogicalTableDataVersionDB>>,
     > = HashMap::new();
 
+    let mut edges: Vec<_> = execution_plan
+        .function_table_input_versions()
+        .into_iter()
+        .collect();
+    edges.sort_by_key(|(function, _, edge)| (function.function_id, edge.dependency_pos().cloned()));
+
+    let mut next_input_idx: i32 = 0;
     let mut rows = Vec::new();
-    for (function, table, edge) in execution_plan.function_table_input_versions() {
+    for (function, table, edge) in edges {
         let Some(consumer_lfr_id) = lfr_id_by_function.get(&function.function_id) else {
             return Err(api_error!(
                 ApiError::InternalError,
@@ -530,14 +545,7 @@ pub async fn build_logical_function_run_inputs(
         };
         let transaction = transaction_map.get(&transaction_by.key(function)?)?;
 
-        // `input_idx` was assigned onto the dependency edge at plan-build
-        // (`TdGraphBuilder::with_dependencies`, in `(function_id, dep_pos)`
-        // order); trigger edges carry neither.
         let dependency_pos = edge.dependency_pos().cloned();
-        let requirement_input_idx = match edge {
-            GraphEdge::Dependency { dependency, .. } => Some(dependency.input_idx),
-            _ => None,
-        };
 
         // Self-dependency: read the *previous* version, not the current one.
         // Shift the relative reference by -1 so HEAD becomes HEAD~1 etc.
@@ -580,7 +588,7 @@ pub async fn build_logical_function_run_inputs(
                     .transaction_id(transaction.id.clone())
                     .logical_function_run_id(consumer_lfr_id.clone())
                     .requirement_logical_table_data_version_id(None)
-                    .requirement_input_idx(requirement_input_idx)
+                    .requirement_input_idx(dependency_pos.is_some().then_some(InputIdx::NO_DATA))
                     .requirement_dependency_pos(dependency_pos)
                     .requirement_version_pos(VersionPos::NO_VERSIONS)
                     .build()?,
@@ -594,6 +602,15 @@ pub async fn build_logical_function_run_inputs(
                 VersionPos::try_from(slot as i32)?
             } else {
                 VersionPos::SINGLE_VERSION
+            };
+            let requirement_input_idx = if dependency_pos.is_none() {
+                None
+            } else if ftdv_opt.is_some() {
+                let idx = InputIdx::try_from(next_input_idx)?;
+                next_input_idx += 1;
+                Some(idx)
+            } else {
+                Some(InputIdx::NO_DATA)
             };
             rows.push(
                 LogicalFunctionRunInputDB::builder()
@@ -657,8 +674,29 @@ pub async fn build_response(
     transaction_map: Ref<TransactionMap<TransactionBy>>,
     execution: Ref<ExecutionDB>,
     execution_plan: Ref<ResolvedExecutionPlan>,
+    logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
+    logical_function_run_inputs: Ref<Vec<LogicalFunctionRunInputDB>>,
 ) -> Result<ExecutionResponse, TdError> {
     let dot = Dot::try_from(execution_plan.dot().to_string())?;
+
+    // `input_idx` by (consumer function, dep slot, version slot), from the
+    // persisted LFRI rows so the response carries the idxs the plan actually
+    // ran with — identically on the execute and read paths.
+    let function_by_lfr: HashMap<_, _> = logical_function_runs
+        .iter()
+        .map(|lfr| (&lfr.id, lfr.function_id))
+        .collect();
+    let idx_by_slot: HashMap<(FunctionId, DependencyPos, VersionPos), InputIdx> =
+        logical_function_run_inputs
+            .iter()
+            .filter_map(|lfri| {
+                let idx = lfri.requirement_input_idx?;
+                let dep_pos = lfri.requirement_dependency_pos?;
+                let function_id = function_by_lfr.get(&lfri.logical_function_run_id)?;
+                Some(((*function_id, dep_pos, lfri.requirement_version_pos), idx))
+            })
+            .collect();
+    let idx_by_slot = &idx_by_slot;
 
     // Transactions info
     let transactions = execution_plan
@@ -686,9 +724,9 @@ pub async fn build_response(
                 };
                 Ok::<_, TdError>(response)
             },
-            |edge, _, _| async move {
+            |edge, _, target| async move {
                 let mut collected_info = Vec::new();
-                let inner = edge
+                let inner: Vec<_> = edge
                     .versions()
                     .inner
                     .iter()
@@ -702,8 +740,31 @@ pub async fn build_response(
                     })
                     .collect::<Result<_, _>>()?;
 
+                // Pair each resolved slot with its persisted `input_idx`;
+                // slots without a matching LFRI row render as NO_DATA.
+                let input_idxs = match (edge.dependency_pos(), target) {
+                    (Some(dep_pos), GraphNode::Function(function)) => {
+                        let multiple = edge.versions().original.is_multiple();
+                        (0..inner.len())
+                            .map(|slot| {
+                                let version_pos = if multiple {
+                                    VersionPos::try_from(slot as i32)?
+                                } else {
+                                    VersionPos::SINGLE_VERSION
+                                };
+                                Ok(idx_by_slot
+                                    .get(&(function.function_id, *dep_pos, version_pos))
+                                    .copied()
+                                    .unwrap_or(InputIdx::NO_DATA))
+                            })
+                            .collect::<Result<Vec<_>, TdError>>()?
+                    }
+                    _ => Vec::new(),
+                };
+
                 let response = ResolvedVersionResponse {
                     inner,
+                    input_idxs,
                     original: edge.versions().original.clone(),
                 };
                 Ok::<_, TdError>((response, collected_info))

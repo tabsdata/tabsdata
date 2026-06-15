@@ -66,6 +66,8 @@ pub(crate) mod tests {
     use super::*;
     use crate::Context;
     use crate::collection::service::CollectionServices;
+    use crate::execution::services::read::ExecutionReadService;
+    use std::collections::HashSet;
     use std::error::Error;
     use std::str::FromStr;
     use std::sync::LazyLock;
@@ -78,22 +80,29 @@ pub(crate) mod tests {
     use td_error::{ApiError, TdError};
     use td_execution::EXECUTION_GRAPH_OPTIONS;
     use td_objects::dxo::collection::{CollectionCreate, CollectionDB};
-    use td_objects::dxo::execution::{ExecutionDBWithStatus, ExecutionResponse};
-    use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
-    use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
+    use td_objects::dxo::execution::{
+        ExecutionDB, ExecutionDBWithStatus, ExecutionResponse, ResolvedVersionResponse,
+    };
+    use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames, FunctionRegister};
+    use td_objects::dxo::graph::GraphEdge;
+    use td_objects::dxo::logical::{
+        LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalTableDataVersionDB,
+        UpdateLogicalFunctionRunDB,
+    };
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::transaction::TransactionDBWithStatus;
+    use td_objects::rest_urls::ExecutionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Depth, Description, Enabled,
-        ExecutionName, ExecutionStatus, FunctionName, FunctionRuntimeValues, GroupId,
-        LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId, ProjectName, RoleId,
-        TableName, TableNameDto, ToCollectionId, TransactionKey, TransactionStatus, TriggeredOn,
-        UserId,
+        ExecutionIdName, ExecutionName, ExecutionStatus, FunctionName, FunctionRuntimeValues,
+        GroupId, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId,
+        ProjectName, RoleId, TableName, TableNameDto, ToCollectionId, TransactionKey,
+        TransactionStatus, TriggeredOn, UserId, VersionPos,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::{Buildable, and};
-    use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
+    use td_queries::{CurrentEntry, LiveEntry};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -420,6 +429,324 @@ pub(crate) mod tests {
         assert_eq!(lfrs.len(), 1);
         assert_eq!(lfrs[0].project_id, project.id);
         assert_eq!(lfrs[0].group_id, collection.group_id);
+
+        Ok(())
+    }
+
+    /// Seed a publisher with the given output tables and `versions`
+    /// committed data versions of the first table. Returns the collection,
+    /// the producer and its seeded executions (oldest first).
+    async fn seed_producer_with_versions(
+        db: &TdPool,
+        tables: &[&str],
+        versions: usize,
+    ) -> Result<(CollectionDB, FunctionDB, Vec<ExecutionDB>), TdError> {
+        let p = ProjectId::sandbox();
+        let collection = db
+            .scoped(p)
+            .seed()
+            .collection(&CollectionName::try_from("range_coll")?, &UserId::admin())
+            .await?;
+
+        let create = FunctionRegister::builder()
+            .name(FunctionName::try_from("producer")?)
+            .try_description("producer")?
+            .bundle_id(BundleId::default())
+            .try_snippet("producer snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(
+                tables
+                    .iter()
+                    .map(|t| TableNameDto::try_from(*t))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
+            .runtime_values(FunctionRuntimeValues::try_from("rt")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let producer = db.scoped(p).seed().function(&collection, &create).await?;
+        let table: TableDB = db
+            .current()
+            .fetch_one(and!(&collection.id, TableName::try_from(tables[0])?))
+            .await?;
+
+        let mut executions = Vec::new();
+        for _ in 0..versions {
+            let execution = db.scoped(p).seed().execution(&producer).await?;
+            let transaction = db
+                .scoped(p)
+                .seed()
+                .transaction(&execution, &TransactionKey::try_from("ANY")?)
+                .await?;
+            let run = db
+                .scoped(p)
+                .seed()
+                .physical_function_run(
+                    &collection,
+                    &producer,
+                    &execution,
+                    &transaction,
+                    &LogicalFunctionRunStatus::Scheduled,
+                )
+                .await?;
+            db.scoped(p)
+                .seed()
+                .physical_table_data_version_with_data(
+                    &collection,
+                    &execution,
+                    &transaction,
+                    &run,
+                    &table,
+                )
+                .await?;
+            executions.push(execution);
+        }
+        Ok((collection, producer, executions))
+    }
+
+    /// Register and execute a consumer with the given dependencies (and an
+    /// optional trigger), returning the execution response.
+    async fn execute_consumer(
+        db: &TdPool,
+        collection: &CollectionDB,
+        dependencies: &[&str],
+        trigger: Option<&str>,
+    ) -> Result<ExecutionResponse, TdError> {
+        let p = ProjectId::sandbox();
+        let create = FunctionRegister::builder()
+            .name(FunctionName::try_from("consumer")?)
+            .try_description("consumer")?
+            .bundle_id(BundleId::default())
+            .try_snippet("consumer snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(
+                dependencies
+                    .iter()
+                    .map(|d| TableDependencyDto::try_from(*d))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
+            .triggers(
+                trigger
+                    .map(|t| Ok::<_, TdError>(vec![TableTriggerDto::try_from(t)?]))
+                    .transpose()?,
+            )
+            .tables(vec![TableNameDto::try_from("table_c")?])
+            .runtime_values(FunctionRuntimeValues::try_from("rt")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let _ = db.scoped(p).seed().function(collection, &create).await?;
+
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .create(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                        .function(FunctionIdName::from_str("consumer")?)
+                        .build()?,
+                    ExecutionRequest::builder()
+                        .name(Some(ExecutionName::try_from("range_dep_execution")?))
+                        .function_only(false)
+                        .build()?,
+                )
+                .in_project(p);
+        ExecuteFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(request)
+            .await
+    }
+
+    /// LFRI row for a `(dep_pos, version_pos)` slot of the execution.
+    fn lfri_slot(
+        rows: &[LogicalFunctionRunInputDB],
+        dep_pos: i32,
+        version_pos: i32,
+    ) -> &LogicalFunctionRunInputDB {
+        rows.iter()
+            .find(|r| {
+                r.requirement_dependency_pos.map(|d| *d) == Some(dep_pos)
+                    && *r.requirement_version_pos == version_pos
+            })
+            .unwrap_or_else(|| panic!("missing LFRI row dep {dep_pos} pos {version_pos}"))
+    }
+
+    /// The resolved versions of the response's dependency edge at `dep_pos`.
+    fn dep_edge(response: &ExecutionResponse, dep_pos: i32) -> &ResolvedVersionResponse {
+        response
+            .relations
+            .iter()
+            .find_map(|(_, _, e)| match e {
+                GraphEdge::Dependency {
+                    versions,
+                    dependency,
+                } if *dependency.dep_pos == dep_pos => Some(versions),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("missing dependency edge at dep_pos {dep_pos}"))
+    }
+
+    fn idxs(versions: &ResolvedVersionResponse) -> Vec<i32> {
+        versions.input_idxs.iter().map(|i| **i).collect()
+    }
+
+    /// Every version resolved by a range dependency carries its own
+    /// `input_idx`, and the response renders the persisted idxs identically
+    /// on the execute and read paths — even after upstream state changes
+    /// would resolve differently.
+    #[td_test::test(db)]
+    async fn test_execute_range_dep_input_idx(db: TdPool) -> Result<(), TdError> {
+        let p = ProjectId::sandbox();
+        let (collection, producer, producer_executions) =
+            seed_producer_with_versions(&db, &["table_p"], 3).await?;
+
+        let response = execute_consumer(
+            &db,
+            &collection,
+            &["table_p@HEAD~2..HEAD", "table_p"],
+            Some("table_p"),
+        )
+        .await?;
+
+        // Persisted LFRI rows: range slots get one idx per resolved version
+        // (HEAD~2 → HEAD, oldest first), the single-version dep continues
+        // the sequence, trigger rows carry no idx.
+        let rows: Vec<LogicalFunctionRunInputDB> =
+            db.scoped(p).live().fetch_all(&response.id).await?;
+
+        let idx_of =
+            |dep: i32, pos: i32| lfri_slot(&rows, dep, pos).requirement_input_idx.map(|i| *i);
+        assert_eq!(idx_of(0, 0), Some(0));
+        assert_eq!(idx_of(0, 1), Some(1));
+        assert_eq!(idx_of(0, 2), Some(2));
+        assert_eq!(idx_of(1, *VersionPos::SINGLE_VERSION), Some(3));
+
+        let range_ltdvs: HashSet<_> = (0..3)
+            .map(|pos| {
+                lfri_slot(&rows, 0, pos)
+                    .requirement_logical_table_data_version_id
+                    .clone()
+                    .expect("range slot must bind an LTDV")
+            })
+            .collect();
+        assert_eq!(range_ltdvs.len(), 3, "each range slot binds its own LTDV");
+        assert_eq!(
+            lfri_slot(&rows, 1, *VersionPos::SINGLE_VERSION)
+                .requirement_logical_table_data_version_id,
+            lfri_slot(&rows, 0, 2).requirement_logical_table_data_version_id,
+            "single-version dep binds the same LTDV as the range's HEAD slot",
+        );
+        for row in rows
+            .iter()
+            .filter(|r| r.requirement_dependency_pos.is_none())
+        {
+            assert_eq!(row.requirement_input_idx, None, "trigger rows carry no idx");
+        }
+
+        // Execute response renders the persisted idxs.
+        assert_eq!(idxs(dep_edge(&response, 0)), vec![0, 1, 2]);
+        assert!(dep_edge(&response, 0).inner.iter().all(|v| v.is_some()));
+        assert_eq!(idxs(dep_edge(&response, 1)), vec![3]);
+        for (_, _, e) in &response.relations {
+            if let GraphEdge::Trigger { versions } = e {
+                assert!(
+                    versions.input_idxs.is_empty(),
+                    "trigger edges carry no idxs"
+                );
+            }
+        }
+
+        // Read path reproduces them.
+        let read_service =
+            ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone()).service();
+        let read_request = || {
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                .read(
+                    ExecutionParam::builder()
+                        .execution(ExecutionIdName::from_str(&response.id.to_string()).unwrap())
+                        .build()
+                        .unwrap(),
+                )
+                .in_project(p)
+        };
+        let read_response = read_service.clone().raw_oneshot(read_request()).await?;
+        assert_eq!(idxs(dep_edge(&read_response, 0)), vec![0, 1, 2]);
+        assert_eq!(idxs(dep_edge(&read_response, 1)), vec![3]);
+
+        // Cancel the middle producer run: read-time re-resolution no longer
+        // sees its version, but the idxs stay the persisted ones.
+        let middle_lfr: LogicalFunctionRunDB = db
+            .scoped(p)
+            .live()
+            .fetch_one(and!(&producer_executions[1].id, &producer.function_id))
+            .await?;
+        let update = UpdateLogicalFunctionRunDB::builder()
+            .status(LogicalFunctionRunStatus::Canceled)
+            .build()?;
+        db.scoped(p)
+            .live()
+            .update::<_, LogicalFunctionRunDB>(&update, &middle_lfr.id)
+            .await?;
+
+        let drifted = read_service.raw_oneshot(read_request()).await?;
+        assert_eq!(idxs(dep_edge(&drifted, 0)), vec![0, 1, 2]);
+        assert_eq!(idxs(dep_edge(&drifted, 1)), vec![3]);
+
+        Ok(())
+    }
+
+    /// Range slots that resolve to no data version carry `NO_DATA`, as does
+    /// a single-version dep on a table with no data; bound slots keep their
+    /// own sequential idxs.
+    #[td_test::test(db)]
+    async fn test_execute_range_dep_input_idx_partial(db: TdPool) -> Result<(), TdError> {
+        let p = ProjectId::sandbox();
+        let (collection, _, _) = seed_producer_with_versions(&db, &["table_p"], 1).await?;
+
+        // `table_q` belongs to a publisher that never ran: no LTDV timeline.
+        let create = FunctionRegister::builder()
+            .name(FunctionName::try_from("producer_q")?)
+            .try_description("producer_q")?
+            .bundle_id(BundleId::default())
+            .try_snippet("producer_q snippet")?
+            .decorator(Decorator::Publisher)
+            .dependencies(None)
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("table_q")?])
+            .runtime_values(FunctionRuntimeValues::try_from("rt")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let _ = db.scoped(p).seed().function(&collection, &create).await?;
+
+        // `table_p` has one version (range over three slots resolves two
+        // empty), `table_q` has none.
+        let response =
+            execute_consumer(&db, &collection, &["table_p@HEAD~2..HEAD", "table_q"], None).await?;
+
+        let rows: Vec<LogicalFunctionRunInputDB> =
+            db.scoped(p).live().fetch_all(&response.id).await?;
+
+        let idx_of =
+            |dep: i32, pos: i32| lfri_slot(&rows, dep, pos).requirement_input_idx.map(|i| *i);
+        assert_eq!(idx_of(0, 0), Some(*InputIdx::NO_DATA));
+        assert_eq!(idx_of(0, 1), Some(*InputIdx::NO_DATA));
+        assert_eq!(idx_of(0, 2), Some(0));
+        assert_eq!(
+            idx_of(1, *VersionPos::SINGLE_VERSION),
+            Some(*InputIdx::NO_DATA)
+        );
+        assert!(
+            lfri_slot(&rows, 0, 0)
+                .requirement_logical_table_data_version_id
+                .is_none()
+        );
+        assert!(
+            lfri_slot(&rows, 0, 2)
+                .requirement_logical_table_data_version_id
+                .is_some()
+        );
+
+        assert_eq!(idxs(dep_edge(&response, 0)), vec![-1, -1, 0]);
+        assert_eq!(idxs(dep_edge(&response, 1)), vec![-1]);
 
         Ok(())
     }

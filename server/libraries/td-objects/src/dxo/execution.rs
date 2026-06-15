@@ -11,7 +11,7 @@ mod definitions {
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
         ExecutionStatus, ExternalUid, FunctionId, FunctionName, FunctionOnly, FunctionVersionId,
-        LogicalFunctionRunStatus, OverrideDisabledTrigger, PhysicalTableDataVersionId,
+        InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, PhysicalTableDataVersionId,
         SkipIfRunning, StatusCount, System, TableName, TableVersionId, TransactionId, TriggerType,
         TriggeredOn, UserId, UserName,
     };
@@ -224,6 +224,12 @@ mod definitions {
     #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
     pub struct ResolvedVersionResponse {
         pub inner: Vec<Option<PhysicalTableDataVersionId>>,
+        /// Per-slot provenance idx, paired 1:1 with `inner` on dependency
+        /// edges (empty on trigger/output edges). Slots without a data
+        /// version carry `InputIdx::NO_DATA`. Sourced from the persisted
+        /// `logical_function_run_inputs` rows, so reads always reproduce
+        /// the idxs the plan actually ran with.
+        pub input_idxs: Vec<InputIdx>,
         pub original: TableVersions,
     }
 

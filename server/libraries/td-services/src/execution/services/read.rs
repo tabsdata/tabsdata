@@ -17,6 +17,7 @@ use td_objects::States;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunInputDB};
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::tower_service::with::With;
@@ -90,6 +91,10 @@ where
         from_fn(build_existing_transaction_map),
         // Create execution plan
         from_fn(resolve_execution_plan_versions),
+        // Persisted logical rows — the response renders `input_idx` from
+        // them, so reads reproduce the plan-build assignment exactly.
+        from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
+        from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunInputDB>),
         // Execution plan response
         from_fn(build_response),
     )
@@ -161,6 +166,9 @@ mod tests {
                 type_of_val(&build_existing_transaction_map),
                 // Create execution plan
                 type_of_val(&resolve_execution_plan_versions),
+                // Persisted logical rows for response input_idx rendering.
+                type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
+                type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunInputDB>),
                 // Execution plan response
                 type_of_val(&build_response),
             ]);

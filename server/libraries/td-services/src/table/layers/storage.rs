@@ -145,6 +145,31 @@ mod tests {
                 &table,
             )
             .await?;
+        // The no-data current version must come from its own execution: within
+        // one execution a second seed rebinds the same LTDV, superseding the
+        // with-data version instead of leaving it as a prior logical version.
+        let function: FunctionDB = db.live().fetch_one(&table.function_version_id).await?;
+        let execution = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&function)
+            .await?;
+        let transaction = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&execution, &TransactionKey::try_from("ANY")?)
+            .await?;
+        let physical_function_run = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .physical_function_run(
+                &collection,
+                &function,
+                &execution,
+                &transaction,
+                &LogicalFunctionRunStatus::Scheduled,
+            )
+            .await?;
         let current_without_data = db
             .scoped(ProjectId::sandbox())
             .seed()
@@ -156,6 +181,10 @@ mod tests {
                 &table,
             )
             .await?;
+        assert_eq!(
+            previous_with_data.table_version_id,
+            current_without_data.table_version_id
+        );
         _run_test(db, Some(current_without_data), Some(previous_with_data)).await
     }
 

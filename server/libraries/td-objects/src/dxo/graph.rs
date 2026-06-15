@@ -7,8 +7,8 @@ use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
 use crate::dxo::table::TableDBWithNames;
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
-    FunctionVersionId, GroupId, InputIdx, Private, SelfDependency, System, TableFunctionParamPos,
-    TableId, TableName, TableVersionId,
+    FunctionVersionId, GroupId, Private, SelfDependency, System, TableFunctionParamPos, TableId,
+    TableName, TableVersionId,
 };
 use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
@@ -116,7 +116,6 @@ impl GraphNode<FunctionNode, TableNode> {
 pub struct GraphDependency {
     pub dep_pos: DependencyPos,
     pub self_dependency: SelfDependency,
-    pub input_idx: InputIdx,
 }
 
 /// Adds contextual information to dependency graph edges.
