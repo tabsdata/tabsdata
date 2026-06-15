@@ -6,11 +6,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tabsdatak.extensions.tableframe._engine.generators import (
+from tabsdatak.extensions.tableframe._engine.column.generator import (
     ConstantVersionGenerator,
     IdentifierGenerator,
 )
-from tabsdatak.tableframe._engine.constants.columns.names import (
+from tabsdatak.tableframe._engine.constant.column.names import (
     TD_EXECUTION_SYSTEM_COLUMN_NAME,
     TD_FILE_LINE_SYSTEM_COLUMN_NAME,
     TD_FILE_PATH_SYSTEM_COLUMN_NAME,
@@ -24,23 +24,23 @@ from tabsdatak.tableframe._engine.constants.columns.names import (
     TD_VALUE_TIMESTAMP_SYSTEM_COLUMN_NAME,
     TD_VERSION_SYSTEM_COLUMN_NAME,
 )
-from tabsdatak.tableframe._engine.constants.empties import (
+from tabsdatak.tableframe._engine.constant.emptiness import (
     EMPTY_EXECUTION,
     EMPTY_TIMESTAMP,
     EMPTY_TRANSACTION,
     EMPTY_VERSION,
 )
-from tabsdatak.tableframe._engine.model.columns import (
+from tabsdatak.tableframe._engine.model.column import SystemColumn
+from tabsdatak.tableframe._engine.taxonomy.column import (
     Inception,
     Language,
-    SystemColumn,
     SystemColumnCategory,
 )
 
 if TYPE_CHECKING:
     import polars as pl_
 
-    from tabsdatak.tableframe._engine.model.columns import (
+    from tabsdatak.tableframe._engine.model.column import (
         SystemColumnDataType as SystemColumnDataType_,
     )
 
@@ -79,7 +79,7 @@ STANDARD: tuple[SystemColumn, ...] = (
         inception=Inception.REGENERATE,
         required=True,
         pristine=True,
-        generator=IdentifierGenerator(),
+        generator=IdentifierGenerator(dtype_string, default_empty_string),
         aggregation=None,
     ),
     SystemColumn(

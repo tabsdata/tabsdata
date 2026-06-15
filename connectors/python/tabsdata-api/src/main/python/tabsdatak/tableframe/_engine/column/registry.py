@@ -6,15 +6,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from tabsdatak.tableframe._engine.constants.columns.prefixes import (
+from tabsdatak.tableframe._engine.constant.column.prefixes import (
     TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
     TD_NAMESPACED_SYSTEM_COLUMN_PREFIXES,
     TD_SYSTEM_COLUMN_PREFIX,
     TD_VOLATILE_SYSTEM_COLUMN_PREFIX,
 )
-from tabsdatak.tableframe._engine.model.columns import (
+from tabsdatak.tableframe._engine.model.column import SystemColumn
+from tabsdatak.tableframe._engine.taxonomy.column import (
     Inception,
-    SystemColumn,
     SystemColumnCategory,
 )
 
@@ -71,6 +71,17 @@ class Registry:
             if system_column.inception is inception
         ]
 
+    def optional(self) -> list[str]:
+        return self.names(SystemColumnCategory.OPTIONAL)
+
+    def row_index_column(self) -> str | None:
+        for name, system_column in self.columns.items():
+            if system_column.category is SystemColumnCategory.EXTENDED and (
+                system_column.inception is Inception.REGENERATE
+            ):
+                return name
+        return None
+
     def is_system_column(self, name: str) -> bool:
         return (
             name in self.columns
@@ -82,12 +93,14 @@ class Registry:
         system_column = self.get(name)
         if system_column is not None:
             return system_column.category
-        if name.startswith(TD_VOLATILE_SYSTEM_COLUMN_PREFIX):
-            return SystemColumnCategory.VOLATILE
-        if name.startswith(TD_CONNECTOR_SYSTEM_COLUMN_PREFIX):
-            return SystemColumnCategory.CONNECTOR
-        if name.startswith(TD_SYSTEM_COLUMN_PREFIX):
-            return SystemColumnCategory.STANDARD
+        by_prefix = (
+            (TD_VOLATILE_SYSTEM_COLUMN_PREFIX, SystemColumnCategory.VOLATILE),
+            (TD_CONNECTOR_SYSTEM_COLUMN_PREFIX, SystemColumnCategory.CONNECTOR),
+            (TD_SYSTEM_COLUMN_PREFIX, SystemColumnCategory.STANDARD),
+        )
+        for prefix, category in by_prefix:
+            if name.startswith(prefix):
+                return category
         return None
 
 

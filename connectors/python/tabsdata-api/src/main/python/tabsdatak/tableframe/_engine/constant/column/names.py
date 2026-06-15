@@ -4,14 +4,14 @@
 
 from __future__ import annotations
 
-from tabsdatak.tableframe._engine.constants.columns.prefixes import (
+from tabsdatak.tableframe._engine.constant.column.prefixes import (
     TD_FILE_ORIGIN_SYSTEM_COLUMN_PREFIX,
     TD_OPTIONAL_TIMESTAMP_SYSTEM_COLUMN_PREFIX,
     TD_SYSTEM_COLUMN_PREFIX,
     TD_VERSION_SYSTEM_COLUMN_PREFIX,
     TD_VOLATILE_SYSTEM_COLUMN_PREFIX,
 )
-from tabsdatak.tableframe._engine.constants.columns.suffixes import (
+from tabsdatak.tableframe._engine.constant.column.suffixes import (
     TD_EXECUTION_SYSTEM_COLUMN_SUFFIX,
     TD_FUNCTION_SYSTEM_COLUMN_SUFFIX,
     TD_IDENTIFIER_SYSTEM_COLUMN_SUFFIX,

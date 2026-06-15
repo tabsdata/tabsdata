@@ -6,21 +6,33 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable
 
-from tabsdatak.tableframe._engine.constants.columns.prefixes import (
+from tabsdatak.tableframe._engine.column.generator import (
+    GeneratorContext,
+    seed_default,
+    temp_column,
+)
+from tabsdatak.tableframe._engine.constant.column.prefixes import (
     TD_VERSION_SYSTEM_COLUMN_PREFIX,
 )
-from tabsdatak.tableframe._engine.generators import GeneratorContext, temp_column
 
 if TYPE_CHECKING:
     import polars as pl_
 
-    from tabsdatak.tableframe._engine.model.columns import (
+    from tabsdatak.tableframe._engine.model.column import (
         SystemColumnDataType as SystemColumnDataType_,
         SystemColumnDefault as SystemColumnDefault_,
     )
 
 
 class IdentifierGenerator:
+    def __init__(
+        self,
+        dtype: Callable[[], SystemColumnDataType_],
+        default: Callable[[], SystemColumnDefault_],
+    ) -> None:
+        self.dtype = dtype
+        self.default = default
+
     def apply(
         self,
         lf: pl_.LazyFrame,
@@ -32,6 +44,7 @@ class IdentifierGenerator:
 
         from tabsdata.expansions.tableframe.expressions import PLUGIN_PATH
 
+        lf = seed_default(lf, column, self.dtype, self.default, context)
         expression = register_plugin_function(
             plugin_path=PLUGIN_PATH,
             function_name="_identifier_generator",

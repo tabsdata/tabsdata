@@ -6,12 +6,12 @@ from __future__ import annotations
 
 from functools import cache
 
-from tabsdatak.tableframe._engine.registry import Registry
+from tabsdatak.tableframe._engine.column.registry import Registry
 
 
 @cache
 def registry() -> Registry:
-    from tabsdatak.extensions.tableframe._engine.constants.columns.system import (
+    from tabsdatak.extensions.tableframe._engine.constant.column.system import (
         CONNECTOR,
         OPTIONAL,
         STANDARD,

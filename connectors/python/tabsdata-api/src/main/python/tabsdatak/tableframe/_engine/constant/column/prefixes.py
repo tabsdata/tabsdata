@@ -4,23 +4,23 @@
 
 from __future__ import annotations
 
-from tabsdatak.tableframe._engine.constants.columns.infixes import (
+from tabsdatak.tableframe._engine.constant.column.infixes import (
     TD_SYSTEM_COLUMN_INFIX,
 )
-from tabsdatak.tableframe._engine.constants.columns.markers import (
+from tabsdatak.tableframe._engine.constant.column.markers import (
     TD_VOLATILE_SYSTEM_COLUMN_MARKER,
 )
-from tabsdatak.tableframe._engine.constants.columns.qualifier import (
+from tabsdatak.tableframe._engine.constant.column.qualifier import (
     TD_SYSTEM_COLUMN_QUALIFIER,
 )
-from tabsdatak.tableframe._engine.constants.columns.segments import (
+from tabsdatak.tableframe._engine.constant.column.segments import (
     TD_FILE_ORIGIN_SYSTEM_COLUMN_SEGMENT,
     TD_OPTIONAL_SYSTEM_COLUMN_SEGMENT,
     TD_ORIGIN_SYSTEM_COLUMN_SEGMENT,
     TD_TIMESTAMP_OPTIONAL_SYSTEM_COLUMN_SEGMENT,
     TD_VERSION_SYSTEM_COLUMN_SEGMENT,
 )
-from tabsdatak.tableframe._engine.constants.columns.sigils import (
+from tabsdatak.tableframe._engine.constant.column.sigils import (
     TD_CONNECTOR_SYSTEM_COLUMN_SIGIL,
     TD_STANDARD_SYSTEM_COLUMN_SIGIL,
 )

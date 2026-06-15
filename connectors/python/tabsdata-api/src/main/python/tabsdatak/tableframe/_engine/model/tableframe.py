@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from tabsdatak.tableframe._engine.constants.empties import (
+from tabsdatak.tableframe._engine.constant.emptiness import (
     EMPTY_EXECUTION,
     EMPTY_TIMESTAMP,
     EMPTY_TRANSACTION,
