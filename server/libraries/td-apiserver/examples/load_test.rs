@@ -11,7 +11,7 @@ use std::time::Instant;
 use strum::IntoEnumIterator;
 use td_common::logging;
 use td_common::logging::{CONSOLE_PROFILE, LoggingOptions};
-use td_database::config::{BackendConfig, DatabaseConfig, EmbeddedConfig};
+use td_database::config::{BackendConfig, DatabaseConfig, EmbeddedConfig, Schema};
 use td_execution::TransactionBy;
 use td_objects::Buildable;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -28,6 +28,9 @@ use td_queries::test_utils::SeedEntry;
 use tracing::Level;
 use tracing::{debug, info};
 use url::Url;
+
+/// Schema the load test isolates its objects in.
+const LOAD_TEST_SCHEMA: &str = "td_load_test";
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -99,8 +102,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The embedded server (when used) is owned by the returned `TdPool`
     // and shuts down cleanly when `db` drops at end of main.
+    let schema = Schema::new(LOAD_TEST_SCHEMA);
     let database_config = match args.db_url {
-        Some(url) => DatabaseConfig::new(url).unwrap(),
+        Some(url) => {
+            let mut config = DatabaseConfig::new(url).unwrap();
+            config.schema = Some(schema);
+            config
+        }
         None => DatabaseConfig {
             conn: Some(BackendConfig::embedded_postgres(EmbeddedConfig {
                 data_dir: Some(td_common::tdtestdir!().join("postgres")),
@@ -109,6 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 username: None,
                 password: None,
             })),
+            schema: Some(schema),
             ..Default::default()
         },
     };

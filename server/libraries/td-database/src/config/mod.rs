@@ -9,6 +9,7 @@
 //! a submodule. [`DatabaseConfig`] bundles that with [`PoolConfig`] for the
 //! sqlx pool settings.
 
+pub mod common;
 #[cfg(all(postgres, feature = "embedded-postgres"))]
 pub mod embedded;
 #[cfg(mysql)]
@@ -18,6 +19,7 @@ pub mod postgres;
 #[cfg(sqlite)]
 pub mod sqlite;
 
+pub use common::Schema;
 #[cfg(all(postgres, feature = "embedded-postgres"))]
 pub use embedded::EmbeddedConfig;
 #[cfg(mysql)]
@@ -31,7 +33,7 @@ use crate::dynamic::DynamicPool;
 #[cfg(all(postgres, feature = "embedded-postgres"))]
 use crate::embedded::EmbeddedPostgres;
 use crate::error::DbError;
-use crate::{APP_ROLE, APP_SCHEMA};
+use crate::APP_ROLE;
 use serde::{Deserialize, Serialize};
 use serde_with::DurationSeconds;
 use serde_with::serde_as;
@@ -294,6 +296,10 @@ pub struct ConnectOutput {
     /// non-PostgreSQL backends (no RLS) it is the serving pool.
     pub admin: DynamicPool,
     pub url: Url,
+    /// Schema the connection's `search_path` was pinned to. `None` on
+    /// SQLite/MySQL, which have no `search_path`; `Some` on PostgreSQL, where it
+    /// is the mandatory configured schema.
+    pub schema: Option<Schema>,
     #[cfg(feature = "embedded-postgres")]
     pub embedded: Option<EmbeddedPostgres>,
 }
@@ -304,6 +310,16 @@ pub struct DatabaseConfig {
     /// The database connection configuration.
     #[serde(default, flatten)]
     pub conn: Option<BackendConfig>,
+    /// PostgreSQL schema the application's objects live in: every connection's
+    /// `search_path` is pinned to it, [`APP_ROLE`](crate::APP_ROLE) is granted
+    /// access to it, the upgrader's privileges are checked against it, and schema
+    /// introspection scopes to it. Mandatory on the PostgreSQL path — there is no
+    /// `public` default, so each component's objects stay isolated in their own
+    /// schema; [`Self::connect`] fails with [`DbError::MissingSchema`] when a
+    /// PostgreSQL backend leaves it unset. Ignored by SQLite and MySQL, which
+    /// have no `search_path`.
+    #[serde(default)]
+    pub schema: Option<Schema>,
     /// Connection pool settings.
     #[serde(default, flatten)]
     pub pool: PoolConfig,
@@ -312,6 +328,13 @@ pub struct DatabaseConfig {
 impl DatabaseConfig {
     pub fn url(&self) -> Option<&Url> {
         self.conn.as_ref().and_then(|c| c.url())
+    }
+
+    /// The configured PostgreSQL schema, or [`DbError::MissingSchema`] when
+    /// unset. Only meaningful on the PostgreSQL path; SQLite/MySQL connect
+    /// without consulting it.
+    pub fn require_schema(&self) -> Result<&Schema, DbError> {
+        self.schema.as_ref().ok_or(DbError::MissingSchema)
     }
 
     pub fn new<P: Into<Url>>(db_url: P) -> Result<Self, DbError> {
@@ -354,25 +377,30 @@ impl DatabaseConfig {
                     admin: pool.clone(),
                     pool,
                     url: (*c.url).clone(),
+                    // SQLite has no `search_path`; schema is not consulted.
+                    schema: None,
                     #[cfg(feature = "embedded-postgres")]
                     embedded: None,
                 })
             }
             #[cfg(postgres)]
             BackendConfig::Postgres(c) => {
+                let schema = self.require_schema()?.to_owned();
                 let url = (*c.url).clone();
                 let conn_options = self.conn_options(&url)?;
                 // Admin/upgrader pool first (raw role: keeps DDL/provisioning
                 // rights). No session default — strict, per-request GUC only; an
                 // unscoped write into a project-scoped table fails closed.
-                let admin_raw = self.connect_postgres(&conn_options, false, false).await?;
+                let admin_raw = self
+                    .connect_postgres(&conn_options, false, false, &schema)
+                    .await?;
                 // The app role must exist before the serving pools' after_connect
                 // `SET ROLE td_app` runs. Idempotent and privilege-free when it
                 // already exists (the external case — ops pre-create it).
                 crate::pool::provision_app_role(&admin_raw).await?;
                 let (rw, ro) = tokio::try_join!(
-                    self.connect_postgres(&conn_options, false, true),
-                    self.connect_postgres(&conn_options, true, true),
+                    self.connect_postgres(&conn_options, false, true, &schema),
+                    self.connect_postgres(&conn_options, true, true, &schema),
                 )?;
                 Ok(ConnectOutput {
                     pool: DynamicPool::Postgres { ro, rw },
@@ -381,23 +409,27 @@ impl DatabaseConfig {
                         rw: admin_raw,
                     },
                     url,
+                    schema: Some(schema),
                     #[cfg(feature = "embedded-postgres")]
                     embedded: None,
                 })
             }
             #[cfg(all(postgres, feature = "embedded-postgres"))]
             BackendConfig::EmbeddedPostgres(ecfg) => {
+                let schema = self.require_schema()?.to_owned();
                 let (pg, url) = crate::embedded::start(ecfg).await?;
                 tracing::info!("Embedded postgres listening at {}", url);
                 let conn_options = self.conn_options(&url)?;
                 // Admin/upgrader pool first (raw superuser). Embedded boots empty,
                 // so provision the app role here — before the serving pools'
                 // after_connect `SET ROLE td_app` needs it to exist.
-                let admin_raw = self.connect_postgres(&conn_options, false, false).await?;
+                let admin_raw = self
+                    .connect_postgres(&conn_options, false, false, &schema)
+                    .await?;
                 crate::pool::provision_app_role(&admin_raw).await?;
                 let (rw, ro) = tokio::try_join!(
-                    self.connect_postgres(&conn_options, false, true),
-                    self.connect_postgres(&conn_options, true, true),
+                    self.connect_postgres(&conn_options, false, true, &schema),
+                    self.connect_postgres(&conn_options, true, true, &schema),
                 )?;
                 Ok(ConnectOutput {
                     pool: DynamicPool::Postgres { ro, rw },
@@ -406,6 +438,7 @@ impl DatabaseConfig {
                         rw: admin_raw,
                     },
                     url,
+                    schema: Some(schema),
                     embedded: Some(pg),
                 })
             }
@@ -422,6 +455,8 @@ impl DatabaseConfig {
                     admin: pool.clone(),
                     pool,
                     url: (*c.url).clone(),
+                    // MySQL has no `search_path`; schema is not consulted.
+                    schema: None,
                     #[cfg(feature = "embedded-postgres")]
                     embedded: None,
                 })
@@ -512,19 +547,22 @@ impl DatabaseConfig {
         conn_options: &AnyConnectOptions,
         read_only: bool,
         app_role: bool,
+        schema: &str,
     ) -> Result<sqlx::PgPool, sqlx::Error> {
         let conn_options = sqlx::postgres::PgConnectOptions::try_from(conn_options)?;
         debug!(
             "Database(read_only:{read_only}, app_role:{app_role}). Connection options: {conn_options:#?}"
         );
 
+        let schema = schema.to_owned();
         let pool_options = self
             .pool_options(read_only)
             .after_connect(move |conn, _meta| {
+                let schema = schema.clone();
                 Box::pin(async move {
                     // Pin the schema the app's objects live in (both pools), so
                     // DDL, RLS-policy/view resolution, and queries all target it.
-                    sqlx::query(&format!("SET search_path TO \"{APP_SCHEMA}\""))
+                    sqlx::query(&format!("SET search_path TO \"{schema}\""))
                         .execute(&mut *conn)
                         .await?;
                     if app_role {
@@ -762,6 +800,7 @@ max_connections: 5
 
         let original = DatabaseConfig {
             conn: Some(BackendConfig::from_url(url).unwrap()),
+            schema: Some(Schema::new(common::TEST_SCHEMA)),
             pool: PoolConfig {
                 min_connections: 3,
                 max_connections: 15,
@@ -775,6 +814,7 @@ max_connections: 5
             original.conn.as_ref().unwrap().url().unwrap().as_str(),
             restored.conn.as_ref().unwrap().url().unwrap().as_str()
         );
+        assert_eq!(restored.schema, original.schema);
         assert_eq!(restored.pool.min_connections, 3);
         assert_eq!(restored.pool.max_connections, 15);
     }

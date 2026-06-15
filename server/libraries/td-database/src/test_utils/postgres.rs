@@ -30,7 +30,8 @@
 //! abort, or `kill -9`; if a run does crash with IPC resources still
 //! lingering, `ipcrm` removes the orphaned segments.
 
-use crate::config::{BackendConfig, DatabaseConfig, EmbeddedConfig};
+use crate::config::common::TEST_SCHEMA;
+use crate::config::{BackendConfig, DatabaseConfig, EmbeddedConfig, Schema};
 use crate::pool::TdPool;
 
 /// Boot a fresh embedded postgres and connect a `TdPool` to it. The server
@@ -60,6 +61,7 @@ pub async fn pool() -> TdPool {
             username: None,
             password: None,
         })),
+        schema: Some(Schema::new(TEST_SCHEMA)),
         pool: Default::default(),
     };
     TdPool::connect(&config).await.expect("postgres test pool")

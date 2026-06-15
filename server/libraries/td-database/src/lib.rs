@@ -16,13 +16,13 @@ use crate::pool::TdPool;
 /// the connecting role membership.
 pub const APP_ROLE: &str = "td_app";
 
-/// PostgreSQL schema the application's objects live in. Single source of truth:
-/// every connection's `search_path` is pinned to it, [`APP_ROLE`] is granted
-/// access to it, the upgrader's privileges are checked against it, and schema
-/// introspection scopes to it. A constant for now (always `public`); promoting
-/// it to a `DatabaseConfig` option is a tracked follow-up — at which point this
-/// becomes the default rather than a hardcoded value.
-pub const APP_SCHEMA: &str = "public";
+// The PostgreSQL schema the application's objects live in is the single source
+// of truth for connection setup: every connection's `search_path` is pinned to
+// it, `APP_ROLE` is granted access to it, the upgrader's privileges are checked
+// against it, and schema introspection scopes to it. It is sourced from
+// `DatabaseConfig::schema` (mandatory on the PostgreSQL path — no `public`
+// default, so each component's objects stay isolated in their own schema) and
+// carried on the live pool via `TdPool::schema`.
 
 pub mod config;
 pub mod dynamic;
@@ -45,8 +45,6 @@ pub async fn db(config: &DatabaseConfig) -> Result<TdPool, DbError> {
 mod tests {
     #[cfg(postgres)]
     use crate::APP_ROLE;
-    #[cfg(postgres)]
-    use crate::APP_SCHEMA;
     #[cfg(postgres)]
     use crate::dynamic::DynamicConnection;
     use crate::dynamic::DynamicPool;
@@ -89,8 +87,9 @@ mod tests {
             #[cfg(postgres)]
             DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(&format!(
                 "SELECT table_name FROM information_schema.tables \
-                 WHERE table_schema = '{APP_SCHEMA}' AND table_type = 'BASE TABLE' \
-                 ORDER BY table_name"
+                 WHERE table_schema = '{}' AND table_type = 'BASE TABLE' \
+                 ORDER BY table_name",
+                db.schema()
             ))
             .fetch_all(ro)
             .await
@@ -121,7 +120,8 @@ mod tests {
             #[cfg(postgres)]
             DynamicPool::Postgres { ro, .. } => sqlx::query_scalar(&format!(
                 "SELECT table_name FROM information_schema.views \
-                 WHERE table_schema = '{APP_SCHEMA}' ORDER BY table_name"
+                 WHERE table_schema = '{}' ORDER BY table_name",
+                db.schema()
             ))
             .fetch_all(ro)
             .await
@@ -162,10 +162,11 @@ mod tests {
                 //  - `_key`  — automatic UNIQUE constraint index.
                 // We only assert on indexes the schema explicitly declared.
                 "SELECT indexname FROM pg_indexes \
-                 WHERE schemaname = '{APP_SCHEMA}' \
+                 WHERE schemaname = '{}' \
                    AND indexname NOT LIKE '%_pkey' \
                    AND indexname NOT LIKE '%_key' \
-                 ORDER BY indexname"
+                 ORDER BY indexname",
+                db.schema()
             ))
             .fetch_all(ro)
             .await
@@ -1043,6 +1044,7 @@ mod tests {
         // A fresh pool's serving connections switch to td_app — now bypassing.
         let cfg = DatabaseConfig {
             conn: Some(BackendConfig::from_url(db.url().clone()).unwrap()),
+            schema: Some(db.schema().clone()),
             pool: Default::default(),
         };
         let other = TdPool::connect(&cfg).await.unwrap();

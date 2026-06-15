@@ -2,14 +2,14 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::config::DatabaseConfig;
+use crate::config::{DatabaseConfig, Schema};
 use crate::dynamic::{DynamicConnection, DynamicPool, DynamicTransaction};
 #[cfg(feature = "embedded-postgres")]
 use crate::embedded::EmbeddedPostgres;
 use crate::error::DbError;
 use crate::sea_query::builder::SeaQueryExt;
 use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
-use crate::{APP_ROLE, APP_SCHEMA};
+use crate::APP_ROLE;
 use sea_query::{Alias, Expr, ExprTrait, Iden, Query};
 use sqlx::Error;
 use std::cmp::Ordering;
@@ -29,6 +29,10 @@ pub struct TdPool {
     pub(crate) pool: DynamicPool,
     admin: DynamicPool,
     url: Arc<Url>,
+    // The PostgreSQL schema the connections' `search_path` is pinned to, used to
+    // scope schema-qualified DDL and privilege checks. `None` on SQLite/MySQL,
+    // which have no `search_path`.
+    schema: Option<Schema>,
     // Owns the embedded postgres server when this pool was booted via the
     // embedded path. Shared across clones via `Arc` so the server stops
     // only when the last `TdPool` clone drops. `pool` is declared first
@@ -63,6 +67,7 @@ impl TdPool {
             pool: out.pool,
             admin: out.admin,
             url: Arc::new(out.url),
+            schema: out.schema,
             #[cfg(feature = "embedded-postgres")]
             _embedded: out.embedded.map(Arc::new),
         })
@@ -73,6 +78,16 @@ impl TdPool {
     /// the booted server is listening on.
     pub fn url(&self) -> &Url {
         &self.url
+    }
+
+    /// The PostgreSQL schema this pool's `search_path` is pinned to. Panics on a
+    /// non-PostgreSQL backend (SQLite/MySQL have no `search_path`), so callers
+    /// must guard on the backend kind first; on the PostgreSQL path it is
+    /// mandatory and always present.
+    pub fn schema(&self) -> &Schema {
+        self.schema
+            .as_ref()
+            .expect("No schema configured: only the PostgreSQL backend carries one. Guard on the backend kind before calling schema()")
     }
 
     /// Creates a database using the given configuration.
@@ -137,17 +152,18 @@ impl TdPool {
     }
 
     /// Verify the **admin/upgrader** role has the privileges schema
-    /// create/upgrade needs: CREATE on schema `public` (to create and alter
-    /// tables). Caught at startup as [`DbError::UpgraderLacksPermissions`]
+    /// create/upgrade needs: CREATE on the application schema (to create and
+    /// alter tables). Caught at startup as [`DbError::UpgraderLacksPermissions`]
     /// instead of failing mid-upgrade with an opaque permission error. Runs on
     /// the admin pool (raw role). PostgreSQL only.
     async fn check_upgrader_permissions(&self) -> Result<(), DbError> {
         if !matches!(self.kind(), DatabaseBackend::Postgres) {
             return Ok(());
         }
+        let schema = self.schema();
         let can_create: Option<bool> = Query::select()
             .expr(Expr::cust(format!(
-                "has_schema_privilege(current_user, '{APP_SCHEMA}', 'CREATE')"
+                "has_schema_privilege(current_user, '{schema}', 'CREATE')"
             )))
             .build_query_scalar()
             .fetch_optional(&self.admin)
@@ -155,7 +171,7 @@ impl TdPool {
             .map_err(DbError::SqlError)?;
         if !matches!(can_create, Some(true)) {
             return Err(DbError::UpgraderLacksPermissions(format!(
-                "CREATE on schema {APP_SCHEMA}"
+                "CREATE on schema {schema}"
             )));
         }
         debug!("db.pool.check: upgrader permissions OK");
@@ -208,22 +224,23 @@ impl TdPool {
         if !matches!(self.kind(), DatabaseBackend::Postgres) {
             return Ok(());
         }
+        let schema = self.schema();
         let stmts = vec![
             format!(
                 "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{APP_ROLE}') \
                  THEN CREATE ROLE \"{APP_ROLE}\" NOBYPASSRLS; END IF; END $$"
             ),
-            format!("CREATE SCHEMA IF NOT EXISTS \"{APP_SCHEMA}\""),
-            format!("GRANT USAGE ON SCHEMA \"{APP_SCHEMA}\" TO \"{APP_ROLE}\""),
+            format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\""),
+            format!("GRANT USAGE ON SCHEMA \"{schema}\" TO \"{APP_ROLE}\""),
             format!(
-                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{APP_SCHEMA}\" TO \"{APP_ROLE}\""
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO \"{APP_ROLE}\""
             ),
             // Future tables created by this (bootstrap) role auto-grant to the
             // app role, so a later migration that adds a table doesn't silently
             // leave td_app without access. `ALTER DEFAULT PRIVILEGES` applies
             // only to tables created after it runs, by the role running it.
             format!(
-                "ALTER DEFAULT PRIVILEGES IN SCHEMA \"{APP_SCHEMA}\" \
+                "ALTER DEFAULT PRIVILEGES IN SCHEMA \"{schema}\" \
                  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"{APP_ROLE}\""
             ),
         ];
@@ -528,8 +545,9 @@ impl TdPool {
         let mut tx = self.admin.begin().await?;
         tx.as_mut_conn().execute_batch(stmts).await?;
         if matches!(self.kind(), DatabaseBackend::Postgres) {
+            let schema = self.schema();
             let grant = format!(
-                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{APP_SCHEMA}\" TO \"{APP_ROLE}\""
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO \"{APP_ROLE}\""
             );
             tx.as_mut_conn()
                 .execute_batch(std::slice::from_ref(&grant))

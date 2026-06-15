@@ -64,6 +64,13 @@ pub enum DbError {
     )]
     MissingDatabaseLocation = 5004,
     #[error(
+        "No database schema in the configuration. PostgreSQL backends require an \
+         explicit `schema:` so each component's objects stay isolated in their \
+         own schema. Set `schema:` (e.g. `schema: td_apiserver`) in the database \
+         configuration."
+    )]
+    MissingSchema = 5023,
+    #[error(
         "Failed to connect to the database: {0}. Verify the database server is \
          running and reachable, and that the host, port, credentials, and \
          database name in the URL are correct (and that any firewall or TLS \
