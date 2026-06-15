@@ -19,7 +19,7 @@ pub mod postgres;
 #[cfg(sqlite)]
 pub mod sqlite;
 
-pub use common::Schema;
+pub use common::{DatabaseMode, Schema};
 #[cfg(all(postgres, feature = "embedded-postgres"))]
 pub use embedded::EmbeddedConfig;
 #[cfg(mysql)]
@@ -29,20 +29,21 @@ pub use postgres::{PostgresConfig, PostgresUrl};
 #[cfg(sqlite)]
 pub use sqlite::{SqliteConfig, SqliteUrl};
 
+use crate::APP_ROLE;
 use crate::dynamic::DynamicPool;
 #[cfg(all(postgres, feature = "embedded-postgres"))]
 use crate::embedded::EmbeddedPostgres;
 use crate::error::DbError;
-use crate::APP_ROLE;
 use serde::{Deserialize, Serialize};
 use serde_with::DurationSeconds;
 use serde_with::serde_as;
 use sqlx::any::AnyConnectOptions;
 use sqlx::pool::PoolOptions;
 use sqlx::{ConnectOptions, Database};
+#[cfg(all(postgres, feature = "embedded-postgres"))]
+use std::collections::{BTreeMap, BTreeSet};
 #[cfg(sqlite)]
 use std::fs;
-#[cfg(all(postgres, feature = "embedded-postgres"))]
 use std::path::PathBuf;
 use std::time::Duration;
 use tracing::debug;
@@ -120,7 +121,10 @@ impl BackendConfig {
         })
     }
 
-    /// Infer the backend variant from the URL scheme.
+    /// Infer the backend variant from the URL scheme. The URL carries the
+    /// connection target only — credentials are explicit fields on
+    /// [`DatabaseConfig`], so a credentialed URL is rejected for the backends
+    /// that take separate credentials (PostgreSQL, MySQL).
     pub fn from_url(url: Url) -> Result<Self, DbError> {
         #[cfg(sqlite)]
         if let Ok(sqlite_url) = SqliteUrl::try_from(url.clone()) {
@@ -304,6 +308,205 @@ pub struct ConnectOutput {
     pub embedded: Option<EmbeddedPostgres>,
 }
 
+/// Map key of the system entry: the connection that carries the backend target
+/// (external URL or embedded knobs) together with the privileged admin
+/// credentials used to create the schemas and their owner roles.
+pub const SYSTEM_SCHEMA_KEY: &str = "system";
+
+/// Map key of the apiserver schema entry.
+pub const APISERVER_SCHEMA_KEY: &str = "apiserver";
+
+/// The `database:` section: a [`DatabaseMode`] plus the system connection and
+/// one entry per component schema, keyed by component name (e.g.
+/// [`SYSTEM_SCHEMA_KEY`], `apiserver`).
+///
+/// The mode is the single source of truth for the credential and provisioning
+/// rules; field presence never implies intent. The [`SYSTEM_SCHEMA_KEY`] entry
+/// carries the [`BackendConfig`] (where the server is) and the privileged admin
+/// credentials. Each schema entry declares its schema and, in [`DatabaseMode::Remote`],
+/// its owner password; it always borrows the system entry's backend at connect
+/// time via [`Self::assemble`].
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DatabaseDescriptor {
+    #[serde(default)]
+    mode: DatabaseMode,
+    #[serde(flatten)]
+    entries: BTreeMap<String, DatabaseConfig>,
+}
+
+impl DatabaseDescriptor {
+    pub fn mode(&self) -> DatabaseMode {
+        self.mode
+    }
+
+    pub fn system(&self) -> Option<&DatabaseConfig> {
+        self.entries.get(SYSTEM_SCHEMA_KEY)
+    }
+
+    /// Mutable access to the system entry, creating a default one if absent.
+    /// Used to overlay CLI/env overrides onto the connection target.
+    pub fn system_mut(&mut self) -> &mut DatabaseConfig {
+        self.entries
+            .entry(SYSTEM_SCHEMA_KEY.to_owned())
+            .or_default()
+    }
+
+    pub fn schemas(&self) -> impl Iterator<Item = (&String, &DatabaseConfig)> {
+        self.entries
+            .iter()
+            .filter(|(name, _)| name.as_str() != SYSTEM_SCHEMA_KEY)
+    }
+
+    /// All entry keys present in the descriptor, including [`SYSTEM_SCHEMA_KEY`].
+    pub fn schema_keys(&self) -> impl Iterator<Item = &String> {
+        self.entries.keys()
+    }
+
+    pub fn validate_schema_keys(&self, expected: &[&str]) -> Result<(), DbError> {
+        let expected_set: BTreeSet<&str> = expected.iter().copied().collect();
+        let actual_set: BTreeSet<&str> = self.entries.keys().map(String::as_str).collect();
+        if actual_set != expected_set {
+            return Err(DbError::UnexpectedSchemaEntries {
+                expected: expected.join(", "),
+                actual: self
+                    .entries
+                    .keys()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            });
+        }
+        Ok(())
+    }
+
+    /// Validate the required inputs for the configured [`DatabaseMode`]. A schema
+    /// entry never carries its own backend or username (its owner is always the
+    /// schema name). In [`DatabaseMode::Remote`] the system entry and every schema
+    /// entry require a password; in the embedded modes nothing is required, as
+    /// passwords are generated and persisted in sidecar files.
+    pub fn validate(&self) -> Result<(), DbError> {
+        let system = self.system().ok_or(DbError::MissingSystemEntry)?;
+        system
+            .conn
+            .as_ref()
+            .ok_or(DbError::MissingDatabaseLocation)?;
+        let remote = matches!(self.mode, DatabaseMode::Remote);
+        if remote && system.password.is_none() {
+            return Err(DbError::MissingCredentials);
+        }
+        for (name, entry) in self.schemas() {
+            if entry.conn.is_some() {
+                return Err(DbError::SchemaEntryHasBackend(name.clone()));
+            }
+            if entry.username.is_some() {
+                return Err(DbError::SchemaEntryHasOwner(name.clone()));
+            }
+            if remote && entry.password.is_none() {
+                return Err(DbError::MissingCredentials);
+            }
+        }
+        Ok(())
+    }
+
+    /// Build a connectable [`DatabaseConfig`] for `name` by overlaying the
+    /// system entry's backend onto that entry's schema, password, and pool. The
+    /// owner username is the schema name. For [`SYSTEM_SCHEMA_KEY`] this returns
+    /// the system entry itself.
+    pub fn assemble(&self, name: &str) -> Result<DatabaseConfig, DbError> {
+        let system = self.system().ok_or(DbError::MissingSystemEntry)?;
+        if name == SYSTEM_SCHEMA_KEY {
+            return Ok(system.clone());
+        }
+        let entry = self
+            .entries
+            .get(name)
+            .ok_or_else(|| DbError::UnknownSchemaEntry(name.to_owned()))?;
+        Ok(DatabaseConfig {
+            conn: system.conn.clone(),
+            schema: entry.schema.clone(),
+            username: entry.schema.as_ref().map(|schema| schema.to_string()),
+            password: entry.password.clone(),
+            pool: entry.pool.clone(),
+        })
+    }
+
+    /// Build the serving [`DatabaseConfig`] for `name` against the running server
+    /// the system pool is connected to. For [`DatabaseMode::Remote`] this is
+    /// [`Self::assemble`]; for the embedded modes it targets the live embedded URL
+    /// as the schema's own login role, using the entry's password when supplied,
+    /// otherwise the one generated and persisted at provisioning time.
+    #[cfg(all(postgres, feature = "embedded-postgres"))]
+    pub fn serving_config(
+        &self,
+        name: &str,
+        system_pool: &crate::pool::TdPool,
+    ) -> Result<DatabaseConfig, DbError> {
+        if !self.mode.is_embedded() {
+            return self.assemble(name);
+        }
+        let entry = self
+            .entries
+            .get(name)
+            .ok_or_else(|| DbError::UnknownSchemaEntry(name.to_owned()))?;
+        let schema = entry.require_schema()?;
+        let password = match entry.password.clone() {
+            Some(password) => password,
+            None => crate::embedded::load_owner_password(self.embedded_data_dir()?, schema)?,
+        };
+        let mut url = system_pool.url().clone();
+        url.set_username("")
+            .and_then(|()| url.set_password(None))
+            .map_err(|()| DbError::CredentialsInUrl)?;
+        Ok(DatabaseConfig {
+            conn: Some(BackendConfig::from_url(url)?),
+            schema: Some(schema.clone()),
+            username: Some(schema.to_string()),
+            password: Some(password),
+            pool: entry.pool.clone(),
+        })
+    }
+
+    /// The embedded data directory the system entry boots from, the parent of the
+    /// sidecar password files.
+    #[cfg(all(postgres, feature = "embedded-postgres"))]
+    fn embedded_data_dir(&self) -> Result<&std::path::Path, DbError> {
+        let system = self.system().ok_or(DbError::MissingSystemEntry)?;
+        match system.conn.as_ref() {
+            Some(BackendConfig::EmbeddedPostgres(embedded)) => embedded
+                .data_dir
+                .as_deref()
+                .ok_or(DbError::MissingDatabaseLocation),
+            _ => Err(DbError::MissingDatabaseLocation),
+        }
+    }
+
+    /// Create each component schema and its owner role on `system_pool`. The
+    /// owner is always the schema name. A password supplied on the entry is used
+    /// as-is; otherwise, in the embedded modes, it is generated and persisted per
+    /// schema in a sidecar file. [`DatabaseMode::Remote`] has no sidecar fallback,
+    /// so the password must be supplied.
+    #[cfg(all(postgres, feature = "embedded-postgres"))]
+    pub async fn provision(&self, system_pool: &crate::pool::TdPool) -> Result<(), DbError> {
+        self.validate()?;
+        for (_, entry) in self.schemas() {
+            let schema = entry.require_schema()?;
+            let owner = schema.to_string();
+            let password = match entry.password.clone() {
+                Some(password) => password,
+                None if self.mode.is_embedded() => crate::embedded::load_or_create_owner_password(
+                    self.embedded_data_dir()?,
+                    schema,
+                )?,
+                None => return Err(DbError::MissingCredentials),
+            };
+            system_pool
+                .provision_schema(schema, &owner, &password)
+                .await?;
+        }
+        Ok(())
+    }
+}
+
 /// Configuration for a database connection pool.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DatabaseConfig {
@@ -320,6 +523,14 @@ pub struct DatabaseConfig {
     /// have no `search_path`.
     #[serde(default)]
     pub schema: Option<Schema>,
+    /// Connection username. Required by PostgreSQL and MySQL (their URL must not
+    /// embed credentials); rejected by SQLite, which is a file with no
+    /// credentials. Validated against the backend by [`Self::connect`].
+    #[serde(default)]
+    pub username: Option<String>,
+    /// Connection password, paired with [`Self::username`] under the same rules.
+    #[serde(default)]
+    pub password: Option<String>,
     /// Connection pool settings.
     #[serde(default, flatten)]
     pub pool: PoolConfig,
@@ -335,6 +546,45 @@ impl DatabaseConfig {
     /// without consulting it.
     pub fn require_schema(&self) -> Result<&Schema, DbError> {
         self.schema.as_ref().ok_or(DbError::MissingSchema)
+    }
+
+    /// Check the credential rules for the configured backend. Credentials are
+    /// optional values: when present they are used, when absent they are
+    /// defaulted or generated, so neither is required here. SQLite is a file with
+    /// no credential concept and rejects any. A configured URL must carry the
+    /// connection target only — credentials are explicit fields, never embedded.
+    pub fn validate(&self) -> Result<(), DbError> {
+        let Some(conn) = self.conn.as_ref() else {
+            return Ok(());
+        };
+        match conn {
+            #[cfg(sqlite)]
+            BackendConfig::Sqlite(_) => {
+                if self.username.is_some() || self.password.is_some() {
+                    return Err(DbError::UnexpectedCredentials);
+                }
+            }
+            _ => {
+                if let Some(url) = conn.url()
+                    && (!url.username().is_empty() || url.password().is_some())
+                {
+                    return Err(DbError::CredentialsInUrl);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The connection URL with the configured credentials injected as userinfo,
+    /// for handing to the sqlx connector. Assumes [`Self::validate`] already
+    /// confirmed the credentials are present.
+    #[cfg(any(postgres, mysql))]
+    fn url_with_credentials(&self, url: &Url) -> Result<Url, DbError> {
+        let mut url = url.clone();
+        url.set_username(self.username.as_deref().unwrap_or_default())
+            .and_then(|()| url.set_password(self.password.as_deref()))
+            .map_err(|()| DbError::CredentialsInUrl)?;
+        Ok(url)
     }
 
     pub fn new<P: Into<Url>>(db_url: P) -> Result<Self, DbError> {
@@ -359,6 +609,7 @@ impl DatabaseConfig {
             ))?
         }
 
+        self.validate()?;
         let conn_config = self.conn.as_ref().ok_or(DbError::MissingDatabaseLocation)?;
 
         match conn_config {
@@ -386,7 +637,7 @@ impl DatabaseConfig {
             #[cfg(postgres)]
             BackendConfig::Postgres(c) => {
                 let schema = self.require_schema()?.to_owned();
-                let url = (*c.url).clone();
+                let url = self.url_with_credentials(&c.url)?;
                 let conn_options = self.conn_options(&url)?;
                 // Admin/upgrader pool first (raw role: keeps DDL/provisioning
                 // rights). No session default — strict, per-request GUC only; an
@@ -417,7 +668,18 @@ impl DatabaseConfig {
             #[cfg(all(postgres, feature = "embedded-postgres"))]
             BackendConfig::EmbeddedPostgres(ecfg) => {
                 let schema = self.require_schema()?.to_owned();
-                let (pg, url) = crate::embedded::start(ecfg).await?;
+                // The embedded superuser identity is carried on the entry's
+                // `username`/`password` (the embedded boot knobs share the
+                // flattened mapping); overlay them onto the boot config, leaving
+                // the sidecar-file fallback when unset.
+                let mut ecfg = ecfg.clone();
+                if self.username.is_some() {
+                    ecfg.username = self.username.clone();
+                }
+                if self.password.is_some() {
+                    ecfg.password = self.password.clone();
+                }
+                let (pg, url) = crate::embedded::start(&ecfg).await?;
                 tracing::info!("Embedded postgres listening at {}", url);
                 let conn_options = self.conn_options(&url)?;
                 // Admin/upgrader pool first (raw superuser). Embedded boots empty,
@@ -444,7 +706,8 @@ impl DatabaseConfig {
             }
             #[cfg(mysql)]
             BackendConfig::MySql(c) => {
-                let conn_options = self.conn_options(&c.url)?;
+                let url = self.url_with_credentials(&c.url)?;
+                let conn_options = self.conn_options(&url)?;
                 let (rw, ro) = tokio::try_join!(
                     self.connect_mysql(&conn_options, false),
                     self.connect_mysql(&conn_options, true),
@@ -740,12 +1003,17 @@ max_connections: 20
     #[test]
     fn database_config_conn_inferred() {
         let yaml = "
-url: postgres://user:pass@localhost/mydb
+url: postgres://localhost/mydb
+schema: td_apiserver
+username: user
+password: pass
 min_connections: 2
 max_connections: 20
 ";
         let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(cfg.conn, Some(BackendConfig::Postgres(_))));
+        assert_eq!(cfg.username.as_deref(), Some("user"));
+        assert_eq!(cfg.password.as_deref(), Some("pass"));
         assert_eq!(cfg.pool.min_connections, 2);
         assert_eq!(cfg.pool.max_connections, 20);
         assert_eq!(cfg.pool.acquire_timeout, Duration::from_secs(30));
@@ -794,13 +1062,19 @@ max_connections: 5
     #[test]
     fn database_config_round_trip() {
         #[cfg(sqlite)]
-        let url = Url::parse("file:///tmp/rt.db").unwrap();
+        let (url, username, password) = (Url::parse("file:///tmp/rt.db").unwrap(), None, None);
         #[cfg(all(postgres, not(sqlite)))]
-        let url = Url::parse("postgres://user:pass@localhost/rt").unwrap();
+        let (url, username, password) = (
+            Url::parse("postgres://localhost/rt").unwrap(),
+            Some("user".to_owned()),
+            Some("pass".to_owned()),
+        );
 
         let original = DatabaseConfig {
             conn: Some(BackendConfig::from_url(url).unwrap()),
             schema: Some(Schema::new(common::TEST_SCHEMA)),
+            username,
+            password,
             pool: PoolConfig {
                 min_connections: 3,
                 max_connections: 15,
@@ -815,8 +1089,66 @@ max_connections: 5
             restored.conn.as_ref().unwrap().url().unwrap().as_str()
         );
         assert_eq!(restored.schema, original.schema);
+        assert_eq!(restored.username, original.username);
+        assert_eq!(restored.password, original.password);
         assert_eq!(restored.pool.min_connections, 3);
         assert_eq!(restored.pool.max_connections, 15);
+    }
+
+    // ── DatabaseDescriptor ────────────────────────────────────────────
+
+    #[test]
+    fn descriptor_embedded_shape() {
+        let yaml = "
+system:
+  min_connections: 1
+  max_connections: 10
+apiserver:
+  schema: td_apiserver
+";
+        let descriptor: DatabaseDescriptor = serde_yaml::from_str(yaml).unwrap();
+        let system = descriptor.system().unwrap();
+        assert!(system.conn.is_none());
+        assert_eq!(system.pool.min_connections, 1);
+        let apiserver = descriptor.assemble("apiserver").unwrap();
+        assert_eq!(apiserver.schema.as_deref(), Some("td_apiserver"));
+        assert_eq!(apiserver.username.as_deref(), Some("td_apiserver"));
+    }
+
+    #[cfg(all(postgres, feature = "embedded-postgres"))]
+    #[test]
+    fn descriptor_rejects_schema_entry_username() {
+        let yaml = "
+mode: embedded
+system:
+  data_dir: /tmp/x
+  persistent: true
+  schema: public
+apiserver:
+  schema: td_apiserver
+  username: someone
+";
+        let descriptor: DatabaseDescriptor = serde_yaml::from_str(yaml).unwrap();
+        assert!(matches!(
+            descriptor.validate(),
+            Err(DbError::SchemaEntryHasOwner(_))
+        ));
+    }
+
+    #[test]
+    fn descriptor_unexpected_schema_keys() {
+        let yaml = "
+system: {}
+apiserver:
+  schema: td_apiserver
+intruder:
+  schema: td_intruder
+";
+        let descriptor: DatabaseDescriptor = serde_yaml::from_str(yaml).unwrap();
+        assert!(matches!(
+            descriptor.validate_schema_keys(&["system", "apiserver"]),
+            Err(DbError::UnexpectedSchemaEntries { .. })
+        ));
     }
 
     // ── PoolConfig defaults ───────────────────────────────────────────

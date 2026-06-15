@@ -10,6 +10,7 @@ use crate::__private::{TestSetup, TestSetupExecution};
 use std::future::Future;
 use std::marker::PhantomData;
 use td_database::pool::TdPool;
+use td_database::schema::{ApiserverSchemaManager, SchemaManager};
 use td_database::sea_query::kind::DatabaseKind;
 use td_schema::schema::backend::Backend;
 
@@ -65,7 +66,7 @@ impl<P: DbBackendProvider + Send + Sync> TestSetup<TdPool> for DbTestSetup<P> {
         let db = P::provision().await;
 
         if self.install_schema {
-            db.upgrade().await.unwrap();
+            ApiserverSchemaManager.upgrade(&db).await.unwrap();
         }
 
         if !self.fixture_builders.is_empty() {

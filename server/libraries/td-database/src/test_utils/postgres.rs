@@ -62,7 +62,16 @@ pub async fn pool() -> TdPool {
             password: None,
         })),
         schema: Some(Schema::new(TEST_SCHEMA)),
+        username: None,
+        password: None,
         pool: Default::default(),
     };
-    TdPool::connect(&config).await.expect("postgres test pool")
+    let pool = TdPool::connect(&config).await.expect("postgres test pool");
+    pool.provision_schema(TEST_SCHEMA, TEST_SCHEMA, &td_common::random::password())
+        .await
+        .expect("provision test schema");
+    pool.ensure_app_role()
+        .await
+        .expect("grant app role on test schema");
+    pool
 }

@@ -316,11 +316,11 @@ mod tests {
     #[test]
     fn test_base_path_accepts_valid() {
         for valid in [
-            "",             // empty: matches the zero-repetition branch of (/...)*
-            "/",            // root
-            "/abc",         // single segment
-            "/abc/def",     // nested path
-            "/A1_b/c2",     // letters, digits and underscores
+            "",         // empty: matches the zero-repetition branch of (/...)*
+            "/",        // root
+            "/abc",     // single segment
+            "/abc/def", // nested path
+            "/A1_b/c2", // letters, digits and underscores
         ] {
             assert!(
                 BasePath::try_from(valid).is_ok(),
@@ -332,11 +332,11 @@ mod tests {
     #[test]
     fn test_base_path_rejects_invalid() {
         for invalid in [
-            "abc",     // missing leading slash
-            "/abc/",   // trailing slash
-            "/1abc",   // segment starting with a digit
-            "/ab-c",   // illegal character in segment
-            "//abc",   // empty segment
+            "abc",   // missing leading slash
+            "/abc/", // trailing slash
+            "/1abc", // segment starting with a digit
+            "/ab-c", // illegal character in segment
+            "//abc", // empty segment
         ] {
             assert!(
                 BasePath::try_from(invalid).is_err(),

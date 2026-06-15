@@ -15,7 +15,7 @@ use td_authz::jwt::JwtConfig;
 #[cfg(feature = "embedded-postgres")]
 use td_common::server::DATABASE_FOLDER;
 use td_common::server::Orchestrator;
-use td_database::config::{BackendConfig, DatabaseConfig};
+use td_database::config::{BackendConfig, DatabaseDescriptor};
 use td_error::{TdError, td_error};
 use td_execution::TransactionBy;
 use td_objects::types::addresses::{
@@ -37,7 +37,8 @@ pub struct Config {
     pub jwt: JwtConfig,
     pub request_timeout: i64, // in seconds
     pub ssl_folder: PathBuf,
-    pub database: DatabaseConfig,
+    #[serde(default)]
+    pub database: DatabaseDescriptor,
     #[serde(default)]
     pub storage: Option<StorageConfig>,
     #[serde(default)]
@@ -88,7 +89,7 @@ impl Default for Config {
             jwt: JwtConfig::default(),
             request_timeout: 60,
             ssl_folder: PathBuf::default(),
-            database: DatabaseConfig::default(),
+            database: DatabaseDescriptor::default(),
             storage: Some(StorageConfig::default()),
             transaction_by: TransactionBy::default(),
             orchestrator: Orchestrator::default(),
@@ -211,13 +212,15 @@ impl Params {
                 .map(|url| url.to_string())
                 .or(self.storage_url.clone());
             resolved_storage.url = resolved_storage_url;
+            resolved_storage.mounts = None;
         }
         let resolved_storage = Some(resolved_storage);
 
         let database = {
-            let mut db = config.database;
+            let mut database = config.database;
+            let db = database.system_mut();
             if let Some(url) = &self.database_url {
-                db.conn = Some(match db.conn {
+                db.conn = Some(match db.conn.take() {
                     Some(existing) => existing.with_url(url.clone())?,
                     None => BackendConfig::from_url(url.clone())?,
                 });
@@ -236,7 +239,7 @@ impl Params {
             // `url() == None`, so the guard always fired).
             #[cfg(feature = "embedded-postgres")]
             {
-                match db.conn {
+                match db.conn.take() {
                     Some(BackendConfig::EmbeddedPostgres(mut embedded)) => {
                         if let Some(data_dir) = self.embedded_postgres_data_dir.clone() {
                             embedded.data_dir = Some(data_dir);
@@ -265,7 +268,7 @@ impl Params {
             if let Some(log_level) = self.database_log_level {
                 db.pool.log_level = log_level;
             }
-            db
+            database
         };
 
         let config = Config {
@@ -359,12 +362,43 @@ mod tests {
     use std::net::SocketAddr;
     use std::str::FromStr;
     use td_common::id;
+    use td_database::config::DatabaseMode;
     use td_objects::types::addresses::NonEmptyAddresses;
+
+    #[test]
+    fn config_crate_loads_database_descriptor() {
+        let yaml = r#"
+database:
+  mode: sidecar
+  system:
+    schema: public
+  apiserver:
+    schema: td_apiserver
+"#;
+        let built = config::Config::builder()
+            .add_source(config::Config::try_from(&Config::default()).unwrap())
+            .add_source(config::File::from_str(yaml, config::FileFormat::Yaml))
+            .add_source(config::Environment::with_prefix("apiserver"))
+            .build()
+            .unwrap();
+        let config: Config = built.try_deserialize().unwrap();
+        assert_eq!(config.database.mode(), DatabaseMode::Sidecar);
+        assert!(config.database.system().is_some());
+        assert_eq!(
+            config
+                .database
+                .schema_keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["apiserver", "system"]
+        );
+        assert!(config.database.assemble("apiserver").is_ok());
+    }
 
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert_eq!(config.database.url(), None);
+        assert!(config.database.system().is_none());
         assert_eq!(
             *config.addresses,
             NonEmptyAddresses::new(nonempty![SocketAddr::from(([0, 0, 0, 0], 2457))])
@@ -418,7 +452,10 @@ mod tests {
             *resolved_config.addresses,
             NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
         );
-        assert_eq!(resolved_config.database.url(), Some(&db_url));
+        assert_eq!(
+            resolved_config.database.system().and_then(|db| db.url()),
+            Some(&db_url)
+        );
         assert!(resolved_config.clone().storage.is_some());
         #[cfg(target_os = "windows")]
         assert_eq!(

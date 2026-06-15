@@ -150,7 +150,7 @@ mod tests {
         let context = Context::with_defaults(db);
 
         let collection = context
-            .db
+            .apiserver_pool
             .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
@@ -173,13 +173,13 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function = context
-            .db
+            .apiserver_pool
             .scoped(ProjectId::sandbox())
             .seed()
             .function(&collection, &create)
             .await?;
         let system_tables = context
-            .db
+            .apiserver_pool
             .scoped(ProjectId::sandbox())
             .seed()
             .system_tables(&function)

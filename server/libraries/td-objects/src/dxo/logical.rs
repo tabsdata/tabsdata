@@ -108,16 +108,15 @@ pub trait LogicalPointerDao:
 mod definitions {
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
-        AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged,
-        DependencyPos, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
-        FunctionVersionId, GroupId, GroupName, HasData, InputIdx, LogicalFunctionRunId,
-        LogicalFunctionRunInputId, LogicalFunctionRunPointerId, LogicalFunctionRunStatus,
-        LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId,
-        LogicalTableDataVersionPointerId, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
-        PhysicalTableDataVersionId, Private, ProjectId, ProjectName, RowCount, SchemaChanged,
-        SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
-        TableVersionCount, TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName,
-        VersionPos,
+        AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged, DependencyPos,
+        EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, GroupId,
+        GroupName, HasData, InputIdx, LogicalFunctionRunId, LogicalFunctionRunInputId,
+        LogicalFunctionRunPointerId, LogicalFunctionRunStatus, LogicalPointerReason,
+        LogicalPointerStatus, LogicalTableDataVersionId, LogicalTableDataVersionPointerId,
+        PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private,
+        ProjectId, ProjectName, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash,
+        StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionCount,
+        TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName, VersionPos,
     };
     use td_error::TdError;
 

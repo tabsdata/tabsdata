@@ -14,7 +14,8 @@ use td_common::server::{
 };
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
-use td_database::error::DbError;
+use td_database::config::DatabaseDescriptor;
+use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;
 use td_kubernetes::kube::KubernetesBridgeProvider;
 use td_kubernetes::runtime::gateway::messaging::KubernetesOrchestratorMessagingProvider;
@@ -22,6 +23,7 @@ use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_storage::Storage;
+use te_apiserver::schema::SchemaManagerResolver;
 use tracing::{error, info};
 
 mod apiserver;
@@ -43,91 +45,74 @@ pub fn run() {
                 ExitStatus::GeneralError
             })?;
 
-            // Connect to db
-            let db = match td_database::db(&config.database).await {
+            let database_descriptor = &config.database;
+            te_apiserver::config::validate_database(database_descriptor).map_err(|e| {
+                error!("Invalid database configuration: {e:#?}");
+                ExitStatus::GeneralError
+            })?;
+
+            let system_db = database_descriptor
+                .assemble(td_database::config::SYSTEM_SCHEMA_KEY)
+                .map_err(|e| {
+                    error!("Error resolving system database configuration: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
+            let system_pool = td_database::db(&system_db).await.map_err(|e| {
+                error!("Error connecting to system database: {e:#?}");
+                ExitStatus::GeneralError
+            })?;
+
+            if let Some(db_schema) = &params.db_schema {
+                match db_schema {
+                    DbSchema::Create => {
+                        info!("Creating database");
+                        database_descriptor
+                            .provision(&system_pool)
+                            .await
+                            .map_err(|e| {
+                                error!("Error provisioning database: {e:#?}");
+                                ExitStatus::GeneralError
+                            })?;
+                        upgrade_schemas(database_descriptor, &system_pool).await?;
+                        info!("Database created");
+                        Err(ExitStatus::Success)?
+                    }
+                    DbSchema::Upgrade => {
+                        info!("Upgrading database");
+                        upgrade_schemas(database_descriptor, &system_pool).await?;
+                        info!("Database upgraded");
+                        Err(ExitStatus::Success)?
+                    }
+                    DbSchema::Auto => {
+                        info!("Creating or upgrading database");
+                        database_descriptor
+                            .provision(&system_pool)
+                            .await
+                            .map_err(|e| {
+                                error!("Error provisioning database: {e:#?}");
+                                ExitStatus::GeneralError
+                            })?;
+                        upgrade_schemas(database_descriptor, &system_pool).await?;
+                    }
+                }
+            }
+
+            // Connect the runtime apiserver pool against the running server.
+            let apiserver_db = database_descriptor
+                .serving_config(CONFIG_NAME, &system_pool)
+                .map_err(|e| {
+                    error!("Error resolving apiserver database configuration: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
+            let db = match td_database::db(&apiserver_db).await {
                 Ok(db) => {
                     info!("Connected to database: {}", db.url());
-                    if let Some(db_schema) = &params.db_schema {
-                        match db_schema {
-                            DbSchema::Create => {
-                                info!("Creating database");
-                                match db.check().await {
-                                    Ok(_) => {
-                                        info!("Database already exists");
-                                        Err(ExitStatus::GeneralError)?
-                                    }
-                                    Err(DbError::DatabaseSchemaDoesNotExist) => {
-                                        if let Err(err) = db.upgrade().await {
-                                            error!("Error creating database: {err:#?}");
-                                            Err(ExitStatus::GeneralError)?
-                                        }
-                                        info!("Database created");
-                                    }
-                                    Err(err) => {
-                                        error!("Error checking database for creating it: {err:#?}");
-                                        Err(ExitStatus::GeneralError)?
-                                    }
-                                }
-                                // After creating the database and/or schema, system exits.
-                                // Values 'auto' & 'None' keep the process running.
-                                Err(ExitStatus::Success)?
-                            }
-                            DbSchema::Upgrade => {
-                                info!("Upgrading database");
-                                match db.check().await {
-                                    Ok(_) => {
-                                        info!("Database does not need to be upgraded");
-                                        Err(ExitStatus::NoAction)?
-                                    }
-                                    Err(DbError::DatabaseNeedsUpgrade(_)) => {
-                                        if let Err(err) = db.upgrade().await {
-                                            error!("Error upgrading database: {err:#?}");
-                                            Err(ExitStatus::GeneralError)?
-                                        }
-                                        info!("Database upgraded");
-                                    }
-                                    Err(error) => {
-                                        error!(
-                                            "Unexpected error occurred during the database upgrade check: {error:#?}"
-                                        );
-                                        Err(ExitStatus::GeneralError)?
-                                    }
-                                }
-                                // After upgrading the database and/or schema, system exits.
-                                // Values 'auto' & 'None' keep the process running.
-                                Err(ExitStatus::Success)?
-                            }
-                            DbSchema::Auto => {
-                                info!("Creating or upgrading database");
-                                match db.check().await {
-                                    Ok(_) => {
-                                        info!("Database exists and is up to date");
-                                    }
-                                    Err(DbError::DatabaseSchemaDoesNotExist) => {
-                                        if let Err(err) = db.upgrade().await {
-                                            error!("Error creating database: {err:#?}");
-                                            Err(ExitStatus::GeneralError)?
-                                        }
-                                        info!("Database created");
-                                    }
-                                    Err(DbError::DatabaseNeedsUpgrade(_)) => {
-                                        if let Err(err) = db.upgrade().await {
-                                            error!("Error upgrading database: {err:#?}");
-                                            Err(ExitStatus::GeneralError)?
-                                        }
-                                        info!("Database upgraded");
-                                    }
-                                    Err(err) => {
-                                        error!(
-                                            "Error checking database for creating or upgrading it: {err:#?}"
-                                        );
-                                        Err(ExitStatus::GeneralError)?
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    match db.check().await {
+                    let manager =
+                        SchemaManagerResolver::for_component(CONFIG_NAME).map_err(|e| {
+                            error!("Error resolving apiserver schema manager: {e:#?}");
+                            ExitStatus::GeneralError
+                        })?;
+                    match manager.check(&db).await {
                         Ok(_) => {
                             info!("Database is up to date, starting apiserver");
                         }
@@ -215,15 +200,26 @@ pub fn run() {
             // Create shared scheduler notify
             let scheduler_notify = SchedulerNotify::new();
 
+            // Retain a handle to the system pool (which owns the embedded
+            // postgres lifecycle) so it can be stopped explicitly on shutdown,
+            // independently of the serving pools that only connect to it.
+            let system_handle = system_pool.clone();
+
             // Create context
             let server_context = ApiServerCtx::new(
                 config.clone(),
+                system_pool,
                 db.clone(),
                 storage.clone(),
                 runtime_context.clone(),
                 scheduler_notify.clone(),
                 bridge,
-            );
+            )
+            .await
+            .map_err(|e| {
+                error!("Error building API Server context: {e:#?}");
+                ExitStatus::GeneralError
+            })?;
 
             // Create required servers
             let api_server = ApiServer::new(&server_context).await.map_err(|e| {
@@ -265,12 +261,45 @@ pub fn run() {
                 .await;
 
             // Explicit shutdown so the embedded postgres lifecycle does not
-            // depend on Drop ordering during tokio runtime teardown.
+            // depend on Drop ordering during tokio runtime teardown. Close the
+            // serving pool's connections first, then stop the system pool, which
+            // owns the embedded server and tears it down with a fast shutdown
+            // that disconnects any remaining client sessions.
             db.shutdown().await;
+            system_handle.shutdown().await;
 
             outcome
         },
         None,
         None,
     );
+}
+
+/// Connect each component schema's serving pool and upgrade it through the
+/// schema manager the extension resolves for that component.
+async fn upgrade_schemas(
+    database_descriptor: &DatabaseDescriptor,
+    system_pool: &TdPool,
+) -> Result<(), ExitStatus> {
+    for (name, _) in database_descriptor.schemas() {
+        let schema_db = database_descriptor
+            .serving_config(name, system_pool)
+            .map_err(|e| {
+                error!("Error resolving '{name}' database configuration: {e:#?}");
+                ExitStatus::GeneralError
+            })?;
+        let pool = td_database::db(&schema_db).await.map_err(|e| {
+            error!("Error connecting to '{name}' schema: {e:#?}");
+            ExitStatus::GeneralError
+        })?;
+        let manager = SchemaManagerResolver::for_component(name).map_err(|e| {
+            error!("Error resolving '{name}' schema manager: {e:#?}");
+            ExitStatus::GeneralError
+        })?;
+        manager.upgrade(&pool).await.map_err(|e| {
+            error!("Error upgrading '{name}' schema: {e:#?}");
+            ExitStatus::GeneralError
+        })?;
+    }
+    Ok(())
 }

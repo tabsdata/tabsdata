@@ -142,6 +142,7 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::collection::service::update::UpdateCollectionService;
     use crate::function::layers::register::RegisterFunctionError;
     use crate::function::services::tests::assert_register;
     use std::collections::HashMap;
@@ -153,12 +154,11 @@ mod tests {
     use td_error::TdError;
     use td_execution::VersionResolverError;
     use td_objects::Buildable;
-    use td_objects::dxo::worker::WorkerDB;
-    use td_objects::errors::SqlError;
-    use crate::collection::service::update::UpdateCollectionService;
     use td_objects::dxo::bundle::BundleDB;
     use td_objects::dxo::collection::CollectionUpdate;
     use td_objects::dxo::function::FunctionDB;
+    use td_objects::dxo::worker::WorkerDB;
+    use td_objects::errors::SqlError;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, BundleStatus, Decorator, FunctionName, FunctionRuntimeValues,
         FunctionStatus, ProjectId, RoleId, ToCollectionId, UserId, WorkerMessageStatus,
@@ -170,8 +170,10 @@ mod tests {
 
     // Helper: the current Active version of the function named `name`.
     async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
-        let active: Vec<FunctionDB> =
-            db.live().fetch_all::<FunctionDB>(&FunctionStatus::Active).await?;
+        let active: Vec<FunctionDB> = db
+            .live()
+            .fetch_all::<FunctionDB>(&FunctionStatus::Active)
+            .await?;
         let function = active
             .into_iter()
             .find(|f| f.name == *name)
@@ -192,15 +194,18 @@ mod tests {
             .description(None)
             .base_path(Some(base_path.clone()))
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
-                .update(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                        .build()?,
-                    update,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+        )
+        .update(
+            CollectionParam::builder()
+                .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                .build()?,
+            update,
+        )
+        .in_project(ProjectId::sandbox());
         UpdateCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -1487,8 +1492,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_flips_bundle_to_registered(db: TdPool) -> Result<(), TdError> {
-        use crate::function::services::upload::UploadFunctionService;
         use crate::Context;
+        use crate::function::services::upload::UploadFunctionService;
         use axum::body::Body;
         use axum::extract::Request;
         use ta_services::factory::ServiceFactory;
@@ -1503,7 +1508,9 @@ mod tests {
         let context = Context::with_defaults(db.clone());
 
         // Upload a bundle so a Pending BundleDB row exists for the function to claim.
-        let upload_request = Request::builder().body(Body::from(b"PAYLOAD".to_vec())).unwrap();
+        let upload_request = Request::builder()
+            .body(Body::from(b"PAYLOAD".to_vec()))
+            .unwrap();
         let upload = FunctionUpload::new(upload_request);
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -1550,8 +1557,7 @@ mod tests {
 
         // The bundle the function claimed is flipped Pending -> Registered.
         let function = active_function(&db, &FunctionName::try_from("flip_fn")?).await?;
-        let bundles: Vec<BundleDB> =
-            db.live().fetch_all::<BundleDB>(&function.bundle_id).await?;
+        let bundles: Vec<BundleDB> = db.live().fetch_all::<BundleDB>(&function.bundle_id).await?;
         assert_eq!(bundles.len(), 1);
         assert_eq!(bundles[0].status, BundleStatus::Registered);
         assert_eq!(bundles[0].collection_id, collection.id);

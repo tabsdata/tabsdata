@@ -18,27 +18,23 @@ jwt:
 request_timeout: 60
 orchestrator: kubernetes
 database:
-  # Embedded Postgres rooted at <instance>/repository/database/. Both
-  # `tdkserver create` (host-side schema creation) and the runtime apiserver
-  # pod must agree on this path; if it's left to postgresql_embedded's
-  # default ($HOME/.theseus/...), the two sides diverge and the pod fails
-  # with DatabaseSchemaDoesNotExist.
-  #
-  # To point at an external server instead, comment out data_dir/persistent
-  # and set `url`. SQLite is supported when built with the `sqlite` feature
-  # (`url: file:///path/to/tabsdata.db`).
-  # url: postgres://user:pass@host:5432/tabsdata
-  data_dir: ${sys:TDK_DATABASE_PATH}
-  persistent: true
-  username: ${secret:postgres_user}
-  password: ${secret:postgres_password}
-  min_connections: 1
-  max_connections: 10
-  acquire_timeout: 30
-  max_lifetime: 3600
-  idle_timeout: 60
-  test_before_acquire: true
-  log_level: off
+  mode: embedded
+  system:
+    data_dir: ${sys:TDK_DATABASE_PATH}
+    persistent: true
+    schema: public
+    username: ${secret:postgres_system_user}
+    password: ${secret:postgres_password}
+    min_connections: 1
+    max_connections: 10
+    acquire_timeout: 30
+    max_lifetime: 3600
+    idle_timeout: 60
+    test_before_acquire: true
+    log_level: off
+  apiserver:
+    schema: td_apiserver
+    password: ${secret:postgres_password}
 storage:
   mounts:
     - id: ROOT

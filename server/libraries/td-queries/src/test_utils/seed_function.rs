@@ -15,8 +15,8 @@ use td_objects::dxo::table::{TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBBuilder;
 use td_objects::dxo::worker::WorkerDBBuilder;
 use td_objects::types::basic::{
-    AccessTokenId, DependencyPos, DependencyStatus, RoleId, StorageVersion,
-    TableFunctionParamPos, TableId, TableName, TableStatus, TriggerStatus, UserId,
+    AccessTokenId, DependencyPos, DependencyStatus, RoleId, StorageVersion, TableFunctionParamPos,
+    TableId, TableName, TableStatus, TriggerStatus, UserId,
 };
 
 /// Runs every statement on the caller's executor; if it is project-scoped

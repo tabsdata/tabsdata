@@ -12,6 +12,7 @@ use strum::IntoEnumIterator;
 use td_common::logging;
 use td_common::logging::{CONSOLE_PROFILE, LoggingOptions};
 use td_database::config::{BackendConfig, DatabaseConfig, EmbeddedConfig, Schema};
+use td_database::schema::{ApiserverSchemaManager, SchemaManager};
 use td_execution::TransactionBy;
 use td_objects::Buildable;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -123,7 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Connecting to database with: {database_config:?}");
     let db = td_database::db(&database_config).await?;
-    db.upgrade().await?;
+    ApiserverSchemaManager.upgrade(&db).await?;
 
     let start_total = Instant::now();
 

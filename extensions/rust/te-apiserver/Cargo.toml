@@ -58,6 +58,7 @@ td-build = { workspace = true }
 
 ta-apiserver = { workspace = true }
 ta-services = { workspace = true }
+td-database = { workspace = true }
 td-error = { workspace = true }
 
 # External dependencies

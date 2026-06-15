@@ -137,7 +137,7 @@ pub(crate) mod tests {
         let context = Context::with_defaults(db);
 
         let collection = context
-            .db
+            .apiserver_pool
             .scoped(ProjectId::sandbox())
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
@@ -160,7 +160,7 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function = context
-            .db
+            .apiserver_pool
             .scoped(ProjectId::sandbox())
             .seed()
             .function(&collection, &create)
@@ -240,14 +240,14 @@ pub(crate) mod tests {
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
             let execution = context
-                .db
+                .apiserver_pool
                 .scoped(ProjectId::sandbox())
                 .seed()
                 .execution(function)
                 .await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = context
-                .db
+                .apiserver_pool
                 .scoped(ProjectId::sandbox())
                 .seed()
                 .transaction(&execution, &transaction_key)
@@ -255,7 +255,7 @@ pub(crate) mod tests {
 
             at_times.push(AtTime::now());
             let physical_function_run = context
-                .db
+                .apiserver_pool
                 .scoped(ProjectId::sandbox())
                 .seed()
                 .physical_function_run(
@@ -269,14 +269,14 @@ pub(crate) mod tests {
 
             for table in tables {
                 let table_version = context
-                    .db
+                    .apiserver_pool
                     .live()
                     .fetch_one::<TableDB>(and!(collection.id, table))
                     .await?;
 
                 if i % 2 == 0 {
                     let physical_table_data_version = context
-                        .db
+                        .apiserver_pool
                         .scoped(ProjectId::sandbox())
                         .seed()
                         .physical_table_data_version_with_data(
@@ -335,7 +335,7 @@ pub(crate) mod tests {
                     .unwrap();
                 } else {
                     context
-                        .db
+                        .apiserver_pool
                         .scoped(ProjectId::sandbox())
                         .seed()
                         .physical_table_data_version(

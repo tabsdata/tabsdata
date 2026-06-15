@@ -71,6 +71,48 @@ pub enum DbError {
     )]
     MissingSchema = 5023,
     #[error(
+        "The database URL must not embed credentials. Set the `username` and \
+         `password` as explicit configuration fields and remove the \
+         `user:password@` part from the URL."
+    )]
+    CredentialsInUrl = 5028,
+    #[error(
+        "Missing database credentials. Set both `username` and `password` in the \
+         database configuration."
+    )]
+    MissingCredentials = 5029,
+    #[error(
+        "Unexpected database credentials. This backend takes no `username` or \
+         `password`; remove them from the database configuration."
+    )]
+    UnexpectedCredentials = 5030,
+    #[error(
+        "No system entry in the database configuration. The database must define \
+         a `system` entry carrying the connection target and admin credentials."
+    )]
+    MissingSystemEntry = 5025,
+    #[error(
+        "The database schema entry '{0}' must not carry its own connection \
+         target. Only the system entry defines where the database is; schema \
+         entries inherit it and declare only their schema and credentials."
+    )]
+    SchemaEntryHasBackend(String) = 5026,
+    #[error(
+        "The database schema entry '{0}' must not set `username`. Its owner role \
+         is always the schema name; remove `username` and set only `password`."
+    )]
+    SchemaEntryHasOwner(String) = 5032,
+    #[error(
+        "Unknown database schema entry '{0}'. Add an entry named '{0}' to the \
+         database configuration."
+    )]
+    UnknownSchemaEntry(String) = 5027,
+    #[error(
+        "Unexpected database schema entries. Expected exactly: {expected}. Found: \
+         {actual}. Adjust the `database` configuration to define those entries."
+    )]
+    UnexpectedSchemaEntries { expected: String, actual: String } = 5031,
+    #[error(
         "Failed to connect to the database: {0}. Verify the database server is \
          running and reachable, and that the host, port, credentials, and \
          database name in the URL are correct (and that any firewall or TLS \

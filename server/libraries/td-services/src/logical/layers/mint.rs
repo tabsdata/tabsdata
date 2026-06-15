@@ -143,10 +143,10 @@ mod tests {
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::table::TableDBBuilder;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BasePath, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        FunctionVersionId, LogicalFunctionRunStatus, Private, ProjectId, RoleId, StorageVersion,
-        TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus, TransactionKey,
-        UserId,
+        AccessTokenId, AtTime, BasePath, BundleId, CollectionName, Decorator,
+        FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus, Private, ProjectId,
+        RoleId, StorageVersion, TableFunctionParamPos, TableId, TableName, TableNameDto,
+        TableStatus, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -321,8 +321,13 @@ mod tests {
             function_version_id: fx.func.id.clone(),
             function_version_patch_id: None,
         };
-        let tdvs =
-            build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables, &BasePath::default())?;
+        let tdvs = build_output_table_data_versions(
+            &fx.lfr,
+            &runnable,
+            &fx.pfr,
+            &fx.tables,
+            &BasePath::default(),
+        )?;
 
         assert_eq!(tdvs.len(), fx.tables.len(), "one TDV per output table");
         for table in &fx.tables {
@@ -339,8 +344,13 @@ mod tests {
             function_version_id: fx.func.id.clone(),
             function_version_patch_id: None,
         };
-        let tdvs =
-            build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &[], &BasePath::default())?;
+        let tdvs = build_output_table_data_versions(
+            &fx.lfr,
+            &runnable,
+            &fx.pfr,
+            &[],
+            &BasePath::default(),
+        )?;
         assert!(tdvs.is_empty());
         Ok(())
     }
@@ -353,8 +363,13 @@ mod tests {
             function_version_id: fx.func.id.clone(),
             function_version_patch_id: Some(patch_id.clone()),
         };
-        let tdvs =
-            build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables, &BasePath::default())?;
+        let tdvs = build_output_table_data_versions(
+            &fx.lfr,
+            &runnable,
+            &fx.pfr,
+            &fx.tables,
+            &BasePath::default(),
+        )?;
         assert!(
             tdvs.iter()
                 .all(|t| t.function_version_patch_id.as_ref() == Some(&patch_id)),
@@ -413,7 +428,10 @@ mod tests {
         let tdvs_b =
             build_output_table_data_versions(&fx.lfr, &runnable, &fx.pfr, &fx.tables, &base_b)?;
         for tdv in &tdvs_b {
-            assert_eq!(tdv.base_path, base_b, "the new run stamps the new base_path");
+            assert_eq!(
+                tdv.base_path, base_b,
+                "the new run stamps the new base_path"
+            );
         }
         // The earlier run's versions keep their original prefix — unaffected by
         // the change.

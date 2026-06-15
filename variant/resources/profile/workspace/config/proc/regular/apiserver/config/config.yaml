@@ -14,23 +14,23 @@ password:
   time_cost: 2
   parallelism_cost: 1
 jwt:
-  #secret: null # by default an UUID is generated
+  #secret: null # by default a UUID is generated
   access_token_expiration: 3600
 request_timeout: 60
 orchestrator: supervisor
 database:
-  # If omitted, the apiserver boots an in-process embedded Postgres rooted
-  # at ${TD_URI_REPOSITORY}/database/. To point at an external server,
-  # uncomment and set `url`. SQLite is supported when built with the
-  # `sqlite` feature (`url: file:///path/to/tabsdata.db`).
-  # url: postgres://user:pass@host:5432/tabsdata
-  min_connections: 1
-  max_connections: 10
-  acquire_timeout: 30
-  max_lifetime: 3600
-  idle_timeout: 60
-  test_before_acquire: true
-  log_level: off
+  mode: embedded
+  system:
+    schema: public
+    min_connections: 1
+    max_connections: 10
+    acquire_timeout: 30
+    max_lifetime: 3600
+    idle_timeout: 60
+    test_before_acquire: true
+    log_level: off
+  apiserver:
+    schema: td_apiserver
 storage:
   mounts:
     - id: ROOT

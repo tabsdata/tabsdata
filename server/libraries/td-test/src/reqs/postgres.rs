@@ -6,8 +6,8 @@ crate::define_requires! {
     /// Requirements for a Postgres test using URI, user and password.
     pub struct PostgresReqs {
         uri: postgres_uri,
-        user: postgres_user,
-        password: postgres_password,
+        user: postgres_system_user,
+        password: postgres_system_password,
     }
 }
 
@@ -38,8 +38,11 @@ mod tests {
                 "0000_00_00_00_00_00".to_string(),
             ),
             ("NS__POSTGRES_URI".to_string(), "uri".to_string()),
-            ("NS__POSTGRES_USER".to_string(), "user".to_string()),
-            ("NS__POSTGRES_PASSWORD".to_string(), "password".to_string()),
+            ("NS__POSTGRES_SYSTEM_USER".to_string(), "user".to_string()),
+            (
+                "NS__POSTGRES_SYSTEM_PASSWORD".to_string(),
+                "password".to_string(),
+            ),
         ]);
         let reqs = TestRequirementsInEnv::resolve_test_run_variables::<PostgresReqs>(
             "test_postgres_reqs",

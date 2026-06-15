@@ -278,7 +278,9 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::TryUpdater;
     use td_objects::and;
-    use td_objects::dxo::collection::{CollectionDB, CollectionUpdateDB, CollectionUpdateDBBuilder};
+    use td_objects::dxo::collection::{
+        CollectionDB, CollectionUpdateDB, CollectionUpdateDBBuilder,
+    };
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::logical::LogicalPointerDao;
@@ -345,7 +347,11 @@ mod tests {
             .seed()
             .function(collection, &create)
             .await?;
-        let exec = db.scoped(ProjectId::sandbox()).seed().execution(&func).await?;
+        let exec = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&func)
+            .await?;
         let txn = db
             .scoped(ProjectId::sandbox())
             .seed()

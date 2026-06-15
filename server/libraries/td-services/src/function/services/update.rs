@@ -30,9 +30,9 @@ use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, FunctionId,
-    FunctionIdName, FunctionVersionId, ResetState, ReuseFrozen, StorageVersion, TableNameDto,
-    TableType, WorkerConfig, WorkerTypeDto,
+    AtTime, BundleId, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionIdName,
+    FunctionVersionId, ResetState, ReuseFrozen, StorageVersion, TableNameDto, TableType,
+    WorkerConfig, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_queries::By;
@@ -712,8 +712,10 @@ mod tests {
 
     // Helper: the current Active version of the function named `name`.
     async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
-        let active: Vec<FunctionDB> =
-            db.live().fetch_all::<FunctionDB>(&FunctionStatus::Active).await?;
+        let active: Vec<FunctionDB> = db
+            .live()
+            .fetch_all::<FunctionDB>(&FunctionStatus::Active)
+            .await?;
         let function = active
             .into_iter()
             .find(|f| f.name == *name)
@@ -757,7 +759,7 @@ mod tests {
 
         let fn_name = FunctionName::try_from("stage_fn")?;
         let before = active_function(&db, &fn_name).await?;
-        let stage_id_before = before.stage_id.clone();
+        let stage_id_before = before.stage_id;
         let stage_base_path_before = before.stage_base_path.clone();
 
         let update = FunctionUpdate::builder()
@@ -794,10 +796,7 @@ mod tests {
         let collection = db
             .scoped(ProjectId::sandbox())
             .seed()
-            .collection(
-                &CollectionName::try_from("nostage_coll")?,
-                &UserId::admin(),
-            )
+            .collection(&CollectionName::try_from("nostage_coll")?, &UserId::admin())
             .await?;
 
         let create = FunctionRegister::builder()

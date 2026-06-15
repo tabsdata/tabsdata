@@ -157,13 +157,14 @@ async fn test_sandbox_can_be_renamed(db: TdPool) -> Result<(), TdError> {
 mod sqlite_single_project {
     use super::*;
     use crate::project::ProjectError;
+    use td_database::schema::{ApiserverSchemaManager, SchemaManager};
     use td_error::TdDomainError;
 
     /// SQLite is single-project: creating new projects is rejected.
     #[tokio::test]
     async fn test_create_rejected_on_sqlite() {
         let db = td_database::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         let create = ProjectCreate::builder()
             .name(ProjectName::try_from("anything").unwrap())
             .description(Description::try_from("nope").unwrap())
@@ -186,7 +187,7 @@ mod sqlite_single_project {
     #[tokio::test]
     async fn test_delete_sandbox_rejected_on_sqlite() {
         let db = td_database::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         let err = DeleteProjectService::with_defaults(db)
             .service()
             .raw_oneshot(admin_ctx().delete(project_param("sandbox")))
@@ -204,7 +205,7 @@ mod sqlite_single_project {
     #[tokio::test]
     async fn test_update_sandbox_allowed_on_sqlite() {
         let db = td_database::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         let upd = ProjectUpdate::builder()
             .name(Some(ProjectName::try_from("primary").unwrap()))
             .description(None)

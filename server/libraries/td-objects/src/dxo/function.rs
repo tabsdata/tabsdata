@@ -6,10 +6,10 @@
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
-        AtTime, BasePath, BundleId, CollectionId, CollectionName, Connector,
-        Decorator, Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues,
-        FunctionStatus, FunctionVersionId, GroupId, ResetStage, ResetState, ReuseFrozen, Snippet,
-        StageId, StorageVersion, TableName, TableNameDto, TableType, UserId, UserName, WorkerConfig,
+        AtTime, BasePath, BundleId, CollectionId, CollectionName, Connector, Decorator,
+        Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
+        FunctionVersionId, GroupId, ResetStage, ResetState, ReuseFrozen, Snippet, StageId,
+        StorageVersion, TableName, TableNameDto, TableType, UserId, UserName, WorkerConfig,
         WorkerId, WorkerTypeDto,
     };
     use crate::types::composed::{

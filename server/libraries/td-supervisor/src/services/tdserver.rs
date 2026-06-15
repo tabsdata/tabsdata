@@ -80,12 +80,14 @@ pub const SUPERVISOR_NAME: &str = "supervisor";
 pub const SUPERVISOR_PROGRAM: &str = "td_supervisor";
 
 pub const APISERVER: &str = "td_apiserver";
+pub const APISERVER_WORKER: &str = "apiserver";
 // The supervisor intentionally does not pass `--database-url` to apiserver
 // invocations: the apiserver picks its database URL from its YAML (set by
 // the user for an external postgres), and otherwise boots an in-process
 // embedded postgres rooted at `$TD_URI_REPOSITORY/database/`. This keeps
 // the supervisor backend-agnostic — it only deals with on-disk instance
 // layout.
+pub const APISERVER_ARGUMENT_CONFIG_FILE: &str = "--config-file";
 pub const APISERVER_ARGUMENT_STORAGE_URL: &str = "--storage-url";
 pub const APISERVER_ARGUMENT_DB_SCHEMA: &str = "--db-schema";
 
@@ -900,6 +902,15 @@ fn create_database(instance: &Option<PathBuf>) {
     let supervisor_storage_url = Url::from_file_path(supervisor_storage_absolute.clone())
         .expect("Failed to convert storage folder path to file:// URL");
 
+    let apiserver_config_file =
+        get_workspace_path_for_instance(&Some(supervisor_instance_absolute.clone()))
+            .join(CONFIG_FOLDER)
+            .join(PROC_FOLDER)
+            .join(REGULAR_FOLDER)
+            .join(APISERVER_WORKER)
+            .join(CONFIG_FOLDER)
+            .join(CONFIG_FILE);
+
     let apiserver = name_program(&PathBuf::from(APISERVER));
     let mut binary = Command::new(apiserver);
     if check_flag_env(TD_DETACHED_SUBPROCESSES) {
@@ -922,6 +933,8 @@ fn create_database(instance: &Option<PathBuf>) {
             REPOSITORY_URI_ENV,
             prepend_slash(supervisor_repository_absolute.clone()),
         )
+        .arg(APISERVER_ARGUMENT_CONFIG_FILE)
+        .arg(apiserver_config_file.to_string_lossy().to_string())
         .arg(APISERVER_ARGUMENT_STORAGE_URL)
         .arg(supervisor_storage_url.clone().to_string())
         .arg(APISERVER_ARGUMENT_DB_SCHEMA)
@@ -1020,11 +1033,21 @@ fn command_upgrade(arguments: UpgradeArguments) {
                 }
             }
             set_log_level(Level::ERROR);
+            let apiserver_config_file =
+                get_workspace_path_for_instance(&Some(supervisor_instance_absolute.clone()))
+                    .join(CONFIG_FOLDER)
+                    .join(PROC_FOLDER)
+                    .join(REGULAR_FOLDER)
+                    .join(APISERVER_WORKER)
+                    .join(CONFIG_FOLDER)
+                    .join(CONFIG_FILE);
             let command = binary
                 .env(
                     REPOSITORY_URI_ENV,
                     prepend_slash(supervisor_repository_absolute.clone()),
                 )
+                .arg(APISERVER_ARGUMENT_CONFIG_FILE)
+                .arg(apiserver_config_file.to_string_lossy().to_string())
                 .arg(APISERVER_ARGUMENT_STORAGE_URL)
                 .arg(supervisor_storage_url.clone().to_string())
                 .arg(APISERVER_ARGUMENT_DB_SCHEMA)

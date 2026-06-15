@@ -81,9 +81,7 @@ class EngineFrame(BaseFrame):
         names = lf.collect_schema().names()
         user = [name for name in names if not name.startswith(prefixes)]
         connector = sorted(
-            name
-            for name in names
-            if name.startswith(TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
+            name for name in names if name.startswith(TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
         )
         standard = sorted(
             name for name in names if name.startswith(TD_SYSTEM_COLUMN_PREFIX)

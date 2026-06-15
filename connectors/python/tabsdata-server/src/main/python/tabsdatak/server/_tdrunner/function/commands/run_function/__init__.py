@@ -520,9 +520,7 @@ def main(args: argparse.Namespace) -> int:
 
     entries_out = _sink_outputs(result, output_tables, out_dir)
     written = sum(
-        1
-        for e in entries_out
-        if e.get(outputs_manifest.MANIFEST_FILE_KEY) is not None
+        1 for e in entries_out if e.get(outputs_manifest.MANIFEST_FILE_KEY) is not None
     )
     logger.info(
         "User function returned %d slot(s); %d table(s) written, %d returned None",

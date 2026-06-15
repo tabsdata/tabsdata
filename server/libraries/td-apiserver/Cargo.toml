@@ -131,6 +131,7 @@ utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
 td-apiserver = { workspace = true, features = ["td-test"] }
 td-test = { workspace = true }
 
+config = { workspace = true, features = ["yaml"] }
 rand = { workspace = true }
 indicatif = { workspace = true, features = ["rayon"] }
 tracing-subscriber = { workspace = true }

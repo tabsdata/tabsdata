@@ -31,6 +31,7 @@ pub mod dynamic;
 pub mod embedded;
 pub mod error;
 pub mod pool;
+pub mod schema;
 pub mod scoped;
 pub mod sea_query;
 
@@ -52,6 +53,7 @@ mod tests {
     use crate::error::DbError;
     use crate::pool::TdPool;
     use crate::raw_query;
+    use crate::schema::{ApiserverSchemaManager, SchemaManager};
     use crate::sea_query::builder::SeaQueryExt;
     use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
     #[cfg(postgres)]
@@ -201,8 +203,8 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_db_schema_creation() {
         let db = crate::test_utils::sqlite::pool().await;
-        assert!(db.upgrade().await.is_ok());
-        assert!(db.check().await.is_ok());
+        assert!(ApiserverSchemaManager.upgrade(&db).await.is_ok());
+        assert!(ApiserverSchemaManager.check(&db).await.is_ok());
     }
 
     #[derive(sqlx::FromRow)]
@@ -214,7 +216,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_db_default_users_sqlite() {
         let db = crate::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         let row: Value = raw_query!(db, "SELECT id FROM users WHERE name = 'admin'")
             .build_query_as()
             .fetch_one(&db)
@@ -227,7 +229,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_db_default_users_postgres() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         let row: Value = raw_query!(db, "SELECT id FROM users WHERE name = 'admin'")
             .build_query_as()
             .fetch_one(&db)
@@ -240,7 +242,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_db_default_roles_sqlite() {
         let db = crate::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         let mut conn = db.acquire().await.unwrap();
 
         let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'sys_admin'")
@@ -269,7 +271,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_db_default_roles_postgres() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         let mut conn = db.acquire().await.unwrap();
 
         let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'sys_admin'")
@@ -298,7 +300,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_db_default_user_roles_sqlite() {
         let db = crate::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         test_tabsdata_db_default_user_roles_body(db).await;
     }
 
@@ -306,7 +308,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_db_default_user_roles_postgres() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         test_tabsdata_db_default_user_roles_body(db).await;
     }
 
@@ -363,7 +365,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_db_default_permissions_sqlite() {
         let db = crate::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         test_tabsdata_db_default_permissions_body(db).await;
     }
 
@@ -371,7 +373,7 @@ mod tests {
     #[tokio::test]
     async fn test_tabsdata_db_default_permissions_postgres() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         test_tabsdata_db_default_permissions_body(db).await;
     }
 
@@ -574,7 +576,7 @@ mod tests {
     #[tokio::test]
     async fn test_schema_tables_sqlite() {
         let db = crate::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         test_schema_tables_body(db).await;
     }
 
@@ -582,7 +584,7 @@ mod tests {
     #[tokio::test]
     async fn test_schema_tables_postgres() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         test_schema_tables_body(db).await;
     }
 
@@ -630,7 +632,7 @@ mod tests {
     #[tokio::test]
     async fn test_schema_views_sqlite() {
         let db = crate::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         test_schema_views_body(db).await;
     }
 
@@ -638,7 +640,7 @@ mod tests {
     #[tokio::test]
     async fn test_schema_views_postgres() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         test_schema_views_body(db).await;
     }
 
@@ -688,7 +690,7 @@ mod tests {
     #[tokio::test]
     async fn test_schema_indices_sqlite() {
         let db = crate::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         test_schema_indices_body(db).await;
     }
 
@@ -696,7 +698,7 @@ mod tests {
     #[tokio::test]
     async fn test_schema_indices_postgres() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         test_schema_indices_body(db).await;
     }
 
@@ -807,7 +809,7 @@ mod tests {
     #[tokio::test]
     async fn test_schema_version_sqlite() {
         let db = crate::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         let version = schema_db_version(&db).await;
         assert_eq!(
             version,
@@ -820,7 +822,7 @@ mod tests {
     #[tokio::test]
     async fn test_schema_version_postgres() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         let version = schema_db_version(&db).await;
         assert_eq!(
             version,
@@ -833,16 +835,28 @@ mod tests {
     #[tokio::test]
     async fn test_schema_applies_sqlite() {
         let db = crate::test_utils::sqlite::pool().await;
-        db.upgrade().await.expect("schema upgrade on sqlite");
-        db.check().await.expect("schema check on sqlite");
+        ApiserverSchemaManager
+            .upgrade(&db)
+            .await
+            .expect("schema upgrade on sqlite");
+        ApiserverSchemaManager
+            .check(&db)
+            .await
+            .expect("schema check on sqlite");
     }
 
     #[cfg(postgres)]
     #[tokio::test]
     async fn test_schema_applies_postgres() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.expect("schema upgrade on postgres");
-        db.check().await.expect("schema check on postgres");
+        ApiserverSchemaManager
+            .upgrade(&db)
+            .await
+            .expect("schema upgrade on postgres");
+        ApiserverSchemaManager
+            .check(&db)
+            .await
+            .expect("schema check on postgres");
     }
 
     /// A 1.x database lacks the `tabsdata_version` row and must be rejected
@@ -851,7 +865,7 @@ mod tests {
     #[tokio::test]
     async fn test_pre_2_0_database_rejected() {
         let db = crate::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
 
         raw_query!(
             db,
@@ -862,7 +876,7 @@ mod tests {
         .await
         .unwrap();
 
-        let res = db.check().await;
+        let res = ApiserverSchemaManager.check(&db).await;
         assert!(
             matches!(res, Err(DbError::IncompatibleMajorVersion(1, _))),
             "expected IncompatibleMajorVersion(1, _), got {res:?}"
@@ -887,7 +901,7 @@ mod tests {
         const COUNT: &str = "SELECT count(*) FROM collections";
 
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
 
         // Provision a NOBYPASSRLS app role. `db.begin()` now runs as the
         // non-privileged `td_app` role, so provision through a raw connection as
@@ -897,12 +911,16 @@ mod tests {
             .connect(db.url().as_str())
             .await
             .unwrap();
+        let schema = db.schema();
         for stmt in [
-            "CREATE ROLE app_user LOGIN PASSWORD 'app_pw' NOBYPASSRLS",
-            "GRANT USAGE ON SCHEMA public TO app_user",
-            "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user",
+            "CREATE ROLE app_user LOGIN PASSWORD 'app_pw' NOBYPASSRLS".to_string(),
+            format!("GRANT USAGE ON SCHEMA \"{schema}\" TO app_user"),
+            format!(
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO app_user"
+            ),
+            format!("ALTER ROLE app_user SET search_path TO \"{schema}\""),
         ] {
-            sqlx::query(stmt).execute(&su).await.unwrap();
+            sqlx::query(&stmt).execute(&su).await.unwrap();
         }
 
         // Connect a second pool as the app role.
@@ -1024,9 +1042,10 @@ mod tests {
         use crate::config::{BackendConfig, DatabaseConfig};
 
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
         // The serving role is NOBYPASSRLS, so check passes.
-        db.check()
+        ApiserverSchemaManager
+            .check(&db)
             .await
             .expect("NOBYPASSRLS serving role should pass");
 
@@ -1043,13 +1062,22 @@ mod tests {
             .unwrap();
 
         // A fresh pool's serving connections switch to td_app — now bypassing.
+        // The embedded server's URL carries the superuser credentials as
+        // userinfo; split them into the explicit fields the config expects.
+        let mut url = db.url().clone();
+        let username = url.username().to_owned();
+        let password = url.password().unwrap_or_default().to_owned();
+        url.set_username("").unwrap();
+        url.set_password(None).unwrap();
         let cfg = DatabaseConfig {
-            conn: Some(BackendConfig::from_url(db.url().clone()).unwrap()),
+            conn: Some(BackendConfig::from_url(url).unwrap()),
             schema: Some(db.schema().clone()),
+            username: Some(username),
+            password: Some(password),
             pool: Default::default(),
         };
         let other = TdPool::connect(&cfg).await.unwrap();
-        let res = other.check().await;
+        let res = ApiserverSchemaManager.check(&other).await;
         assert!(
             matches!(res, Err(DbError::ConnectedRoleBypassesRls)),
             "a BYPASSRLS serving role must be rejected, got {res:?}"
@@ -1069,7 +1097,7 @@ mod tests {
     #[allow(irrefutable_let_patterns)] // only the Postgres variant exists in a postgres-only build
     async fn test_rls_maintain_current_trigger_under_role() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap(); // also auto-provisions the `td_app` role (embedded)
+        ApiserverSchemaManager.upgrade(&db).await.unwrap(); // also auto-provisions the `td_app` role (embedded)
 
         // Project A: a collection and a function. The function insert fires the
         // maintain-current trigger into functions_current.
@@ -1148,7 +1176,7 @@ mod tests {
     #[allow(irrefutable_let_patterns)] // only the Postgres variant exists in a postgres-only build
     async fn test_set_rls_guc_primitive() {
         let db = crate::test_utils::postgres::pool().await;
-        db.upgrade().await.unwrap();
+        ApiserverSchemaManager.upgrade(&db).await.unwrap();
 
         // set_project_scope sets app.project_id AND clears any prior bypass.
         {

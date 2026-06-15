@@ -10,7 +10,7 @@ use serde_yaml::Value;
 
 use crate::base::constants::{
     SECRET_GENERATOR_JWT_SIGNING_KEY, SECRET_GENERATOR_POSTGRES_PASSWORD,
-    SECRET_GENERATOR_POSTGRES_USER,
+    SECRET_GENERATOR_POSTGRES_SYSTEM_USER,
 };
 use crate::base::error::secret::SecretError;
 
@@ -24,7 +24,7 @@ static PLACEHOLDER_PATTERN: Lazy<Regex> = Lazy::new(|| {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Generator {
     JwtSigningKey,
-    PostgresUser,
+    PostgresSystemUser,
     PostgresPassword,
 }
 
@@ -34,7 +34,7 @@ impl Generator {
     pub fn from_name(name: &str) -> Option<Generator> {
         match name {
             SECRET_GENERATOR_JWT_SIGNING_KEY => Some(Generator::JwtSigningKey),
-            SECRET_GENERATOR_POSTGRES_USER => Some(Generator::PostgresUser),
+            SECRET_GENERATOR_POSTGRES_SYSTEM_USER => Some(Generator::PostgresSystemUser),
             SECRET_GENERATOR_POSTGRES_PASSWORD => Some(Generator::PostgresPassword),
             _ => None,
         }
@@ -43,7 +43,7 @@ impl Generator {
     pub fn supported() -> &'static [&'static str] {
         &[
             SECRET_GENERATOR_JWT_SIGNING_KEY,
-            SECRET_GENERATOR_POSTGRES_USER,
+            SECRET_GENERATOR_POSTGRES_SYSTEM_USER,
             SECRET_GENERATOR_POSTGRES_PASSWORD,
         ]
     }
@@ -51,7 +51,7 @@ impl Generator {
     pub fn generate(self) -> String {
         match self {
             Generator::JwtSigningKey => td_common::id::id().to_string(),
-            Generator::PostgresUser => EMBEDDED_POSTGRES_DEFAULT_USER.to_owned(),
+            Generator::PostgresSystemUser => EMBEDDED_POSTGRES_DEFAULT_USER.to_owned(),
             Generator::PostgresPassword => td_common::random::password(),
         }
     }

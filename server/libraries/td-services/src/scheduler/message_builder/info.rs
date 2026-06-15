@@ -151,11 +151,29 @@ mod tests {
         );
 
         // No cross-wiring: the bundle/stage prefixes must not leak into other paths.
-        assert!(!bundle.contains("/s/"), "bundle path leaked stage prefix: {bundle}");
-        assert!(!bundle.contains("/c/c/"), "bundle path leaked collection prefix: {bundle}");
-        assert!(!stage.contains("/b/"), "stage path leaked bundle prefix: {stage}");
-        assert!(!stage.contains("/c/c/"), "stage path leaked collection prefix: {stage}");
-        assert!(!data.contains("/b/"), "data path leaked bundle prefix: {data}");
-        assert!(!data.contains("/s/"), "data path leaked stage prefix: {data}");
+        assert!(
+            !bundle.contains("/s/"),
+            "bundle path leaked stage prefix: {bundle}"
+        );
+        assert!(
+            !bundle.contains("/c/c/"),
+            "bundle path leaked collection prefix: {bundle}"
+        );
+        assert!(
+            !stage.contains("/b/"),
+            "stage path leaked bundle prefix: {stage}"
+        );
+        assert!(
+            !stage.contains("/c/c/"),
+            "stage path leaked collection prefix: {stage}"
+        );
+        assert!(
+            !data.contains("/b/"),
+            "data path leaked bundle prefix: {data}"
+        );
+        assert!(
+            !data.contains("/s/"),
+            "data path leaked stage prefix: {data}"
+        );
     }
 }

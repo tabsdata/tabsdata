@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::APP_ROLE;
 use crate::config::{DatabaseConfig, Schema};
 use crate::dynamic::{DynamicConnection, DynamicPool, DynamicTransaction};
 #[cfg(feature = "embedded-postgres")]
@@ -9,7 +10,6 @@ use crate::embedded::EmbeddedPostgres;
 use crate::error::DbError;
 use crate::sea_query::builder::SeaQueryExt;
 use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
-use crate::APP_ROLE;
 use sea_query::{Alias, Expr, ExprTrait, Iden, Query};
 use sqlx::Error;
 use std::cmp::Ordering;
@@ -90,30 +90,6 @@ impl TdPool {
             .expect("No schema configured: only the PostgreSQL backend carries one. Guard on the backend kind before calling schema()")
     }
 
-    /// Creates a database using the given configuration.
-    ///
-    /// Creates the schema.
-    #[instrument(name = "db.pool.create", skip_all, level = "info", err(Debug))]
-    pub async fn create(config: &DatabaseConfig) -> Result<Self, DbError> {
-        let this = Self::connect(config).await?;
-        this.upgrade().await?;
-        Ok(this)
-    }
-
-    #[instrument(name = "db.pool.check", skip_all, level = "debug", err(Debug))]
-    pub async fn check(&self) -> Result<(), DbError> {
-        self.check_tabsdata_version().await?;
-        debug!("db.pool.check: tabsdata version OK");
-        self.check_db_version().await?;
-        debug!("db.pool.check: db version OK");
-        self.check_tabsdata_edition().await?;
-        debug!("db.pool.check: edition OK");
-        self.check_pg_min_version().await?;
-        self.check_rls_posture().await?;
-        self.check_upgrader_permissions().await?;
-        Ok(())
-    }
-
     /// PostgreSQL major version required for `CREATE VIEW … WITH
     /// (security_invoker = true)`, which the schema relies on so views over
     /// RLS tables are evaluated as the querying role (project isolation) rather
@@ -127,7 +103,7 @@ impl TdPool {
     /// evaluate views as their (superuser) owner and bypass project isolation.
     /// Probe the version explicitly and fail with a clear, actionable error.
     /// PostgreSQL only.
-    async fn check_pg_min_version(&self) -> Result<(), DbError> {
+    pub(crate) async fn check_pg_min_version(&self) -> Result<(), DbError> {
         if !matches!(self.kind(), DatabaseBackend::Postgres) {
             return Ok(());
         }
@@ -156,7 +132,7 @@ impl TdPool {
     /// alter tables). Caught at startup as [`DbError::UpgraderLacksPermissions`]
     /// instead of failing mid-upgrade with an opaque permission error. Runs on
     /// the admin pool (raw role). PostgreSQL only.
-    async fn check_upgrader_permissions(&self) -> Result<(), DbError> {
+    pub(crate) async fn check_upgrader_permissions(&self) -> Result<(), DbError> {
         if !matches!(self.kind(), DatabaseBackend::Postgres) {
             return Ok(());
         }
@@ -187,7 +163,7 @@ impl TdPool {
     /// query runs on the serving pool, so `current_user` is the after_connect
     /// role. Fail closed at startup ([`DbError::ConnectedRoleBypassesRls`]).
     /// PostgreSQL only (no RLS elsewhere).
-    async fn check_rls_posture(&self) -> Result<(), DbError> {
+    pub(crate) async fn check_rls_posture(&self) -> Result<(), DbError> {
         if !matches!(self.kind(), DatabaseBackend::Postgres) {
             return Ok(());
         }
@@ -206,31 +182,22 @@ impl TdPool {
         Ok(())
     }
 
-    pub async fn upgrade(&self) -> Result<(), DbError> {
-        info!("Starting database upgrade");
-        self.upgrade_db_version().await?;
-        self.upgrade_tabsdata_edition().await?;
-        self.ensure_app_role().await?;
-        info!("Database upgrade complete");
-        Ok(())
-    }
-
     /// Grant the row-level-security app role ([`APP_ROLE`]) the schema/table
     /// privileges it needs, run on the admin pool during `upgrade()` — i.e.
-    /// after the tables exist. The role itself is created earlier, at connect,
-    /// by [`provision_app_role`] (so the serving pools' `after_connect` `SET
-    /// ROLE` can succeed); the `CREATE ROLE` guard here is a redundant no-op then.
-    async fn ensure_app_role(&self) -> Result<(), DbError> {
+    /// after the tables exist. The role, schema and owner are created earlier in
+    /// the provisioning phase by [`Self::provision_schema`]; the upgrade phase
+    /// runs as the schema owner, which can grant on what it owns but cannot
+    /// `CREATE ROLE` or `CREATE SCHEMA`.
+    pub async fn ensure_app_role(&self) -> Result<(), DbError> {
         if !matches!(self.kind(), DatabaseBackend::Postgres) {
             return Ok(());
         }
         let schema = self.schema();
-        let mut stmts = vec![create_app_role_sql(), create_schema_sql(schema, None)];
-        // Future tables created by this (bootstrap) role auto-grant to the app
+        // Future tables created by this (owner) role auto-grant to the app
         // role, so a later migration that adds a table doesn't silently leave
         // td_app without access. `ALTER DEFAULT PRIVILEGES` applies only to
         // tables created after it runs, by the role running it.
-        stmts.extend(grant_app_role_privileges_sql(schema));
+        let stmts = grant_app_role_privileges_sql(schema);
         let mut tx = self
             .admin
             .begin()
@@ -281,7 +248,12 @@ impl TdPool {
         tx.commit()
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
-        debug!(owner, schema, role = APP_ROLE, "Provisioned schema and owner");
+        debug!(
+            owner,
+            schema,
+            role = APP_ROLE,
+            "Provisioned schema and owner"
+        );
         Ok(())
     }
 
@@ -337,7 +309,7 @@ impl TdPool {
         })
     }
 
-    async fn check_db_version(&self) -> Result<(), DbError> {
+    pub(crate) async fn check_db_version(&self) -> Result<(), DbError> {
         let version = self.try_read_db_version().await?;
         match version.cmp(&CURRENT_VERSION) {
             Ordering::Equal => Ok(()),
@@ -367,7 +339,7 @@ impl TdPool {
         }
     }
 
-    async fn check_tabsdata_version(&self) -> Result<(), DbError> {
+    pub(crate) async fn check_tabsdata_version(&self) -> Result<(), DbError> {
         let version = self.try_read_tabsdata_version().await?;
         if version == CURRENT_TABSDATA_VERSION {
             Ok(())
@@ -451,7 +423,7 @@ impl TdPool {
         self.read_system_value(DB_EDITION_NAME).await
     }
 
-    async fn check_tabsdata_edition(&self) -> Result<(), DbError> {
+    pub(crate) async fn check_tabsdata_edition(&self) -> Result<(), DbError> {
         let instance_edition = self.parse_tabsdata_edition().await?;
         let runtime_edition = TabsdataEdition;
 
@@ -478,7 +450,7 @@ impl TdPool {
         }
     }
 
-    async fn upgrade_tabsdata_edition(&self) -> Result<(), DbError> {
+    pub(crate) async fn upgrade_tabsdata_edition(&self) -> Result<(), DbError> {
         let instance_edition = self.parse_tabsdata_edition().await?;
         let runtime_edition = TabsdataEdition;
 
@@ -624,7 +596,9 @@ fn create_owner_role_sql(owner: &str, password: &str) -> String {
 #[cfg(postgres)]
 fn create_schema_sql(schema: &str, owner: Option<&str>) -> String {
     match owner {
-        Some(owner) => format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\" AUTHORIZATION \"{owner}\""),
+        Some(owner) => {
+            format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\" AUTHORIZATION \"{owner}\"")
+        }
         None => format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\""),
     }
 }

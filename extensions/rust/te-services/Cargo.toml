@@ -51,6 +51,7 @@ td-build = { workspace = true }
 # Internal dependencies
 
 ta-services = { workspace = true }
+td-error = { workspace = true }
 
 ## Macros
 

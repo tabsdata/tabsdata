@@ -23,6 +23,8 @@ use url::Url;
 /// own the password lifecycle for the persistent case.
 const PASSWORD_FILE: &str = ".td_embedded_password";
 
+const OWNER_PASSWORD_FILE_PREFIX: &str = ".td_embedded_owner_password.";
+
 /// PID file written by postgres on start and removed on clean shutdown.
 const POSTMASTER_PID_FILE: &str = "postmaster.pid";
 
@@ -181,10 +183,34 @@ async fn wait_for_postmaster_release(data_dir: &Path) -> Result<(), DbError> {
 /// or generate a fresh one and write it on first boot. Lives outside the
 /// data_dir itself because `initdb` refuses a non-empty data_dir.
 fn load_or_create_password(data_dir: &Path) -> Result<String, DbError> {
-    let parent = data_dir.parent().ok_or_else(|| {
-        DbError::EmbeddedPostgres(format!("data_dir has no parent: {data_dir:?}"))
-    })?;
-    let path = parent.join(PASSWORD_FILE);
+    load_or_create_secret(data_dir, PASSWORD_FILE)
+}
+
+fn owner_password_file(schema: &str) -> String {
+    format!("{OWNER_PASSWORD_FILE_PREFIX}{schema}")
+}
+
+pub fn load_or_create_owner_password(data_dir: &Path, schema: &str) -> Result<String, DbError> {
+    load_or_create_secret(data_dir, &owner_password_file(schema))
+}
+
+pub fn load_owner_password(data_dir: &Path, schema: &str) -> Result<String, DbError> {
+    let parent = secret_parent(data_dir)?;
+    let path = parent.join(owner_password_file(schema));
+    std::fs::read_to_string(&path)
+        .map(|s| s.trim().to_string())
+        .map_err(|e| DbError::EmbeddedPostgres(format!("read owner password file: {e}")))
+}
+
+fn secret_parent(data_dir: &Path) -> Result<&Path, DbError> {
+    data_dir
+        .parent()
+        .ok_or_else(|| DbError::EmbeddedPostgres(format!("data_dir has no parent: {data_dir:?}")))
+}
+
+fn load_or_create_secret(data_dir: &Path, file: &str) -> Result<String, DbError> {
+    let parent = secret_parent(data_dir)?;
+    let path = parent.join(file);
     if path.exists() {
         return std::fs::read_to_string(&path)
             .map(|s| s.trim().to_string())

@@ -42,7 +42,9 @@ impl<'de> Deserialize<'de> for PostgresUrl {
 }
 
 /// External Postgres backend — talks to a server somewhere else. For the
-/// in-process variant see [`super::embedded::EmbeddedConfig`].
+/// in-process variant see [`super::embedded::EmbeddedConfig`]. The URL carries
+/// host, port, and database name only; credentials are explicit fields on
+/// [`super::DatabaseConfig`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostgresConfig {
     pub(super) url: PostgresUrl,

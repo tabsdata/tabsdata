@@ -73,6 +73,7 @@ class Report:
     version: str | None = None
     version_source: str | None = None
     releases_api: str = field(default_factory=lambda: RELEASES_API)
+    authenticated: bool = field(default_factory=lambda: GITHUB_TOKEN is not None)
     cache_directory: Path | None = None
     archive_filename: str | None = None
     archive_path: Path | None = None
@@ -123,6 +124,12 @@ class Report:
                 )
             )
         lines.append(row("theseus releases api", self.releases_api))
+        lines.append(
+            row(
+                "github authentication",
+                "gh auth token" if self.authenticated else "<unauthenticated>",
+            )
+        )
         lines.append(row("cache directory", self.cache_directory or "<unresolved>"))
         lines.append(row("archive filename", self.archive_filename or "<unresolved>"))
         lines.append(row("archive path", self.archive_path or "<unresolved>"))
@@ -208,6 +215,28 @@ def resolve_target_triple(report: Report) -> str:
     return report.target_triple
 
 
+def resolve_github_token() -> str | None:
+    try:
+        completed = subprocess.run(
+            ["gh", "auth", "token"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (
+        FileNotFoundError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+    ):
+        return None
+    token = completed.stdout.strip()
+    return token or None
+
+
+GITHUB_TOKEN = resolve_github_token()
+
+
 def equivalent_curl(
     url: str, accept: str | None = None, output: Path | None = None
 ) -> str:
@@ -222,6 +251,8 @@ def equivalent_curl(
     parts += ["--max-time", str(REQUEST_TIMEOUT_SECONDS)]
     if accept:
         parts += ["-H", f"Accept: {accept}"]
+    if GITHUB_TOKEN:
+        parts += ["-H", "Authorization: Bearer $(gh auth token)"]
     if output is not None:
         parts += ["-o", str(output)]
     parts.append(url)
@@ -232,6 +263,8 @@ def open_url(url: str, accept: str | None = None):
     request = urllib.request.Request(url)
     if accept:
         request.add_header("Accept", accept)
+    if GITHUB_TOKEN:
+        request.add_header("Authorization", f"Bearer {GITHUB_TOKEN}")
     context = ssl.create_default_context()
     return urllib.request.urlopen(
         request, timeout=REQUEST_TIMEOUT_SECONDS, context=context

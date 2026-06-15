@@ -15,9 +15,10 @@ use td_authz::session_provider::Sessions;
 use td_common::server::BridgeProviderHandle;
 use td_common::server_runner::ServerRunnable;
 use td_database::pool::TdPool;
+use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_services::execution::services::runtime_info::RuntimeContext;
-use td_services::{Context, Services};
+use td_services::{Context, Services, SystemPool};
 use td_storage::Storage;
 use te_services::{ExtendedContext, ExtendedServices};
 use tokio::sync::watch;
@@ -36,17 +37,20 @@ pub struct ApiServerCtx {
 }
 
 impl ApiServerCtx {
-    pub fn new(
+    pub async fn new(
         config: Config,
+        system_pool: TdPool,
         db: TdPool,
         storage: Arc<Storage>,
         runtime_context: Arc<RuntimeContext>,
         scheduler_notify: SchedulerNotify,
         bridge: Arc<BridgeProviderHandle>,
-    ) -> Self {
+    ) -> Result<Self, TdError> {
         let scheduler_notify = Arc::new(scheduler_notify);
         let context = Context {
-            db: db.clone(),
+            system_pool: SystemPool(system_pool),
+            apiserver_pool: db.clone(),
+            database_descriptor: Arc::new(config.database.clone()),
             server_addresses: Arc::new(config.addresses.clone()),
             jwt_config: Arc::new(config.jwt.clone()),
             auth_context: Arc::new(AuthzContext::default()),
@@ -65,16 +69,16 @@ impl ApiServerCtx {
             bridge,
         };
         let services = Services::build(&context);
-        let extended_context = ExtendedContext::build(&context, &config.extended_config);
+        let extended_context = ExtendedContext::build(&context, &config.extended_config).await?;
         let extended_services = ExtendedServices::build(&extended_context);
 
-        Self {
+        Ok(Self {
             config,
             context,
             services,
             extended_context,
             extended_services,
-        }
+        })
     }
 }
 

@@ -5,8 +5,8 @@
 use crate::{SPath, StorageError};
 use std::fmt::Debug;
 use td_objects::types::basic::{
-    BundleId, CollectionId, BasePath, StageId, FunctionVersionId, Partition,
-    PhysicalTableDataVersionId, StorageVersion, TableId, TableVersionId, TransactionId,
+    BasePath, BundleId, CollectionId, FunctionVersionId, Partition, PhysicalTableDataVersionId,
+    StageId, StorageVersion, TableId, TableVersionId, TransactionId,
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -588,8 +588,8 @@ mod tests {
     use super::*;
     use td_error::TdError;
     use td_objects::types::basic::{
-        BundleId, CollectionId, BasePath, FunctionVersionId, Partition,
-        PhysicalTableDataVersionId, TableId, TableVersionId, TransactionId,
+        BasePath, BundleId, CollectionId, FunctionVersionId, Partition, PhysicalTableDataVersionId,
+        TableId, TableVersionId, TransactionId,
     };
 
     #[test]

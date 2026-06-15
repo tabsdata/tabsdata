@@ -10,11 +10,32 @@ use std::ops::Deref;
 
 use serde::{Deserialize, Serialize};
 
-/// Schema the tests isolate their objects in, mirroring the production contract
-/// that every PostgreSQL connection names an explicit schema (no `public`
-/// fallback). Single source for the test fixtures and the config unit tests.
+/// Schema the tests isolate their objects in. Uses the real apiserver schema so
+/// tests run against the same schema name the production manager and resolver
+/// expect, avoiding a test-only schema that diverges from production. Single
+/// source for the test fixtures and the config unit tests.
 #[cfg(any(test, feature = "test-utils"))]
-pub const TEST_SCHEMA: &str = "td_test";
+pub const TEST_SCHEMA: &str = "td_apiserver";
+
+/// Where the database process runs.
+///
+/// `Embedded` the database runs in-process.
+/// `Sidecar` the database runs as an alongside process.
+/// `Remote` the database runs as a remote process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DatabaseMode {
+    #[default]
+    Embedded,
+    Sidecar,
+    Remote,
+}
+
+impl DatabaseMode {
+    pub fn is_embedded(self) -> bool {
+        matches!(self, DatabaseMode::Embedded | DatabaseMode::Sidecar)
+    }
+}
 
 /// PostgreSQL schema name. Mandatory on the PostgreSQL path — there is no
 /// `public` default, so each component's objects stay isolated in their own

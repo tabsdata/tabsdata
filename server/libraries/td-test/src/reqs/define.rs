@@ -20,8 +20,8 @@
 ///     /// Requirements for a Postgres test using URI, user and password.
 ///     pub struct PostgresReqs {
 ///         uri: postgres_uri,
-///         user: postgres_user,
-///         password: postgres_password,
+///         user: postgres_system_user,
+///         password: postgres_system_password,
 ///     }
 /// }
 /// ```

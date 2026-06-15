@@ -83,9 +83,8 @@ mod tests {
     use td_objects::rest_urls::params::FunctionMaybeAtIdName;
     use td_objects::rest_urls::{CollectionParam, FunctionParam, OptionalAtTimeParam};
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BasePath, CollectionName, Decorator, Description,
-        FunctionIdName, FunctionName, FunctionRuntimeValues, FunctionStatus, ProjectId, RoleId,
-        UserId, UserName,
+        AccessTokenId, AtTime, BasePath, CollectionName, Decorator, Description, FunctionIdName,
+        FunctionName, FunctionRuntimeValues, FunctionStatus, ProjectId, RoleId, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -198,15 +197,18 @@ mod tests {
             .description(description)
             .base_path(base_path)
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
-                .update(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                        .build()?,
-                    update,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+        )
+        .update(
+            CollectionParam::builder()
+                .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                .build()?,
+            update,
+        )
+        .in_project(ProjectId::sandbox());
         UpdateCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -215,8 +217,10 @@ mod tests {
 
     /// The current Active version of the function named `name`.
     async fn active_function(db: &TdPool, name: &FunctionName) -> Result<FunctionDB, TdError> {
-        let active: Vec<FunctionDB> =
-            db.live().fetch_all::<FunctionDB>(&FunctionStatus::Active).await?;
+        let active: Vec<FunctionDB> = db
+            .live()
+            .fetch_all::<FunctionDB>(&FunctionStatus::Active)
+            .await?;
         let function = active
             .into_iter()
             .find(|f| f.name == *name)
@@ -261,16 +265,19 @@ mod tests {
             .base_path(None)
             .build()
             .unwrap();
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
-                .update(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(collection_name.as_str()).unwrap())
-                        .build()
-                        .unwrap(),
-                    update,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+        )
+        .update(
+            CollectionParam::builder()
+                .collection(CollectionIdName::from_str(collection_name.as_str()).unwrap())
+                .build()
+                .unwrap(),
+            update,
+        )
+        .in_project(ProjectId::sandbox());
 
         let service = UpdateCollectionService::with_defaults(db).service();
         assert_service_error(service, request, |err| {
@@ -305,7 +312,9 @@ mod tests {
 
         // Upload a real bundle so a Pending BundleDB row + storage object exist.
         let payload = b"BUNDLE-PAYLOAD".to_vec();
-        let upload_request = Request::builder().body(Body::from(payload.clone())).unwrap();
+        let upload_request = Request::builder()
+            .body(Body::from(payload.clone()))
+            .unwrap();
         let upload = FunctionUpload::new(upload_request);
         let request =
             RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
@@ -374,8 +383,10 @@ mod tests {
             function_after.stage_base_path, a,
             "function stage_base_path stays on the prefix it was stamped with"
         );
-        let bundle_after: Vec<BundleDB> =
-            db.live().fetch_all::<BundleDB>(&function_after.bundle_id).await?;
+        let bundle_after: Vec<BundleDB> = db
+            .live()
+            .fetch_all::<BundleDB>(&function_after.bundle_id)
+            .await?;
         assert_eq!(bundle_after.len(), 1);
         assert_eq!(
             bundle_after[0].base_path, a,

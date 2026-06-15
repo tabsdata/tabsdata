@@ -64,12 +64,17 @@ pub async fn build_bundle_download(
 ) -> Result<BundleDownload, TdError> {
     // The bundle's storage prefix is frozen on the (durable) bundle row; fall back
     // to the collection's live base_path if the bundle row predates retention.
-    let bundle: Option<BundleDB> = conn.live().fetch_optional::<BundleDB>(&function.bundle_id).await?;
+    let bundle: Option<BundleDB> = conn
+        .live()
+        .fetch_optional::<BundleDB>(&function.bundle_id)
+        .await?;
     let base_path = match bundle {
         Some(bundle) => bundle.base_path,
         None => {
-            let collection: CollectionDB =
-                conn.live().fetch_one::<CollectionDB>(&function.collection_id).await?;
+            let collection: CollectionDB = conn
+                .live()
+                .fetch_one::<CollectionDB>(&function.collection_id)
+                .await?;
             collection.base_path
         }
     };

@@ -73,7 +73,6 @@ chrono = { workspace = true, features = ["serde"] }
 colored = { workspace = true }
 const_format = { workspace = true }
 data-encoding = { workspace = true }
-derive_builder = { workspace = true }
 derive-new = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }

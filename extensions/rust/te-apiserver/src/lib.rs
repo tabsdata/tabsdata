@@ -3,6 +3,7 @@
 //
 
 pub mod config;
+pub mod schema;
 
 use ta_apiserver::router::RouterExtension;
 use utoipa_axum::router::OpenApiRouter;

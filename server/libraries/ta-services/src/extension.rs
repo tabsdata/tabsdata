@@ -2,6 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-pub trait ContextExt<Base, Extended> {
-    fn build(base: &Base, extended: &Extended) -> Self;
+use std::future::Future;
+use td_error::TdError;
+
+pub trait ContextExt<Base, Extended>: Sized {
+    fn build(base: &Base, extended: &Extended) -> impl Future<Output = Result<Self, TdError>>;
 }
