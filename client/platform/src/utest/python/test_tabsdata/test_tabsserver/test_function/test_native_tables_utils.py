@@ -415,8 +415,8 @@ class TestScanTfFromTable:
 
         ctx = _make_execution_context()
         # input_idx and table_pos are deliberately different so the assertion
-        # below proves the provenance 'tab' is taken from table_pos (the
-        # signature position) and not from input_idx.
+        # below proves the provenance 'tab' is taken from input_idx (the
+        # signature index) and not from table_pos.
         table = _make_table(
             uri="file:///data/test.parquet",
             execution_id="exec1",
@@ -440,9 +440,9 @@ class TestScanTfFromTable:
             assert call_kwargs["df"] is mock_lf
             # Loading a stored table as a transformer/subscriber input
             # regenerates the pristine columns ("mut" mode) and stamps the
-            # provenance 'tab' with the signature position (table_pos).
+            # provenance 'tab' with the signature index (input_idx).
             assert call_kwargs["mode"] == "mut"
-            assert call_kwargs["idx"] == 2
+            assert call_kwargs["idx"] == 7
 
     @patch(
         "tabsdata._tabsserver.function.native_tables_utils.scan_lf_from_location"

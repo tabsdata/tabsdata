@@ -41,9 +41,9 @@ AddSystemColumnsMode: TypeAlias = Literal[
     # transformer/subscriber function.
     # (Used to load a TableFrame as the input of a transformer/subscriber function:
     #  every input row is re-stamped with a sequential $td.row and a single-entry
-    #  $td.src pointing to itself, where the $td.src 'tab' is this input's position in
+    #  $td.src pointing to itself, where the $td.src 'tab' is this input's index in
     #  the function signature -- the 'idx' argument, taken from the request.yaml
-    #  'table_pos'. This replaces whatever the producing function stored.)
+    #  'input_idx'. This replaces whatever the producing function stored.)
     "mut",
 ]
 

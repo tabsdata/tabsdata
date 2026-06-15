@@ -67,9 +67,9 @@ def scan_tf_from_table(
             # regenerate the pristine columns ($td.id, $td.row, $td.src) so each
             # input row is re-stamped with a fresh sequential $td.row and a
             # single-entry $td.src pointing to itself. The provenance 'tab' is this
-            # input's position in the function signature, given by 'table_pos'.
+            # input's index in the function signature, given by 'input_idx'.
             mode="mut",
-            idx=table.table_pos,
+            idx=table.input_idx,
             properties=properties,
         )
     return tf
