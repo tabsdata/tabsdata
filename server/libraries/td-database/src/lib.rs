@@ -879,8 +879,8 @@ mod tests {
     #[tokio::test]
     async fn test_rls_project_isolation() {
         const INSERT: &str = "INSERT INTO collections \
-            (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id) \
-            VALUES ($1, $2, 'd', now(), 'u', now(), 'u', 'g')";
+            (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path) \
+            VALUES ($1, $2, 'd', now(), 'u', now(), 'u', 'g', '/')";
         const SET_PROJECT: &str = "SELECT set_config('app.project_id', $1, true)";
         const COUNT: &str = "SELECT count(*) FROM collections";
 
@@ -954,8 +954,8 @@ mod tests {
             .unwrap();
         let bad = sqlx::query(
             "INSERT INTO collections \
-             (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, project_id) \
-             VALUES ('x', 'x', 'd', now(), 'u', now(), 'u', 'g', 'A')",
+             (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, project_id) \
+             VALUES ('x', 'x', 'd', now(), 'u', now(), 'u', 'g', '/', 'A')",
         )
         .execute(&mut *t)
         .await;
@@ -1078,8 +1078,8 @@ mod tests {
                 unreachable!()
             };
             sqlx::query(
-                "INSERT INTO collections (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id) \
-                 VALUES ('col', 'c', 'd', now(), 'u', now(), 'u', 'g')",
+                "INSERT INTO collections (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path) \
+                 VALUES ('col', 'c', 'd', now(), 'u', now(), 'u', 'g', '/')",
             )
             .execute(&mut **h)
             .await
@@ -1087,8 +1087,8 @@ mod tests {
             sqlx::query(
                 "INSERT INTO functions \
                  (id, collection_id, name, description, decorator, runtime_values, function_id, \
-                  storage_version, bundle_id, snippet, defined_on, defined_by_id, status) \
-                 VALUES ('fn1', 'col', 'f', 'd', 'dec', '{}', 'fid', '1', 'bun', 'snip', now(), 'u', 'active')",
+                  stage_id, stage_base_path, storage_version, bundle_id, snippet, defined_on, defined_by_id, status) \
+                 VALUES ('fn1', 'col', 'f', 'd', 'dec', '{}', 'fid', 'stg', '/', '1', 'bun', 'snip', now(), 'u', 'active')",
             )
             .execute(&mut **h)
             .await
