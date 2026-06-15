@@ -26,11 +26,11 @@ from tabsdatak.tableframe._engine.system.constants.columns.names import (
 )
 
 if TYPE_CHECKING:
-    import polars as pl
-    from polars.datatypes import DataTypeClass
+    import polars as pl_
+    from polars.datatypes import DataTypeClass as DataTypeClass_
 
-    SystemColumnDataType = pl.DataType | DataTypeClass
-    SystemColumnDefault = pl.Expr | str | datetime | None
+    SystemColumnDataType = pl_.DataType | DataTypeClass_
+    SystemColumnDefault = pl_.Expr | str | datetime | None
 
 
 class Language(Enum):
@@ -93,5 +93,7 @@ class SystemColumn:
     default: Callable[[], SystemColumnDefault]
     language: Language
     inception: Inception
-    generator: Any = None
-    aggregation: Any = None
+    required: bool
+    pristine: bool
+    generator: Any
+    aggregation: Any
