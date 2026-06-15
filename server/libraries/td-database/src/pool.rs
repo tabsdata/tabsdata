@@ -225,25 +225,12 @@ impl TdPool {
             return Ok(());
         }
         let schema = self.schema();
-        let stmts = vec![
-            format!(
-                "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{APP_ROLE}') \
-                 THEN CREATE ROLE \"{APP_ROLE}\" NOBYPASSRLS; END IF; END $$"
-            ),
-            format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\""),
-            format!("GRANT USAGE ON SCHEMA \"{schema}\" TO \"{APP_ROLE}\""),
-            format!(
-                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO \"{APP_ROLE}\""
-            ),
-            // Future tables created by this (bootstrap) role auto-grant to the
-            // app role, so a later migration that adds a table doesn't silently
-            // leave td_app without access. `ALTER DEFAULT PRIVILEGES` applies
-            // only to tables created after it runs, by the role running it.
-            format!(
-                "ALTER DEFAULT PRIVILEGES IN SCHEMA \"{schema}\" \
-                 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"{APP_ROLE}\""
-            ),
-        ];
+        let mut stmts = vec![create_app_role_sql(), create_schema_sql(schema, None)];
+        // Future tables created by this (bootstrap) role auto-grant to the app
+        // role, so a later migration that adds a table doesn't silently leave
+        // td_app without access. `ALTER DEFAULT PRIVILEGES` applies only to
+        // tables created after it runs, by the role running it.
+        stmts.extend(grant_app_role_privileges_sql(schema));
         let mut tx = self
             .admin
             .begin()
@@ -257,6 +244,44 @@ impl TdPool {
             .await
             .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
         debug!(role = APP_ROLE, "Ensured RLS app role");
+        Ok(())
+    }
+
+    /// Provision, on the admin pool, everything an externally-hosted schema needs
+    /// before its owner can populate it: the login-capable owner role, the
+    /// [`APP_ROLE`] the serving pools switch into, the schema owned by the owner,
+    /// and the owner's membership in [`APP_ROLE`] so its connections'
+    /// `after_connect` `SET ROLE` succeeds. Idempotent: each object is left in
+    /// place when it already exists. The [`APP_ROLE`] table grants are applied
+    /// later by [`Self::ensure_app_role`], once the tables exist.
+    pub async fn provision_schema(
+        &self,
+        schema: &str,
+        owner: &str,
+        password: &str,
+    ) -> Result<(), DbError> {
+        if !matches!(self.kind(), DatabaseBackend::Postgres) {
+            return Ok(());
+        }
+        let stmts = vec![
+            create_owner_role_sql(owner, password),
+            create_app_role_sql(),
+            create_schema_sql(schema, Some(owner)),
+            grant_app_role_membership_sql(owner),
+        ];
+        let mut tx = self
+            .admin
+            .begin()
+            .await
+            .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        tx.as_mut_conn()
+            .execute_batch(&stmts)
+            .await
+            .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        tx.commit()
+            .await
+            .map_err(DbError::FailedToCreateOrUpgradeDatabaseSchema)?;
+        debug!(owner, schema, role = APP_ROLE, "Provisioned schema and owner");
         Ok(())
     }
 
@@ -545,10 +570,7 @@ impl TdPool {
         let mut tx = self.admin.begin().await?;
         tx.as_mut_conn().execute_batch(stmts).await?;
         if matches!(self.kind(), DatabaseBackend::Postgres) {
-            let schema = self.schema();
-            let grant = format!(
-                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO \"{APP_ROLE}\""
-            );
+            let grant = grant_app_role_tables_sql(self.schema());
             tx.as_mut_conn()
                 .execute_batch(std::slice::from_ref(&grant))
                 .await?;
@@ -583,6 +605,54 @@ impl TdPool {
     }
 }
 
+#[cfg(postgres)]
+fn create_app_role_sql() -> String {
+    format!(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{APP_ROLE}') \
+         THEN CREATE ROLE \"{APP_ROLE}\" NOBYPASSRLS; END IF; END $$"
+    )
+}
+
+#[cfg(postgres)]
+fn create_owner_role_sql(owner: &str, password: &str) -> String {
+    format!(
+        "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{owner}') \
+         THEN CREATE ROLE \"{owner}\" LOGIN PASSWORD '{password}'; END IF; END $$"
+    )
+}
+
+#[cfg(postgres)]
+fn create_schema_sql(schema: &str, owner: Option<&str>) -> String {
+    match owner {
+        Some(owner) => format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\" AUTHORIZATION \"{owner}\""),
+        None => format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\""),
+    }
+}
+
+#[cfg(postgres)]
+fn grant_app_role_membership_sql(owner: &str) -> String {
+    format!("GRANT \"{APP_ROLE}\" TO \"{owner}\"")
+}
+
+#[cfg(postgres)]
+fn grant_app_role_tables_sql(schema: &str) -> String {
+    format!(
+        "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO \"{APP_ROLE}\""
+    )
+}
+
+#[cfg(postgres)]
+fn grant_app_role_privileges_sql(schema: &str) -> [String; 3] {
+    [
+        format!("GRANT USAGE ON SCHEMA \"{schema}\" TO \"{APP_ROLE}\""),
+        grant_app_role_tables_sql(schema),
+        format!(
+            "ALTER DEFAULT PRIVILEGES IN SCHEMA \"{schema}\" \
+             GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"{APP_ROLE}\""
+        ),
+    ]
+}
+
 /// Create the row-level-security app role ([`APP_ROLE`]) if it does not exist,
 /// `NOBYPASSRLS`. Called on the admin pool during connect — *before* the
 /// serving pools' `after_connect` `SET ROLE td_app` runs — so the switch can
@@ -592,11 +662,7 @@ impl TdPool {
 /// (they need the schema tables to exist first).
 #[cfg(postgres)]
 pub(crate) async fn provision_app_role(pool: &sqlx::PgPool) -> Result<(), DbError> {
-    let stmt = format!(
-        "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{APP_ROLE}') \
-         THEN CREATE ROLE \"{APP_ROLE}\" NOBYPASSRLS; END IF; END $$"
-    );
-    sqlx::query(&stmt)
+    sqlx::query(&create_app_role_sql())
         .execute(pool)
         .await
         .map_err(DbError::SqlError)?;
