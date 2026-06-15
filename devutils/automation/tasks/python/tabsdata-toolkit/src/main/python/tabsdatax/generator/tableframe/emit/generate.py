@@ -726,6 +726,9 @@ def _render_tableframe_py(
     if hookable:
         lines.append(f"    _HOOKABLE_OPS = ({', '.join(repr(op) for op in hookable)},)")
         lines.append("")
+    # The from_* / empty / to_* construction and materialization surface is
+    # hand-written on EngineFrame (not generated); TableFrame inherits it, and the
+    # stub's `class TableFrame(EngineFrame)` link lets tooling resolve it from source.
     for sym in syms:
         lines += _tableframe_member(sym, root)
 

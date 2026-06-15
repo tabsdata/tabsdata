@@ -26,6 +26,10 @@ class DataVersionProperties:
     def builder(cls) -> DataVersionPropertiesBuilder:
         return DataVersionPropertiesBuilder()
 
+    @classmethod
+    def empty(cls) -> DataVersionProperties:
+        return DataVersionPropertiesBuilder.empty()
+
     def clone(self) -> DataVersionProperties:
         # No need to clone as its dataclass is frozen and immutable.
         return self

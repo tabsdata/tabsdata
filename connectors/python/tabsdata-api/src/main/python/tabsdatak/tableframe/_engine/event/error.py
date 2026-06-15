@@ -29,6 +29,9 @@ class DirectConstructionError(TableFrameInitException): ...
 class IncompleteVersionPropertiesError(TableFrameInternalException): ...
 
 
+class UnsupportedInputError(TableFrameInitException): ...
+
+
 class TableFrameErrorCode(ErrorCode):
     TF1 = ErrorDef(
         DirectConstructionError,
@@ -43,4 +46,8 @@ class TableFrameErrorCode(ErrorCode):
         "transaction={transaction!r} - "
         "version={version!r} - "
         "timestamp={timestamp!r}.",
+    )
+    TF3 = ErrorDef(
+        UnsupportedInputError,
+        "{factory} does not support an input of type {type}.",
     )
