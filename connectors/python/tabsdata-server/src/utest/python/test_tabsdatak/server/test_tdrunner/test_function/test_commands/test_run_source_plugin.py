@@ -259,7 +259,7 @@ def _set_argv(
             responder_method,
             "--responder-authorization",
             responder_authorization,
-            "--execution-meta-file",
+            "--journal-file",
             "/tmp/em.yaml",
         ],
     )

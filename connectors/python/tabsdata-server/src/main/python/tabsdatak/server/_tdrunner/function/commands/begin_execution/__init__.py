@@ -7,9 +7,14 @@
 First step of the function-run pod chain (publisher / subscriber /
 transformer). Initializes the shared ``Journal`` YAML with the
 run's startup-phase data — today just the start time (unix-epoch
-seconds, matching the apiserver callback envelope's ``start`` field),
-but the file is the agreed home for any additional startup-phase
+milliseconds, matching the apiserver callback envelope's ``start``
+field), but the file is the agreed home for any additional startup-phase
 information later steps want to expose to the rest of the chain.
+
+After recording the start time it posts a ``Running`` status to the
+responder so the apiserver learns the run has started. A ``Running``
+post that cannot reach the responder fails the command, which the
+orchestration then reports to the responder as ``Failed``.
 
 Runs exactly once per pod, before ``fetch-request``. The shared volume
 is overlaid on the image-template-provided ``shared/journal/``
@@ -24,7 +29,11 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._lib.command import (
+    build_parser,
+    command,
+    notify_running,
+)
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function.commands.begin_execution.error import (
     BeginExecutionErrorCode,
@@ -33,7 +42,7 @@ from tabsdatak.server._tdrunner.function.commands.begin_execution.error import (
 logger = logging.getLogger(__name__)
 
 VERSION = "2.0.0"
-INFO = "begin-execution — initialize execution-meta with the run's startup-phase data"
+INFO = "begin-execution — initialize the journal with the run's startup-phase data"
 MAN = (
     "begin-execution\n"
     "    --shared-dir <PATH>\n"
@@ -43,7 +52,7 @@ MAN = (
     "    --responder-url <URL>\n"
     "    --responder-method <METHOD>\n"
     "    --responder-authorization <AUTH>\n"
-    "    --execution-meta-file <PATH>\n\n"
+    "    --journal-file <PATH>\n\n"
     "First step of the function-run pod chain. Writes the shared "
     "Journal YAML with the run's startup-phase data (start time "
     "today; additional fields/steps may grow the schema in the future)."
@@ -62,21 +71,21 @@ def _build_parser():
 
 @command(name="td_begin_execution", parser=_build_parser)
 def main(args: argparse.Namespace) -> int:
-    out_path = Path(args.journal_file)
     logger.info("Initializing Journal for the function run")
-    # i64 unix epoch seconds — matches ResponseMessagePayload.start in
-    # td-common/src/server.rs so the value can flow through to the
-    # eventual report-completion POST body unchanged.
-    start = int(datetime.now(tz=timezone.utc).timestamp())
-    meta = Journal(start=start)
-    logger.debug("Journal start=%s; writing to %s", start, out_path)
+    start = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+    journal_path = Path(args.journal_file)
+    journal = Journal(start=start)
+    logger.debug("Journal start=%s; writing to %s", start, journal_path)
     try:
-        meta.save(out_path)
+        journal.save(journal_path)
     except OSError as exc:
         raise BeginExecutionErrorCode.BE_1.exception(
-            cause=exc, path=out_path, detail=str(exc)
+            cause=exc,
+            path=journal_path,
+            detail=str(exc),
         )
-    logger.info("Recorded ExecutionMeta start=%s", start)
+    logger.info("begin-execution: recorded start=%s", start)
+    notify_running(args)
     return 0
 
 

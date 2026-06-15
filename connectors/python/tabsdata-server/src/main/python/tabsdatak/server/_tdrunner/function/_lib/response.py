@@ -24,10 +24,19 @@ Schema:
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
+import pyarrow.parquet as pq
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
+
+from tabsdatak.error import ErrorCode
+from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
+    MANIFEST_FILE_KEY,
+    MANIFEST_NAME_KEY,
+)
+from tabsdatak.server._tdrunner.function._lib.request import Request
 
 
 class InvalidResponseError(ValueError):
@@ -46,6 +55,19 @@ class TableInfo(BaseModel):
     # missing field as "no contribution".
     data_bytes: int | None = None
 
+    @classmethod
+    def from_parquet(cls, path: Path) -> "TableInfo":
+        """Read column/row counts, schema hash, and on-disk size from a parquet."""
+        metadata = pq.read_metadata(path)
+        schema = pq.read_schema(path)
+        schema_bytes = schema.serialize().to_pybytes()
+        return cls(
+            column_count=len(schema),
+            row_count=int(metadata.num_rows),
+            schema_hash="sha256:" + hashlib.sha256(schema_bytes).hexdigest(),
+            data_bytes=path.stat().st_size,
+        )
+
 
 class TableEntry(BaseModel):
     """An output-table entry in the response.
@@ -59,11 +81,92 @@ class TableEntry(BaseModel):
     table: str
     info: TableInfo | None = None
 
+    @classmethod
+    def from_manifest(cls, name: str, file: str | None) -> "TableEntry":
+        """Entry for a declared output, resolved against the outputs manifest.
+
+        A null `file` is the "user returned None" sentinel and yields a
+        not-modified entry (`info=None`).
+        """
+        if file is None:
+            return cls(table=name, info=None)
+        return cls(table=name, info=TableInfo.from_parquet(Path(file)))
+
+    @classmethod
+    def from_state_dir(cls, name: str, state_dir: Path) -> "TableEntry":
+        """Entry for a system-output table, resolved against `state_dir`.
+
+        A missing `<state_dir>/<name>.parquet` yields a not-modified
+        entry (`info=None`).
+        """
+        parquet = state_dir / f"{name}.parquet"
+        if not parquet.exists():
+            return cls(table=name, info=None)
+        return cls(table=name, info=TableInfo.from_parquet(parquet))
+
 
 class Response(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     output: tuple[TableEntry, ...]
+
+    @classmethod
+    def from_fn_response(
+        cls,
+        request: Request,
+        manifest_entries: list[dict],
+        state_dir: Path,
+        *,
+        mismatch_error_code: ErrorCode,
+    ) -> "Response":
+        """Build the response from a function run's outputs.
+
+        `request.output` tables are resolved against the outputs manifest
+        (authoritative for absolute file paths and for the "user returned
+        None" sentinel via `file: null`). `request.system_output` tables
+        are resolved against `state_dir/<name>.parquet`.
+
+        Raises:
+            The exception bound to `mismatch_error_code` when a declared
+            `request.output` table has no entry in the manifest.
+        """
+        files_by_name: dict[str, str | None] = {
+            entry[MANIFEST_NAME_KEY]: entry.get(MANIFEST_FILE_KEY)
+            for entry in manifest_entries
+        }
+        entries: list[TableEntry] = []
+        for table in request.output:
+            if table.name not in files_by_name:
+                raise mismatch_error_code.exception(table=table.name)
+            entries.append(
+                TableEntry.from_manifest(table.name, files_by_name[table.name])
+            )
+        for table in request.system_output:
+            entries.append(TableEntry.from_state_dir(table.name, state_dir))
+        return cls(output=tuple(entries))
+
+    def to_worker_output(self) -> dict:
+        """Render as the apiserver callback ``WorkerOutput`` context.
+
+        Mirrors the Rust ``WorkerOutput::FunctionV2`` wrapping a
+        ``FunctionOutput`` of externally-tagged ``WrittenTable`` entries:
+        a modified table (``info`` present) becomes ``Data``, a
+        not-modified table becomes ``NoData``. The flat on-disk
+        ``response.yaml`` shape would not deserialize into this enum, so
+        the tag must be added explicitly.
+        """
+        written: list[dict] = []
+        for entry in self.output:
+            if entry.info is None:
+                written.append({"NoData": {"table": entry.table}})
+            else:
+                written.append({
+                    "Data": {
+                        "table": entry.table,
+                        "info": entry.info.model_dump(mode="json", exclude_none=True),
+                    }
+                })
+        return {"FunctionV2": {"output": written}}
 
 
 def write_response(resp: Response, path: Path) -> None:

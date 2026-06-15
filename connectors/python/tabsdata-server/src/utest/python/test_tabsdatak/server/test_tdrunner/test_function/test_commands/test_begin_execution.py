@@ -53,7 +53,7 @@ def _required_args(
 ):
     _set_argv(
         monkeypatch,
-        "--execution-meta-file",
+        "--journal-file",
         str(journal_file),
         "--liveness",
         str(liveness),
@@ -68,15 +68,15 @@ def _required_args(
 
 
 def test_main_writes_journal_yaml(monkeypatch, tmp_path):
-    meta_file = tmp_path / "journal.yaml"
+    journal_file = tmp_path / "journal.yaml"
     before = int(datetime.now(tz=timezone.utc).timestamp())
     _required_args(
         monkeypatch,
-        journal_file=meta_file,
+        journal_file=journal_file,
         liveness=tmp_path / "live",
     )
     assert main() == 0
-    written = yaml.safe_load(meta_file.read_text())
+    written = yaml.safe_load(journal_file.read_text())
     assert isinstance(written, dict)
     assert set(written) == {"start"}
     after = int(datetime.now(tz=timezone.utc).timestamp())
@@ -119,6 +119,6 @@ def test_main_missing_required_option_returns_1(monkeypatch):
         monkeypatch,
         "--responder-url",
         "https://api/w/1",
-        # missing every other required arg, including --execution-meta-file.
+        # missing every other required arg, including --journal-file.
     )
     assert main() == 1

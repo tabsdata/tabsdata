@@ -13,7 +13,7 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
 
 
 class WriteFailedError(_WriteFailedError):
-    """``--execution-meta-file`` could not be written (missing parent
+    """``--journal-file`` could not be written (missing parent
     dir, permission, ...)."""
 
     exit_code = 10

@@ -63,7 +63,7 @@ def _set_argv(
             "POST",
             "--responder-authorization",
             "Bearer wtok",
-            "--execution-meta-file",
+            "--journal-file",
             "/tmp/em.yaml",
         ],
     )

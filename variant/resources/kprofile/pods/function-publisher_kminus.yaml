@@ -66,7 +66,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
           resources:
             requests:
@@ -117,7 +117,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
           resources:
             requests:
@@ -168,7 +168,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --resolver-url
             - env:SECRET__TD_RESOLVER_URL
@@ -227,7 +227,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
@@ -288,7 +288,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
@@ -351,7 +351,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-download.yaml
@@ -406,7 +406,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
@@ -467,7 +467,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
@@ -526,7 +526,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
@@ -589,7 +589,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
@@ -646,7 +646,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-upload.yaml
@@ -701,7 +701,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
@@ -758,7 +758,7 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/tables-upload.yaml
@@ -814,12 +814,8 @@ spec:
             - env:SECRET__TD_RESPONDER_METHOD
             - --responder-authorization
             - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --execution-meta-file
+            - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
-            - --url
-            - env:SECRET__TD_RESPONDER_URL
-            - --authorization
-            - env:SECRET__TD_RESPONDER_AUTHORIZATION
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --outputs-manifest

@@ -37,12 +37,14 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, NoReturn
+from typing import Any, Callable, NoReturn
 
 from tenacity import retry, stop_after_delay, wait_fixed
 
 from tabsdatak._logging import setup_logging
+from tabsdatak.common._enums import WorkerCallbackStatus
 from tabsdatak.server._tdrunner.function._lib.errors import (
     CommandErrorCode,
     CommandException,
@@ -50,7 +52,12 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
     PrematureError,
     UnexpectedError,
 )
+from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function._lib.liveness import install_liveness_handler
+from tabsdatak.server._tdrunner.function._lib.message import (
+    EXIT_STATUS_SUCCESS,
+    ResponseMessagePayload,
+)
 from tabsdatak.server._tdrunner.function.commands import tabsdata_command
 
 logger = logging.getLogger(__name__)
@@ -160,7 +167,7 @@ def build_parser(
       call.
     * ``--responder-authorization`` — required; ``Authorization``
       header value for the responder call.
-    * ``--execution-meta-file PATH`` — required; path to the shared
+    * ``--journal-file PATH`` — required; path to the shared
       run-metadata YAML (``Journal``) every command in the chain
       reads/writes.
     """
@@ -232,7 +239,7 @@ def build_parser(
         help="Responder Authorization header value.",
     )
     parser.add_argument(
-        "--execution-meta-file",
+        "--journal-file",
         required=True,
         metavar="PATH",
         help=(
@@ -266,62 +273,148 @@ def run_command(main_fn: Callable[[], int | None]) -> int:
     return int(result)
 
 
-@retry(
-    stop=stop_after_delay(_RESPONDER_RETRY_TOTAL_SECONDS),
-    wait=wait_fixed(_RESPONDER_RETRY_WAIT_SECONDS),
-    reraise=True,
-)
-def _failure_to_responder_request(request: urllib.request.Request) -> None:
-    with urllib.request.urlopen(request) as response:
-        response.read()
+def _notify_status(
+    args: argparse.Namespace,
+    payload: ResponseMessagePayload,
+) -> None:
+    """POST a pre-built payload to the responder endpoint, raising on failure.
+
+    Not meant to be called directly — use :func:`notify_running`,
+    :func:`notify_done`, or :func:`notify_failed`, which build the proper
+    payload for each case.
+
+    The HTTP call is wrapped with a tenacity retry: fixed wait of
+    :data:`_RESPONDER_RETRY_WAIT_SECONDS` between attempts, total budget
+    :data:`_RESPONDER_RETRY_TOTAL_SECONDS`. If every attempt fails the
+    error propagates, so a command body posting a status (e.g.
+    ``Running`` or ``Done``) that cannot reach the responder fails like
+    any other command error and is reported to the responder as
+    ``Failed`` by the :func:`command` orchestration.
+    """
+
+    @retry(
+        stop=stop_after_delay(_RESPONDER_RETRY_TOTAL_SECONDS),
+        wait=wait_fixed(_RESPONDER_RETRY_WAIT_SECONDS),
+        reraise=True,
+    )
+    def post(request: urllib.request.Request) -> None:
+        with urllib.request.urlopen(request) as response:
+            response.read()
+
+    url = resolve_value(args.responder_url)
+    method = resolve_value(args.responder_method)
+    authorization = resolve_value(args.responder_authorization)
+    body = json.dumps(payload.to_body()).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        method=method,
+        headers={
+            "Authorization": authorization,
+            "Content-Type": "application/json",
+        },
+    )
+    status = payload.status
+    exit_status = payload.exit_status
+    logger.info(f"Posting responder {status}: {method} {url} exit_status={exit_status}")
+    post(request)
+    logger.info(f"Posted responder {status}: {method} {url} exit_status={exit_status}")
 
 
-def _failure_to_responder(
+def notify_running(args: argparse.Namespace) -> None:
+    """POST a ``Running`` status to the responder, raising on failure.
+
+    ``start`` (unix-epoch milliseconds) is read back from the run's
+    ``Journal`` and carried through to the apiserver callback envelope's
+    ``start`` field. The read is strict: a missing or broken journal
+    fails the command and is reported as ``Failed`` by the
+    :func:`command` orchestration.
+    """
+    journal = Journal.load(
+        Path(args.journal_file),
+        strict=True,
+    )
+    _notify_status(
+        args,
+        ResponseMessagePayload(
+            status=WorkerCallbackStatus.RUNNING,
+            start=journal.start,
+        ),
+    )
+
+
+def notify_done(
+    args: argparse.Namespace,
+    *,
+    context: Any | None = None,
+    exit_code: int = EXIT_STATUS_SUCCESS,
+) -> None:
+    """POST a ``Done`` status to the responder, raising on failure.
+
+    ``start`` and ``end`` (unix-epoch milliseconds) are read back from
+    the run's ``Journal`` and carried through to the apiserver callback
+    envelope's ``start`` / ``end`` fields. The read is strict: a missing
+    or broken journal on the success path fails the command and is
+    reported as ``Failed`` by the :func:`command` orchestration.
+    ``context`` is the optional per-run payload (the worker output).
+    """
+    journal = Journal.load(
+        Path(args.journal_file),
+        strict=True,
+    )
+    logger.debug(f"notify_done context: {context}")
+    _notify_status(
+        args,
+        ResponseMessagePayload(
+            status=WorkerCallbackStatus.DONE,
+            start=journal.start,
+            end=journal.end,
+            context=context,
+            exit_status=exit_code,
+        ),
+    )
+
+
+def notify_failed(
     args: argparse.Namespace | None,
     exit_code: int,
     error: BaseException,
 ) -> None:
-    """Best-effort POST a failure status back to the responder endpoint.
+    """Best-effort POST a ``Failed`` status back to the responder endpoint.
 
-    Any failure inside this helper is swallowed and logged — we are
-    already in an error path and must not mask the original failure.
-    The HTTP call is wrapped with a tenacity retry: fixed wait of
-    :data:`_RESPONDER_RETRY_WAIT_SECONDS` between attempts, total budget
-    :data:`_RESPONDER_RETRY_TOTAL_SECONDS`.
+    ``start`` and ``end`` are read from the run's ``Journal`` — ``start``
+    falls back to ``0`` and ``end`` to the current time when it cannot be
+    read or parsed, both unix-epoch milliseconds. Any failure inside this
+    helper is swallowed and logged — this is the terminal error path and
+    must not mask the original failure, so there is nowhere left to
+    escalate a failed post to.
     """
     if args is None:
         logger.warning(
-            "Skipping responder failure POST: command arguments not available."
+            "Skipping responder Failed POST: command arguments not available."
         )
         return
     # noinspection PyBroadException
     try:
-        url = resolve_value(args.responder_url)
-        method = resolve_value(args.responder_method)
-        authorization = resolve_value(args.responder_authorization)
-        body = json.dumps({
-            "status": "Failed",
-            "exit_code": exit_code,
-            "message": repr(error),
-        }).encode("utf-8")
-        request = urllib.request.Request(
-            url,
-            data=body,
-            method=method,
-            headers={
-                "Authorization": authorization,
-                "Content-Type": "application/json",
-            },
+        journal = Journal.load(Path(args.journal_file), strict=False)
+        end = (
+            journal.end
+            if journal.end is not None
+            else int(datetime.now(tz=timezone.utc).timestamp() * 1000)
         )
-        logger.warning(
-            f"Posting responder failure: {method} {url} exit_code={exit_code}"
-        )
-        _failure_to_responder_request(request)
-        logger.warning(
-            f"Posted responder failure: {method} {url} exit_code={exit_code}"
+        start = journal.start if journal.start is not None else end
+        _notify_status(
+            args,
+            ResponseMessagePayload(
+                status=WorkerCallbackStatus.FAILED,
+                start=start,
+                end=end,
+                exit_status=exit_code,
+                error_message=repr(error),
+            ),
         )
     except Exception:
-        logger.warning("Failed to post failure status to responder", exc_info=True)
+        logger.warning("Failed to post Failed status to responder", exc_info=True)
 
 
 def command(
@@ -390,12 +483,12 @@ def command(
                         f"promoting to {InconsistentError.exit_code}"
                     )
                     exit_code = InconsistentError.exit_code
-                _failure_to_responder(args, exit_code, error)
+                notify_failed(args, exit_code, error)
                 return exit_code
             except Exception as exception:
                 exit_code = UnexpectedError.exit_code
                 logger.exception("Unhandled exception caught by command")
-                _failure_to_responder(args, exit_code, exception)
+                notify_failed(args, exit_code, exception)
                 return exit_code
             except SystemExit as exit_event:
                 exit_code = PrematureError.exit_code
@@ -403,7 +496,7 @@ def command(
                     f"Exit ({exit_event.code}) intercepted by command; "
                     f"promoting to {exit_code}"
                 )
-                _failure_to_responder(args, exit_code, exit_event)
+                notify_failed(args, exit_code, exit_event)
                 return exit_code
 
         return main

@@ -124,7 +124,7 @@ def test_build_parser_required_liveness_long():
         "POST",
         "--responder-authorization",
         "Bearer tok",
-        "--execution-meta-file",
+        "--journal-file",
         "/tmp/em.yaml",
     ])
     assert args.liveness == "/tmp/x"
@@ -141,7 +141,7 @@ def test_build_parser_required_liveness_short():
         "POST",
         "--responder-authorization",
         "Bearer tok",
-        "--execution-meta-file",
+        "--journal-file",
         "/tmp/em.yaml",
     ])
     assert args.liveness == "/tmp/x"
