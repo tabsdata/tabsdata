@@ -30,8 +30,8 @@ from tabsdatak.server._tdrunner.function._lib.initial_values import (
     hydrate_ctx_from_state_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
-    MANIFEST_FILES_KEY,
-    MANIFEST_NAME_KEY,
+    build_entry,
+    build_table_record,
     write_inputs_manifest,
 )
 from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
@@ -221,10 +221,18 @@ def _write_inputs_manifest(
         )
 
     entries = [
-        {
-            MANIFEST_NAME_KEY: parameters[i],
-            MANIFEST_FILES_KEY: [_normalise_table_file(f) for f in produced[i]],
-        }
+        build_entry(
+            name=parameters[i],
+            table_pos=i,
+            tables=[
+                build_table_record(
+                    file=_normalise_table_file(f),
+                    input_idx=None,
+                    version_pos=-1,
+                )
+                for f in produced[i]
+            ],
+        )
         for i in range(cardinality)
     ]
 

@@ -38,7 +38,12 @@ from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_NAME_KEY,
 )
-from tabsdatak.server._tdrunner.function._lib.request import Request
+from tabsdatak.server._tdrunner.function._lib.request import (
+    InputTable,
+    InputTableVersions,
+    Request,
+    input_tables,
+)
 
 
 class OutputTableNotInManifestError(ValueError):
@@ -71,6 +76,22 @@ class TransporterCopyRequest(BaseModel):
 # ---- builders -------------------------------------------------------------
 
 
+def localized_input_files(
+    in_dir: Path, entry: InputTable | InputTableVersions
+) -> list[tuple[InputTable, Path]]:
+    """Per-member `(member, local path)` pairs an input entry is copied to.
+
+    Members of a multi-version dependency share the table name, so their
+    files are disambiguated with the member's `version_pos`.
+    """
+    if isinstance(entry, InputTableVersions):
+        return [
+            (member, in_dir / f"{member.name}.{member.version_pos}.parquet")
+            for member in input_tables(entry)
+        ]
+    return [(entry, in_dir / f"{entry.name}.parquet")]
+
+
 def build_localize_state_request(
     request: Request, in_dir: Path, state_dir: Path
 ) -> TransporterCopyRequest:
@@ -79,17 +100,16 @@ def build_localize_state_request(
     Tables with a `None` location (declared but unbound) are skipped.
     """
     pairs: list[CopyPair] = []
-    for table in request.input:
-        if table.location is None:
-            continue
-        pairs.append(
-            CopyPair(
-                source=endpoint_from_location(table.location),
-                target=LocalFileEndpoint(
-                    url=_local_uri(in_dir / f"{table.name}.parquet")
-                ),
+    for entry in request.input:
+        for member, path in localized_input_files(in_dir, entry):
+            if member.location is None:
+                continue
+            pairs.append(
+                CopyPair(
+                    source=endpoint_from_location(member.location),
+                    target=LocalFileEndpoint(url=_local_uri(path)),
+                )
             )
-        )
     for table in request.system_input:
         if table.location is None:
             continue

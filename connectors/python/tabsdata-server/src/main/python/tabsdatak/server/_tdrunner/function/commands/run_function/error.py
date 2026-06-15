@@ -176,7 +176,7 @@ class RunFunctionErrorCode(ErrorCode):
         BadManifestError,
         "SINGLE-mode slot has {count} files; expected 0 or 1",
     )
-    # ``_materialise_input_slot`` SINGLE mode > 1 files. Same exit
+    # ``_materialize_input_slot`` SINGLE mode > 1 files. Same exit
     # code as RF_5 / RF_10 (all are manifest-shape failures).
 
     RF_12 = ErrorDef(
@@ -202,10 +202,7 @@ class RunFunctionErrorCode(ErrorCode):
 
     RF_15 = ErrorDef(
         OutputShapeMismatchError,
-        (
-            "output {slot} ({table!r}) must be a polars.LazyFrame or "
-            "None, got {actual_type}"
-        ),
+        ("output {slot} ({table!r}) must be a TableFrame or None, got {actual_type}"),
     )
     # ``_invoke_user_function`` per-entry type mismatch.
 

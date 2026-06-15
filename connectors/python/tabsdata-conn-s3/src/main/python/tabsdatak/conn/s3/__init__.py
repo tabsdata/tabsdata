@@ -5,8 +5,8 @@
 * :class:`S3Src` -- source: list of `paths` (glob-style);
   one parquet slot per path.
 * :class:`S3Dest` -- destination: list of `paths`; one
-  parquet slot per path. Tokens like ``${date}`` and ``${trx_id}``
-  in dest paths are resolved at write time.
+  parquet slot per path. The tokens ``${EXEC_PLAN_ID}``, ``${TRX_ID}``
+  and ``${EXEC_PLAN_TS}`` in dest paths are resolved at write time.
 
 File transport goes through the shared ``td_transporter`` binary.
 String, ``Var``, and ``Secret`` are accepted on credential and
@@ -159,8 +159,9 @@ class S3Dest(Dest):
     """S3 destination — write one parquet slot per path.
 
     :param paths: List of target file paths relative to the
-        conn's root. One parquet slot per entry. Tokens like
-        ``${date}`` / ``${trx_id}`` are resolved at write time.
+        conn's root. One parquet slot per entry. The tokens
+        ``${EXEC_PLAN_ID}``, ``${TRX_ID}`` and ``${EXEC_PLAN_TS}``
+        are resolved at write time.
     :param format: Optional output-format override (default AUTO).
     :param dest_cfg: Optional ``Mapping`` over
         ``{"tabsdata.file.chunkSize"}``.

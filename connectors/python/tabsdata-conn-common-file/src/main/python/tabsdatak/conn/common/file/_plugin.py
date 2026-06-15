@@ -8,7 +8,12 @@ from typing import Any, Callable, cast
 
 from tabsdatak.conn.common.file import _input, _output, _transporter
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
-from tabsdatak.conn.common.file.typing_ import FileInfo
+from tabsdatak.conn.common.file.typing_ import (
+    EXEC_PLAN_ID,
+    EXEC_PLAN_TS,
+    TRX_ID,
+    FileInfo,
+)
 from tabsdatak.error import ApiException, ErrorCode
 from tabsdatak.spi import (
     DestContext,
@@ -33,9 +38,16 @@ def initial_lastmod_to_iso(value: datetime | None) -> str | None:
     return value.astimezone(timezone.utc).isoformat(timespec="microseconds")
 
 
-def resolve_dest_tokens(target_path: str) -> str:
-    # Placeholder: dest-token substitution lands here when wired.
-    return target_path
+def resolve_dest_tokens(target_path: str, ctx: DestContext) -> str:
+    tokens = {
+        EXEC_PLAN_ID: ctx.exec_plan_id,
+        TRX_ID: ctx.trx_id,
+        EXEC_PLAN_TS: ctx.exec_plan_ts,
+    }
+    resolved = target_path
+    for token, value in tokens.items():
+        resolved = resolved.replace(token, value)
+    return resolved
 
 
 # --- Reader / writer adapter conf --------------------------------
@@ -228,7 +240,7 @@ def copy_out(
     pairs: list[tuple[Any, Any]] = []
     for i, (parquet_path, entry) in enumerate(zip(tables, cfg.paths), 1):
         logger.info("file-writer: writing path %d/%d: %r", i, total, entry)
-        resolved_entry = resolve_dest_tokens(entry)
+        resolved_entry = resolve_dest_tokens(entry, ctx)
         source_loc = _transporter.TransporterLocalFile(
             _transporter.path_to_file_uri(parquet_path)
         )

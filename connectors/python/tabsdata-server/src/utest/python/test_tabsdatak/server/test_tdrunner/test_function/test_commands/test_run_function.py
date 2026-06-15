@@ -6,7 +6,7 @@
 
 Covers:
   * Helper-function unit tests (`_load_function_def`,
-    `_infer_table_modes`, `_materialise_input_slot`,
+    `_infer_table_modes`, `_materialize_input_slot`,
     `_invoke_user_function`, `_sink_outputs`).
   * `main()` error paths and end-to-end happy path: bundle a real
     publisher, write an inputs manifest pointing at a real parquet,
@@ -39,7 +39,7 @@ from tabsdatak.server._tdrunner.function.commands.run_function import (
     _infer_table_modes,
     _invoke_user_function,
     _load_function_def,
-    _materialise_input_slot,
+    _materialize_input_slot,
     _output_table_names,
     _scan_parquet_or_fail,
     _sink_outputs,
@@ -636,17 +636,17 @@ def test_scan_parquet_garbage_raises_bad_input_parquet(tmp_path):
         _scan_parquet_or_fail(p)
 
 
-# --- unit: _materialise_input_slot --------------------------------------
+# --- unit: _materialize_input_slot --------------------------------------
 
 
 def test_materialise_single_zero_files_is_none(tmp_path):
-    assert _materialise_input_slot([], table_mode=TableMode.SINGLE) is None
+    assert _materialize_input_slot([], table_mode=TableMode.SINGLE) is None
 
 
 def test_materialise_single_one_file_is_lazyframe(tmp_path):
     p = tmp_path / "x.parquet"
     _write_sample_parquet(p)
-    out = _materialise_input_slot([str(p)], table_mode=TableMode.SINGLE)
+    out = _materialize_input_slot([str(p)], table_mode=TableMode.SINGLE)
     assert isinstance(out, pl.LazyFrame)
 
 
@@ -656,7 +656,7 @@ def test_materialise_single_two_files_raises_bad_manifest(tmp_path):
     _write_sample_parquet(a)
     _write_sample_parquet(b)
     with pytest.raises(BadManifestError):
-        _materialise_input_slot([str(a), str(b)], table_mode=TableMode.SINGLE)
+        _materialize_input_slot([str(a), str(b)], table_mode=TableMode.SINGLE)
 
 
 def test_materialise_array_returns_list_of_lazyframes(tmp_path):
@@ -664,14 +664,14 @@ def test_materialise_array_returns_list_of_lazyframes(tmp_path):
     b = tmp_path / "b.parquet"
     _write_sample_parquet(a)
     _write_sample_parquet(b)
-    out = _materialise_input_slot([str(a), str(b)], table_mode=TableMode.ARRAY)
+    out = _materialize_input_slot([str(a), str(b)], table_mode=TableMode.ARRAY)
     assert isinstance(out, list)
     assert len(out) == 2
     assert all(isinstance(x, pl.LazyFrame) for x in out)
 
 
 def test_materialise_array_empty_is_empty_list():
-    out = _materialise_input_slot([], table_mode=TableMode.ARRAY)
+    out = _materialize_input_slot([], table_mode=TableMode.ARRAY)
     assert out == []
 
 

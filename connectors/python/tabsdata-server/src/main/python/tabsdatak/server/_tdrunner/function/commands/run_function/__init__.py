@@ -5,7 +5,7 @@
 """run-function command.
 
 The penultimate step of the function-runner chain. Reads the inputs
-manifest, materialises each input slot as a polars `LazyFrame` (or a
+manifest, materializes each input slot as a polars `LazyFrame` (or a
 list of LazyFrames for ARRAY-mode slots), invokes the user-decorated
 function, and sinks each returned `LazyFrame` to a parquet under
 `--out-dir`. Emits an outputs manifest at `--outputs-manifest` mapping
@@ -47,6 +47,10 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
+from tabsdatak.server._tdrunner.function._lib import (
+    inputs_manifest,
+    outputs_manifest,
+)
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
@@ -54,15 +58,6 @@ from tabsdatak.server._tdrunner.function._lib.function_def import (
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
     drain_ctx_to_state_or_raise,
     hydrate_ctx_from_state_or_raise,
-)
-from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
-    MANIFEST_FILES_KEY,
-    load_inputs_manifest_or_raise,
-)
-from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
-    MANIFEST_FILE_KEY,
-    MANIFEST_NAME_KEY,
-    write_outputs_manifest,
 )
 from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
@@ -90,7 +85,7 @@ MAN = (
     "run-function --request <PATH> --bundle-dir <PATH> "
     "--inputs-manifest <PATH> --out-dir <PATH> "
     "--outputs-manifest <PATH> --liveness <PATH>\n\n"
-    "Loads function_def.json from --bundle-dir, materialises each "
+    "Loads function_def.json from --bundle-dir, materializes each "
     "input slot from --inputs-manifest as a polars LazyFrame "
     "(single-mode slots → one LazyFrame; array-mode slots → list of "
     "LazyFrames), invokes the user function, and sinks each returned "
@@ -272,50 +267,100 @@ def _scan_parquet_or_fail(path: Path) -> pl.LazyFrame:
     return lf
 
 
-def _materialise_input_slot(files: list[str], *, table_mode: TableMode):
+def _input_version(record: dict):
+    """Build a `DataVersion` from a manifest table record's version fields."""
+    from tabsdatak.tableframe._engine.model.frame import DataVersion
+
+    execution_id = record.get(inputs_manifest.MANIFEST_EXECUTION_ID_KEY)
+    transaction_id = record.get(inputs_manifest.MANIFEST_TRANSACTION_ID_KEY)
+    table_data_version_id = record.get(inputs_manifest.MANIFEST_VERSION_ID_KEY)
+    triggered_on = record.get(inputs_manifest.MANIFEST_TRIGGERED_ON_KEY)
+    if (
+        execution_id is None
+        or transaction_id is None
+        or table_data_version_id is None
+        or triggered_on is None
+    ):
+        return None
+    return (
+        DataVersion
+        .builder()
+        .with_execution(str(execution_id))
+        .with_transaction(str(transaction_id))
+        .with_version(str(table_data_version_id))
+        .with_timestamp(triggered_on)
+        .build()
+    )
+
+
+def _build_input(record: dict, *, info: FunctionInfo):
+    """Wrap one manifest table record into a `TableFrame`.
+
+    A record with a null `file` (a version member with no physical data)
+    yields `None`, preserving its position in a multi-version slot.
+    Publisher inputs are the enriched parquets stamp-inputs already wrote, so
+    they keep their system columns as-is (TAB). The transformer / subscriber inputs
+    are stored tables whose pristine columns are regenerated for a fresh
+    per-function view (MUT), seeded with the record's version metadata and its
+    provenance idx (`input_idx`).
+    """
+    from tabsdatak.tableframe import TableFrame
+    from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
+
+    file = record.get(inputs_manifest.MANIFEST_FILE_KEY)
+    if file is None:
+        return None
+    lf = _scan_parquet_or_fail(Path(file))
+    if isinstance(info, PublisherInfo):
+        return TableFrame._build(lf, CreationMode.TAB)
+    return TableFrame._build(
+        lf,
+        CreationMode.MUT,
+        idx=record.get(inputs_manifest.MANIFEST_INPUT_IDX_KEY),
+        version=_input_version(record),
+    )
+
+
+def _materialize_input_slot(
+    entry: dict,
+    *,
+    table_mode: TableMode,
+    info: FunctionInfo,
+):
     """Turn one inputs-manifest entry into the value the user function
     expects for that input parameter.
 
     SINGLE mode:
-      * empty `files` → `None`
-      * one file     → `LazyFrame`
-      * many files   → contract violation (plugin should have returned
-        exactly one for a SINGLE slot)
+      * no records      → `None`
+      * one record      → `TableFrame` (or `None` for a null `file`)
+      * many records    → contract violation (a SINGLE slot resolves to
+        exactly one table)
 
     ARRAY mode:
-      * any files (incl. empty) → `list[LazyFrame]`
-
-    !!! WARNING — INTERIM STUB !!!
-    The user-function contract (see `tabsdatak._api`) declares input
-    parameters as `TableFrame | None` / `list[TableFrame | None] | None`,
-    but this helper currently hands back raw `polars.LazyFrame` because
-    `tabsdatak.tableframe.TableFrame` is still an empty placeholder class
-    (no real wrapper implementation yet). When the real TableFrame lands
-    in tabsdatak, every `LazyFrame` produced here must be wrapped — e.g.
-    `return TableFrame(scans[0])` in SINGLE mode and
-    `return [TableFrame(s) for s in scans]` in ARRAY mode — and the
-    `LazyFrame` mentions above should be replaced with `TableFrame`.
-
-    TODO(T2-migration): wrap LazyFrame outputs in TableFrame once the
-    real TableFrame implementation is available in tabsdatak.
+      * `is_empty` entry → `[]`
+      * any records      → `list[TableFrame | None]`, one element per
+        record in order (null-`file` members stay as `None`)
     """
-    scans = [_scan_parquet_or_fail(Path(f)) for f in files]
+    records = entry.get(inputs_manifest.MANIFEST_TABLES_KEY) or []
     if table_mode is TableMode.SINGLE:
-        if len(scans) == 0:
+        if len(records) == 0:
             return None
-        if len(scans) > 1:
-            raise RunFunctionErrorCode.RF_11.exception(count=len(scans))
-        return scans[0]
-    # ARRAY mode
-    return scans
+        if len(records) > 1:
+            raise RunFunctionErrorCode.RF_11.exception(count=len(records))
+        return _build_input(records[0], info=info)
+    if entry.get(inputs_manifest.MANIFEST_IS_EMPTY_KEY):
+        return []
+    return [_build_input(record, info=info) for record in records]
 
 
 def _invoke_user_function(func, call_args: list, output_tables: list[str]) -> tuple:
     """Call the user function and validate its return shape.
 
     Expected return: a tuple with exactly `len(output_tables)` elements.
-    Each element must be a `LazyFrame` or `None`.
+    Each element must be a `TableFrame` or `None`.
     """
+    from tabsdatak.tableframe import TableFrame
+
     try:
         result = func(*call_args)
     except Exception as exc:
@@ -330,7 +375,7 @@ def _invoke_user_function(func, call_args: list, output_tables: list[str]) -> tu
             tables=list(output_tables),
         )
     for i, value in enumerate(result):
-        if value is not None and not isinstance(value, pl.LazyFrame):
+        if value is not None and not isinstance(value, TableFrame):
             raise RunFunctionErrorCode.RF_15.exception(
                 slot=i,
                 table=output_tables[i],
@@ -350,8 +395,8 @@ def _sink_outputs(
     for i, (table_name, value) in enumerate(zip(output_tables, result)):
         if value is None:
             entries.append({
-                MANIFEST_NAME_KEY: table_name,
-                MANIFEST_FILE_KEY: None,
+                outputs_manifest.MANIFEST_NAME_KEY: table_name,
+                outputs_manifest.MANIFEST_FILE_KEY: None,
             })
             continue
         slot_dir = out_dir / f"slot{i}"
@@ -360,14 +405,14 @@ def _sink_outputs(
             slot_dir.mkdir(parents=True, exist_ok=True)
             # [TODO: tabsdatak.tableframe scan and sink migration] revisit when
             # tabsdatak.tableframe ships scan and sink methods.
-            value.sink_parquet(dest)
+            value._sink_native(dest)
         except Exception as exc:
             raise RunFunctionErrorCode.RF_16.exception(
                 cause=exc, table=table_name, path=dest, detail=str(exc)
             )
         entries.append({
-            MANIFEST_NAME_KEY: table_name,
-            MANIFEST_FILE_KEY: str(dest.absolute()),
+            outputs_manifest.MANIFEST_NAME_KEY: table_name,
+            outputs_manifest.MANIFEST_FILE_KEY: str(dest.absolute()),
         })
     return entries
 
@@ -390,7 +435,7 @@ def main(args: argparse.Namespace) -> int:
         type(info).__name__,
         bundle_dir,
     )
-    entries = load_inputs_manifest_or_raise(
+    entries = inputs_manifest.load_inputs_manifest_or_raise(
         inputs_manifest_path, RunFunctionErrorCode.RF_5
     )
     logger.debug(
@@ -416,11 +461,14 @@ def main(args: argparse.Namespace) -> int:
 
     # Build the positional args for the user function from the
     # inputs manifest. Manifest order mirrors function parameter
-    # order.
+    # order; each entry carries the per-table records (file, provenance
+    # idx and version metadata) the materialization needs, so no
+    # correlation with the request is required.
     call_args: list[Any] = []
     for entry, table_mode in zip(entries, table_modes):
-        files = entry.get(MANIFEST_FILES_KEY) or []
-        call_args.append(_materialise_input_slot(files, table_mode=table_mode))
+        call_args.append(
+            _materialize_input_slot(entry, table_mode=table_mode, info=info)
+        )
     logger.debug(
         "Materialised %d input slot(s) with modes %s",
         len(call_args),
@@ -471,7 +519,11 @@ def main(args: argparse.Namespace) -> int:
         logger.debug("Drained ctx scratch to %s", state_dir)
 
     entries_out = _sink_outputs(result, output_tables, out_dir)
-    written = sum(1 for e in entries_out if e.get(MANIFEST_FILE_KEY) is not None)
+    written = sum(
+        1
+        for e in entries_out
+        if e.get(outputs_manifest.MANIFEST_FILE_KEY) is not None
+    )
     logger.info(
         "User function returned %d slot(s); %d table(s) written, %d returned None",
         len(entries_out),
@@ -481,7 +533,7 @@ def main(args: argparse.Namespace) -> int:
     logger.debug("Outputs manifest entries: %s", entries_out)
 
     try:
-        write_outputs_manifest(entries_out, outputs_manifest_path)
+        outputs_manifest.write_outputs_manifest(entries_out, outputs_manifest_path)
     except OSError as exc:
         raise RunFunctionErrorCode.RF_17.exception(
             cause=exc, path=outputs_manifest_path, detail=str(exc)

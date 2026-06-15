@@ -10,7 +10,7 @@ import pytest
 
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._core.hooks import tableframe_of
-from tabsdatak.tableframe._engine.model.tableframe import TableFrameState
+from tabsdatak.tableframe._engine.model.frame import TableFrameState
 from tabsdatak.tableframe.group_by import LazyGroupBy
 
 pytestmark = pytest.mark.tfgen

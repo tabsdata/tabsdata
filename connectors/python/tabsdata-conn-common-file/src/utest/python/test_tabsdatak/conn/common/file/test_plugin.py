@@ -218,8 +218,20 @@ def test_initial_lastmod_to_iso_none():
 # --- _plugin.resolve_dest_tokens ----------------------------------------
 
 
-def test_resolve_dest_tokens_passes_through():
-    assert _plugin.resolve_dest_tokens("out/${TRX_ID}/x.csv") == "out/${TRX_ID}/x.csv"
+def test_resolve_dest_tokens_substitutes():
+    ctx = _DestCtx(Path("."))
+    resolved = _plugin.resolve_dest_tokens(
+        "out/${EXEC_PLAN_ID}/${TRX_ID}/x.${EXEC_PLAN_TS}.csv", ctx
+    )
+    assert resolved == (
+        "out/test-exec-plan-id/test-trx-id/x.2026-01-01T00:00:00.000000+00:00.csv"
+    )
+
+
+def test_resolve_dest_tokens_leaves_unknown_tokens():
+    ctx = _DestCtx(Path("."))
+    resolved = _plugin.resolve_dest_tokens("out/${UNKNOWN}/x.csv", ctx)
+    assert resolved == "out/${UNKNOWN}/x.csv"
 
 
 # --- src/_transporter.dest_format_to_transporter unhandled-format raises -----

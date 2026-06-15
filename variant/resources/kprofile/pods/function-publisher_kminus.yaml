@@ -89,6 +89,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-inspect-function
               mountPath: /tabsdata/config
@@ -140,6 +142,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-begin-execution
               mountPath: /tabsdata/config
@@ -199,6 +203,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-fetch-request
               mountPath: /tabsdata/config
@@ -260,6 +266,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-localize-fn-bundle
               mountPath: /tabsdata/config
@@ -323,6 +331,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-prep-localize-state
               mountPath: /tabsdata/config
@@ -378,6 +388,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-run-transporter-state-download
               mountPath: /tabsdata/config
@@ -439,6 +451,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-run-source-plugin
               mountPath: /tabsdata/config
@@ -498,6 +512,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-stamp-inputs
               mountPath: /tabsdata/config
@@ -561,6 +577,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-run-function
               mountPath: /tabsdata/config
@@ -618,6 +636,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-prep-upload-state
               mountPath: /tabsdata/config
@@ -673,6 +693,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-run-transporter-state-upload
               mountPath: /tabsdata/config
@@ -730,6 +752,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-prep-upload-tables
               mountPath: /tabsdata/config
@@ -785,6 +809,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-run-transporter-tables-upload
               mountPath: /tabsdata/config
@@ -845,6 +871,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
               value: "${sys:TDK_INSTANCE_NAME}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
             - name: config-report-completion
               mountPath: /tabsdata/config
@@ -860,71 +888,99 @@ spec:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-begin-execution
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-fetch-request
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-localize-fn-bundle
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-prep-localize-state
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-run-transporter-state-download
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-run-source-plugin
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-stamp-inputs
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-run-function
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-prep-upload-state
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-run-transporter-state-upload
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-prep-upload-tables
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-run-transporter-tables-upload
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: config-report-completion
           projected:
             sources:
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: pyenv
           hostPath:
             path: "${sys:TDK_PYENV_TD_ROOT}"

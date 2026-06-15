@@ -58,6 +58,7 @@ pub const TDUDF_FOLDER: &str = "tdudf";
 
 pub const TD_LOG_PROFILE_ENV: &str = "TD_LOG_PROFILE";
 pub const TD_LOG_PROFILE_ENV_PATTERN: &str = "TD_LOG_PROFILE_";
+pub const TD_LOG_CONFIG_ENV: &str = "TD_LOG_CONFIG";
 
 pub const CONSOLE_PROFILE: &str = "console";
 pub const DEVELOPMENT_PROFILE: &str = "development";
@@ -1101,9 +1102,16 @@ pub struct LogConfig {
 }
 
 pub fn load() -> Option<LogConfig> {
-    let config_folder = obtain_config_folder()?;
-    let config_path = config_folder.join(LOG_CONFIG_FILE);
-    load_from_path(&config_path)
+    if let Some(config_folder) = obtain_config_folder() {
+        let config_path = config_folder.join(LOG_CONFIG_FILE);
+        if let Some(config) = load_from_path(&config_path) {
+            return Some(config);
+        }
+    }
+    if let Ok(config_path) = env::var(TD_LOG_CONFIG_ENV) {
+        return load_from_path(&PathBuf::from(config_path));
+    }
+    None
 }
 
 pub fn load_from_path(config_path: &Path) -> Option<LogConfig> {

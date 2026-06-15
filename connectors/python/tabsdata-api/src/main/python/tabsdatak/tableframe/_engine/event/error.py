@@ -26,10 +26,13 @@ class TableFrameInternalException(TableFrameException): ...
 class DirectConstructionError(TableFrameInitException): ...
 
 
-class IncompleteVersionPropertiesError(TableFrameInternalException): ...
+class IncompleteVersionError(TableFrameInternalException): ...
 
 
 class UnsupportedInputError(TableFrameInitException): ...
+
+
+class MissingRequiredColumnsError(TableFrameInternalException): ...
 
 
 class TableFrameErrorCode(ErrorCode):
@@ -39,8 +42,8 @@ class TableFrameErrorCode(ErrorCode):
         "use from_polars / from_pandas / from_dict / scan.",
     )
     TF2 = ErrorDef(
-        IncompleteVersionPropertiesError,
-        "DataVersionProperties requires execution, transaction, version, "
+        IncompleteVersionError,
+        "DataVersion requires execution, transaction, version, "
         "and timestamp; got "
         "execution={execution!r} - "
         "transaction={transaction!r} - "
@@ -50,4 +53,8 @@ class TableFrameErrorCode(ErrorCode):
     TF3 = ErrorDef(
         UnsupportedInputError,
         "{factory} does not support an input of type {type}.",
+    )
+    TF4 = ErrorDef(
+        MissingRequiredColumnsError,
+        "TableFrame is missing required system columns: {missing}.",
     )

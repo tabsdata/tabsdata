@@ -5,11 +5,11 @@
 """Inputs-manifest schema + IO.
 
 Shared by every runner command that produces or consumes the
-inputs-manifest YAML (currently `run-source-plugin` writes it,
-`stamp-inputs` reads it and writes an enriched copy, and
-`run-function` will read it). One source of truth for:
+inputs-manifest YAML (`prep-localize-state` and `run-source-plugin`
+write it, `stamp-inputs` reads it and writes an enriched copy, and
+`run-function` reads it). One source of truth for:
 
-  * the YAML schema (top-level `inputs:` list of `{name, files}` entries),
+  * the YAML schema (top-level `inputs:` list of entries),
   * the reader (with shape validation), and
   * the writer.
 
@@ -17,16 +17,35 @@ Callers translate the exceptions raised here into their own
 command-specific exit codes — the schema lives in this module, but
 exit-code policy stays per-command.
 
-YAML shape:
+YAML shape — one entry per positional argument of the user function;
+each entry carries one table record per resolved version (a single
+record for plain tables, several for a multi-version dependency,
+ordered by `version_pos`):
 
     inputs:
       - name: <slot label>             # function parameter name, or a
                                        # caller-chosen identifier
-        files:
-          - <absolute filesystem path>
-          - ...
+        table_pos: <int>               # argument position (-1 when not
+                                       # request-driven, e.g. publishers)
+        is_empty: false                # true for an empty multi-version
+                                       # dependency (slot value is [])
+        tables:
+          - file: <absolute path>      # null for a version member with
+                                       # no physical data
+            input_idx: <int>           # unique index;
+                                       # request-assigned for native
+                                       # inputs, stamped sequentially by
+                                       # stamp-inputs for publishers
+            version_pos: <int>         # order within the dependency
+                                       # (-1 single-version sentinel)
+            execution_id: <str|null>   # version metadata of the member
+            transaction_id: <str|null>
+            table_data_version_id: <str|null>
+            triggered_on: <int|null>   # epoch milliseconds
       - name: <next slot>
-        files: []                      # empty slots are explicit
+        table_pos: 1
+        is_empty: false
+        tables: []                     # empty slots are explicit
 """
 
 from __future__ import annotations
@@ -47,9 +66,54 @@ class InvalidManifestError(ValueError):
 # `inputs:` key stays private — only the read/write helpers in this
 # module wrap entries with it, so callers never type the literal.
 MANIFEST_NAME_KEY = "name"
-MANIFEST_FILES_KEY = "files"
+MANIFEST_TABLE_POS_KEY = "table_pos"
+MANIFEST_IS_EMPTY_KEY = "is_empty"
+MANIFEST_TABLES_KEY = "tables"
+MANIFEST_FILE_KEY = "file"
+MANIFEST_INPUT_IDX_KEY = "input_idx"
+MANIFEST_VERSION_POS_KEY = "version_pos"
+MANIFEST_EXECUTION_ID_KEY = "execution_id"
+MANIFEST_TRANSACTION_ID_KEY = "transaction_id"
+MANIFEST_VERSION_ID_KEY = "table_data_version_id"
+MANIFEST_TRIGGERED_ON_KEY = "triggered_on"
 
 _MANIFEST_INPUTS_KEY = "inputs"
+
+
+def build_table_record(
+    *,
+    file: str | None,
+    input_idx: int | None,
+    version_pos: int,
+    execution_id: str | None = None,
+    transaction_id: str | None = None,
+    table_data_version_id: str | None = None,
+    triggered_on: int | None = None,
+) -> dict[str, Any]:
+    return {
+        MANIFEST_FILE_KEY: file,
+        MANIFEST_INPUT_IDX_KEY: input_idx,
+        MANIFEST_VERSION_POS_KEY: version_pos,
+        MANIFEST_EXECUTION_ID_KEY: execution_id,
+        MANIFEST_TRANSACTION_ID_KEY: transaction_id,
+        MANIFEST_VERSION_ID_KEY: table_data_version_id,
+        MANIFEST_TRIGGERED_ON_KEY: triggered_on,
+    }
+
+
+def build_entry(
+    *,
+    name: str,
+    table_pos: int,
+    tables: list[dict[str, Any]],
+    is_empty: bool = False,
+) -> dict[str, Any]:
+    return {
+        MANIFEST_NAME_KEY: name,
+        MANIFEST_TABLE_POS_KEY: table_pos,
+        MANIFEST_IS_EMPTY_KEY: is_empty,
+        MANIFEST_TABLES_KEY: tables,
+    }
 
 
 def load_inputs_manifest(path: Path) -> list[dict[str, Any]]:

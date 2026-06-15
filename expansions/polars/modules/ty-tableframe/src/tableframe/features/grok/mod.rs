@@ -19,7 +19,7 @@ use pyo3_stub_gen::derive::gen_stub_pyfunction;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use td_common::logging;
-use td_common::logging::{DEVELOPMENT_PROFILE, LoggingOptions};
+use td_common::logging::LoggingOptions;
 use tracing::{Level, debug};
 
 struct GrokContext {
@@ -107,7 +107,6 @@ function (polars expr) + function-impl (actual implementation).
 pub fn _grok(batch: &[Series], kwargs: GrokKwargs) -> PolarsResult<Series> {
     logging::start_with(LoggingOptions {
         max_level: Some(Level::ERROR),
-        profile: Some(DEVELOPMENT_PROFILE.to_string()),
         ..Default::default()
     });
     debug!(

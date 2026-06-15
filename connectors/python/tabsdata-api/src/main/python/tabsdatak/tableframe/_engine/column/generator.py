@@ -19,15 +19,15 @@ if TYPE_CHECKING:
         SystemColumnDataType as SystemColumnDataType_,
         SystemColumnDefault as SystemColumnDefault_,
     )
-    from tabsdatak.tableframe._engine.model.tableframe import (
-        DataVersionProperties as DataVersionProperties_,
+    from tabsdatak.tableframe._engine.model.frame import (
+        DataVersion as DataVersion_,
     )
 
 
 @dataclass(frozen=True, slots=True)
 class GeneratorContext:
     index: int | None
-    properties: DataVersionProperties_ | None
+    version: DataVersion_ | None
     row_index_column: str | None
     is_void: bool
 
@@ -43,6 +43,24 @@ class Generator(Protocol):
 
 def temp_column() -> str:
     return f"{TD_TEMP_COLUMN_PREFIX}{uuid.uuid4().hex}"
+
+
+class IdxGenerator:
+    def __init__(self) -> None:
+        self._index = 0
+
+    @property
+    def index(self) -> int:
+        return self._index
+
+    @index.setter
+    def index(self, value: int) -> None:
+        self._index = value
+
+    def __call__(self) -> int:
+        idx = self._index
+        self.index += 1
+        return idx
 
 
 def as_expression(

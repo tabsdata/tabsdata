@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     import polars as pl_
 
     from tabsdatak.tableframe._engine.column.registry import Registry as Registry_
-    from tabsdatak.tableframe._engine.model.tableframe import (
-        DataVersionProperties as DataVersionProperties_,
+    from tabsdatak.tableframe._engine.model.frame import (
+        DataVersion as DataVersion_,
     )
 
 
@@ -45,7 +45,7 @@ def add_system_columns(
     registry: Registry_,
     mode: CreationMode,
     index: int | None = None,
-    properties: DataVersionProperties_ | None = None,
+    version: DataVersion_ | None = None,
 ) -> pl_.LazyFrame:
     lf = drop_columns(lf, columns_to_drop(registry, mode))
 
@@ -55,7 +55,7 @@ def add_system_columns(
     optional = set(registry.optional())
     context = GeneratorContext(
         index=index,
-        properties=properties,
+        version=version,
         row_index_column=registry.row_index_column(),
         is_void=is_void,
     )
@@ -68,7 +68,7 @@ def add_system_columns(
         lf = system_column.generator.apply(lf, name, context)
         context = GeneratorContext(
             index=context.index,
-            properties=context.properties,
+            version=context.version,
             row_index_column=context.row_index_column,
             is_void=False,
         )

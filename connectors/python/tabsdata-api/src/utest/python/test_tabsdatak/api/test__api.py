@@ -766,3 +766,147 @@ def test_naive_datetime_rejected_on_load_from_json():
     import json
     with pytest.raises(Exception, match="timezone-aware"):
         _SrcWithDt.from_json(json.dumps(envelope))
+
+
+# ---------------------------------------------------------------------------
+# Version specs -- port of the version-spec tests in
+# server/libraries/td-objects/src/parse.rs (regex acceptance only; the
+# parsed Version/Versions values are server-side concerns).
+# ---------------------------------------------------------------------------
+
+FIXED_ID = "0123456789ABCDEFGHIJKLMNOP"
+
+
+def test_parse_version():
+    assert _api.VERSION_REGEX.match("HEAD")
+    assert _api.VERSION_REGEX.match("HEAD^")
+    assert _api.VERSION_REGEX.match("HEAD~1")
+    assert not _api.VERSION_REGEX.match("HEAD~a")
+    assert _api.VERSION_REGEX.match("INITIAL")
+    assert _api.VERSION_REGEX.match("INITIAL^")
+    assert _api.VERSION_REGEX.match("INITIAL~1")
+    assert not _api.VERSION_REGEX.match("INITIAL~a")
+    assert _api.VERSION_REGEX.match(FIXED_ID)
+    # "A" * 26 satisfies the pattern; Rust rejects it in IdL::parse, a
+    # semantic id check that exists only on the server side.
+    assert _api.VERSION_REGEX.match("A" * 26)
+
+
+def test_parse_versions():
+    assert _api.VERSIONS_REGEX.search("HEAD")
+    assert _api.VERSIONS_REGEX.search("HEAD^")
+    assert _api.VERSIONS_REGEX.search("HEAD~1")
+    assert _api.VERSIONS_REGEX.search("HEAD~1,HEAD")
+    assert _api.VERSIONS_REGEX.search("HEAD~1..HEAD")
+
+    assert _api.VERSIONS_REGEX.search("INITIAL")
+    assert _api.VERSIONS_REGEX.search("INITIAL^")
+    assert _api.VERSIONS_REGEX.search("INITIAL~1")
+    assert _api.VERSIONS_REGEX.search("INITIAL~1,INITIAL")
+    assert _api.VERSIONS_REGEX.search("INITIAL~1..INITIAL")
+
+    assert _api.VERSIONS_REGEX.search("INITIAL~1,HEAD")
+    assert _api.VERSIONS_REGEX.search("INITIAL~1..HEAD")
+    assert _api.VERSIONS_REGEX.search("HEAD~1,INITIAL")
+    assert _api.VERSIONS_REGEX.search("HEAD~1..INITIAL")
+
+    assert _api.VERSIONS_REGEX.search(FIXED_ID)
+    assert _api.VERSIONS_REGEX.search(f"{FIXED_ID},HEAD~2")
+    assert _api.VERSIONS_REGEX.search(f"HEAD~2,{FIXED_ID}")
+    assert _api.VERSIONS_REGEX.search(f"{FIXED_ID},INITIAL~2")
+    assert _api.VERSIONS_REGEX.search(f"INITIAL~2,{FIXED_ID}")
+
+    assert not _api.VERSIONS_REGEX.search("HEAD~a")
+
+
+def test_parse_versioned_table_ref():
+    invalid = [
+        " abc",
+        "abc ",
+        "abc/abc ",
+        " abc/abc",
+        "abc/abc@",
+        "@abc",
+        "abc/abc@HEAD..HEAD,HEAD",
+        "abc/abc@HEAD..HEAD..HEAD",
+        "abc/abc@HEAD~",
+        "abc/abc@HEAD,,HEAD",
+    ]
+    for value in invalid:
+        with pytest.raises(ValueError):
+            _api._validate_coll_table_versions_name(value)
+
+    valid = [
+        "abc",
+        "xyz/abc",
+        "xyz/abc@HEAD",
+        "xyz/abc@HEAD^^",
+        "xyz/abc@HEAD^,HEAD",
+        "xyz/abc@HEAD^..HEAD",
+        "xyz/abc@HEAD~1",
+        "xyz/abc@HEAD~10,HEAD",
+        "xyz/abc@HEAD~10..HEAD",
+    ]
+    for value in valid:
+        assert _api._validate_coll_table_versions_name(value) == value
+
+
+def test_parse_valid_versioned_table_refs():
+    valid_tables = [
+        "table",
+        "collection/table",
+        "table@HEAD",
+        "collection/table@HEAD",
+        "collection/table@HEAD^",
+        "collection/table@HEAD~1",
+        "collection/table@HEAD^^^^,HEAD^,HEAD",
+        "collection/table@HEAD^^..HEAD",
+        "collection/table@INITIAL",
+        "table@INITIAL",
+        "collection/table@INITIAL^",
+        "collection/table@INITIAL~1",
+        "collection/table@INITIAL^^^^,INITIAL^,INITIAL",
+        "collection/table@INITIAL^^..INITIAL",
+        "collection/table@HEAD^^^^,INITIAL^,INITIAL",
+        "collection/table@INITIAL^^..HEAD",
+        "collection/table@INITIAL^^^^,HEAD^,INITIAL",
+        "collection/table@NEW",
+        f"collection/table@{FIXED_ID}",
+    ]
+    for value in valid_tables:
+        assert _api._validate_coll_table_versions_name(value) == value
+
+
+def test_parse_invalid_table_refs():
+    invalid_table_refs = [
+        "/table",
+        "table/",
+        "/table/",
+        "collection//",
+        "collection//table",
+        "collection//table/",
+        "collection/table/table/",
+        "table@head",
+        "table@initial",
+        "collection/table@HEAD-1",
+        "collection/table@INITIAL-1",
+        "collection/table@01234567890123456789012",
+        # Valid versioned, invalid refs
+        "table@HEAD",
+        "collection/table@HEAD",
+        "collection/table@HEAD^",
+        "collection/table@HEAD~1",
+        "collection/table@HEAD^^^^,HEAD^,HEAD",
+        "collection/table@HEAD^^..HEAD",
+        "table@INITIAL",
+        "collection/table@INITIAL",
+        "collection/table@INITIAL^",
+        "collection/table@INITIAL~1",
+        "collection/table@INITIAL^^^^,INITIAL^,INITIAL",
+        "collection/table@INITIAL^^..INITIAL",
+        "collection/table@NEW^",
+        "collection/table@NEW..HEAD^",
+    ]
+    for value in invalid_table_refs:
+        with pytest.raises(ValueError):
+            _api._validate_coll_table_name(value)

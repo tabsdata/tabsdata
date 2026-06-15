@@ -10,7 +10,7 @@ import pytest
 
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._core.hooks import tableframe_of
-from tabsdatak.tableframe._engine.model.tableframe import TableFrameState
+from tabsdatak.tableframe._engine.model.frame import TableFrameState
 
 pytestmark = pytest.mark.tfgen
 

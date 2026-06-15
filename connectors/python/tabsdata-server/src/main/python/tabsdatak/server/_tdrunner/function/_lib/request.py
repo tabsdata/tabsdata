@@ -23,7 +23,11 @@ For each envelope we track two sets:
   with a "recognized but not yet supported" message; a tag in neither
   is rejected with "unknown variant; expected one of: ...".
 
-Today the supported sets are ``FunctionV2`` and ``Table``.
+Today the supported sets are ``FunctionV2``, and per-table ``Table``
+everywhere plus ``TableVersions`` on ``input`` (a multi-version
+dependency: one entry per positional argument whose ``versions`` list
+carries one Table-shaped member per resolved version, ordered by
+``version_pos``).
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ REQUEST_ENVELOPE_SUPPORTED = ("FunctionV2",)
 REQUEST_ENVELOPE_KNOWN = REQUEST_ENVELOPE_SUPPORTED
 
 TABLE_VARIANT_SUPPORTED = ("Table",)
+INPUT_TABLE_VARIANT_SUPPORTED = ("Table", "TableVersions")
 TABLE_VARIANT_KNOWN = (
     "Table",
     "TableVersions",
@@ -76,6 +81,19 @@ class InputTable(BaseModel):
     input_idx: int
     table_pos: int
     version_pos: int
+
+
+class InputTableVersions(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    is_empty: bool
+    versions: tuple[InputTable, ...]
+
+
+def input_tables(entry: InputTable | InputTableVersions) -> tuple[InputTable, ...]:
+    if isinstance(entry, InputTableVersions):
+        return entry.versions
+    return (entry,)
 
 
 class OutputTable(BaseModel):
@@ -134,7 +152,7 @@ class Request(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     info: Info
-    input: tuple[InputTable, ...] = ()
+    input: tuple[InputTable | InputTableVersions, ...] = ()
     output: tuple[OutputTable, ...] = ()
     system_input: tuple[InputTable, ...] = ()
     system_output: tuple[OutputTable, ...] = ()
@@ -164,7 +182,11 @@ def _strip_variant(
     return payload
 
 
-def _strip_variants(entries: object, slot: str) -> list[dict]:
+def _strip_variants(
+    entries: object,
+    slot: str,
+    supported: tuple[str, ...],
+) -> list[dict]:
     if entries is None:
         return []
     if not isinstance(entries, list):
@@ -174,7 +196,7 @@ def _strip_variants(entries: object, slot: str) -> list[dict]:
     return [
         _strip_variant(
             entry,
-            TABLE_VARIANT_SUPPORTED,
+            supported,
             TABLE_VARIANT_KNOWN,
             f"{slot}[{index}]",
         )
@@ -207,9 +229,15 @@ def load_request(path: Path) -> Request:
             REQUEST_ENVELOPE_KNOWN,
             "request",
         )
-        for slot in ("input", "output", "system_input", "system_output"):
+        if "input" in payload:
+            payload["input"] = _strip_variants(
+                payload["input"], "input", INPUT_TABLE_VARIANT_SUPPORTED
+            )
+        for slot in ("output", "system_input", "system_output"):
             if slot in payload:
-                payload[slot] = _strip_variants(payload[slot], slot)
+                payload[slot] = _strip_variants(
+                    payload[slot], slot, TABLE_VARIANT_SUPPORTED
+                )
     except InvalidRequestError as exc:
         raise InvalidRequestError(
             f"invalid request structure in {path}: {exc}"

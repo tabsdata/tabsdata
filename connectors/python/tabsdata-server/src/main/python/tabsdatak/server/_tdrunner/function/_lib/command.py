@@ -498,6 +498,11 @@ def command(
                 )
                 notify_failed(args, exit_code, exit_event)
                 return exit_code
+            except BaseException as exception:
+                exit_code = UnexpectedError.exit_code
+                logger.exception("Unhandled core exception caught by command")
+                notify_failed(args, exit_code, exception)
+                return exit_code
 
         return main
 

@@ -75,9 +75,9 @@ class ConstantVersionGenerator:
         context: GeneratorContext,
     ) -> pl_.LazyFrame:
         value = self.default
-        if context.properties is not None:
-            property_name = column.removeprefix(TD_VERSION_SYSTEM_COLUMN_PREFIX)
-            from_properties = getattr(context.properties, property_name, None)
-            if from_properties is not None:
-                value = from_properties
+        if context.version is not None:
+            version_field = column.removeprefix(TD_VERSION_SYSTEM_COLUMN_PREFIX)
+            from_version = getattr(context.version, version_field, None)
+            if from_version is not None:
+                value = from_version
         return lf.with_columns(as_expression(value, self.dtype).alias(column))

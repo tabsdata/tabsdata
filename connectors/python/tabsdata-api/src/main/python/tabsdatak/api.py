@@ -64,12 +64,22 @@ TableNamesSpec: TypeAlias = Annotated[
 ]
 
 # Cross-collection table reference, of shape ``"collection/table"``.
-# ``input_tables`` and ``TablesTrigger.tables`` use this form so a
-# function can read from / fire on tables that live in a different
-# collection.
+# ``TablesTrigger.tables`` uses this form so a function can fire on
+# tables that live in a different collection.
 CollTableNameSpec: TypeAlias = Annotated[str, _api.COLL_TABLE_NAME_CONSTRAINTS]
 CollTableNamesSpec: TypeAlias = Annotated[
     list[CollTableNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
+]
+
+# Cross-collection table reference with an optional version suffix, of
+# shape ``"[collection/]table[@versions]"`` (e.g. ``people@HEAD~1..HEAD``).
+# ``input_tables`` uses this form so a function can read a specific
+# version, a range of versions, or a list of versions of a table.
+CollTableVersionsNameSpec: TypeAlias = Annotated[
+    str, _api.COLL_TABLE_VERSIONS_NAME_CONSTRAINTS
+]
+CollTableVersionsNamesSpec: TypeAlias = Annotated[
+    list[CollTableVersionsNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
 ]
 
 # Five-field cron expression understood by ``croniter``.
@@ -465,7 +475,7 @@ def stream_publisher[C: Conn](
 
 
 def transformer(
-    input_tables: CollTableNamesSpec,
+    input_tables: CollTableVersionsNamesSpec,
     output_tables: TableNamesSpec,
     trigger_by: TransformerTriggerBySpec | None = None,
     on_tables: OnTablesActionSpec | None = None,
@@ -498,7 +508,7 @@ def transformer(
 def subscriber[C: Conn](
     conn: C,
     destination: Dest[C],
-    input_tables: CollTableNamesSpec,
+    input_tables: CollTableVersionsNamesSpec,
     trigger_by: SubscriberTriggerBySpec | None = None,
 ) -> Callable:
     """Decorate a function as a subscriber (push tables to an

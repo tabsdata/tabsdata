@@ -31,17 +31,24 @@ from pathlib import Path
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
-    MANIFEST_FILES_KEY,
-    MANIFEST_NAME_KEY,
+    build_entry,
+    build_table_record,
     write_inputs_manifest,
 )
 from tabsdatak.server._tdrunner.function._lib.request import (
+    InputTableVersions,
     Request,
+    input_tables,
     load_request_or_raise,
 )
-from tabsdatak.server._tdrunner.function._lib.state_manifest import write_state_manifest
+from tabsdatak.server._tdrunner.function._lib.state_manifest import (
+    MANIFEST_FILES_KEY,
+    MANIFEST_NAME_KEY,
+    write_state_manifest,
+)
 from tabsdatak.server._tdrunner.function._lib.transporter_request import (
     build_localize_state_request,
+    localized_input_files,
     write_transporter_request,
 )
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.error import (
@@ -116,39 +123,73 @@ def _build_parser():
     return parser
 
 
-def _build_table_manifest_entries(tables, parquet_dir: Path) -> list[dict]:
-    """One entry per `tables` element.
+def _build_inputs_manifest_entries(request: Request, in_dir: Path) -> list[dict]:
+    """One manifest entry per `request.input` entry (positional argument).
 
-    Tables with a non-null `location` get a single-element `files` list
-    pointing at where the transporter is going to put the localized
-    parquet (`<parquet_dir>/<name>.parquet`). Tables with
-    `location is None` get an empty `files` list — downstream
-    `_materialise_input_slot` turns that into a None / [] value for
-    the user function depending on the slot's mode.
-
-    Used to build both the inputs manifest (from `request.input` +
-    `in_dir`) and the state manifest (from `request.system_input` +
-    `state_dir`) since the per-entry shape is identical.
+    A plain table entry yields one table record; a multi-version
+    dependency yields one record per member, in `version_pos` order. A
+    member with `location is None` keeps its record with a null `file`,
+    so downstream `_materialize_input_slot` preserves its position as a
+    `None` value. An `is_empty` dependency yields no records.
     """
     entries: list[dict] = []
-    for table in tables:
+    for entry in request.input:
+        is_empty = isinstance(entry, InputTableVersions) and entry.is_empty
+        members = input_tables(entry)
+        records: list[dict] = []
+        if not is_empty:
+            for member, path in localized_input_files(in_dir, entry):
+                if member.location is None:
+                    file = None
+                else:
+                    file = str(path.absolute())
+                records.append(
+                    build_table_record(
+                        file=file,
+                        input_idx=member.input_idx,
+                        version_pos=member.version_pos,
+                        execution_id=(
+                            None
+                            if member.execution_id is None
+                            else str(member.execution_id)
+                        ),
+                        transaction_id=(
+                            None
+                            if member.transaction_id is None
+                            else str(member.transaction_id)
+                        ),
+                        table_data_version_id=(
+                            None
+                            if member.table_data_version_id is None
+                            else str(member.table_data_version_id)
+                        ),
+                        triggered_on=member.triggered_on,
+                    )
+                )
+        entries.append(
+            build_entry(
+                name=members[0].name,
+                table_pos=members[0].table_pos,
+                tables=records,
+                is_empty=is_empty,
+            )
+        )
+    return entries
+
+
+def _build_state_manifest_entries(request: Request, state_dir: Path) -> list[dict]:
+    """One `{name, files}` entry per `request.system_input` table."""
+    entries: list[dict] = []
+    for table in request.system_input:
         if table.location is None:
             files: list[str] = []
         else:
-            files = [str((parquet_dir / f"{table.name}.parquet").absolute())]
+            files = [str((state_dir / f"{table.name}.parquet").absolute())]
         entries.append({
             MANIFEST_NAME_KEY: table.name,
             MANIFEST_FILES_KEY: files,
         })
     return entries
-
-
-def _build_inputs_manifest_entries(request: Request, in_dir: Path) -> list[dict]:
-    return _build_table_manifest_entries(request.input, in_dir)
-
-
-def _build_state_manifest_entries(request: Request, state_dir: Path) -> list[dict]:
-    return _build_table_manifest_entries(request.system_input, state_dir)
 
 
 @command(name="td_prep_localize_state", parser=_build_parser)

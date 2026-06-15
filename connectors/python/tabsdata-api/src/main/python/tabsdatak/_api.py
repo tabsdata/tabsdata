@@ -139,6 +139,45 @@ _COLL_IDENTIFIER_RE_STR = (
 )
 _COLL_IDENTIFIER_RE = re.compile(_COLL_IDENTIFIER_RE_STR)
 
+# --- Version specs: a TableVersionSpec is a single point in a table's
+# --- version history (VERSION_PATTERN); a TableVersionRangeSpec is a
+# --- <version>..<version> range or the special range NEW, and the
+# --- versions suffix also admits a comma-separated list
+# --- (VERSIONS_PATTERN). Constant names, definitions and structure
+# --- mirror server/libraries/td-objects/src/parse.rs (captures
+# --- dropped); keep both sides in sync.
+VERSION_PATTERN = (
+    "^("
+    "HEAD(\\^{0,10})"
+    "|HEAD~([0-9]{1,7})"
+    "|INITIAL(\\^{0,10})"
+    "|INITIAL~([0-9]{1,7})"
+    "|(([A-Z0-9]{26}|[0-9]{8}[A-Z]{1,3}[0-9]{1,10}))"
+    ")$"
+)
+VERSION_REGEX = re.compile(VERSION_PATTERN)
+
+UNNAMED_VERSION_PATTERN = (
+    "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})"
+    "|INITIAL(\\^{0,10})|INITIAL(\\~[0-9]{1,7})|[A-Z0-9]{26})"
+)
+NEW_VERSION_PATTERN = "NEW"
+VERSIONS_PATTERN = (
+    "(" + NEW_VERSION_PATTERN + ")|"
+    "^((" + UNNAMED_VERSION_PATTERN + ")"
+    "|((" + UNNAMED_VERSION_PATTERN + "(," + UNNAMED_VERSION_PATTERN + ")+))"
+    "|((" + UNNAMED_VERSION_PATTERN + ".." + UNNAMED_VERSION_PATTERN + ")))$"
+)
+VERSIONS_REGEX = re.compile(VERSIONS_PATTERN)
+
+VERSIONS_MARKER_REGEX = "[^/@]+"
+VERSIONED_TABLE_PATTERN = (
+    "^((?P<collection>[^/]+)/)?(?P<table>[^@]+)(@(?P<versions>"
+    + VERSIONS_MARKER_REGEX
+    + "))?$"
+)
+VERSIONED_TABLE_REGEX = re.compile(VERSIONED_TABLE_PATTERN)
+
 # --- Kubernetes CronJob schedule: 5-field standard Unix cron + the descriptors
 # --- K8s documents. Quartz/Jenkins extensions and @reboot/@every are excluded.
 #
@@ -186,6 +225,43 @@ def _validate_coll_table_name(value: str) -> str:
             f"(<identifier> or <identifier>/<identifier>, no whitespace): "
             f"{value!r}"
         )
+    return value
+
+
+def _validate_coll_table_versions_name(value: str) -> str:
+    message = (
+        f"not a valid collection-qualified table reference "
+        f"([<collection>/]<table>[@<versions>], with <versions> a single "
+        f"version, a <version>..<version> range, the special range NEW or "
+        f"a comma-separated list, and a version HEAD / INITIAL with an "
+        f"optional ^ or ~N offset, or a fixed id): {value!r}"
+    )
+    match = VERSIONED_TABLE_REGEX.match(value)
+    if not match:
+        raise ValueError(message)
+    collection = match.group("collection")
+    table = match.group("table")
+    versions = match.group("versions")
+    if collection is not None and not _IDENTIFIER_RE.fullmatch(collection):
+        raise ValueError(message)
+    if not _IDENTIFIER_RE.fullmatch(table):
+        raise ValueError(message)
+    if versions is not None:
+        versions_match = VERSIONS_REGEX.search(versions)
+        if not versions_match:
+            raise ValueError(message)
+        # Mirror parse_versions' second phase: unless the NEW branch
+        # (group 1) matched, every member must parse as a version.
+        if versions_match.group(1) is None:
+            if ".." in versions:
+                members = versions.split("..")
+            elif "," in versions:
+                members = versions.split(",")
+            else:
+                members = [versions]
+            for member in members:
+                if not VERSION_REGEX.match(member):
+                    raise ValueError(message)
     return value
 
 
@@ -270,6 +346,9 @@ def _validate_cron_mask(value: str) -> str:
 
 TABLE_NAME_CONSTRAINTS = AfterValidator(_validate_table_name)
 COLL_TABLE_NAME_CONSTRAINTS = AfterValidator(_validate_coll_table_name)
+COLL_TABLE_VERSIONS_NAME_CONSTRAINTS = AfterValidator(
+    _validate_coll_table_versions_name
+)
 CRON_MASK_CONSTRAINTS = AfterValidator(_validate_cron_mask)
 NAMED_CONN_CONSTRAINTS = AfterValidator(_validate_named_connection)
 VAR_NAME_CONSTRAINTS = AfterValidator(_validate_var_name)

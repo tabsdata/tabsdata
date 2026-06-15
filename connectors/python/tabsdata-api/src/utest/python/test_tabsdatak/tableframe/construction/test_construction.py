@@ -14,7 +14,7 @@ from tabsdatak.tableframe._core.base import BaseFrame
 from tabsdatak.tableframe._core.hooks import polars_of, tableframe_of
 from tabsdatak.tableframe._engine.event.error import DirectConstructionError
 from tabsdatak.tableframe._engine.frame.frame import EngineFrame
-from tabsdatak.tableframe._engine.model.tableframe import TableFrameState
+from tabsdatak.tableframe._engine.model.frame import TableFrameState
 
 pytestmark = pytest.mark.tableframe
 

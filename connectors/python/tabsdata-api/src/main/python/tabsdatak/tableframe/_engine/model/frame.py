@@ -13,50 +13,49 @@ from tabsdatak.tableframe._engine.constant.emptiness import (
     EMPTY_TRANSACTION,
     EMPTY_VERSION,
 )
+from tabsdatak.tableframe._engine.taxonomy.frame import TableFrameOrigin
 
 
 @dataclass(frozen=True, slots=True)
-class DataVersionProperties:
+class DataVersion:
     transaction: str
     execution: str
     version: str
     timestamp: datetime
 
     @classmethod
-    def builder(cls) -> DataVersionPropertiesBuilder:
-        return DataVersionPropertiesBuilder()
+    def builder(cls) -> DataVersionBuilder:
+        return DataVersionBuilder()
 
     @classmethod
-    def empty(cls) -> DataVersionProperties:
-        return DataVersionPropertiesBuilder.empty()
+    def empty(cls) -> DataVersion:
+        return DataVersionBuilder.empty()
 
-    def clone(self) -> DataVersionProperties:
+    def clone(self) -> DataVersion:
         # No need to clone as its dataclass is frozen and immutable.
         return self
 
 
-class DataVersionPropertiesBuilder:
+class DataVersionBuilder:
     def __init__(self) -> None:
         self.execution: str | None = None
         self.transaction: str | None = None
         self.version: str | None = None
         self.timestamp: datetime | None = None
 
-    def with_execution(self, execution: str) -> DataVersionPropertiesBuilder:
+    def with_execution(self, execution: str) -> DataVersionBuilder:
         self.execution = execution
         return self
 
-    def with_transaction(self, transaction: str) -> DataVersionPropertiesBuilder:
+    def with_transaction(self, transaction: str) -> DataVersionBuilder:
         self.transaction = transaction
         return self
 
-    def with_version(self, version: str) -> DataVersionPropertiesBuilder:
+    def with_version(self, version: str) -> DataVersionBuilder:
         self.version = version
         return self
 
-    def with_timestamp(
-        self, timestamp: str | int | datetime
-    ) -> DataVersionPropertiesBuilder:
+    def with_timestamp(self, timestamp: str | int | datetime) -> DataVersionBuilder:
         if isinstance(timestamp, datetime):
             self.timestamp = timestamp
             return self
@@ -80,9 +79,9 @@ class DataVersionPropertiesBuilder:
         )
 
     @staticmethod
-    def empty() -> DataVersionProperties:
+    def empty() -> DataVersion:
         return (
-            DataVersionProperties
+            DataVersion
             .builder()
             .with_execution(EMPTY_EXECUTION)
             .with_transaction(EMPTY_TRANSACTION)
@@ -91,7 +90,7 @@ class DataVersionPropertiesBuilder:
             .build()
         )
 
-    def build(self) -> DataVersionProperties:
+    def build(self) -> DataVersion:
         execution = self.execution
         transaction = self.transaction
         version = self.version
@@ -110,7 +109,7 @@ class DataVersionPropertiesBuilder:
                 version=version,
                 timestamp=timestamp,
             )
-        return DataVersionProperties(
+        return DataVersion(
             execution=execution,
             transaction=transaction,
             version=version,
@@ -118,15 +117,28 @@ class DataVersionPropertiesBuilder:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class DataGenesis:
+    id: str | None = None
+    idx: int | None = None
+    origin: TableFrameOrigin | None = None
+
+    def clone(self) -> DataGenesis:
+        # No need to clone as its dataclass is frozen and immutable.
+        return self
+
+
 @dataclass(slots=True)
 class TableFrameState:
-    properties: DataVersionProperties | None = None
+    version: DataVersion | None = None
+    genesis: DataGenesis | None = None
 
     @classmethod
     def empty(cls) -> TableFrameState:
-        return cls(properties=None)
+        return cls(version=None, genesis=None)
 
     def clone(self) -> TableFrameState:
         return TableFrameState(
-            properties=None if self.properties is None else self.properties.clone(),
+            version=None if self.version is None else self.version.clone(),
+            genesis=None if self.genesis is None else self.genesis.clone(),
         )

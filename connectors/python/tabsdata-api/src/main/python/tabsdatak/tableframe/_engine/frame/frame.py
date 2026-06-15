@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Self
 
 from tabsdatak.tableframe._core.base import BaseFrame
-from tabsdatak.tableframe._engine.model.tableframe import TableFrameState
+from tabsdatak.tableframe._engine.model.frame import TableFrameState
 
 
 class EngineFrame(BaseFrame):
@@ -45,17 +45,90 @@ class EngineFrame(BaseFrame):
         return type(self)._wrap(lf, state)
 
     @classmethod
-    def _assemble(cls, lf, mode) -> Self:
+    def _resolve_idx(cls, idx) -> int | None:
+        from tabsdatak.tableframe._engine.column.generator import IdxGenerator
+
+        if isinstance(idx, IdxGenerator):
+            return idx()
+        if idx is None or isinstance(idx, int):
+            return idx
+        raise ValueError(f"Invalid idx: {idx}")
+
+    @classmethod
+    def _resolve_origin(cls, origin, source):
+        from tabsdatak.tableframe._engine.taxonomy.frame import TableFrameOrigin
+
+        if isinstance(source, EngineFrame):
+            genesis = source._state.genesis if source._state is not None else None
+            origin_of = genesis.origin if genesis is not None else None
+            if origin_of is TableFrameOrigin.IMPORT:
+                return TableFrameOrigin.IMPORT
+            return TableFrameOrigin.TRANSFORM
+        if origin is None:
+            return TableFrameOrigin.BUILD
+        if isinstance(origin, TableFrameOrigin):
+            return origin
+        raise ValueError(f"Invalid origin: {origin}")
+
+    @classmethod
+    def _arrange(cls, lf):
+        from tabsdatak.tableframe._engine.constant.column.prefixes import (
+            TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
+            TD_SYSTEM_COLUMN_PREFIX,
+        )
+
+        prefixes = (TD_SYSTEM_COLUMN_PREFIX, TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
+        names = lf.collect_schema().names()
+        user = [name for name in names if not name.startswith(prefixes)]
+        system = sorted(name for name in names if name.startswith(prefixes))
+        return lf.select(user + system)
+
+    @classmethod
+    def _check_required(cls, lf, registry) -> None:
+        present = set(lf.collect_schema().names())
+        missing = [name for name in registry.required() if name not in present]
+        if missing:
+            from tabsdatak.tableframe._engine.event.error import TableFrameErrorCode
+
+            raise TableFrameErrorCode.TF4.exception(missing=missing)
+
+    @classmethod
+    def _build(
+        cls, df, mode, *, idx=None, version=None, origin=None, source=None
+    ) -> Self:
+        from tabsdatak.common._id import encode_id
         from tabsdatak.extensions.tableframe._engine.column.registry import registry
         from tabsdatak.tableframe._core.translate import validate_schema
         from tabsdatak.tableframe._engine.column.assembly import add_system_columns
-        from tabsdatak.tableframe._engine.model.tableframe import DataVersionProperties
-
-        validate_schema(lf)
-        lf = add_system_columns(
-            lf, registry(), mode, properties=DataVersionProperties.empty()
+        from tabsdatak.tableframe._engine.model.frame import (
+            DataGenesis,
+            DataVersion,
+            TableFrameState,
         )
-        return cls._wrap(lf)
+
+        resolved_idx = cls._resolve_idx(idx)
+        resolved_origin = cls._resolve_origin(origin, source)
+        resolved_version = version if version is not None else DataVersion.empty()
+        reg = registry()
+
+        validate_schema(df)
+        df = add_system_columns(
+            df, reg, mode, index=resolved_idx, version=resolved_version
+        )
+        cls._check_required(df, reg)
+        df = cls._arrange(df)
+
+        state = TableFrameState(
+            version=resolved_version,
+            genesis=DataGenesis(
+                idx=resolved_idx, origin=resolved_origin, id=encode_id()[1]
+            ),
+        )
+        return cls._wrap(df, state)
+
+    @classmethod
+    def _assemble(cls, lf, mode) -> Self:
+        return cls._build(lf, mode)
 
     def _strip(self, drop_system_columns):
         # The conversion surface (to_polars_* / to_pandas / to_dict) drops only the
@@ -69,6 +142,22 @@ class EngineFrame(BaseFrame):
         names = self._lf.collect_schema().names()
         keep = [name for name in names if not name.startswith(TD_SYSTEM_COLUMN_PREFIX)]
         return self._lf.select(keep)
+
+    def _persisted(self):
+        from tabsdatak.tableframe._engine.constant.column.prefixes import (
+            TD_NAMESPACED_VIRTUAL_SYSTEM_COLUMN_PREFIXES,
+        )
+
+        names = self._lf.collect_schema().names()
+        keep = [
+            name
+            for name in names
+            if not name.startswith(TD_NAMESPACED_VIRTUAL_SYSTEM_COLUMN_PREFIXES)
+        ]
+        return self._lf.select(keep)
+
+    def _sink_native(self, path) -> None:
+        self._persisted().sink_parquet(path)
 
     # Construction surface. Classmethods so cls is the concrete subclass and the
     # wrapped result is a TableFrame; each normalizes its input to a polars

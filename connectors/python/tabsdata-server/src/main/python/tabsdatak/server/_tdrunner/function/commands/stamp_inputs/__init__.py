@@ -30,19 +30,22 @@ import polars as pl
 
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
-    MANIFEST_FILES_KEY,
+    MANIFEST_FILE_KEY,
+    MANIFEST_INPUT_IDX_KEY,
     MANIFEST_NAME_KEY,
+    MANIFEST_TABLES_KEY,
     load_inputs_manifest_or_raise,
     write_inputs_manifest,
 )
 from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
-from tabsdatak.server._tdrunner.function._lib.system_columns import (
-    EMPTY_VERSION,
-    stamp_system_columns,
-)
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     StampInputsErrorCode,
 )
+from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe._engine.column.generator import IdxGenerator
+from tabsdatak.tableframe._engine.constant.emptiness import EMPTY_VERSION
+from tabsdatak.tableframe._engine.model.frame import DataVersion
+from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
 logger = logging.getLogger(__name__)
 
@@ -102,27 +105,21 @@ def _stamp_file(
     src_path: Path,
     dest_path: Path,
     *,
-    execution: str,
-    transaction: str,
-    version: str,
-    timestamp,
+    version: DataVersion,
+    idx: int,
 ) -> None:
     """Read a raw parquet, stamp framework system columns, write to dest."""
     try:
-        df = pl.read_parquet(src_path)
+        lf = pl.scan_parquet(src_path)
     except Exception as exc:
         raise StampInputsErrorCode.SI_3.exception(
             cause=exc, path=src_path, detail=str(exc)
         )
 
     try:
-        stamped = stamp_system_columns(
-            df,
-            execution=execution,
-            transaction=transaction,
-            version=version,
-            timestamp=timestamp,
-        )
+        stamped = TableFrame._build(
+            lf, CreationMode.RAW, idx=idx, version=version
+        ).to_polars_lf(drop_system_columns=False)
     except Exception as exc:
         raise StampInputsErrorCode.SI_4.exception(
             cause=exc, path=src_path, detail=str(exc)
@@ -130,7 +127,7 @@ def _stamp_file(
 
     try:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
-        stamped.write_parquet(dest_path)
+        stamped.sink_parquet(dest_path)
     except OSError as exc:
         raise StampInputsErrorCode.SI_5.exception(
             cause=exc, path=dest_path, detail=str(exc)
@@ -154,48 +151,61 @@ def main(args: argparse.Namespace) -> int:
         inputs_manifest,
     )
 
-    execution = str(request.info.execution_id)
-    transaction = str(request.info.transaction_id)
-    timestamp = request.info.triggered_on_datetime
+    version = (
+        DataVersion
+        .builder()
+        .with_execution(str(request.info.execution_id))
+        .with_transaction(str(request.info.transaction_id))
+        .with_version(EMPTY_VERSION)
+        .with_timestamp(request.info.triggered_on_datetime)
+        .build()
+    )
     logger.debug(
         "Stamping with execution=%s transaction=%s timestamp=%s",
-        execution,
-        transaction,
-        timestamp,
+        version.execution,
+        version.transaction,
+        version.timestamp,
     )
 
+    # One IdxGenerator shared across every stamped file so idx assignment is
+    # globally unique across all slots, matching legacy store_sources_raw_data.
+    # The assigned idx is recorded on each table record so downstream steps
+    # read it from the manifest instead of regenerating it.
+    idx = IdxGenerator()
     enriched_entries: list[dict] = []
     total_stamped = 0
     for slot_idx, entry in enumerate(entries):
         name = entry.get(MANIFEST_NAME_KEY, f"slot{slot_idx}")
-        files = entry.get(MANIFEST_FILES_KEY) or []
+        records = entry.get(MANIFEST_TABLES_KEY) or []
         logger.debug(
-            "Slot %d (%s): %d file(s) to stamp: %s",
+            "Slot %d (%s): %d table record(s) to stamp: %s",
             slot_idx,
             name,
-            len(files),
-            files,
+            len(records),
+            records,
         )
 
         slot_dir = enriched_dir / f"slot{slot_idx}"
-        enriched_files: list[str] = []
-        for src in files:
+        enriched_records: list[dict] = []
+        for record in records:
+            src = record.get(MANIFEST_FILE_KEY)
+            if src is None:
+                enriched_records.append(record)
+                continue
             src_path = Path(src)
             dest_path = slot_dir / src_path.name
-            _stamp_file(
-                src_path,
-                dest_path,
-                execution=execution,
-                transaction=transaction,
-                version=EMPTY_VERSION,
-                timestamp=timestamp,
-            )
-            enriched_files.append(str(dest_path.absolute()))
+            assigned = idx()
+            _stamp_file(src_path, dest_path, version=version, idx=assigned)
+            enriched_records.append({
+                **record,
+                MANIFEST_FILE_KEY: str(dest_path.absolute()),
+                MANIFEST_INPUT_IDX_KEY: assigned,
+            })
             total_stamped += 1
 
         enriched_entries.append({
-            MANIFEST_NAME_KEY: name,
-            MANIFEST_FILES_KEY: enriched_files,
+            **entry,
+            MANIFEST_TABLES_KEY: enriched_records,
         })
 
     try:

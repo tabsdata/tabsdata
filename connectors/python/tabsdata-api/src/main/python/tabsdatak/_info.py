@@ -190,7 +190,7 @@ class TransformerInfo(_api.JsonSerde):
     __kind__ = KIND_TRANSFORMER_DEF
 
     func: Callable
-    input_tables: api.CollTableNamesSpec
+    input_tables: api.CollTableVersionsNamesSpec
     output_tables: api.TableNamesSpec
     trigger_by: api.TransformerTriggerBySpec | None
     on_tables: api.OnTablesActionSpec | None
@@ -235,7 +235,7 @@ class SubscriberInfo(_api.JsonSerde):
     func: Callable
     conn: Conn
     destination: api.Dest
-    input_tables: api.CollTableNamesSpec
+    input_tables: api.CollTableVersionsNamesSpec
     trigger_by: api.SubscriberTriggerBySpec | None
 
     _ser_func = field_serializer("func")(_ser_func)
