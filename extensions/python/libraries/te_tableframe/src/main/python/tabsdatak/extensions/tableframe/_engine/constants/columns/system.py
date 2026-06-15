@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from tabsdatak.tableframe._engine.system.constants.columns.names import (
+from tabsdatak.tableframe._engine.constants.columns.names import (
     TD_EXECUTION_SYSTEM_COLUMN_NAME,
     TD_FILE_LINE_SYSTEM_COLUMN_NAME,
     TD_FILE_PATH_SYSTEM_COLUMN_NAME,
@@ -20,13 +20,13 @@ from tabsdatak.tableframe._engine.system.constants.columns.names import (
     TD_VALUE_TIMESTAMP_SYSTEM_COLUMN_NAME,
     TD_VERSION_SYSTEM_COLUMN_NAME,
 )
-from tabsdatak.tableframe._engine.system.constants.empties import (
+from tabsdatak.tableframe._engine.constants.empties import (
     EMPTY_EXECUTION,
     EMPTY_TIMESTAMP,
     EMPTY_TRANSACTION,
     EMPTY_VERSION,
 )
-from tabsdatak.tableframe._engine.system.model import (
+from tabsdatak.tableframe._engine.model.columns import (
     Inception,
     Language,
     SystemColumn,
@@ -36,7 +36,7 @@ from tabsdatak.tableframe._engine.system.model import (
 if TYPE_CHECKING:
     import polars as pl_
 
-    from tabsdatak.tableframe._engine.system.model import SystemColumnDataType
+    from tabsdatak.tableframe._engine.model.columns import SystemColumnDataType
 
 
 def dtype_string() -> SystemColumnDataType:

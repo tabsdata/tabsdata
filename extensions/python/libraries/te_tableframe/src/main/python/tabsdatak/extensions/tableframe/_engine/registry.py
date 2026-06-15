@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from functools import cache
 
-from tabsdatak.tableframe._engine.system.registry import Registry
+from tabsdatak.tableframe._engine.registry import Registry
 
 
 @cache

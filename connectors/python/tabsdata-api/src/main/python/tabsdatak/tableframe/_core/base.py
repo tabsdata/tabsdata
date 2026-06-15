@@ -6,8 +6,8 @@
 ``BaseWrapper`` holds a single underlying polars object as ``_inner`` (the
 transparent wrappers: ``Expr``, the Expr namespaces, the when/then builders).
 ``BaseFrame`` is the base for ``TableFrame``: it holds the underlying
-``pl.LazyFrame`` plus an opaque ``_state`` dict that hooks read/write (each hook
-namespaces its own keys). The generated code knows nothing about what's in it.
+``pl.LazyFrame`` plus a ``_state`` (a ``TableFrameState``) carrying everything
+about the frame other than ``_lf``. The generated code treats it opaquely.
 """
 
 from __future__ import annotations
@@ -35,8 +35,10 @@ class BaseFrame:
     def __init__(self, data=None, schema=None, **kwargs) -> None:
         import polars as pl
 
+        from tabsdatak.tableframe._engine.model.tableframe import TableFrameState
+
         self._lf = pl.LazyFrame(data, schema, **kwargs)
-        self._state = {}
+        self._state = TableFrameState.empty()
         # enforce the allowed-datatype set on the incoming schema (lazy import
         # avoids a cycle: translate imports this module)
         from .translate import validate_schema
@@ -45,14 +47,16 @@ class BaseFrame:
 
     @classmethod
     def _wrap(cls, lf, state=None) -> "BaseFrame":
+        from tabsdatak.tableframe._engine.model.tableframe import TableFrameState
+
         obj = cls.__new__(cls)
         obj._lf = lf
-        obj._state = dict(state) if state else {}
+        obj._state = state if state is not None else TableFrameState.empty()
         return obj
 
     def _clone(self, lf) -> "BaseFrame":
-        # carry a shallow copy of the hook state forward (type(self) => subclass)
-        return type(self)._wrap(lf, self._state)
+        # carry the hook state forward (type(self) => subclass)
+        return type(self)._wrap(lf, self._state.clone())
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._lf!r})"

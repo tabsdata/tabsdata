@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Any, Callable
 
-from tabsdatak.tableframe._engine.system.constants.columns.names import (
+from tabsdatak.tableframe._engine.constants.columns.names import (
     TD_EXECUTION_SYSTEM_COLUMN_NAME,
     TD_FILE_LINE_SYSTEM_COLUMN_NAME,
     TD_FILE_PATH_SYSTEM_COLUMN_NAME,

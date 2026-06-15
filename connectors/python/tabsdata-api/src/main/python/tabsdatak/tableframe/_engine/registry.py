@@ -6,13 +6,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from tabsdatak.tableframe._engine.system.constants.columns.prefixes import (
+from tabsdatak.tableframe._engine.constants.columns.prefixes import (
     TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
     TD_NAMESPACED_SYSTEM_COLUMN_PREFIXES,
     TD_SYSTEM_COLUMN_PREFIX,
     TD_VOLATILE_SYSTEM_COLUMN_PREFIX,
 )
-from tabsdatak.tableframe._engine.system.model import (
+from tabsdatak.tableframe._engine.model.columns import (
     Inception,
     SystemColumn,
     SystemColumnCategory,
