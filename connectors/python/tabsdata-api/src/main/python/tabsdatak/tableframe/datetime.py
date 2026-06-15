@@ -11,20 +11,11 @@ from tabsdatak.tableframe._core.translate import register, unwrap, wrap
 
 @register(_PlExprDateTimeNameSpace)
 class ExprDateTimeNameSpace(BaseWrapper):
-    def __or__(self, *args, **kwargs):
-        return wrap(self._inner.__or__(*unwrap(args), **unwrap(kwargs)))
-
-    def __ror__(self, *args, **kwargs):
-        return wrap(self._inner.__ror__(*unwrap(args), **unwrap(kwargs)))
-
     def add_business_days(self, *args, **kwargs):
         return wrap(self._inner.add_business_days(*unwrap(args), **unwrap(kwargs)))
 
     def truncate(self, *args, **kwargs):
         return wrap(self._inner.truncate(*unwrap(args), **unwrap(kwargs)))
-
-    def round(self, *args, **kwargs):
-        return wrap(self._inner.round(*unwrap(args), **unwrap(kwargs)))
 
     def replace(self, *args, **kwargs):
         return wrap(self._inner.replace(*unwrap(args), **unwrap(kwargs)))
@@ -47,9 +38,6 @@ class ExprDateTimeNameSpace(BaseWrapper):
     def year(self, *args, **kwargs):
         return wrap(self._inner.year(*unwrap(args), **unwrap(kwargs)))
 
-    def is_business_day(self, *args, **kwargs):
-        return wrap(self._inner.is_business_day(*unwrap(args), **unwrap(kwargs)))
-
     def is_leap_year(self, *args, **kwargs):
         return wrap(self._inner.is_leap_year(*unwrap(args), **unwrap(kwargs)))
 
@@ -61,9 +49,6 @@ class ExprDateTimeNameSpace(BaseWrapper):
 
     def month(self, *args, **kwargs):
         return wrap(self._inner.month(*unwrap(args), **unwrap(kwargs)))
-
-    def days_in_month(self, *args, **kwargs):
-        return wrap(self._inner.days_in_month(*unwrap(args), **unwrap(kwargs)))
 
     def week(self, *args, **kwargs):
         return wrap(self._inner.week(*unwrap(args), **unwrap(kwargs)))

@@ -18,18 +18,6 @@ class TableFrame(EngineFrame):
         "with_columns",
     )
 
-    def __or__(self, *args, **kwargs):
-        out = self._lf.__or__(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def __ror__(self, *args, **kwargs):
-        out = self._lf.__ror__(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def deserialize(self, *args, **kwargs):
-        out = self._lf.deserialize(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
     @property
     def columns(self):
         return wrap(self._lf.columns)
@@ -74,18 +62,6 @@ class TableFrame(EngineFrame):
         out = self._lf.__getitem__(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
-    def serialize(self, *args, **kwargs):
-        out = self._lf.serialize(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def pipe(self, *args, **kwargs):
-        out = self._lf.pipe(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def pipe_with_schema(self, *args, **kwargs):
-        out = self._lf.pipe_with_schema(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
     def explain(self, *args, **kwargs):
         out = self._lf.explain(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
@@ -102,54 +78,6 @@ class TableFrame(EngineFrame):
         out = self._lf.sort(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
-    def sql(self, *args, **kwargs):
-        out = self._lf.sql(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def top_k(self, *args, **kwargs):
-        out = self._lf.top_k(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def bottom_k(self, *args, **kwargs):
-        out = self._lf.bottom_k(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def collect_schema(self, *args, **kwargs):
-        out = self._lf.collect_schema(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def sink_parquet(self, *args, **kwargs):
-        out = self._lf.sink_parquet(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def sink_delta(self, *args, **kwargs):
-        out = self._lf.sink_delta(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def sink_ipc(self, *args, **kwargs):
-        out = self._lf.sink_ipc(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def sink_csv(self, *args, **kwargs):
-        out = self._lf.sink_csv(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def sink_ndjson(self, *args, **kwargs):
-        out = self._lf.sink_ndjson(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def sink_batches(self, *args, **kwargs):
-        out = self._lf.sink_batches(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def lazy(self, *args, **kwargs):
-        out = self._lf.lazy(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def cache(self, *args, **kwargs):
-        out = self._lf.cache(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
     def cast(self, *args, **kwargs):
         out = self._lf.cast(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
@@ -158,16 +86,8 @@ class TableFrame(EngineFrame):
         out = self._lf.clear(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
-    def clone(self, *args, **kwargs):
-        out = self._lf.clone(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
     def filter(self, *args, **kwargs):
         out = self._lf.filter(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def remove(self, *args, **kwargs):
-        out = self._lf.remove(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
     def select(self, *exprs, **named_exprs):
@@ -181,36 +101,12 @@ class TableFrame(EngineFrame):
             params={"exprs": u_args, "named": u_named, "replace_all": True},
         )
 
-    def select_seq(self, *args, **kwargs):
-        out = self._lf.select_seq(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
     def group_by(self, *by, **named_by):
         from tabsdatak.tableframe.group_by import LazyGroupBy
 
         u_by = unwrap(by)
         u_named = unwrap(named_by)
         return LazyGroupBy(self._lf.group_by(*u_by, **u_named), self, (u_by, u_named))
-
-    def rolling(self, *by, **named_by):
-        from tabsdatak.tableframe.group_by import LazyGroupBy
-
-        u_by = unwrap(by)
-        u_named = unwrap(named_by)
-        return LazyGroupBy(self._lf.rolling(*u_by, **u_named), self, (u_by, u_named))
-
-    def group_by_dynamic(self, *by, **named_by):
-        from tabsdatak.tableframe.group_by import LazyGroupBy
-
-        u_by = unwrap(by)
-        u_named = unwrap(named_by)
-        return LazyGroupBy(
-            self._lf.group_by_dynamic(*u_by, **u_named), self, (u_by, u_named)
-        )
-
-    def join_asof(self, *args, **kwargs):
-        out = self._lf.join_asof(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
     def join(
         self,
@@ -245,10 +141,6 @@ class TableFrame(EngineFrame):
             },
         )
 
-    def join_where(self, *args, **kwargs):
-        out = self._lf.join_where(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
     def with_columns(self, *exprs, **named_exprs):
         u_args = unwrap(exprs)
         u_named = unwrap(named_exprs)
@@ -260,14 +152,6 @@ class TableFrame(EngineFrame):
             params={"exprs": u_args, "named": u_named, "replace_all": False},
         )
 
-    def with_columns_seq(self, *args, **kwargs):
-        out = self._lf.with_columns_seq(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def with_context(self, *args, **kwargs):
-        out = self._lf.with_context(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
     def drop(self, *columns, **kwargs):
         u_columns = unwrap(columns)
         out = self._clone(self._lf.drop(*u_columns, **unwrap(kwargs)))
@@ -277,14 +161,6 @@ class TableFrame(EngineFrame):
         u_mapping = unwrap(mapping)
         out = self._clone(self._lf.rename(u_mapping, *unwrap(args), **unwrap(kwargs)))
         return run_hook("rename", out, sources=(self,), params={"mapping": u_mapping})
-
-    def reverse(self, *args, **kwargs):
-        out = self._lf.reverse(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def shift(self, *args, **kwargs):
-        out = self._lf.shift(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
     def slice(self, *args, **kwargs):
         out = self._lf.slice(*unwrap(args), **unwrap(kwargs))
@@ -310,68 +186,12 @@ class TableFrame(EngineFrame):
         out = self._lf.first(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
-    def approx_n_unique(self, *args, **kwargs):
-        out = self._lf.approx_n_unique(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def with_row_index(self, *args, **kwargs):
-        out = self._lf.with_row_index(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def with_row_count(self, *args, **kwargs):
-        out = self._lf.with_row_count(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def gather_every(self, *args, **kwargs):
-        out = self._lf.gather_every(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
     def fill_null(self, *args, **kwargs):
         out = self._lf.fill_null(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
     def fill_nan(self, *args, **kwargs):
         out = self._lf.fill_nan(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def std(self, *args, **kwargs):
-        out = self._lf.std(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def var(self, *args, **kwargs):
-        out = self._lf.var(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def max(self, *args, **kwargs):
-        out = self._lf.max(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def min(self, *args, **kwargs):
-        out = self._lf.min(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def sum(self, *args, **kwargs):
-        out = self._lf.sum(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def mean(self, *args, **kwargs):
-        out = self._lf.mean(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def median(self, *args, **kwargs):
-        out = self._lf.median(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def null_count(self, *args, **kwargs):
-        out = self._lf.null_count(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def quantile(self, *args, **kwargs):
-        out = self._lf.quantile(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def explode(self, *args, **kwargs):
-        out = self._lf.explode(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
     def unique(self, *args, **kwargs):
@@ -386,56 +206,8 @@ class TableFrame(EngineFrame):
         out = self._lf.drop_nulls(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
-    def pivot(self, *args, **kwargs):
-        out = self._lf.pivot(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def unpivot(self, *args, **kwargs):
-        out = self._lf.unpivot(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def map_batches(self, *args, **kwargs):
-        out = self._lf.map_batches(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def interpolate(self, *args, **kwargs):
-        out = self._lf.interpolate(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
     def unnest(self, *args, **kwargs):
         out = self._lf.unnest(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def merge_sorted(self, *args, **kwargs):
-        out = self._lf.merge_sorted(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def set_sorted(self, *args, **kwargs):
-        out = self._lf.set_sorted(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def update(self, *args, **kwargs):
-        out = self._lf.update(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def count(self, *args, **kwargs):
-        out = self._lf.count(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def melt(self, *args, **kwargs):
-        out = self._lf.melt(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def remote(self, *args, **kwargs):
-        out = self._lf.remote(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def match_to_schema(self, *args, **kwargs):
-        out = self._lf.match_to_schema(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def show(self, *args, **kwargs):
-        out = self._lf.show(*unwrap(args), **unwrap(kwargs))
         return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
 
 
@@ -445,22 +217,13 @@ def _load_registry() -> None:
     import polars as pl
 
     for submodule in (
-        "array",
-        "binary",
-        "categorical",
         "datatypes",
         "datetime",
         "expr",
-        "ext",
         "functions",
         "group_by",
-        "list",
-        "meta",
-        "name",
         "schema",
         "string",
-        "struct",
-        "whenthen",
     ):
         importlib.import_module(f"{__name__}.{submodule}")
 

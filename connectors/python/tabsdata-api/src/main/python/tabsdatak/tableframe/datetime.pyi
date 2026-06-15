@@ -26,7 +26,6 @@ from tabsdatak.tableframe._typing import (
     Ambiguous,
     EpochTimeUnit,
     IntoExpr,
-    IntoExprColumn,
     NonExistent,
     Roll,
     TimeUnit,
@@ -36,12 +35,6 @@ from tabsdatak.tableframe._typing import (
 
 class ExprDateTimeNameSpace:
     """ """
-    def __or__(value, /):
-        """ """
-
-    def __ror__(value, /):
-        """ """
-
     def add_business_days(
         self,
         n: int | IntoExpr,
@@ -53,9 +46,6 @@ class ExprDateTimeNameSpace:
         """ """
 
     def truncate(self, every: str | Expr) -> Expr:
-        """ """
-
-    def round(self, every: str | IntoExprColumn) -> Expr:
         """ """
 
     def replace(
@@ -90,14 +80,6 @@ class ExprDateTimeNameSpace:
     def year(self) -> Expr:
         """ """
 
-    def is_business_day(
-        self,
-        *,
-        week_mask: Iterable[bool] = (True, True, True, True, True, False, False),
-        holidays: Iterable[Any] | Expr = (),
-    ) -> Expr:
-        """ """
-
     def is_leap_year(self) -> Expr:
         """ """
 
@@ -108,9 +90,6 @@ class ExprDateTimeNameSpace:
         """ """
 
     def month(self) -> Expr:
-        """ """
-
-    def days_in_month(self) -> Expr:
         """ """
 
     def week(self) -> Expr:

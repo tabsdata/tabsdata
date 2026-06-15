@@ -94,6 +94,15 @@ _HOOK_SHAPES: dict[str, tuple[int, list[tuple[str, str]]]] = {
 }
 _HOOK_NAMES = set(_HOOK_SHAPES)
 
+# Constructors of generator-scaffolded classes (class name -> parameter names).
+# These have no polars-report symbol — the runtime renderers emit them as
+# scaffolding — so the .pyi renderer sources them from here; otherwise the stub
+# class has no __init__ and type checkers fall back to ``object()``'s
+# zero-argument constructor, flagging every construction site.
+_SCAFFOLD_CONSTRUCTORS: dict[str, tuple[str, ...]] = {
+    "LazyGroupBy": ("lgb", "parent", "by"),
+}
+
 
 @dataclass
 class GenResult:
@@ -769,7 +778,7 @@ def _render_lazygroupby_py(syms: list[Symbol], root: str) -> str:
         "",
         "",
         "class LazyGroupBy:",
-        "    def __init__(self, lgb, parent, by):",
+        f"    def __init__(self, {', '.join(_SCAFFOLD_CONSTRUCTORS['LazyGroupBy'])}):",
         "        self._lgb = lgb",
         "        self._parent = parent",
         "        self._by = by  # (positional, named) group keys, for the agg hook",
@@ -947,6 +956,16 @@ def _render_pyi(
             else:
                 body += ["", f"class {cls_name}:"]
             body += _docstring_lines(class_doc, body_indent="    ")
+            constructor_parameters = _SCAFFOLD_CONSTRUCTORS.get(cls_name)
+            if constructor_parameters is not None:
+                signature = f"(self, {', '.join(constructor_parameters)}) -> None"
+                body += _pyi_def(
+                    "__init__",
+                    signature,
+                    previous,
+                    indent="    ",
+                    cls_name=cls_name,
+                )
             for sym in cls_syms:
                 entry, our, aliases = _pyi_entry(
                     sym, previous, typing_gen, indent="    ", cls_name=cls_name
@@ -973,6 +992,26 @@ def _pyi_entry(
 ) -> tuple[list[str], set[str], set[str]]:
     name = _member(sym)
     signature, used_our, used_aliases = typing_gen.rewrite_signature(sym.signature)
+    lines = _pyi_def(
+        name,
+        signature,
+        previous,
+        is_property=sym.is_property,
+        indent=indent,
+        cls_name=cls_name,
+    )
+    return lines, used_our, used_aliases
+
+
+def _pyi_def(
+    name: str,
+    signature: str,
+    previous: PyiDoc | None,
+    *,
+    is_property: bool = False,
+    indent: str,
+    cls_name: str | None,
+) -> list[str]:
     docstring: str | None = None
     lines: list[str] = []
 
@@ -986,13 +1025,13 @@ def _pyi_entry(
         else:
             docstring = existing.docstring  # unchanged: preserve verbatim
 
-    if sym.is_property:
+    if is_property:
         lines.append(f"{indent}@property")
     # every entity gets a docstring placeholder to fill in (preserved if present)
     lines.append(f"{indent}def {name}{signature}:")
     lines += _docstring_lines(_preserved(docstring), indent + "    ")
     lines.append("")
-    return lines, used_our, used_aliases
+    return lines
 
 
 def _preserved(docstring: str | None) -> str:

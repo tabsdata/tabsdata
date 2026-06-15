@@ -13,30 +13,6 @@ class LazyGroupBy:
         self._parent = parent
         self._by = by  # (positional, named) group keys, for the agg hook
 
-    def __or__(self, *args, **kwargs):
-        out = self._lgb.__or__(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
-
-    def __ror__(self, *args, **kwargs):
-        out = self._lgb.__ror__(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
-
-    def having(self, *args, **kwargs):
-        out = self._lgb.having(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
-
     def agg(self, *aggs, **named_aggs):
         u_args = unwrap(aggs)
         u_named = unwrap(named_aggs)
@@ -54,38 +30,6 @@ class LazyGroupBy:
             },
         )
 
-    def map_groups(self, *args, **kwargs):
-        out = self._lgb.map_groups(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
-
-    def head(self, *args, **kwargs):
-        out = self._lgb.head(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
-
-    def tail(self, *args, **kwargs):
-        out = self._lgb.tail(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
-
-    def all(self, *args, **kwargs):
-        out = self._lgb.all(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
-
     def len(self, *args, **kwargs):
         out = self._lgb.len(*unwrap(args), **unwrap(kwargs))
         if isinstance(out, type(self._lgb)):
@@ -96,22 +40,6 @@ class LazyGroupBy:
 
     def count(self, *args, **kwargs):
         out = self._lgb.count(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
-
-    def first(self, *args, **kwargs):
-        out = self._lgb.first(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
-
-    def last(self, *args, **kwargs):
-        out = self._lgb.last(*unwrap(args), **unwrap(kwargs))
         if isinstance(out, type(self._lgb)):
             return LazyGroupBy(out, self._parent, self._by)
         if isinstance(out, type(self._parent._lf)):
@@ -152,14 +80,6 @@ class LazyGroupBy:
 
     def n_unique(self, *args, **kwargs):
         out = self._lgb.n_unique(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
-
-    def quantile(self, *args, **kwargs):
-        out = self._lgb.quantile(*unwrap(args), **unwrap(kwargs))
         if isinstance(out, type(self._lgb)):
             return LazyGroupBy(out, self._parent, self._by)
         if isinstance(out, type(self._parent._lf)):

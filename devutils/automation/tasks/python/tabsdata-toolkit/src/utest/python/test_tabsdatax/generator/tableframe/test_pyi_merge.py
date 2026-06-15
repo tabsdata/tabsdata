@@ -1,10 +1,18 @@
 """Tests for the .pyi merge/preserve behavior on regeneration."""
 
+import pytest
+
 from tabsdatax.generator.tableframe.emit.generate import generate
 from tabsdatax.generator.tableframe.emit.pyi import canonical_signature
 from tabsdatax.generator.tableframe.model.model import Report, Symbol
 
 ROOT = "pkg.wrap"
+
+
+@pytest.fixture
+def root_dir(tmp_path):
+    # Mirror the Maven source layout the generator expects (see test_generate).
+    return tmp_path / "src" / "main" / "python"
 
 
 def _report(symbols):
@@ -29,11 +37,11 @@ def test_canonical_signature_ignores_formatting():
     )
 
 
-def test_first_generation_has_no_markers(tmp_path):
+def test_first_generation_has_no_markers(root_dir):
     generate(
-        _report([_expr("alias", "(self, name: 'str') -> 'Expr'")]), ROOT, str(tmp_path)
+        _report([_expr("alias", "(self, name: 'str') -> 'Expr'")]), ROOT, str(root_dir)
     )
-    text = (tmp_path / "pkg" / "wrap" / "expr.pyi").read_text()
+    text = (root_dir / "pkg" / "wrap" / "expr.pyi").read_text()
     assert "NEW SIGNATURE" not in text and "CHANGED SIGNATURE" not in text
     # annotations rewritten through the typing engine (unquoted, our types);
     # every entity gets an empty docstring placeholder instead of `...`
@@ -41,15 +49,15 @@ def test_first_generation_has_no_markers(tmp_path):
     assert '""" """' in text
 
 
-def test_regeneration_preserves_docstring_and_flags_changes(tmp_path):
-    base = tmp_path / "pkg" / "wrap"
+def test_regeneration_preserves_docstring_and_flags_changes(root_dir):
+    base = root_dir / "pkg" / "wrap"
     generate(
         _report([
             _expr("alias", "(self, name: 'str') -> 'Expr'"),
             _expr("keep", "(self) -> 'Expr'"),
         ]),
         ROOT,
-        str(tmp_path),
+        str(root_dir),
     )
 
     # Human fills the empty docstring placeholders.
@@ -79,7 +87,7 @@ def test_regeneration_preserves_docstring_and_flags_changes(tmp_path):
             _expr("brand", "(self) -> 'Expr'"),
         ]),
         ROOT,
-        str(tmp_path),
+        str(root_dir),
     )
     result_text = pyi.read_text()
 
@@ -90,17 +98,17 @@ def test_regeneration_preserves_docstring_and_flags_changes(tmp_path):
     assert '"""Unchanged doc."""' in result_text
     # new symbol -> marker
     assert "# NEW SIGNATURE, CREATE PYDOC" in result_text
-    # .pyi-ori snapshot was created
-    assert (base / "expr.pyi-ori").exists()
+    # the .pyi-ori snapshot is transient: read for docstring recovery, then dropped
+    assert not (base / "expr.pyi-ori").exists()
 
 
-def test_dropped_symbols_reported(tmp_path):
+def test_dropped_symbols_reported(root_dir):
     generate(
         _report([_expr("a", "(self) -> 'Expr'"), _expr("b", "(self) -> 'Expr'")]),
         ROOT,
-        str(tmp_path),
+        str(root_dir),
     )
-    result = generate(_report([_expr("a", "(self) -> 'Expr'")]), ROOT, str(tmp_path))
+    result = generate(_report([_expr("a", "(self) -> 'Expr'")]), ROOT, str(root_dir))
     assert result.dropped[f"{ROOT}.expr"] == ["b"]
     # b is gone from the regenerated stub
-    assert "def b(" not in (tmp_path / "pkg" / "wrap" / "expr.pyi").read_text()
+    assert "def b(" not in (root_dir / "pkg" / "wrap" / "expr.pyi").read_text()

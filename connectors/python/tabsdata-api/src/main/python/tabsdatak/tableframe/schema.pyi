@@ -22,6 +22,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from tabsdatak.tableframe.datatypes import DataType
+from tabsdatak.tableframe import TableFrame
 
 """ """
 
@@ -106,6 +107,9 @@ class Schema:
         """ """
 
     def to_arrow(self, *, compat_level: None = None) -> Any:
+        """ """
+
+    def to_frame(self, *, eager: bool = True) -> TableFrame:
         """ """
 
     def len(self) -> int:

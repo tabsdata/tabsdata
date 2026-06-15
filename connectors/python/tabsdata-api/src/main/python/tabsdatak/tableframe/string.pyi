@@ -26,24 +26,14 @@ from tabsdatak.tableframe._typing import (
     Ambiguous,
     IntoExpr,
     IntoExprColumn,
-    PolarsDataType,
     PolarsIntegerType,
-    PolarsTemporalType,
     TimeUnit,
-    TransferEncoding,
-    UnicodeForm,
 )
 
 """ """
 
 class ExprStringNameSpace:
     """ """
-    def __or__(value, /):
-        """ """
-
-    def __ror__(value, /):
-        """ """
-
     def to_date(
         self,
         format: str | None = None,
@@ -70,21 +60,6 @@ class ExprStringNameSpace:
     def to_time(
         self, format: str | None = None, *, strict: bool = True, cache: bool = True
     ) -> Expr:
-        """ """
-
-    def strptime(
-        self,
-        dtype: PolarsTemporalType,
-        format: str | None = None,
-        *,
-        strict: bool = True,
-        exact: bool = True,
-        cache: bool = True,
-        ambiguous: Ambiguous | Expr = "raise",
-    ) -> Expr:
-        """ """
-
-    def to_decimal(self, *, scale: int) -> Expr:
         """ """
 
     def len_bytes(self) -> Expr:
@@ -142,46 +117,10 @@ class ExprStringNameSpace:
     def starts_with(self, prefix: str | Expr) -> Expr:
         """ """
 
-    def json_decode(
-        self, dtype: PolarsDataType, *, infer_schema_length: int | None = None
-    ) -> Expr:
-        """ """
-
-    def json_path_match(self, json_path: IntoExprColumn) -> Expr:
-        """ """
-
-    def decode(self, encoding: TransferEncoding, *, strict: bool = True) -> Expr:
-        """ """
-
-    def encode(self, encoding: TransferEncoding) -> Expr:
-        """ """
-
     def extract(self, pattern: IntoExprColumn, group_index: int = 1) -> Expr:
         """ """
 
-    def extract_all(self, pattern: str | Expr) -> Expr:
-        """ """
-
-    def extract_groups(self, pattern: str) -> Expr:
-        """ """
-
     def count_matches(self, pattern: str | Expr, *, literal: bool = False) -> Expr:
-        """ """
-
-    def split(
-        self,
-        by: IntoExpr,
-        *,
-        inclusive: bool = False,
-        literal: bool = True,
-        strict: bool = True,
-    ) -> Expr:
-        """ """
-
-    def split_exact(self, by: IntoExpr, n: int, *, inclusive: bool = False) -> Expr:
-        """ """
-
-    def splitn(self, by: IntoExpr, n: int) -> Expr:
         """ """
 
     def replace(
@@ -213,9 +152,6 @@ class ExprStringNameSpace:
     def tail(self, n: int | IntoExprColumn) -> Expr:
         """ """
 
-    def explode(self) -> Expr:
-        """ """
-
     def to_integer(
         self,
         *,
@@ -238,38 +174,4 @@ class ExprStringNameSpace:
         ascii_case_insensitive: bool = False,
         leftmost: bool = False,
     ) -> Expr:
-        """ """
-
-    def extract_many(
-        self,
-        patterns: IntoExpr,
-        *,
-        ascii_case_insensitive: bool = False,
-        overlapping: bool = False,
-        leftmost: bool = False,
-    ) -> Expr:
-        """ """
-
-    def find_many(
-        self,
-        patterns: IntoExpr,
-        *,
-        ascii_case_insensitive: bool = False,
-        overlapping: bool = False,
-        leftmost: bool = False,
-    ) -> Expr:
-        """ """
-
-    def join(self, delimiter: str = "", *, ignore_nulls: bool = True) -> Expr:
-        """ """
-
-    def concat(
-        self, delimiter: str | None = None, *, ignore_nulls: bool = True
-    ) -> Expr:
-        """ """
-
-    def escape_regex(self) -> Expr:
-        """ """
-
-    def normalize(self, form: UnicodeForm = "NFC") -> Expr:
         """ """

@@ -12,44 +12,12 @@ from tabsdatak.tableframe._core.translate import register, unwrap, wrap
 @register(_PlExpr)
 class Expr(BaseWrapper):
     @property
-    def bin(self):
-        return wrap(self._inner.bin)
-
-    @property
-    def cat(self):
-        return wrap(self._inner.cat)
-
-    @property
     def dt(self):
         return wrap(self._inner.dt)
 
     @property
-    def list(self):
-        return wrap(self._inner.list)
-
-    @property
-    def arr(self):
-        return wrap(self._inner.arr)
-
-    @property
-    def meta(self):
-        return wrap(self._inner.meta)
-
-    @property
-    def name(self):
-        return wrap(self._inner.name)
-
-    @property
     def str(self):
         return wrap(self._inner.str)
-
-    @property
-    def struct(self):
-        return wrap(self._inner.struct)
-
-    @property
-    def ext(self):
-        return wrap(self._inner.ext)
 
     def __abs__(self, *args, **kwargs):
         return wrap(self._inner.__abs__(*unwrap(args), **unwrap(kwargs)))
@@ -141,21 +109,6 @@ class Expr(BaseWrapper):
     def __rxor__(self, *args, **kwargs):
         return wrap(self._inner.__rxor__(*unwrap(args), **unwrap(kwargs)))
 
-    def deserialize(self, *args, **kwargs):
-        return wrap(self._inner.deserialize(*unwrap(args), **unwrap(kwargs)))
-
-    def to_physical(self, *args, **kwargs):
-        return wrap(self._inner.to_physical(*unwrap(args), **unwrap(kwargs)))
-
-    def any(self, *args, **kwargs):
-        return wrap(self._inner.any(*unwrap(args), **unwrap(kwargs)))
-
-    def all(self, *args, **kwargs):
-        return wrap(self._inner.all(*unwrap(args), **unwrap(kwargs)))
-
-    def arg_true(self, *args, **kwargs):
-        return wrap(self._inner.arg_true(*unwrap(args), **unwrap(kwargs)))
-
     def sqrt(self, *args, **kwargs):
         return wrap(self._inner.sqrt(*unwrap(args), **unwrap(kwargs)))
 
@@ -170,12 +123,6 @@ class Expr(BaseWrapper):
 
     def alias(self, *args, **kwargs):
         return wrap(self._inner.alias(*unwrap(args), **unwrap(kwargs)))
-
-    def exclude(self, *args, **kwargs):
-        return wrap(self._inner.exclude(*unwrap(args), **unwrap(kwargs)))
-
-    def pipe(self, *args, **kwargs):
-        return wrap(self._inner.pipe(*unwrap(args), **unwrap(kwargs)))
 
     def not_(self, *args, **kwargs):
         return wrap(self._inner.not_(*unwrap(args), **unwrap(kwargs)))
@@ -198,9 +145,6 @@ class Expr(BaseWrapper):
     def is_not_nan(self, *args, **kwargs):
         return wrap(self._inner.is_not_nan(*unwrap(args), **unwrap(kwargs)))
 
-    def agg_groups(self, *args, **kwargs):
-        return wrap(self._inner.agg_groups(*unwrap(args), **unwrap(kwargs)))
-
     def count(self, *args, **kwargs):
         return wrap(self._inner.count(*unwrap(args), **unwrap(kwargs)))
 
@@ -209,33 +153,6 @@ class Expr(BaseWrapper):
 
     def slice(self, *args, **kwargs):
         return wrap(self._inner.slice(*unwrap(args), **unwrap(kwargs)))
-
-    def append(self, *args, **kwargs):
-        return wrap(self._inner.append(*unwrap(args), **unwrap(kwargs)))
-
-    def rechunk(self, *args, **kwargs):
-        return wrap(self._inner.rechunk(*unwrap(args), **unwrap(kwargs)))
-
-    def drop_nulls(self, *args, **kwargs):
-        return wrap(self._inner.drop_nulls(*unwrap(args), **unwrap(kwargs)))
-
-    def drop_nans(self, *args, **kwargs):
-        return wrap(self._inner.drop_nans(*unwrap(args), **unwrap(kwargs)))
-
-    def cum_sum(self, *args, **kwargs):
-        return wrap(self._inner.cum_sum(*unwrap(args), **unwrap(kwargs)))
-
-    def cum_prod(self, *args, **kwargs):
-        return wrap(self._inner.cum_prod(*unwrap(args), **unwrap(kwargs)))
-
-    def cum_min(self, *args, **kwargs):
-        return wrap(self._inner.cum_min(*unwrap(args), **unwrap(kwargs)))
-
-    def cum_max(self, *args, **kwargs):
-        return wrap(self._inner.cum_max(*unwrap(args), **unwrap(kwargs)))
-
-    def cum_count(self, *args, **kwargs):
-        return wrap(self._inner.cum_count(*unwrap(args), **unwrap(kwargs)))
 
     def floor(self, *args, **kwargs):
         return wrap(self._inner.floor(*unwrap(args), **unwrap(kwargs)))
@@ -249,59 +166,8 @@ class Expr(BaseWrapper):
     def round_sig_figs(self, *args, **kwargs):
         return wrap(self._inner.round_sig_figs(*unwrap(args), **unwrap(kwargs)))
 
-    def truncate(self, *args, **kwargs):
-        return wrap(self._inner.truncate(*unwrap(args), **unwrap(kwargs)))
-
-    def dot(self, *args, **kwargs):
-        return wrap(self._inner.dot(*unwrap(args), **unwrap(kwargs)))
-
-    def mode(self, *args, **kwargs):
-        return wrap(self._inner.mode(*unwrap(args), **unwrap(kwargs)))
-
     def cast(self, *args, **kwargs):
         return wrap(self._inner.cast(*unwrap(args), **unwrap(kwargs)))
-
-    def sort(self, *args, **kwargs):
-        return wrap(self._inner.sort(*unwrap(args), **unwrap(kwargs)))
-
-    def top_k(self, *args, **kwargs):
-        return wrap(self._inner.top_k(*unwrap(args), **unwrap(kwargs)))
-
-    def top_k_by(self, *args, **kwargs):
-        return wrap(self._inner.top_k_by(*unwrap(args), **unwrap(kwargs)))
-
-    def bottom_k(self, *args, **kwargs):
-        return wrap(self._inner.bottom_k(*unwrap(args), **unwrap(kwargs)))
-
-    def bottom_k_by(self, *args, **kwargs):
-        return wrap(self._inner.bottom_k_by(*unwrap(args), **unwrap(kwargs)))
-
-    def arg_sort(self, *args, **kwargs):
-        return wrap(self._inner.arg_sort(*unwrap(args), **unwrap(kwargs)))
-
-    def arg_max(self, *args, **kwargs):
-        return wrap(self._inner.arg_max(*unwrap(args), **unwrap(kwargs)))
-
-    def arg_min(self, *args, **kwargs):
-        return wrap(self._inner.arg_min(*unwrap(args), **unwrap(kwargs)))
-
-    def index_of(self, *args, **kwargs):
-        return wrap(self._inner.index_of(*unwrap(args), **unwrap(kwargs)))
-
-    def search_sorted(self, *args, **kwargs):
-        return wrap(self._inner.search_sorted(*unwrap(args), **unwrap(kwargs)))
-
-    def sort_by(self, *args, **kwargs):
-        return wrap(self._inner.sort_by(*unwrap(args), **unwrap(kwargs)))
-
-    def gather(self, *args, **kwargs):
-        return wrap(self._inner.gather(*unwrap(args), **unwrap(kwargs)))
-
-    def get(self, *args, **kwargs):
-        return wrap(self._inner.get(*unwrap(args), **unwrap(kwargs)))
-
-    def shift(self, *args, **kwargs):
-        return wrap(self._inner.shift(*unwrap(args), **unwrap(kwargs)))
 
     def fill_null(self, *args, **kwargs):
         return wrap(self._inner.fill_null(*unwrap(args), **unwrap(kwargs)))
@@ -309,38 +175,11 @@ class Expr(BaseWrapper):
     def fill_nan(self, *args, **kwargs):
         return wrap(self._inner.fill_nan(*unwrap(args), **unwrap(kwargs)))
 
-    def forward_fill(self, *args, **kwargs):
-        return wrap(self._inner.forward_fill(*unwrap(args), **unwrap(kwargs)))
-
-    def backward_fill(self, *args, **kwargs):
-        return wrap(self._inner.backward_fill(*unwrap(args), **unwrap(kwargs)))
-
-    def reverse(self, *args, **kwargs):
-        return wrap(self._inner.reverse(*unwrap(args), **unwrap(kwargs)))
-
-    def std(self, *args, **kwargs):
-        return wrap(self._inner.std(*unwrap(args), **unwrap(kwargs)))
-
-    def var(self, *args, **kwargs):
-        return wrap(self._inner.var(*unwrap(args), **unwrap(kwargs)))
-
     def max(self, *args, **kwargs):
         return wrap(self._inner.max(*unwrap(args), **unwrap(kwargs)))
 
-    def max_by(self, *args, **kwargs):
-        return wrap(self._inner.max_by(*unwrap(args), **unwrap(kwargs)))
-
     def min(self, *args, **kwargs):
         return wrap(self._inner.min(*unwrap(args), **unwrap(kwargs)))
-
-    def min_by(self, *args, **kwargs):
-        return wrap(self._inner.min_by(*unwrap(args), **unwrap(kwargs)))
-
-    def nan_max(self, *args, **kwargs):
-        return wrap(self._inner.nan_max(*unwrap(args), **unwrap(kwargs)))
-
-    def nan_min(self, *args, **kwargs):
-        return wrap(self._inner.nan_min(*unwrap(args), **unwrap(kwargs)))
 
     def sum(self, *args, **kwargs):
         return wrap(self._inner.sum(*unwrap(args), **unwrap(kwargs)))
@@ -351,26 +190,8 @@ class Expr(BaseWrapper):
     def median(self, *args, **kwargs):
         return wrap(self._inner.median(*unwrap(args), **unwrap(kwargs)))
 
-    def product(self, *args, **kwargs):
-        return wrap(self._inner.product(*unwrap(args), **unwrap(kwargs)))
-
     def n_unique(self, *args, **kwargs):
         return wrap(self._inner.n_unique(*unwrap(args), **unwrap(kwargs)))
-
-    def approx_n_unique(self, *args, **kwargs):
-        return wrap(self._inner.approx_n_unique(*unwrap(args), **unwrap(kwargs)))
-
-    def null_count(self, *args, **kwargs):
-        return wrap(self._inner.null_count(*unwrap(args), **unwrap(kwargs)))
-
-    def has_nulls(self, *args, **kwargs):
-        return wrap(self._inner.has_nulls(*unwrap(args), **unwrap(kwargs)))
-
-    def arg_unique(self, *args, **kwargs):
-        return wrap(self._inner.arg_unique(*unwrap(args), **unwrap(kwargs)))
-
-    def unique(self, *args, **kwargs):
-        return wrap(self._inner.unique(*unwrap(args), **unwrap(kwargs)))
 
     def first(self, *args, **kwargs):
         return wrap(self._inner.first(*unwrap(args), **unwrap(kwargs)))
@@ -378,80 +199,11 @@ class Expr(BaseWrapper):
     def last(self, *args, **kwargs):
         return wrap(self._inner.last(*unwrap(args), **unwrap(kwargs)))
 
-    def item(self, *args, **kwargs):
-        return wrap(self._inner.item(*unwrap(args), **unwrap(kwargs)))
-
-    def over(self, *args, **kwargs):
-        return wrap(self._inner.over(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling(self, *args, **kwargs):
-        return wrap(self._inner.rolling(*unwrap(args), **unwrap(kwargs)))
-
     def is_unique(self, *args, **kwargs):
         return wrap(self._inner.is_unique(*unwrap(args), **unwrap(kwargs)))
 
-    def is_first_distinct(self, *args, **kwargs):
-        return wrap(self._inner.is_first_distinct(*unwrap(args), **unwrap(kwargs)))
-
-    def is_last_distinct(self, *args, **kwargs):
-        return wrap(self._inner.is_last_distinct(*unwrap(args), **unwrap(kwargs)))
-
-    def is_duplicated(self, *args, **kwargs):
-        return wrap(self._inner.is_duplicated(*unwrap(args), **unwrap(kwargs)))
-
-    def peak_max(self, *args, **kwargs):
-        return wrap(self._inner.peak_max(*unwrap(args), **unwrap(kwargs)))
-
-    def peak_min(self, *args, **kwargs):
-        return wrap(self._inner.peak_min(*unwrap(args), **unwrap(kwargs)))
-
-    def quantile(self, *args, **kwargs):
-        return wrap(self._inner.quantile(*unwrap(args), **unwrap(kwargs)))
-
-    def cut(self, *args, **kwargs):
-        return wrap(self._inner.cut(*unwrap(args), **unwrap(kwargs)))
-
-    def qcut(self, *args, **kwargs):
-        return wrap(self._inner.qcut(*unwrap(args), **unwrap(kwargs)))
-
-    def rle(self, *args, **kwargs):
-        return wrap(self._inner.rle(*unwrap(args), **unwrap(kwargs)))
-
-    def rle_id(self, *args, **kwargs):
-        return wrap(self._inner.rle_id(*unwrap(args), **unwrap(kwargs)))
-
     def filter(self, *args, **kwargs):
         return wrap(self._inner.filter(*unwrap(args), **unwrap(kwargs)))
-
-    def where(self, *args, **kwargs):
-        return wrap(self._inner.where(*unwrap(args), **unwrap(kwargs)))
-
-    def map_batches(self, *args, **kwargs):
-        return wrap(self._inner.map_batches(*unwrap(args), **unwrap(kwargs)))
-
-    def map_elements(self, *args, **kwargs):
-        return wrap(self._inner.map_elements(*unwrap(args), **unwrap(kwargs)))
-
-    def flatten(self, *args, **kwargs):
-        return wrap(self._inner.flatten(*unwrap(args), **unwrap(kwargs)))
-
-    def explode(self, *args, **kwargs):
-        return wrap(self._inner.explode(*unwrap(args), **unwrap(kwargs)))
-
-    def implode(self, *args, **kwargs):
-        return wrap(self._inner.implode(*unwrap(args), **unwrap(kwargs)))
-
-    def gather_every(self, *args, **kwargs):
-        return wrap(self._inner.gather_every(*unwrap(args), **unwrap(kwargs)))
-
-    def head(self, *args, **kwargs):
-        return wrap(self._inner.head(*unwrap(args), **unwrap(kwargs)))
-
-    def tail(self, *args, **kwargs):
-        return wrap(self._inner.tail(*unwrap(args), **unwrap(kwargs)))
-
-    def limit(self, *args, **kwargs):
-        return wrap(self._inner.limit(*unwrap(args), **unwrap(kwargs)))
 
     def and_(self, *args, **kwargs):
         return wrap(self._inner.and_(*unwrap(args), **unwrap(kwargs)))
@@ -513,92 +265,14 @@ class Expr(BaseWrapper):
     def is_in(self, *args, **kwargs):
         return wrap(self._inner.is_in(*unwrap(args), **unwrap(kwargs)))
 
-    def repeat_by(self, *args, **kwargs):
-        return wrap(self._inner.repeat_by(*unwrap(args), **unwrap(kwargs)))
-
     def is_between(self, *args, **kwargs):
         return wrap(self._inner.is_between(*unwrap(args), **unwrap(kwargs)))
-
-    def is_close(self, *args, **kwargs):
-        return wrap(self._inner.is_close(*unwrap(args), **unwrap(kwargs)))
 
     def hash(self, *args, **kwargs):
         return wrap(self._inner.hash(*unwrap(args), **unwrap(kwargs)))
 
     def reinterpret(self, *args, **kwargs):
         return wrap(self._inner.reinterpret(*unwrap(args), **unwrap(kwargs)))
-
-    def inspect(self, *args, **kwargs):
-        return wrap(self._inner.inspect(*unwrap(args), **unwrap(kwargs)))
-
-    def interpolate(self, *args, **kwargs):
-        return wrap(self._inner.interpolate(*unwrap(args), **unwrap(kwargs)))
-
-    def interpolate_by(self, *args, **kwargs):
-        return wrap(self._inner.interpolate_by(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_min_by(self, *args, **kwargs):
-        return wrap(self._inner.rolling_min_by(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_max_by(self, *args, **kwargs):
-        return wrap(self._inner.rolling_max_by(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_mean_by(self, *args, **kwargs):
-        return wrap(self._inner.rolling_mean_by(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_sum_by(self, *args, **kwargs):
-        return wrap(self._inner.rolling_sum_by(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_std_by(self, *args, **kwargs):
-        return wrap(self._inner.rolling_std_by(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_var_by(self, *args, **kwargs):
-        return wrap(self._inner.rolling_var_by(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_median_by(self, *args, **kwargs):
-        return wrap(self._inner.rolling_median_by(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_quantile_by(self, *args, **kwargs):
-        return wrap(self._inner.rolling_quantile_by(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_rank_by(self, *args, **kwargs):
-        return wrap(self._inner.rolling_rank_by(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_min(self, *args, **kwargs):
-        return wrap(self._inner.rolling_min(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_max(self, *args, **kwargs):
-        return wrap(self._inner.rolling_max(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_mean(self, *args, **kwargs):
-        return wrap(self._inner.rolling_mean(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_sum(self, *args, **kwargs):
-        return wrap(self._inner.rolling_sum(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_std(self, *args, **kwargs):
-        return wrap(self._inner.rolling_std(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_var(self, *args, **kwargs):
-        return wrap(self._inner.rolling_var(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_median(self, *args, **kwargs):
-        return wrap(self._inner.rolling_median(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_quantile(self, *args, **kwargs):
-        return wrap(self._inner.rolling_quantile(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_rank(self, *args, **kwargs):
-        return wrap(self._inner.rolling_rank(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_skew(self, *args, **kwargs):
-        return wrap(self._inner.rolling_skew(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_kurtosis(self, *args, **kwargs):
-        return wrap(self._inner.rolling_kurtosis(*unwrap(args), **unwrap(kwargs)))
-
-    def rolling_map(self, *args, **kwargs):
-        return wrap(self._inner.rolling_map(*unwrap(args), **unwrap(kwargs)))
 
     def abs(self, *args, **kwargs):
         return wrap(self._inner.abs(*unwrap(args), **unwrap(kwargs)))
@@ -609,23 +283,8 @@ class Expr(BaseWrapper):
     def diff(self, *args, **kwargs):
         return wrap(self._inner.diff(*unwrap(args), **unwrap(kwargs)))
 
-    def pct_change(self, *args, **kwargs):
-        return wrap(self._inner.pct_change(*unwrap(args), **unwrap(kwargs)))
-
-    def skew(self, *args, **kwargs):
-        return wrap(self._inner.skew(*unwrap(args), **unwrap(kwargs)))
-
-    def kurtosis(self, *args, **kwargs):
-        return wrap(self._inner.kurtosis(*unwrap(args), **unwrap(kwargs)))
-
     def clip(self, *args, **kwargs):
         return wrap(self._inner.clip(*unwrap(args), **unwrap(kwargs)))
-
-    def lower_bound(self, *args, **kwargs):
-        return wrap(self._inner.lower_bound(*unwrap(args), **unwrap(kwargs)))
-
-    def upper_bound(self, *args, **kwargs):
-        return wrap(self._inner.upper_bound(*unwrap(args), **unwrap(kwargs)))
 
     def sign(self, *args, **kwargs):
         return wrap(self._inner.sign(*unwrap(args), **unwrap(kwargs)))
@@ -675,92 +334,11 @@ class Expr(BaseWrapper):
     def radians(self, *args, **kwargs):
         return wrap(self._inner.radians(*unwrap(args), **unwrap(kwargs)))
 
-    def reshape(self, *args, **kwargs):
-        return wrap(self._inner.reshape(*unwrap(args), **unwrap(kwargs)))
-
-    def shuffle(self, *args, **kwargs):
-        return wrap(self._inner.shuffle(*unwrap(args), **unwrap(kwargs)))
-
-    def sample(self, *args, **kwargs):
-        return wrap(self._inner.sample(*unwrap(args), **unwrap(kwargs)))
-
-    def ewm_mean(self, *args, **kwargs):
-        return wrap(self._inner.ewm_mean(*unwrap(args), **unwrap(kwargs)))
-
-    def ewm_mean_by(self, *args, **kwargs):
-        return wrap(self._inner.ewm_mean_by(*unwrap(args), **unwrap(kwargs)))
-
-    def ewm_std(self, *args, **kwargs):
-        return wrap(self._inner.ewm_std(*unwrap(args), **unwrap(kwargs)))
-
-    def ewm_var(self, *args, **kwargs):
-        return wrap(self._inner.ewm_var(*unwrap(args), **unwrap(kwargs)))
-
-    def extend_constant(self, *args, **kwargs):
-        return wrap(self._inner.extend_constant(*unwrap(args), **unwrap(kwargs)))
-
-    def value_counts(self, *args, **kwargs):
-        return wrap(self._inner.value_counts(*unwrap(args), **unwrap(kwargs)))
-
-    def unique_counts(self, *args, **kwargs):
-        return wrap(self._inner.unique_counts(*unwrap(args), **unwrap(kwargs)))
-
     def log(self, *args, **kwargs):
         return wrap(self._inner.log(*unwrap(args), **unwrap(kwargs)))
 
     def log1p(self, *args, **kwargs):
         return wrap(self._inner.log1p(*unwrap(args), **unwrap(kwargs)))
 
-    def entropy(self, *args, **kwargs):
-        return wrap(self._inner.entropy(*unwrap(args), **unwrap(kwargs)))
-
-    def cumulative_eval(self, *args, **kwargs):
-        return wrap(self._inner.cumulative_eval(*unwrap(args), **unwrap(kwargs)))
-
-    def set_sorted(self, *args, **kwargs):
-        return wrap(self._inner.set_sorted(*unwrap(args), **unwrap(kwargs)))
-
     def shrink_dtype(self, *args, **kwargs):
         return wrap(self._inner.shrink_dtype(*unwrap(args), **unwrap(kwargs)))
-
-    def hist(self, *args, **kwargs):
-        return wrap(self._inner.hist(*unwrap(args), **unwrap(kwargs)))
-
-    def replace(self, *args, **kwargs):
-        return wrap(self._inner.replace(*unwrap(args), **unwrap(kwargs)))
-
-    def replace_strict(self, *args, **kwargs):
-        return wrap(self._inner.replace_strict(*unwrap(args), **unwrap(kwargs)))
-
-    def bitwise_count_ones(self, *args, **kwargs):
-        return wrap(self._inner.bitwise_count_ones(*unwrap(args), **unwrap(kwargs)))
-
-    def bitwise_count_zeros(self, *args, **kwargs):
-        return wrap(self._inner.bitwise_count_zeros(*unwrap(args), **unwrap(kwargs)))
-
-    def bitwise_leading_ones(self, *args, **kwargs):
-        return wrap(self._inner.bitwise_leading_ones(*unwrap(args), **unwrap(kwargs)))
-
-    def bitwise_leading_zeros(self, *args, **kwargs):
-        return wrap(self._inner.bitwise_leading_zeros(*unwrap(args), **unwrap(kwargs)))
-
-    def bitwise_trailing_ones(self, *args, **kwargs):
-        return wrap(self._inner.bitwise_trailing_ones(*unwrap(args), **unwrap(kwargs)))
-
-    def bitwise_trailing_zeros(self, *args, **kwargs):
-        return wrap(self._inner.bitwise_trailing_zeros(*unwrap(args), **unwrap(kwargs)))
-
-    def bitwise_and(self, *args, **kwargs):
-        return wrap(self._inner.bitwise_and(*unwrap(args), **unwrap(kwargs)))
-
-    def bitwise_or(self, *args, **kwargs):
-        return wrap(self._inner.bitwise_or(*unwrap(args), **unwrap(kwargs)))
-
-    def bitwise_xor(self, *args, **kwargs):
-        return wrap(self._inner.bitwise_xor(*unwrap(args), **unwrap(kwargs)))
-
-    def register_plugin(self, *args, **kwargs):
-        return wrap(self._inner.register_plugin(*unwrap(args), **unwrap(kwargs)))
-
-    def from_json(self, *args, **kwargs):
-        return wrap(self._inner.from_json(*unwrap(args), **unwrap(kwargs)))

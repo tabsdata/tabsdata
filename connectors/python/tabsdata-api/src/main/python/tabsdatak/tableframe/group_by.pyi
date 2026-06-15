@@ -22,19 +22,13 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe._typing import IntoExpr, QuantileMethod, SchemaDict
+from tabsdatak.tableframe._typing import IntoExpr
 
 """ """
 
 class LazyGroupBy:
     """ """
-    def __or__(value, /):
-        """ """
-
-    def __ror__(value, /):
-        """ """
-
-    def having(self, *predicates: IntoExpr | Iterable[IntoExpr]) -> LazyGroupBy:
+    def __init__(self, lgb, parent, by) -> None:
         """ """
 
     def agg(
@@ -42,30 +36,10 @@ class LazyGroupBy:
     ) -> TableFrame:
         """ """
 
-    def map_groups(
-        self, function: Callable[[Any], Any], schema: SchemaDict | None
-    ) -> TableFrame:
-        """ """
-
-    def head(self, n: int = 5) -> TableFrame:
-        """ """
-
-    def tail(self, n: int = 5) -> TableFrame:
-        """ """
-
-    def all(self) -> TableFrame:
-        """ """
-
     def len(self, name: str | None = None) -> TableFrame:
         """ """
 
     def count(self) -> TableFrame:
-        """ """
-
-    def first(self, *, ignore_nulls: bool = False) -> TableFrame:
-        """ """
-
-    def last(self, *, ignore_nulls: bool = False) -> TableFrame:
         """ """
 
     def max(self) -> TableFrame:
@@ -81,11 +55,6 @@ class LazyGroupBy:
         """ """
 
     def n_unique(self) -> TableFrame:
-        """ """
-
-    def quantile(
-        self, quantile: float, interpolation: QuantileMethod = "nearest"
-    ) -> TableFrame:
         """ """
 
     def sum(self) -> TableFrame:

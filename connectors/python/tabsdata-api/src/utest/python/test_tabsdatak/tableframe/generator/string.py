@@ -12,18 +12,6 @@ from tabsdatak.tableframe.string import ExprStringNameSpace
 pytestmark = pytest.mark.tfgen
 
 
-def test_op_or_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "__or__")()
-    getattr(inner, "__or__").assert_called()
-
-
-def test_op_ror_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "__ror__")()
-    getattr(inner, "__ror__").assert_called()
-
-
 def test_to_date_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "to_date")()
@@ -40,18 +28,6 @@ def test_to_time_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "to_time")()
     getattr(inner, "to_time").assert_called()
-
-
-def test_strptime_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "strptime")()
-    getattr(inner, "strptime").assert_called()
-
-
-def test_to_decimal_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "to_decimal")()
-    getattr(inner, "to_decimal").assert_called()
 
 
 def test_len_bytes_delegates():
@@ -156,70 +132,16 @@ def test_starts_with_delegates():
     getattr(inner, "starts_with").assert_called()
 
 
-def test_json_decode_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "json_decode")()
-    getattr(inner, "json_decode").assert_called()
-
-
-def test_json_path_match_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "json_path_match")()
-    getattr(inner, "json_path_match").assert_called()
-
-
-def test_decode_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "decode")()
-    getattr(inner, "decode").assert_called()
-
-
-def test_encode_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "encode")()
-    getattr(inner, "encode").assert_called()
-
-
 def test_extract_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "extract")()
     getattr(inner, "extract").assert_called()
 
 
-def test_extract_all_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "extract_all")()
-    getattr(inner, "extract_all").assert_called()
-
-
-def test_extract_groups_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "extract_groups")()
-    getattr(inner, "extract_groups").assert_called()
-
-
 def test_count_matches_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "count_matches")()
     getattr(inner, "count_matches").assert_called()
-
-
-def test_split_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "split")()
-    getattr(inner, "split").assert_called()
-
-
-def test_split_exact_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "split_exact")()
-    getattr(inner, "split_exact").assert_called()
-
-
-def test_splitn_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "splitn")()
-    getattr(inner, "splitn").assert_called()
 
 
 def test_replace_delegates():
@@ -258,12 +180,6 @@ def test_tail_delegates():
     getattr(inner, "tail").assert_called()
 
 
-def test_explode_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "explode")()
-    getattr(inner, "explode").assert_called()
-
-
 def test_to_integer_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "to_integer")()
@@ -280,39 +196,3 @@ def test_replace_many_delegates():
     inner = MagicMock()
     getattr(ExprStringNameSpace._wrap(inner), "replace_many")()
     getattr(inner, "replace_many").assert_called()
-
-
-def test_extract_many_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "extract_many")()
-    getattr(inner, "extract_many").assert_called()
-
-
-def test_find_many_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "find_many")()
-    getattr(inner, "find_many").assert_called()
-
-
-def test_join_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "join")()
-    getattr(inner, "join").assert_called()
-
-
-def test_concat_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "concat")()
-    getattr(inner, "concat").assert_called()
-
-
-def test_escape_regex_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "escape_regex")()
-    getattr(inner, "escape_regex").assert_called()
-
-
-def test_normalize_delegates():
-    inner = MagicMock()
-    getattr(ExprStringNameSpace._wrap(inner), "normalize")()
-    getattr(inner, "normalize").assert_called()

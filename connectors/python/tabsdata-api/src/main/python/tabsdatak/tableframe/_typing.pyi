@@ -27,9 +27,7 @@ from tabsdatak.tableframe.datatypes import DataType
 from tabsdatak.tableframe.datatypes import Decimal
 from tabsdatak.tableframe.expr import Expr
 
-Alignment: TypeAlias = Literal["left", "center", "right", "LEFT", "CENTER", "RIGHT"]
 Ambiguous: TypeAlias = Literal["earliest", "latest", "raise", "null"]
-AsofJoinStrategy: TypeAlias = Literal["backward", "forward", "nearest"]
 ClosedInterval: TypeAlias = Literal["left", "right", "both", "none"]
 ColumnNameOrSelector: TypeAlias = str | SelectorType
 ConcatMethod: TypeAlias = Literal[
@@ -44,43 +42,28 @@ ConcatMethod: TypeAlias = Literal[
     "align_left",
     "align_right",
 ]
-CsvQuoteStyle: TypeAlias = Literal["necessary", "always", "non_numeric", "never"]
-Endianness: TypeAlias = Literal["little", "big"]
 EngineType: TypeAlias = Literal["auto", "in-memory", "streaming", "gpu"]
 EpochTimeUnit: TypeAlias = Literal["ns", "us", "ms", "s", "d"]
 ExplainFormat: TypeAlias = Literal["plain", "tree"]
 FillNullStrategy: TypeAlias = Literal[
     "forward", "backward", "min", "max", "mean", "zero", "one"
 ]
-FloatFmt: TypeAlias = Literal["full", "mixed"]
-FrameType: TypeAlias = Any
-InterpolationMethod: TypeAlias = Literal["linear", "nearest"]
 IntoExpr: TypeAlias = PythonLiteral | IntoExprColumn | None
 IntoExprColumn: TypeAlias = Expr | str
-IpcCompression: TypeAlias = Literal["uncompressed", "lz4", "zstd"]
 JoinStrategy: TypeAlias = Literal[
     "inner", "left", "right", "full", "semi", "anti", "cross", "outer"
 ]
 JoinValidation: TypeAlias = Literal["m:m", "m:1", "1:m", "1:1"]
-Label: TypeAlias = Literal["left", "right", "datapoint"]
-ListToStructWidthStrategy: TypeAlias = Literal["first_non_null", "max_width"]
 MaintainOrderJoin: TypeAlias = Literal[
     "none", "left", "right", "left_right", "right_left"
 ]
-MapElementsStrategy: TypeAlias = Literal["thread_local", "threading"]
 NonExistent: TypeAlias = Literal["raise", "null"]
 NonNestedLiteral: TypeAlias = NumericLiteral | TemporalLiteral | str | bool | bytes
 NullBehavior: TypeAlias = Literal["ignore", "drop"]
 NumericLiteral: TypeAlias = int | float | Decimal
-ParquetMetadata: TypeAlias = dict[str, str] | ParquetMetadataFn
-ParquetMetadataFn: TypeAlias = Callable[[Any], dict[str, str]]
-PivotAgg: TypeAlias = Literal[
-    "min", "max", "first", "last", "sum", "mean", "median", "len", "item"
-]
 PlanStage: TypeAlias = Literal["ir", "physical"]
 PolarsDataType: TypeAlias = DataType
 PolarsIntegerType: TypeAlias = type[Any]
-PolarsTemporalType: TypeAlias = type[Any]
 PolarsType: TypeAlias = Any
 PythonDataType: TypeAlias = (
     type[int]
@@ -99,44 +82,10 @@ PythonDataType: TypeAlias = (
     | type[None]
 )
 PythonLiteral: TypeAlias = NonNestedLiteral | list[Any]
-QuantileMethod: TypeAlias = Literal[
-    "nearest", "higher", "lower", "midpoint", "linear", "equiprobable"
-]
 RankMethod: TypeAlias = Literal["average", "min", "max", "dense", "ordinal", "random"]
 Roll: TypeAlias = Literal["raise", "forward", "backward"]
 RoundMode: TypeAlias = Literal["half_to_even", "half_away_from_zero", "to_zero"]
-SchemaDict: TypeAlias = Mapping[str, PolarsDataType]
-SearchSortedSide: TypeAlias = Literal["any", "left", "right"]
 SelectorType: TypeAlias = Any
-SerializationFormat: TypeAlias = Literal["binary", "json"]
-SizeUnit: TypeAlias = Literal[
-    "b",
-    "kb",
-    "mb",
-    "gb",
-    "tb",
-    "bytes",
-    "kilobytes",
-    "megabytes",
-    "gigabytes",
-    "terabytes",
-]
-StartBy: TypeAlias = Literal[
-    "window",
-    "datapoint",
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-    "sunday",
-]
-StorageOptionsDict: TypeAlias = dict[str, Any]
-SyncOnCloseMethod: TypeAlias = Literal["data", "all"]
 TemporalLiteral: TypeAlias = date | time | datetime | timedelta
 TimeUnit: TypeAlias = Literal["ns", "us", "ms"]
-TransferEncoding: TypeAlias = Literal["hex", "base64"]
-UnicodeForm: TypeAlias = Literal["NFC", "NFKC", "NFD", "NFKD"]
 UniqueKeepStrategy: TypeAlias = Literal["first", "last", "any", "none"]
-WindowMappingStrategy: TypeAlias = Literal["group_to_rows", "join", "explode"]

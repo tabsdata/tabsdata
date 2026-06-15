@@ -174,6 +174,12 @@ def test_to_arrow_delegates():
     getattr(inner, "to_arrow").assert_called()
 
 
+def test_to_frame_delegates():
+    inner = MagicMock()
+    getattr(Schema._wrap(inner), "to_frame")()
+    getattr(inner, "to_frame").assert_called()
+
+
 def test_len_delegates():
     inner = MagicMock()
     getattr(Schema._wrap(inner), "len")()

@@ -27,33 +27,18 @@ from tabsdatak.tableframe.expr import Expr
 from tabsdatak.tableframe.group_by import LazyGroupBy
 from tabsdatak.tableframe.schema import Schema
 from tabsdatak.tableframe._typing import (
-    Alignment,
-    AsofJoinStrategy,
-    ClosedInterval,
     ColumnNameOrSelector,
-    CsvQuoteStyle,
     EngineType,
     ExplainFormat,
     FillNullStrategy,
-    FloatFmt,
     IntoExpr,
     IntoExprColumn,
-    IpcCompression,
     JoinStrategy,
     JoinValidation,
-    Label,
     MaintainOrderJoin,
-    ParquetMetadata,
-    PivotAgg,
     PlanStage,
     PolarsDataType,
     PythonDataType,
-    QuantileMethod,
-    SchemaDict,
-    SerializationFormat,
-    StartBy,
-    StorageOptionsDict,
-    SyncOnCloseMethod,
     UniqueKeepStrategy,
 )
 
@@ -61,17 +46,6 @@ from tabsdatak.tableframe._typing import (
 
 class TableFrame(EngineFrame):
     """ """
-    def __or__(value, /):
-        """ """
-
-    def __ror__(value, /):
-        """ """
-
-    def deserialize(
-        source: str | bytes | Path | IOBase, *, format: SerializationFormat = "binary"
-    ) -> TableFrame:
-        """ """
-
     @property
     def columns(self) -> list[str]:
         """ """
@@ -107,22 +81,6 @@ class TableFrame(EngineFrame):
         """ """
 
     def __getitem__(self, item: Any) -> TableFrame:
-        """ """
-
-    def serialize(
-        self,
-        file: IOBase | str | Path | None = None,
-        *,
-        format: SerializationFormat = "binary",
-    ) -> bytes | str | None:
-        """ """
-
-    def pipe(self, function: Callable[Any, Any], *args: Any, **kwargs: Any) -> Any:
-        """ """
-
-    def pipe_with_schema(
-        self, function: Callable[[TableFrame, Schema], TableFrame]
-    ) -> TableFrame:
         """ """
 
     def explain(
@@ -185,156 +143,6 @@ class TableFrame(EngineFrame):
     ) -> TableFrame:
         """ """
 
-    def sql(self, query: str, *, table_name: str = "self") -> TableFrame:
-        """ """
-
-    def top_k(
-        self,
-        k: int,
-        *,
-        by: IntoExpr | Iterable[IntoExpr],
-        reverse: bool | Sequence[bool] = False,
-    ) -> TableFrame:
-        """ """
-
-    def bottom_k(
-        self,
-        k: int,
-        *,
-        by: IntoExpr | Iterable[IntoExpr],
-        reverse: bool | Sequence[bool] = False,
-    ) -> TableFrame:
-        """ """
-
-    def collect_schema(self) -> Schema:
-        """ """
-
-    def sink_parquet(
-        self,
-        path: str | Path | IO[bytes],
-        *,
-        compression: str = "zstd",
-        compression_level: int | None = None,
-        statistics: bool | str | dict[str, bool] = True,
-        row_group_size: int | None = None,
-        data_page_size: int | None = None,
-        maintain_order: bool = True,
-        storage_options: StorageOptionsDict | None = None,
-        credential_provider: Literal["auto"] | None = "auto",
-        retries: int | None = None,
-        sync_on_close: SyncOnCloseMethod | None = None,
-        metadata: ParquetMetadata | None = None,
-        arrow_schema: None = None,
-        mkdir: bool = False,
-        lazy: bool = False,
-        engine: EngineType = "auto",
-        optimizations: Any = ...,
-    ) -> TableFrame | None:
-        """ """
-
-    def sink_delta(
-        self,
-        target: str | Path,
-        *,
-        mode: Literal["error", "append", "overwrite", "ignore", "merge"] = "error",
-        storage_options: StorageOptionsDict | None = None,
-        credential_provider: Literal["auto"] | None = "auto",
-        delta_write_options: dict[str, Any] | None = None,
-        delta_merge_options: dict[str, Any] | None = None,
-        optimizations: Any = ...,
-    ) -> None:
-        """ """
-
-    def sink_ipc(
-        self,
-        path: str | Path | IO[bytes],
-        *,
-        compression: IpcCompression | None = "uncompressed",
-        compat_level: None = None,
-        record_batch_size: int | None = None,
-        maintain_order: bool = True,
-        storage_options: StorageOptionsDict | None = None,
-        credential_provider: Literal["auto"] | None = "auto",
-        retries: int | None = None,
-        sync_on_close: SyncOnCloseMethod | None = None,
-        mkdir: bool = False,
-        lazy: bool = False,
-        engine: EngineType = "auto",
-        optimizations: Any = ...,
-        _record_batch_statistics: bool = False,
-    ) -> TableFrame | None:
-        """ """
-
-    def sink_csv(
-        self,
-        path: str | Path | IO[bytes] | IO[str],
-        *,
-        include_bom: bool = False,
-        compression: Literal["uncompressed", "gzip", "zstd"] = "uncompressed",
-        compression_level: int | None = None,
-        check_extension: bool = True,
-        include_header: bool = True,
-        separator: str = ",",
-        line_terminator: str = "\n",
-        quote_char: str = '"',
-        batch_size: int = 1024,
-        datetime_format: str | None = None,
-        date_format: str | None = None,
-        time_format: str | None = None,
-        float_scientific: bool | None = None,
-        float_precision: int | None = None,
-        decimal_comma: bool = False,
-        null_value: str | None = None,
-        quote_style: CsvQuoteStyle | None = None,
-        maintain_order: bool = True,
-        storage_options: StorageOptionsDict | None = None,
-        credential_provider: Literal["auto"] | None = "auto",
-        retries: int | None = None,
-        sync_on_close: SyncOnCloseMethod | None = None,
-        mkdir: bool = False,
-        lazy: bool = False,
-        engine: EngineType = "auto",
-        optimizations: Any = ...,
-    ) -> TableFrame | None:
-        """ """
-
-    def sink_ndjson(
-        self,
-        path: str | Path | IO[bytes] | IO[str],
-        *,
-        compression: Literal["uncompressed", "gzip", "zstd"] = "uncompressed",
-        compression_level: int | None = None,
-        check_extension: bool = True,
-        maintain_order: bool = True,
-        storage_options: StorageOptionsDict | None = None,
-        credential_provider: Literal["auto"] | None = "auto",
-        retries: int | None = None,
-        sync_on_close: SyncOnCloseMethod | None = None,
-        mkdir: bool = False,
-        lazy: bool = False,
-        engine: EngineType = "auto",
-        optimizations: Any = ...,
-    ) -> TableFrame | None:
-        """ """
-
-    def sink_batches(
-        self,
-        function: Callable[[Any], bool | None],
-        *,
-        chunk_size: int | None = None,
-        maintain_order: bool = True,
-        lazy: bool = False,
-        engine: EngineType = "auto",
-        optimizations: Any = ...,
-    ) -> None:
-        """ """
-
-    def lazy(self) -> TableFrame:
-        """ """
-
-    def cache(self) -> TableFrame:
-        """ """
-
     def cast(
         self,
         dtypes: Mapping[
@@ -350,17 +158,7 @@ class TableFrame(EngineFrame):
     def clear(self, n: int = 0) -> TableFrame:
         """ """
 
-    def clone(self) -> TableFrame:
-        """ """
-
     def filter(
-        self,
-        *predicates: IntoExprColumn | Iterable[IntoExprColumn] | bool | list[bool],
-        **constraints: Any,
-    ) -> TableFrame:
-        """ """
-
-    def remove(
         self,
         *predicates: IntoExprColumn | Iterable[IntoExprColumn] | bool | list[bool],
         **constraints: Any,
@@ -372,64 +170,12 @@ class TableFrame(EngineFrame):
     ) -> TableFrame:
         """ """
 
-    def select_seq(
-        self, *exprs: IntoExpr | Iterable[IntoExpr], **named_exprs: IntoExpr
-    ) -> TableFrame:
-        """ """
-
     def group_by(
         self,
         *by: IntoExpr | Iterable[IntoExpr],
         maintain_order: bool = False,
         **named_by: IntoExpr,
     ) -> LazyGroupBy:
-        """ """
-
-    def rolling(
-        self,
-        index_column: IntoExpr,
-        *,
-        period: str | timedelta,
-        offset: str | timedelta | None = None,
-        closed: ClosedInterval = "right",
-        group_by: IntoExpr | Iterable[IntoExpr] | None = None,
-    ) -> LazyGroupBy:
-        """ """
-
-    def group_by_dynamic(
-        self,
-        index_column: IntoExpr,
-        *,
-        every: str | timedelta,
-        period: str | timedelta | None = None,
-        offset: str | timedelta | None = None,
-        include_boundaries: bool = False,
-        closed: ClosedInterval = "left",
-        label: Label = "left",
-        group_by: IntoExpr | Iterable[IntoExpr] | None = None,
-        start_by: StartBy = "window",
-    ) -> LazyGroupBy:
-        """ """
-
-    def join_asof(
-        self,
-        other: TableFrame,
-        *,
-        left_on: str | None | Expr = None,
-        right_on: str | None | Expr = None,
-        on: str | None | Expr = None,
-        by_left: str | Sequence[str] | None = None,
-        by_right: str | Sequence[str] | None = None,
-        by: str | Sequence[str] | None = None,
-        strategy: AsofJoinStrategy = "backward",
-        suffix: str = "_right",
-        tolerance: str | int | float | timedelta | None = None,
-        allow_parallel: bool = True,
-        force_parallel: bool = False,
-        coalesce: bool = True,
-        allow_exact_matches: bool = True,
-        check_sortedness: bool = True,
-    ) -> TableFrame:
         """ """
 
     def join(
@@ -450,25 +196,9 @@ class TableFrame(EngineFrame):
     ) -> TableFrame:
         """ """
 
-    def join_where(
-        self,
-        other: TableFrame,
-        *predicates: Expr | Iterable[Expr],
-        suffix: str = "_right",
-    ) -> TableFrame:
-        """ """
-
     def with_columns(
         self, *exprs: IntoExpr | Iterable[IntoExpr], **named_exprs: IntoExpr
     ) -> TableFrame:
-        """ """
-
-    def with_columns_seq(
-        self, *exprs: IntoExpr | Iterable[IntoExpr], **named_exprs: IntoExpr
-    ) -> TableFrame:
-        """ """
-
-    def with_context(self, other: list[Any]) -> TableFrame:
         """ """
 
     def drop(
@@ -480,14 +210,6 @@ class TableFrame(EngineFrame):
 
     def rename(
         self, mapping: Mapping[str, str] | Callable[[str], str], *, strict: bool = True
-    ) -> TableFrame:
-        """ """
-
-    def reverse(self) -> TableFrame:
-        """ """
-
-    def shift(
-        self, n: int | IntoExprColumn = 1, *, fill_value: IntoExpr | None = None
     ) -> TableFrame:
         """ """
 
@@ -509,18 +231,6 @@ class TableFrame(EngineFrame):
     def first(self) -> TableFrame:
         """ """
 
-    def approx_n_unique(self) -> TableFrame:
-        """ """
-
-    def with_row_index(self, name: str = "index", offset: int = 0) -> TableFrame:
-        """ """
-
-    def with_row_count(self, name: str = "row_nr", offset: int = 0) -> TableFrame:
-        """ """
-
-    def gather_every(self, n: int, offset: int = 0) -> TableFrame:
-        """ """
-
     def fill_null(
         self,
         value: Any | Expr | None = None,
@@ -532,44 +242,6 @@ class TableFrame(EngineFrame):
         """ """
 
     def fill_nan(self, value: int | float | Expr | None) -> TableFrame:
-        """ """
-
-    def std(self, ddof: int = 1) -> TableFrame:
-        """ """
-
-    def var(self, ddof: int = 1) -> TableFrame:
-        """ """
-
-    def max(self) -> TableFrame:
-        """ """
-
-    def min(self) -> TableFrame:
-        """ """
-
-    def sum(self) -> TableFrame:
-        """ """
-
-    def mean(self) -> TableFrame:
-        """ """
-
-    def median(self) -> TableFrame:
-        """ """
-
-    def null_count(self) -> TableFrame:
-        """ """
-
-    def quantile(
-        self, quantile: float | Expr, interpolation: QuantileMethod = "nearest"
-    ) -> TableFrame:
-        """ """
-
-    def explode(
-        self,
-        columns: ColumnNameOrSelector | Iterable[ColumnNameOrSelector],
-        *more_columns: ColumnNameOrSelector,
-        empty_as_null: bool = True,
-        keep_nulls: bool = True,
-    ) -> TableFrame:
         """ """
 
     def unique(
@@ -593,146 +265,10 @@ class TableFrame(EngineFrame):
     ) -> TableFrame:
         """ """
 
-    def pivot(
-        self,
-        on: ColumnNameOrSelector | Sequence[ColumnNameOrSelector],
-        on_columns: Sequence[Any],
-        *,
-        index: ColumnNameOrSelector | Sequence[ColumnNameOrSelector] | None = None,
-        values: ColumnNameOrSelector | Sequence[ColumnNameOrSelector] | None = None,
-        aggregate_function: PivotAgg | Expr | None = None,
-        maintain_order: bool = False,
-        separator: str = "_",
-        column_naming: Literal["auto", "combine"] = "auto",
-    ) -> TableFrame:
-        """ """
-
-    def unpivot(
-        self,
-        on: ColumnNameOrSelector | Sequence[ColumnNameOrSelector] | None = None,
-        *,
-        index: ColumnNameOrSelector | Sequence[ColumnNameOrSelector] | None = None,
-        variable_name: str | None = None,
-        value_name: str | None = None,
-        streamable: bool = True,
-    ) -> TableFrame:
-        """ """
-
-    def map_batches(
-        self,
-        function: Callable[[Any], Any],
-        *,
-        predicate_pushdown: bool = True,
-        projection_pushdown: bool = True,
-        slice_pushdown: bool = True,
-        no_optimizations: bool = False,
-        schema: None | SchemaDict = None,
-        validate_output_schema: bool = True,
-        streamable: bool = False,
-    ) -> TableFrame:
-        """ """
-
-    def interpolate(self) -> TableFrame:
-        """ """
-
     def unnest(
         self,
         columns: ColumnNameOrSelector | Collection[ColumnNameOrSelector],
         *more_columns: ColumnNameOrSelector,
         separator: str | None = None,
     ) -> TableFrame:
-        """ """
-
-    def merge_sorted(self, other: TableFrame, key: str) -> TableFrame:
-        """ """
-
-    def set_sorted(
-        self,
-        column: str | list[str],
-        *more_columns: str,
-        descending: bool | list[bool] = False,
-        nulls_last: bool | list[bool] = False,
-    ) -> TableFrame:
-        """ """
-
-    def update(
-        self,
-        other: TableFrame,
-        on: str | Sequence[str] | None = None,
-        how: Literal["left", "inner", "full"] = "left",
-        *,
-        left_on: str | Sequence[str] | None = None,
-        right_on: str | Sequence[str] | None = None,
-        include_nulls: bool = False,
-        maintain_order: MaintainOrderJoin | None = "left",
-    ) -> TableFrame:
-        """ """
-
-    def count(self) -> TableFrame:
-        """ """
-
-    def melt(
-        self,
-        id_vars: ColumnNameOrSelector | Sequence[ColumnNameOrSelector] | None = None,
-        value_vars: ColumnNameOrSelector | Sequence[ColumnNameOrSelector] | None = None,
-        variable_name: str | None = None,
-        value_name: str | None = None,
-        *,
-        streamable: bool = True,
-    ) -> TableFrame:
-        """ """
-
-    def remote(
-        self,
-        context: None = None,
-        *,
-        plan_type: Any = "dot",
-        n_retries: int = 0,
-        engine: Any = "auto",
-        scaling_mode: Any = "auto",
-    ) -> Any:
-        """ """
-
-    def match_to_schema(
-        self,
-        schema: SchemaDict | Schema,
-        *,
-        missing_columns: Literal["insert", "raise"]
-        | Mapping[str, Literal["insert", "raise"] | Expr] = "raise",
-        missing_struct_fields: Literal["insert", "raise"]
-        | Mapping[str, Literal["insert", "raise"]] = "raise",
-        extra_columns: Literal["ignore", "raise"] = "raise",
-        extra_struct_fields: Literal["ignore", "raise"]
-        | Mapping[str, Literal["ignore", "raise"]] = "raise",
-        integer_cast: Literal["upcast", "forbid"]
-        | Mapping[str, Literal["upcast", "forbid"]] = "forbid",
-        float_cast: Literal["upcast", "forbid"]
-        | Mapping[str, Literal["upcast", "forbid"]] = "forbid",
-    ) -> TableFrame:
-        """ """
-
-    def show(
-        self,
-        limit: int | None = 5,
-        *,
-        ascii_tables: bool | None = None,
-        decimal_separator: str | None = None,
-        thousands_separator: str | bool | None = None,
-        float_precision: int | None = None,
-        fmt_float: FloatFmt | None = None,
-        fmt_str_lengths: int | None = None,
-        fmt_table_cell_list_len: int | None = None,
-        tbl_cell_alignment: Alignment | None = None,
-        tbl_cell_numeric_alignment: Alignment | None = None,
-        tbl_cols: int | None = None,
-        tbl_column_data_type_inline: bool | None = None,
-        tbl_dataframe_shape_below: bool | None = None,
-        tbl_formatting: None = None,
-        tbl_hide_column_data_types: bool | None = None,
-        tbl_hide_column_names: bool | None = None,
-        tbl_hide_dtype_separator: bool | None = None,
-        tbl_hide_dataframe_shape: bool | None = None,
-        tbl_width_chars: int | None = None,
-        trim_decimal_zeros: bool | None = True,
-    ) -> None:
         """ """

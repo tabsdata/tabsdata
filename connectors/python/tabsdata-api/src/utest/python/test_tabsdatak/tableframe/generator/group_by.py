@@ -28,54 +28,6 @@ def _live_group_by():
     return tableframe_of(pl.LazyFrame({"a": [1.0], "b": [2.0]})).group_by("a")
 
 
-def test_op_or_delegates():
-    group_by = _group_by()
-    group_by.__or__()
-    group_by._lgb.__or__.assert_called()
-
-
-def test_op_or_runs():
-    try:
-        result = _live_group_by().__or__()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_op_ror_delegates():
-    group_by = _group_by()
-    group_by.__ror__()
-    group_by._lgb.__ror__.assert_called()
-
-
-def test_op_ror_runs():
-    try:
-        result = _live_group_by().__ror__()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_having_delegates():
-    group_by = _group_by()
-    group_by.having()
-    group_by._lgb.having.assert_called()
-
-
-def test_having_runs():
-    try:
-        result = _live_group_by().having()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
 def test_agg_delegates():
     group_by = _group_by()
     group_by.agg()
@@ -85,70 +37,6 @@ def test_agg_delegates():
 def test_agg_runs():
     try:
         result = _live_group_by().agg()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_map_groups_delegates():
-    group_by = _group_by()
-    group_by.map_groups()
-    group_by._lgb.map_groups.assert_called()
-
-
-def test_map_groups_runs():
-    try:
-        result = _live_group_by().map_groups()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_head_delegates():
-    group_by = _group_by()
-    group_by.head()
-    group_by._lgb.head.assert_called()
-
-
-def test_head_runs():
-    try:
-        result = _live_group_by().head()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_tail_delegates():
-    group_by = _group_by()
-    group_by.tail()
-    group_by._lgb.tail.assert_called()
-
-
-def test_tail_runs():
-    try:
-        result = _live_group_by().tail()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_all_delegates():
-    group_by = _group_by()
-    group_by.all()
-    group_by._lgb.all.assert_called()
-
-
-def test_all_runs():
-    try:
-        result = _live_group_by().all()
     except Exception as exc:  # noqa: BLE001
         if "tableframe:" in str(exc):
             raise  # a real leak, not an argument problem
@@ -181,38 +69,6 @@ def test_count_delegates():
 def test_count_runs():
     try:
         result = _live_group_by().count()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_first_delegates():
-    group_by = _group_by()
-    group_by.first()
-    group_by._lgb.first.assert_called()
-
-
-def test_first_runs():
-    try:
-        result = _live_group_by().first()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_last_delegates():
-    group_by = _group_by()
-    group_by.last()
-    group_by._lgb.last.assert_called()
-
-
-def test_last_runs():
-    try:
-        result = _live_group_by().last()
     except Exception as exc:  # noqa: BLE001
         if "tableframe:" in str(exc):
             raise  # a real leak, not an argument problem
@@ -293,22 +149,6 @@ def test_n_unique_delegates():
 def test_n_unique_runs():
     try:
         result = _live_group_by().n_unique()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_quantile_delegates():
-    group_by = _group_by()
-    group_by.quantile()
-    group_by._lgb.quantile.assert_called()
-
-
-def test_quantile_runs():
-    try:
-        result = _live_group_by().quantile()
     except Exception as exc:  # noqa: BLE001
         if "tableframe:" in str(exc):
             raise  # a real leak, not an argument problem

@@ -80,8 +80,15 @@ class EngineFrame(BaseFrame):
         prefixes = (TD_SYSTEM_COLUMN_PREFIX, TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
         names = lf.collect_schema().names()
         user = [name for name in names if not name.startswith(prefixes)]
-        system = sorted(name for name in names if name.startswith(prefixes))
-        return lf.select(user + system)
+        connector = sorted(
+            name
+            for name in names
+            if name.startswith(TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
+        )
+        standard = sorted(
+            name for name in names if name.startswith(TD_SYSTEM_COLUMN_PREFIX)
+        )
+        return lf.select(user + connector + standard)
 
     @classmethod
     def _check_required(cls, lf, registry) -> None:
@@ -247,3 +254,6 @@ class EngineFrame(BaseFrame):
             .collect(no_optimization=True)
             .to_dict(as_series=False)
         )
+
+
+from tabsdatak.tableframe._engine.frame import hook  # noqa: E402,F401

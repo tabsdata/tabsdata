@@ -21,33 +21,19 @@ from typing import (
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
-from tabsdatak.tableframe.array import ExprArrayNameSpace
-from tabsdatak.tableframe.binary import ExprBinaryNameSpace
-from tabsdatak.tableframe.categorical import ExprCatNameSpace
 from tabsdatak.tableframe.datetime import ExprDateTimeNameSpace
-from tabsdatak.tableframe.ext import ExprExtensionNameSpace
-from tabsdatak.tableframe.list import ExprListNameSpace
-from tabsdatak.tableframe.meta import ExprMetaNameSpace
-from tabsdatak.tableframe.name import ExprNameNameSpace
 from tabsdatak.tableframe.string import ExprStringNameSpace
-from tabsdatak.tableframe.struct import ExprStructNameSpace
 from tabsdatak.tableframe._typing import (
     ClosedInterval,
     FillNullStrategy,
-    InterpolationMethod,
     IntoExpr,
     IntoExprColumn,
-    MapElementsStrategy,
     NullBehavior,
     NumericLiteral,
     PolarsDataType,
-    QuantileMethod,
     RankMethod,
     RoundMode,
-    SearchSortedSide,
-    SerializationFormat,
     TemporalLiteral,
-    WindowMappingStrategy,
 )
 
 """ """
@@ -55,43 +41,11 @@ from tabsdatak.tableframe._typing import (
 class Expr:
     """ """
     @property
-    def bin(self) -> ExprBinaryNameSpace:
-        """ """
-
-    @property
-    def cat(self) -> ExprCatNameSpace:
-        """ """
-
-    @property
     def dt(self) -> ExprDateTimeNameSpace:
         """ """
 
     @property
-    def list(self) -> ExprListNameSpace:
-        """ """
-
-    @property
-    def arr(self) -> ExprArrayNameSpace:
-        """ """
-
-    @property
-    def meta(self) -> ExprMetaNameSpace:
-        """ """
-
-    @property
-    def name(self) -> ExprNameNameSpace:
-        """ """
-
-    @property
     def str(self) -> ExprStringNameSpace:
-        """ """
-
-    @property
-    def struct(self) -> ExprStructNameSpace:
-        """ """
-
-    @property
-    def ext(self) -> ExprExtensionNameSpace:
         """ """
 
     def __abs__(self) -> Expr:
@@ -184,23 +138,6 @@ class Expr:
     def __rxor__(self, other: IntoExprColumn | int | bool) -> Expr:
         """ """
 
-    def deserialize(
-        source: Path | IOBase | bytes, *, format: SerializationFormat = "binary"
-    ) -> Expr:
-        """ """
-
-    def to_physical(self) -> Expr:
-        """ """
-
-    def any(self, *, ignore_nulls: bool = True) -> Expr:
-        """ """
-
-    def all(self, *, ignore_nulls: bool = True) -> Expr:
-        """ """
-
-    def arg_true(self) -> Expr:
-        """ """
-
     def sqrt(self) -> Expr:
         """ """
 
@@ -214,16 +151,6 @@ class Expr:
         """ """
 
     def alias(self, name: Any) -> Expr:
-        """ """
-
-    def exclude(
-        self,
-        columns: PolarsDataType | Collection[PolarsDataType],
-        *more_columns: PolarsDataType,
-    ) -> Expr:
-        """ """
-
-    def pipe(self, function: Callable[Any, Any], *args: Any, **kwargs: Any) -> Any:
         """ """
 
     def not_(self) -> Expr:
@@ -247,9 +174,6 @@ class Expr:
     def is_not_nan(self) -> Expr:
         """ """
 
-    def agg_groups(self) -> Expr:
-        """ """
-
     def count(self) -> Expr:
         """ """
 
@@ -257,33 +181,6 @@ class Expr:
         """ """
 
     def slice(self, offset: int | Expr, length: int | Expr | None = None) -> Expr:
-        """ """
-
-    def append(self, other: IntoExpr, *, upcast: bool = True) -> Expr:
-        """ """
-
-    def rechunk(self) -> Expr:
-        """ """
-
-    def drop_nulls(self) -> Expr:
-        """ """
-
-    def drop_nans(self) -> Expr:
-        """ """
-
-    def cum_sum(self, *, reverse: bool = False) -> Expr:
-        """ """
-
-    def cum_prod(self, *, reverse: bool = False) -> Expr:
-        """ """
-
-    def cum_min(self, *, reverse: bool = False) -> Expr:
-        """ """
-
-    def cum_max(self, *, reverse: bool = False) -> Expr:
-        """ """
-
-    def cum_count(self, *, reverse: bool = False) -> Expr:
         """ """
 
     def floor(self) -> Expr:
@@ -298,91 +195,12 @@ class Expr:
     def round_sig_figs(self, digits: int) -> Expr:
         """ """
 
-    def truncate(self, decimals: int = 0) -> Expr:
-        """ """
-
-    def dot(self, other: Expr) -> Expr:
-        """ """
-
-    def mode(self, *, maintain_order: bool = False) -> Expr:
-        """ """
-
     def cast(
         self,
         dtype: PolarsDataType | type[Any],
         *,
         strict: bool = True,
         wrap_numerical: bool = False,
-    ) -> Expr:
-        """ """
-
-    def sort(self, *, descending: bool = False, nulls_last: bool = False) -> Expr:
-        """ """
-
-    def top_k(self, k: int | IntoExprColumn = 5) -> Expr:
-        """ """
-
-    def top_k_by(
-        self,
-        by: IntoExpr | Iterable[IntoExpr],
-        k: int | IntoExprColumn = 5,
-        *,
-        reverse: bool | Sequence[bool] = False,
-    ) -> Expr:
-        """ """
-
-    def bottom_k(self, k: int | IntoExprColumn = 5) -> Expr:
-        """ """
-
-    def bottom_k_by(
-        self,
-        by: IntoExpr | Iterable[IntoExpr],
-        k: int | IntoExprColumn = 5,
-        *,
-        reverse: bool | Sequence[bool] = False,
-    ) -> Expr:
-        """ """
-
-    def arg_sort(self, *, descending: bool = False, nulls_last: bool = False) -> Expr:
-        """ """
-
-    def arg_max(self) -> Expr:
-        """ """
-
-    def arg_min(self) -> Expr:
-        """ """
-
-    def index_of(self, element: IntoExpr) -> Expr:
-        """ """
-
-    def search_sorted(
-        self,
-        element: IntoExpr,
-        side: SearchSortedSide = "any",
-        *,
-        descending: bool = False,
-    ) -> Expr:
-        """ """
-
-    def sort_by(
-        self,
-        by: IntoExpr | Iterable[IntoExpr],
-        *more_by: IntoExpr,
-        descending: bool | Sequence[bool] = False,
-        nulls_last: bool | Sequence[bool] = False,
-        multithreaded: bool = True,
-        maintain_order: bool = False,
-    ) -> Expr:
-        """ """
-
-    def gather(self, indices: int | Sequence[int] | IntoExpr) -> Expr:
-        """ """
-
-    def get(self, index: int | Expr, *, null_on_oob: bool = False) -> Expr:
-        """ """
-
-    def shift(
-        self, n: int | IntoExprColumn = 1, *, fill_value: IntoExpr | None = None
     ) -> Expr:
         """ """
 
@@ -397,37 +215,10 @@ class Expr:
     def fill_nan(self, value: int | float | Expr | None) -> Expr:
         """ """
 
-    def forward_fill(self, limit: int | None = None) -> Expr:
-        """ """
-
-    def backward_fill(self, limit: int | None = None) -> Expr:
-        """ """
-
-    def reverse(self) -> Expr:
-        """ """
-
-    def std(self, ddof: int = 1) -> Expr:
-        """ """
-
-    def var(self, ddof: int = 1) -> Expr:
-        """ """
-
     def max(self) -> Expr:
         """ """
 
-    def max_by(self, by: IntoExpr) -> Expr:
-        """ """
-
     def min(self) -> Expr:
-        """ """
-
-    def min_by(self, by: IntoExpr) -> Expr:
-        """ """
-
-    def nan_max(self) -> Expr:
-        """ """
-
-    def nan_min(self) -> Expr:
         """ """
 
     def sum(self) -> Expr:
@@ -439,25 +230,7 @@ class Expr:
     def median(self) -> Expr:
         """ """
 
-    def product(self) -> Expr:
-        """ """
-
     def n_unique(self) -> Expr:
-        """ """
-
-    def approx_n_unique(self) -> Expr:
-        """ """
-
-    def null_count(self) -> Expr:
-        """ """
-
-    def has_nulls(self) -> Expr:
-        """ """
-
-    def arg_unique(self) -> Expr:
-        """ """
-
-    def unique(self, *, maintain_order: bool = False) -> Expr:
         """ """
 
     def first(self, *, ignore_nulls: bool = False) -> Expr:
@@ -466,130 +239,12 @@ class Expr:
     def last(self, *, ignore_nulls: bool = False) -> Expr:
         """ """
 
-    def item(self, *, allow_empty: bool = False) -> Expr:
-        """ """
-
-    def over(
-        self,
-        partition_by: IntoExpr | Iterable[IntoExpr] | None = None,
-        *more_exprs: IntoExpr,
-        order_by: IntoExpr | Iterable[IntoExpr] | None = None,
-        descending: bool = False,
-        nulls_last: bool = False,
-        mapping_strategy: WindowMappingStrategy = "group_to_rows",
-    ) -> Expr:
-        """ """
-
-    def rolling(
-        self,
-        index_column: IntoExprColumn,
-        *,
-        period: timedelta,
-        offset: timedelta | None = None,
-        closed: ClosedInterval = "right",
-    ) -> Expr:
-        """ """
-
     def is_unique(self) -> Expr:
-        """ """
-
-    def is_first_distinct(self) -> Expr:
-        """ """
-
-    def is_last_distinct(self) -> Expr:
-        """ """
-
-    def is_duplicated(self) -> Expr:
-        """ """
-
-    def peak_max(self) -> Expr:
-        """ """
-
-    def peak_min(self) -> Expr:
-        """ """
-
-    def quantile(
-        self, quantile: float | Expr, interpolation: QuantileMethod = "nearest"
-    ) -> Expr:
-        """ """
-
-    def cut(
-        self,
-        breaks: Sequence[float],
-        *,
-        labels: Sequence[Any] | None = None,
-        left_closed: bool = False,
-        include_breaks: bool = False,
-    ) -> Expr:
-        """ """
-
-    def qcut(
-        self,
-        quantiles: Sequence[float] | int,
-        *,
-        labels: Sequence[Any] | None = None,
-        left_closed: bool = False,
-        allow_duplicates: bool = False,
-        include_breaks: bool = False,
-    ) -> Expr:
-        """ """
-
-    def rle(self) -> Expr:
-        """ """
-
-    def rle_id(self) -> Expr:
         """ """
 
     def filter(
         self, *predicates: IntoExprColumn | Iterable[IntoExprColumn], **constraints: Any
     ) -> Expr:
-        """ """
-
-    def where(self, predicate: Expr) -> Expr:
-        """ """
-
-    def map_batches(
-        self,
-        function: Callable[[Any], Any],
-        return_dtype: PolarsDataType | None = None,
-        *,
-        agg_list: bool = False,
-        is_elementwise: bool = False,
-        returns_scalar: bool = False,
-    ) -> Expr:
-        """ """
-
-    def map_elements(
-        self,
-        function: Callable[[Any], Any],
-        return_dtype: PolarsDataType | None = None,
-        *,
-        skip_nulls: bool = True,
-        pass_name: bool = False,
-        strategy: MapElementsStrategy = "thread_local",
-        returns_scalar: bool = False,
-    ) -> Expr:
-        """ """
-
-    def flatten(self) -> Expr:
-        """ """
-
-    def explode(self, *, empty_as_null: bool = True, keep_nulls: bool = True) -> Expr:
-        """ """
-
-    def implode(self, *, maintain_order: bool = True) -> Expr:
-        """ """
-
-    def gather_every(self, n: int, offset: int = 0) -> Expr:
-        """ """
-
-    def head(self, n: int | Expr = 10) -> Expr:
-        """ """
-
-    def tail(self, n: int | Expr = 10) -> Expr:
-        """ """
-
-    def limit(self, n: int | Expr = 10) -> Expr:
         """ """
 
     def and_(self, *others: Any) -> Expr:
@@ -654,24 +309,11 @@ class Expr:
     ) -> Expr:
         """ """
 
-    def repeat_by(self, by: Expr | int) -> Expr:
-        """ """
-
     def is_between(
         self,
         lower_bound: IntoExpr,
         upper_bound: IntoExpr,
         closed: ClosedInterval = "both",
-    ) -> Expr:
-        """ """
-
-    def is_close(
-        self,
-        other: IntoExpr,
-        *,
-        abs_tol: float = 0.0,
-        rel_tol: float = 1e-09,
-        nans_equal: bool = False,
     ) -> Expr:
         """ """
 
@@ -686,238 +328,6 @@ class Expr:
 
     def reinterpret(
         self, *, signed: bool | None = None, dtype: PolarsDataType | None = None
-    ) -> Expr:
-        """ """
-
-    def inspect(self, fmt: Any = "{}") -> Expr:
-        """ """
-
-    def interpolate(self, method: InterpolationMethod = "linear") -> Expr:
-        """ """
-
-    def interpolate_by(self, by: IntoExpr) -> Expr:
-        """ """
-
-    def rolling_min_by(
-        self,
-        by: IntoExpr,
-        window_size: timedelta,
-        *,
-        min_samples: int = 1,
-        closed: ClosedInterval = "right",
-    ) -> Expr:
-        """ """
-
-    def rolling_max_by(
-        self,
-        by: IntoExpr,
-        window_size: timedelta,
-        *,
-        min_samples: int = 1,
-        closed: ClosedInterval = "right",
-    ) -> Expr:
-        """ """
-
-    def rolling_mean_by(
-        self,
-        by: IntoExpr,
-        window_size: timedelta,
-        *,
-        min_samples: int = 1,
-        closed: ClosedInterval = "right",
-    ) -> Expr:
-        """ """
-
-    def rolling_sum_by(
-        self,
-        by: IntoExpr,
-        window_size: timedelta,
-        *,
-        min_samples: int = 1,
-        closed: ClosedInterval = "right",
-    ) -> Expr:
-        """ """
-
-    def rolling_std_by(
-        self,
-        by: IntoExpr,
-        window_size: timedelta,
-        *,
-        min_samples: int = 1,
-        closed: ClosedInterval = "right",
-        ddof: int = 1,
-    ) -> Expr:
-        """ """
-
-    def rolling_var_by(
-        self,
-        by: IntoExpr,
-        window_size: timedelta,
-        *,
-        min_samples: int = 1,
-        closed: ClosedInterval = "right",
-        ddof: int = 1,
-    ) -> Expr:
-        """ """
-
-    def rolling_median_by(
-        self,
-        by: IntoExpr,
-        window_size: timedelta,
-        *,
-        min_samples: int = 1,
-        closed: ClosedInterval = "right",
-    ) -> Expr:
-        """ """
-
-    def rolling_quantile_by(
-        self,
-        by: IntoExpr,
-        window_size: timedelta,
-        *,
-        quantile: float,
-        interpolation: QuantileMethod = "nearest",
-        min_samples: int = 1,
-        closed: ClosedInterval = "right",
-    ) -> Expr:
-        """ """
-
-    def rolling_rank_by(
-        self,
-        by: IntoExpr,
-        window_size: timedelta,
-        method: RankMethod = "average",
-        *,
-        seed: int | None = None,
-        min_samples: int = 1,
-        closed: ClosedInterval = "right",
-    ) -> Expr:
-        """ """
-
-    def rolling_min(
-        self,
-        window_size: int,
-        weights: None = None,
-        *,
-        min_samples: int | None = None,
-        center: bool = False,
-    ) -> Expr:
-        """ """
-
-    def rolling_max(
-        self,
-        window_size: int,
-        weights: None = None,
-        *,
-        min_samples: int | None = None,
-        center: bool = False,
-    ) -> Expr:
-        """ """
-
-    def rolling_mean(
-        self,
-        window_size: int,
-        weights: None = None,
-        *,
-        min_samples: int | None = None,
-        center: bool = False,
-    ) -> Expr:
-        """ """
-
-    def rolling_sum(
-        self,
-        window_size: int,
-        weights: None = None,
-        *,
-        min_samples: int | None = None,
-        center: bool = False,
-    ) -> Expr:
-        """ """
-
-    def rolling_std(
-        self,
-        window_size: int,
-        weights: None = None,
-        *,
-        min_samples: int | None = None,
-        center: bool = False,
-        ddof: int = 1,
-    ) -> Expr:
-        """ """
-
-    def rolling_var(
-        self,
-        window_size: int,
-        weights: None = None,
-        *,
-        min_samples: int | None = None,
-        center: bool = False,
-        ddof: int = 1,
-    ) -> Expr:
-        """ """
-
-    def rolling_median(
-        self,
-        window_size: int,
-        weights: None = None,
-        *,
-        min_samples: int | None = None,
-        center: bool = False,
-    ) -> Expr:
-        """ """
-
-    def rolling_quantile(
-        self,
-        quantile: float,
-        interpolation: QuantileMethod = "nearest",
-        window_size: int = 2,
-        weights: None = None,
-        *,
-        min_samples: int | None = None,
-        center: bool = False,
-    ) -> Expr:
-        """ """
-
-    def rolling_rank(
-        self,
-        window_size: int,
-        method: RankMethod = "average",
-        *,
-        seed: int | None = None,
-        min_samples: int | None = None,
-        center: bool = False,
-    ) -> Expr:
-        """ """
-
-    def rolling_skew(
-        self,
-        window_size: int,
-        *,
-        bias: bool = True,
-        min_samples: int | None = None,
-        center: bool = False,
-    ) -> Expr:
-        """ """
-
-    def rolling_kurtosis(
-        self,
-        window_size: int,
-        *,
-        fisher: bool = True,
-        bias: bool = True,
-        min_samples: int | None = None,
-        center: bool = False,
-    ) -> Expr:
-        """ """
-
-    def rolling_map(
-        self,
-        function: Callable[[Any], Any],
-        window_size: int,
-        weights: None = None,
-        *,
-        min_samples: int | None = None,
-        center: bool = False,
     ) -> Expr:
         """ """
 
@@ -938,26 +348,11 @@ class Expr:
     ) -> Expr:
         """ """
 
-    def pct_change(self, n: int | IntoExprColumn = 1) -> Expr:
-        """ """
-
-    def skew(self, *, bias: bool = True) -> Expr:
-        """ """
-
-    def kurtosis(self, *, fisher: bool = True, bias: bool = True) -> Expr:
-        """ """
-
     def clip(
         self,
         lower_bound: NumericLiteral | TemporalLiteral | IntoExprColumn | None = None,
         upper_bound: NumericLiteral | TemporalLiteral | IntoExprColumn | None = None,
     ) -> Expr:
-        """ """
-
-    def lower_bound(self) -> Expr:
-        """ """
-
-    def upper_bound(self) -> Expr:
         """ """
 
     def sign(self) -> Expr:
@@ -1008,175 +403,11 @@ class Expr:
     def radians(self) -> Expr:
         """ """
 
-    def reshape(self, dimensions: tuple[int, ...]) -> Expr:
-        """ """
-
-    def shuffle(self, seed: int | None = None) -> Expr:
-        """ """
-
-    def sample(
-        self,
-        n: int | IntoExprColumn | None = None,
-        *,
-        fraction: float | IntoExprColumn | None = None,
-        with_replacement: bool = False,
-        shuffle: bool = False,
-        seed: int | None = None,
-    ) -> Expr:
-        """ """
-
-    def ewm_mean(
-        self,
-        *,
-        com: float | None = None,
-        span: float | None = None,
-        half_life: float | None = None,
-        alpha: float | None = None,
-        adjust: bool = True,
-        min_samples: int = 1,
-        ignore_nulls: bool = False,
-    ) -> Expr:
-        """ """
-
-    def ewm_mean_by(self, by: IntoExpr, *, half_life: timedelta) -> Expr:
-        """ """
-
-    def ewm_std(
-        self,
-        *,
-        com: float | None = None,
-        span: float | None = None,
-        half_life: float | None = None,
-        alpha: float | None = None,
-        adjust: bool = True,
-        bias: bool = False,
-        min_samples: int = 1,
-        ignore_nulls: bool = False,
-    ) -> Expr:
-        """ """
-
-    def ewm_var(
-        self,
-        *,
-        com: float | None = None,
-        span: float | None = None,
-        half_life: float | None = None,
-        alpha: float | None = None,
-        adjust: bool = True,
-        bias: bool = False,
-        min_samples: int = 1,
-        ignore_nulls: bool = False,
-    ) -> Expr:
-        """ """
-
-    def extend_constant(self, value: IntoExpr, n: int | IntoExprColumn) -> Expr:
-        """ """
-
-    def value_counts(
-        self,
-        *,
-        sort: bool = False,
-        parallel: bool = False,
-        name: None = None,
-        normalize: bool = False,
-    ) -> Expr:
-        """ """
-
-    def unique_counts(self) -> Expr:
-        """ """
-
     def log(self, base: float | IntoExpr = 2.718281828459045) -> Expr:
         """ """
 
     def log1p(self) -> Expr:
         """ """
 
-    def entropy(
-        self, base: float = 2.718281828459045, *, normalize: bool = True
-    ) -> Expr:
-        """ """
-
-    def cumulative_eval(self, expr: Expr, *, min_samples: int = 1) -> Expr:
-        """ """
-
-    def set_sorted(self, *, descending: bool = False, nulls_last: bool = False) -> Expr:
-        """ """
-
     def shrink_dtype(self) -> Expr:
-        """ """
-
-    def hist(
-        self,
-        bins: IntoExpr | None = None,
-        *,
-        bin_count: int | None = None,
-        include_category: bool = False,
-        include_breakpoint: bool = False,
-    ) -> Expr:
-        """ """
-
-    def replace(
-        self,
-        old: IntoExpr | Sequence[Any] | Mapping[Any, Any],
-        new: IntoExpr | Sequence[Any] = ...,
-        *,
-        default: IntoExpr = ...,
-        return_dtype: PolarsDataType | None = None,
-    ) -> Expr:
-        """ """
-
-    def replace_strict(
-        self,
-        old: IntoExpr | Sequence[Any] | Mapping[Any, Any],
-        new: IntoExpr | Sequence[Any] = ...,
-        *,
-        default: IntoExpr = ...,
-        return_dtype: PolarsDataType | None = None,
-    ) -> Expr:
-        """ """
-
-    def bitwise_count_ones(self) -> Expr:
-        """ """
-
-    def bitwise_count_zeros(self) -> Expr:
-        """ """
-
-    def bitwise_leading_ones(self) -> Expr:
-        """ """
-
-    def bitwise_leading_zeros(self) -> Expr:
-        """ """
-
-    def bitwise_trailing_ones(self) -> Expr:
-        """ """
-
-    def bitwise_trailing_zeros(self) -> Expr:
-        """ """
-
-    def bitwise_and(self) -> Expr:
-        """ """
-
-    def bitwise_or(self) -> Expr:
-        """ """
-
-    def bitwise_xor(self) -> Expr:
-        """ """
-
-    def register_plugin(
-        self,
-        *,
-        lib: Any,
-        symbol: Any,
-        args: None = None,
-        kwargs: dict[Any, Any] | None = None,
-        is_elementwise: bool = False,
-        input_wildcard_expansion: bool = False,
-        returns_scalar: bool = False,
-        cast_to_supertypes: bool = False,
-        pass_name_to_apply: bool = False,
-        changes_length: bool = False,
-    ) -> Expr:
-        """ """
-
-    def from_json(value: Any) -> Expr:
         """ """

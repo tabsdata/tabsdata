@@ -11,12 +11,6 @@ from tabsdatak.tableframe._core.translate import register, unwrap, wrap
 
 @register(_PlExprStringNameSpace)
 class ExprStringNameSpace(BaseWrapper):
-    def __or__(self, *args, **kwargs):
-        return wrap(self._inner.__or__(*unwrap(args), **unwrap(kwargs)))
-
-    def __ror__(self, *args, **kwargs):
-        return wrap(self._inner.__ror__(*unwrap(args), **unwrap(kwargs)))
-
     def to_date(self, *args, **kwargs):
         return wrap(self._inner.to_date(*unwrap(args), **unwrap(kwargs)))
 
@@ -25,12 +19,6 @@ class ExprStringNameSpace(BaseWrapper):
 
     def to_time(self, *args, **kwargs):
         return wrap(self._inner.to_time(*unwrap(args), **unwrap(kwargs)))
-
-    def strptime(self, *args, **kwargs):
-        return wrap(self._inner.strptime(*unwrap(args), **unwrap(kwargs)))
-
-    def to_decimal(self, *args, **kwargs):
-        return wrap(self._inner.to_decimal(*unwrap(args), **unwrap(kwargs)))
 
     def len_bytes(self, *args, **kwargs):
         return wrap(self._inner.len_bytes(*unwrap(args), **unwrap(kwargs)))
@@ -83,38 +71,11 @@ class ExprStringNameSpace(BaseWrapper):
     def starts_with(self, *args, **kwargs):
         return wrap(self._inner.starts_with(*unwrap(args), **unwrap(kwargs)))
 
-    def json_decode(self, *args, **kwargs):
-        return wrap(self._inner.json_decode(*unwrap(args), **unwrap(kwargs)))
-
-    def json_path_match(self, *args, **kwargs):
-        return wrap(self._inner.json_path_match(*unwrap(args), **unwrap(kwargs)))
-
-    def decode(self, *args, **kwargs):
-        return wrap(self._inner.decode(*unwrap(args), **unwrap(kwargs)))
-
-    def encode(self, *args, **kwargs):
-        return wrap(self._inner.encode(*unwrap(args), **unwrap(kwargs)))
-
     def extract(self, *args, **kwargs):
         return wrap(self._inner.extract(*unwrap(args), **unwrap(kwargs)))
 
-    def extract_all(self, *args, **kwargs):
-        return wrap(self._inner.extract_all(*unwrap(args), **unwrap(kwargs)))
-
-    def extract_groups(self, *args, **kwargs):
-        return wrap(self._inner.extract_groups(*unwrap(args), **unwrap(kwargs)))
-
     def count_matches(self, *args, **kwargs):
         return wrap(self._inner.count_matches(*unwrap(args), **unwrap(kwargs)))
-
-    def split(self, *args, **kwargs):
-        return wrap(self._inner.split(*unwrap(args), **unwrap(kwargs)))
-
-    def split_exact(self, *args, **kwargs):
-        return wrap(self._inner.split_exact(*unwrap(args), **unwrap(kwargs)))
-
-    def splitn(self, *args, **kwargs):
-        return wrap(self._inner.splitn(*unwrap(args), **unwrap(kwargs)))
 
     def replace(self, *args, **kwargs):
         return wrap(self._inner.replace(*unwrap(args), **unwrap(kwargs)))
@@ -134,9 +95,6 @@ class ExprStringNameSpace(BaseWrapper):
     def tail(self, *args, **kwargs):
         return wrap(self._inner.tail(*unwrap(args), **unwrap(kwargs)))
 
-    def explode(self, *args, **kwargs):
-        return wrap(self._inner.explode(*unwrap(args), **unwrap(kwargs)))
-
     def to_integer(self, *args, **kwargs):
         return wrap(self._inner.to_integer(*unwrap(args), **unwrap(kwargs)))
 
@@ -145,21 +103,3 @@ class ExprStringNameSpace(BaseWrapper):
 
     def replace_many(self, *args, **kwargs):
         return wrap(self._inner.replace_many(*unwrap(args), **unwrap(kwargs)))
-
-    def extract_many(self, *args, **kwargs):
-        return wrap(self._inner.extract_many(*unwrap(args), **unwrap(kwargs)))
-
-    def find_many(self, *args, **kwargs):
-        return wrap(self._inner.find_many(*unwrap(args), **unwrap(kwargs)))
-
-    def join(self, *args, **kwargs):
-        return wrap(self._inner.join(*unwrap(args), **unwrap(kwargs)))
-
-    def concat(self, *args, **kwargs):
-        return wrap(self._inner.concat(*unwrap(args), **unwrap(kwargs)))
-
-    def escape_regex(self, *args, **kwargs):
-        return wrap(self._inner.escape_regex(*unwrap(args), **unwrap(kwargs)))
-
-    def normalize(self, *args, **kwargs):
-        return wrap(self._inner.normalize(*unwrap(args), **unwrap(kwargs)))

@@ -12,18 +12,6 @@ from tabsdatak.tableframe.datetime import ExprDateTimeNameSpace
 pytestmark = pytest.mark.tfgen
 
 
-def test_op_or_delegates():
-    inner = MagicMock()
-    getattr(ExprDateTimeNameSpace._wrap(inner), "__or__")()
-    getattr(inner, "__or__").assert_called()
-
-
-def test_op_ror_delegates():
-    inner = MagicMock()
-    getattr(ExprDateTimeNameSpace._wrap(inner), "__ror__")()
-    getattr(inner, "__ror__").assert_called()
-
-
 def test_add_business_days_delegates():
     inner = MagicMock()
     getattr(ExprDateTimeNameSpace._wrap(inner), "add_business_days")()
@@ -34,12 +22,6 @@ def test_truncate_delegates():
     inner = MagicMock()
     getattr(ExprDateTimeNameSpace._wrap(inner), "truncate")()
     getattr(inner, "truncate").assert_called()
-
-
-def test_round_delegates():
-    inner = MagicMock()
-    getattr(ExprDateTimeNameSpace._wrap(inner), "round")()
-    getattr(inner, "round").assert_called()
 
 
 def test_replace_delegates():
@@ -84,12 +66,6 @@ def test_year_delegates():
     getattr(inner, "year").assert_called()
 
 
-def test_is_business_day_delegates():
-    inner = MagicMock()
-    getattr(ExprDateTimeNameSpace._wrap(inner), "is_business_day")()
-    getattr(inner, "is_business_day").assert_called()
-
-
 def test_is_leap_year_delegates():
     inner = MagicMock()
     getattr(ExprDateTimeNameSpace._wrap(inner), "is_leap_year")()
@@ -112,12 +88,6 @@ def test_month_delegates():
     inner = MagicMock()
     getattr(ExprDateTimeNameSpace._wrap(inner), "month")()
     getattr(inner, "month").assert_called()
-
-
-def test_days_in_month_delegates():
-    inner = MagicMock()
-    getattr(ExprDateTimeNameSpace._wrap(inner), "days_in_month")()
-    getattr(inner, "days_in_month").assert_called()
 
 
 def test_week_delegates():
