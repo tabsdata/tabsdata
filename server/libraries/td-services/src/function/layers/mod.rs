@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::do_authz::{DoAuthz, inter_collection_authz};
 use crate::function::layers::register::{
     build_dependency_versions, build_table_versions, build_tables_trigger_versions,
     build_trigger_versions, build_workers, stop_current_workers,
@@ -50,25 +49,23 @@ pub fn register_tables() {
 }
 
 #[layer]
-pub fn register_dependencies<A: DoAuthz>() {
+pub fn register_dependencies() {
     layers!(
         // Build dependency_versions(sql) current function table dependencies status=Active.
         from_fn(With::<FunctionDB>::try_convert_to::<DependencyDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<DependencyDBBuilder, _>),
         from_fn(build_dependency_versions),
-        inter_collection_authz::<_, A, DependencyDB, _>(),
         from_fn(insert_vec::<DependencyDB>),
     )
 }
 
 #[layer]
-pub fn register_triggers<A: DoAuthz>() {
+pub fn register_triggers() {
     layers!(
         // Insert into trigger_versions(sql) current function trigger status=Active.
         from_fn(With::<FunctionDB>::try_convert_to::<TriggerDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<TriggerDBBuilder, _>),
         from_fn(build_trigger_versions),
-        inter_collection_authz::<_, A, TriggerDB, _>(),
         from_fn(insert_vec::<TriggerDB>),
     )
 }

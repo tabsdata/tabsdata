@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::do_authz::SKIP_AUTHZ;
 use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use crate::table::layers::flow::{build_response, with_recursion_options};
 use ta_services::factory::service_factory;
@@ -21,8 +20,6 @@ use td_tower::layers;
 
 pub struct GraphOpts;
 impl GraphConfig for GraphOpts {
-    type Authz = SKIP_AUTHZ;
-
     fn function_state() -> StateFilter<FunctionDB> {
         FunctionDB::available()
     }
@@ -182,7 +179,7 @@ mod tests {
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .read(
                     TableParam::builder()
                         .collection(CollectionIdName::from_str(&collection_name.to_string())?)
@@ -315,7 +312,7 @@ mod tests {
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .read(
                     TableParam::builder()
                         .collection(CollectionIdName::from_str(&collection_name.to_string())?)
@@ -471,7 +468,7 @@ mod tests {
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .read(
                     TableParam::builder()
                         .collection(CollectionIdName::from_str(&collection_name.to_string())?)

@@ -227,7 +227,7 @@ mod tests {
         let service =
             ExecutionListByPhysicalTableDataVersionService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     PhysicalTableDataVersionParam::builder()
                         .table_data_version(tdv.id.clone())
@@ -319,7 +319,7 @@ mod tests {
         let service =
             ExecutionListByPhysicalTableDataVersionService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     PhysicalTableDataVersionParam::builder()
                         .table_data_version(tdv.id.clone())

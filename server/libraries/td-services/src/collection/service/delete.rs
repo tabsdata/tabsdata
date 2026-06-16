@@ -9,8 +9,8 @@ use crate::table::layers::delete::{
     build_deleted_dependencies, build_deleted_triggers, build_frozen_functions,
 };
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SysAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::dxo::collection::{CollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::dependency::DependencyDB;
@@ -37,8 +37,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<DeleteRequest<CollectionParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SysAdmin>::check),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<DeleteRequest<CollectionParam>>::extract_name::<CollectionParam>),
         // Get collection
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
@@ -129,8 +129,8 @@ mod tests {
             .await
             .assert_service::<Scoped<DeleteRequest<CollectionParam>, ProjectId>, ()>(&[
                 type_of_val(&With::<DeleteRequest<CollectionParam>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SysAdmin>::check),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(
                     &With::<DeleteRequest<CollectionParam>>::extract_name::<CollectionParam>,
                 ),

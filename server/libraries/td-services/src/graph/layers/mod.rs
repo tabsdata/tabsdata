@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::do_authz::{DoAuthz, inter_collection_authz};
 use crate::graph::layers::build::GraphBuilder;
 use td_objects::StateFilter;
 use td_objects::dxo::dependency::DependencyDBWithNames;
@@ -18,7 +17,13 @@ pub mod build;
 /// Knobs for [`GraphBuilder`] / [`generate_td_graph`]. State filters
 /// are typed values; defaults cover the values both current callers
 /// share. Implementations specify what differs (`function_state`,
-/// `include_dependency_functions`) plus their auth strategy.
+/// `include_dependency_functions`).
+///
+/// Authorization is owned by the calling service: under the
+/// project-oriented RBAC model projects are silos with no
+/// inter-project visibility, so the caller gates access with its own
+/// project-scoped `Rbac` check before invoking graph generation, and
+/// the graph layer itself carries no authz.
 ///
 /// `historic()` picks the read mode: `false` (default) reads live
 /// state from `_current` views — used by execution and live
@@ -26,8 +31,6 @@ pub mod build;
 /// via ranked CTEs — used only by plan-reading services that need the
 /// graph as it existed when the plan was dispatched.
 pub trait GraphConfig: Send + Sync + 'static {
-    type Authz: DoAuthz;
-
     fn trigger_state() -> StateFilter<TriggerDBWithNames> {
         TriggerDBWithNames::active()
     }
@@ -83,7 +86,6 @@ pub fn generate_td_graph<C: GraphConfig>(_config: C) {
     layers!(
         // Find triggers
         from_fn(gb!(find_recursive_trigger_graph)),
-        inter_collection_authz::<_, C::Authz, TriggerDBWithNames, _>(),
         // Find dependencies. For clarity, we always show the function, even if
         // generating a table centered graph, the same way we show the tables of
         // a function centered graph.
@@ -99,7 +101,6 @@ pub fn generate_td_graph<C: GraphConfig>(_config: C) {
                 from_fn(gb!(find_triggered_functions_dependency_graph))
             )
         },
-        inter_collection_authz::<_, C::Authz, DependencyDBWithNames, _>(),
         // Find output tables
         from_fn(gb!(find_functions_output_tables)),
         // Find all tables and functions

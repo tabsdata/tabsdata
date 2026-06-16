@@ -117,6 +117,7 @@
 pub mod layers;
 pub mod model;
 pub mod source;
+pub mod sql_source;
 
 pub use layers::{
     CreateProjects, DevelopProject, Enforce, ManageAccess, ManageProject, OnAnyProject, RbacError,
@@ -128,3 +129,23 @@ pub use model::{
     SystemPermission, SystemRole, User,
 };
 pub use source::{FixedRbacSource, RbacSource, identity_grants};
+pub use sql_source::{SqlRbacGrantsProvider, SqlRbacSource};
+
+/// The service-facing enforcement layer with the production grant source
+/// fixed in: `Enforce<SqlRbacSource, E, R>`.
+///
+/// A service wires a [`Scope`] layer (which entity the operation targets) then
+/// a `Rbac<E, R>::check` layer (which requirement(s) must hold), reading the
+/// `Ref<SqlRbacSource>` placed in the service context:
+///
+/// ```ignore
+/// // system-scoped: requester must hold create_projects on the system
+/// .layer(from_fn(Scope::<System>::system))
+/// .layer(from_fn(Rbac::<System, CreateProjects>::check))
+///
+/// // project-scoped (scope = the current project): manage_access on the
+/// // system OR manage_project on the project
+/// .layer(from_fn(Scope::<Project>::set))
+/// .layer(from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check))
+/// ```
+pub type Rbac<E, R> = Enforce<SqlRbacSource, E, R>;

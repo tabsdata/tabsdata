@@ -7,8 +7,8 @@ use crate::user::layers::update::{
     update_user_validate_password_change,
 };
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, Rbac, Scope, SelfUser, User};
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::user::{
     UserDB, UserDBWithNames, UserRead, UserReadBuilder, UserUpdate, UserUpdateDB,
@@ -40,8 +40,10 @@ fn service() {
         from_fn(With::<UpdateRequest<UserParam, UserUpdate>>::extract_name::<UserParam>),
         from_fn(With::<UserParam>::extract::<UserIdName>),
         from_fn(By::<UserIdName>::fetch_one::<UserDB>),
-        from_fn(AuthzOn::<SystemOrUserId>::set),
-        from_fn(Authz::<SecAdmin, Requester>::check),
+        from_fn(With::<UserDB>::extract::<UserId>),
+        from_fn(Scope::<User>::set),
+        from_fn(Rbac::<User, (SelfUser, ManageAccess)>::check),
+        from_fn(With::<RequestContext>::extract::<UserId>),
         from_fn(With::<UpdateRequest<UserParam, UserUpdate>>::extract_data::<UserUpdate>),
         from_fn(update_user_validate),
         from_fn(update_user_validate_password_change),
@@ -93,8 +95,10 @@ mod tests {
                 ),
                 type_of_val(&With::<UserParam>::extract::<UserIdName>),
                 type_of_val(&By::<UserIdName>::fetch_one::<UserDB>),
-                type_of_val(&AuthzOn::<SystemOrUserId>::set),
-                type_of_val(&Authz::<SecAdmin, Requester>::check),
+                type_of_val(&With::<UserDB>::extract::<UserId>),
+                type_of_val(&Scope::<User>::set),
+                type_of_val(&Rbac::<User, (SelfUser, ManageAccess)>::check),
+                type_of_val(&With::<RequestContext>::extract::<UserId>),
                 type_of_val(
                     &With::<UpdateRequest<UserParam, UserUpdate>>::extract_data::<UserUpdate>,
                 ),
@@ -134,7 +138,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .update(
             UserParam::builder()
@@ -188,7 +192,7 @@ mod tests {
             .unwrap();
 
         let before = AtTime::now();
-        let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::user())
+        let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::default_role())
             .update(
                 UserParam::builder()
                     .user(UserIdName::from_str("u0").unwrap())

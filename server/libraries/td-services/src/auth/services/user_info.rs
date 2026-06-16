@@ -117,7 +117,7 @@ mod tests {
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
             .password(Password::try_from("tabsdata")?)
-            .role(RoleName::try_from("user")?)
+            .role(RoleName::try_from("default")?)
             .build()?;
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
@@ -128,13 +128,13 @@ mod tests {
         let service = auth_services.user_info.service();
 
         let request =
-            RequestContext::with(access_token_id, UserId::admin(), RoleId::user()).read(());
+            RequestContext::with(access_token_id, UserId::admin(), RoleId::default_role()).read(());
         let res = service.raw_oneshot(request).await;
         let user_info = res?;
         assert_eq!(user_info.name, UserName::try_from("admin")?);
-        assert_eq!(user_info.current_role_id, RoleId::user());
-        assert_eq!(user_info.user_roles.len(), 3);
-        assert_eq!(user_info.current_permissions.len(), 3);
+        assert_eq!(user_info.current_role_id, RoleId::default_role());
+        assert_eq!(user_info.user_roles.len(), 2);
+        assert_eq!(user_info.current_permissions.len(), 1);
         Ok(())
     }
 }

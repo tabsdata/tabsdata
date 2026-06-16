@@ -4,8 +4,8 @@
 
 use crate::user_role::layers::assert_not_fixed;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
+use td_authz::AuthzContext;
 use td_objects::And;
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::role::RoleDB;
@@ -30,8 +30,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<DeleteRequest<UserRoleParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, ManageAccess>::check),
         from_fn(With::<DeleteRequest<UserRoleParam>>::extract_name::<UserRoleParam>),
         from_fn(With::<UserRoleParam>::extract::<RoleIdName>),
         from_fn(By::<RoleIdName>::fetch_one::<RoleDB>),
@@ -70,8 +70,8 @@ mod tests {
             .await
             .assert_service::<DeleteRequest<UserRoleParam>, ()>(&[
                 type_of_val(&With::<DeleteRequest<UserRoleParam>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, ManageAccess>::check),
                 type_of_val(&With::<DeleteRequest<UserRoleParam>>::extract_name::<UserRoleParam>),
                 type_of_val(&With::<UserRoleParam>::extract::<RoleIdName>),
                 type_of_val(&By::<RoleIdName>::fetch_one::<RoleDB>),
@@ -106,7 +106,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .delete(
             UserRoleParam::builder()
@@ -128,7 +128,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .delete(
             UserRoleParam::builder()

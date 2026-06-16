@@ -8,7 +8,6 @@ pub(crate) mod executions;
 pub(crate) mod function_runs;
 pub(crate) mod functions;
 pub(crate) mod groups;
-pub(crate) mod inter_collection_permissions;
 pub(crate) mod internal;
 pub(crate) mod logical_versions;
 pub(crate) mod metrics;

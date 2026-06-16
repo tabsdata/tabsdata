@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::do_authz::DO_AUTHZ;
 use crate::function::layers::register::{bundle_registered, validate_tables_do_not_exist};
 use crate::function::layers::update::{
     assert_function_name_not_exists, update_function_db_builder,
@@ -14,8 +13,8 @@ use crate::function::layers::{
 use crate::scheduler::layers::request::notify_scheduler;
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
 use td_execution::SchedulerNotify;
 use td_objects::And;
 use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
@@ -65,9 +64,9 @@ fn service() {
         // Get collection. Extract collection id and name.
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        // check requester is coll_admin or coll_dev for the function's collection
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev>::check),
+        // check requester can manage or develop the current project
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
         from_fn(With::<CollectionDB>::extract::<CollectionName>),
         // Get function. Extract function id and name.
         from_fn(With::<RequestContext>::extract::<AtTime>),
@@ -125,8 +124,8 @@ fn service() {
         from_fn(With::<FunctionUpdate>::extract::<ResetState>),
         // And register new ones
         register_tables(),
-        register_dependencies::<_, DO_AUTHZ>(),
-        register_triggers::<_, DO_AUTHZ>(),
+        register_dependencies(),
+        register_triggers(),
         register_workers(),
         // Response
         // Extract new function version id
@@ -160,8 +159,7 @@ mod tests {
     use td_objects::system::TD_FN_STATE_PREFIX;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, Decorator, Depth, FunctionName, FunctionRuntimeValues,
-        FunctionStatus, ProjectId, ResetStage, RoleId, TableId, TableName, TableStatus,
-        ToCollectionId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        FunctionStatus, ProjectId, ResetStage, RoleId, TableId, TableName, TableStatus, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::recursion::RecursionOptions;
     use td_objects::{Buildable, and};
@@ -176,11 +174,7 @@ mod tests {
             build_dependency_versions, build_table_versions, build_tables_trigger_versions,
             build_trigger_versions, build_workers, stop_current_workers,
         };
-        use td_authz::tower::InterColl;
         use td_objects::dxo::dependency::DependencyDBBuilder;
-        use td_objects::dxo::inter_collection_access::{
-            InterCollectionAccess, InterCollectionAccessBuilder,
-        };
         use td_objects::dxo::table::TableDBBuilder;
         use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
         use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
@@ -204,9 +198,9 @@ mod tests {
                 // Get collection. Extract collection id and name.
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                // check requester is coll_admin or coll_dev for the function's collection
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev>::check),
+                // check requester can manage or develop the current project
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
 
                 type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
                 // Get function. Extract function id and name.
@@ -272,19 +266,11 @@ mod tests {
                 type_of_val(&With::<FunctionDB>::try_convert_to::<DependencyDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<DependencyDBBuilder, _>),
                 type_of_val(&build_dependency_versions),
-                // inter collections check for dependencies
-                type_of_val(&With::<DependencyDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
-                type_of_val(&With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>),
-                type_of_val(&Authz::<InterColl>::check_inter_collection),
                 type_of_val(&insert_vec::<DependencyDB>),
                 // Insert into trigger_versions(sql) current function trigger status=Active.
                 type_of_val(&With::<FunctionDB>::try_convert_to::<TriggerDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<TriggerDBBuilder, _>),
                 type_of_val(&build_trigger_versions),
-                // inter collections check for trigger
-                type_of_val(&With::<TriggerDB>::vec_convert_to::<InterCollectionAccessBuilder, _>),
-                type_of_val(&With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>),
-                type_of_val(&Authz::<InterColl>::check_inter_collection),
                 type_of_val(&insert_vec::<TriggerDB>),
                 // Set stopped for current workers and insert into workers(sql) new workers.
                 type_of_val(&stop_current_workers),
@@ -340,7 +326,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -405,7 +391,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -537,7 +523,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -599,7 +585,7 @@ mod tests {
             .build()?;
         // Register via the service so the system state table is created.
         let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -622,7 +608,7 @@ mod tests {
             .reset_state(ResetState::TRUE)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -669,7 +655,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -690,7 +676,7 @@ mod tests {
             .tables(Some(vec![TableNameDto::try_from("user_table")?]))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -744,7 +730,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -767,7 +753,7 @@ mod tests {
             .reset_stage(ResetStage::TRUE)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -812,7 +798,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -833,7 +819,7 @@ mod tests {
             .name(Some("nostage_fn".try_into()?))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -879,7 +865,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -900,7 +886,7 @@ mod tests {
             .base_path(Some(BasePath::try_from("/over")?))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -924,7 +910,7 @@ mod tests {
             .name(Some("override_fn".try_into()?))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -985,7 +971,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -1050,7 +1036,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -1116,7 +1102,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -1201,7 +1187,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -1373,7 +1359,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -1472,7 +1458,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -1536,7 +1522,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -1565,7 +1551,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -1594,7 +1580,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -1660,7 +1646,7 @@ mod tests {
             .build()?;
 
         let update_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -1675,7 +1661,7 @@ mod tests {
         let update_response = response?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -1740,14 +1726,6 @@ mod tests {
             .scoped(ProjectId::sandbox())
             .seed()
             .collection(&collection_name_2, &UserId::admin())
-            .await?;
-
-        db.scoped(ProjectId::sandbox())
-            .seed()
-            .inter_collection_permission(
-                &collection_1.id,
-                &ToCollectionId::try_from(collection_2.id)?,
-            )
             .await?;
 
         for collection in [&collection_1, &collection_2] {
@@ -1843,7 +1821,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!(
@@ -1908,7 +1886,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!(
@@ -1994,7 +1972,7 @@ mod tests {
         // With an update, a new function version and table version is created
         // But the trigger and dependency should still be valid (as the use id, not version id)
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -2110,7 +2088,7 @@ mod tests {
         // With an update, a new function version and table version is created
         // But the trigger and dependency should still be valid (as the use id, not version id)
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)
@@ -2201,7 +2179,7 @@ mod tests {
             )])))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)
@@ -2234,7 +2212,7 @@ mod tests {
         // Then update with None
         let update = FunctionUpdate::builder().workers(None).build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)
@@ -2294,7 +2272,7 @@ mod tests {
             )])))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)
@@ -2351,7 +2329,7 @@ mod tests {
             .workers(Some(HashMap::new()))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)
@@ -2436,7 +2414,7 @@ mod tests {
             ])))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)

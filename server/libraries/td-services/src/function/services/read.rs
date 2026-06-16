@@ -5,8 +5,8 @@
 use crate::function::layers::read::{map_create_worker, vec_create_table_dependency};
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope, ViewProject};
 use td_objects::And;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::dependency::DependencyDBWithNames;
@@ -51,10 +51,10 @@ fn service() {
                 FunctionDBWithNames,
             >
         ),
-        // check requester is coll_admin or coll_dev for the function's collection
+        // check requester can view the current project
         from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
         // Read function with tables, triggers and dependencies
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
@@ -157,10 +157,12 @@ mod tests {
                             FunctionDBWithNames,
                         >,
                     ),
-                    // check requester is coll_admin or coll_dev for the function's collection
+                    // check requester can view the current project
                     type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
-                    type_of_val(&AuthzOn::<CollectionId>::set),
-                    type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                    type_of_val(&Scope::<Project>::set),
+                    type_of_val(
+                        &Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check,
+                    ),
                     // Read function with tables, triggers and dependencies
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
@@ -263,7 +265,7 @@ mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .read(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!(

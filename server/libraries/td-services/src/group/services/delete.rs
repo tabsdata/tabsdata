@@ -4,8 +4,8 @@
 
 use crate::group::layers::assert_not_system;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SysAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageProject, Project, Rbac, Scope};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::group::{GroupDB, GroupDBWithNames};
 use td_objects::rest_urls::GroupParam;
@@ -27,8 +27,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<DeleteRequest<GroupParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SysAdmin>::check),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ManageProject>::check),
         from_fn(With::<DeleteRequest<GroupParam>>::extract_name::<GroupParam>),
         from_fn(With::<GroupParam>::extract::<GroupIdName>),
         from_fn(By::<GroupIdName>::fetch_one::<GroupDBWithNames>),

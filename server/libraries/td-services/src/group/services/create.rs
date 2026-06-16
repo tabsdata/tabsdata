@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SysAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageProject, Project, Rbac, Scope};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::group::{
     Group, GroupBuilder, GroupCreate, GroupDB, GroupDBBuilder, GroupDBWithNames,
@@ -28,8 +28,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<CreateRequest<(), GroupCreate>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SysAdmin>::check),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ManageProject>::check),
         from_fn(With::<CreateRequest<(), GroupCreate>>::extract_data::<GroupCreate>),
         from_fn(With::<GroupCreate>::try_convert_to::<GroupDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<GroupDBBuilder, _>),

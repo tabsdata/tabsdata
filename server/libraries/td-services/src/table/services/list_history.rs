@@ -3,15 +3,15 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{CollAdmin, CollDev, CollExec, CollRead};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
+use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::table::{Table, TableDBWithNames};
 use td_objects::list::params::ListQueryParams;
 use td_objects::rest_urls::AtTimeParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::AtTime;
-use td_objects::types::visible_collections::{VisibleCollections, VisibleTablesCollections};
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -30,19 +30,14 @@ fn service() {
         from_fn(With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
         from_fn(With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
         from_fn(With::<AtTimeParam>::extract::<AtTime>),
-        // get allowed collections
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
-        // convert them to allowed table collections
-        from_fn(With::<VisibleCollections>::try_convert_to::<VisibleTablesCollections, _>),
+        // check requester has project permissions (sees all collections in the project)
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // list
         from_fn(With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
         from_fn(
-            By::<()>::historic_list_versions::<
-                VisibleTablesCollections,
-                { TableDBWithNames::User },
-                Table,
-            >
+            By::<()>::historic_list_versions::<NoFilter, { TableDBWithNames::User }, Table>
         ),
     )
 }
@@ -81,18 +76,15 @@ mod tests {
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
                 type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
-                // get allowed collections
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
-                // convert them to allowed table collections
-                type_of_val(
-                    &With::<VisibleCollections>::try_convert_to::<VisibleTablesCollections, _>,
-                ),
+                // check requester has project permissions (sees all collections in the project)
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // list
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
                 type_of_val(
                     &By::<()>::historic_list_versions::<
-                        VisibleTablesCollections,
+                        NoFilter,
                         { TableDBWithNames::User },
                         Table,
                     >,
@@ -145,7 +137,7 @@ mod tests {
             .tables(Some(tables))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -161,7 +153,7 @@ mod tests {
 
         // Delete table_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .delete(
                     TableParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -181,7 +173,7 @@ mod tests {
 
         // t0 -> no tables
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     AtTimeParam::builder().at(t0).build()?,
                     ListParams::default(),
@@ -197,7 +189,7 @@ mod tests {
 
         // t1 -> table_1 and table_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     AtTimeParam::builder().at(t1).build()?,
                     ListParamsBuilder::default()
@@ -217,7 +209,7 @@ mod tests {
 
         // t2 -> table_1
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     AtTimeParam::builder().at(t2).build()?,
                     ListParams::default(),

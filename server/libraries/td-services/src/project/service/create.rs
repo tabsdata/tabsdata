@@ -6,8 +6,8 @@ use crate::project::service::layer::scope_to_project::scope_to_created_project;
 use crate::project::service::layer::seed_groups::seed_default_groups;
 use crate::project::service::layer::single_project::reject_create_on_single_project_backend;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SysAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{CreateProjects, Rbac, Scope, System};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::project::{
     ProjectCreate, ProjectCreateDB, ProjectCreateDBBuilder, ProjectDBWithNames, ProjectRead,
@@ -31,8 +31,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<CreateRequest<(), ProjectCreate>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SysAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, CreateProjects>::check),
         from_fn(reject_create_on_single_project_backend),
         from_fn(With::<CreateRequest<(), ProjectCreate>>::extract_data::<ProjectCreate>),
         from_fn(With::<ProjectCreate>::try_convert_to::<ProjectCreateDBBuilder, _>),
@@ -66,8 +66,8 @@ mod tests {
             .await
             .assert_service::<CreateRequest<(), ProjectCreate>, ProjectRead>(&[
                 type_of_val(&With::<CreateRequest<(), ProjectCreate>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SysAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, CreateProjects>::check),
                 type_of_val(&reject_create_on_single_project_backend),
                 type_of_val(
                     &With::<CreateRequest<(), ProjectCreate>>::extract_data::<ProjectCreate>,

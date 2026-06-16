@@ -7,8 +7,8 @@ use crate::function::layers::download_bundle::{
     build_bundle_download, resolve_function_with_names,
 };
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope, ViewProject};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::rest_urls::params::FunctionMaybeAtIdName;
@@ -37,8 +37,8 @@ fn service() {
         from_fn(With::<FunctionMaybeAtIdName>::extract::<Option<AtTime>>),
         from_fn(resolve_function_with_names),
         from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
         from_fn(build_bundle_download),
     )
 }
@@ -93,8 +93,8 @@ mod tests {
                 type_of_val(&With::<FunctionMaybeAtIdName>::extract::<Option<AtTime>>),
                 type_of_val(&resolve_function_with_names),
                 type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
                 type_of_val(&build_bundle_download),
             ]);
     }
@@ -165,7 +165,7 @@ mod tests {
         ];
         for (at, expected_fn, expected_bundle, expected_payload) in cases {
             let download_request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                     .read(FunctionMaybeAtIdName::new(
                         function_param.clone(),
                         OptionalAtTimeParam { at },
@@ -243,7 +243,7 @@ mod tests {
             .build()?;
         let service = DownloadBundleService::build(&context).service();
         let download_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .read(FunctionMaybeAtIdName::new(
                     function_param,
                     OptionalAtTimeParam { at: None },
@@ -270,7 +270,7 @@ mod tests {
         let request = Request::builder().body(Body::from(payload)).unwrap();
         let upload = FunctionUpload::new(request);
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection))?)

@@ -7,7 +7,7 @@ use sea_query::{
     Query, Table, TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::projects::Projects;
 use super::roles::Roles;
 use super::users::Users;
 use crate::schema::Entity;
@@ -106,7 +106,7 @@ impl Entity for Defs {
                         Alias::new("entity_id"),
                     )
                     .expr_as(Expr::col((Roles::Table, Roles::Name)), Alias::new("role"))
-                    .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("entity"))
+                    .expr_as(Expr::col((Projects::Table, Projects::Name)), Alias::new("entity"))
                     .from(Permissions::Table)
                     .join(
                         JoinType::LeftJoin,
@@ -120,8 +120,8 @@ impl Entity for Defs {
                     )
                     .join(
                         JoinType::LeftJoin,
-                        Collections::Table,
-                        Expr::col((Permissions::Table, Permissions::EntityId)).equals((Collections::Table, Collections::Id)),
+                        Projects::Table,
+                        Expr::col((Permissions::Table, Permissions::EntityId)).equals((Projects::Table, Projects::Id)),
                     )
                     .to_owned(),
             ),
@@ -130,21 +130,19 @@ impl Entity for Defs {
 
     fn seeds(&self) -> Vec<InsertStatement> {
         // (permission_id, role_name, permission_type, entity_type, fixed)
+        //
+        // entity_id is ALL_ENTITY_ID (`__all__` = 00000000000000000000000204) for
+        // every row: system rows are disambiguated by entity_type='system'; the
+        // project wildcard `(project:__all__, manage_project)` reuses the same
+        // sentinel.
         let assignments: &[(&str, &str, &str, &str, bool)] = &[
-            // sys_admin gets all permissions
-            ("00000000000000000000000010", "sys_admin", "sa", "s", true),
-            ("00000000000000000000000014", "sys_admin", "ss", "s", false),
-            ("00000000000000000000000100", "sys_admin", "ca", "c", false),
-            ("00000000000000000000000104", "sys_admin", "cd", "c", false),
-            ("00000000000000000000000108", "sys_admin", "cx", "c", false),
-            ("0000000000000000000000010G", "sys_admin", "cr", "c", false),
-            // sec_admin permissions
-            ("0000000000000000000000010K", "sec_admin", "ss", "s", true),
-            ("0000000000000000000000010O", "sec_admin", "ca", "c", true),
-            // user permissions
-            ("0000000000000000000000010S", "user", "cd", "c", false),
-            ("00000000000000000000000110", "user", "cx", "c", false),
-            ("00000000000000000000000200", "user", "cr", "c", false),
+            // sys_admin: all three system permissions + manage on every project.
+            ("00000000000000000000000010", "sys_admin", "manage_access", "system", true),
+            ("00000000000000000000000014", "sys_admin", "create_projects", "system", true),
+            ("00000000000000000000000100", "sys_admin", "role_mgnt", "system", true),
+            ("00000000000000000000000104", "sys_admin", "manage_project", "project", true),
+            // default role: every user can create projects.
+            ("00000000000000000000000108", "default", "create_projects", "system", false),
         ];
 
         assignments

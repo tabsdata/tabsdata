@@ -3,9 +3,10 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope, ViewProject};
 use td_objects::And;
+use td_objects::NoFilter;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionPatchRecord};
@@ -13,7 +14,6 @@ use td_objects::list::params::ListQueryParams;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, CollectionIdName, FunctionIdName};
-use td_objects::types::visible_collections::{VisibleCollections, VisibleFunctionsCollections};
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -38,18 +38,14 @@ fn service() {
         // Resolve collection + authz.
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
         // Resolve function id from the URL.
         from_fn(By::<And![CollectionId, FunctionIdName]>::assert_exists::<FunctionDBWithNames>),
-        // get allowed collections
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
-        // convert them to allowed function collections
-        from_fn(With::<VisibleCollections>::try_convert_to::<VisibleFunctionsCollections, _>),
-        // list function patches
+        // list function patches (all collections in the current project)
         from_fn(With::<ListRequest<FunctionParam>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<FunctionPatchRecord>, _>),
-        from_fn(By::<()>::list::<VisibleFunctionsCollections, FunctionPatchRecord>),
+        from_fn(By::<()>::list::<NoFilter, FunctionPatchRecord>),
     )
 }
 
@@ -90,24 +86,18 @@ mod tests {
                 // Resolve collection + authz.
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
                 // Resolve function id from the URL.
                 type_of_val(
                     &By::<And![CollectionId, FunctionIdName]>::assert_exists::<FunctionDBWithNames>,
                 ),
-                // get allowed collections
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
-                // convert them to allowed function collections
-                type_of_val(
-                    &With::<VisibleCollections>::try_convert_to::<VisibleFunctionsCollections, _>,
-                ),
-                // list function patches
+                // list function patches (all collections in the current project)
                 type_of_val(&With::<ListRequest<FunctionParam>>::extract::<ListParams>),
                 type_of_val(
                     &With::<ListParams>::try_convert_to::<ListQueryParams<FunctionPatchRecord>, _>,
                 ),
-                type_of_val(&By::<()>::list::<VisibleFunctionsCollections, FunctionPatchRecord>),
+                type_of_val(&By::<()>::list::<NoFilter, FunctionPatchRecord>),
             ]);
     }
 
@@ -151,7 +141,7 @@ mod tests {
             .function(FunctionIdName::from_str("f0")?)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(param, ListParams::default())
                 .in_project(ProjectId::sandbox());
         let response = ListFunctionPatchesService::with_defaults(db.clone())
@@ -182,7 +172,7 @@ mod tests {
                 .try_snippet(&format!("v{i}"))?
                 .build()?;
             let req =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                     .create(
                         FunctionParam::builder()
                             .collection(CollectionIdName::from_str("c0")?)
@@ -198,7 +188,7 @@ mod tests {
         }
 
         let read_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str("c0")?)

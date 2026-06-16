@@ -6,8 +6,8 @@ use crate::project::service::layer::guards::{
     reject_delete_non_empty_project, reject_delete_sandbox_on_single_project_backend,
 };
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SysAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageProject, Project, Rbac, Scope};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::project::{ProjectDB, ProjectDeleteDB, ProjectDeleteDBBuilder};
@@ -30,12 +30,13 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<DeleteRequest<ProjectParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SysAdmin>::check),
         from_fn(With::<DeleteRequest<ProjectParam>>::extract_name::<ProjectParam>),
         from_fn(With::<ProjectParam>::extract::<ProjectIdName>),
         from_fn(By::<ProjectIdName>::fetch_one::<ProjectDB>),
         from_fn(With::<ProjectDB>::extract::<ProjectId>),
+        // Deleting a project requires `manage_project` on that project.
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ManageProject>::check),
         // Guard before the soft-delete: keep sandbox on single-project
         // backends, and never strand a non-empty project's data (any backend).
         from_fn(reject_delete_sandbox_on_single_project_backend),
@@ -62,12 +63,12 @@ mod tests {
             .await
             .assert_service::<DeleteRequest<ProjectParam>, ()>(&[
                 type_of_val(&With::<DeleteRequest<ProjectParam>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SysAdmin>::check),
                 type_of_val(&With::<DeleteRequest<ProjectParam>>::extract_name::<ProjectParam>),
                 type_of_val(&With::<ProjectParam>::extract::<ProjectIdName>),
                 type_of_val(&By::<ProjectIdName>::fetch_one::<ProjectDB>),
                 type_of_val(&With::<ProjectDB>::extract::<ProjectId>),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ManageProject>::check),
                 type_of_val(&reject_delete_sandbox_on_single_project_backend),
                 type_of_val(&By::<ProjectId>::fetch_all::<CollectionDB>),
                 type_of_val(&reject_delete_non_empty_project),

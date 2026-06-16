@@ -12,7 +12,6 @@ mod function_patches_current;
 mod functions;
 mod functions_current;
 mod groups;
-mod inter_collection_permissions;
 mod logical_function_run_inputs;
 mod logical_function_run_pointers;
 mod logical_function_runs;
@@ -67,7 +66,6 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &users_roles::Defs,
     &sessions::Defs,
     &permissions::Defs,
-    &inter_collection_permissions::Defs,
     &bundles::Defs,
     &functions::Defs,
     &functions_current::Defs,
@@ -127,7 +125,6 @@ pub(crate) const PROJECT_SCOPED_TABLES: &[&str] = &[
     "logical_function_run_inputs",
     "logical_function_run_pointers",
     "logical_table_data_version_pointers",
-    "inter_collection_permissions",
 ];
 
 impl SchemaVersion for Schema {
@@ -136,9 +133,9 @@ impl SchemaVersion for Schema {
     // Refresh via `cargo test -p td-schema --lib print_schema_fingerprints --
     // --ignored --nocapture` after any intentional change to current/.
     const FINGERPRINTS: [&'static str; 3] = [
-        "9f91129de396cd8638bcc9e4b869fbed067dd3232ff896c142a66f594efd9803", // Sqlite
-        "087c8d5c7e306f92f5de5ea6b63d083e11c9e476e590db6be484620e00e9af18", // Postgres
-        "7c415c256c6f3dfc6285877ab8057f7bc2e4151ea811a5969366bab617e1887c", // MySql
+        "79c7780d43b27906a117198fe8faeba3784a2a694b24364edbff726635896231", // Sqlite
+        "3bcce15fbfc9b6837324bbd7a42b7edbc645e0585626f348aeef7df5eaca018d", // Postgres
+        "a71daa44430c85aa7f4e99520dde2518307d217bc341ef428bd571c5374df034", // MySql
     ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {

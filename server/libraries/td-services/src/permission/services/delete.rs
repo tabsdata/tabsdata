@@ -4,17 +4,19 @@
 
 use crate::permission::layers::{
     assert_permission_is_not_fixed, assert_role_in_permission,
-    is_permission_with_names_on_a_single_collection,
+    is_permission_with_names_on_a_single_project,
 };
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_authz::{Authz, AuthzContext, refresh_authz_context};
+use td_authz::rbac::{
+    ManageAccess, ManageProject, OnAnyProject, Project, Rbac, Scope, System,
+};
+use td_authz::{refresh_authz_context, AuthzContext};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::permission::{PermissionDB, PermissionDBWithNames};
 use td_objects::rest_urls::RolePermissionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    CollectionId, EntityId, PermissionId, PermissionIdName, RoleIdName,
+    EntityId, PermissionId, PermissionIdName, ProjectId, RoleIdName,
 };
 use td_queries::By;
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
@@ -32,8 +34,8 @@ use td_tower::{layers, service};
 fn service() {
     layers!(
         from_fn(With::<DeleteRequest<RolePermissionParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
         from_fn(With::<DeleteRequest<RolePermissionParam>>::extract_name::<RolePermissionParam>),
         from_fn(With::<RolePermissionParam>::extract::<PermissionIdName>),
         from_fn(By::<PermissionIdName>::fetch_one::<PermissionDBWithNames>),
@@ -42,20 +44,21 @@ fn service() {
         from_fn(assert_role_in_permission),
         conditional(
             If(service!(layers!(from_fn(
-                is_permission_with_names_on_a_single_collection
+                is_permission_with_names_on_a_single_project
             )))),
             Do(service!(layers!(
-                // a permission on a single collection can also be deleted by a collection admin
+                // a permission on a single project can also be deleted by a project admin
                 from_fn(With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
                 from_fn(With::<Option<EntityId>>::unwrap),
-                from_fn(With::<EntityId>::try_convert_to::<CollectionId, _>),
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<SecAdmin, CollAdmin>::check),
+                from_fn(With::<EntityId>::try_convert_to::<ProjectId, _>),
+                from_fn(Scope::<Project>::set),
+                from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check),
             ))),
             Else(service!(layers!(
-                // a permission on a all collections can be deleted by a sec_admin only
-                from_fn(AuthzOn::<System>::set),
-                from_fn(Authz::<SecAdmin>::check),
+                // a permission on all projects can be deleted only by an
+                // identity holding manage_access on the system
+                from_fn(Scope::<System>::system),
+                from_fn(Rbac::<System, ManageAccess>::check),
             )))
         ),
         from_fn(assert_permission_is_not_fixed),
@@ -74,7 +77,7 @@ mod tests {
     use std::collections::HashSet;
     use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_authz::tower::AuthzError;
+    use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
     use td_objects::Buildable;
@@ -82,13 +85,14 @@ mod tests {
     use td_objects::dxo::permission::PermissionCreate;
     use td_objects::rest_urls::RoleParam;
     use td_objects::types::basic::{
-        AccessTokenId, CollectionName, Description, EntityName, PermissionType, ProjectId, RoleId,
-        RoleName, UserId,
+        AccessTokenId, Description, EntityName, PermissionType, ProjectName, RoleId, RoleName,
+        UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_security::{
-        ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_SA_SYS_ADMIN, ENCODED_ID_SS_SEC_ADMIN,
+        ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS,
+        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT, ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT,
     };
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -100,8 +104,8 @@ mod tests {
 
         DeletePermissionService::with_defaults(db).metadata().await.assert_service::<DeleteRequest<RolePermissionParam>, ()>(&[
             type_of_val(&With::<DeleteRequest<RolePermissionParam>>::extract::<RequestContext>),
-            type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+            type_of_val(&Scope::<System>::system),
+            type_of_val(&Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
             type_of_val(
                 &With::<DeleteRequest<RolePermissionParam>>::extract_name::<RolePermissionParam>,
             ),
@@ -109,14 +113,14 @@ mod tests {
             type_of_val(&By::<PermissionIdName>::fetch_one::<PermissionDBWithNames>),
             type_of_val(&With::<RolePermissionParam>::extract::<RoleIdName>),
             type_of_val(&assert_role_in_permission),
-            type_of_val(&is_permission_with_names_on_a_single_collection),
+            type_of_val(&is_permission_with_names_on_a_single_project),
             type_of_val(&With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
             type_of_val(&With::<Option<EntityId>>::unwrap),
-            type_of_val(&With::<EntityId>::try_convert_to::<CollectionId, _>),
-            type_of_val(&AuthzOn::<CollectionId>::set),
-            type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-            type_of_val(&AuthzOn::<System>::set),
-            type_of_val(&Authz::<SecAdmin>::check),
+            type_of_val(&With::<EntityId>::try_convert_to::<ProjectId, _>),
+            type_of_val(&Scope::<Project>::set),
+            type_of_val(&Rbac::<Project, (ManageAccess, ManageProject)>::check),
+            type_of_val(&Scope::<System>::system),
+            type_of_val(&Rbac::<System, ManageAccess>::check),
             type_of_val(&assert_permission_is_not_fixed),
             type_of_val(&With::<PermissionDBWithNames>::extract::<PermissionId>),
             type_of_val(&By::<PermissionId>::delete::<PermissionDB>),
@@ -135,13 +139,13 @@ mod tests {
             .await?;
         let seeded = db
             .seed()
-            .permission(PermissionType::SysAdmin, None, None, &role)
+            .permission(PermissionType::CreateProjects, None, None, &role)
             .await?;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .delete(
             RolePermissionParam::builder()
@@ -159,25 +163,21 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_create_permission_on_collection_by_coll_admin_ok(
+    async fn test_create_permission_on_project_by_project_admin_ok(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let coll0 = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
-            .await?;
-        let coll_admin_role = db
+        let p0 = db.seed().project(ProjectName::try_from("p0")?).await?;
+        let project_admin_role = db
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = coll0.id.try_into()?;
+        let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::CollectionAdmin,
-                Some(EntityName::try_from("c0")?),
+                PermissionType::ManageProject,
+                Some(EntityName::try_from("p0")?),
                 Some(entity_id),
-                &coll_admin_role,
+                &project_admin_role,
             )
             .await?;
 
@@ -186,16 +186,17 @@ mod tests {
             .role(RoleName::try_from("r1")?, Description::try_from("d")?)
             .await?;
 
+        // `admin` holds manage_project on `__all__`, so it can grant on any project.
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            coll_admin_role.id,
+            project_admin_role.id,
         )
         .create(
             RoleParam::builder().role(RoleIdName::Id(role.id)).build()?,
             PermissionCreate::builder()
-                .permission_type(PermissionType::CollectionDev)
-                .entity_name(EntityName::try_from("c0")?)
+                .permission_type(PermissionType::DevelopProject)
+                .entity_name(EntityName::try_from("p0")?)
                 .build()?,
         );
 
@@ -205,25 +206,21 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_create_permission_on_other_collection_by_coll_admin_unauthz(
+    async fn test_create_permission_on_other_project_by_project_admin_unauthz(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let coll0 = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
-            .await?;
-        let coll_admin_role = db
+        let p0 = db.seed().project(ProjectName::try_from("p0")?).await?;
+        let project_admin_role = db
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = coll0.id.try_into()?;
+        let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::CollectionAdmin,
-                Some(EntityName::try_from("c0")?),
+                PermissionType::ManageProject,
+                Some(EntityName::try_from("p0")?),
                 Some(entity_id),
-                &coll_admin_role,
+                &project_admin_role,
             )
             .await?;
 
@@ -231,28 +228,33 @@ mod tests {
             .seed()
             .role(RoleName::try_from("r1")?, Description::try_from("d")?)
             .await?;
-        let _ = db
-            .scoped(ProjectId::sandbox())
+        let _ = db.seed().project(ProjectName::try_from("p1")?).await?;
+        // A non-admin user assigned only to the project_admin_role (manage_project
+        // on p0 only): admin can never be forbidden.
+        let user = db
             .seed()
-            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .user(&UserName::try_from("u0")?, &UserEnabled::from(true))
+            .await?;
+        db.seed()
+            .user_role(&user.id, &project_admin_role.id)
             .await?;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            coll_admin_role.id,
+            user.id,
+            project_admin_role.id,
         )
         .create(
             RoleParam::builder().role(RoleIdName::Id(role.id)).build()?,
             PermissionCreate::builder()
-                .permission_type(PermissionType::CollectionDev)
-                .entity_name(EntityName::try_from("c1")?)
+                .permission_type(PermissionType::DevelopProject)
+                .entity_name(EntityName::try_from("p1")?)
                 .build()?,
         );
 
         let service = CreatePermissionService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
-            AuthzError::Forbidden(_) => {}
+            RbacError::Forbidden(_, _) => {}
             other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
@@ -260,51 +262,52 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_create_permission_on_all_collection_by_coll_admin_unauthz(
+    async fn test_create_permission_on_all_project_by_project_admin_unauthz(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let coll0 = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
-            .await?;
-        let coll_admin_role = db
+        let p0 = db.seed().project(ProjectName::try_from("p0")?).await?;
+        let project_admin_role = db
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = coll0.id.try_into()?;
+        let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::CollectionAdmin,
-                Some(EntityName::try_from("c0")?),
+                PermissionType::ManageProject,
+                Some(EntityName::try_from("p0")?),
                 Some(entity_id),
-                &coll_admin_role,
+                &project_admin_role,
             )
             .await?;
-        let _ = db
-            .scoped(ProjectId::sandbox())
+        let _ = db.seed().project(ProjectName::try_from("p1")?).await?;
+        // A non-admin user assigned only to the project_admin_role (manage_project
+        // on p0 only): admin can never be forbidden.
+        let user = db
             .seed()
-            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
+            .user(&UserName::try_from("u0")?, &UserEnabled::from(true))
+            .await?;
+        db.seed()
+            .user_role(&user.id, &project_admin_role.id)
             .await?;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            coll_admin_role.id,
+            user.id,
+            project_admin_role.id,
         )
         .create(
             RoleParam::builder()
-                .role(RoleIdName::Id(coll_admin_role.id))
+                .role(RoleIdName::Id(project_admin_role.id))
                 .build()?,
             PermissionCreate::builder()
-                .permission_type(PermissionType::CollectionDev)
+                .permission_type(PermissionType::DevelopProject)
                 .entity_name(None)
                 .build()?,
         );
 
         let service = CreatePermissionService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
-            AuthzError::Forbidden(_) => {}
+            RbacError::Forbidden(_, _) => {}
             other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
@@ -312,78 +315,71 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_delete_permission_on_collection_by_coll_admin_ok(
+    async fn test_delete_permission_on_project_by_project_admin_ok(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let coll0 = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
-            .await?;
+        let p0 = db.seed().project(ProjectName::try_from("p0")?).await?;
         let role = db
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = coll0.id.try_into()?;
+        let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::CollectionAdmin,
-                Some(EntityName::try_from("c0")?),
+                PermissionType::ManageProject,
+                Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
             )
             .await?;
-        let coll_dev_perm = db
+        let project_dev_perm = db
             .seed()
             .permission(
-                PermissionType::CollectionDev,
-                Some(EntityName::try_from("c0")?),
+                PermissionType::DevelopProject,
+                Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
             )
             .await?;
 
+        // `admin` holds manage_project on `__all__`, so it can delete on any project.
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
             .delete(
                 RolePermissionParam::builder()
                     .role(RoleIdName::from_str("r0")?)
-                    .permission(PermissionIdName::from_str(&coll_dev_perm.id.to_string())?)
+                    .permission(PermissionIdName::from_str(&project_dev_perm.id.to_string())?)
                     .build()?,
             );
 
         let service = DeletePermissionService::with_defaults(db.clone()).service();
         assert!(service.raw_oneshot(request).await.is_ok());
 
-        let not_found = db.live().fetch_one::<PermissionDB>(coll_dev_perm.id).await;
+        let not_found = db.live().fetch_one::<PermissionDB>(project_dev_perm.id).await;
         assert!(not_found.is_err());
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_delete_permission_incorrect_role_err(db: TdPool) -> Result<(), TdError> {
-        let coll0 = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
-            .await?;
+        let p0 = db.seed().project(ProjectName::try_from("p0")?).await?;
         let role = db
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = coll0.id.try_into()?;
+        let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::CollectionAdmin,
-                Some(EntityName::try_from("c0")?),
+                PermissionType::ManageProject,
+                Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
             )
             .await?;
-        let coll_dev_perm = db
+        let project_dev_perm = db
             .seed()
             .permission(
-                PermissionType::CollectionDev,
-                Some(EntityName::try_from("c0")?),
+                PermissionType::DevelopProject,
+                Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
             )
@@ -393,7 +389,7 @@ mod tests {
             .delete(
                 RolePermissionParam::builder()
                     .role(RoleIdName::from_str("r_incorrect")?)
-                    .permission(PermissionIdName::from_str(&coll_dev_perm.id.to_string())?)
+                    .permission(PermissionIdName::from_str(&project_dev_perm.id.to_string())?)
                     .build()?,
             );
 
@@ -408,19 +404,11 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_delete_permission_on_diff_collection_by_coll_admin_unauthz(
+    async fn test_delete_permission_on_diff_project_by_project_admin_unauthz(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let coll0 = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
-            .await?;
-        let coll1 = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
-            .await?;
+        let p0 = db.seed().project(ProjectName::try_from("p0")?).await?;
+        let p1 = db.seed().project(ProjectName::try_from("p1")?).await?;
         let role0 = db
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
@@ -429,36 +417,43 @@ mod tests {
             .seed()
             .role(RoleName::try_from("r1")?, Description::try_from("d")?)
             .await?;
+        // requester user holds manage_project on p0 only (via role0).
         db.seed()
             .permission(
-                PermissionType::CollectionDev,
-                Some(EntityName::try_from("c0")?),
-                Some(coll0.id.try_into()?),
+                PermissionType::ManageProject,
+                Some(EntityName::try_from("p0")?),
+                Some(p0.id.try_into()?),
                 &role0,
             )
             .await?;
         let perm1 = db
             .seed()
             .permission(
-                PermissionType::CollectionDev,
-                Some(EntityName::try_from("c1")?),
-                Some(coll1.id.try_into()?),
+                PermissionType::DevelopProject,
+                Some(EntityName::try_from("p1")?),
+                Some(p1.id.try_into()?),
                 &role1,
             )
             .await?;
+        // A non-admin user assigned only to role0 (manage_project on p0 only):
+        // admin can never be forbidden.
+        let user = db
+            .seed()
+            .user(&UserName::try_from("u0")?, &UserEnabled::from(true))
+            .await?;
+        db.seed().user_role(&user.id, &role0.id).await?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role0.id)
-            .delete(
-                RolePermissionParam::builder()
-                    .role(RoleIdName::from_str("r1")?)
-                    .permission(PermissionIdName::from_str(&perm1.id.to_string())?)
-                    .build()?,
-            );
+        let request = RequestContext::with(AccessTokenId::default(), user.id, role0.id).delete(
+            RolePermissionParam::builder()
+                .role(RoleIdName::from_str("r1")?)
+                .permission(PermissionIdName::from_str(&perm1.id.to_string())?)
+                .build()?,
+        );
 
         let service = DeletePermissionService::with_defaults(db.clone()).service();
 
         assert_service_error(service, request, |err| match err {
-            AuthzError::Forbidden(_) => {}
+            RbacError::Forbidden(_, _) => {}
             other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
@@ -466,40 +461,54 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_delete_permission_on_all_collection_by_coll_admin_unauthz(
+    async fn test_delete_permission_on_all_project_by_project_admin_unauthz(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let _ = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
-            .await?;
+        let p0 = db.seed().project(ProjectName::try_from("p0")?).await?;
         let role = db
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let coll_dev_perm = db
+        // requester user holds manage_project on p0 only.
+        db.seed()
+            .permission(
+                PermissionType::ManageProject,
+                Some(EntityName::try_from("p0")?),
+                Some(p0.id.try_into()?),
+                &role,
+            )
+            .await?;
+        // permission to delete targets ALL projects (entity_id = __all__).
+        let all_project_dev_perm = db
             .seed()
             .permission(
-                PermissionType::CollectionDev,
-                Some(EntityName::try_from("c0")?),
+                PermissionType::DevelopProject,
+                Some(EntityName::try_from("p0")?),
                 None,
                 &role,
             )
             .await?;
+        // A non-admin user assigned only to role (manage_project on p0 only):
+        // admin can never be forbidden.
+        let user = db
+            .seed()
+            .user(&UserName::try_from("u0")?, &UserEnabled::from(true))
+            .await?;
+        db.seed().user_role(&user.id, &role.id).await?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
-            .delete(
-                RolePermissionParam::builder()
-                    .role(RoleIdName::from_str("r0")?)
-                    .permission(PermissionIdName::from_str(&coll_dev_perm.id.to_string())?)
-                    .build()?,
-            );
+        let request = RequestContext::with(AccessTokenId::default(), user.id, role.id).delete(
+            RolePermissionParam::builder()
+                .role(RoleIdName::from_str("r0")?)
+                .permission(PermissionIdName::from_str(
+                    &all_project_dev_perm.id.to_string(),
+                )?)
+                .build()?,
+        );
 
         let service = DeletePermissionService::with_defaults(db.clone()).service();
 
         assert_service_error(service, request, |err| match err {
-            AuthzError::Forbidden(_) => {}
+            RbacError::Forbidden(_, _) => {}
             other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
@@ -509,9 +518,10 @@ mod tests {
     #[td_test::test(db)]
     async fn test_delete_system_permissions(db: TdPool) -> Result<(), TdError> {
         let fixed_permissions = HashSet::from([
-            ENCODED_ID_SA_SYS_ADMIN,
-            ENCODED_ID_SS_SEC_ADMIN,
-            ENCODED_ID_CA_ALL_SEC_ADMIN,
+            ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS,
+            ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS,
+            ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT,
+            ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT,
         ]);
 
         let permissions = db.live().fetch_all::<PermissionDB>(()).await?;
@@ -522,7 +532,7 @@ mod tests {
             let request: DeleteRequest<RolePermissionParam> = RequestContext::with(
                 AccessTokenId::default(),
                 UserId::admin(),
-                RoleId::sec_admin(),
+                RoleId::sys_admin(),
             )
             .delete(
                 RolePermissionParam::builder()

@@ -28,7 +28,7 @@ pub(crate) async fn seed_user(
     let request_context = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
-        RoleId::sec_admin(),
+        RoleId::sys_admin(),
     );
 
     let user_db = UserDB::builder()

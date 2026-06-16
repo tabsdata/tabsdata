@@ -22,7 +22,7 @@ pub(crate) async fn seed_role(
     let request_context = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
-        RoleId::sec_admin(),
+        RoleId::sys_admin(),
     );
 
     let role_db = RoleDBBuilder::try_from(&role_create)?

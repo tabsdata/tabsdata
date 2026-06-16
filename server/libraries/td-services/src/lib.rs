@@ -9,7 +9,6 @@ use crate::execution::services::runtime_info::RuntimeContext;
 use crate::function::services::FunctionServices;
 use crate::function_run::services::FunctionRunServices;
 use crate::group::services::GroupServices;
-use crate::inter_coll_permission::services::InterCollectionPermissionServices;
 use crate::logical::services::LogicalServices;
 use crate::metrics::services::OperationalMetricsServices;
 use crate::permission::services::PermissionServices;
@@ -45,7 +44,6 @@ pub mod function;
 pub mod function_run;
 pub mod graph;
 pub mod group;
-pub mod inter_coll_permission;
 pub mod logical;
 pub mod metrics;
 pub mod permission;
@@ -59,8 +57,6 @@ pub mod user;
 pub mod user_role;
 pub mod worker;
 
-pub mod do_authz;
-
 #[derive(ServiceFactory, FieldAccessors, FromRef, Clone)]
 pub struct Services {
     auth: Arc<AuthServices>,
@@ -70,7 +66,6 @@ pub struct Services {
     function: Arc<FunctionServices>,
     function_run: Arc<FunctionRunServices>,
     group: Arc<GroupServices>,
-    inter_coll_permission: Arc<InterCollectionPermissionServices>,
     operational_metrics: Arc<OperationalMetricsServices>,
     permission: Arc<PermissionServices>,
     project: Arc<ProjectServices>,

@@ -63,7 +63,7 @@ mod tests {
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
         let context =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user());
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role());
         let router = router.clone().into();
         router.layer(Extension(context.clone()))
     }

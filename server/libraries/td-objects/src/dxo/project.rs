@@ -80,6 +80,8 @@ mod definitions {
     #[dao(sql_table = "projects__with_names")]
     #[inherits(ProjectDB)]
     pub struct ProjectDBWithNames {
+        #[dxo(extractor)]
+        pub id: ProjectId,
         pub created_by: UserName,
         pub modified_by: UserName,
     }

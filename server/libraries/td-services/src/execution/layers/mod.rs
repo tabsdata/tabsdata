@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::do_authz::DO_AUTHZ;
 use crate::execution::layers::execution::{
     assert_function_status, build_execution_plan, build_initial_mint_lfr_pointers,
     build_initial_mint_ltdv_pointers, build_logical_function_run_inputs,
@@ -15,8 +14,7 @@ use crate::execution::layers::execution_version::{
 };
 use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use crate::scheduler::layers::request::notify_scheduler;
-use td_authz::Authz;
-use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::And;
 use td_objects::StateFilter;
 use td_objects::dxo::crudl::RequestContext;
@@ -29,8 +27,8 @@ use td_objects::dxo::logical::{
 use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    CollectionId, ExternalUid, FunctionId, FunctionOnly, FunctionVersionId,
-    OverrideDisabledTrigger, SkipIfRunning, TriggerType,
+    ExternalUid, FunctionId, FunctionOnly, FunctionVersionId, OverrideDisabledTrigger,
+    SkipIfRunning, TriggerType,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_queries::{By, insert, insert_vec};
@@ -47,8 +45,6 @@ pub(crate) mod update_status;
 
 pub struct GraphOpts;
 impl GraphConfig for GraphOpts {
-    type Authz = DO_AUTHZ;
-
     fn function_state() -> StateFilter<FunctionDB> {
         FunctionDB::executable()
     }
@@ -96,10 +92,9 @@ pub fn execute() {
         trigger_guards(),
         from_fn(With::<ExecutionRequest>::extract::<OverrideDisabledTrigger>),
         from_fn(assert_function_status),
-        // check requester is coll_admin or coll_exec for the function's collection
-        from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollExec>::check),
+        // check requester can develop the current project (manage or develop)
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         // Get recursion options
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         from_fn(With::<FunctionId>::convert_to::<FunctionOrTable>),

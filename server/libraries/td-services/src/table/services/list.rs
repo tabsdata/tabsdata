@@ -3,13 +3,13 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{CollAdmin, CollDev, CollExec, CollRead};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
+use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::table::{Table, TableDBWithNames};
 use td_objects::list::params::ListQueryParams;
 use td_objects::tower_service::with::With;
-use td_objects::types::visible_collections::{VisibleCollections, VisibleTablesCollections};
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -26,16 +26,13 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        // get allowed collections
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
-        // convert them to allowed table collections
-        from_fn(With::<VisibleCollections>::try_convert_to::<VisibleTablesCollections, _>),
+        // check requester has project permissions (sees all collections in the project)
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // list
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
-        from_fn(
-            By::<()>::list_current::<VisibleTablesCollections, { TableDBWithNames::User }, Table>
-        ),
+        from_fn(By::<()>::list_current::<NoFilter, { TableDBWithNames::User }, Table>),
     )
 }
 
@@ -43,9 +40,10 @@ fn service() {
 mod tests {
     use super::*;
     use ta_services::service::TdService;
+    use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
-    use td_error::TdError;
+    use td_error::{TdError, assert_service_error};
     use td_objects::Buildable;
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
@@ -67,21 +65,14 @@ mod tests {
             .await
             .assert_service::<Scoped<ListRequest<()>, ProjectId>, ListResponse<Table>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                // get allowed collections
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
-                // convert them to allowed table collections
-                type_of_val(
-                    &With::<VisibleCollections>::try_convert_to::<VisibleTablesCollections, _>,
-                ),
+                // check requester has project permissions (sees all collections in the project)
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // list
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
                 type_of_val(
-                    &By::<()>::list_current::<
-                        VisibleTablesCollections,
-                        { TableDBWithNames::User },
-                        Table,
-                    >,
+                    &By::<()>::list_current::<NoFilter, { TableDBWithNames::User }, Table>,
                 ),
             ]);
     }
@@ -119,7 +110,7 @@ mod tests {
 
         // List current tables
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 
@@ -182,7 +173,7 @@ mod tests {
 
         // All tables are visible to authorized users
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 
@@ -195,17 +186,17 @@ mod tests {
         assert_eq!(data[0].name, TableName::try_from("table_1")?);
         assert_eq!(data[1].name, TableName::try_from("table_2")?);
 
-        // No tables are visible to authorized users
+        // A user whose role carries no view_project on the project is forbidden.
         let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
             .list((), ListParams::default())
             .in_project(ProjectId::sandbox());
 
         let service = TableListService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
-        let response = response?;
-        let data = response.data;
-
-        assert_eq!(data.len(), 0);
+        assert_service_error(service, request, |err| match err {
+            RbacError::Forbidden(_, _) => {}
+            other => panic!("Expected 'Forbidden', got {other:?}"),
+        })
+        .await;
         Ok(())
     }
 }

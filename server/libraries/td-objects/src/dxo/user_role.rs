@@ -45,7 +45,7 @@ mod definitions {
 
     #[ta_objects::Dlo]
     pub struct FixedUserRole {
-        #[builder(default = "RoleId::user()")]
+        #[builder(default = "RoleId::default_role()")]
         pub role_id: RoleId,
         #[builder(default = "Fixed::from(true)")]
         pub fixed: Fixed,

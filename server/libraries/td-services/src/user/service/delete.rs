@@ -4,8 +4,8 @@
 
 use crate::user::layers::delete::delete_user_validate;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::UserRoleDB;
@@ -28,8 +28,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<DeleteRequest<UserParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, ManageAccess>::check),
         from_fn(With::<DeleteRequest<UserParam>>::extract_name::<UserParam>),
         from_fn(With::<UserParam>::extract::<UserIdName>),
         from_fn(By::<UserIdName>::fetch_one::<UserDB>),
@@ -66,8 +66,8 @@ mod tests {
             .await
             .assert_service::<DeleteRequest<UserParam>, ()>(&[
                 type_of_val(&With::<DeleteRequest<UserParam>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, ManageAccess>::check),
                 type_of_val(&With::<DeleteRequest<UserParam>>::extract_name::<UserParam>),
                 type_of_val(&With::<UserParam>::extract::<UserIdName>),
                 type_of_val(&By::<UserIdName>::fetch_one::<UserDB>),
@@ -92,7 +92,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .delete(
             UserParam::builder()

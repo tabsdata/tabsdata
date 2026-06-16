@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Rbac, RoleMgnt, Scope, System};
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::role::{
     Role, RoleBuilder, RoleDB, RoleDBUpdate, RoleDBUpdateBuilder, RoleDBWithNames, RoleUpdate,
@@ -28,8 +28,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, RoleMgnt>::check),
         from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>),
         from_fn(With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_data::<RoleUpdate>),
         from_fn(With::<RoleUpdate>::try_convert_to::<RoleDBUpdateBuilder, _>),
@@ -71,8 +71,8 @@ mod tests {
                 type_of_val(
                     &With::<UpdateRequest<RoleParam, RoleUpdate>>::extract::<RequestContext>,
                 ),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, RoleMgnt>::check),
                 type_of_val(
                     &With::<UpdateRequest<RoleParam, RoleUpdate>>::extract_name::<RoleParam>,
                 ),
@@ -110,7 +110,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .update(
             RoleParam::builder()

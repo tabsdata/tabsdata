@@ -45,17 +45,17 @@ def role():
     ),
 )
 @click.option(
-    "--coll",
+    "--project",
     help=(
-        "Collection to which the permission will apply. If '"
+        "Project to which the permission will apply. If '"
         f"{ALL_ENTITIES_REPRESENTATION}' is provided, it will "
-        "apply to all collections. This option is only allowed for "
+        "apply to all projects. This option is only allowed for "
         "permissions that require an entity, which are "
         f"{', '.join(str(p) for p in PERMISSION_TYPES_WITH_ENTITY)}."
     ),
 )
 @click.pass_context
-def add_perm(ctx: click.Context, name: str, perm: str, coll: str):
+def add_perm(ctx: click.Context, name: str, perm: str, project: str):
     """Add a permission to a role"""
     verify_login_or_prompt(ctx)
     name = (
@@ -70,33 +70,33 @@ def add_perm(ctx: click.Context, name: str, perm: str, coll: str):
     )
     flattened_list = [item for tup in PERMISSION_TYPES_WITH_ENTITY for item in tup]
     requires_entity = perm in flattened_list
-    if coll:
+    if project:
         if not requires_entity:
             raise click.ClickException(
                 f"Permission '{perm}' does not require an entity. The permissions "
                 "that require an entity are: "
                 f"{', '.join(str(p) for p in PERMISSION_TYPES_WITH_ENTITY)}. "
-                "Please remove the --coll option."
+                "Please remove the --project option."
             )
-        if coll == ALL_ENTITIES_REPRESENTATION:
-            coll = None
+        if project == ALL_ENTITIES_REPRESENTATION:
+            project = None
     else:
         if requires_entity:
-            coll = logical_prompt(
+            project = logical_prompt(
                 ctx,
-                "Collection to which the permission will apply. If "
+                "Project to which the permission will apply. If "
                 f"'{ALL_ENTITIES_REPRESENTATION}' is provided, it will apply "
-                "to all collections.",
+                "to all projects.",
                 default_value=ALL_ENTITIES_REPRESENTATION,
             )
-            if coll == ALL_ENTITIES_REPRESENTATION:
-                coll = None
+            if project == ALL_ENTITIES_REPRESENTATION:
+                project = None
     try:
         click.echo(f"Adding permission of type '{perm}' to role '{name}'")
         click.echo("-" * 10)
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         role = server.get_role(name)
-        permission = role.create_permission(perm, coll)
+        permission = role.create_permission(perm, project)
 
         click.echo("Permission added successfully")
         click.echo(f"Permission ID: {permission.id}")
@@ -208,7 +208,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
     "--id",
     help="ID of the permission to delete.",
     cls=MutuallyExclusiveOption,
-    mutually_exclusive=["perm", "coll"],
+    mutually_exclusive=["perm", "project"],
 )
 @click.option(
     "--perm",
@@ -220,9 +220,9 @@ def delete(ctx: click.Context, name: str, confirm: str):
     mutually_exclusive=["id"],
 )
 @click.option(
-    "--coll",
+    "--project",
     help=(
-        "Collection to which the permission applies. "
+        "Project to which the permission applies. "
         "This option is only allowed for permissions that require an entity, which are "
         f"{', '.join(str(p) for p in PERMISSION_TYPES_WITH_ENTITY)}."
     ),
@@ -230,7 +230,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
     mutually_exclusive=["id"],
 )
 @click.pass_context
-def delete_perm(ctx: click.Context, name: str, id: str, perm: str, coll: str):
+def delete_perm(ctx: click.Context, name: str, id: str, perm: str, project: str):
     """Delete a permission from a role"""
     verify_login_or_prompt(ctx)
     name = (
@@ -243,7 +243,7 @@ def delete_perm(ctx: click.Context, name: str, id: str, perm: str, coll: str):
     if not perm:
         id = id or logical_prompt(ctx, "ID of the permission to delete")
     else:
-        coll = _obtain_coll_for_perm(perm, coll, ctx)
+        project = _obtain_project_for_perm(perm, project, ctx)
     try:
         if id:
             click.echo(f"Deleting permission from role '{name}' with ID '{id}'")
@@ -255,7 +255,7 @@ def delete_perm(ctx: click.Context, name: str, id: str, perm: str, coll: str):
         if id:
             _delete_permission_by_id(role, id, name)
         else:
-            _delete_permission_by_type_and_entity(perm, coll, role, name)
+            _delete_permission_by_type_and_entity(perm, project, role, name)
 
         click.echo("Permission deleted successfully")
     except Exception as e:
@@ -276,35 +276,37 @@ def _delete_permission_by_id(role: Role, id: str, name: str):
     role.delete_permission(permission)
 
 
-def _obtain_coll_for_perm(perm: str, coll: str, ctx: click.Context):
+def _obtain_project_for_perm(perm: str, project: str, ctx: click.Context):
     flattened_list = [item for tup in PERMISSION_TYPES_WITH_ENTITY for item in tup]
     requires_entity = perm in flattened_list
-    if coll:
+    if project:
         if not requires_entity:
             raise click.ClickException(
                 f"Permission '{perm}' does not require an entity. The permissions "
                 "that require an entity are: "
                 f"{', '.join(str(p) for p in PERMISSION_TYPES_WITH_ENTITY)}. "
-                "Please remove the --coll option."
+                "Please remove the --project option."
             )
-        if coll == ALL_ENTITIES_REPRESENTATION:
-            coll = None
+        if project == ALL_ENTITIES_REPRESENTATION:
+            project = None
     else:
         if requires_entity:
-            coll = logical_prompt(
+            project = logical_prompt(
                 ctx,
-                "Collection to which the permission that will be deleted "
+                "Project to which the permission that will be deleted "
                 "currently applies. Provide "
                 f"'{ALL_ENTITIES_REPRESENTATION}' if it applies "
-                "to all collections.",
+                "to all projects.",
                 default_value=ALL_ENTITIES_REPRESENTATION,
             )
-            if coll == ALL_ENTITIES_REPRESENTATION:
-                coll = None
-    return coll
+            if project == ALL_ENTITIES_REPRESENTATION:
+                project = None
+    return project
 
 
-def _delete_permission_by_type_and_entity(perm: str, coll: str, role: Role, name: str):
+def _delete_permission_by_type_and_entity(
+    perm: str, project: str, role: Role, name: str
+):
     for n, value in VALID_PERMISSION_TYPES:
         if perm.lower() == n or perm.lower() == value:
             permission_type = value
@@ -319,7 +321,7 @@ def _delete_permission_by_type_and_entity(perm: str, coll: str, role: Role, name
         filter=f"permission_type:eq:{permission_type}",
     )
     for p in permissions:
-        if p.entity == coll:
+        if p.entity == project:
             role.delete_permission(p)
             break
     else:

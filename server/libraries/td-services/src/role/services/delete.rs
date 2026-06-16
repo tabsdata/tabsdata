@@ -4,8 +4,8 @@
 
 use crate::role::layers::assert_not_fixed;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Rbac, RoleMgnt, Scope, System};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::role::{RoleDB, RoleDBWithNames};
@@ -29,8 +29,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<DeleteRequest<RoleParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, RoleMgnt>::check),
         from_fn(With::<DeleteRequest<RoleParam>>::extract_name::<RoleParam>),
         from_fn(With::<RoleParam>::extract::<RoleIdName>),
         // Find role to delete
@@ -76,8 +76,8 @@ mod tests {
             .await
             .assert_service::<DeleteRequest<RoleParam>, ()>(&[
                 type_of_val(&With::<DeleteRequest<RoleParam>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, RoleMgnt>::check),
                 type_of_val(&With::<DeleteRequest<RoleParam>>::extract_name::<RoleParam>),
                 type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
                 // Find role to delete
@@ -147,7 +147,7 @@ mod tests {
         let _hero_permissions = db
             .seed()
             .permission(
-                PermissionType::try_from("cr").unwrap(),
+                PermissionType::try_from("role_mgnt").unwrap(),
                 None,
                 None,
                 &hero_role,
@@ -157,7 +157,7 @@ mod tests {
         let _villain_permissions = db
             .seed()
             .permission(
-                PermissionType::try_from("cr").unwrap(),
+                PermissionType::try_from("role_mgnt").unwrap(),
                 None,
                 None,
                 &villain_role,
@@ -172,7 +172,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .delete(RoleParam::builder().role(role_id_name.clone()).build()?);
         let service = DeleteRoleService::with_defaults(db.clone()).service();
@@ -210,7 +210,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .delete(
             RoleParam::builder()

@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::role::{Role, RoleBuilder, RoleDBWithNames};
 use td_objects::rest_urls::RoleParam;
@@ -26,8 +26,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ReadRequest<RoleParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
         from_fn(With::<ReadRequest<RoleParam>>::extract_name::<RoleParam>),
         from_fn(With::<RoleParam>::extract::<RoleIdName>),
         from_fn(By::<RoleIdName>::fetch_one::<RoleDBWithNames>),
@@ -61,8 +61,8 @@ mod tests {
             .await
             .assert_service::<ReadRequest<RoleParam>, Role>(&[
                 type_of_val(&With::<ReadRequest<RoleParam>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
                 type_of_val(&With::<ReadRequest<RoleParam>>::extract_name::<RoleParam>),
                 type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
                 type_of_val(&By::<RoleIdName>::fetch_one::<RoleDBWithNames>),
@@ -84,7 +84,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .read(
             RoleParam::builder()
@@ -123,7 +123,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .read(
             RoleParam::builder()

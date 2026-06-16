@@ -19,7 +19,6 @@ use crate::test_utils::seed_collection::{seed_collection, seed_collection_in_gro
 use crate::test_utils::seed_execution::{seed_cron_execution, seed_execution};
 use crate::test_utils::seed_function::seed_function;
 use crate::test_utils::seed_group::seed_group;
-use crate::test_utils::seed_inter_collection_permission::seed_inter_collection_permission;
 use crate::test_utils::seed_logical_input::seed_logical_input;
 use crate::test_utils::seed_permission::seed_permission;
 use crate::test_utils::seed_physical_function_run::seed_physical_function_run;
@@ -39,7 +38,6 @@ use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
 use td_objects::dxo::group::GroupDB;
-use td_objects::dxo::inter_collection_permission::InterCollectionPermissionDB;
 use td_objects::dxo::logical::LogicalFunctionRunInputDB;
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
@@ -52,10 +50,9 @@ use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
-    CollectionId, CollectionName, DependencyPos, Description, EntityId, EntityName, GroupId,
-    GroupName, LogicalFunctionRunStatus, PermissionType, ProjectName, RoleId, RoleName,
-    ToCollectionId, TransactionKey, UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus,
-    WorkerStatus, WorkerType,
+    CollectionName, DependencyPos, Description, EntityId, EntityName, GroupId, GroupName,
+    LogicalFunctionRunStatus, PermissionType, ProjectName, RoleId, RoleName, TransactionKey,
+    UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus, WorkerStatus, WorkerType,
 };
 
 query_handle! {
@@ -160,14 +157,6 @@ impl<E: QueryExecutor> Seed<E> {
             status,
         )
         .await
-    }
-
-    pub async fn inter_collection_permission(
-        self,
-        from_collection: &CollectionId,
-        to_collection: &ToCollectionId,
-    ) -> Result<InterCollectionPermissionDB, TdError> {
-        seed_inter_collection_permission(self.executor, from_collection, to_collection).await
     }
 
     pub async fn permission(

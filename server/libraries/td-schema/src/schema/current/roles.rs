@@ -3,10 +3,11 @@
 //
 
 use sea_query::{
-    Alias, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, InsertStatement, JoinType, Keyword, Query, Table,
-    TableCreateStatement,
+    Alias, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, InsertStatement, JoinType, Keyword,
+    Query, Table, TableCreateStatement,
 };
 
+use super::projects::Projects;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -26,6 +27,8 @@ pub enum Roles {
     CreatedById,
     ModifiedOn,
     ModifiedById,
+    Kind,
+    ProjectId,
     Fixed,
 }
 
@@ -45,7 +48,16 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Roles::CreatedById).text().not_null())
                 .col(ColumnDef::new(Roles::ModifiedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Roles::ModifiedById).text().not_null())
+                .col(ColumnDef::new(Roles::Kind).text().not_null())
+                .col(ColumnDef::new(Roles::ProjectId).text().null())
                 .col(ColumnDef::new(Roles::Fixed).boolean().not_null())
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Roles::Table, Roles::ProjectId)
+                        .to(Projects::Table, Projects::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
                 .to_owned(),
         ]
     }
@@ -72,6 +84,8 @@ impl Entity for Defs {
                     b.name_or_id((modified_by_user.clone(), Users::Name), (Roles::Table, Roles::ModifiedById)),
                     Alias::new("modified_by"),
                 )
+                .expr(Expr::col((Roles::Table, Roles::Kind)))
+                .expr(Expr::col((Roles::Table, Roles::ProjectId)))
                 .expr(Expr::col((Roles::Table, Roles::Fixed)))
                 .from(Roles::Table)
                 .join_as(
@@ -91,15 +105,16 @@ impl Entity for Defs {
     }
 
     fn seeds(&self) -> Vec<InsertStatement> {
+        // (id, name, description, kind). project_id is NULL for the built-in
+        // system roles (per-project roles carry a project_id, but none are seeded).
         let role_inserts = [
-            ("00000000000000000000000008", "sys_admin", "System Administrator Role"),
-            ("0000000000000000000000000C", "sec_admin", "Security Administrator Role"),
-            ("0000000000000000000000000G", "user", "User Role"),
+            ("00000000000000000000000008", "sys_admin", "System Administrator Role", "sys_admin"),
+            ("0000000000000000000000000G", "default", "Default Role", "default"),
         ];
 
         role_inserts
             .iter()
-            .map(|(id, name, desc)| {
+            .map(|(id, name, desc, kind)| {
                 Query::insert()
                     .into_table(Roles::Table)
                     .columns([
@@ -110,6 +125,8 @@ impl Entity for Defs {
                         Roles::CreatedById,
                         Roles::ModifiedOn,
                         Roles::ModifiedById,
+                        Roles::Kind,
+                        Roles::ProjectId,
                         Roles::Fixed,
                     ])
                     .values_panic([
@@ -120,6 +137,8 @@ impl Entity for Defs {
                         SYSTEM_USER_ID.into(),
                         Keyword::CurrentTimestamp.into(),
                         SYSTEM_USER_ID.into(),
+                        (*kind).into(),
+                        Expr::val(Option::<String>::None).into(),
                         true.into(),
                     ])
                     .to_owned()

@@ -17,7 +17,7 @@ mod definitions {
         #[dxo(extractor)]
         pub password: Password,
         #[dxo(extractor)]
-        #[serde(default = "RoleName::user")]
+        #[serde(default = "RoleName::default_role")]
         pub role: RoleName,
     }
 

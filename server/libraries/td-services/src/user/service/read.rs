@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, Requester, SecAdmin, SystemOrUserId};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, Rbac, Scope, SelfUser, User};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::user::{UserDBWithNames, UserRead, UserReadBuilder};
 use td_objects::rest_urls::UserParam;
@@ -30,8 +30,8 @@ fn service() {
         from_fn(With::<UserParam>::extract::<UserIdName>),
         from_fn(By::<UserIdName>::fetch_one::<UserDBWithNames>),
         from_fn(With::<UserDBWithNames>::extract::<UserId>),
-        from_fn(AuthzOn::<SystemOrUserId>::set),
-        from_fn(Authz::<SecAdmin, Requester>::check),
+        from_fn(Scope::<User>::set),
+        from_fn(Rbac::<User, (SelfUser, ManageAccess)>::check),
         from_fn(With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
         from_fn(With::<UserReadBuilder>::build::<UserRead>),
     )
@@ -64,8 +64,8 @@ mod tests {
                 type_of_val(&With::<UserParam>::extract::<UserIdName>),
                 type_of_val(&By::<UserIdName>::fetch_one::<UserDBWithNames>),
                 type_of_val(&With::<UserDBWithNames>::extract::<UserId>),
-                type_of_val(&AuthzOn::<SystemOrUserId>::set),
-                type_of_val(&Authz::<SecAdmin, Requester>::check),
+                type_of_val(&Scope::<User>::set),
+                type_of_val(&Rbac::<User, (SelfUser, ManageAccess)>::check),
                 type_of_val(&With::<UserDBWithNames>::try_convert_to::<UserReadBuilder, _>),
                 type_of_val(&With::<UserReadBuilder>::build::<UserRead>),
             ]);
@@ -82,7 +82,7 @@ mod tests {
 
         let service = ReadUserService::with_defaults(db.clone()).service();
 
-        let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::user()).read(
+        let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::default_role()).read(
             UserParam::builder()
                 .user(UserIdName::from_str(&user_name.to_string()).unwrap())
                 .build()

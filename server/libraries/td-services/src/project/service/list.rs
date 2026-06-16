@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, NoPermissions, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{CreateProjects, Rbac, Scope, System};
 use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::project::ProjectRead;
@@ -26,8 +26,10 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<NoPermissions>::check),
+        from_fn(Scope::<System>::system),
+        // List is open to any authenticated role: every user holds the
+        // `default` system role, whose `create_projects` grant gates this.
+        from_fn(Rbac::<System, CreateProjects>::check),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<ProjectRead>, _>),
         from_fn(By::<()>::list::<NoFilter, ProjectRead>),
@@ -48,8 +50,8 @@ mod tests {
             .await
             .assert_service::<ListRequest<()>, ListResponse<ProjectRead>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<NoPermissions>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, CreateProjects>::check),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<ProjectRead>, _>),
                 type_of_val(&By::<()>::list::<NoFilter, ProjectRead>),

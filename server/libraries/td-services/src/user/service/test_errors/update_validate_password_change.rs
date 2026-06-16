@@ -21,7 +21,7 @@ async fn test_cannot_change_self_password(db: TdPool) {
     let ctx = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
-        RoleId::sec_admin(),
+        RoleId::sys_admin(),
     );
 
     let update = UserUpdate::builder()

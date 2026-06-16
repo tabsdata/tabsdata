@@ -36,7 +36,6 @@ pub mod global_status;
 pub mod graph;
 pub mod group;
 pub mod inter_collection_access;
-pub mod inter_collection_permission;
 pub mod logical;
 pub mod metrics;
 pub mod permission;

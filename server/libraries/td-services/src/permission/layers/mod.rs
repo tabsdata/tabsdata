@@ -6,12 +6,12 @@ use crate::permission::PermissionError;
 use std::ops::Deref;
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::permission::{
     PermissionCreate, PermissionDB, PermissionDBBuilder, PermissionDBWithNames,
 };
+use td_objects::dxo::project::ProjectDB;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionName, EntityId, PermissionEntityType, RoleIdName};
+use td_objects::types::basic::{EntityId, PermissionEntityType, ProjectName, RoleIdName};
 use td_queries::LiveEntry;
 use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
@@ -35,13 +35,10 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
         let entity_type = permission_type.on_entity_type();
 
         let entity_id = if let Some(entity_name) = entity_name {
-            let collection_name = CollectionName::try_from(entity_name.to_string())?;
-            let collection = conn
-                .live()
-                .fetch_one::<CollectionDB>(&collection_name)
-                .await?;
+            let project_name = ProjectName::try_from(entity_name.to_string())?;
+            let project = conn.live().fetch_one::<ProjectDB>(&project_name).await?;
 
-            EntityId::try_from(collection.id)?
+            EntityId::try_from(project.id)?
         } else {
             EntityId::all_entities()
         };
@@ -55,20 +52,20 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
     }
 }
 
-pub async fn is_permission_with_names_on_a_single_collection(
+pub async fn is_permission_with_names_on_a_single_project(
     permission: Ref<PermissionDBWithNames>,
 ) -> Result<Condition, TdError> {
     Ok(Condition(
-        permission.permission_type.on_entity_type() == PermissionEntityType::Collection
+        permission.permission_type.on_entity_type() == PermissionEntityType::Project
             && permission.entity_id.is_some(),
     ))
 }
 
-pub async fn is_permission_on_a_single_collection(
+pub async fn is_permission_on_a_single_project(
     permission: Ref<PermissionDB>,
 ) -> Result<Condition, TdError> {
     Ok(Condition(
-        permission.permission_type.on_entity_type() == PermissionEntityType::Collection
+        permission.permission_type.on_entity_type() == PermissionEntityType::Project
             && !permission.entity_id.is_all_entities(),
     ))
 }

@@ -110,7 +110,7 @@ mod tests {
         let context = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         );
         let router = router.clone().into();
         router.layer(Extension(context.clone()))

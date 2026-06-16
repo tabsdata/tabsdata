@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, Requester, SecAdmin, SystemOrRoleId};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, Rbac, Role, Scope, SelfRole};
 use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::permission::Permission;
@@ -33,8 +33,8 @@ fn service() {
         from_fn(With::<RoleParam>::extract::<RoleIdName>),
         from_fn(By::<RoleIdName>::fetch_one::<RoleDB>),
         from_fn(With::<RoleDB>::extract::<RoleId>),
-        from_fn(AuthzOn::<SystemOrRoleId>::set),
-        from_fn(Authz::<SecAdmin, Requester>::check),
+        from_fn(Scope::<Role>::set),
+        from_fn(Rbac::<Role, (SelfRole, ManageAccess)>::check),
         from_fn(With::<ListRequest<RoleParam>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Permission>, _>),
         from_fn(By::<RoleId>::list::<NoFilter, Permission>),
@@ -70,8 +70,8 @@ mod tests {
                 type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
                 type_of_val(&By::<RoleIdName>::fetch_one::<RoleDB>),
                 type_of_val(&With::<RoleDB>::extract::<RoleId>),
-                type_of_val(&AuthzOn::<SystemOrRoleId>::set),
-                type_of_val(&Authz::<SecAdmin, Requester>::check),
+                type_of_val(&Scope::<Role>::set),
+                type_of_val(&Rbac::<Role, (SelfRole, ManageAccess)>::check),
                 type_of_val(&With::<ListRequest<RoleParam>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Permission>, _>),
                 type_of_val(&By::<RoleId>::list::<NoFilter, Permission>),
@@ -89,13 +89,13 @@ mod tests {
             .await?;
         let seeded = db
             .seed()
-            .permission(PermissionType::SysAdmin, None, None, &role)
+            .permission(PermissionType::CreateProjects, None, None, &role)
             .await?;
 
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .list(
             RoleParam::builder()

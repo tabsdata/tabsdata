@@ -106,11 +106,11 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_execution_details(db: TdPool) -> Result<(), TdError> {
-        let execution = test_execute(db.clone(), false, false, true, false).await?;
+        let execution = test_execute(db.clone(), false, false, false).await?;
 
         let service = ExecutionDetailsService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .read(
                     ExecutionParam::builder()
                         .execution(ExecutionIdName::from_str(&execution.id.to_string())?)

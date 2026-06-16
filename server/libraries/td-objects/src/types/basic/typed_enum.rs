@@ -358,40 +358,68 @@ pub enum GlobalStatus {
     Unknown,
 }
 
+/// The entity type a permission targets — the `entity_type` half of the
+/// `(entity_type, entity_id)` pair (TEDA).
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq)]
 pub enum PermissionEntityType {
-    #[typed_enum(rename = "s")]
+    #[typed_enum(rename = "system")]
     System,
-    #[typed_enum(rename = "c")]
-    Collection,
+    #[typed_enum(rename = "project")]
+    Project,
 }
 
+/// A permission name, stored in `permissions.permission_type`. Three target the
+/// `system` entity, three target a `project` entity (TEDA). The stored value is
+/// the exact user-facing symbol — no internal/external translation layer.
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq)]
 pub enum PermissionType {
-    #[typed_enum(rename = "sa")]
-    SysAdmin,
-    #[typed_enum(rename = "ss")]
-    SecAdmin,
-    #[typed_enum(rename = "ca")]
-    CollectionAdmin,
-    #[typed_enum(rename = "cd")]
-    CollectionDev,
-    #[typed_enum(rename = "cx")]
-    CollectionExec,
-    #[typed_enum(rename = "cr")]
-    CollectionRead,
+    // system permissions (entity `system:__system__`)
+    #[typed_enum(rename = "manage_access")]
+    ManageAccess,
+    #[typed_enum(rename = "create_projects")]
+    CreateProjects,
+    #[typed_enum(rename = "role_mgnt")]
+    RoleMgnt,
+    // project permissions (entity `project:<id>` or `project:__all__`)
+    #[typed_enum(rename = "view_project")]
+    ViewProject,
+    #[typed_enum(rename = "develop_project")]
+    DevelopProject,
+    #[typed_enum(rename = "manage_project")]
+    ManageProject,
 }
 
 impl PermissionType {
     pub fn on_entity_type(&self) -> PermissionEntityType {
-        if matches!(self, &Self::SysAdmin | &Self::SecAdmin) {
-            PermissionEntityType::System
-        } else {
-            PermissionEntityType::Collection
+        match self {
+            Self::ManageAccess | Self::CreateProjects | Self::RoleMgnt => {
+                PermissionEntityType::System
+            }
+            Self::ViewProject | Self::DevelopProject | Self::ManageProject => {
+                PermissionEntityType::Project
+            }
         }
     }
+}
+
+/// The kind of a role, stored in `roles.kind` (TEDA's five user-visible role
+/// kinds). Two are system roles (`project_id` NULL), three are per-project
+/// roles (`project_id` set).
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
+pub enum RoleKind {
+    #[typed_enum(rename = "sys_admin")]
+    SysAdmin,
+    #[typed_enum(rename = "default")]
+    Default,
+    #[typed_enum(rename = "prj_admin")]
+    PrjAdmin,
+    #[typed_enum(rename = "prj_dev")]
+    PrjDev,
+    #[typed_enum(rename = "prj_view")]
+    PrjView,
 }
 
 /// Kind of replay-audit row written by the replay / delete-replay

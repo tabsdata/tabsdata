@@ -3,15 +3,15 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{CollAdmin, CollDev, CollExec, CollRead};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
+use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::function::{Function, FunctionDBWithNames};
 use td_objects::list::params::ListQueryParams;
 use td_objects::rest_urls::AtTimeParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::AtTime;
-use td_objects::types::visible_collections::{VisibleCollections, VisibleFunctionsCollections};
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -30,16 +30,16 @@ fn service() {
         from_fn(With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
         from_fn(With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
         from_fn(With::<AtTimeParam>::extract::<AtTime>),
-        // get allowed collections
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
-        // convert them to allowed function collections
-        from_fn(With::<VisibleCollections>::try_convert_to::<VisibleFunctionsCollections, _>),
-        // list
+        // check requester can view the current project; within the project
+        // every collection is visible (no cross-project visibility)
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
+        // list (all collections in the current project)
         from_fn(With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
         from_fn(
             By::<()>::historic_list_versions::<
-                VisibleFunctionsCollections,
+                NoFilter,
                 { FunctionDBWithNames::Available },
                 Function,
             >
@@ -81,18 +81,16 @@ mod tests {
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
                 type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
-                // get allowed collections
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::visible_collections),
-                // convert them to allowed function collections
-                type_of_val(
-                    &With::<VisibleCollections>::try_convert_to::<VisibleFunctionsCollections, _>,
-                ),
-                // list
+                // check requester can view the current project; within the project
+                // every collection is visible (no cross-project visibility)
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
+                // list (all collections in the current project)
                 type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
                 type_of_val(
                     &By::<()>::historic_list_versions::<
-                        VisibleFunctionsCollections,
+                        NoFilter,
                         { FunctionDBWithNames::Available },
                         Function,
                     >,
@@ -160,7 +158,7 @@ mod tests {
             .snippet(Some("function_foo snippet".try_into()?))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -178,7 +176,7 @@ mod tests {
 
         // Delete function_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .delete(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -215,7 +213,7 @@ mod tests {
         // Actual test
         // t0 -> no functions
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     AtTimeParam::builder().at(t0).build()?,
                     ListParams::default(),
@@ -231,7 +229,7 @@ mod tests {
 
         // t1 -> function_1
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     AtTimeParam::builder().at(t1).build()?,
                     ListParamsBuilder::default()
@@ -251,7 +249,7 @@ mod tests {
 
         // t2 -> function_1 and function_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     AtTimeParam::builder().at(t2).build()?,
                     ListParams::default(),
@@ -269,7 +267,7 @@ mod tests {
 
         // t3 -> function_2 and function_3
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     AtTimeParam::builder().at(t3).build()?,
                     ListParams::default(),
@@ -287,7 +285,7 @@ mod tests {
 
         // t4 -> function_3
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     AtTimeParam::builder().at(t4).build()?,
                     ListParams::default(),
@@ -304,7 +302,7 @@ mod tests {
 
         // t5 -> function_3 and function_5
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     AtTimeParam::builder().at(t5).build()?,
                     ListParams::default(),

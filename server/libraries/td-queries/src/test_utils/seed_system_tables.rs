@@ -32,7 +32,7 @@ pub(crate) async fn seed_system_tables(
     let request_context = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
-        RoleId::sec_admin(),
+        RoleId::sys_admin(),
     );
 
     // System tables

@@ -2523,12 +2523,12 @@ class RolePermissionTypes(Enum):
     Enum for permission types.
     """
 
-    COLL_ADMIN = "ca"
-    COLL_DEV = "cd"
-    COLL_EXE = "cx"
-    COLL_READ = "cr"
-    SEC_ADMIN = "ss"
-    SYS_ADMIN = "sa"
+    MANAGE_ACCESS = "manage_access"
+    CREATE_PROJECTS = "create_projects"
+    ROLE_MGNT = "role_mgnt"
+    VIEW_PROJECT = "view_project"
+    DEVELOP_PROJECT = "develop_project"
+    MANAGE_PROJECT = "manage_project"
 
 
 VALID_PERMISSION_TYPES = [
@@ -2537,20 +2537,16 @@ VALID_PERMISSION_TYPES = [
 
 PERMISSION_TYPES_WITH_ENTITY = [
     (
-        RolePermissionTypes.COLL_ADMIN.name.lower(),
-        RolePermissionTypes.COLL_ADMIN.value.lower(),
+        RolePermissionTypes.VIEW_PROJECT.name.lower(),
+        RolePermissionTypes.VIEW_PROJECT.value.lower(),
     ),
     (
-        RolePermissionTypes.COLL_DEV.name.lower(),
-        RolePermissionTypes.COLL_DEV.value.lower(),
+        RolePermissionTypes.DEVELOP_PROJECT.name.lower(),
+        RolePermissionTypes.DEVELOP_PROJECT.value.lower(),
     ),
     (
-        RolePermissionTypes.COLL_EXE.name.lower(),
-        RolePermissionTypes.COLL_EXE.value.lower(),
-    ),
-    (
-        RolePermissionTypes.COLL_READ.name.lower(),
-        RolePermissionTypes.COLL_READ.value.lower(),
+        RolePermissionTypes.MANAGE_PROJECT.name.lower(),
+        RolePermissionTypes.MANAGE_PROJECT.value.lower(),
     ),
 ]
 

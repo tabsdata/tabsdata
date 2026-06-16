@@ -150,7 +150,7 @@ mod tests {
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
             .password(Password::try_from("tabsdata")?)
-            .role(RoleName::try_from("user")?)
+            .role(RoleName::try_from("default")?)
             .build()?;
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
@@ -166,7 +166,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(original_access_token_id, UserId::admin(), RoleId::user())
+            RequestContext::with(original_access_token_id, UserId::admin(), RoleId::default_role())
                 .update((), request);
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
@@ -201,7 +201,7 @@ mod tests {
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
             .password(Password::try_from("tabsdata")?)
-            .role(RoleName::try_from("user")?)
+            .role(RoleName::try_from("default")?)
             .build()?;
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
@@ -215,7 +215,7 @@ mod tests {
             .role(RoleName::try_from("invalid_role")?)
             .build()?;
 
-        let request = RequestContext::with(access_token_id, UserId::admin(), RoleId::user())
+        let request = RequestContext::with(access_token_id, UserId::admin(), RoleId::default_role())
             .update((), request);
 
         assert_service_error(service, request, |err| match err {

@@ -4,8 +4,8 @@
 
 use crate::function::layers::upload::upload_function_write_to_storage;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
 use td_objects::dxo::bundle::{Bundle, BundleBuilder, BundleDB, BundleDBBuilder};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
@@ -47,9 +47,9 @@ fn service() {
         // The bundle is stored under the collection's base_path, stamped onto the
         // bundle row so it self-locates regardless of later collection changes.
         from_fn(With::<CollectionDB>::extract::<BasePath>),
-        // check requester is coll_admin or coll_dev for the function's collection
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev>::check),
+        // check requester can manage or develop the current project
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
         // Get storage version.
         from_fn(With::<StorageVersion>::default),
         // Write to storage with new bundle id.
@@ -121,9 +121,9 @@ mod tests {
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 type_of_val(&With::<CollectionDB>::extract::<BasePath>),
-                // check requester is coll_admin or coll_dev for the function's collection
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev>::check),
+                // check requester can manage or develop the current project
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
                 // Get storage version.
                 type_of_val(&With::<StorageVersion>::default),
                 // Write to storage with new bundle id.
@@ -160,7 +160,7 @@ mod tests {
         let function_upload = FunctionUpload::new(request);
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -217,7 +217,7 @@ mod tests {
             .unwrap();
         let function_upload = FunctionUpload::new(request);
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{collection_name}"))?)

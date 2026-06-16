@@ -73,7 +73,6 @@ pub(crate) mod tests {
     use std::sync::LazyLock;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
-    use td_authz::tower::AuthzError;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
@@ -96,8 +95,8 @@ pub(crate) mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, Depth, Description, Enabled,
         ExecutionIdName, ExecutionName, ExecutionStatus, FunctionName, FunctionRuntimeValues,
         GroupId, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId,
-        ProjectName, RoleId, TableName, TableNameDto, ToCollectionId, TransactionKey,
-        TransactionStatus, TriggeredOn, UserId, VersionPos,
+        ProjectName, RoleId, TableName, TableNameDto, TransactionKey, TransactionStatus,
+        TriggeredOn, UserId, VersionPos,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::{Buildable, and};
@@ -121,28 +120,21 @@ pub(crate) mod tests {
         };
         use crate::graph::layers::FunctionOrTable;
         use crate::graph::layers::build::GraphBuilder;
-        use crate::scheduler::layers::request::notify_scheduler;
-        use td_authz::Authz;
-        use td_authz::tower::InterColl;
-        use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
+        use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
         use td_database::scoped::Scoped;
         use td_objects::dxo::crudl::RequestContext;
-        use td_objects::dxo::dependency::DependencyDBWithNames;
         use td_objects::dxo::execution::{ExecutionDB, ExecutionDBBuilder, ExecutionRequest};
         use td_objects::dxo::function::FunctionDBWithNames;
-        use td_objects::dxo::inter_collection_access::{
-            InterCollectionAccess, InterCollectionAccessBuilder,
-        };
         use td_objects::dxo::logical::{
             LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB,
             LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
         };
         use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
-        use td_objects::dxo::trigger::TriggerDBWithNames;
+        use crate::scheduler::layers::request::notify_scheduler;
         use td_objects::tower_service::with::With;
         use td_objects::types::basic::ProjectId;
         use td_objects::types::basic::{
-            CollectionId, ExternalUid, FunctionId, FunctionOnly, SkipIfRunning, TriggerType,
+            ExternalUid, FunctionId, FunctionOnly, SkipIfRunning, TriggerType,
         };
         use td_objects::types::recursion::RecursionOptions;
         use td_queries::{insert, insert_vec};
@@ -195,10 +187,9 @@ pub(crate) mod tests {
                     // execute()
                     type_of_val(&With::<ExecutionRequest>::extract::<OverrideDisabledTrigger>),
                     type_of_val(&assert_function_status),
-                    // check requester is coll_admin or coll_exec for the function's collection
-                    type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
-                    type_of_val(&AuthzOn::<CollectionId>::set),
-                    type_of_val(&Authz::<CollAdmin, CollExec>::check),
+                    // check requester can develop the current project (manage or develop)
+                    type_of_val(&Scope::<Project>::set),
+                    type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
                     // Get recursion options
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                     type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
@@ -207,19 +198,6 @@ pub(crate) mod tests {
                     // Find td graph
                     // Find triggers
                     type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_trigger_graph),
-                    // inter collection authz check
-                    type_of_val(
-                        &With::<TriggerDBWithNames>::vec_convert_to::<
-                            InterCollectionAccessBuilder,
-                            _,
-                        >,
-                    ),
-                    type_of_val(
-                        &With::<Vec<InterCollectionAccessBuilder>>::build::<
-                            Vec<InterCollectionAccess>,
-                        >,
-                    ),
-                    type_of_val(&Authz::<InterColl>::check_inter_collection),
                     // Find dependencies. For clarity, we always show the function, even if
                     // generating a table centered graph, the same way we show the tables of
                     // a function centered graph.
@@ -228,19 +206,6 @@ pub(crate) mod tests {
                     type_of_val(
                         &GraphBuilder::<GraphOpts>::find_triggered_functions_dependency_graph,
                     ),
-                    // inter collection authz check
-                    type_of_val(
-                        &With::<DependencyDBWithNames>::vec_convert_to::<
-                            InterCollectionAccessBuilder,
-                            _,
-                        >,
-                    ),
-                    type_of_val(
-                        &With::<Vec<InterCollectionAccessBuilder>>::build::<
-                            Vec<InterCollectionAccess>,
-                        >,
-                    ),
-                    type_of_val(&Authz::<InterColl>::check_inter_collection),
                     // Find output tables
                     type_of_val(&GraphBuilder::<GraphOpts>::find_functions_output_tables),
                     // Find all tables and functions
@@ -291,41 +256,24 @@ pub(crate) mod tests {
             );
     }
 
+    // Projects are silos with no inter-collection checks: triggering across
+    // collections within the same project is always allowed for a
+    // develop_project holder.
     #[td_test::test(db)]
-    async fn test_execute_dependencies_different_collections_permissions_ok(
-        db: TdPool,
-    ) -> Result<(), TdError> {
-        let _ = test_execute(db, true, false, true, false).await?;
+    async fn test_execute_dependencies_different_collections(db: TdPool) -> Result<(), TdError> {
+        let _ = test_execute(db, true, false, false).await?;
         Ok(())
     }
 
     #[td_test::test(db)]
-    async fn test_execute_dependencies_different_collections_permissions_forbidden(
-        db: TdPool,
-    ) -> Result<(), TdError> {
-        let _ = test_execute(db, true, false, false, false).await;
-        Ok(())
-    }
-
-    #[td_test::test(db)]
-    async fn test_execute_trigger_different_collections_permissions_ok(
-        db: TdPool,
-    ) -> Result<(), TdError> {
-        let _ = test_execute(db, false, true, true, false).await;
-        Ok(())
-    }
-
-    #[td_test::test(db)]
-    async fn test_execute_trigger_different_collections_permissions_forbidden(
-        db: TdPool,
-    ) -> Result<(), TdError> {
-        let _ = test_execute(db, false, true, false, false).await;
+    async fn test_execute_trigger_different_collections(db: TdPool) -> Result<(), TdError> {
+        let _ = test_execute(db, false, true, false).await?;
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_execute_single_function(db: TdPool) -> Result<(), TdError> {
-        let _ = test_execute(db, true, false, true, true).await?;
+        let _ = test_execute(db, true, false, true).await?;
         Ok(())
     }
 
@@ -772,7 +720,6 @@ pub(crate) mod tests {
         db: TdPool,
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
-        with_permission: bool,
         single_function: bool,
     ) -> Result<ExecutionResponse, TdError> {
         let collection_0 = db
@@ -790,32 +737,6 @@ pub(crate) mod tests {
             .seed()
             .collection(&COLLECTION_NAMES[2], &UserId::admin())
             .await?;
-
-        db.scoped(ProjectId::sandbox())
-            .seed()
-            .inter_collection_permission(
-                &collection_0.id,
-                &ToCollectionId::try_from(&collection_1.id)?,
-            )
-            .await?;
-
-        db.scoped(ProjectId::sandbox())
-            .seed()
-            .inter_collection_permission(
-                &collection_0.id,
-                &ToCollectionId::try_from(&collection_2.id)?,
-            )
-            .await?;
-
-        if with_permission {
-            db.scoped(ProjectId::sandbox())
-                .seed()
-                .inter_collection_permission(
-                    &collection_1.id,
-                    &ToCollectionId::try_from(&collection_2.id)?,
-                )
-                .await?;
-        }
 
         let graph_depth = if single_function {
             Some(Depth::ZERO)
@@ -935,7 +856,7 @@ pub(crate) mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection_0.name.to_string())?)
@@ -960,8 +881,9 @@ pub(crate) mod tests {
             None => FUNCTION_NAMES.iter().collect::<Vec<_>>(),
         };
 
-        // with 0 or 1 functions, there is not going to be an inter collection permission issue
-        if with_permission || expected_all_functions.len() <= 1 {
+        // Projects are silos: cross-collection triggering within the project
+        // is always allowed, so every trigger succeeds.
+        {
             let response = response?;
 
             // Check the response
@@ -1094,13 +1016,6 @@ pub(crate) mod tests {
                 assert_eq!(&ltdv.execution_id, &response.id);
             }
             Ok(response)
-        } else {
-            let err = response.err().unwrap();
-            assert_eq!(
-                std::mem::discriminant(&AuthzError::ForbiddenInterCollectionAccess("".to_string())),
-                std::mem::discriminant(err.domain_err())
-            );
-            Err(err)
         }
     }
 
@@ -1290,7 +1205,7 @@ pub(crate) mod tests {
 
         // And then run function_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)
@@ -1437,7 +1352,7 @@ pub(crate) mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)
@@ -1483,7 +1398,7 @@ pub(crate) mod tests {
             .await?;
 
         let trigger = |external_uid: Option<ExternalUid>| {
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     FunctionParam::builder()
                         .collection(

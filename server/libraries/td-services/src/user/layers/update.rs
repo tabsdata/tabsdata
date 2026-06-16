@@ -34,7 +34,7 @@ pub async fn update_user_validate_password_change(
             // a self password change must be done via de password_change endpoint
             return Err(UserError::PasswordChangeNotAllowed)?;
         }
-        // only a sec_admin can make it here without being the requester
+        // only a manage_access holder can make it here without being the requester
     }
     Ok(())
 }

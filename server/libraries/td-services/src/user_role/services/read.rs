@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
+use td_authz::AuthzContext;
 use td_objects::And;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::role::RoleDB;
@@ -29,8 +29,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ReadRequest<UserRoleParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
         from_fn(With::<ReadRequest<UserRoleParam>>::extract_name::<UserRoleParam>),
         from_fn(With::<UserRoleParam>::extract::<RoleIdName>),
         from_fn(By::<RoleIdName>::fetch_one::<RoleDB>),
@@ -69,8 +69,8 @@ mod tests {
             .await
             .assert_service::<ReadRequest<UserRoleParam>, UserRole>(&[
                 type_of_val(&With::<ReadRequest<UserRoleParam>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
                 type_of_val(&With::<ReadRequest<UserRoleParam>>::extract_name::<UserRoleParam>),
                 type_of_val(&With::<UserRoleParam>::extract::<RoleIdName>),
                 type_of_val(&By::<RoleIdName>::fetch_one::<RoleDB>),
@@ -105,7 +105,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .read(
             UserRoleParam::builder()

@@ -5,7 +5,9 @@
 #[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::types::basic::{AtTime, Description, Fixed, RoleId, RoleName, UserId, UserName};
+    use crate::types::basic::{
+        AtTime, Description, Fixed, ProjectId, RoleId, RoleKind, RoleName, UserId, UserName,
+    };
 
     #[ta_objects::Dao]
     #[dao(sql_table = "roles")]
@@ -29,6 +31,13 @@ mod definitions {
         pub modified_on: AtTime,
         #[dxo(updater(include, field = "user_id"))]
         pub modified_by_id: UserId,
+        // TEDA: the role's kind. `default` for API-created custom roles; the
+        // built-in/per-project kinds are set by the system at seed/mint time.
+        #[builder(default = "RoleKind::Default")]
+        pub kind: RoleKind,
+        // NULL for system roles (sys_admin/default), set for per-project roles.
+        #[builder(default)]
+        pub project_id: Option<ProjectId>,
         #[builder(default = "Fixed::from(false)")]
         pub fixed: Fixed,
     }

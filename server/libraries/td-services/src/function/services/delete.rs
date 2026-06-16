@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::do_authz::SKIP_AUTHZ;
 use crate::function::layers::delete::build_deleted_function_version;
 use crate::function::layers::{
     register_dependencies, register_tables, register_triggers, register_workers,
@@ -10,8 +9,8 @@ use crate::function::layers::{
 use crate::scheduler::layers::request::notify_scheduler;
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
 use td_execution::SchedulerNotify;
 use td_objects::And;
 use td_objects::dxo::collection::CollectionDB;
@@ -53,9 +52,9 @@ fn service() {
         // Get collection. Extract collection id and name.
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        // check requester is coll_admin or coll_dev for the function's collection
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev>::check),
+        // check requester can manage or develop the current project
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
         from_fn(With::<CollectionDB>::extract::<CollectionName>),
         // Get function. Extract function version id.
         from_fn(With::<RequestContext>::extract::<AtTime>),
@@ -98,8 +97,8 @@ fn service() {
         from_fn(With::<ResetState>::default),
         // And register new ones
         register_tables(),
-        register_dependencies::<_, SKIP_AUTHZ>(),
-        register_triggers::<_, SKIP_AUTHZ>(),
+        register_dependencies(),
+        register_triggers(),
         register_workers(),
         // Wake the scheduler so cron/stage workers stop immediately
         // instead of at the next polling tick.
@@ -158,9 +157,9 @@ mod tests {
                 // Get collection. Extract collection id and name.
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                // check requester is coll_admin or coll_dev for the function's collection
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev>::check),
+                // check requester can manage or develop the current project
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
                 // Get function. Extract function version id.
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
@@ -260,7 +259,7 @@ mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .delete(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -314,7 +313,7 @@ mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .delete(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -384,7 +383,7 @@ mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .delete(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -454,7 +453,7 @@ mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .delete(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -518,7 +517,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -551,7 +550,7 @@ mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .delete(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -616,7 +615,7 @@ mod tests {
             )])))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -629,7 +628,7 @@ mod tests {
 
         // and then just deleted
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .delete(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)

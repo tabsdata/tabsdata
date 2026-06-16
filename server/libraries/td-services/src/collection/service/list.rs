@@ -3,13 +3,13 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::NoPermissions;
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
+use td_objects::NoFilter;
 use td_objects::dxo::collection::CollectionRead;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::list::params::ListQueryParams;
 use td_objects::tower_service::with::With;
-use td_objects::types::visible_collections::VisibleCollections;
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -26,10 +26,11 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(Authz::<NoPermissions>::visible_collections),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<CollectionRead>, _>),
-        from_fn(By::<()>::list::<VisibleCollections, CollectionRead>),
+        from_fn(By::<()>::list::<NoFilter, CollectionRead>),
     )
 }
 
@@ -39,9 +40,10 @@ mod tests {
     use std::sync::Arc;
     use ta_services::service::TdService;
     use td_authz::AuthzContext;
+    use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
-    use td_error::TdError;
+    use td_error::{TdError, assert_service_error};
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, Description, ProjectId, RoleId, RoleName, UserEnabled,
@@ -61,12 +63,13 @@ mod tests {
             .await
             .assert_service::<Scoped<ListRequest<()>, ProjectId>, ListResponse<CollectionRead>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&Authz::<NoPermissions>::visible_collections),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(
                     &With::<ListParams>::try_convert_to::<ListQueryParams<CollectionRead>, _>,
                 ),
-                type_of_val(&By::<()>::list::<VisibleCollections, CollectionRead>),
+                type_of_val(&By::<()>::list::<NoFilter, CollectionRead>),
             ]);
     }
 
@@ -81,7 +84,7 @@ mod tests {
             .unwrap();
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 
@@ -117,9 +120,11 @@ mod tests {
             .collection(&name, &UserId::admin())
             .await?;
 
-        // All collections are visible to authorized users
+        // Within the project, every collection is visible to users with
+        // view_project (the admin user holds sys_admin, which grants
+        // manage_project on all projects).
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 
@@ -130,16 +135,17 @@ mod tests {
         assert_eq!(list.len, 1);
         assert_eq!(list.data[0].name, name);
 
-        // No collections are visible to unauthorized users
+        // A user whose role carries no view_project on the project is forbidden.
         let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
             .list((), ListParams::default())
             .in_project(ProjectId::sandbox());
 
         let service = ListCollectionsService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request).await;
-        assert!(response.is_ok());
-        let list = response?;
-        assert_eq!(list.len, 0);
+        assert_service_error(service, request, |err| match err {
+            RbacError::Forbidden(_, _) => {}
+            other => panic!("Expected 'Forbidden', got {other:?}"),
+        })
+        .await;
         Ok(())
     }
 }

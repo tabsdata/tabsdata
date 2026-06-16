@@ -131,7 +131,7 @@ mod tests {
 
         let service = SynchrotronService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 

@@ -4,8 +4,8 @@
 
 use crate::function_run::layers::resolve_bound_function_run;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::And;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
@@ -17,7 +17,7 @@ use td_objects::dxo::physical_function_run::{
 use td_objects::rest_urls::PhysicalFunctionRunParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    CollectionId, CollectionIdName, ExecutionId, ExecutionIdName, FunctionIdName, FunctionVersionId,
+    CollectionIdName, ExecutionId, ExecutionIdName, FunctionIdName, FunctionVersionId, ProjectId,
 };
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
@@ -39,12 +39,12 @@ fn service() {
             With::<ReadRequest<PhysicalFunctionRunParam>>::extract_name::<PhysicalFunctionRunParam>
         ),
         from_fn(With::<PhysicalFunctionRunParam>::extract::<CollectionIdName>),
-        // find collection ID
+        // find collection (resolves the owning project for the scope)
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        // check requester has collection permissions
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        from_fn(With::<CollectionDB>::extract::<ProjectId>),
+        // check requester can view the project
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // find function version ID
         from_fn(With::<PhysicalFunctionRunParam>::extract::<FunctionIdName>),
         from_fn(
@@ -109,12 +109,12 @@ mod tests {
                     >,
                 ),
                 type_of_val(&With::<PhysicalFunctionRunParam>::extract::<CollectionIdName>),
-                // find collection ID
+                // find collection (resolves the owning project for the scope)
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                // check requester has collection permissions
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                type_of_val(&With::<CollectionDB>::extract::<ProjectId>),
+                // check requester can view the project
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // find function version ID
                 type_of_val(&With::<PhysicalFunctionRunParam>::extract::<FunctionIdName>),
                 type_of_val(
@@ -196,7 +196,7 @@ mod tests {
 
         // Test
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .read(
                     PhysicalFunctionRunParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)

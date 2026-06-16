@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
 use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::role::Role;
@@ -26,8 +26,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Role>, _>),
         from_fn(By::<()>::list::<NoFilter, Role>),
@@ -50,7 +50,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_role(db: TdPool) {
-        use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
+        use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
         use td_tower::metadata::type_of_val;
 
         ListRoleService::with_defaults(db)
@@ -58,8 +58,8 @@ mod tests {
             .await
             .assert_service::<ListRequest<()>, ListResponse<Role>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Role>, _>),
                 type_of_val(&By::<()>::list::<NoFilter, Role>),
@@ -79,24 +79,23 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .list((), ListParams::default());
 
         let service = ListRoleService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        assert_eq!(response.len, 4); // 3 default roles + 1
+        assert_eq!(response.len, 3); // 2 default roles + 1
         let response = response.data;
         assert_eq!(response[0].name, RoleName::try_from("sys_admin")?);
-        assert_eq!(response[1].name, RoleName::try_from("sec_admin")?);
-        assert_eq!(response[2].name, RoleName::try_from("user")?);
+        assert_eq!(response[1].name, RoleName::try_from("default")?);
 
         let found = db
             .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin").unwrap())
             .await?;
-        let role = response.get(3).unwrap();
+        let role = response.get(2).unwrap();
         assert_eq!(role.id, found.id);
         assert_eq!(role.name, found.name);
         assert_eq!(role.description, found.description);

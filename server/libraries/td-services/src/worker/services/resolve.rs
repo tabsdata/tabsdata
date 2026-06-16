@@ -179,7 +179,7 @@ mod tests {
             function_run_id: pfr.id.clone(),
             worker_id: worker.id,
         };
-        let read = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+        let read = RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
             .read(param)
             .in_project(ProjectId::sandbox());
         let response = ResolveWorkerMessageService::with_defaults(db.clone())

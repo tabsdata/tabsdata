@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SysAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::dxo::collection::{
     CollectionCreate, CollectionCreateDB, CollectionCreateDBBuilder, CollectionDBWithNames,
     CollectionRead, CollectionReadBuilder,
@@ -30,8 +30,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<CreateRequest<(), CollectionCreate>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SysAdmin>::check),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<CreateRequest<(), CollectionCreate>>::extract_data::<CollectionCreate>),
         // resolve the group name to its GroupId
         from_fn(With::<CollectionCreate>::extract::<GroupName>),
@@ -84,8 +84,8 @@ mod tests {
                 type_of_val(
                     &With::<CreateRequest<(), CollectionCreate>>::extract::<RequestContext>,
                 ),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SysAdmin>::check),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(
                     &With::<CreateRequest<(), CollectionCreate>>::extract_data::<CollectionCreate>,
                 ),
@@ -245,7 +245,7 @@ mod tests {
         // app applies no collection filter; RLS does the isolation.
         for (project, name) in [(&project_a, "ca"), (&project_b, "cb")] {
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                     .list((), ListParams::default())
                     .in_project(*project);
             let list = ListCollectionsService::with_defaults(db.clone())

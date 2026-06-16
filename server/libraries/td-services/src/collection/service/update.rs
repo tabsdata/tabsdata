@@ -6,8 +6,8 @@ use crate::collection::service::layer::update::{
     UpdateCollectionDBBuilderUpdate, update_collection_validate,
 };
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SysAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::dxo::collection::{
     CollectionDB, CollectionDBWithNames, CollectionRead, CollectionReadBuilder, CollectionUpdate,
     CollectionUpdateDB, CollectionUpdateDBBuilder,
@@ -34,8 +34,8 @@ fn service() {
         from_fn(
             With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract::<RequestContext>
         ),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SysAdmin>::check),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(
             With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract_name::<CollectionParam>
         ),
@@ -105,8 +105,8 @@ mod tests {
                         RequestContext,
                     >,
                 ),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SysAdmin>::check),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(
                     &With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract_name::<
                         CollectionParam,
@@ -317,7 +317,7 @@ mod tests {
             .unwrap();
         let upload = FunctionUpload::new(upload_request);
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -344,7 +344,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -403,7 +403,7 @@ mod tests {
             .function(FunctionIdName::from_str("artifact_fn")?)
             .build()?;
         let download_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .read(FunctionMaybeAtIdName::new(
                     function_param,
                     OptionalAtTimeParam { at: None },

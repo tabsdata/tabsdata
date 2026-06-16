@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::group::{Group, GroupBuilder, GroupDBWithNames};
 use td_objects::rest_urls::GroupParam;
@@ -26,10 +26,10 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ReadRequest<GroupParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        // List + read are open to any authenticated role (groups are
-        // referenced by name across the API).
-        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        from_fn(Scope::<Project>::set),
+        // List + read are open to any role with access to the project
+        // (groups are referenced by name across the API).
+        from_fn(Rbac::<Project, ViewProject>::check),
         from_fn(With::<ReadRequest<GroupParam>>::extract_name::<GroupParam>),
         from_fn(With::<GroupParam>::extract::<GroupIdName>),
         from_fn(By::<GroupIdName>::fetch_one::<GroupDBWithNames>),

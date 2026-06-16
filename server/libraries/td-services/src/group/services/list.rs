@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::group::Group;
@@ -26,9 +26,9 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        // List + read open to any authenticated role.
-        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        from_fn(Scope::<Project>::set),
+        // List + read open to any role with access to the project.
+        from_fn(Rbac::<Project, ViewProject>::check),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Group>, _>),
         from_fn(By::<()>::list::<NoFilter, Group>),

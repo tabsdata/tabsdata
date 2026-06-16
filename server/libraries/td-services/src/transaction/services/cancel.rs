@@ -5,8 +5,8 @@
 use crate::execution::layers::update_status::update_function_run_status;
 use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
@@ -37,10 +37,10 @@ fn service() {
         from_fn(With::<TransactionParam>::extract::<TransactionIdName>),
         // Find function run.
         from_fn(By::<TransactionIdName>::fetch_one::<TransactionDB>),
-        // check requester is coll_admin or coll_exec for the transaction's collection
+        // check requester can manage or develop the transaction's project
         from_fn(With::<TransactionDB>::extract::<CollectionId>),
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollExec>::check),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
         from_fn(With::<TransactionDB>::extract::<TransactionId>),
         from_fn(By::<TransactionId>::fetch_all::<LogicalFunctionRunDB>),
         // Set cancel status
@@ -93,10 +93,10 @@ mod tests {
                 type_of_val(&With::<TransactionParam>::extract::<TransactionIdName>),
                 // Find function run.
                 type_of_val(&By::<TransactionIdName>::fetch_one::<TransactionDB>),
-                // check requester is coll_admin or coll_exec for the transaction's collection
+                // check requester can manage or develop the transaction's project
                 type_of_val(&With::<TransactionDB>::extract::<CollectionId>),
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollExec>::check),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
                 type_of_val(&With::<TransactionDB>::extract::<TransactionId>),
                 type_of_val(&By::<TransactionId>::fetch_all::<LogicalFunctionRunDB>),
                 // Set cancel status
@@ -125,7 +125,7 @@ mod tests {
             async move {
                 // Execute test
                 let request =
-                    RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                    RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                         .update(
                             TransactionParam::builder()
                                 .transaction(TransactionIdName::from_str(&transaction)?)

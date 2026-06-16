@@ -103,36 +103,29 @@ mod tests {
             build_transaction_map, build_transactions, resolve_execution_plan_versions,
             update_initial_function_run_status, validate_execution_plan, with_recursion_options,
         };
+        use crate::graph::layers::FunctionOrTable;
+        use crate::graph::layers::build::GraphBuilder;
+        use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+        use td_database::scoped::Scoped;
         use crate::execution::layers::execution_version::{
             dedup_lock, reject_if_external_uid_in_use, reject_if_running,
         };
-        use crate::graph::layers::FunctionOrTable;
-        use crate::graph::layers::build::GraphBuilder;
         use crate::scheduler::layers::request::notify_scheduler;
-        use td_authz::Authz;
-        use td_authz::tower::InterColl;
-        use td_authz::tower::{AuthzOn, CollAdmin, CollExec};
-        use td_database::scoped::Scoped;
         use td_objects::And;
         use td_objects::dxo::crudl::RequestContext;
-        use td_objects::dxo::dependency::DependencyDBWithNames;
         use td_objects::dxo::execution::{
             ExecutionDB, ExecutionDBBuilder, ExecutionRequest, ExecutionRequestInternal,
         };
         use td_objects::dxo::function::FunctionDBWithNames;
-        use td_objects::dxo::inter_collection_access::{
-            InterCollectionAccess, InterCollectionAccessBuilder,
-        };
         use td_objects::dxo::logical::{
             LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB,
             LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
         };
         use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
-        use td_objects::dxo::trigger::TriggerDBWithNames;
         use td_objects::tower_service::with::With;
         use td_objects::types::basic::ProjectId;
         use td_objects::types::basic::{
-            CollectionId, FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
+            FunctionId, FunctionOnly, OverrideDisabledTrigger, TriggerType,
         };
         use td_objects::types::recursion::RecursionOptions;
         use td_queries::{insert, insert_vec};
@@ -188,10 +181,9 @@ mod tests {
                 // execute()
                 type_of_val(&With::<ExecutionRequest>::extract::<OverrideDisabledTrigger>),
                 type_of_val(&assert_function_status),
-                // check requester is coll_admin or coll_exec for the function's collection
-                type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollExec>::check),
+                // check requester can develop the current project (manage or develop)
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
                 // Get recursion options
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
@@ -200,14 +192,6 @@ mod tests {
                 // Find td graph
                 // Find triggers
                 type_of_val(&GraphBuilder::<GraphOpts>::find_recursive_trigger_graph),
-                // inter collection authz check
-                type_of_val(
-                    &With::<TriggerDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>,
-                ),
-                type_of_val(
-                    &With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>,
-                ),
-                type_of_val(&Authz::<InterColl>::check_inter_collection),
                 // Find dependencies. For clarity, we always show the function, even if
                 // generating a table centered graph, the same way we show the tables of
                 // a function centered graph.
@@ -216,14 +200,6 @@ mod tests {
                 type_of_val(
                     &GraphBuilder::<GraphOpts>::find_triggered_functions_dependency_graph,
                 ),
-                // inter collection authz check
-                type_of_val(
-                    &With::<DependencyDBWithNames>::vec_convert_to::<InterCollectionAccessBuilder, _>,
-                ),
-                type_of_val(
-                    &With::<Vec<InterCollectionAccessBuilder>>::build::<Vec<InterCollectionAccess>>,
-                ),
-                type_of_val(&Authz::<InterColl>::check_inter_collection),
                 // Find output tables
                 type_of_val(&GraphBuilder::<GraphOpts>::find_functions_output_tables),
                 // Find all tables and functions
@@ -472,7 +448,7 @@ mod tests {
 
         // Trigger function
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     FunctionVersionIdParam {
                         function_version_id: function.id.clone(),
@@ -521,7 +497,7 @@ mod tests {
         // Dummy update to create new version
         let update = FunctionUpdate::builder().name(function_0).build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!(
@@ -542,7 +518,7 @@ mod tests {
 
         // Now, using function.id will fail
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     FunctionVersionIdParam {
                         function_version_id: function.id.clone(),
@@ -595,7 +571,7 @@ mod tests {
         external_uid: Option<ExternalUid>,
     ) -> Result<ExecutionResponse, TdError> {
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .create(
                     FunctionVersionIdParam {
                         function_version_id: function_version_id.clone(),

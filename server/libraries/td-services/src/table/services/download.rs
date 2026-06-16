@@ -5,15 +5,18 @@
 use crate::table::layers::download::get_table_download;
 use crate::table::layers::find_data_version_location_at;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead};
-use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::collection::CollectionDB;
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
+#[cfg(test)]
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::rest_urls::params::TableAtIdName;
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, CollectionIdName};
-use td_objects::types::stream::BoxedSyncStream;
+#[cfg(test)]
+use td_objects::types::basic::CollectionIdName;
+#[cfg(feature = "test_tower_metadata")]
 use td_queries::By;
+use td_objects::tower_service::with::With;
+use td_objects::types::stream::BoxedSyncStream;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -33,13 +36,9 @@ fn service() {
         // Extract parameters
         from_fn(With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-        // find collection ID
-        from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        // check requester has collection permissions
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+        // check requester has project permissions
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // Find table data version location.
         find_data_version_location_at::<_, TableAtIdName>(),
         from_fn(get_table_download),
@@ -100,13 +99,9 @@ pub(crate) mod tests {
                 // Extract parameters
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-                // find collection ID
-                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                // check requester has collection permissions
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+                // check requester has project permissions
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Find table data version location.
                 // Extract parameters
                 type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
@@ -173,7 +168,7 @@ pub(crate) mod tests {
                     -> Result<Bytes, TdError> {
             // with ids
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                     .read(TableAtIdName::new(
                         TableParam::builder()
                             .collection(CollectionIdName::from_str(&format!("~{}", collection_id))?)
@@ -194,7 +189,7 @@ pub(crate) mod tests {
             };
             // with names
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                     .read(TableAtIdName::new(
                         TableParam::builder()
                             .collection(CollectionIdName::from_str(&format!(

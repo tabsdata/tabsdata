@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::NoFilter;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
@@ -34,9 +34,9 @@ fn service() {
         // find collection ID
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        // check requester has collection permissions
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+        // check requester has project permissions
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // list
         from_fn(With::<ListRequest<CollectionParam>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
@@ -81,11 +81,9 @@ mod tests {
                     // find collection ID
                     type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                     type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                    // check requester has collection permissions
-                    type_of_val(&AuthzOn::<CollectionId>::set),
-                    type_of_val(
-                        &Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check,
-                    ),
+                    // check requester has project permissions
+                    type_of_val(&Scope::<Project>::set),
+                    type_of_val(&Rbac::<Project, ViewProject>::check),
                     // list
                     type_of_val(&With::<ListRequest<CollectionParam>>::extract::<ListParams>),
                     type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
@@ -133,7 +131,7 @@ mod tests {
 
         // List current tables by collection
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .list(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)

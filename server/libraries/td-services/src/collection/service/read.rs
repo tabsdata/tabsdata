@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, NoPermissions, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::dxo::collection::{CollectionDBWithNames, CollectionRead, CollectionReadBuilder};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
@@ -26,8 +26,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ReadRequest<CollectionParam>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<NoPermissions>::check), // no permission required
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         from_fn(With::<ReadRequest<CollectionParam>>::extract_name::<CollectionParam>),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDBWithNames>),
@@ -63,8 +63,8 @@ mod tests {
             .await
             .assert_service::<Scoped<ReadRequest<CollectionParam>, ProjectId>, CollectionRead>(&[
                 type_of_val(&With::<ReadRequest<CollectionParam>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<NoPermissions>::check), // no permission required
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 type_of_val(&With::<ReadRequest<CollectionParam>>::extract_name::<CollectionParam>),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDBWithNames>),
@@ -86,7 +86,7 @@ mod tests {
             .await;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .read(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&name.to_string()).unwrap())

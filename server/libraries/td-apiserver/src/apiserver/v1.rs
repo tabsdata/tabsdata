@@ -44,7 +44,6 @@ use crate::router::executions::ExecutionsRouter;
 use crate::router::function_runs::FunctionRunsRouter;
 use crate::router::functions::FunctionsRouter;
 use crate::router::groups::GroupsRouter;
-use crate::router::inter_collection_permissions::InterCollectionPermissionsRouter;
 use crate::router::logical_versions::LogicalVersionsRouter;
 use crate::router::metrics::{GlobalMetricsRouter, MetricsRouter};
 use crate::router::permissions::PermissionsRouter;
@@ -117,9 +116,6 @@ impl ApiServerV1 {
                         .merge(FunctionRunsRouter::router(context.services.clone()))
                         .merge(MetricsRouter::router(context.services.clone()))
                         .merge(LogicalVersionsRouter::router(context.services.clone()))
-                        .merge(InterCollectionPermissionsRouter::router(
-                            context.services.clone(),
-                        ))
                         .merge(TablesRouter::router(context.services.clone()))
                         .merge(TransactionsRouter::router(context.services.clone()))
                         .merge(WorkersRouter::router(context.services.clone()))

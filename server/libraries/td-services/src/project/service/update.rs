@@ -6,8 +6,8 @@ use crate::project::service::layer::update::{
     UpdateProjectDBBuilderUpdate, update_project_validate,
 };
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SysAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageProject, Project, Rbac, Scope};
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::project::{
     ProjectDB, ProjectDBWithNames, ProjectRead, ProjectReadBuilder, ProjectUpdate, ProjectUpdateDB,
@@ -32,12 +32,13 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SysAdmin>::check),
         from_fn(With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract_name::<ProjectParam>),
         from_fn(With::<ProjectParam>::extract::<ProjectIdName>),
         from_fn(By::<ProjectIdName>::fetch_one::<ProjectDB>),
         from_fn(With::<ProjectDB>::extract::<ProjectId>),
+        // Renaming a project requires `manage_project` on that project.
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ManageProject>::check),
         from_fn(With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract_data::<ProjectUpdate>),
         from_fn(update_project_validate),
         from_fn(With::<ProjectDB>::try_convert_to::<ProjectUpdateDBBuilder, _>),
@@ -67,14 +68,14 @@ mod tests {
                 type_of_val(
                     &With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract::<RequestContext>,
                 ),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SysAdmin>::check),
                 type_of_val(
                     &With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract_name::<ProjectParam>,
                 ),
                 type_of_val(&With::<ProjectParam>::extract::<ProjectIdName>),
                 type_of_val(&By::<ProjectIdName>::fetch_one::<ProjectDB>),
                 type_of_val(&With::<ProjectDB>::extract::<ProjectId>),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ManageProject>::check),
                 type_of_val(
                     &With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract_data::<ProjectUpdate>,
                 ),

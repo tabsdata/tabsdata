@@ -59,13 +59,11 @@ mod tests {
     #[cfg(postgres)]
     use sqlx::postgres::PgPoolOptions;
     use td_security::{
-        ENCODED_ID_CA_ALL_SEC_ADMIN, ENCODED_ID_CA_ALL_SYS_ADMIN, ENCODED_ID_CD_ALL_SYS_ADMIN,
-        ENCODED_ID_CD_ALL_USER, ENCODED_ID_CR_ALL_SYS_ADMIN, ENCODED_ID_CR_ALL_USER,
-        ENCODED_ID_CX_ALL_SYS_ADMIN, ENCODED_ID_CX_ALL_USER, ENCODED_ID_ROLE_SEC_ADMIN,
-        ENCODED_ID_ROLE_SYS_ADMIN, ENCODED_ID_ROLE_USER, ENCODED_ID_SA_SYS_ADMIN,
-        ENCODED_ID_SS_SEC_ADMIN, ENCODED_ID_SS_SYS_ADMIN, ENCODED_ID_USER_ADMIN,
-        ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN,
-        ENCODED_ID_USER_ROLE_ADMIN_USER,
+        ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS,
+        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT,
+        ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT, ENCODED_ID_ROLE_DEFAULT, ENCODED_ID_ROLE_SYS_ADMIN,
+        ENCODED_ID_USER_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_DEFAULT,
+        ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN,
     };
 
     // -----------------------------------------------------------------------
@@ -252,19 +250,19 @@ mod tests {
             .unwrap();
         assert_eq!(row.id, ENCODED_ID_ROLE_SYS_ADMIN);
 
-        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'sec_admin'")
+        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'default'")
             .build_query_as()
             .fetch_one(&mut conn)
             .await
             .unwrap();
-        assert_eq!(row.id, ENCODED_ID_ROLE_SEC_ADMIN);
+        assert_eq!(row.id, ENCODED_ID_ROLE_DEFAULT);
 
-        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'user'")
-            .build_query_as()
+        let count: i64 = raw_query!(db, "SELECT count(*) FROM roles")
+            .build_query_scalar()
             .fetch_one(&mut conn)
             .await
             .unwrap();
-        assert_eq!(row.id, ENCODED_ID_ROLE_USER);
+        assert_eq!(count, 2);
     }
 
     #[cfg(postgres)]
@@ -281,19 +279,19 @@ mod tests {
             .unwrap();
         assert_eq!(row.id, ENCODED_ID_ROLE_SYS_ADMIN);
 
-        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'sec_admin'")
+        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'default'")
             .build_query_as()
             .fetch_one(&mut conn)
             .await
             .unwrap();
-        assert_eq!(row.id, ENCODED_ID_ROLE_SEC_ADMIN);
+        assert_eq!(row.id, ENCODED_ID_ROLE_DEFAULT);
 
-        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'user'")
-            .build_query_as()
+        let count: i64 = raw_query!(db, "SELECT count(*) FROM roles")
+            .build_query_scalar()
             .fetch_one(&mut conn)
             .await
             .unwrap();
-        assert_eq!(row.id, ENCODED_ID_ROLE_USER);
+        assert_eq!(count, 2);
     }
 
     #[cfg(sqlite)]
@@ -336,29 +334,21 @@ mod tests {
             SELECT id FROM users_roles
                 WHERE
                  user_id = {ENCODED_ID_USER_ADMIN}
-                 AND role_id = {ENCODED_ID_ROLE_SEC_ADMIN}
+                 AND role_id = {ENCODED_ID_ROLE_DEFAULT}
             "#
         )
         .build_query_as()
         .fetch_one(&mut conn)
         .await
         .unwrap();
-        assert_eq!(row.id, ENCODED_ID_USER_ROLE_ADMIN_SEC_ADMIN);
+        assert_eq!(row.id, ENCODED_ID_USER_ROLE_ADMIN_DEFAULT);
 
-        let row: Value = raw_query!(
-            db,
-            r#"
-            SELECT id FROM users_roles
-                WHERE
-                 user_id = {ENCODED_ID_USER_ADMIN}
-                 AND role_id = {ENCODED_ID_ROLE_USER}
-            "#
-        )
-        .build_query_as()
-        .fetch_one(&mut conn)
-        .await
-        .unwrap();
-        assert_eq!(row.id, ENCODED_ID_USER_ROLE_ADMIN_USER);
+        let count: i64 = raw_query!(db, "SELECT count(*) FROM users_roles")
+            .build_query_scalar()
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(count, 2);
     }
 
     #[cfg(sqlite)]
@@ -380,14 +370,15 @@ mod tests {
     async fn test_tabsdata_db_default_permissions_body(db: TdPool) {
         let mut conn = db.acquire().await.unwrap();
 
+        // sys_admin: manage_access on system.
         let row: Value = raw_query!(
             db,
             r#"
             SELECT id FROM permissions
             WHERE
                 role_id = {ENCODED_ID_ROLE_SYS_ADMIN} AND
-                permission_type = 'sa' AND
-                entity_type = 's' AND
+                permission_type = 'manage_access' AND
+                entity_type = 'system' AND
                 entity_id = '00000000000000000000000204'
             "#
         )
@@ -395,16 +386,17 @@ mod tests {
         .fetch_one(&mut conn)
         .await
         .unwrap();
-        assert_eq!(row.id, ENCODED_ID_SA_SYS_ADMIN);
+        assert_eq!(row.id, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS);
 
+        // sys_admin: create_projects on system.
         let row: Value = raw_query!(
             db,
             r#"
             SELECT id FROM permissions
             WHERE
                 role_id = {ENCODED_ID_ROLE_SYS_ADMIN} AND
-                permission_type = 'ss' AND
-                entity_type = 's' AND
+                permission_type = 'create_projects' AND
+                entity_type = 'system' AND
                 entity_id = '00000000000000000000000204'
             "#
         )
@@ -412,16 +404,17 @@ mod tests {
         .fetch_one(&mut conn)
         .await
         .unwrap();
-        assert_eq!(row.id, ENCODED_ID_SS_SYS_ADMIN);
+        assert_eq!(row.id, ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS);
 
+        // sys_admin: role_mgnt on system.
         let row: Value = raw_query!(
             db,
             r#"
             SELECT id FROM permissions
             WHERE
                 role_id = {ENCODED_ID_ROLE_SYS_ADMIN} AND
-                permission_type = 'ca' AND
-                entity_type = 'c' AND
+                permission_type = 'role_mgnt' AND
+                entity_type = 'system' AND
                 entity_id = '00000000000000000000000204'
             "#
         )
@@ -429,16 +422,17 @@ mod tests {
         .fetch_one(&mut conn)
         .await
         .unwrap();
-        assert_eq!(row.id, ENCODED_ID_CA_ALL_SYS_ADMIN);
+        assert_eq!(row.id, ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT);
 
+        // sys_admin: manage_project on every project.
         let row: Value = raw_query!(
             db,
             r#"
             SELECT id FROM permissions
             WHERE
                 role_id = {ENCODED_ID_ROLE_SYS_ADMIN} AND
-                permission_type = 'cd' AND
-                entity_type = 'c' AND
+                permission_type = 'manage_project' AND
+                entity_type = 'project' AND
                 entity_id = '00000000000000000000000204'
             "#
         )
@@ -446,16 +440,17 @@ mod tests {
         .fetch_one(&mut conn)
         .await
         .unwrap();
-        assert_eq!(row.id, ENCODED_ID_CD_ALL_SYS_ADMIN);
+        assert_eq!(row.id, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT);
 
+        // default role: create_projects on system.
         let row: Value = raw_query!(
             db,
             r#"
             SELECT id FROM permissions
             WHERE
-                role_id = {ENCODED_ID_ROLE_SYS_ADMIN} AND
-                permission_type = 'cx' AND
-                entity_type = 'c' AND
+                role_id = {ENCODED_ID_ROLE_DEFAULT} AND
+                permission_type = 'create_projects' AND
+                entity_type = 'system' AND
                 entity_id = '00000000000000000000000204'
             "#
         )
@@ -463,109 +458,14 @@ mod tests {
         .fetch_one(&mut conn)
         .await
         .unwrap();
-        assert_eq!(row.id, ENCODED_ID_CX_ALL_SYS_ADMIN);
+        assert_eq!(row.id, ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS);
 
-        let row: Value = raw_query!(
-            db,
-            r#"
-            SELECT id FROM permissions
-            WHERE
-                role_id = {ENCODED_ID_ROLE_SYS_ADMIN} AND
-                permission_type = 'cr' AND
-                entity_type = 'c' AND
-                entity_id = '00000000000000000000000204'
-            "#
-        )
-        .build_query_as()
-        .fetch_one(&mut conn)
-        .await
-        .unwrap();
-        assert_eq!(row.id, ENCODED_ID_CR_ALL_SYS_ADMIN);
-
-        let row: Value = raw_query!(
-            db,
-            r#"
-            SELECT id FROM permissions
-            WHERE
-                role_id = {ENCODED_ID_ROLE_SEC_ADMIN} AND
-                permission_type = 'ss' AND
-                entity_type = 's' AND
-                entity_id = '00000000000000000000000204'
-            "#
-        )
-        .build_query_as()
-        .fetch_one(&mut conn)
-        .await
-        .unwrap();
-        assert_eq!(row.id, ENCODED_ID_SS_SEC_ADMIN);
-
-        let row: Value = raw_query!(
-            db,
-            r#"
-            SELECT id FROM permissions
-            WHERE
-                role_id = {ENCODED_ID_ROLE_SEC_ADMIN} AND
-                permission_type = 'ca' AND
-                entity_type = 'c' AND
-                entity_id = '00000000000000000000000204'
-            "#
-        )
-        .build_query_as()
-        .fetch_one(&mut conn)
-        .await
-        .unwrap();
-        assert_eq!(row.id, ENCODED_ID_CA_ALL_SEC_ADMIN);
-
-        let row: Value = raw_query!(
-            db,
-            r#"
-            SELECT id FROM permissions
-            WHERE
-                role_id = {ENCODED_ID_ROLE_USER} AND
-                permission_type = 'cd' AND
-                entity_type = 'c' AND
-                entity_id = '00000000000000000000000204'
-            "#
-        )
-        .build_query_as()
-        .fetch_one(&mut conn)
-        .await
-        .unwrap();
-        assert_eq!(row.id, ENCODED_ID_CD_ALL_USER);
-
-        let row: Value = raw_query!(
-            db,
-            r#"
-            SELECT id FROM permissions
-            WHERE
-                role_id = {ENCODED_ID_ROLE_USER} AND
-                permission_type = 'cx' AND
-                entity_type = 'c' AND
-                entity_id = '00000000000000000000000204'
-            "#,
-        )
-        .build_query_as()
-        .fetch_one(&mut conn)
-        .await
-        .unwrap();
-        assert_eq!(row.id, ENCODED_ID_CX_ALL_USER);
-
-        let row: Value = raw_query!(
-            db,
-            r#"
-            SELECT id FROM permissions
-            WHERE
-                role_id = {ENCODED_ID_ROLE_USER} AND
-                permission_type = 'cr' AND
-                entity_type = 'c' AND
-                entity_id = '00000000000000000000000204'
-            "#,
-        )
-        .build_query_as()
-        .fetch_one(&mut conn)
-        .await
-        .unwrap();
-        assert_eq!(row.id, ENCODED_ID_CR_ALL_USER);
+        let count: i64 = raw_query!(db, "SELECT count(*) FROM permissions")
+            .build_query_scalar()
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(count, 5);
     }
 
     // -------------------------------------------------------------------
@@ -602,7 +502,6 @@ mod tests {
             "functions",
             "functions_current",
             "groups",
-            "inter_collection_permissions",
             "logical_function_run_inputs",
             "logical_function_run_pointers",
             "logical_function_runs",
@@ -660,7 +559,6 @@ mod tests {
             "functions_current__with_names",
             "global_status_summary",
             "groups__with_names",
-            "inter_collection_permissions__with_names",
             "logical_table_data_versions__active",
             "permissions__with_names",
             "physical_function_runs__with_names",
@@ -739,7 +637,6 @@ mod tests {
             "functions_current___collection_id___idx",
             "functions_current___status___idx",
             "groups___project_id__name___idx",
-            "inter_collection_permissions___from_collection_id__to_collection_id__idx",
             "logical_function_run_inputs___execution_id___idx",
             "logical_function_run_inputs___logical_function_run_id___idx",
             "logical_function_run_pointers___function_run_id___idx",

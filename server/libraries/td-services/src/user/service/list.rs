@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
 use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::user::UserRead;
@@ -26,8 +26,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, ManageAccess>::check),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<UserRead>, _>),
         from_fn(By::<()>::list::<NoFilter, UserRead>),
@@ -41,7 +41,7 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
+    use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserName};
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
@@ -55,8 +55,8 @@ mod tests {
             .await
             .assert_service::<ListRequest<()>, ListResponse<UserRead>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, ManageAccess>::check),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<UserRead>, _>),
                 type_of_val(&By::<()>::list::<NoFilter, UserRead>),
@@ -69,7 +69,7 @@ mod tests {
             .seed()
             .user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
             .await;
-        let user1 = db
+        let _ = db
             .seed()
             .user(&UserName::try_from("u1").unwrap(), &UserEnabled::from(true))
             .await
@@ -77,8 +77,11 @@ mod tests {
 
         let service = ListUsersService::with_defaults(db.clone()).service();
 
-        let request = RequestContext::with(AccessTokenId::default(), user1.id, RoleId::sec_admin())
-            .list((), ListParams::default());
+        // `admin` is the only seeded user in `sys_admin` (holding manage_access),
+        // so it is the requester able to list users.
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
+                .list((), ListParams::default());
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();

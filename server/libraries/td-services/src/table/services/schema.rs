@@ -5,14 +5,15 @@
 use crate::table::layers::find_data_version_location_at;
 use crate::table::layers::schema::get_table_schema;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead};
-use td_authz::{Authz, AuthzContext};
-use td_objects::dxo::collection::CollectionDB;
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::params::{TableAtIdName, TableSchema};
-use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, CollectionIdName};
+#[cfg(test)]
+use td_objects::types::basic::CollectionIdName;
+#[cfg(feature = "test_tower_metadata")]
 use td_queries::By;
+use td_objects::tower_service::with::With;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -32,13 +33,9 @@ fn service() {
         // Extract parameters
         from_fn(With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-        from_fn(With::<TableAtIdName>::extract::<CollectionIdName>),
-        // Find collection ID
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // Check permissions
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // Find data version location.
         find_data_version_location_at::<_, TableAtIdName>(),
         // Get table schema
@@ -98,13 +95,9 @@ mod tests {
             .assert_service::<Scoped<ReadRequest<TableAtIdName>, ProjectId>, TableSchema>(&[
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract::<RequestContext>),
                 type_of_val(&With::<ReadRequest<TableAtIdName>>::extract_name::<TableAtIdName>),
-                type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
-                // find collection ID
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                // check requester has collection permissions
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+                // check requester has project permissions
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Find table data version location.
                 // Extract parameters
                 type_of_val(&With::<TableAtIdName>::extract::<CollectionIdName>),
@@ -288,7 +281,7 @@ mod tests {
                 TableSchemaService::new(db, Arc::new(AuthzContext::default()), storage).service();
 
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                     .read(TableAtIdName::new(
                         TableParam::builder()
                             .collection(CollectionIdName::from_str(collection)?)

@@ -4,8 +4,8 @@
 
 use crate::user::layers::create::UpdateCreateUserDBBuilder;
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, SecAdmin, System};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::user::{
     UserCreate, UserDB, UserDBBuilder, UserDBWithNames, UserRead, UserReadBuilder,
@@ -34,8 +34,8 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<CreateRequest<(), UserCreate>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, ManageAccess>::check),
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(With::<RequestContext>::extract::<UserId>),
         from_fn(With::<CreateRequest<(), UserCreate>>::extract_data::<UserCreate>),
@@ -81,8 +81,8 @@ mod tests {
             .await
             .assert_service::<CreateRequest<(), UserCreate>, UserRead>(&[
                 type_of_val(&With::<CreateRequest<(), UserCreate>>::extract::<RequestContext>),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, ManageAccess>::check),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(&With::<RequestContext>::extract::<UserId>),
                 type_of_val(&With::<CreateRequest<(), UserCreate>>::extract_data::<UserCreate>),
@@ -135,7 +135,7 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .create((), create);
         let response = service.raw_oneshot(request).await;
@@ -165,7 +165,7 @@ mod tests {
             .await
             .unwrap();
         assert!(res.is_some());
-        assert_eq!(RoleId::user(), res.unwrap().role_id)
+        assert_eq!(RoleId::default_role(), res.unwrap().role_id)
     }
 
     #[td_test::test(db)]

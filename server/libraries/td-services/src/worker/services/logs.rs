@@ -4,14 +4,14 @@
 
 use crate::worker::layers::logs::{worker_logs, worker_logs_tail};
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope, ViewProject};
 use td_common::server::BridgeProviderHandle;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::rest_urls::{LogsExtension, WorkerLogsParams};
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, LogsCastNumber, WorkerIdName};
+use td_objects::types::basic::{LogsCastNumber, ProjectId, WorkerIdName};
 use td_objects::types::stream::BoxedSyncStream;
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
@@ -31,11 +31,14 @@ fn service() {
     layers!(
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>),
+        // find worker (resolves the owning project for the scope)
         from_fn(With::<WorkerLogsParams>::extract::<WorkerIdName>),
         from_fn(By::<WorkerIdName>::fetch_one::<WorkerDB>),
-        from_fn(With::<WorkerDB>::extract::<CollectionId>),
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        from_fn(With::<WorkerDB>::extract::<ProjectId>),
+        // check requester has access to the project
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
+        // Resolve worker message path.
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
         from_fn(worker_logs),
@@ -57,9 +60,9 @@ fn logs_tail_service() {
         from_fn(With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>),
         from_fn(With::<WorkerLogsParams>::extract::<WorkerIdName>),
         from_fn(By::<WorkerIdName>::fetch_one::<WorkerDB>),
-        from_fn(With::<WorkerDB>::extract::<CollectionId>),
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+        from_fn(With::<WorkerDB>::extract::<ProjectId>),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
         from_fn(worker_logs_tail),
@@ -104,11 +107,16 @@ mod tests {
                     type_of_val(
                         &With::<ReadRequest<WorkerLogsParams>>::extract_name::<WorkerLogsParams>,
                     ),
+                    // find worker (resolves the owning project for the scope)
                     type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
                     type_of_val(&By::<WorkerIdName>::fetch_one::<WorkerDB>),
-                    type_of_val(&With::<WorkerDB>::extract::<CollectionId>),
-                    type_of_val(&AuthzOn::<CollectionId>::set),
-                    type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                    type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
+                    // check requester has access to the project
+                    type_of_val(&Scope::<Project>::set),
+                    type_of_val(
+                        &Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check,
+                    ),
+                    // Resolve worker message path.
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
                     type_of_val(&worker_logs),
@@ -134,9 +142,11 @@ mod tests {
                     ),
                     type_of_val(&With::<WorkerLogsParams>::extract::<WorkerIdName>),
                     type_of_val(&By::<WorkerIdName>::fetch_one::<WorkerDB>),
-                    type_of_val(&With::<WorkerDB>::extract::<CollectionId>),
-                    type_of_val(&AuthzOn::<CollectionId>::set),
-                    type_of_val(&Authz::<CollAdmin, CollDev, CollExec, CollRead>::check),
+                    type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
+                    type_of_val(&Scope::<Project>::set),
+                    type_of_val(
+                        &Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check,
+                    ),
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
                     type_of_val(&worker_logs_tail),
@@ -231,7 +241,7 @@ mod tests {
                     let request = RequestContext::with(
                         AccessTokenId::default(),
                         UserId::admin(),
-                        RoleId::user(),
+                        RoleId::default_role(),
                     )
                     .read(
                         WorkerLogsParams::builder()

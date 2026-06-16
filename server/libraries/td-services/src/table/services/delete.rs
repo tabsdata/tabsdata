@@ -6,8 +6,8 @@ use crate::table::layers::delete::{
     build_deleted_table, build_deleted_triggers, build_frozen_functions,
 };
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
 use td_objects::And;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
@@ -46,9 +46,9 @@ fn service() {
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionName>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        // check requester has collection permissions
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev>::check),
+        // check requester has project permissions
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
         // Get table. Extract table id, table version id
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(
@@ -125,9 +125,9 @@ mod tests {
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                // check requester has collection permissions
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<CollAdmin, CollDev>::check),
+                // check requester has project permissions
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
                 // Get table. Extract table id, table version id
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(

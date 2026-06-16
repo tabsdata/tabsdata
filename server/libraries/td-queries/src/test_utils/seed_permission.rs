@@ -27,7 +27,7 @@ pub async fn seed_permission(
     let request_context = RequestContext::with(
         AccessTokenId::default(),
         UserId::admin(),
-        RoleId::sec_admin(),
+        RoleId::sys_admin(),
     );
 
     let mut builder = PermissionDBBuilder::try_from(&permission_create)?;
@@ -65,7 +65,12 @@ mod tests {
             .unwrap();
         let permission = db
             .seed()
-            .permission(PermissionType::try_from("sa").unwrap(), None, None, &role)
+            .permission(
+                PermissionType::try_from("manage_access").unwrap(),
+                None,
+                None,
+                &role,
+            )
             .await
             .unwrap();
 

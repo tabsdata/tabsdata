@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, CollDev, CollExec, CollRead, InterCollRead};
-use td_authz::{Authz, AuthzContext};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::And;
 use td_objects::NoFilter;
 use td_objects::dxo::collection::CollectionDB;
@@ -40,9 +40,9 @@ fn service() {
         from_fn(With::<TableDataVersionAtIdName>::extract::<CollectionIdName>),
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        // check requester has collection permissions
-        from_fn(AuthzOn::<CollectionId>::set),
-        from_fn(Authz::<CollAdmin, CollDev, CollExec, CollRead, InterCollRead>::check),
+        // check requester has project permissions
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // extract at time (triggered on)
         from_fn(With::<TableDataVersionAtIdName>::extract::<AtTime>),
         from_fn(With::<AtTime>::try_convert_to::<TriggeredOn, _>),

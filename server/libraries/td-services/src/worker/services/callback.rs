@@ -156,7 +156,7 @@ mod tests {
         };
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     WorkerIdParam {
                         worker_id: worker.id,
@@ -187,7 +187,7 @@ mod tests {
         };
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .update(
                     WorkerIdParam {
                         worker_id: worker.id,

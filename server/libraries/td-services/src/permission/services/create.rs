@@ -2,10 +2,12 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::permission::layers::{PermissionBuildService, is_permission_on_a_single_collection};
+use crate::permission::layers::{is_permission_on_a_single_project, PermissionBuildService};
 use ta_services::factory::service_factory;
-use td_authz::tower::{AuthzOn, CollAdmin, SecAdmin, System};
-use td_authz::{Authz, AuthzContext, refresh_authz_context};
+use td_authz::rbac::{
+    ManageAccess, ManageProject, OnAnyProject, Project, Rbac, Scope, System,
+};
+use td_authz::{refresh_authz_context, AuthzContext};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::permission::{
     Permission, PermissionBuilder, PermissionCreate, PermissionDB, PermissionDBBuilder,
@@ -14,9 +16,9 @@ use td_objects::dxo::permission::{
 use td_objects::dxo::role::RoleDB;
 use td_objects::rest_urls::RoleParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, EntityId, PermissionId, RoleIdName};
-use td_queries::By;
+use td_objects::types::basic::{EntityId, PermissionId, ProjectId, RoleIdName};
 use td_queries::insert;
+use td_queries::By;
 use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
 use td_tower::from_fn::from_fn;
 use td_tower::{layers, service};
@@ -32,8 +34,8 @@ use td_tower::{layers, service};
 fn service() {
     layers!(
         from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>),
-        from_fn(AuthzOn::<System>::set),
-        from_fn(Authz::<SecAdmin, CollAdmin>::check),
+        from_fn(Scope::<System>::system),
+        from_fn(Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
         from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>),
         from_fn(
             With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<PermissionCreate>
@@ -46,19 +48,20 @@ fn service() {
         from_fn(With::<PermissionDBBuilder>::build_permission_db),
         conditional(
             If(service!(layers!(from_fn(
-                is_permission_on_a_single_collection
+                is_permission_on_a_single_project
             )))),
             Do(service!(layers!(
-                // a permission on a single collection can also be created by a collection admin
+                // a permission on a single project can also be created by a project admin
                 from_fn(With::<PermissionDB>::extract::<EntityId>),
-                from_fn(With::<EntityId>::try_convert_to::<CollectionId, _>),
-                from_fn(AuthzOn::<CollectionId>::set),
-                from_fn(Authz::<SecAdmin, CollAdmin>::check),
+                from_fn(With::<EntityId>::try_convert_to::<ProjectId, _>),
+                from_fn(Scope::<Project>::set),
+                from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check),
             ))),
             Else(service!(layers!(
-                // a permission on a all collections can be created by a sec_admin only
-                from_fn(AuthzOn::<System>::set),
-                from_fn(Authz::<SecAdmin>::check),
+                // a permission on all projects can be created only by an
+                // identity holding manage_access on the system
+                from_fn(Scope::<System>::system),
+                from_fn(Rbac::<System, ManageAccess>::check),
             )))
         ),
         from_fn(insert::<PermissionDB>),
@@ -76,14 +79,14 @@ mod tests {
     use super::*;
     use std::str::FromStr;
     use ta_services::service::TdService;
-    use td_authz::tower::AuthzError;
+    use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
     use td_error::{TdError, assert_service_error};
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
-        AccessTokenId, CollectionName, Description, EntityName, PermissionType, ProjectId, RoleId,
-        RoleName, UserId,
+        AccessTokenId, Description, EntityName, PermissionType, ProjectName, RoleId, RoleName,
+        UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -101,8 +104,8 @@ mod tests {
                 type_of_val(
                     &With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>,
                 ),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
                 type_of_val(
                     &With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>,
                 ),
@@ -117,13 +120,13 @@ mod tests {
                 type_of_val(&By::<RoleIdName>::fetch_one::<RoleDB>),
                 type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
                 type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
-                type_of_val(&is_permission_on_a_single_collection),
+                type_of_val(&is_permission_on_a_single_project),
                 type_of_val(&With::<PermissionDB>::extract::<EntityId>),
-                type_of_val(&With::<EntityId>::try_convert_to::<CollectionId, _>),
-                type_of_val(&AuthzOn::<CollectionId>::set),
-                type_of_val(&Authz::<SecAdmin, CollAdmin>::check),
-                type_of_val(&AuthzOn::<System>::set),
-                type_of_val(&Authz::<SecAdmin>::check),
+                type_of_val(&With::<EntityId>::try_convert_to::<ProjectId, _>),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, (ManageAccess, ManageProject)>::check),
+                type_of_val(&Scope::<System>::system),
+                type_of_val(&Rbac::<System, ManageAccess>::check),
                 type_of_val(&insert::<PermissionDB>),
                 type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
                 type_of_val(&By::<PermissionId>::fetch_one::<PermissionDBWithNames>),
@@ -136,7 +139,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_create_permission(db: TdPool) -> Result<(), TdError> {
         let create = PermissionCreate::builder()
-            .permission_type(PermissionType::SecAdmin)
+            .permission_type(PermissionType::ManageAccess)
             .try_entity_name(None)
             .unwrap()
             .build()?;
@@ -144,11 +147,11 @@ mod tests {
         let request = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .create(
             RoleParam::builder()
-                .role(RoleIdName::from_str(&RoleName::user().to_string())?)
+                .role(RoleIdName::from_str(&RoleName::default_role().to_string())?)
                 .build()?,
             create,
         );
@@ -173,34 +176,31 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_create_permission_on_collection_by_coll_admin_ok(
+    async fn test_create_permission_on_project_by_project_admin_ok(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let coll0 = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
-            .await?;
+        let p0 = db.seed().project(ProjectName::try_from("p0")?).await?;
         let role = db
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = coll0.id.try_into()?;
+        let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::CollectionAdmin,
-                Some(EntityName::try_from("c0")?),
+                PermissionType::ManageProject,
+                Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
             )
             .await?;
 
         let create = PermissionCreate::builder()
-            .permission_type(PermissionType::CollectionRead)
-            .try_entity_name(Some(EntityName::try_from("c0")?))
+            .permission_type(PermissionType::ViewProject)
+            .try_entity_name(Some(EntityName::try_from("p0")?))
             .unwrap()
             .build()?;
 
+        // `admin` holds manage_project on `__all__`, so it can grant on any project.
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
             .create(
                 RoleParam::builder()
@@ -229,51 +229,49 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_create_permission_on_collection_by_coll_admin_unauthz(
+    async fn test_create_permission_on_project_by_project_admin_unauthz(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let coll0 = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
-            .await?;
-        let _ = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .collection(&CollectionName::try_from("c1")?, &UserId::admin())
-            .await?;
+        let p0 = db.seed().project(ProjectName::try_from("p0")?).await?;
+        let _ = db.seed().project(ProjectName::try_from("p1")?).await?;
         let role = db
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = coll0.id.try_into()?;
+        let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::CollectionAdmin,
-                Some(EntityName::try_from("c0")?),
+                PermissionType::ManageProject,
+                Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
             )
             .await?;
+        // A non-admin user assigned only to `role` (manage_project on p0 only):
+        // admin can never be forbidden, so the requester must be this user.
+        let user = db
+            .seed()
+            .user(&UserName::try_from("u0")?, &UserEnabled::from(true))
+            .await?;
+        db.seed().user_role(&user.id, &role.id).await?;
 
         let create = PermissionCreate::builder()
-            .permission_type(PermissionType::CollectionRead)
-            .try_entity_name(Some(EntityName::try_from("c1")?))
+            .permission_type(PermissionType::ViewProject)
+            .try_entity_name(Some(EntityName::try_from("p1")?))
             .unwrap()
             .build()?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
-            .create(
-                RoleParam::builder()
-                    .role(RoleIdName::from_str("r0")?)
-                    .build()?,
-                create,
-            );
+        let request = RequestContext::with(AccessTokenId::default(), user.id, role.id).create(
+            RoleParam::builder()
+                .role(RoleIdName::from_str("r0")?)
+                .build()?,
+            create,
+        );
 
         let service = CreatePermissionService::with_defaults(db.clone()).service();
 
         assert_service_error(service, request, |err| match err {
-            AuthzError::Forbidden(_) => {}
+            RbacError::Forbidden(_, _) => {}
             other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;

@@ -2,7 +2,6 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::do_authz::SKIP_AUTHZ;
 use crate::execution::layers::execution::{
     build_execution_plan, build_response, resolve_execution_plan_versions,
 };
@@ -34,8 +33,6 @@ impl<const FUNCTION_STATE: u8> GraphConfig for GraphOpts<FUNCTION_STATE>
 where
     FunctionDB: States<FUNCTION_STATE>,
 {
-    type Authz = SKIP_AUTHZ;
-
     fn function_state() -> StateFilter<FunctionDB> {
         StateFilter::<FunctionDB>::from_states::<FUNCTION_STATE>()
     }
@@ -176,12 +173,12 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_read_execution(db: TdPool) -> Result<(), TdError> {
-        let execution = test_execute(db.clone(), false, false, true, false).await?;
+        let execution = test_execute(db.clone(), false, false, false).await?;
 
         let service =
             ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
                 .read(
                     ExecutionParam::builder()
                         .execution(ExecutionIdName::from_str(&execution.id.to_string())?)

@@ -305,7 +305,7 @@ mod tests {
         let request_context = RequestContext::with(
             AccessTokenId::default(),
             UserId::admin(),
-            RoleId::sec_admin(),
+            RoleId::sys_admin(),
         )
         .read::<String>("")
         .context;
