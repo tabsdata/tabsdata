@@ -78,7 +78,7 @@ pub async fn reject_if_running(
         Some(fr) if !fr.status.is_ended() => {
             debug!(physical_function_run_id = %fr.id, status = ?fr.status, "Latest function run running");
             Err(api_error!(
-                StatusCode::TOO_EARLY,
+                status = StatusCode::TOO_EARLY,
                 "Function is currently running (execution '{}'); retry once it finishes",
                 latest_execution.id
             ))
@@ -161,7 +161,7 @@ pub async fn reject_if_external_uid_in_use(
         return Ok(());
     }
     Err(api_error!(
-        StatusCode::CONFLICT,
+        status = StatusCode::CONFLICT,
         "external_uid already in use by execution '{}'",
         existing.id
     ))

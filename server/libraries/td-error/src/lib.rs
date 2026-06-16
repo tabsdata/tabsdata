@@ -195,11 +195,10 @@ impl From<UninitializedFieldError> for TdError {
 ///
 /// It accepts any of:
 /// - an [`ApiError`] class: `api_error!(ApiError::NotFound, "...")`
-/// - a bare status constant: `api_error!(StatusCode::LOCKED, "...")`
-/// - any status expression: `api_error!(status = some_status, "...")`,
+/// - any status expression: `api_error!(status = StatusCode::LOCKED, "...")`,
 ///   `api_error!(status = http::StatusCode::from_u16(x)?, "...")`
 ///
-/// The status forms lower to the [`ApiError::Any`] passthrough. Every `StatusCode`/`http`
+/// The status form lowers to the [`ApiError::Any`] passthrough. Every `StatusCode`/`http`
 /// reference is resolved in the *caller's* scope (which already has `http` to name it), so
 /// `td-error` itself never depends on `http`.
 ///
@@ -212,10 +211,6 @@ macro_rules! api_error {
     // Explicit status expression — resilient to full paths, `from_u16`, variables, etc.
     (status = $status:expr, $($arg:tt)*) => {
         $crate::api_error!(@build $crate::ApiError::Any(($status).as_u16()), $($arg)*)
-    };
-    // Terse sugar for a bare `StatusCode::VARIANT` constant.
-    (StatusCode::$status:ident, $($arg:tt)*) => {
-        $crate::api_error!(@build $crate::ApiError::Any((StatusCode::$status).as_u16()), $($arg)*)
     };
     // An `ApiError` class (InputError, NotFound, ...).
     ($api_error:expr, $($arg:tt)*) => {
