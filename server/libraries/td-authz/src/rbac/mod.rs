@@ -121,12 +121,12 @@ pub mod sql_source;
 
 pub use layers::{
     CreateProjects, DevelopProject, Enforce, ManageAccess, ManageProject, OnAnyProject, RbacError,
-    Requirement, ManageRoles, Scope, SelfUser, ViewProject, enforce,
+    Requirement, ManageRoles, Scope, SelfUser, ViewProject, VisibleProjectsResolver, enforce,
 };
 pub use model::{
     EffectiveGrants, EntityKind, Grant, GrantedPermission, Grants, IdentityClaim, On, Project,
     ProjectId, ProjectPermission, ProjectRole, Requires, System, SystemEntity,
-    SystemPermission, SystemRole, User,
+    SystemPermission, SystemRole, User, VisibleProjects,
 };
 pub use source::{FixedRbacSource, RbacSource, identity_grants};
 pub use sql_source::{SqlRbacGrantsProvider, SqlRbacSource};
@@ -149,3 +149,9 @@ pub use sql_source::{SqlRbacGrantsProvider, SqlRbacSource};
 /// .layer(from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check))
 /// ```
 pub type Rbac<E, R> = Enforce<SqlRbacSource, E, R>;
+
+/// The service-facing [`VisibleProjects`] resolver with the production grant
+/// source fixed in: a cross-project (global) read wires a
+/// `Visible::resolve` layer to put the requester's viewable-project set in the
+/// service context, then a downstream layer filters its result set against it.
+pub type Visible = VisibleProjectsResolver<SqlRbacSource>;

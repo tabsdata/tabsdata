@@ -547,6 +547,54 @@ impl ProjectRole {
     }
 }
 
+// ---------------------------------------------------------------------------
+// VisibleProjects: the set of projects a user may view
+// ---------------------------------------------------------------------------
+
+/// The projects a user can view, derived from their effective grants: every
+/// project the user holds `view_project` (or a dominating permission) on.
+///
+/// This is the data-filter counterpart of the [`ViewProject`](super::ViewProject)
+/// *gate*: a project-scoped read gates on the one project in scope, while a
+/// cross-project (global) read must instead narrow its result set to the
+/// projects in scope here. A `project:__all__` grant collapses to
+/// [`VisibleProjects::All`] (no filtering); otherwise it is the explicit set
+/// (possibly empty — the user then sees nothing globally).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VisibleProjects {
+    /// The user can view every project (holds `view_project`+ on `__all__`).
+    All,
+    /// The user can view exactly these projects.
+    Only(std::collections::HashSet<ProjectId>),
+}
+
+impl VisibleProjects {
+    /// Derive the viewable-project set from a user's effective grants.
+    pub fn from_grants(grants: &Grants) -> Self {
+        let mut ids = std::collections::HashSet::new();
+        for grant in grants.of::<Project>() {
+            if !grant.permission.satisfies(ProjectPermission::ViewProject) {
+                continue;
+            }
+            match grant.on {
+                On::All => return VisibleProjects::All,
+                On::Entity(project) => {
+                    ids.insert(project);
+                }
+            }
+        }
+        VisibleProjects::Only(ids)
+    }
+
+    /// Whether `project` is viewable.
+    pub fn contains(&self, project: &ProjectId) -> bool {
+        match self {
+            VisibleProjects::All => true,
+            VisibleProjects::Only(ids) => ids.contains(project),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -714,5 +762,39 @@ mod tests {
         grants.add(ProjectPermission::ViewProject.granted_on_all());
         grants.add(ProjectPermission::ViewProject.granted_on_all());
         assert_eq!(grants.of::<Project>().len(), 1);
+    }
+
+    #[test]
+    fn test_visible_projects_view_all_wildcard() {
+        // A `project:__all__` view grant (here via sys_admin's manage_project
+        // on __all__, which dominates view_project) sees every project.
+        let admin = SystemRole::SysAdmin.grants();
+        assert_eq!(VisibleProjects::from_grants(&admin), VisibleProjects::All);
+        assert!(VisibleProjects::from_grants(&admin).contains(&ProjectId::default()));
+    }
+
+    #[test]
+    fn test_visible_projects_explicit_set() {
+        // Per-project roles (admin/dev/view all dominate view_project) yield the
+        // explicit set of granted projects.
+        let p0 = ProjectId::default();
+        let p1 = ProjectId::default();
+        let grants = ProjectRole::View
+            .grants(p0)
+            .union(&ProjectRole::Dev.grants(p1));
+        let visible = VisibleProjects::from_grants(&grants);
+        assert!(visible.contains(&p0));
+        assert!(visible.contains(&p1));
+        assert!(!visible.contains(&ProjectId::default()));
+        assert_ne!(visible, VisibleProjects::All);
+    }
+
+    #[test]
+    fn test_visible_projects_none_for_default_role() {
+        // `default` carries only create_projects (a system permission) — no
+        // project grants, so nothing is viewable.
+        let visible = VisibleProjects::from_grants(&SystemRole::Default.grants());
+        assert_eq!(visible, VisibleProjects::Only(std::collections::HashSet::new()));
+        assert!(!visible.contains(&ProjectId::default()));
     }
 }

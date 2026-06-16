@@ -2,9 +2,13 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::metrics::layers::build_inflight_response;
+use crate::metrics::layers::{build_inflight_response, build_inflight_response_global};
 use ta_services::factory::service_factory;
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject, Visible};
+use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::metrics::{InflightRequest, InflightResponse};
+use td_objects::tower_service::with::With;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -12,30 +16,46 @@ use td_tower::layers;
 /// `GET /inflight` — point-in-time count of in-flight LFRs broken
 /// out by `(collection_id, group_id, status)`. Inflight is defined by
 /// status, not by `ended_on IS NULL`. RLS filters to the request's project.
+/// Authorized: the requester must be able to view the project in scope.
 #[service_factory(
     name = InflightService,
-    request = InflightRequest,
+    request = ReadRequest<InflightRequest>,
     response = InflightResponse,
     connection = ConnectionProvider,
     scope = "Project",
+    context = AuthzContext,
 )]
 fn service() {
-    layers!(from_fn(build_inflight_response))
+    layers!(
+        from_fn(With::<ReadRequest<InflightRequest>>::extract::<RequestContext>),
+        from_fn(With::<ReadRequest<InflightRequest>>::extract_name::<InflightRequest>),
+        // Authorize: the requester must be able to view the project in scope.
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
+        from_fn(build_inflight_response),
+    )
 }
 
 /// `GET /inflight` (global) — the same point-in-time aggregation across every
 /// project. `scope = "Global"` bypasses RLS so the query spans all tenants;
-/// the inner layer is identical (scope-agnostic), the connection decides the
-/// row set.
+/// the result is then narrowed to the projects the requester may view
+/// (`Visible::resolve` + the `*_global` builder).
 #[service_factory(
     name = InflightGlobalService,
-    request = InflightRequest,
+    request = ReadRequest<InflightRequest>,
     response = InflightResponse,
     connection = ConnectionProvider,
     scope = "Global",
+    context = AuthzContext,
 )]
 fn service_global() {
-    layers!(from_fn(build_inflight_response))
+    layers!(
+        from_fn(With::<ReadRequest<InflightRequest>>::extract::<RequestContext>),
+        from_fn(With::<ReadRequest<InflightRequest>>::extract_name::<InflightRequest>),
+        // Narrow the cross-project aggregation to the requester's viewable projects.
+        from_fn(Visible::resolve),
+        from_fn(build_inflight_response_global),
+    )
 }
 
 #[cfg(test)]
@@ -72,7 +92,11 @@ mod tests {
         };
         let service = InflightService::with_defaults(db).service();
         let response = service
-            .raw_oneshot(request.in_project(ProjectId::sandbox()))
+            .raw_oneshot(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .read(request)
+                    .in_project(ProjectId::sandbox()),
+            )
             .await?;
         assert!(response.rows.is_empty());
         Ok(())
@@ -147,12 +171,13 @@ mod tests {
         let sandbox = InflightService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
-                InflightRequest {
-                    collections: DimensionFilter::default(),
-                    groups: DimensionFilter::default(),
-                    statuses: vec![],
-                }
-                .in_project(ProjectId::sandbox()),
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .read(InflightRequest {
+                        collections: DimensionFilter::default(),
+                        groups: DimensionFilter::default(),
+                        statuses: vec![],
+                    })
+                    .in_project(ProjectId::sandbox()),
             )
             .await?;
         assert!(
@@ -164,12 +189,13 @@ mod tests {
         let other = InflightService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
-                InflightRequest {
-                    collections: DimensionFilter::default(),
-                    groups: DimensionFilter::default(),
-                    statuses: vec![],
-                }
-                .in_project(other_project.id),
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .read(InflightRequest {
+                        collections: DimensionFilter::default(),
+                        groups: DimensionFilter::default(),
+                        statuses: vec![],
+                    })
+                    .in_project(other_project.id),
             )
             .await?;
         assert!(
@@ -270,11 +296,15 @@ mod tests {
         // both projects' runs are visible in one response.
         let response = InflightGlobalService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(InflightRequest {
-                collections: DimensionFilter::default(),
-                groups: DimensionFilter::default(),
-                statuses: vec![],
-            })
+            .raw_oneshot(
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+                    InflightRequest {
+                        collections: DimensionFilter::default(),
+                        groups: DimensionFilter::default(),
+                        statuses: vec![],
+                    },
+                ),
+            )
             .await?;
 
         let row_a = response

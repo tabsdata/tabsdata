@@ -46,7 +46,7 @@
 
 use crate::rbac::model::{
     EffectiveGrants, EntityKind, Grants, IdentityClaim, On, Project, ProjectPermission, Requires,
-    System, SystemEntity, SystemPermission, User,
+    System, SystemEntity, SystemPermission, User, VisibleProjects,
 };
 use crate::rbac::source::{RbacSource, identity_grants};
 use std::any::type_name;
@@ -262,6 +262,28 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
                 format!("{}:{}", E::NAME, scope.0),
             ))?
         }
+    }
+}
+
+/// Resolver for the requester's [`VisibleProjects`]: the data-filter
+/// counterpart of [`Enforce`]. A cross-project (global) read gates on no
+/// single project — instead it narrows its result set to the projects the
+/// requester may view. This layer puts that set in the service context for a
+/// downstream layer to filter against.
+pub struct VisibleProjectsResolver<S: RbacSource> {
+    _p: PhantomData<S>,
+}
+
+impl<S: RbacSource> VisibleProjectsResolver<S> {
+    /// Layer fn: resolve the requester's viewable-project set from their
+    /// effective grants (union across the user's assigned roles).
+    pub async fn resolve(
+        source: Ref<S>,
+        mut conn: MutRef<DynamicConnection<'static>>,
+        request: Ref<RequestContext>,
+    ) -> Result<VisibleProjects, TdError> {
+        let user_grants = source.user_grants(&mut conn, &request.user_id).await?;
+        Ok(VisibleProjects::from_grants(&user_grants))
     }
 }
 

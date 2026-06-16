@@ -158,6 +158,7 @@ mod definitions {
     /// to aggregate. Filters apply target-only to nodes and
     /// either-endpoint to real edges (target-only to synthetic edges,
     /// since they have no source dim to filter).
+    #[derive(Clone)]
     pub struct MetricsRequest {
         pub dim: Dim,
         pub window: TimeWindow,
@@ -168,12 +169,14 @@ mod definitions {
     }
 
     /// Domain request for `GET /inflight`. Point-in-time, no window.
+    #[derive(Clone)]
     pub struct InflightRequest {
         pub collections: DimensionFilter<CollectionId>,
         pub groups: DimensionFilter<GroupId>,
         pub statuses: Vec<LogicalFunctionRunStatus>,
     }
 
+    #[derive(Clone)]
     pub struct SnapshotRequest {
         pub metrics: MetricsRequest,
         pub inflight: InflightRequest,

@@ -21,6 +21,7 @@ mod routes {
         Dim, InflightQuery, InflightRequest, InflightResponse, InflightStatusQuery, MetricsQuery,
         MetricsRequest, MetricsResponse, SnapshotRequest, SnapshotResponse, StatusFilterError,
     };
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::query_filters::{
         DimensionFilter, TimeWindow, WindowAlign, WindowSpec, WindowUnit,
     };
@@ -125,10 +126,13 @@ mod routes {
     #[doc = "Consolidated operational metrics: nodes + edges over a window"]
     pub async fn get_metrics(
         State(state): State<Arc<OperationalMetricsServices>>,
+        Extension(context): Extension<RequestContext>,
         Extension(project_id): Extension<ProjectId>,
         Query(query): Query<MetricsQuery>,
     ) -> Result<GetStatus<MetricsResponse>, ErrorStatus> {
-        let request = metrics_query_into_request(query)?.in_project(project_id);
+        let request = context
+            .read(metrics_query_into_request(query)?)
+            .in_project(project_id);
         let response = state.metrics.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -137,10 +141,13 @@ mod routes {
     #[doc = "Point-in-time count of in-flight runs"]
     pub async fn get_inflight(
         State(state): State<Arc<OperationalMetricsServices>>,
+        Extension(context): Extension<RequestContext>,
         Extension(project_id): Extension<ProjectId>,
         Query(query): Query<InflightQuery>,
     ) -> Result<GetStatus<InflightResponse>, ErrorStatus> {
-        let request = inflight_query_into_request(query)?.in_project(project_id);
+        let request = context
+            .read(inflight_query_into_request(query)?)
+            .in_project(project_id);
         let response = state.inflight.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -149,12 +156,14 @@ mod routes {
     #[doc = "Combined `/metrics` + `/inflight` on one DB connection"]
     pub async fn get_snapshot(
         State(state): State<Arc<OperationalMetricsServices>>,
+        Extension(context): Extension<RequestContext>,
         Extension(project_id): Extension<ProjectId>,
         Query(metrics): Query<MetricsQuery>,
         Query(inflight): Query<InflightStatusQuery>,
     ) -> Result<GetStatus<SnapshotResponse>, ErrorStatus> {
-        let request =
-            snapshot_query_into_request(metrics, inflight.inflight_status)?.in_project(project_id);
+        let request = context.read(
+            snapshot_query_into_request(metrics, inflight.inflight_status)?
+        ).in_project(project_id);
         let response = state.snapshot.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -407,6 +416,7 @@ mod routes {
 /// `Extension<ProjectId>` / `.in_project`) and the `*_global` service handle.
 #[router_ext(GlobalMetricsRouter)]
 mod global_routes {
+    use axum::Extension;
     use axum::extract::State;
     use axum_extra::extract::Query;
     use std::sync::Arc;
@@ -414,6 +424,7 @@ mod global_routes {
     use ta_apiserver::status::ok_status::GetStatus;
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::metrics::{
         InflightQuery, InflightResponse, InflightStatusQuery, MetricsQuery, MetricsResponse,
         SnapshotResponse,
@@ -432,9 +443,10 @@ mod global_routes {
     #[doc = "Cross-project operational metrics: nodes + edges over a window"]
     pub async fn get_metrics_global(
         State(state): State<Arc<OperationalMetricsServices>>,
+        Extension(context): Extension<RequestContext>,
         Query(query): Query<MetricsQuery>,
     ) -> Result<GetStatus<MetricsResponse>, ErrorStatus> {
-        let request = metrics_query_into_request(query)?;
+        let request = context.read(metrics_query_into_request(query)?);
         let response = state.metrics_global.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -443,9 +455,10 @@ mod global_routes {
     #[doc = "Cross-project point-in-time count of in-flight runs"]
     pub async fn get_inflight_global(
         State(state): State<Arc<OperationalMetricsServices>>,
+        Extension(context): Extension<RequestContext>,
         Query(query): Query<InflightQuery>,
     ) -> Result<GetStatus<InflightResponse>, ErrorStatus> {
-        let request = inflight_query_into_request(query)?;
+        let request = context.read(inflight_query_into_request(query)?);
         let response = state.inflight_global.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -454,10 +467,11 @@ mod global_routes {
     #[doc = "Cross-project combined `/metrics` + `/inflight` on one DB connection"]
     pub async fn get_snapshot_global(
         State(state): State<Arc<OperationalMetricsServices>>,
+        Extension(context): Extension<RequestContext>,
         Query(metrics): Query<MetricsQuery>,
         Query(inflight): Query<InflightStatusQuery>,
     ) -> Result<GetStatus<SnapshotResponse>, ErrorStatus> {
-        let request = snapshot_query_into_request(metrics, inflight.inflight_status)?;
+        let request = context.read(snapshot_query_into_request(metrics, inflight.inflight_status)?);
         let response = state.snapshot_global.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }

@@ -8,6 +8,7 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
+use td_authz::rbac::VisibleProjects;
 use td_common::bucket::{WindowUnit as BucketUnit, floor_unit_ms};
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
@@ -30,39 +31,87 @@ pub async fn build_inflight_response(
     req: Ref<InflightRequest>,
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<InflightResponse, TdError> {
-    inflight_response(&req, &mut conn).await
+    // Project-scoped: RLS already isolates to the project in scope.
+    inflight_response(&req, &VisibleProjects::All, &mut conn).await
 }
 
 pub async fn build_metrics_response(
     req: Ref<MetricsRequest>,
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<MetricsResponse, TdError> {
-    metrics_response(&req, &mut conn).await
+    // Project-scoped: RLS already isolates to the project in scope.
+    metrics_response(&req, &VisibleProjects::All, &mut conn).await
 }
 
 pub async fn build_snapshot_response(
     req: Ref<SnapshotRequest>,
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<SnapshotResponse, TdError> {
-    let metrics = metrics_response(&req.metrics, &mut conn).await?;
-    let inflight = inflight_response(&req.inflight, &mut conn).await?;
+    // Project-scoped: RLS already isolates to the project in scope.
+    let metrics = metrics_response(&req.metrics, &VisibleProjects::All, &mut conn).await?;
+    let inflight = inflight_response(&req.inflight, &VisibleProjects::All, &mut conn).await?;
+    Ok(SnapshotResponse { metrics, inflight })
+}
+
+/// Global (cross-project) `/inflight`, narrowed to the requester's viewable
+/// projects. The query bypasses RLS to span every tenant; this restricts the
+/// returned rows to projects the requester may view (`VisibleProjects::All`
+/// for a view-all grant, otherwise the explicit set — empty sees nothing).
+pub async fn build_inflight_response_global(
+    req: Ref<InflightRequest>,
+    visible: Ref<VisibleProjects>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+) -> Result<InflightResponse, TdError> {
+    inflight_response(&req, &visible, &mut conn).await
+}
+
+/// Global (cross-project) `/metrics`, narrowed to the requester's viewable
+/// projects (see [`build_inflight_response_global`]).
+pub async fn build_metrics_response_global(
+    req: Ref<MetricsRequest>,
+    visible: Ref<VisibleProjects>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+) -> Result<MetricsResponse, TdError> {
+    metrics_response(&req, &visible, &mut conn).await
+}
+
+/// Global (cross-project) `/snapshot`, narrowed to the requester's viewable
+/// projects (see [`build_inflight_response_global`]).
+pub async fn build_snapshot_response_global(
+    req: Ref<SnapshotRequest>,
+    visible: Ref<VisibleProjects>,
+    mut conn: MutRef<DynamicConnection<'static>>,
+) -> Result<SnapshotResponse, TdError> {
+    let metrics = metrics_response(&req.metrics, &visible, &mut conn).await?;
+    let inflight = inflight_response(&req.inflight, &visible, &mut conn).await?;
     Ok(SnapshotResponse { metrics, inflight })
 }
 
 async fn inflight_response(
     req: &InflightRequest,
+    visible: &VisibleProjects,
     conn: &mut DynamicConnection<'static>,
 ) -> Result<InflightResponse, TdError> {
-    let rows = conn.metrics().inflight(req).await?;
+    let mut rows = conn.metrics().inflight(req).await?;
+    // Cross-project (global) reads span every tenant; drop rows for projects
+    // the requester cannot view. Scoped reads pass `All` (RLS already filtered).
+    rows.retain(|r| visible.contains(&r.project_id));
     Ok(InflightResponse::builder().rows(rows).build()?)
 }
 
 async fn metrics_response(
     req: &MetricsRequest,
+    visible: &VisibleProjects,
     conn: &mut DynamicConnection<'static>,
 ) -> Result<MetricsResponse, TdError> {
-    let raw_nodes = conn.metrics().metrics_nodes(req).await?;
-    let raw_edges = conn.metrics().metrics_edges(req).await?;
+    let mut raw_nodes = conn.metrics().metrics_nodes(req).await?;
+    let mut raw_edges = conn.metrics().metrics_edges(req).await?;
+    // Cross-project (global) reads span every tenant; drop rows for projects
+    // the requester cannot view, before synthesizing external nodes from edges
+    // (so the synthetic singletons reflect only viewable flow). Scoped reads
+    // pass `All` (RLS already filtered).
+    raw_nodes.retain(|n| n.project_id.is_none_or(|p| visible.contains(&p)));
+    raw_edges.retain(|e| e.project_id.is_none_or(|p| visible.contains(&p)));
     let mut nodes = fold_to_coarse(raw_nodes, req.unit)?;
     let edges = fold_to_coarse(raw_edges, req.unit)?;
     nodes.extend(synthesize_nodes_from_edges(&edges)?);
