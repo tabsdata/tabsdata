@@ -240,7 +240,7 @@ mod tests {
             .build()?;
         let service = DownloadBundleService::build(&context).service();
         let download_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(FunctionMaybeAtIdName::new(
                     function_param,
                     OptionalAtTimeParam { at: None },

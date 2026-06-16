@@ -159,7 +159,7 @@ mod tests {
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, BundleStatus, Decorator, FunctionName, FunctionRuntimeValues,
-        FunctionStatus, ProjectId, RoleId, UserId, WorkerMessageStatus,
+        FunctionStatus, ProjectId, UserId, WorkerMessageStatus,
         WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
@@ -192,18 +192,14 @@ mod tests {
             .description(None)
             .base_path(Some(base_path.clone()))
             .build()?;
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
-        )
-        .update(
-            CollectionParam::builder()
-                .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                .build()?,
-            update,
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
         UpdateCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -1410,7 +1406,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -1452,7 +1448,7 @@ mod tests {
             .unwrap();
         let upload = FunctionUpload::new(upload_request);
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -1483,7 +1479,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -1528,7 +1524,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)

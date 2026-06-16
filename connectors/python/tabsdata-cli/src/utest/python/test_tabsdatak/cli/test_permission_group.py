@@ -1,0 +1,290 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+"""API-level tests for the project-oriented authorization (Simple Security)
+operations and their enforcement.
+
+These exercise the ``td permission`` Simple-Security facade through the API
+client (:meth:`TabsdataServer.grant_permission` / ``revoke_permission`` /
+``list_permissions_by_user`` / ``list_permissions_by_project``) and assert both:
+
+* the happy path (an ``admin`` holding ``manage_access`` can grant/revoke/list),
+* the scope rules (project permissions require a project; system permissions
+  forbid one), and
+* enforcement -- a user holding only the auto-assigned ``default`` role (no
+  ``manage_access`` / ``manage_project``) is rejected with ``APIServerError``,
+  and a freshly-granted ``manage_access`` then *enables* the operation.
+
+All operations go through API calls, not the CLI. Project-scoped grants depend
+on the per-project roles minted at project-create time, which is Postgres-only
+on the server; those cases create a project first and skip when that is not
+available.
+"""
+
+import logging
+import uuid
+
+import pytest
+
+from tabsdatak.sdk._apiserver import APIServerError
+from tabsdatak.sdk.tabsdata_server import TabsdataServer
+
+# noinspection PyUnresolvedReferences
+from test_tabsdata.conftest import APISERVER_URL
+
+# Keep the whole module on one xdist worker: the tests mint/destroy shared
+# users, roles and grants, which race under ``--dist=loadgroup``.
+pytestmark = pytest.mark.xdist_group("connector-permission_group_seq")
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+_PASSWORD = "authz_password"
+
+
+def _unique(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+
+
+def _client_for(name: str, password: str = _PASSWORD) -> TabsdataServer:
+    """An API client authenticated as the given user (a fresh token, so it
+    reflects the user's current grants)."""
+    return TabsdataServer(APISERVER_URL, name, password)
+
+
+@pytest.fixture(scope="module")
+def admin_client() -> TabsdataServer:
+    """Admin API client (``manage_access`` via the ``sys_admin`` role).
+
+    Built directly instead of through the shared ``tabsserver_connection``
+    fixture: that fixture still passes a removed ``role`` argument
+    (``TabsdataServer(url, "admin", "tabsdata", "sys_admin")``) and so raises
+    ``TypeError`` at the tip -- TD-2417 dropped ``role`` from the client/CLI but
+    did not update the test fixtures. Keeping this self-contained lets the
+    module run independently of that breakage.
+    """
+    return _client_for("admin", "tabsdata")
+
+
+@pytest.fixture
+def regular_user(admin_client):
+    """A freshly-created, enabled user holding only the auto-assigned
+    ``default`` role (no ``manage_access`` / ``manage_project``), with an API
+    client logged in as that user.
+
+    Yields ``(name, client)``.
+    """
+    name = _unique("authz_user")
+    admin_client.delete_user(name, raise_for_status=False)
+    admin_client.create_user(name, _PASSWORD)
+    try:
+        yield name, _client_for(name)
+    finally:
+        admin_client.delete_user(name, raise_for_status=False)
+
+
+@pytest.fixture
+def other_user(admin_client):
+    """A second plain user, used as the target of grant/revoke operations."""
+    name = _unique("authz_target")
+    admin_client.delete_user(name, raise_for_status=False)
+    admin_client.create_user(name, _PASSWORD)
+    try:
+        yield name
+    finally:
+        admin_client.delete_user(name, raise_for_status=False)
+
+
+# --------------------------------------------------------------------------- #
+# Happy path -- admin (manage_access) grants / lists / revokes
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.integration
+def test_grant_list_revoke_system_permission(admin_client, other_user):
+    # `manage_access` is a system permission the `default` role does NOT hold,
+    # so it is a clean grant/revoke target (unlike `create_projects`, which
+    # every user already has via `default`).
+    admin_client.grant_permission(other_user, "manage_access")
+    perms = admin_client.list_permissions_by_user(other_user)
+    assert any(
+        p.permission == "manage_access" and p.project is None for p in perms
+    ), f"manage_access not granted; got {perms}"
+
+    admin_client.revoke_permission(other_user, "manage_access")
+    perms = admin_client.list_permissions_by_user(other_user)
+    assert not any(p.permission == "manage_access" for p in perms), (
+        f"manage_access still present after revoke; got {perms}"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Scope validation -- project perms require a project, system perms forbid one
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.integration
+def test_system_permission_with_project_rejected(admin_client, other_user):
+    with pytest.raises(APIServerError):
+        admin_client.grant_permission(
+            other_user, "manage_access", project="sandbox"
+        )
+
+
+@pytest.mark.integration
+def test_project_permission_without_project_rejected(
+    admin_client, other_user
+):
+    with pytest.raises(APIServerError):
+        admin_client.grant_permission(other_user, "develop_project")
+
+
+# --------------------------------------------------------------------------- #
+# Enforcement -- a non-privileged user may not grant / revoke / list-by-project
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.integration
+def test_grant_forbidden_for_non_privileged_user(regular_user, other_user):
+    _, client = regular_user
+    # only `default` (no manage_access / manage_project) -> Forbidden
+    with pytest.raises(APIServerError):
+        client.grant_permission(other_user, "manage_access")
+
+
+@pytest.mark.integration
+def test_revoke_forbidden_for_non_privileged_user(
+    admin_client, regular_user, other_user
+):
+    _, client = regular_user
+    # admin first grants something so a revoke target exists
+    admin_client.grant_permission(other_user, "manage_access")
+    try:
+        with pytest.raises(APIServerError):
+            client.revoke_permission(other_user, "manage_access")
+    finally:
+        admin_client.revoke_permission(
+            other_user, "manage_access", raise_for_status=False
+        )
+
+
+@pytest.mark.integration
+def test_list_by_project_forbidden_for_non_privileged_user(regular_user):
+    _, client = regular_user
+    # listing who-can-access a project requires manage on that project
+    with pytest.raises(APIServerError):
+        client.list_permissions_by_project("sandbox")
+
+
+# --------------------------------------------------------------------------- #
+# Enforcement of a granted permission -- manage_access enables granting
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.integration
+def test_manage_access_grant_enables_granting(
+    admin_client, regular_user, other_user
+):
+    name, client = regular_user
+
+    # Before: the plain user cannot grant.
+    with pytest.raises(APIServerError):
+        client.grant_permission(other_user, "manage_access")
+
+    # Admin grants manage_access to the user (Simple facade -> sys_admin role).
+    admin_client.grant_permission(name, "manage_access")
+    try:
+        # Re-login so the client carries a token issued after the grant.
+        elevated = _client_for(name)
+        # After: the user can now grant (effective permissions are the union
+        # across the user's roles, evaluated live on each request).
+        elevated.grant_permission(other_user, "create_projects")
+        perms = admin_client.list_permissions_by_user(other_user)
+        assert any(p.permission == "create_projects" for p in perms)
+    finally:
+        admin_client.revoke_permission(
+            other_user, "create_projects", raise_for_status=False
+        )
+        admin_client.revoke_permission(
+            name, "manage_access", raise_for_status=False
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Project-scoped grant + enforcement (needs a created project -> Postgres).
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def created_project(admin_client):
+    """A project created through the API so its per-project roles
+    (``<name>_view`` / ``_dev`` / ``_admin``) are minted. Skips when project
+    creation is unavailable (e.g. the server runs on SQLite)."""
+    name = _unique("authz_proj")
+    admin_client.delete_project(name, raise_for_status=False)
+    try:
+        admin_client.create_project(name, "authz test project")
+    except APIServerError as err:
+        pytest.skip(f"project creation unavailable on this backend: {err}")
+    try:
+        yield name
+    finally:
+        admin_client.delete_project(name, raise_for_status=False)
+
+
+@pytest.mark.integration
+def test_grant_project_permission_lists_under_project(
+    admin_client, created_project, other_user
+):
+    admin_client.grant_permission(
+        other_user, "develop_project", project=created_project
+    )
+    try:
+        by_user = admin_client.list_permissions_by_user(other_user)
+        assert any(
+            p.permission == "develop_project" and p.project == created_project
+            for p in by_user
+        ), f"develop_project on {created_project} not in {by_user}"
+
+        by_project = admin_client.list_permissions_by_project(created_project)
+        assert any(
+            a.user == other_user and a.permission == "develop_project"
+            for a in by_project
+        ), f"{other_user} not listed on {created_project}: {by_project}"
+    finally:
+        admin_client.revoke_permission(
+            other_user, "develop_project", project=created_project, raise_for_status=False
+        )
+
+
+@pytest.mark.integration
+def test_project_manager_can_grant_on_own_project_only(
+    admin_client, created_project, regular_user, other_user
+):
+    name, client = regular_user
+    # Make `name` a manager of the project (manage_project on it).
+    admin_client.grant_permission(
+        name, "manage_project", project=created_project
+    )
+    try:
+        manager = _client_for(name)
+        # Can grant a project permission on the project they manage.
+        manager.grant_permission(
+            other_user, "view_project", project=created_project
+        )
+        by_user = admin_client.list_permissions_by_user(other_user)
+        assert any(
+            p.permission == "view_project" and p.project == created_project
+            for p in by_user
+        )
+        # But a project manager cannot grant a *system* permission.
+        with pytest.raises(APIServerError):
+            manager.grant_permission(other_user, "manage_access")
+    finally:
+        admin_client.revoke_permission(
+            other_user, "view_project", project=created_project, raise_for_status=False
+        )
+        admin_client.revoke_permission(
+            name, "manage_project", project=created_project, raise_for_status=False
+        )

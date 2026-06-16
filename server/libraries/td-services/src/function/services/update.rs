@@ -729,7 +729,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -752,7 +752,7 @@ mod tests {
             .reset_stage(ResetStage::TRUE)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -797,7 +797,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -818,7 +818,7 @@ mod tests {
             .name(Some("nostage_fn".try_into()?))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -864,7 +864,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -885,7 +885,7 @@ mod tests {
             .base_path(Some(BasePath::try_from("/over")?))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -909,7 +909,7 @@ mod tests {
             .name(Some("override_fn".try_into()?))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)

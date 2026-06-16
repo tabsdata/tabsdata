@@ -84,7 +84,7 @@ mod tests {
     use td_objects::rest_urls::{CollectionParam, FunctionParam, OptionalAtTimeParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, CollectionName, Decorator, Description, FunctionIdName,
-        FunctionName, FunctionRuntimeValues, FunctionStatus, ProjectId, RoleId, UserId, UserName,
+        FunctionName, FunctionRuntimeValues, FunctionStatus, ProjectId, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -196,18 +196,14 @@ mod tests {
             .description(description)
             .base_path(base_path)
             .build()?;
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
-        )
-        .update(
-            CollectionParam::builder()
-                .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                .build()?,
-            update,
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
         UpdateCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -264,19 +260,15 @@ mod tests {
             .base_path(None)
             .build()
             .unwrap();
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
-        )
-        .update(
-            CollectionParam::builder()
-                .collection(CollectionIdName::from_str(collection_name.as_str()).unwrap())
-                .build()
-                .unwrap(),
-            update,
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection_name.as_str()).unwrap())
+                    .build()
+                    .unwrap(),
+                update,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateCollectionService::with_defaults(db).service();
         assert_service_error(service, request, |err| {
@@ -316,7 +308,7 @@ mod tests {
             .unwrap();
         let upload = FunctionUpload::new(upload_request);
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -343,7 +335,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -402,7 +394,7 @@ mod tests {
             .function(FunctionIdName::from_str("artifact_fn")?)
             .build()?;
         let download_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(FunctionMaybeAtIdName::new(
                     function_param,
                     OptionalAtTimeParam { at: None },
