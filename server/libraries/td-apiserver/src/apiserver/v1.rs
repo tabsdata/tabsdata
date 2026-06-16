@@ -36,9 +36,8 @@ use crate::apiserver::server::{Server, ServerBuilder, ServerError};
 use crate::layers::authorization::authorization_layer;
 use crate::layers::compression::CompressionService;
 use crate::layers::cors::CorsService;
-use crate::config::SecurityMode;
 use crate::layers::project_resolver::project_resolver_layer;
-use crate::layers::security_mode::gated_router;
+use crate::layers::security_mode::mode_authz_router;
 use crate::layers::tracing::TraceService;
 use crate::router::auth::{SecureAuthRouter, UnsecureAuthRouter};
 use crate::router::collections::CollectionsRouter;
@@ -100,29 +99,18 @@ impl ApiServerV1 {
                 .merge({
                     let mode = context.config.security_mode;
 
-                    // RBAC-management endpoints (role CRUD, role-permission, and
-                    // user-role membership) — available only in `rbac` mode.
-                    // In `simple` mode a request to any of these paths returns a
-                    // clear 403 (the raw RBAC surface is hidden behind the
-                    // `/permission-grants` facade).
-                    let rbac_management = gated_router(
-                        mode,
-                        SecurityMode::Rbac,
-                        utoipa_axum::router::OpenApiRouter::default()
-                            .merge(PermissionsRouter::router(context.services.clone()))
-                            .merge(RolesRouter::router(context.services.clone()))
-                            .merge(UserRolesRouter::router(context.services.clone())),
-                    );
+                    // RBAC-management endpoints: role CRUD, role-permission and
+                    // user-role membership (tags `Roles` / `Permissions` /
+                    // `User Roles`).
+                    let rbac_management = utoipa_axum::router::OpenApiRouter::default()
+                        .merge(PermissionsRouter::router(context.services.clone()))
+                        .merge(RolesRouter::router(context.services.clone()))
+                        .merge(UserRolesRouter::router(context.services.clone()));
 
-                    // Simple Security Mode `/permission-grants` facade —
-                    // available only in `simple` mode; blocked with a 403 in
-                    // `rbac` mode (use the RBAC role/membership endpoints there).
-                    let simple_facade = gated_router(
-                        mode,
-                        SecurityMode::Simple,
-                        utoipa_axum::router::OpenApiRouter::default()
-                            .merge(SimplePermissionsRouter::router(context.services.clone())),
-                    );
+                    // Simple Security `/permission-grants` facade (tag
+                    // `Permissions (Simple)`).
+                    let simple_facade = utoipa_axum::router::OpenApiRouter::default()
+                        .merge(SimplePermissionsRouter::router(context.services.clone()));
 
                     let global = utoipa_axum::router::OpenApiRouter::default()
                         .merge(SecureAuthRouter::router(context.services.clone()))
@@ -130,9 +118,12 @@ impl ApiServerV1 {
                         .merge(ProjectsRouter::router(context.services.clone()))
                         .merge(ServerStatusRouter::router(context.services.clone()))
                         .merge(UsersRouter::router(context.services.clone()))
-                        // mode-specific subtrees (each gated to its mode).
-                        .merge(rbac_management)
-                        .merge(simple_facade)
+                        // Mount only the active security mode's authz surface;
+                        // the other mode's endpoints are dropped — absent from
+                        // routing AND the OpenAPI doc. So `simple` mode exposes
+                        // only `Permissions (Simple)` (Roles / Permissions /
+                        // User Roles are hidden), and `rbac` mode the reverse.
+                        .merge(mode_authz_router(mode, rbac_management, simple_facade))
                         .merge(AuthenticatedExtendedRouter::router(
                             context.extended_services.clone(),
                         ));
