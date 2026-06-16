@@ -10,10 +10,9 @@ use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope, ViewProject};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::rest_urls::params::FunctionMaybeAtIdName;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, CollectionId, CollectionIdName, FunctionIdName};
+use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -36,7 +35,6 @@ fn service() {
         from_fn(With::<FunctionMaybeAtIdName>::extract::<FunctionIdName>),
         from_fn(With::<FunctionMaybeAtIdName>::extract::<Option<AtTime>>),
         from_fn(resolve_function_with_names),
-        from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
         from_fn(build_bundle_download),
@@ -92,7 +90,6 @@ mod tests {
                 type_of_val(&With::<FunctionMaybeAtIdName>::extract::<FunctionIdName>),
                 type_of_val(&With::<FunctionMaybeAtIdName>::extract::<Option<AtTime>>),
                 type_of_val(&resolve_function_with_names),
-                type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
                 type_of_val(&build_bundle_download),

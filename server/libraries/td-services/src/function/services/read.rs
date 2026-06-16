@@ -19,7 +19,7 @@ use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, FunctionId, FunctionIdName, FunctionVersionId, TableId,
+    AtTime, CollectionIdName, FunctionId, FunctionIdName, FunctionVersionId, TableId,
     TableName, WorkerId, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependency, TableTrigger};
@@ -52,7 +52,6 @@ fn service() {
             >
         ),
         // check requester can view the current project
-        from_fn(With::<FunctionDBWithNames>::extract::<CollectionId>),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
         // Read function with tables, triggers and dependencies
@@ -158,7 +157,6 @@ mod tests {
                         >,
                     ),
                     // check requester can view the current project
-                    type_of_val(&With::<FunctionDBWithNames>::extract::<CollectionId>),
                     type_of_val(&Scope::<Project>::set),
                     type_of_val(
                         &Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check,

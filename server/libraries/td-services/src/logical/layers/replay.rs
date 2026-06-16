@@ -18,7 +18,7 @@ use td_objects::dxo::logical::{
 };
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::types::basic::{
-    AtTime, CollectionId, LogicalFunctionRunId, LogicalFunctionRunStatus, LogicalPointerStatus,
+    AtTime, LogicalFunctionRunId, LogicalFunctionRunStatus, LogicalPointerStatus,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus,
 };
 use td_queries::{PfrEntry, VersionedEntry};
@@ -41,13 +41,6 @@ pub enum ReplayError {
         PhysicalFunctionRunId,
         PhysicalFunctionRunStatus,
     ) = 3,
-}
-
-#[instrument(name = "replay.extract_collection_id", skip_all, level = "debug")]
-pub async fn extract_collection_id_from_lfr(
-    lfr: Ref<LogicalFunctionRunDB>,
-) -> Result<CollectionId, TdError> {
-    Ok(lfr.collection_id)
 }
 
 /// Read the LFR's current pointer event. Refuse if not Bound — replay

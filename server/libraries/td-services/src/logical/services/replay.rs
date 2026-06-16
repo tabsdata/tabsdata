@@ -4,13 +4,13 @@
 
 use crate::logical::layers::replay::{
     assert_lfr_terminal, assert_no_concurrent_replay, build_replay_response,
-    extract_collection_id_from_lfr, load_bound_function_run_id, mint_replay_function_run,
-    mint_replay_table_data_versions, resolve_replay_function_version_id,
+    load_bound_function_run_id, mint_replay_function_run, mint_replay_table_data_versions,
+    resolve_replay_function_version_id,
 };
 use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunReplayResponse};
@@ -42,11 +42,10 @@ fn service() {
             >
         ),
         from_fn(With::<LogicalFunctionRunParam>::extract::<LogicalFunctionRunId>),
-        // Load the LFR identity row and authz on its collection.
+        // Load the LFR identity row and authz on its project.
         from_fn(By::<LogicalFunctionRunId>::fetch_one::<LogicalFunctionRunDB>),
-        from_fn(extract_collection_id_from_lfr),
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         // Validate replay preconditions: LFR.status terminal + pointer Bound +
         // no concurrent replay (only meaningful when LFR is sticky-Committed —
         // for other terminal statuses no prior replay can exist).
@@ -114,11 +113,10 @@ mod tests {
                     >
                 ),
                 type_of_val(&With::<LogicalFunctionRunParam>::extract::<LogicalFunctionRunId>),
-                // Load the LFR identity row and authz on its collection.
+                // Load the LFR identity row and authz on its project.
                 type_of_val(&By::<LogicalFunctionRunId>::fetch_one::<LogicalFunctionRunDB>),
-                type_of_val(&extract_collection_id_from_lfr),
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 // Validate replay preconditions: LFR.status terminal + pointer Bound +
                 // no concurrent replay (only meaningful when LFR is sticky-Committed —
                 // for other terminal statuses no prior replay can exist).

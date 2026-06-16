@@ -6,14 +6,14 @@ use crate::execution::layers::update_status::update_function_run_status;
 use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::rest_urls::TransactionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, TransactionId, TransactionIdName};
+use td_objects::types::basic::{TransactionId, TransactionIdName};
 use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -38,9 +38,8 @@ fn service() {
         // Find function run.
         from_fn(By::<TransactionIdName>::fetch_one::<TransactionDB>),
         // check requester can manage or develop the transaction's project
-        from_fn(With::<TransactionDB>::extract::<CollectionId>),
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<TransactionDB>::extract::<TransactionId>),
         from_fn(By::<TransactionId>::fetch_all::<LogicalFunctionRunDB>),
         // Set recover status
@@ -94,9 +93,8 @@ mod tests {
                 // Find function run.
                 type_of_val(&By::<TransactionIdName>::fetch_one::<TransactionDB>),
                 // check requester can manage or develop the transaction's project
-                type_of_val(&With::<TransactionDB>::extract::<CollectionId>),
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(&With::<TransactionDB>::extract::<TransactionId>),
                 type_of_val(&By::<TransactionId>::fetch_all::<LogicalFunctionRunDB>),
                 // Set recover status

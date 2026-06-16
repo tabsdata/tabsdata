@@ -7,7 +7,7 @@ use crate::table::layers::delete::{
 };
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::And;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
@@ -18,7 +18,7 @@ use td_objects::dxo::trigger::TriggerDB;
 use td_objects::rest_urls::TableParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, TableId, TableIdName,
+    AtTime, CollectionIdName, CollectionName, FunctionId, TableId, TableIdName,
     TableVersionId,
 };
 use td_queries::By;
@@ -45,10 +45,9 @@ fn service() {
         // Get collection. Extract collection id and name.
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionName>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester has project permissions
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         // Get table. Extract table id, table version id
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(
@@ -124,10 +123,9 @@ mod tests {
                 // Get collection. Extract collection id and name.
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester has project permissions
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 // Get table. Extract table id, table version id
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(

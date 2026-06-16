@@ -8,10 +8,9 @@ use crate::scheduler::layers::request::notify_scheduler;
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_execution::SchedulerNotify;
 use td_objects::And;
-use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::function::{
     Function, FunctionBuilder, FunctionDB, FunctionDBBuilder, FunctionDBWithNames, FunctionEnable,
@@ -20,7 +19,7 @@ use td_objects::dxo::table::{TableDB, TableDBBuilder};
 use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    CollectionId, CollectionIdName, FunctionIdName, FunctionVersionId, WorkerConfig, WorkerTypeDto,
+    CollectionIdName, FunctionIdName, FunctionVersionId, WorkerConfig, WorkerTypeDto,
 };
 use td_queries::By;
 use td_queries::{insert, insert_vec};
@@ -49,12 +48,9 @@ fn service() {
         // Extract collection and current function from request.
         from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
-        // Get collection. Extract collection id and name.
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester can manage or develop the current project
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         // Get function. Extract function id and name.
         from_fn(
             By::<And![CollectionIdName, FunctionIdName]>::fetch_one_current::<
@@ -146,12 +142,9 @@ mod tests {
                 // Extract collection and current function from request.
                 type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
                 type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
-                // Get collection. Extract collection id and name.
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester can manage or develop the current project
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 // Get function. Extract function id and name.
                 type_of_val(&
                     By::<And![CollectionIdName, FunctionIdName]>::fetch_one_current::<
