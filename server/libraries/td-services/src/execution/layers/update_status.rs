@@ -22,7 +22,7 @@ use td_objects::types::basic::{
 };
 use td_objects::{Buildable, and};
 use td_queries::{ChunkedQueries, LfrEntry, LiveEntry, LtdvEntry};
-use td_tower::ctx_service::ReqCtx;
+use td_tower::ctx_service::{Message, ReqCtx};
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
 
@@ -99,10 +99,10 @@ pub async fn update_function_run_status(
                     | LogicalFunctionRunStatus::Error
                     | LogicalFunctionRunStatus::Failed,
                 ) => {
-                    ctx.warning(UpdateStatusRunError::StickyFinalStatus(
+                    ctx.warning(Message::of(UpdateStatusRunError::StickyFinalStatus(
                         current.id.clone(),
                         *s,
-                    ));
+                    )));
                     None
                 }
                 (s @ LogicalFunctionRunStatus::Yanked, LogicalFunctionRunStatus::Yanked)
@@ -110,10 +110,10 @@ pub async fn update_function_run_status(
                     s @ (LogicalFunctionRunStatus::Committed | LogicalFunctionRunStatus::Canceled),
                     LogicalFunctionRunStatus::Committed | LogicalFunctionRunStatus::Canceled,
                 ) if s == &update.status => {
-                    ctx.warning(UpdateStatusRunError::StickyFinalStatus(
+                    ctx.warning(Message::of(UpdateStatusRunError::StickyFinalStatus(
                         current.id.clone(),
                         *s,
-                    ));
+                    )));
                     None
                 }
                 (
@@ -138,10 +138,10 @@ pub async fn update_function_run_status(
                     | LogicalFunctionRunStatus::Failed,
                 )
                 | (LogicalFunctionRunStatus::Done, LogicalFunctionRunStatus::Done) => {
-                    ctx.warning(UpdateStatusRunError::ReplayCallbackAbsorbed(
+                    ctx.warning(Message::of(UpdateStatusRunError::ReplayCallbackAbsorbed(
                         current.id.clone(),
                         current.status,
-                    ));
+                    )));
                     None
                 }
                 (LogicalFunctionRunStatus::Failed, LogicalFunctionRunStatus::Done) => {
@@ -203,7 +203,7 @@ pub async fn update_function_run_status(
 
     if lfr_ids.is_empty() {
         debug!("execution.update_status: no-op (all filtered)");
-        ctx.warning(UpdateStatusRunError::NoOpStatusUpdate);
+        ctx.warning(Message::of(UpdateStatusRunError::NoOpStatusUpdate));
         return Ok(());
     }
 

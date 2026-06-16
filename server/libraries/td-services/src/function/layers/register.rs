@@ -29,7 +29,7 @@ use td_objects::types::composed::{
 };
 use td_objects::{Buildable, and, or};
 use td_queries::{ChunkedQueries, HistoricEntry, LiveEntry};
-use td_tower::ctx_service::ReqCtx;
+use td_tower::ctx_service::{Message, ReqCtx};
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, error};
 
@@ -185,10 +185,12 @@ pub async fn build_table_versions(
                 TableStatus::Frozen => {
                     // We can only unfreeze a frozen table if reuse_frozen is enabled
                     if **reuse_frozen {
-                        ctx.warning(RegisterFunctionError::FrozenTableAlreadyExists(
-                            table_name.clone(),
-                            collection_name.deref().clone(),
-                            "unfreezing with new table definition".to_string(),
+                        ctx.warning(Message::of(
+                            RegisterFunctionError::FrozenTableAlreadyExists(
+                                table_name.clone(),
+                                collection_name.deref().clone(),
+                                "unfreezing with new table definition".to_string(),
+                            ),
                         ));
 
                         &existing_version.table_id

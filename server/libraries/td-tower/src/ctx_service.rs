@@ -53,12 +53,16 @@ pub struct Message {
     pub link: Option<String>,
 }
 
-impl<E: td_error::TdDomainError> From<E> for Message {
-    fn from(value: E) -> Self {
+impl Message {
+    /// Build a context message from a domain error. Deliberately NOT a
+    /// blanket `From<E: TdDomainError>` impl: that overlaps (per coherence's
+    /// future-compat rules) with any upstream `impl From<X> for X::Assoc`,
+    /// so a routine dependency bump could break the build (`time` 0.3.48 did).
+    pub fn of<E: td_error::TdDomainError>(error: E) -> Self {
         Message {
-            code: value.code().to_string(),
-            group: value.domain().to_string(),
-            message: value.to_string(),
+            code: error.code().to_string(),
+            group: error.domain().to_string(),
+            message: error.to_string(),
             template: None,
             args: None,
             link: None,
@@ -192,9 +196,9 @@ mod tests {
     }
 
     #[test]
-    fn test_message_from_td_error() {
+    fn test_message_of_td_error() {
         let error = TestError::FatalError("terrible".to_string());
-        let message: Message = error.into();
+        let message = Message::of(error);
         assert_eq!(message.code, "TestError::1234");
         assert_eq!(message.group, "TestError");
         assert_eq!(message.message, "Fatal error: terrible");
