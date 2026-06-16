@@ -2,6 +2,7 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
+import json
 import logging
 
 import pytest
@@ -402,3 +403,71 @@ def test_collection_info_error(login):
     )
     assert result.exit_code != 0
 
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_collection_create_source_with_conn_file(login, tmp_path):
+    conn_file = tmp_path / "conn.json"
+    conn_file.write_text(
+        json.dumps(
+            {
+                "kind": "mysqlSrcConn",
+                "apiVersion": "1.0",
+                "conn_configs": {
+                    "uri": "mysql://127.0.0.1:3306/db",
+                    "credentials": {"user": "u", "password": "p"},
+                },
+            }
+        )
+    )
+    runner = CliRunner()
+    try:
+        result = runner.invoke(
+            cli,
+            [
+                "collection",
+                "create",
+                "--name",
+                "test_create_source_conn_file",
+                "--description",
+                "source via conn file",
+                "--conn-file",
+                str(conn_file),
+            ],
+        )
+        logger.debug(result.output)
+        assert result.exit_code == 0
+    finally:
+        runner.invoke(
+            cli,
+            [
+                "collection",
+                "delete",
+                "--name",
+                "test_create_source_conn_file",
+                "--confirm",
+                "delete",
+            ],
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.requires_internet
+def test_collection_create_source_without_conn_file_fails(login):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "collection",
+            "create",
+            "--name",
+            "test_create_source_no_conn",
+            "--description",
+            "d",
+            "--group",
+            "source",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "conn-file" in result.output

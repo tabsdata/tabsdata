@@ -4,6 +4,10 @@ from enum import Enum
 from typing import ClassVar
 
 from tabsdata._io.connections.connections import Conn
+from tabsdata._io.connections.named_connection.kind_registry import (
+    conn_class_for,
+    split_kind,
+)
 
 ENV_PREFIX = "env:"
 
@@ -15,36 +19,65 @@ class ConnMode(str, Enum):
 
 @dataclass(frozen=True)
 class _ConnDef:
-    """Schema of a connection definition document."""
+    """Schema of a connection definition document.
 
-    KIND: ClassVar[str] = "connectionDef"
+    The canonical shape — the same document the apiserver validates, the
+    stores persist, and the workers hydrate::
+
+        {
+            "kind": "mysqlSrcConn",
+            "apiVersion": "1.0",
+            "name": "<connection name>",
+            "conn_configs": {
+                "<param>": "<value>",
+                "env:<param>": "<ENV_KEY>",
+                ...
+            }
+        }
+
+    ``kind`` is the connector identifier (``<token><Src|Dst>Conn``); the
+    old ``conn_type``/``conn_mode`` pair is derived from it via the
+    [`kind_registry`](kind_registry.py).
+    """
+
     API_VERSION: ClassVar[str] = "1.0"
 
     kind: str
     apiVersion: str
     name: str
-    conn_mode: ConnMode
-    conn_type: str
     conn_configs: dict
 
     @classmethod
     def from_dict(cls, cx_dict: dict) -> "_ConnDef":
         kind = cx_dict.get("kind")
-        if kind != cls.KIND:
-            raise ValueError(f"Expected kind '{cls.KIND}', got '{kind}'")
-        api_version = cx_dict.get("apiVersion")
+        if not isinstance(kind, str):
+            raise ValueError(f"Expected a string 'kind', got '{kind}'")
+        split_kind(kind)  # validates the shape; class resolution is lazy
+        api_version = cx_dict.get("apiVersion", cls.API_VERSION)
         if api_version != cls.API_VERSION:
             raise ValueError(
                 f"Expected apiVersion '{cls.API_VERSION}', got '{api_version}'"
             )
+        name = cx_dict.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError("Connection document missing 'name'")
         return cls(
             kind=kind,
             apiVersion=api_version,
-            name=cx_dict["name"],
-            conn_mode=ConnMode(cx_dict["conn_mode"]),
-            conn_type=cx_dict["conn_type"],
+            name=name,
             conn_configs=cx_dict.get("conn_configs", {}),
         )
+
+    @property
+    def conn_type(self) -> str:
+        """The ``Conn`` subclass name the kind maps to (e.g. ``MySQLConn``)."""
+        return conn_class_for(self.kind).__name__
+
+    @property
+    def conn_mode(self) -> ConnMode:
+        """The src/dest mode carried by the kind's suffix."""
+        _, mode = split_kind(self.kind)
+        return ConnMode(mode)
 
 
 @dataclass(init=False)
@@ -79,21 +112,9 @@ class NamedConn(Conn):
         dictionary using the name of this NamedConn.
 
         Args:
-            cx_dict: A dictionary with the following structure:
-                {
-                    "kind": "connectionDef",
-                    "apiVersion": "1.0",
-                    "name": "<connection name>",
-                    "conn_mode": "src" | "dest",
-                    "conn_type": "<Conn class name, e.g. MySQLConn>",
-                    "conn_configs": {
-                        "<param>": "<value>",
-                        "env:<param>": "<ENV_VAR_NAME>",
-                        ...
-                    }
-                }
-                Keys in conn_configs prefixed with "env:" indicate that the value
-                is the name of an environment variable to resolve.
+            cx_dict: A connection document (see :class:`_ConnDef`). Keys in
+                ``conn_configs`` prefixed with ``env:`` indicate that the
+                value is the name of an environment variable to resolve.
         Returns:
             The actual connection configuration corresponding to this NamedConn's name.
         """
@@ -105,22 +126,40 @@ class NamedConn(Conn):
                 f"NamedConn name '{self.name}'"
             )
 
-        subclasses = {sub.__name__: sub for sub in _all_subclasses(Conn)}
-        conn_cls = subclasses.get(conn_def.conn_type)
-        if conn_cls is None:
-            raise ValueError(f"Unknown connection type: '{conn_def.conn_type}'")
+        conn_cls = conn_class_for(conn_def.kind)
 
         resolved = _resolve_env_vars(conn_def.conn_configs)
 
         return conn_cls._load_from_dict(resolved)
 
 
-def _all_subclasses(cls: type) -> list[type]:
-    result = []
-    for sub in cls.__subclasses__():
-        result.append(sub)
-        result.extend(_all_subclasses(sub))
-    return result
+def collect_env_refs(configs) -> list[str]:
+    """Env keys referenced via ``env:`` entries, recursively — the set the
+    server checks coverage for on create/upsert."""
+    refs: list[str] = []
+    if isinstance(configs, dict):
+        for key, value in configs.items():
+            if key.startswith(ENV_PREFIX) and isinstance(value, str):
+                refs.append(value)
+            elif isinstance(value, dict):
+                refs.extend(collect_env_refs(value))
+    return refs
+
+
+def secrets_from_env(document: dict) -> list[dict]:
+    """The ``secrets`` payload for a dehydrated document: every referenced
+    env key resolved from THIS process's environment."""
+    secrets = []
+    for env_key in sorted(set(collect_env_refs(document.get("conn_configs")))):
+        value = os.environ.get(env_key)
+        if value is None:
+            raise ValueError(
+                f"Environment variable '{env_key}' is referenced by the "
+                "connection but not set; export it before sending the"
+                " connection"
+            )
+        secrets.append({"key": env_key, "value": value})
+    return secrets
 
 
 def _resolve_env_vars(configs: dict) -> dict:

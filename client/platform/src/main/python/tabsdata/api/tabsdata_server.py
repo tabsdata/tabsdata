@@ -113,6 +113,9 @@ class Collection:
         description: str | None = None,
         group: str | None = None,
         base_path: str | None = None,
+        connection_document: dict | None = None,
+        secrets: list | None = None,
+        variables: list | None = None,
         **kwargs,
     ):
         """
@@ -136,6 +139,11 @@ class Collection:
         self.description = description
         self._group = group
         self.base_path = base_path
+        # Source/destination collections are created WITH their connection;
+        # only used at create time.
+        self._connection_document = connection_document
+        self._secrets = secrets
+        self._variables = variables
         self.created_on = created_on
         if created_on:
             self.created_on_str = _convert_timestamp_to_string(created_on)
@@ -172,6 +180,9 @@ class Collection:
             description,
             group=self._group,
             base_path=self._base_path,
+            connection=self._connection_document,
+            secrets=self._secrets,
+            variables=self._variables,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -3625,6 +3636,9 @@ class TabsdataServer:
         description: str = None,
         group: str | None = None,
         base_path: str | None = None,
+        connection: dict | None = None,
+        secrets: list | None = None,
+        variables: list | None = None,
         raise_for_status: bool = True,
     ) -> Collection:
         """
@@ -3637,6 +3651,12 @@ class TabsdataServer:
                 omitted, the server assigns the default group.
             base_path (str, optional): The logical storage prefix for the
                 collection's artifacts. Defaults to '/' when omitted.
+            connection (dict, optional): Dehydrated connection document —
+                required when creating a source/destination collection (it is
+                created WITH its connection, 1:1).
+            secrets (list, optional): ``{key, value}`` covering every
+                ``env:`` reference in the connection document.
+            variables (list, optional): ``{key, value}`` non-secret values.
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
 
@@ -3649,6 +3669,9 @@ class TabsdataServer:
             description=description,
             group=group,
             base_path=base_path,
+            connection_document=connection,
+            secrets=secrets,
+            variables=variables,
         )
         collection.create(raise_for_status=raise_for_status)
         return collection

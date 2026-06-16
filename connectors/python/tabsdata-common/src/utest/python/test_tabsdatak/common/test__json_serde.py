@@ -18,6 +18,7 @@ from tabsdatak.common._json_serde import (
     hydrate_secrets_as_envs,
     hydrate_vars,
     hydrate_vars_as_envs,
+    list_refs,
     replace_at,
 )
 
@@ -289,6 +290,36 @@ def test_extract_secrets_ignores_var_envelopes():
     data = _wrap({"u": _var_ref("USER"), "p": _secret_ref("PW")})
     result = extract_secrets(data)
     assert result == [KeyValue(key="P", value=None)]
+
+
+# --- list_refs -------------------------------------------------------------
+
+
+def test_list_refs_on_empty_payload_returns_empty():
+    assert list_refs(_wrap({})) == ([], [])
+
+
+def test_list_refs_returns_secret_and_var_ref_keys():
+    data = _wrap({"password": _secret_ref("PW"), "schema": _var_ref("SCHEMA")})
+    secret_keys, var_keys = list_refs(data)
+    assert secret_keys == ["PASSWORD"]
+    assert var_keys == ["SCHEMA"]
+
+
+def test_list_refs_keys_match_extract_keys_on_dehydrated():
+    # A dehydrated connection carries only refs; list_refs must agree with the
+    # keys extract_* derives — this is the alignment invariant the CLI relies on.
+    original = _wrap(
+        {
+            "uri": _secret_literal("mysql://h/db"),
+            "password": _secret_ref("PW"),
+            "schema": _var_literal("public"),
+        }
+    )
+    dehydrated = dehydrate_vars(dehydrate_secrets(original))
+    secret_keys, var_keys = list_refs(dehydrated)
+    assert secret_keys == [kv.key for kv in extract_secrets(dehydrated)]
+    assert var_keys == [kv.key for kv in extract_vars(dehydrated)]
 
 
 # --- dehydrate_secrets -----------------------------------------------------

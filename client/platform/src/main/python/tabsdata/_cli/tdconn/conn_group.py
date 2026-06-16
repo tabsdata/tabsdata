@@ -4,8 +4,8 @@
 """Connection management commands for ``tdconn``.
 
 Each function is a Click command registered on the main ``cli`` group.
-Commands mirror the original argparse verbs (add, update, delete, info,
-list) with identical semantics but Click-native option handling.
+Commands mirror the original argparse verbs (add, update, info, list)
+with identical semantics but Click-native option handling.
 """
 
 from __future__ import annotations
@@ -97,31 +97,6 @@ def update(ctx: click.Context, conn_name: str, conn_file: str):
     "conn_name",
     required=True,
     metavar="CONN_NAME",
-    help="Name of the connection to delete.",
-)
-@click.option(
-    "--confirm",
-    required=True,
-    type=click.Choice(["delete"]),
-    help="Type 'delete' verbatim to confirm destruction.",
-)
-@click.pass_context
-def delete(ctx: click.Context, conn_name: str, confirm: str):
-    """Delete a connection by name."""
-    ux = ctx.obj["ux"]
-    try:
-        ux.delete(conn_name)
-    except (FileNotFoundError, ValueError, OSError) as exc:
-        raise click.ClickException(str(exc))
-
-
-@click.command()
-@click.option(
-    "-n",
-    "--name",
-    "conn_name",
-    required=True,
-    metavar="CONN_NAME",
     help="Name of the connection to show.",
 )
 @click.option(
@@ -163,5 +138,6 @@ def list_cmd(ctx: click.Context, verify: bool):
         raise click.ClickException(str(exc))
 
 
-# Commands to register on the CLI group
-conn_commands = [add, update, delete, info, list_cmd]
+# Commands to register on the CLI group. There is no `delete`: a connection
+# is 1:1 with its collection and is deleted with it (`td collection delete`).
+conn_commands = [add, update, info, list_cmd]

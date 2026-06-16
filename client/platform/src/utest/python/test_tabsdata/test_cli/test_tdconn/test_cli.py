@@ -3,9 +3,10 @@
 #
 """End-to-end tests for the ``tdconn`` CLI (CRUD operations).
 
-Tests drive the Click CLI via :class:`click.testing.CliRunner` and assert
+Tests drive the Click CLI via :class:`click.testing.CliRunner` against the
+``api_server`` fake (in-memory collection-connection endpoints) and assert
 on exit codes and captured output.  ``HOME`` is redirected via the
-``isolated_home`` fixture so the CLI writes inside the test's temp
+``isolated_home`` fixture so nothing leaks outside the test's temp
 directory.
 """
 from __future__ import annotations
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-def test_add_and_list(isolated_home, conn_file):
+def test_add_and_list(isolated_home, conn_file, api_server):
     runner = CliRunner()
     src = conn_file(name="finance")
 
@@ -46,7 +47,7 @@ def test_add_and_list(isolated_home, conn_file):
     assert "src" in result.output
 
 
-def test_add_duplicate_errors(isolated_home, conn_file):
+def test_add_duplicate_errors(isolated_home, conn_file, api_server):
     runner = CliRunner()
     src = conn_file(name="finance")
 
@@ -58,7 +59,7 @@ def test_add_duplicate_errors(isolated_home, conn_file):
     assert "already exists" in result.output
 
 
-def test_info_prints_identity(isolated_home, conn_file):
+def test_info_prints_identity(isolated_home, conn_file, api_server):
     runner = CliRunner()
     runner.invoke(cli, ["add", "-f", str(conn_file(name="finance"))])
 
@@ -74,7 +75,7 @@ def test_info_prints_identity(isolated_home, conn_file):
     assert '"conn_configs"' not in result.output
 
 
-def test_info_with_details_prints_full_json(isolated_home, conn_file):
+def test_info_with_details_prints_full_json(isolated_home, conn_file, api_server):
     runner = CliRunner()
     runner.invoke(cli, ["add", "-f", str(conn_file(name="finance"))])
 
@@ -89,7 +90,7 @@ def test_info_with_details_prints_full_json(isolated_home, conn_file):
     assert '"uri": "stub://host/db"' in result.output
 
 
-def test_info_short_details_flag_is_d(isolated_home, conn_file):
+def test_info_short_details_flag_is_d(isolated_home, conn_file, api_server):
     runner = CliRunner()
     runner.invoke(cli, ["add", "-f", str(conn_file(name="finance"))])
 
@@ -99,7 +100,7 @@ def test_info_short_details_flag_is_d(isolated_home, conn_file):
     assert '"conn_configs"' in result.output
 
 
-def test_list_with_verify_adds_verified_column(isolated_home, conn_file):
+def test_list_with_verify_adds_verified_column(isolated_home, conn_file, api_server):
     runner = CliRunner()
     # StubConn has no registered extractor, so logic.verify will raise -- the
     # list output should still render all rows and mark them not verified.
@@ -117,7 +118,7 @@ def test_list_with_verify_adds_verified_column(isolated_home, conn_file):
     assert "verified 0 / 2" in result.output
 
 
-def test_update(isolated_home, conn_file):
+def test_update(isolated_home, conn_file, api_server):
     runner = CliRunner()
     runner.invoke(cli, ["add", "-f", str(conn_file(name="finance", description="v1"))])
 
@@ -132,78 +133,26 @@ def test_update(isolated_home, conn_file):
     assert "connectivity failed" in result.output
 
 
-def test_delete_requires_confirm_flag(isolated_home, conn_file):
+def test_add_reaches_the_server_store(isolated_home, conn_file, api_server):
     runner = CliRunner()
-    runner.invoke(cli, ["add", "-f", str(conn_file(name="finance"))])
 
-    # Click exits with code 2 when a required option is missing.
-    result = runner.invoke(cli, ["delete", "--name", "finance"])
-    assert result.exit_code == 2
-
-    # Entry still present.
-    result = runner.invoke(cli, ["list"])
-    assert result.exit_code == 0
-    assert "finance" in result.output
-
-
-def test_delete_rejects_wrong_confirm_value(isolated_home, conn_file):
-    runner = CliRunner()
-    runner.invoke(cli, ["add", "-f", str(conn_file(name="finance"))])
-
-    # --confirm restricts to the literal string 'delete'.
-    result = runner.invoke(cli, ["delete", "--name", "finance", "--confirm", "yes"])
-    assert result.exit_code == 2
-
-
-def test_delete_with_confirm_delete_proceeds(isolated_home, conn_file):
-    runner = CliRunner()
-    runner.invoke(cli, ["add", "-f", str(conn_file(name="finance"))])
-
-    result = runner.invoke(
-        cli, ["delete", "--name", "finance", "--confirm", "delete"]
-    )
+    result = runner.invoke(cli, ["add", "-f", str(conn_file(name="finance"))])
     logger.debug(result.output)
     assert result.exit_code == 0
-    assert "Deleted" in result.output
-    assert "'finance'" in result.output
-
-    # Gone from the store.
-    result = runner.invoke(cli, ["list"])
-    assert result.exit_code == 0
-    assert "finance" not in result.output
+    # The document landed server-side, keyed by the connection name; no
+    # instance file was written (connections live behind the apiserver now).
+    assert "finance" in api_server.documents
+    assert not (isolated_home / ".tabsdata" / "instances").exists()
 
 
-def test_instance_flag_is_respected(isolated_home, conn_file):
-    runner = CliRunner()
-    instance = "prod"
-
-    result = runner.invoke(
-        cli,
-        ["--instance", instance, "add", "-f", str(conn_file(name="finance"))],
-    )
-    logger.debug(result.output)
-    assert result.exit_code == 0
-
-    expected = (
-        isolated_home
-        / ".tabsdata"
-        / "instances"
-        / instance
-        / "repository"
-        / "connections"
-        / "finance.json"
-    )
-    assert expected.is_file()
-
-
-def test_long_file_flag_still_works(isolated_home, conn_file):
+def test_long_file_flag_still_works(isolated_home, conn_file, api_server):
     runner = CliRunner()
     src = conn_file(name="finance")
     result = runner.invoke(cli, ["add", "--file", str(src)])
     assert result.exit_code == 0
 
 
-def test_short_name_flag_works(isolated_home, conn_file):
+def test_short_name_flag_works(isolated_home, conn_file, api_server):
     runner = CliRunner()
     runner.invoke(cli, ["add", "-f", str(conn_file(name="finance"))])
 
@@ -214,7 +163,7 @@ def test_short_name_flag_works(isolated_home, conn_file):
     assert "StubConn" in result.output
 
 
-def test_add_from_stdin(isolated_home, conn_file):
+def test_add_from_stdin(isolated_home, conn_file, api_server):
     runner = CliRunner()
     src = conn_file(name="stdin_conn")
     stdin_content = src.read_text(encoding="utf-8")
@@ -226,7 +175,7 @@ def test_add_from_stdin(isolated_home, conn_file):
     assert "'stdin_conn'" in result.output
 
 
-def test_update_from_stdin(isolated_home, conn_file):
+def test_update_from_stdin(isolated_home, conn_file, api_server):
     runner = CliRunner()
     runner.invoke(
         cli, ["add", "-f", str(conn_file(name="finance", description="v1"))]

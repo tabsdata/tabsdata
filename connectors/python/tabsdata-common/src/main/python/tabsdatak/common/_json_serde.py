@@ -221,6 +221,20 @@ def extract_vars(data: JsonSerdeData) -> list[KeyValue]:
     )
 
 
+def list_refs(dehydrated_data: JsonSerdeData) -> tuple[list[str], list[str]]:
+    """Return ``(secret_ref_keys, var_ref_keys)`` for a dehydrated JSON.
+
+    The keys are the env-var-style names derived from each ref's jsonpath,
+    matching the keys produced by `extract_secrets`/`extract_vars`. Unlike
+    `extract_*`, this needs no literal values — it lists the ref names a
+    dehydrated connection carries, for alignment checks against a separately
+    supplied secrets/vars set.
+    """
+    secret_keys = [_to_key(path) for path, _ in find_by_kind(dehydrated_data, _SECRET_REF_KIND)]
+    var_keys = [_to_key(path) for path, _ in find_by_kind(dehydrated_data, _VAR_REF_KIND)]
+    return secret_keys, var_keys
+
+
 def dehydrate_secrets(hydrated_data: JsonSerdeData) -> JsonSerdeData:
     """Return a deep copy of ``hydrated_data`` with every ``secretLiteral``
     envelope rewritten as a ``secretRef`` envelope.

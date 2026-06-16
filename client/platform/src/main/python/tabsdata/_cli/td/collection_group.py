@@ -3,6 +3,10 @@
 #
 
 
+import json
+import sys
+from pathlib import Path
+
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
@@ -12,6 +16,10 @@ from tabsdata._cli.cli_utils import (
     hint_common_solutions,
     logical_prompt,
     verify_login_or_prompt,
+)
+from tabsdata._io.connections.named_connection.kind_registry import split_kind
+from tabsdata._io.connections.named_connection.named_connection import (
+    secrets_from_env,
 )
 from tabsdata.api.tabsdata_server import TabsdataServer
 
@@ -38,6 +46,14 @@ def collection():
         "The physical backend is selected by the server's configured mounts."
     ),
 )
+@click.option(
+    "--conn-file",
+    help=(
+        "Connection JSON document ('-' to read from stdin). Required for a "
+        "source/destination collection — it is created WITH its connection. "
+        "'env:' references are resolved from this shell's environment."
+    ),
+)
 @click.pass_context
 def create(
     ctx: click.Context,
@@ -45,6 +61,7 @@ def create(
     description: str,
     group: str,
     base_path: str,
+    conn_file: str,
 ):
     """Create a new collection"""
     verify_login_or_prompt(ctx)
@@ -54,15 +71,72 @@ def create(
         or logical_prompt(ctx, "Name of the collection to create")
     )
     description = description or ""
+    document = None
+    secrets = None
+    if conn_file:
+        document, group, secrets = _load_connection_document(conn_file, name, group)
+    elif group in ("source", "destination"):
+        raise click.ClickException(
+            f"a {group} collection is created WITH its connection; pass --conn-file"
+        )
     click.echo("Creating a new collection")
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.create_collection(name, description, group=group, base_path=base_path)
+        server.create_collection(
+            name,
+            description,
+            group=group,
+            base_path=base_path,
+            connection=document,
+            secrets=secrets,
+        )
         click.echo("Collection created successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to create collection: {e}")
+
+
+def _load_connection_document(
+    conn_file: str, name: str, group: str | None
+) -> tuple[dict, str, list]:
+    """The dehydrated document, the group its kind implies, and the secrets
+    payload resolved from this shell's environment."""
+    try:
+        raw = (
+            sys.stdin.read()
+            if conn_file == "-"
+            else Path(conn_file).read_text(encoding="utf-8")
+        )
+    except OSError as e:
+        raise click.ClickException(f"cannot read connection file: {e}")
+    try:
+        document = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"invalid connection JSON: {e}")
+    doc_name = document.get("name")
+    if doc_name is None:
+        document["name"] = name
+    elif doc_name != name:
+        raise click.ClickException(
+            f"the connection document is named '{doc_name}' but the collection "
+            f"is '{name}' — a connection is named by its collection (1:1)"
+        )
+    try:
+        _, mode = split_kind(document.get("kind", ""))
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    implied = "source" if mode == "src" else "destination"
+    if group is not None and group != implied:
+        raise click.ClickException(
+            f"kind '{document['kind']}' makes this a {implied} collection, "
+            f"but --group says '{group}'"
+        )
+    try:
+        secrets = secrets_from_env(document)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    return document, implied, secrets
 
 
 @collection.command()

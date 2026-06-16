@@ -494,6 +494,9 @@ class APIServer:
         description: str,
         group: str | None = None,
         base_path: str | None = None,
+        connection: dict | None = None,
+        secrets: list | None = None,
+        variables: list | None = None,
         raise_for_status: bool = True,
     ):
         endpoint = "/collections"
@@ -502,12 +505,42 @@ class APIServer:
             data["group"] = group
         if base_path is not None:
             data["base_path"] = base_path
+        if connection is not None:
+            # Source/destination collections are created WITH their
+            # connection (1:1) — the triple rides on the create payload.
+            data["connection"] = connection
+            data["secrets"] = secrets or []
+            data["vars"] = variables or []
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def collection_delete(self, collection_name: str, raise_for_status: bool = True):
         endpoint = f"/collections/{collection_name}"
         response = self.delete(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def collection_connection_upsert(
+        self,
+        collection_name: str,
+        connection: dict,
+        secrets: list | None = None,
+        variables: list | None = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/collections/{collection_name}/connection"
+        data = {
+            "connection": connection,
+            "secrets": secrets or [],
+            "vars": variables or [],
+        }
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def collection_connection_get(
+        self, collection_name: str, raise_for_status: bool = True
+    ):
+        endpoint = f"/collections/{collection_name}/connection"
+        response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def collection_get_by_name(
