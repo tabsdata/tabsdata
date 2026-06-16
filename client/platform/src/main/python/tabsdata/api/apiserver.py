@@ -185,6 +185,7 @@ class APIServer:
     # server adds a top-level (non-`SCOPED`) resource.
     _GLOBAL_PREFIXES = (
         "/auth",
+        "/permission-grants",
         "/projects",
         "/roles",
         "/runtime-info",
@@ -343,7 +344,7 @@ class APIServer:
                 verify=self.certificate_file,
             )
 
-    def delete(self, path, refresh_if_needed=True):
+    def delete(self, path, json=None, refresh_if_needed=True):
         headers = {}
 
         if refresh_if_needed:
@@ -356,6 +357,7 @@ class APIServer:
                 self.url + self._resolve_path(path),
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                json=json,
                 verify=self.certificate_file,
             )
         else:
@@ -363,6 +365,7 @@ class APIServer:
                 self.url + self._resolve_path(path),
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+                json=json,
                 verify=self.certificate_file,
             )
 
@@ -1082,6 +1085,50 @@ class APIServer:
         count of non-terminal runs.
         """
         response = self.get("/inflight", params=params or {})
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def permission_grant(
+        self,
+        user: str,
+        permission: str,
+        project: str = None,
+        raise_for_status: bool = True,
+    ):
+        """Grant a flat permission to a user (Simple Security Mode facade)."""
+        endpoint = "/permission-grants"
+        data = self.get_params_dict(
+            ["user", "permission", "project"], [user, permission, project]
+        )
+        response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def permission_revoke(
+        self,
+        user: str,
+        permission: str,
+        project: str = None,
+        raise_for_status: bool = True,
+    ):
+        """Revoke a flat permission from a user (Simple Security Mode facade)."""
+        endpoint = "/permission-grants"
+        data = self.get_params_dict(
+            ["user", "permission", "project"], [user, permission, project]
+        )
+        response = self.delete(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def permission_list_by_user(self, user: str, raise_for_status: bool = True):
+        """List a user's effective flat permissions (Simple Security Mode
+        facade)."""
+        endpoint = "/permission-grants/by-user"
+        response = self.get(endpoint, params={"user": user})
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def permission_list_by_project(self, project: str, raise_for_status: bool = True):
+        """List everyone with authority on a project (Simple Security Mode
+        facade)."""
+        endpoint = "/permission-grants/by-project"
+        response = self.get(endpoint, params={"project": project})
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def role_create(

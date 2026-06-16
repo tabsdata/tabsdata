@@ -2551,6 +2551,83 @@ PERMISSION_TYPES_WITH_ENTITY = [
 ]
 
 
+# --- Simple Security Mode permission facade (TEDB / TEDC) ---------------------
+# Flat per-user permissions, the surface exposed by `td permission`. The server
+# translates these into RBAC role-membership operations; there is no
+# `simple_permission` table. See `server/.../dxo/simple_permission.rs` and
+# `server/.../types/basic/typed_enum.rs::SimplePermissionType`.
+
+# Project-scoped permissions: require `--project`.
+SIMPLE_PROJECT_PERMISSION_TYPES = [
+    "view_project",
+    "develop_project",
+    "manage_project",
+]
+
+# System-scoped permissions: must not carry `--project`. `admin_all_projects` is
+# the instance-wide equivalent of `manage_project`.
+SIMPLE_SYSTEM_PERMISSION_TYPES = [
+    "create_projects",
+    "manage_access",
+    "admin_all_projects",
+]
+
+VALID_SIMPLE_PERMISSION_TYPES = (
+    SIMPLE_PROJECT_PERMISSION_TYPES + SIMPLE_SYSTEM_PERMISSION_TYPES
+)
+
+# Org-wide read/develop wildcards have no Simple-surface name; rejected
+# client-side (and by the server) with a "use RBAC Mode View" message.
+SIMPLE_RBAC_ONLY_WILDCARD_TYPES = [
+    "view_all_projects",
+    "develop_all_projects",
+]
+
+RBAC_ONLY_WILDCARD_MESSAGE = (
+    "org-wide view/develop is RBAC Mode View only; grant per project or use "
+    "RBAC Mode."
+)
+
+
+class SimplePermission:
+    """One row of a user's effective flat permission set
+    (`td permission list --user X`).
+
+    `project` is set for project-scoped permissions and ``None`` for
+    system-scoped ones.
+    """
+
+    def __init__(self, permission: str, project: str = None, **kwargs):
+        self.permission = permission
+        self.project = project
+        self.kwargs = kwargs
+
+    def __repr__(self) -> str:
+        return f"SimplePermission(permission={self.permission!r}, project={self.project!r})"
+
+
+class SimpleProjectAccess:
+    """One row of "who has access to a project"
+    (`td permission list --project P`).
+
+    `source` records what conferred the access: ``project (<rolename>)`` for
+    per-project role memberships, ``system (admin_all_projects)`` for wildcard
+    holders.
+    """
+
+    def __init__(self, user: str, permission: str, source: str, **kwargs):
+        self.user = user
+        self.permission = permission
+        self.source = source
+        self.kwargs = kwargs
+
+    def __repr__(self) -> str:
+        return (
+            f"SimpleProjectAccess(user={self.user!r}, "
+            f"permission={self.permission!r}, source={self.source!r})"
+        )
+
+
 class RolePermission:
     entity = _LazyProperty("entity")
     entity_id = _LazyProperty("entity_id")
@@ -4772,6 +4849,103 @@ class TabsdataServer:
             params=params, raise_for_status=raise_for_status
         )
         return response.json().get("data") or {}
+
+    def grant_permission(
+        self,
+        user: str,
+        permission: str,
+        project: str = None,
+        raise_for_status: bool = True,
+    ) -> None:
+        """
+        Grant a flat permission to a user (Simple Security Mode facade).
+
+        Args:
+            user (str): The user to grant the permission to.
+            permission (str): The flat permission to grant. One of
+                ``VALID_SIMPLE_PERMISSION_TYPES``.
+            project (str, optional): The project the permission applies to.
+                Required for project-scoped permissions, forbidden for
+                system-scoped ones.
+            raise_for_status (bool, optional): Whether to raise an exception if
+                the request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the permission could not be granted.
+        """
+        self.connection.permission_grant(
+            user, permission, project, raise_for_status=raise_for_status
+        )
+
+    def revoke_permission(
+        self,
+        user: str,
+        permission: str,
+        project: str = None,
+        raise_for_status: bool = True,
+    ) -> None:
+        """
+        Revoke a flat permission from a user (Simple Security Mode facade).
+
+        Args:
+            user (str): The user to revoke the permission from.
+            permission (str): The flat permission to revoke. One of
+                ``VALID_SIMPLE_PERMISSION_TYPES``.
+            project (str, optional): The project the permission applies to.
+                Required for project-scoped permissions, forbidden for
+                system-scoped ones.
+            raise_for_status (bool, optional): Whether to raise an exception if
+                the request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the permission could not be revoked.
+        """
+        self.connection.permission_revoke(
+            user, permission, project, raise_for_status=raise_for_status
+        )
+
+    def list_permissions_by_user(
+        self, user: str, raise_for_status: bool = True
+    ) -> List[SimplePermission]:
+        """
+        List a user's effective flat permissions (Simple Security Mode facade).
+
+        Args:
+            user (str): The user whose permissions are listed.
+            raise_for_status (bool, optional): Whether to raise an exception if
+                the request was not successful. Defaults to True.
+
+        Returns:
+            List[SimplePermission]: The user's effective flat permissions.
+        """
+        response = self.connection.permission_list_by_user(
+            user, raise_for_status=raise_for_status
+        )
+        data = response.json().get("data") or {}
+        rows = data.get("data") or []
+        return [SimplePermission(**row) for row in rows]
+
+    def list_permissions_by_project(
+        self, project: str, raise_for_status: bool = True
+    ) -> List[SimpleProjectAccess]:
+        """
+        List everyone with authority on a project (Simple Security Mode facade).
+
+        Args:
+            project (str): The project whose access list is returned.
+            raise_for_status (bool, optional): Whether to raise an exception if
+                the request was not successful. Defaults to True.
+
+        Returns:
+            List[SimpleProjectAccess]: Everyone with authority on the project,
+                with the source that conferred each grant.
+        """
+        response = self.connection.permission_list_by_project(
+            project, raise_for_status=raise_for_status
+        )
+        data = response.json().get("data") or {}
+        rows = data.get("data") or []
+        return [SimpleProjectAccess(**row) for row in rows]
 
     def create_role(
         self, name: str, description: str = None, raise_for_status: bool = True

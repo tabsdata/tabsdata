@@ -35,6 +35,7 @@ from tabsdata._cli.td.exe_group import exe
 from tabsdata._cli.td.fn_group import fn
 from tabsdata._cli.td.group_group import group
 from tabsdata._cli.td.metrics_group import metrics
+from tabsdata._cli.td.permission_group import permission
 from tabsdata._cli.td.pin_group import pin
 from tabsdata._cli.td.project_group import project
 from tabsdata._cli.td.role_group import role
@@ -119,6 +120,7 @@ cli.add_command(exe)
 cli.add_command(fn)
 cli.add_command(group)
 cli.add_command(metrics)
+cli.add_command(permission)
 cli.add_command(pin)
 cli.add_command(project)
 cli.add_command(role)
