@@ -480,44 +480,6 @@ class APIServer:
         else:
             raise APIServerError(response_data)
 
-    def authz_inter_coll_perm_create(
-        self, collection: str, to_collection: str, raise_for_status: bool = True
-    ):
-        endpoint = f"/collections/{collection}/inter-collection-permissions"
-
-        data = {"to_collection": to_collection}
-        response = self.post(endpoint, json=data)
-        return self.raise_for_status_or_return(raise_for_status, response)
-
-    def authz_inter_coll_perm_delete(
-        self, collection: str, permission: str, raise_for_status: bool = True
-    ):
-        endpoint = (
-            f"/collections/{collection}/inter-collection-permissions/{permission}"
-        )
-
-        response = self.delete(endpoint)
-        return self.raise_for_status_or_return(raise_for_status, response)
-
-    def authz_inter_coll_perm_list(
-        self,
-        collection: str,
-        request_len: int = None,
-        request_filter: List[str] | str = None,
-        order_by: str = None,
-        pagination_id: str = None,
-        next_step: str = None,
-        raise_for_status: bool = True,
-    ):
-        endpoint = f"/collections/{collection}/inter-collection-permissions"
-
-        params = self.get_params_dict(
-            DEFAULT_LIST_ENDPOINT_PARAMETERS,
-            [request_len, request_filter, order_by, pagination_id, next_step],
-        )
-        response = self.get(endpoint, params)
-        return self.raise_for_status_or_return(raise_for_status, response)
-
     def collection_create(
         self,
         name: str,

@@ -190,10 +190,6 @@ class Collection:
         return self.list_functions()
 
     @property
-    def permissions(self) -> List[InterCollectionPermission]:
-        return self.list_permissions()
-
-    @property
     def tables(self) -> List[Table]:
         return self.list_tables()
 
@@ -210,48 +206,8 @@ class Collection:
         self._data = response.json().get("data")
         return self
 
-    def create_permission(
-        self, to_collection: str | Collection, raise_for_status: bool = True
-    ) -> InterCollectionPermission:
-        if isinstance(to_collection, str):
-            pass
-        elif isinstance(to_collection, Collection):
-            to_collection = to_collection.name
-        else:
-            raise TypeError(
-                "The 'to_collection' parameter must be a string or a Collection "
-                f"object; got {type(to_collection)} instead."
-            )
-        response = self.connection.authz_inter_coll_perm_create(
-            self.name, to_collection, raise_for_status=raise_for_status
-        )
-        return InterCollectionPermission(
-            self.connection, **response.json().get("data"), collection=self
-        )
-
     def delete(self, raise_for_status: bool = True) -> None:
         self.connection.collection_delete(self.name, raise_for_status=raise_for_status)
-
-    def delete_permission(
-        self, permission: str | InterCollectionPermission, raise_for_status: bool = True
-    ) -> InterCollectionPermission:
-        """
-        Delete an inter-collection permission by its ID.
-
-        Args:
-            permission (str | InterCollectionPermission): The ID of the
-                inter-collection permission to delete or a InterCollectionPermission
-                object.
-            raise_for_status (bool, optional): Whether to raise an exception if the
-                request was not successful. Defaults to True.
-        """
-        perm = (
-            InterCollectionPermission(self.connection, permission, self)
-            if isinstance(permission, str)
-            else permission
-        )
-        perm.delete(raise_for_status=raise_for_status)
-        return perm
 
     def get_function(self, function_name: str) -> Function:
         function_definition = (
@@ -306,49 +262,6 @@ class Collection:
                 if "collection" not in raw_function:
                     raw_function["collection"] = self
                 yield Function(self.connection, **raw_function)
-            first_page = False
-
-    def list_permissions(
-        self,
-        filter: List[str] | str = None,
-        order_by: str = None,
-        raise_for_status: bool = True,
-    ) -> List[InterCollectionPermission]:
-        return list(
-            self.list_permissions_generator(
-                filter=filter,
-                order_by=order_by,
-                raise_for_status=raise_for_status,
-            )
-        )
-
-    def list_permissions_generator(
-        self,
-        filter: List[str] | str = None,
-        order_by: str = None,
-        raise_for_status: bool = True,
-    ) -> Generator[InterCollectionPermission]:
-        first_page = True
-        next_pagination_id = None
-        next_step = None
-        while first_page or (next_pagination_id and next_step):
-            response = self.connection.authz_inter_coll_perm_list(
-                self.name,
-                request_filter=filter,
-                order_by=order_by,
-                pagination_id=next_pagination_id,
-                next_step=next_step,
-                raise_for_status=raise_for_status,
-            )
-            data = response.json().get("data")
-            next_pagination_id = data.get("next_pagination_id")
-            next_step = data.get("next")
-            raw_permissions = data.get("data") or []
-            for raw_permission in raw_permissions:
-                built_permission = InterCollectionPermission(
-                    self.connection, **raw_permission, collection=self
-                )
-                yield built_permission
             first_page = False
 
     def list_tables(
@@ -1842,139 +1755,6 @@ class FunctionRun:
 
     def __str__(self) -> str:
         return f"ID: {self.id!s}"
-
-
-class InterCollectionPermission:
-    granted_by = _LazyProperty("granted_by")
-    granted_on = _LazyProperty("granted_on")
-    granted_on_str = _LazyProperty("granted_on_str", subordinate_time_string=True)
-
-    def __init__(
-        self, connection: APIServer, id: str, collection: str | Collection, **kwargs
-    ):
-        """
-        Initialize the InterCollectionPermission object.
-
-        Args:
-            connection (APIServer): The connection to the API server.
-            id (str): The ID of the inter-collection permission.
-            collection (str | Collection): The collection associated with the
-                permission.
-            **kwargs: Additional keyword arguments.
-        """
-        self.connection = connection
-        self.id = id
-        self.collection = collection
-        self.to_collection = kwargs.get("to_collection")
-        self.granted_by = kwargs.get("granted_by")
-        self.granted_on = kwargs.get("granted_on")
-        self.granted_on_str = None
-
-        self.kwargs = kwargs
-        self._data = None
-
-    @property
-    def _data(self) -> dict:
-        if self._data_dict is None:
-            try:
-                inter_coll_perm = self.collection.list_permissions(
-                    filter=f"id:eq:{self.id}"
-                )[0]
-            except IndexError:
-                raise ValueError(
-                    f"Inter collection permission with ID {self.id} "
-                    f"for collection {self.collection.name} not found."
-                )
-            self._data = inter_coll_perm.kwargs
-        return self._data_dict
-
-    @_data.setter
-    def _data(self, data_dict: dict | None):
-        self._data_dict = data_dict
-
-    @property
-    def collection(self) -> Collection:
-        return self._collection
-
-    @collection.setter
-    def collection(self, collection: str | Collection):
-        if isinstance(collection, str):
-            self._collection = Collection(self.connection, collection)
-        elif isinstance(collection, Collection):
-            self._collection = collection
-        else:
-            raise TypeError(
-                "The 'collection' parameter must be a string or a Collection object; "
-                f"got {type(collection)} instead."
-            )
-
-    @property
-    def to_collection(self) -> Collection:
-        """
-        Get the collection to which this permission applies.
-
-        Returns:
-            Collection: The collection to which this permission applies.
-        """
-        if self._to_collection is None:
-            self.to_collection = self._data.get("to_collection")
-        return self._to_collection
-
-    @to_collection.setter
-    def to_collection(self, to_collection: str | Collection | None):
-        if isinstance(to_collection, str):
-            self._to_collection = Collection(self.connection, to_collection)
-        elif isinstance(to_collection, Collection):
-            self._to_collection = to_collection
-        elif to_collection is None:
-            self._to_collection = None
-        else:
-            raise TypeError(
-                "The 'to_collection' parameter must be a string, a Collection object, "
-                f"or None; got {type(to_collection)} instead."
-            )
-
-    def delete(self, raise_for_status: bool = True) -> None:
-        """
-        Delete the inter-collection permission.
-
-        Args:
-            raise_for_status (bool): Whether to raise an exception if the request
-                was not successful.
-        """
-        self.connection.authz_inter_coll_perm_delete(
-            self.collection.name, self.id, raise_for_status=raise_for_status
-        )
-
-    def refresh(self) -> InterCollectionPermission:
-        """
-        Refresh the inter-collection permission data.
-
-        Returns:
-            InterCollectionPermission: The refreshed inter-collection permission object.
-        """
-        self.to_collection = None
-        self.granted_by = None
-        self.granted_on = None
-        self.granted_on_str = None
-        self.kwargs = None
-        self._data = None
-        return self
-
-    def __eq__(self, other):
-        if not isinstance(other, InterCollectionPermission):
-            return False
-        return self.id == other.id
-
-    def __repr__(self) -> str:
-        representation = (
-            f"{self.__class__.__name__}(id={self.id!r}, collection={self.collection!r})"
-        )
-        return representation
-
-    def __str__(self) -> str:
-        string_representation = f"ID: {self.id!s}, collection: {self.collection.name!s}"
-        return string_representation
 
 
 class Role:
@@ -4447,76 +4227,6 @@ class TabsdataServer:
         """
         function = Function(self.connection, collection_name, function_name)
         return function.enable(enabled=enabled, raise_for_status=raise_for_status)
-
-    def create_inter_coll_perm(
-        self,
-        collection: str | Collection,
-        to_collection: str | Collection,
-        raise_for_status: bool = True,
-    ) -> InterCollectionPermission:
-        """
-        Create an inter-collection permission in the server.
-
-        Args:
-            collection (str | Collection): The name of the collection or a Collection
-                object.
-            to_collection (str | Collection): The name of the target collection or a
-                Collection object.
-            raise_for_status (bool, optional): Whether to raise an exception if the
-                request was not successful. Defaults to True.
-
-        Returns:
-            InterCollectionPermission: The created inter-collection permission.
-        """
-        collection = (
-            collection
-            if isinstance(collection, Collection)
-            else (self.get_collection(collection))
-        )
-        return collection.create_permission(
-            to_collection, raise_for_status=raise_for_status
-        )
-
-    def delete_inter_coll_perm(
-        self, collection: str, permission: str, raise_for_status: bool = True
-    ):
-        """
-        Delete an inter-collection permission in the server.
-
-        Args:
-            collection (str): The name of the collection.
-            permission (str): The id of the
-                inter-collection permission.
-            raise_for_status (bool, optional): Whether to raise an exception if the
-                request was not successful. Defaults to True.
-
-        Returns:
-            InterCollectionPermission: The created inter-collection permission.
-        """
-        collection = self.get_collection(collection)
-        collection.delete_permission(permission, raise_for_status=raise_for_status)
-
-    def list_inter_coll_perm(
-        self,
-        collection: str | Collection,
-        filter: List[str] | str = None,
-        order_by: str = None,
-        raise_for_status: bool = True,
-    ) -> list[InterCollectionPermission]:
-        """
-        List the inter-collection permissions in the server.
-
-        Returns:
-            List[InterCollectionPermission]: The list of inter-collection permissions.
-        """
-        collection = (
-            collection
-            if isinstance(collection, Collection)
-            else (self.get_collection(collection))
-        )
-        return collection.list_permissions(
-            filter=filter, order_by=order_by, raise_for_status=raise_for_status
-        )
 
     def login(self, username: str, password: str):
         self.connection.authentication_login(
