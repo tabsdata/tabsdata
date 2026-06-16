@@ -131,8 +131,8 @@ system_requirement!(
     CreateProjects => SystemPermission::CreateProjects
 );
 system_requirement!(
-    /// Requires `(system:__system__, role_mgnt)`.
-    RoleMgnt => SystemPermission::RoleMgnt
+    /// Requires `(system:__system__, manage_roles)`.
+    ManageRoles => SystemPermission::ManageRoles
 );
 
 // --- project permission requirements (scope-dependent) ---------------------
@@ -351,10 +351,10 @@ mod tests {
         let user = SystemRole::Default.grants();
         assert!(enforce::<System, CreateProjects>(&user, &none, &scope));
         assert!(!enforce::<System, ManageAccess>(&user, &none, &scope));
-        assert!(!enforce::<System, RoleMgnt>(&user, &none, &scope));
+        assert!(!enforce::<System, ManageRoles>(&user, &none, &scope));
 
         let admin = SystemRole::SysAdmin.grants();
-        assert!(enforce::<System, (ManageAccess, RoleMgnt)>(
+        assert!(enforce::<System, (ManageAccess, ManageRoles)>(
             &admin, &none, &scope
         ));
     }
@@ -423,11 +423,11 @@ mod tests {
         let none = Grants::new();
         let scope = On::<Project>::Entity(p);
 
-        type ThreeWay = (ManageAccess, RoleMgnt, ManageProject);
+        type ThreeWay = (ManageAccess, ManageRoles, ManageProject);
         type FiveWay = (
             ManageAccess,
             CreateProjects,
-            RoleMgnt,
+            ManageRoles,
             OnAnyProject<ManageProject>,
             ManageProject,
         );

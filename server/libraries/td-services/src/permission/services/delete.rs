@@ -93,7 +93,7 @@ mod tests {
     use td_security::{
         ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
         ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS,
-        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT, ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT,
+        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ROLES,
     };
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -521,7 +521,7 @@ mod tests {
         let fixed_permissions = HashSet::from([
             ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS,
             ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS,
-            ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT,
+            ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ROLES,
             ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT,
             // project_creator's create_projects row is system-managed (fixed).
             ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,

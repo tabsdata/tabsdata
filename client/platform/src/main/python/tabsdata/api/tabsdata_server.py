@@ -2525,7 +2525,7 @@ class RolePermissionTypes(Enum):
 
     MANAGE_ACCESS = "manage_access"
     CREATE_PROJECTS = "create_projects"
-    ROLE_MGNT = "role_mgnt"
+    MANAGE_ROLES = "manage_roles"
     VIEW_PROJECT = "view_project"
     DEVELOP_PROJECT = "develop_project"
     MANAGE_PROJECT = "manage_project"

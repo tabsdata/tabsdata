@@ -12,7 +12,7 @@
 //! - `(project:__all__, manage_project)`        -> `admin_all_projects`;
 //! - `(system, manage_access)`                  -> `manage_access`;
 //! - `(system, create_projects)`                -> `create_projects`;
-//! - `(system, role_mgnt)`                       -> SKIP (internal, not user-facing);
+//! - `(system, manage_roles)`                       -> SKIP (internal, not user-facing);
 //! - other `project:__all__` rows (org-wide view/develop wildcards) -> SKIP
 //!   (no Simple-surface name; RBAC Mode View only).
 //!
@@ -137,7 +137,7 @@ mod tests {
 
     /// A `sys_admin` member flattens to the system bundle: `manage_access`,
     /// `create_projects` and `admin_all_projects` (the `(project:__all__,
-    /// manage_project)` row). `role_mgnt` is skipped.
+    /// manage_project)` row). `manage_roles` is skipped.
     #[td_test::test(db)]
     async fn test_list_by_user_sys_admin_bundle(db: TdPool) -> Result<(), TdError> {
         let user = db
@@ -153,7 +153,7 @@ mod tests {
         assert!(perms.contains(&SimplePermissionType::ManageAccess));
         assert!(perms.contains(&SimplePermissionType::CreateProjects));
         assert!(perms.contains(&SimplePermissionType::AdminAllProjects));
-        // role_mgnt has no Simple-surface name and must not leak.
+        // manage_roles has no Simple-surface name and must not leak.
         assert!(perms.iter().all(|p| !matches!(
             p,
             SimplePermissionType::ViewAllProjects | SimplePermissionType::DevelopAllProjects

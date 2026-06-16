@@ -380,8 +380,8 @@ pub enum PermissionType {
     ManageAccess,
     #[typed_enum(rename = "create_projects")]
     CreateProjects,
-    #[typed_enum(rename = "role_mgnt")]
-    RoleMgnt,
+    #[typed_enum(rename = "manage_roles")]
+    ManageRoles,
     // project permissions (entity `project:<id>` or `project:__all__`)
     #[typed_enum(rename = "view_project")]
     ViewProject,
@@ -394,7 +394,7 @@ pub enum PermissionType {
 impl PermissionType {
     pub fn on_entity_type(&self) -> PermissionEntityType {
         match self {
-            Self::ManageAccess | Self::CreateProjects | Self::RoleMgnt => {
+            Self::ManageAccess | Self::CreateProjects | Self::ManageRoles => {
                 PermissionEntityType::System
             }
             Self::ViewProject | Self::DevelopProject | Self::ManageProject => {

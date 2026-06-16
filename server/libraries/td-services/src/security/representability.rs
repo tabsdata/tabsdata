@@ -37,7 +37,7 @@ use td_queries::{LiveEntry, QueryExecutor};
 const SYS_ADMIN_COMPOSITION: &[(PermissionEntityType, bool, PermissionType)] = &[
     (PermissionEntityType::System, true, PermissionType::ManageAccess),
     (PermissionEntityType::System, true, PermissionType::CreateProjects),
-    (PermissionEntityType::System, true, PermissionType::RoleMgnt),
+    (PermissionEntityType::System, true, PermissionType::ManageRoles),
     // (project:__all__, manage_project) — the org-wide admin wildcard.
     (PermissionEntityType::Project, true, PermissionType::ManageProject),
 ];

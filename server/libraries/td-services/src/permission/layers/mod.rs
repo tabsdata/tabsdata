@@ -93,7 +93,7 @@ pub async fn assert_permission_is_not_fixed(
 ///
 /// Gating is on `kind`, not the row's `fixed` flag: the built-in `default` role
 /// is seeded `fixed = true` yet TEDA mandates its composition be editable (via
-/// `role_mgnt`); custom roles (`kind = Custom`) are user-defined and freely
+/// `manage_roles`); custom roles (`kind = Custom`) are user-defined and freely
 /// editable. So `Default` (the built-in default role) and `Custom` (API-created
 /// roles) stay editable, while the four system-managed kinds are blocked.
 pub async fn assert_role_is_not_fixed(role: Ref<RoleDB>) -> Result<(), TdError> {

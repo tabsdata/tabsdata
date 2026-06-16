@@ -5,7 +5,7 @@
 use crate::role::layers::assert_not_fixed;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Rbac, RoleMgnt, Scope, System};
+use td_authz::rbac::{Rbac, ManageRoles, Scope, System};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::role::{RoleDB, RoleDBWithNames};
@@ -30,7 +30,7 @@ fn service() {
     layers!(
         from_fn(With::<DeleteRequest<RoleParam>>::extract::<RequestContext>),
         from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, RoleMgnt>::check),
+        from_fn(Rbac::<System, ManageRoles>::check),
         from_fn(With::<DeleteRequest<RoleParam>>::extract_name::<RoleParam>),
         from_fn(With::<RoleParam>::extract::<RoleIdName>),
         // Find role to delete
@@ -77,7 +77,7 @@ mod tests {
             .assert_service::<DeleteRequest<RoleParam>, ()>(&[
                 type_of_val(&With::<DeleteRequest<RoleParam>>::extract::<RequestContext>),
                 type_of_val(&Scope::<System>::system),
-                type_of_val(&Rbac::<System, RoleMgnt>::check),
+                type_of_val(&Rbac::<System, ManageRoles>::check),
                 type_of_val(&With::<DeleteRequest<RoleParam>>::extract_name::<RoleParam>),
                 type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
                 // Find role to delete
@@ -147,7 +147,7 @@ mod tests {
         let _hero_permissions = db
             .seed()
             .permission(
-                PermissionType::try_from("role_mgnt").unwrap(),
+                PermissionType::try_from("manage_roles").unwrap(),
                 None,
                 None,
                 &hero_role,
@@ -157,7 +157,7 @@ mod tests {
         let _villain_permissions = db
             .seed()
             .permission(
-                PermissionType::try_from("role_mgnt").unwrap(),
+                PermissionType::try_from("manage_roles").unwrap(),
                 None,
                 None,
                 &villain_role,

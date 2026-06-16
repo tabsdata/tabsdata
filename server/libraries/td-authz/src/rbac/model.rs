@@ -213,7 +213,7 @@ pub enum SystemPermission {
     CreateProjects,
     /// CRUD roles and role permissions. Internal capability bit in v1 — no
     /// public API exposes role CRUD.
-    RoleMgnt,
+    ManageRoles,
 }
 
 impl GrantedPermission for SystemPermission {
@@ -221,7 +221,7 @@ impl GrantedPermission for SystemPermission {
         match self {
             SystemPermission::ManageAccess => "manage_access",
             SystemPermission::CreateProjects => "create_projects",
-            SystemPermission::RoleMgnt => "role_mgnt",
+            SystemPermission::ManageRoles => "manage_roles",
         }
     }
 }
@@ -508,7 +508,7 @@ pub enum SystemRole {
     SysAdmin,
     /// `default`: `(system:__system__, create_projects)`. Auto-assigned to
     /// every user and never unassignable; the one built-in system role whose
-    /// composition is *mutable* (via `role_mgnt`, exercised by `sys_admin`).
+    /// composition is *mutable* (via `manage_roles`, exercised by `sys_admin`).
     Default,
 }
 
@@ -519,7 +519,7 @@ impl SystemRole {
             SystemRole::SysAdmin => Grants::new()
                 .with(Grant::system(SystemPermission::ManageAccess))
                 .with(Grant::system(SystemPermission::CreateProjects))
-                .with(Grant::system(SystemPermission::RoleMgnt))
+                .with(Grant::system(SystemPermission::ManageRoles))
                 .with(ProjectPermission::ManageProject.granted_on_all()),
             SystemRole::Default => {
                 Grants::new().with(Grant::system(SystemPermission::CreateProjects))
@@ -582,8 +582,8 @@ mod tests {
         use SystemPermission::*;
         assert!(ManageAccess.satisfies(ManageAccess));
         assert!(!ManageAccess.satisfies(CreateProjects));
-        assert!(!CreateProjects.satisfies(RoleMgnt));
-        assert!(!RoleMgnt.satisfies(ManageAccess));
+        assert!(!CreateProjects.satisfies(ManageRoles));
+        assert!(!ManageRoles.satisfies(ManageAccess));
     }
 
     #[test]
@@ -652,7 +652,7 @@ mod tests {
         assert!(sys_admin.allows(&ProjectPermission::ManageProject.required_on(orphan)));
         assert!(sys_admin.allows(&Requires::system(SystemPermission::ManageAccess)));
         assert!(sys_admin.allows(&Requires::system(SystemPermission::CreateProjects)));
-        assert!(sys_admin.allows(&Requires::system(SystemPermission::RoleMgnt)));
+        assert!(sys_admin.allows(&Requires::system(SystemPermission::ManageRoles)));
     }
 
     #[test]
@@ -660,7 +660,7 @@ mod tests {
         let default = SystemRole::Default.grants();
         assert!(default.allows(&Requires::system(SystemPermission::CreateProjects)));
         assert!(!default.allows(&Requires::system(SystemPermission::ManageAccess)));
-        assert!(!default.allows(&Requires::system(SystemPermission::RoleMgnt)));
+        assert!(!default.allows(&Requires::system(SystemPermission::ManageRoles)));
         assert!(!default.allows(&ProjectPermission::ViewProject.required_on(project())));
     }
 

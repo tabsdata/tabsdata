@@ -14,7 +14,7 @@
 //! all entities of a type, current and future.
 //!
 //! - `system` permissions ([`SystemPermission`]): `manage_access`,
-//!   `create_projects`, `role_mgnt` — independent flags.
+//!   `create_projects`, `manage_roles` — independent flags.
 //! - `project` permissions ([`ProjectPermission`]): `manage_project` >
 //!   `develop_project` > `view_project` — ordered; holding a higher one
 //!   satisfies a lower requirement, which makes the doc's "effective
@@ -38,7 +38,7 @@
 //! | current ([`crate::tower`]) | new |
 //! |---|---|
 //! | `Permission::SysAdmin` | `(system:__system__, create_projects)` + `(project:__all__, manage_project)` (sys_admin role grants) |
-//! | `Permission::SecAdmin` | `(system:__system__, manage_access)` (+ `role_mgnt`) |
+//! | `Permission::SecAdmin` | `(system:__system__, manage_access)` (+ `manage_roles`) |
 //! | `Permission::CollectionAdmin(e)` | `(project:e, manage_project)` |
 //! | `Permission::CollectionDev(e)` | `(project:e, develop_project)` |
 //! | `Permission::CollectionExec(e)` | folded into `develop_project` |
@@ -121,7 +121,7 @@ pub mod sql_source;
 
 pub use layers::{
     CreateProjects, DevelopProject, Enforce, ManageAccess, ManageProject, OnAnyProject, RbacError,
-    Requirement, RoleMgnt, Scope, SelfRole, SelfUser, ViewProject, enforce,
+    Requirement, ManageRoles, Scope, SelfRole, SelfUser, ViewProject, enforce,
 };
 pub use model::{
     EffectiveGrants, EntityKind, Grant, GrantedPermission, Grants, IdentityClaim, On, Project,

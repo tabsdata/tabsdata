@@ -5,7 +5,7 @@
 use crate::role::layers::set_custom_role_kind;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Rbac, RoleMgnt, Scope, System};
+use td_authz::rbac::{Rbac, ManageRoles, Scope, System};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::role::{
     Role, RoleBuilder, RoleCreate, RoleDB, RoleDBBuilder, RoleDBWithNames,
@@ -30,7 +30,7 @@ fn service() {
     layers!(
         from_fn(With::<CreateRequest<(), RoleCreate>>::extract::<RequestContext>),
         from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, RoleMgnt>::check),
+        from_fn(Rbac::<System, ManageRoles>::check),
         from_fn(With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
         from_fn(With::<RoleCreate>::try_convert_to::<RoleDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<RoleDBBuilder, _>),
@@ -62,7 +62,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_create_role(db: TdPool) {
-        use td_authz::rbac::{Rbac, RoleMgnt, Scope, System};
+        use td_authz::rbac::{Rbac, ManageRoles, Scope, System};
         use td_tower::metadata::type_of_val;
 
         CreateRoleService::with_defaults(db)
@@ -71,7 +71,7 @@ mod tests {
             .assert_service::<CreateRequest<(), RoleCreate>, Role>(&[
                 type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract::<RequestContext>),
                 type_of_val(&Scope::<System>::system),
-                type_of_val(&Rbac::<System, RoleMgnt>::check),
+                type_of_val(&Rbac::<System, ManageRoles>::check),
                 type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
                 type_of_val(&With::<RoleCreate>::try_convert_to::<RoleDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<RoleDBBuilder, _>),

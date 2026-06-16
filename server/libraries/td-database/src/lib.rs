@@ -62,7 +62,7 @@ mod tests {
         ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS,
         ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
         ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS,
-        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT, ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT,
+        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ROLES,
         ENCODED_ID_ROLE_DEFAULT, ENCODED_ID_ROLE_PROJECT_CREATOR, ENCODED_ID_ROLE_SYS_ADMIN,
         ENCODED_ID_USER_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_DEFAULT,
         ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN,
@@ -422,14 +422,14 @@ mod tests {
         .unwrap();
         assert_eq!(row.id, ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS);
 
-        // sys_admin: role_mgnt on system.
+        // sys_admin: manage_roles on system.
         let row: Value = raw_query!(
             db,
             r#"
             SELECT id FROM permissions
             WHERE
                 role_id = {ENCODED_ID_ROLE_SYS_ADMIN} AND
-                permission_type = 'role_mgnt' AND
+                permission_type = 'manage_roles' AND
                 entity_type = 'system' AND
                 entity_id = '00000000000000000000000204'
             "#
@@ -438,7 +438,7 @@ mod tests {
         .fetch_one(&mut conn)
         .await
         .unwrap();
-        assert_eq!(row.id, ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT);
+        assert_eq!(row.id, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ROLES);
 
         // sys_admin: manage_project on every project.
         let row: Value = raw_query!(

@@ -139,7 +139,7 @@ impl Entity for Defs {
             // sys_admin: all three system permissions + manage on every project.
             ("00000000000000000000000010", "sys_admin", "manage_access", "system", true),
             ("00000000000000000000000014", "sys_admin", "create_projects", "system", true),
-            ("00000000000000000000000100", "sys_admin", "role_mgnt", "system", true),
+            ("00000000000000000000000100", "sys_admin", "manage_roles", "system", true),
             ("00000000000000000000000104", "sys_admin", "manage_project", "project", true),
             // default role: every user can create projects.
             ("00000000000000000000000108", "default", "create_projects", "system", false),

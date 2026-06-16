@@ -206,7 +206,7 @@ fn list_response<T: Clone>(data: Vec<T>) -> Result<ListResponse<T>, TdError> {
 
 /// List a user's effective flat permissions, joining their `user_role`
 /// memberships with `role_permission` and mapping each row to a Simple
-/// permission (de-duplicated). `role_mgnt` and the org-wide view/develop
+/// permission (de-duplicated). `manage_roles` and the org-wide view/develop
 /// wildcards are skipped (no Simple-surface name).
 pub async fn flatten_user_permissions(
     mut conn: MutRef<DynamicConnection<'static>>,
@@ -237,7 +237,7 @@ pub async fn flatten_user_permissions(
 }
 
 /// Map one `role_permission` row to its Simple-surface permission, or `None`
-/// if it has no Simple name (`role_mgnt`, org-wide view/develop wildcards).
+/// if it has no Simple name (`manage_roles`, org-wide view/develop wildcards).
 fn simple_permission_of(
     perm: &PermissionDB,
     projects: &HashMap<ProjectId, ProjectName>,
@@ -246,8 +246,8 @@ fn simple_permission_of(
         PermissionEntityType::System => match perm.permission_type {
             PermissionType::ManageAccess => Some((SimplePermissionType::ManageAccess, None)),
             PermissionType::CreateProjects => Some((SimplePermissionType::CreateProjects, None)),
-            // role_mgnt is internal — not user-facing on the Simple surface.
-            PermissionType::RoleMgnt => None,
+            // manage_roles is internal — not user-facing on the Simple surface.
+            PermissionType::ManageRoles => None,
             // a project permission on the system entity is malformed; skip.
             _ => None,
         },

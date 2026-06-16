@@ -50,7 +50,7 @@ impl SqlRbacGrantsProvider {
                 let permission = match &perm.permission_type {
                     PermissionType::ManageAccess => SystemPermission::ManageAccess,
                     PermissionType::CreateProjects => SystemPermission::CreateProjects,
-                    PermissionType::RoleMgnt => SystemPermission::RoleMgnt,
+                    PermissionType::ManageRoles => SystemPermission::ManageRoles,
                     other => {
                         error!(
                             permission_id = %perm.id,
@@ -195,7 +195,7 @@ mod tests {
         // sys_admin role -> all system permissions
         assert!(grants.allows(&Requires::system(SystemPermission::ManageAccess)));
         assert!(grants.allows(&Requires::system(SystemPermission::CreateProjects)));
-        assert!(grants.allows(&Requires::system(SystemPermission::RoleMgnt)));
+        assert!(grants.allows(&Requires::system(SystemPermission::ManageRoles)));
         // sys_admin role -> (project:__all__, manage_project)
         assert!(grants.allows(&Requires::<Project>::all(ProjectPermission::ManageProject)));
 
