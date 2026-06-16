@@ -63,7 +63,11 @@ impl Entity for Defs {
     }
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
-        vec![Index::create().name("roles___name___idx").table(Roles::Table).col(Roles::Name).unique().to_owned()]
+        vec![
+            Index::create().name("roles___name___idx").table(Roles::Table).col(Roles::Name).unique().to_owned(),
+            // Per-project roles are looked up / cascade-deleted by project_id.
+            Index::create().name("roles___project_id___idx").table(Roles::Table).col(Roles::ProjectId).to_owned(),
+        ]
     }
 
     fn create_views(&self, b: &Backend) -> Vec<ViewDef> {

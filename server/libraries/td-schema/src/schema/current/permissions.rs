@@ -71,6 +71,14 @@ impl Entity for Defs {
                 .col(Permissions::EntityId)
                 .unique()
                 .to_owned(),
+            // The Simple facade's `list --project` filters rows by entity_id
+            // (the composite index above leads with role_id, so it can't serve
+            // an entity_id-only lookup).
+            Index::create()
+                .name("permissions___entity_id___idx")
+                .table(Permissions::Table)
+                .col(Permissions::EntityId)
+                .to_owned(),
         ]
     }
 
