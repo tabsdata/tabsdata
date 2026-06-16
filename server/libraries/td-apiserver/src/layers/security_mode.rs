@@ -104,7 +104,10 @@ mod tests {
             "RBAC role endpoint must not appear in the OpenAPI doc in simple mode"
         );
         assert!(
-            openapi.paths.paths.contains_key(LIST_PERMISSION_GRANTS_BY_USER),
+            openapi
+                .paths
+                .paths
+                .contains_key(LIST_PERMISSION_GRANTS_BY_USER),
             "the simple-permission facade must appear in the OpenAPI doc in simple mode"
         );
 

@@ -34,11 +34,27 @@ use td_queries::{LiveEntry, QueryExecutor};
 /// as `(entity_type, on `__all__`?, permission)` triples. System rows are
 /// stored with `entity_id = __all__` but disambiguated by `entity_type`.
 const SYS_ADMIN_COMPOSITION: &[(PermissionEntityType, bool, PermissionType)] = &[
-    (PermissionEntityType::System, true, PermissionType::ManageAccess),
-    (PermissionEntityType::System, true, PermissionType::CreateProjects),
-    (PermissionEntityType::System, true, PermissionType::ManageRoles),
+    (
+        PermissionEntityType::System,
+        true,
+        PermissionType::ManageAccess,
+    ),
+    (
+        PermissionEntityType::System,
+        true,
+        PermissionType::CreateProjects,
+    ),
+    (
+        PermissionEntityType::System,
+        true,
+        PermissionType::ManageRoles,
+    ),
     // (project:__all__, manage_project) — the org-wide admin wildcard.
-    (PermissionEntityType::Project, true, PermissionType::ManageProject),
+    (
+        PermissionEntityType::Project,
+        true,
+        PermissionType::ManageProject,
+    ),
 ];
 
 /// Classify one permission row for human-readable reasons.
@@ -74,9 +90,7 @@ fn is_system_row(perm: &PermissionDB) -> bool {
 /// called both at apiserver startup and from a service/test. `Copy` is required
 /// because each `.live()` consumes the executor and the check issues two reads;
 /// `&TdPool` (and the connection references) are `Copy`.
-pub async fn check_representability(
-    db: impl QueryExecutor + Copy,
-) -> Result<Vec<String>, TdError> {
+pub async fn check_representability(db: impl QueryExecutor + Copy) -> Result<Vec<String>, TdError> {
     let roles = db.live().fetch_all::<RoleDB>(()).await?;
     let permissions = db.live().fetch_all::<PermissionDB>(()).await?;
     Ok(evaluate(&roles, &permissions))
@@ -90,7 +104,7 @@ pub fn evaluate(roles: &[RoleDB], permissions: &[PermissionDB]) -> Vec<String> {
     // Index permissions by role for per-role composition checks.
     let mut by_role: HashMap<RoleId, Vec<&PermissionDB>> = HashMap::new();
     for perm in permissions {
-        by_role.entry(perm.role_id.clone()).or_default().push(perm);
+        by_role.entry(perm.role_id).or_default().push(perm);
     }
     let empty: Vec<&PermissionDB> = Vec::new();
 
@@ -120,10 +134,20 @@ pub fn evaluate(roles: &[RoleDB], permissions: &[PermissionDB]) -> Vec<String> {
             // Condition 5: per-project roles must hold exactly their one
             // expected project permission and no system rows.
             RoleKind::ProjectAdmin => {
-                check_per_project(role, role_perms, PermissionType::ManageProject, &mut reasons);
+                check_per_project(
+                    role,
+                    role_perms,
+                    PermissionType::ManageProject,
+                    &mut reasons,
+                );
             }
             RoleKind::ProjectDev => {
-                check_per_project(role, role_perms, PermissionType::DevelopProject, &mut reasons);
+                check_per_project(
+                    role,
+                    role_perms,
+                    PermissionType::DevelopProject,
+                    &mut reasons,
+                );
             }
             RoleKind::ProjectView => {
                 check_per_project(role, role_perms, PermissionType::ViewProject, &mut reasons);
@@ -266,14 +290,14 @@ fn check_per_project(
 mod tests {
     use super::*;
     use td_database::pool::TdPool;
+    use td_objects::Buildable;
     use td_objects::dxo::project::ProjectDB;
     use td_objects::dxo::role::RoleCreate;
     use td_objects::types::basic::{
-        AccessTokenId, Description, EntityId, ProjectName, RoleId, RoleName, UserId,
+        AccessTokenId, Description, EntityId, ProjectName, RoleName, UserId,
     };
-    use td_objects::Buildable;
-    use td_queries::test_utils::SeedEntry;
     use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
 
     use crate::project::service::create::CreateProjectService;
     use crate::role::services::create::CreateRoleService;
@@ -295,18 +319,27 @@ mod tests {
             .service()
             .raw_oneshot(admin_ctx().create((), create))
             .await?;
-        Ok(db.live().fetch_one::<ProjectDB>(&ProjectName::try_from(name)?).await?)
+        Ok(db
+            .live()
+            .fetch_one::<ProjectDB>(&ProjectName::try_from(name)?)
+            .await?)
     }
 
     async fn role_by_name(db: &TdPool, name: &str) -> Result<RoleDB, TdError> {
-        Ok(db.live().fetch_one::<RoleDB>(&RoleName::try_from(name)?).await?)
+        Ok(db
+            .live()
+            .fetch_one::<RoleDB>(&RoleName::try_from(name)?)
+            .await?)
     }
 
     /// A fresh bootstrap (only the built-in roles) is representable.
     #[td_test::test(db)]
     async fn test_fresh_bootstrap_is_representable(db: TdPool) -> Result<(), TdError> {
         let reasons = check_representability(&db).await?;
-        assert!(reasons.is_empty(), "expected no violations, got: {reasons:?}");
+        assert!(
+            reasons.is_empty(),
+            "expected no violations, got: {reasons:?}"
+        );
         Ok(())
     }
 
@@ -315,7 +348,10 @@ mod tests {
     async fn test_with_project_is_representable(db: TdPool) -> Result<(), TdError> {
         create_project(&db, "foo").await?;
         let reasons = check_representability(&db).await?;
-        assert!(reasons.is_empty(), "expected no violations, got: {reasons:?}");
+        assert!(
+            reasons.is_empty(),
+            "expected no violations, got: {reasons:?}"
+        );
         Ok(())
     }
 
@@ -333,7 +369,9 @@ mod tests {
 
         let reasons = check_representability(&db).await?;
         assert!(
-            reasons.iter().any(|r| r.contains("data_engineers") && r.contains("custom")),
+            reasons
+                .iter()
+                .any(|r| r.contains("data_engineers") && r.contains("custom")),
             "expected a custom-role violation naming 'data_engineers', got: {reasons:?}"
         );
         Ok(())
@@ -350,7 +388,7 @@ mod tests {
             .permission(
                 PermissionType::ViewProject,
                 None,
-                Some(EntityId::try_from(project.id.clone())?),
+                Some(EntityId::try_from(project.id)?),
                 &default_role,
             )
             .await?;
@@ -376,7 +414,7 @@ mod tests {
             .permission(
                 PermissionType::ManageProject,
                 None,
-                Some(EntityId::try_from(project.id.clone())?),
+                Some(EntityId::try_from(project.id)?),
                 &project_creator,
             )
             .await?;

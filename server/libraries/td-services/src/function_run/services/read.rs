@@ -83,8 +83,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, LogicalFunctionRunStatus,
-        PhysicalFunctionRunStatus, ProjectId, RoleId, TableNameDto, TransactionKey, UserId,
-        UserName,
+        PhysicalFunctionRunStatus, ProjectId, TableNameDto, TransactionKey, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -195,19 +194,18 @@ mod tests {
             .await?;
 
         // Test
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(
-                    PhysicalFunctionRunParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str(&format!(
-                            "{}",
-                            function_version.name
-                        ))?)
-                        .execution(ExecutionIdName::from_str(&format!("~{}", execution.id))?)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(
+                PhysicalFunctionRunParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str(&format!(
+                        "{}",
+                        function_version.name
+                    ))?)
+                    .execution(ExecutionIdName::from_str(&format!("~{}", execution.id))?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionRunReadService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

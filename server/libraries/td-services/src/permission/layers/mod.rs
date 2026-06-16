@@ -18,7 +18,9 @@ use td_objects::dxo::permission::{
 use td_objects::dxo::project::ProjectDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{EntityId, PermissionEntityType, ProjectId, ProjectName, RoleIdName};
+use td_objects::types::basic::{
+    EntityId, PermissionEntityType, ProjectId, ProjectName, RoleIdName,
+};
 use td_queries::LiveEntry;
 use td_tower::extractors::{MutRef, Ref};
 

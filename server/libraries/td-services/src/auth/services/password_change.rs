@@ -95,7 +95,7 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::auth::{Login, PasswordChange};
     use td_objects::types::basic::AccessTokenId;
-    use td_objects::types::basic::{Password, RoleName, SessionStatus};
+    use td_objects::types::basic::{Password, SessionStatus};
     use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
 

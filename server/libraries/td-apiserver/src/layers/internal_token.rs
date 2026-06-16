@@ -85,7 +85,7 @@ pub async fn internal_token_layer(
     // is unchanged.
     request.extensions_mut().insert(RequestContext::with(
         AccessTokenId::default(),
-        UserId::system()
+        UserId::system(),
     ));
 
     let log_span = span!(Level::INFO, "internal_token_request", scope = %claims.scope);

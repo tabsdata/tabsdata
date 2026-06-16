@@ -177,8 +177,8 @@ mod tests {
     use td_objects::dxo::yaml::function_runner::v2::{FunctionOutput, TableInfo, WrittenTable};
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName, HasData,
-        LogicalFunctionRunStatus, ProjectId, RoleId, RowCount, SchemaChanged, SchemaHash,
-        TableName, TableNameDto, TransactionStatus, UserId,
+        LogicalFunctionRunStatus, ProjectId, RowCount, SchemaChanged, SchemaHash, TableName,
+        TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::LiveEntry;
@@ -273,16 +273,15 @@ mod tests {
                     context: function_output,
                 };
 
-                let request =
-                    RequestContext::with(AccessTokenId::default(), UserId::admin())
-                        .update(
-                            PhysicalFunctionRunWorkerIdParam {
-                                function_run_id: physical_function_run.into(),
-                                worker_id: worker.into(),
-                            },
-                            response,
-                        )
-                        .in_project(ProjectId::sandbox());
+                let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(
+                        PhysicalFunctionRunWorkerIdParam {
+                            function_run_id: physical_function_run.into(),
+                            worker_id: worker.into(),
+                        },
+                        response,
+                    )
+                    .in_project(ProjectId::sandbox());
 
                 let service = ExecutionCallbackService::with_defaults(db.clone()).service();
                 service.raw_oneshot(request).await

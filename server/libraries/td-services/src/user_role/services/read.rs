@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
 use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
 use td_objects::And;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::role::RoleDB;
@@ -102,11 +102,7 @@ mod tests {
             .await?;
         let user_role = db.seed().user_role(&user.id, &role.id).await?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .read(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             UserRoleParam::builder()
                 .role(RoleIdName::from_str("king")?)
                 .user(UserIdName::from_str("joaquin")?)

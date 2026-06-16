@@ -8,9 +8,7 @@ use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
 use td_objects::dxo::role::RoleDB;
-use td_objects::types::basic::{
-    AccessTokenId, EntityId, EntityName, PermissionType, RoleId, UserId,
-};
+use td_objects::types::basic::{AccessTokenId, EntityId, EntityName, PermissionType, UserId};
 
 pub async fn seed_permission(
     db: impl QueryExecutor,
@@ -24,10 +22,7 @@ pub async fn seed_permission(
         .entity_name(entity_name)
         .build()?;
 
-    let request_context = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    );
+    let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     let mut builder = PermissionDBBuilder::try_from(&permission_create)?;
     let builder = builder

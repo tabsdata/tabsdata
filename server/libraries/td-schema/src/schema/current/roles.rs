@@ -143,7 +143,7 @@ impl Entity for Defs {
                         Keyword::CurrentTimestamp.into(),
                         SYSTEM_USER_ID.into(),
                         (*kind).into(),
-                        Expr::val(Option::<String>::None).into(),
+                        Expr::val(Option::<String>::None),
                         true.into(),
                     ])
                     .to_owned()

@@ -66,7 +66,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
-        ProjectId, RoleId, TableNameDto, TransactionStatus, UserId,
+        ProjectId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_tower::ctx_service::RawOneshot;
@@ -116,15 +116,14 @@ mod tests {
 
             async move {
                 // Execute test
-                let request =
-                    RequestContext::with(AccessTokenId::default(), UserId::admin())
-                        .update(
-                            ExecutionParam::builder()
-                                .execution(ExecutionIdName::from_str(&execution)?)
-                                .build()?,
-                            (),
-                        )
-                        .in_project(ProjectId::sandbox());
+                let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(
+                        ExecutionParam::builder()
+                            .execution(ExecutionIdName::from_str(&execution)?)
+                            .build()?,
+                        (),
+                    )
+                    .in_project(ProjectId::sandbox());
 
                 ExecutionRecoverService::with_defaults(db.clone())
                     .service()

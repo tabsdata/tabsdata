@@ -65,9 +65,7 @@ mod tests {
     use td_error::assert_service_error;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{
-        AccessTokenId, Description, GroupName, ProjectId, RoleId, UserId,
-    };
+    use td_objects::types::basic::{AccessTokenId, Description, GroupName, ProjectId, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -88,17 +86,14 @@ mod tests {
             .description(Description::try_from("ML platform group")?)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .update(
-            GroupParam::builder()
-                .group(GroupIdName::from_str("analytics")?)
-                .build()?,
-            update,
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                GroupParam::builder()
+                    .group(GroupIdName::from_str("analytics")?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -142,18 +137,15 @@ mod tests {
             .build()
             .unwrap();
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .update(
-            GroupParam::builder()
-                .group(GroupIdName::from_str("analytics").unwrap())
-                .build()
-                .unwrap(),
-            update,
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                GroupParam::builder()
+                    .group(GroupIdName::from_str("analytics").unwrap())
+                    .build()
+                    .unwrap(),
+                update,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateGroupService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
@@ -172,17 +164,14 @@ mod tests {
             )?))
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .update(
-            GroupParam::builder()
-                .group(GroupIdName::from_str("default")?)
-                .build()?,
-            update,
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                GroupParam::builder()
+                    .group(GroupIdName::from_str("default")?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateGroupService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;

@@ -109,8 +109,7 @@ mod tests {
     use td_objects::types::basic::BundleId;
     use td_objects::types::basic::CollectionName;
     use td_objects::types::basic::{
-        AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, ProjectId, RoleId, TableNameDto,
-        UserId,
+        AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, ProjectId, TableNameDto, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
@@ -313,18 +312,17 @@ mod tests {
             .function(&collection, &create)
             .await?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("foo")?)
-                        .build()?,
-                    FunctionEnable {
-                        enabled: enabled_update,
-                    },
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("foo")?)
+                    .build()?,
+                FunctionEnable {
+                    enabled: enabled_update,
+                },
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = EnableFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

@@ -145,8 +145,8 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, BundleId, CollectionName, Decorator,
         FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus, Private, ProjectId,
-        RoleId, StorageVersion, TableFunctionParamPos, TableId, TableName, TableNameDto,
-        TableStatus, TransactionKey, UserId,
+        StorageVersion, TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus,
+        TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -207,12 +207,10 @@ mod tests {
             .system_tables(&func)
             .await?;
 
-        let request_context = td_objects::dxo::crudl::RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .read::<String>("")
-        .context;
+        let request_context =
+            td_objects::dxo::crudl::RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .read::<String>("")
+                .context;
         let mut builder = TableDBBuilder::try_from(&func)?;
         let builder = TryUpdater::try_update_from(&mut builder, &request_context)?;
         let private = builder

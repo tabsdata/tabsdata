@@ -62,7 +62,7 @@ mod tests {
     use td_objects::dxo::function::{FunctionPatch, FunctionRegister};
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
-        ProjectId, RoleId, TableNameDto, UserId,
+        ProjectId, TableNameDto, UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::CurrentEntry;
@@ -140,10 +140,9 @@ mod tests {
             .collection(CollectionIdName::from_str("c0")?)
             .function(FunctionIdName::from_str("f0")?)
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(param, ListParams::default())
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(param, ListParams::default())
+            .in_project(ProjectId::sandbox());
         let response = ListFunctionPatchesService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -171,32 +170,30 @@ mod tests {
                 .bundle_id(BundleId::default())
                 .try_snippet(&format!("v{i}"))?
                 .build()?;
-            let req =
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .create(
-                        FunctionParam::builder()
-                            .collection(CollectionIdName::from_str("c0")?)
-                            .function(FunctionIdName::from_str("f0")?)
-                            .build()?,
-                        body,
-                    )
-                    .in_project(ProjectId::sandbox());
+            let req = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .create(
+                    FunctionParam::builder()
+                        .collection(CollectionIdName::from_str("c0")?)
+                        .function(FunctionIdName::from_str("f0")?)
+                        .build()?,
+                    body,
+                )
+                .in_project(ProjectId::sandbox());
             let _ = CreateFunctionPatchService::with_defaults(db.clone())
                 .service()
                 .raw_oneshot(req)
                 .await?;
         }
 
-        let read_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str("c0")?)
-                        .function(FunctionIdName::from_str("f0")?)
-                        .build()?,
-                    ListParams::default(),
-                )
-                .in_project(ProjectId::sandbox());
+        let read_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str("c0")?)
+                    .function(FunctionIdName::from_str("f0")?)
+                    .build()?,
+                ListParams::default(),
+            )
+            .in_project(ProjectId::sandbox());
         let response = ListFunctionPatchesService::with_defaults(db.clone())
             .service()
             .raw_oneshot(read_request)

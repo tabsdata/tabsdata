@@ -84,7 +84,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BasePath, BundleStatus, CollectionName, ProjectId, RoleId, UserId,
+        AccessTokenId, AtTime, BasePath, BundleStatus, CollectionName, ProjectId, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -159,15 +159,14 @@ mod tests {
             .unwrap();
         let function_upload = FunctionUpload::new(request);
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .build()?,
-                    function_upload,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .build()?,
+                function_upload,
+            )
+            .in_project(ProjectId::sandbox());
 
         let context = Context::with_defaults(db.clone());
         let service = UploadFunctionService::build(&context).service();
@@ -216,15 +215,14 @@ mod tests {
             .body(Body::new(payload.to_string()))
             .unwrap();
         let function_upload = FunctionUpload::new(request);
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{collection_name}"))?)
-                        .build()?,
-                    function_upload,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{collection_name}"))?)
+                    .build()?,
+                function_upload,
+            )
+            .in_project(ProjectId::sandbox());
         let service = UploadFunctionService::build(context).service();
         service.raw_oneshot(request).await
     }

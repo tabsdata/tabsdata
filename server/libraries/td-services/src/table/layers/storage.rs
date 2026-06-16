@@ -76,8 +76,7 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
-        LogicalFunctionRunStatus, ProjectId, RoleId, TableName, TableNameDto, TransactionKey,
-        UserId,
+        LogicalFunctionRunStatus, ProjectId, TableName, TableNameDto, TransactionKey, UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::LiveEntry;
@@ -379,16 +378,15 @@ mod tests {
             .tables(vec![TableNameDto::try_from("table_1")?])
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("joaquin")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("joaquin")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;

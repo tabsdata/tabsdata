@@ -24,17 +24,14 @@ use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::rest_urls::ProjectParam;
 use td_objects::types::basic::{
     AccessTokenId, Description, EntityId, PermissionEntityType, PermissionType, ProjectId,
-    ProjectIdName, ProjectName, RoleId, RoleKind, RoleName, UserEnabled, UserId, UserName,
+    ProjectIdName, ProjectName, RoleKind, RoleName, UserEnabled, UserId, UserName,
 };
 use td_queries::LiveEntry;
 use td_queries::test_utils::SeedEntry;
 use td_tower::ctx_service::RawOneshot;
 
 fn admin_ctx() -> RequestContext {
-    RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    )
+    RequestContext::with(AccessTokenId::default(), UserId::admin())
 }
 
 fn project_param(name: &str) -> ProjectParam {
@@ -132,20 +129,24 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
         .permission(
             PermissionType::ViewProject,
             None,
-            Some(EntityId::try_from(alpha.id.clone())?),
+            Some(EntityId::try_from(alpha.id)?),
             &alpha_viewers,
         )
         .await?;
     db.seed().user_role(&bob.id, &alpha_viewers.id).await?;
 
     // Bob sees only `alpha`.
-    let bob_ctx = RequestContext::with(AccessTokenId::default(), bob.id.clone());
+    let bob_ctx = RequestContext::with(AccessTokenId::default(), bob.id);
     let bob_list = ListProjectsService::with_defaults(db.clone())
         .service()
         .raw_oneshot(bob_ctx.list((), ListParams::default()))
         .await?;
     let bob_names: Vec<_> = bob_list.data.iter().map(|p| p.name.to_string()).collect();
-    assert_eq!(bob_names, vec!["alpha".to_string()], "bob should see only alpha");
+    assert_eq!(
+        bob_names,
+        vec!["alpha".to_string()],
+        "bob should see only alpha"
+    );
 
     // The admin (sys_admin) sees all three (sandbox, alpha, beta).
     let admin_list = ListProjectsService::with_defaults(db.clone())
@@ -243,9 +244,21 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
 
     let entity_id = EntityId::try_from(created.id)?;
     let expected = [
-        (RoleKind::ProjectAdmin, "rocket_admin", PermissionType::ManageProject),
-        (RoleKind::ProjectDev, "rocket_dev", PermissionType::DevelopProject),
-        (RoleKind::ProjectView, "rocket_view", PermissionType::ViewProject),
+        (
+            RoleKind::ProjectAdmin,
+            "rocket_admin",
+            PermissionType::ManageProject,
+        ),
+        (
+            RoleKind::ProjectDev,
+            "rocket_dev",
+            PermissionType::DevelopProject,
+        ),
+        (
+            RoleKind::ProjectView,
+            "rocket_view",
+            PermissionType::ViewProject,
+        ),
     ];
 
     for (kind, role_name, permission_type) in expected {
@@ -258,12 +271,18 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
         assert!(*role.fixed, "{role_name} must be system-managed (fixed)");
 
         // Exactly one permission row, fixed, on the project entity.
-        let perms = db.live().fetch_all::<PermissionDB>(role.id.clone()).await?;
+        let perms = db.live().fetch_all::<PermissionDB>(role.id).await?;
         assert_eq!(perms.len(), 1, "{role_name} has exactly one permission");
         let perm = &perms[0];
-        assert_eq!(perm.permission_type, permission_type, "{role_name} permission");
+        assert_eq!(
+            perm.permission_type, permission_type,
+            "{role_name} permission"
+        );
         assert_eq!(perm.entity_type, PermissionEntityType::Project);
-        assert_eq!(perm.entity_id, entity_id, "{role_name} entity is the project");
+        assert_eq!(
+            perm.entity_id, entity_id,
+            "{role_name} entity is the project"
+        );
         assert!(*perm.fixed, "{role_name} permission must be fixed");
     }
 
@@ -272,10 +291,7 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
         .iter()
         .find(|r| r.kind == RoleKind::ProjectAdmin)
         .expect("admin role");
-    let memberships = db
-        .live()
-        .fetch_all::<UserRoleDB>(admin_role.id.clone())
-        .await?;
+    let memberships = db.live().fetch_all::<UserRoleDB>(admin_role.id).await?;
     assert_eq!(memberships.len(), 1, "one creator membership on admin role");
     assert_eq!(memberships[0].user_id, UserId::admin());
     assert!(
@@ -286,7 +302,7 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
     // `_dev` / `_view` start empty.
     for kind in [RoleKind::ProjectDev, RoleKind::ProjectView] {
         let role = roles.iter().find(|r| r.kind == kind).unwrap();
-        let memberships = db.live().fetch_all::<UserRoleDB>(role.id.clone()).await?;
+        let memberships = db.live().fetch_all::<UserRoleDB>(role.id).await?;
         assert!(memberships.is_empty(), "{kind:?} role starts empty");
     }
 
@@ -311,7 +327,7 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
     // Collect the role ids before delete.
     let roles = project_roles(&db, created.id).await?;
     assert_eq!(roles.len(), 3);
-    let role_ids: Vec<_> = roles.iter().map(|r| r.id.clone()).collect();
+    let role_ids: Vec<_> = roles.iter().map(|r| r.id).collect();
 
     DeleteProjectService::with_defaults(db.clone())
         .service()
@@ -320,11 +336,14 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
 
     // Role rows for the project are gone.
     let roles_after = project_roles(&db, created.id).await?;
-    assert!(roles_after.is_empty(), "per-project roles dropped on delete");
+    assert!(
+        roles_after.is_empty(),
+        "per-project roles dropped on delete"
+    );
 
     // Their permission and membership rows are gone too.
     for role_id in role_ids {
-        let perms = db.live().fetch_all::<PermissionDB>(role_id.clone()).await?;
+        let perms = db.live().fetch_all::<PermissionDB>(role_id).await?;
         assert!(perms.is_empty(), "permissions cascaded");
         let memberships = db.live().fetch_all::<UserRoleDB>(role_id).await?;
         assert!(memberships.is_empty(), "memberships cascaded");

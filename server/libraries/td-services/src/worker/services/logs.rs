@@ -116,9 +116,7 @@ mod tests {
                     type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
                     // check requester has access to the project
                     type_of_val(&Scope::<Project>::set),
-                    type_of_val(
-                        &Rbac::<Project, DevelopProject>::check,
-                    ),
+                    type_of_val(&Rbac::<Project, DevelopProject>::check),
                     // Resolve worker message path.
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
@@ -147,9 +145,7 @@ mod tests {
                     type_of_val(&By::<WorkerIdName>::fetch_one::<WorkerDB>),
                     type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
                     type_of_val(&Scope::<Project>::set),
-                    type_of_val(
-                        &Rbac::<Project, DevelopProject>::check,
-                    ),
+                    type_of_val(&Rbac::<Project, DevelopProject>::check),
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
                     type_of_val(&worker_logs_tail),
@@ -249,18 +245,15 @@ mod tests {
                     )
                     .service();
 
-                    let request = RequestContext::with(
-                        AccessTokenId::default(),
-                        UserId::admin()
-                    )
-                    .read(
-                        WorkerLogsParams::builder()
-                            .worker(WorkerIdName::from_str(&workers[0].id.to_string())?)
-                            .extension(vec![LogsExtension::All])
-                            .retry(vec![])
-                            .build()?,
-                    )
-                    .in_project(ProjectId::sandbox());
+                    let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                        .read(
+                            WorkerLogsParams::builder()
+                                .worker(WorkerIdName::from_str(&workers[0].id.to_string())?)
+                                .extension(vec![LogsExtension::All])
+                                .retry(vec![])
+                                .build()?,
+                        )
+                        .in_project(ProjectId::sandbox());
 
                     let response = service.raw_oneshot(request).await?;
                     Ok::<_, TdError>(response)

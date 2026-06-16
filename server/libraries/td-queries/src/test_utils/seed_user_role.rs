@@ -14,10 +14,7 @@ pub(crate) async fn seed_user_role(
     user: &UserId,
     role: &RoleId,
 ) -> Result<UserRoleDB, TdError> {
-    let request_context = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    );
+    let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     let user_role_db = UserRoleDB::builder()
         .try_update_from(&request_context)?

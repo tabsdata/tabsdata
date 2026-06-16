@@ -7,7 +7,7 @@ use ta_objects::{Buildable, TryUpdater};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::role::{RoleCreate, RoleDB, RoleDBBuilder};
-use td_objects::types::basic::{AccessTokenId, Description, RoleId, RoleName, UserId};
+use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserId};
 
 pub(crate) async fn seed_role(
     db: impl QueryExecutor,
@@ -19,10 +19,7 @@ pub(crate) async fn seed_role(
         .description(description)
         .build()?;
 
-    let request_context = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    );
+    let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     let role_db = RoleDBBuilder::try_from(&role_create)?
         .try_update_from(&request_context)?

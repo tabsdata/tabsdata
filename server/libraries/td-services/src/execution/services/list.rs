@@ -47,7 +47,7 @@ mod tests {
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, ProjectId, RoleId, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, ProjectId, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -127,10 +127,9 @@ mod tests {
         ];
 
         let service = ExecutionListService::with_defaults(db.clone()).service();
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list((), ListParams::default())
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, executions.len());

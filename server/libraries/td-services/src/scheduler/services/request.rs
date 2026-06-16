@@ -268,8 +268,8 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, EnvPrefix,
-        ExecutionName, FunctionIdName, FunctionRuntimeValues, ProjectId, RoleId, TableName,
-        TableNameDto, UserId, WorkerMessageStatus,
+        ExecutionName, FunctionIdName, FunctionRuntimeValues, ProjectId, TableName, TableNameDto,
+        UserId, WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
@@ -427,18 +427,17 @@ mod tests {
             .function(&collection, &create)
             .await?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("function_1")?)
-                        .build()?,
-                    ExecutionRequest::builder()
-                        .name(Some(ExecutionName::try_from("test_execution")?))
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("function_1")?)
+                    .build()?,
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let execution = service.raw_oneshot(request).await?;
@@ -673,10 +672,9 @@ mod tests {
             .collection(CollectionIdName::from_str("c_replay")?)
             .logical_function_run(lfr_id.clone())
             .build()?;
-        let replay_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(replay_param, ())
-                .in_project(ProjectId::sandbox());
+        let replay_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(replay_param, ())
+            .in_project(ProjectId::sandbox());
         let replay_response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
             .raw_oneshot(replay_request)
@@ -803,18 +801,17 @@ mod tests {
             .function(&collection, &create)
             .await?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("function_1")?)
-                        .build()?,
-                    ExecutionRequest::builder()
-                        .name(Some(ExecutionName::try_from("e_k8s")?))
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("function_1")?)
+                    .build()?,
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("e_k8s")?))
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
         ExecuteFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)

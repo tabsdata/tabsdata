@@ -49,9 +49,7 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::group::GroupDB;
-    use td_objects::types::basic::{
-        AccessTokenId, Description, GroupName, ProjectId, RoleId, UserId,
-    };
+    use td_objects::types::basic::{AccessTokenId, Description, GroupName, ProjectId, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -67,16 +65,13 @@ mod tests {
             )
             .await?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .read(
-            GroupParam::builder()
-                .group(GroupIdName::from_str("analytics")?)
-                .build()?,
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(
+                GroupParam::builder()
+                    .group(GroupIdName::from_str("analytics")?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ReadGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -92,16 +87,13 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_read_system_group_by_name(db: TdPool) -> Result<(), TdError> {
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .read(
-            GroupParam::builder()
-                .group(GroupIdName::from_str("default")?)
-                .build()?,
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(
+                GroupParam::builder()
+                    .group(GroupIdName::from_str("default")?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ReadGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;

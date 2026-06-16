@@ -48,8 +48,8 @@ mod tests {
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, Description, ProjectId, RoleId,
-        RoleName, TableName, TableNameDto, UserEnabled, UserId, UserName,
+        AccessTokenId, BundleId, CollectionName, Decorator, Description, ProjectId, RoleName,
+        TableName, TableNameDto, UserEnabled, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -71,9 +71,7 @@ mod tests {
                 // list
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Table>, _>),
-                type_of_val(
-                    &By::<()>::list_current::<NoFilter, { TableDBWithNames::User }, Table>,
-                ),
+                type_of_val(&By::<()>::list_current::<NoFilter, { TableDBWithNames::User }, Table>),
             ]);
     }
 
@@ -109,10 +107,9 @@ mod tests {
             .await?;
 
         // List current tables
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list((), ListParams::default())
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let service = TableListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -172,10 +169,9 @@ mod tests {
             .await?;
 
         // All tables are visible to authorized users
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list((), ListParams::default())
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let service = TableListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -194,7 +190,6 @@ mod tests {
         let service = TableListService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
-            other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
         Ok(())

@@ -7,16 +7,16 @@ use crate::table::layers::find_data_version_location_at;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
-use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 #[cfg(test)]
 use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::params::TableAtIdName;
+use td_objects::tower_service::with::With;
 #[cfg(test)]
 use td_objects::types::basic::CollectionIdName;
+use td_objects::types::stream::BoxedSyncStream;
 #[cfg(feature = "test_tower_metadata")]
 use td_queries::By;
-use td_objects::tower_service::with::With;
-use td_objects::types::stream::BoxedSyncStream;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -72,7 +72,7 @@ pub(crate) mod tests {
     use td_objects::rest_urls::{AtTimeParam, TableParam, UncommittedParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
-        ProjectId, RoleId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
+        ProjectId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
         UncommittedStatus, UserId,
     };
     use td_objects::{Buildable, and};
@@ -167,19 +167,18 @@ pub(crate) mod tests {
                                        at_time: &AtTime|
                     -> Result<Bytes, TdError> {
             // with ids
-            let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .read(TableAtIdName::new(
-                        TableParam::builder()
-                            .collection(CollectionIdName::from_str(&format!("~{}", collection_id))?)
-                            .table(TableIdName::from_str(table)?)
-                            .build()?,
-                        AtTimeParam::builder().at(at_time).build()?,
-                        UncommittedParam::builder()
-                            .uncommitted(UncommittedStatus::TRUE)
-                            .build()?,
-                    ))
-                    .in_project(ProjectId::sandbox());
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .read(TableAtIdName::new(
+                    TableParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("~{}", collection_id))?)
+                        .table(TableIdName::from_str(table)?)
+                        .build()?,
+                    AtTimeParam::builder().at(at_time).build()?,
+                    UncommittedParam::builder()
+                        .uncommitted(UncommittedStatus::TRUE)
+                        .build()?,
+                ))
+                .in_project(ProjectId::sandbox());
             let service = TableDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
@@ -188,22 +187,18 @@ pub(crate) mod tests {
                 None => Bytes::new(),
             };
             // with names
-            let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .read(TableAtIdName::new(
-                        TableParam::builder()
-                            .collection(CollectionIdName::from_str(&format!(
-                                "{}",
-                                collection_name
-                            ))?)
-                            .table(TableIdName::from_str(table)?)
-                            .build()?,
-                        AtTimeParam::builder().at(at_time).build()?,
-                        UncommittedParam::builder()
-                            .uncommitted(UncommittedStatus::TRUE)
-                            .build()?,
-                    ))
-                    .in_project(ProjectId::sandbox());
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .read(TableAtIdName::new(
+                    TableParam::builder()
+                        .collection(CollectionIdName::from_str(&format!("{}", collection_name))?)
+                        .table(TableIdName::from_str(table)?)
+                        .build()?,
+                    AtTimeParam::builder().at(at_time).build()?,
+                    UncommittedParam::builder()
+                        .uncommitted(UncommittedStatus::TRUE)
+                        .build()?,
+                ))
+                .in_project(ProjectId::sandbox());
             let service = TableDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();

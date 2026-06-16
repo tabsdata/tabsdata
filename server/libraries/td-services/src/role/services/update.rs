@@ -4,7 +4,7 @@
 
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Rbac, ManageRoles, Scope, System};
+use td_authz::rbac::{ManageRoles, Rbac, Scope, System};
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::role::{
     Role, RoleBuilder, RoleDB, RoleDBUpdate, RoleDBUpdateBuilder, RoleDBWithNames, RoleUpdate,
@@ -107,11 +107,7 @@ mod tests {
             .description(Description::try_from("new desc")?)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .update(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
             RoleParam::builder()
                 .role(RoleIdName::from_str("joaquin")?)
                 .build()?,

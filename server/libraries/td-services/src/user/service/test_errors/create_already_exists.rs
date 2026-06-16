@@ -10,7 +10,7 @@ use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserCreate;
 use td_objects::errors::SqlError;
-use td_objects::types::basic::{AccessTokenId, ProjectId, RoleId, UserEnabled, UserId, UserName};
+use td_objects::types::basic::{AccessTokenId, ProjectId, UserEnabled, UserId, UserName};
 use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(db)]
@@ -35,11 +35,8 @@ async fn test_create_already_existing(db: TdPool) {
         .build()
         .unwrap();
 
-    let request = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    )
-    .create((), create);
+    let request =
+        RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create);
 
     assert_service_error(service, request, |err| match err {
         SqlError::UniqueViolation(_, _, _) => {}

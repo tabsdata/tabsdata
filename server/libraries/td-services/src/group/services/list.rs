@@ -43,9 +43,7 @@ mod tests {
     use td_database::scoped::InProject;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::types::basic::{
-        AccessTokenId, Description, GroupName, ProjectId, RoleId, UserId,
-    };
+    use td_objects::types::basic::{AccessTokenId, Description, GroupName, ProjectId, UserId};
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
@@ -60,12 +58,9 @@ mod tests {
             )
             .await?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .list((), ListParams::default())
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let service = ListGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;

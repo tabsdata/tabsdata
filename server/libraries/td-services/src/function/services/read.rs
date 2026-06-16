@@ -19,8 +19,8 @@ use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::rest_urls::FunctionParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, CollectionIdName, FunctionId, FunctionIdName, FunctionVersionId, TableId,
-    TableName, WorkerId, WorkerTypeDto,
+    AtTime, CollectionIdName, FunctionId, FunctionIdName, FunctionVersionId, TableId, TableName,
+    WorkerId, WorkerTypeDto,
 };
 use td_objects::types::composed::{TableDependency, TableTrigger};
 use td_queries::By;
@@ -126,7 +126,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, ProjectId,
-        RoleId, TableNameDto, UserId, UserName, WorkerConfig,
+        TableNameDto, UserId, UserName, WorkerConfig,
     };
     use td_objects::types::composed::{TableDependency, TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
@@ -158,9 +158,7 @@ mod tests {
                     ),
                     // check requester can view the current project
                     type_of_val(&Scope::<Project>::set),
-                    type_of_val(
-                        &Rbac::<Project, ViewProject>::check,
-                    ),
+                    type_of_val(&Rbac::<Project, ViewProject>::check),
                     // Read function with tables, triggers and dependencies
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
@@ -262,18 +260,17 @@ mod tests {
             .function(&collection, &create)
             .await?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!(
-                            "~{}",
-                            function.collection_id
-                        ))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!(
+                        "~{}",
+                        function.collection_id
+                    ))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ReadFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

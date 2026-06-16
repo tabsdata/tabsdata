@@ -63,7 +63,7 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
-        FunctionName, ProjectId, RoleId, UserId,
+        FunctionName, ProjectId, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -77,25 +77,29 @@ mod tests {
         FunctionListHistoryService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ListRequest<AtTimeParam>, ProjectId>, ListResponse<Function>>(&[
-                type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
-                type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
-                type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
-                // check requester can view the current project; within the project
-                // every collection is visible (no cross-project visibility)
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
-                // list (all collections in the current project)
-                type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
-                type_of_val(
-                    &By::<()>::historic_list_versions::<
-                        NoFilter,
-                        { FunctionDBWithNames::Available },
-                        Function,
-                    >,
-                ),
-            ]);
+            .assert_service::<Scoped<ListRequest<AtTimeParam>, ProjectId>, ListResponse<Function>>(
+                &[
+                    type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<RequestContext>),
+                    type_of_val(&With::<ListRequest<AtTimeParam>>::extract_name::<AtTimeParam>),
+                    type_of_val(&With::<AtTimeParam>::extract::<AtTime>),
+                    // check requester can view the current project; within the project
+                    // every collection is visible (no cross-project visibility)
+                    type_of_val(&Scope::<Project>::set),
+                    type_of_val(&Rbac::<Project, ViewProject>::check),
+                    // list (all collections in the current project)
+                    type_of_val(&With::<ListRequest<AtTimeParam>>::extract::<ListParams>),
+                    type_of_val(
+                        &With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>,
+                    ),
+                    type_of_val(
+                        &By::<()>::historic_list_versions::<
+                            NoFilter,
+                            { FunctionDBWithNames::Available },
+                            Function,
+                        >,
+                    ),
+                ],
+            );
     }
 
     #[td_test::test(db)]
@@ -157,16 +161,15 @@ mod tests {
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet".try_into()?))
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("function_1")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("function_1")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -175,15 +178,14 @@ mod tests {
         let t3 = AtTime::now();
 
         // Delete function_2
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .delete(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("function_2")?)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .delete(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("function_2")?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
@@ -212,13 +214,12 @@ mod tests {
 
         // Actual test
         // t0 -> no functions
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(
-                    AtTimeParam::builder().at(t0).build()?,
-                    ListParams::default(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                AtTimeParam::builder().at(t0).build()?,
+                ListParams::default(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -228,16 +229,15 @@ mod tests {
         assert_eq!(data.len(), 0);
 
         // t1 -> function_1
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(
-                    AtTimeParam::builder().at(t1).build()?,
-                    ListParamsBuilder::default()
-                        .order_by("name".to_string())
-                        .build()
-                        .unwrap(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                AtTimeParam::builder().at(t1).build()?,
+                ListParamsBuilder::default()
+                    .order_by("name".to_string())
+                    .build()
+                    .unwrap(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -248,13 +248,12 @@ mod tests {
         assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
 
         // t2 -> function_1 and function_2
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(
-                    AtTimeParam::builder().at(t2).build()?,
-                    ListParams::default(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                AtTimeParam::builder().at(t2).build()?,
+                ListParams::default(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -266,13 +265,12 @@ mod tests {
         assert_eq!(data[1].name, FunctionName::try_from("function_2")?);
 
         // t3 -> function_2 and function_3
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(
-                    AtTimeParam::builder().at(t3).build()?,
-                    ListParams::default(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                AtTimeParam::builder().at(t3).build()?,
+                ListParams::default(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -284,13 +282,12 @@ mod tests {
         assert_eq!(data[1].name, FunctionName::try_from("function_3")?);
 
         // t4 -> function_3
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(
-                    AtTimeParam::builder().at(t4).build()?,
-                    ListParams::default(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                AtTimeParam::builder().at(t4).build()?,
+                ListParams::default(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -301,13 +298,12 @@ mod tests {
         assert_eq!(data[0].name, FunctionName::try_from("function_3")?);
 
         // t5 -> function_3 and function_5
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(
-                    AtTimeParam::builder().at(t5).build()?,
-                    ListParams::default(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                AtTimeParam::builder().at(t5).build()?,
+                ListParams::default(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListHistoryService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

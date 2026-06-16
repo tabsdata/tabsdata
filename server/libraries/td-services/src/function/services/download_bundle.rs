@@ -63,8 +63,7 @@ mod tests {
     use td_objects::dxo::function_upload::FunctionUpload;
     use td_objects::rest_urls::{CollectionParam, FunctionParam, OptionalAtTimeParam};
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionVersionId, ProjectId, RoleId,
-        UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionVersionId, ProjectId, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -161,13 +160,12 @@ mod tests {
             (Some(at_v1), &v1, &bundle_a_id, &payload_a),
         ];
         for (at, expected_fn, expected_bundle, expected_payload) in cases {
-            let download_request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .read(FunctionMaybeAtIdName::new(
-                        function_param.clone(),
-                        OptionalAtTimeParam { at },
-                    ))
-                    .in_project(ProjectId::sandbox());
+            let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .read(FunctionMaybeAtIdName::new(
+                    function_param.clone(),
+                    OptionalAtTimeParam { at },
+                ))
+                .in_project(ProjectId::sandbox());
             let response = service.clone().raw_oneshot(download_request).await?;
 
             assert_eq!(response.function_version_id, expected_fn.id);
@@ -239,13 +237,12 @@ mod tests {
             .function(FunctionIdName::from_str("joaquin")?)
             .build()?;
         let service = DownloadBundleService::build(&context).service();
-        let download_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(FunctionMaybeAtIdName::new(
-                    function_param,
-                    OptionalAtTimeParam { at: None },
-                ))
-                .in_project(ProjectId::sandbox());
+        let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(FunctionMaybeAtIdName::new(
+                function_param,
+                OptionalAtTimeParam { at: None },
+            ))
+            .in_project(ProjectId::sandbox());
         let response = service.raw_oneshot(download_request).await?;
         assert_eq!(response.bundle_id, bundle_id);
 
@@ -266,15 +263,14 @@ mod tests {
     ) -> Result<BundleId, TdError> {
         let request = Request::builder().body(Body::from(payload)).unwrap();
         let upload = FunctionUpload::new(request);
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection))?)
-                        .build()?,
-                    upload,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection))?)
+                    .build()?,
+                upload,
+            )
+            .in_project(ProjectId::sandbox());
         let bundle = UploadFunctionService::build(context)
             .service()
             .raw_oneshot(request)

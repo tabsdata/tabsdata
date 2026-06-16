@@ -8,7 +8,7 @@ use ta_objects::{Buildable, TryUpdater};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
-use td_objects::types::basic::{AccessTokenId, Description, GroupName, RoleId, UserId};
+use td_objects::types::basic::{AccessTokenId, Description, GroupName, UserId};
 
 pub(crate) async fn seed_group(
     mut executor: impl QueryExecutor,
@@ -20,10 +20,7 @@ pub(crate) async fn seed_group(
         .description(description)
         .build()?;
 
-    let request_context = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    );
+    let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     let group_db = GroupDBBuilder::try_from(&group_create)?
         .try_update_from(&request_context)?

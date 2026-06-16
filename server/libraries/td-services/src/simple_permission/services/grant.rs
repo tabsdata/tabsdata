@@ -17,15 +17,15 @@
 
 use crate::permission::authorize_permission_target;
 use crate::simple_permission::layers::{
-    assert_simple_permission_valid, resolve_grant, resolved_role_id, resolved_user_id,
-    ResolvedGrant,
+    ResolvedGrant, assert_simple_permission_valid, resolve_grant, resolved_role_id,
+    resolved_user_id,
 };
 use ta_services::factory::service_factory;
-use td_authz::{refresh_authz_context, AuthzContext};
+use td_authz::{AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
 use td_objects::dxo::user_role::{UserRoleDB, UserRoleDBBuilder};
-use td_objects::tower_service::with::{builder, With};
+use td_objects::tower_service::with::{With, builder};
 use td_objects::types::basic::{RoleId, UserId};
 use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
@@ -76,20 +76,20 @@ mod tests {
     use ta_services::service::TdService;
     use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
-    use td_error::{assert_service_error, TdError};
+    use td_error::{TdError, assert_service_error};
+    use td_objects::Buildable;
     use td_objects::dxo::user_role::UserRoleDB;
     use td_objects::types::basic::{
         AccessTokenId, EntityId, EntityName, PermissionType, ProjectIdName, ProjectName, RoleId,
         RoleName, SimplePermissionType, UserEnabled, UserId, UserName,
     };
-    use td_objects::Buildable;
-    use td_queries::test_utils::SeedEntry;
     use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     fn grant_request(
         user: UserId,
-        role: RoleId,
+        _role: RoleId,
         grant: SimplePermissionGrant,
     ) -> CreateRequest<(), SimplePermissionGrant> {
         RequestContext::with(AccessTokenId::default(), user).create((), grant)
@@ -108,8 +108,7 @@ mod tests {
         CreateProjectService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .create((), create),
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create),
             )
             .await?;
         Ok(())
@@ -310,7 +309,7 @@ mod tests {
                 td_objects::types::basic::Description::try_from("d")?,
             )
             .await?;
-        let entity_id: EntityId = p0.id.clone().try_into()?;
+        let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::DevelopProject,
@@ -340,7 +339,6 @@ mod tests {
         let request = grant_request(requester.id, dev_only.id, grant);
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
-            other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
         let _ = target;

@@ -88,8 +88,8 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description,
         FunctionRuntimeValues, FunctionStatus, FunctionVersionId, LogicalFunctionRunStatus,
-        LogicalPointerReason, LogicalPointerStatus, PhysicalFunctionRunStatus, ProjectId, RoleId,
-        Snippet, TableNameDto, TransactionKey, UserId,
+        LogicalPointerReason, LogicalPointerStatus, PhysicalFunctionRunStatus, ProjectId, Snippet,
+        TableNameDto, TransactionKey, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_queries::{LiveEntry, VersionedEntry};

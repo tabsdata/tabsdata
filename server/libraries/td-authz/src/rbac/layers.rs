@@ -452,7 +452,9 @@ mod tests {
 
         // one generic set() for any entity kind, from a Ref<E::Id>
         let p = ProjectId::default();
-        let scope = Scope::<Project>::set(Ref::from_arc(Arc::new(p))).await.unwrap();
+        let scope = Scope::<Project>::set(Ref::from_arc(Arc::new(p)))
+            .await
+            .unwrap();
         assert_eq!(scope.0, On::Entity(p));
 
         let user_id = UserId::default();
@@ -473,10 +475,10 @@ mod tests {
         let user_id = UserId::default();
         let p = ProjectId::default();
 
-        let source = Arc::new(
-            FixedRbacSource::new()
-                .with_user_roles(user_id, [SystemRole::Default.grants(), ProjectRole::Dev.grants(p)]),
-        );
+        let source = Arc::new(FixedRbacSource::new().with_user_roles(
+            user_id,
+            [SystemRole::Default.grants(), ProjectRole::Dev.grants(p)],
+        ));
         let request = Arc::new(request(user_id));
         let scope = Arc::new(Scope::<Project>(On::Entity(p)));
 
@@ -520,7 +522,7 @@ mod tests {
         // a user unknown to the source has empty grants: forbidden
         let unknown = Arc::new(RequestContext::with(
             AccessTokenId::default(),
-            UserId::default()
+            UserId::default(),
         ));
         let conn = MutRef::new(db.acquire().await.unwrap());
         Enforce::<FixedRbacSource, Project, ViewProject>::check(
@@ -532,5 +534,4 @@ mod tests {
         .await
         .unwrap_err();
     }
-
 }

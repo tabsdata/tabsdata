@@ -50,7 +50,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::auth::Login;
-    use td_objects::types::basic::{Password, RoleId, RoleName, SessionStatus, UserId, UserName};
+    use td_objects::types::basic::{Password, SessionStatus, UserId, UserName};
     use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
 
@@ -96,9 +96,7 @@ mod tests {
 
         let service = auth_services.logout.service();
 
-        let request =
-            RequestContext::with(access_token_id, UserId::admin())
-                .update((), ());
+        let request = RequestContext::with(access_token_id, UserId::admin()).update((), ());
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
 

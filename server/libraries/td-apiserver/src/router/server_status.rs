@@ -57,13 +57,12 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::system::{ApiStatus, HealthStatus};
     use td_objects::rest_urls::SERVER_STATUS;
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, UserId};
     use td_services::{Context, Services};
     use tower::ServiceExt;
 
     async fn to_route<R: Into<Router> + Clone>(router: &R) -> Router {
-        let context =
-            RequestContext::with(AccessTokenId::default(), UserId::admin());
+        let context = RequestContext::with(AccessTokenId::default(), UserId::admin());
         let router = router.clone().into();
         router.layer(Extension(context.clone()))
     }

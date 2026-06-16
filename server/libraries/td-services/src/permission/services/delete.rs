@@ -6,7 +6,7 @@ use crate::permission::layers::{
     assert_permission_is_not_fixed, assert_role_in_permission, authorize_permission_target,
 };
 use ta_services::factory::service_factory;
-use td_authz::{refresh_authz_context, AuthzContext};
+use td_authz::{AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::permission::{PermissionDB, PermissionDBWithNames};
 use td_objects::rest_urls::RolePermissionParam;
@@ -61,15 +61,15 @@ mod tests {
     use td_objects::dxo::permission::PermissionCreate;
     use td_objects::rest_urls::RoleParam;
     use td_objects::types::basic::{
-        AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleId,
-        RoleName, UserEnabled, UserId, UserName,
+        AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleName,
+        UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_security::{
-        ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
-        ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS,
-        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ROLES,
+        ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS,
+        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT,
+        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ROLES,
     };
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -110,11 +110,7 @@ mod tests {
             .permission(PermissionType::CreateProjects, None, None, &role)
             .await?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .delete(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
             RolePermissionParam::builder()
                 .role(RoleIdName::from_str("king")?)
                 .permission(PermissionIdName::from_str(&seeded.id.to_string())?)
@@ -154,11 +150,7 @@ mod tests {
             .await?;
 
         // `admin` holds manage_project on `__all__`, so it can grant on any project.
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .create(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
             RoleParam::builder().role(RoleIdName::Id(role.id)).build()?,
             PermissionCreate::builder()
                 .permission_type(PermissionType::DevelopProject)
@@ -205,11 +197,7 @@ mod tests {
             .user_role(&user.id, &project_admin_role.id)
             .await?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            user.id
-        )
-        .create(
+        let request = RequestContext::with(AccessTokenId::default(), user.id).create(
             RoleParam::builder().role(RoleIdName::Id(role.id)).build()?,
             PermissionCreate::builder()
                 .permission_type(PermissionType::DevelopProject)
@@ -220,7 +208,6 @@ mod tests {
         let service = CreatePermissionService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
-            other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
         Ok(())
@@ -255,11 +242,7 @@ mod tests {
             .user_role(&user.id, &project_admin_role.id)
             .await?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            user.id
-        )
-        .create(
+        let request = RequestContext::with(AccessTokenId::default(), user.id).create(
             RoleParam::builder()
                 .role(RoleIdName::Id(project_admin_role.id))
                 .build()?,
@@ -272,7 +255,6 @@ mod tests {
         let service = CreatePermissionService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
-            other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
         Ok(())
@@ -307,18 +289,22 @@ mod tests {
             .await?;
 
         // `admin` holds manage_project on `__all__`, so it can delete on any project.
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                RolePermissionParam::builder()
-                    .role(RoleIdName::from_str("r0")?)
-                    .permission(PermissionIdName::from_str(&project_dev_perm.id.to_string())?)
-                    .build()?,
-            );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
+            RolePermissionParam::builder()
+                .role(RoleIdName::from_str("r0")?)
+                .permission(PermissionIdName::from_str(
+                    &project_dev_perm.id.to_string(),
+                )?)
+                .build()?,
+        );
 
         let service = DeletePermissionService::with_defaults(db.clone()).service();
         assert!(service.raw_oneshot(request).await.is_ok());
 
-        let not_found = db.live().fetch_one::<PermissionDB>(project_dev_perm.id).await;
+        let not_found = db
+            .live()
+            .fetch_one::<PermissionDB>(project_dev_perm.id)
+            .await;
         assert!(not_found.is_err());
         Ok(())
     }
@@ -349,13 +335,14 @@ mod tests {
             )
             .await?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .delete(
-                RolePermissionParam::builder()
-                    .role(RoleIdName::from_str("r_incorrect")?)
-                    .permission(PermissionIdName::from_str(&project_dev_perm.id.to_string())?)
-                    .build()?,
-            );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
+            RolePermissionParam::builder()
+                .role(RoleIdName::from_str("r_incorrect")?)
+                .permission(PermissionIdName::from_str(
+                    &project_dev_perm.id.to_string(),
+                )?)
+                .build()?,
+        );
 
         let service = DeletePermissionService::with_defaults(db.clone()).service();
 
@@ -418,7 +405,6 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
-            other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
         Ok(())
@@ -473,7 +459,6 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
-            other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
         Ok(())
@@ -495,16 +480,13 @@ mod tests {
         for permission in permissions {
             let service = DeletePermissionService::with_defaults(db.clone()).service();
 
-            let request: DeleteRequest<RolePermissionParam> = RequestContext::with(
-                AccessTokenId::default(),
-                UserId::admin()
-            )
-            .delete(
-                RolePermissionParam::builder()
-                    .role(RoleIdName::Id(permission.role_id))
-                    .permission(PermissionIdName::Id(permission.id))
-                    .build()?,
-            );
+            let request: DeleteRequest<RolePermissionParam> =
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
+                    RolePermissionParam::builder()
+                        .role(RoleIdName::Id(permission.role_id))
+                        .permission(PermissionIdName::Id(permission.id))
+                        .build()?,
+                );
 
             if fixed_permissions.contains(permission.id.to_string().as_str()) {
                 assert_service_error(service, request, |err| match err {

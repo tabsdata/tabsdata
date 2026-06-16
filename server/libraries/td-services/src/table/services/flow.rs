@@ -83,7 +83,7 @@ mod tests {
     use td_objects::dxo::graph::GraphEdge;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
-        ProjectId, RoleId, TableName, TableNameDto, UserId,
+        ProjectId, TableName, TableNameDto, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::{Buildable, and};
@@ -187,15 +187,14 @@ mod tests {
 
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(
-                    TableParam::builder()
-                        .collection(CollectionIdName::from_str(&collection_name.to_string())?)
-                        .table(TableIdName::from_str("table_0")?)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(
+                TableParam::builder()
+                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
+                    .table(TableIdName::from_str("table_0")?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
 
@@ -320,15 +319,14 @@ mod tests {
 
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(
-                    TableParam::builder()
-                        .collection(CollectionIdName::from_str(&collection_name.to_string())?)
-                        .table(TableIdName::from_str("table_0")?)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(
+                TableParam::builder()
+                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
+                    .table(TableIdName::from_str("table_0")?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
 
@@ -476,15 +474,14 @@ mod tests {
 
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(
-                    TableParam::builder()
-                        .collection(CollectionIdName::from_str(&collection_name.to_string())?)
-                        .table(TableIdName::from_str("table_3")?)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(
+                TableParam::builder()
+                    .collection(CollectionIdName::from_str(&collection_name.to_string())?)
+                    .table(TableIdName::from_str("table_3")?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let response = service.raw_oneshot(request).await?;
 

@@ -88,19 +88,24 @@ pub const SYSTEM_GROUPS: [(&str, &str, &str); 3] = [
 
 ///- Permissions (the five rows the bootstrap seeds):
 ///    - sys_admin / manage_access on system: (BASE32HEX_NOPAD: 00000000000000000000000010)
-pub const ID_PERM_SYS_ADMIN_MANAGE_ACCESS: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8];
+pub const ID_PERM_SYS_ADMIN_MANAGE_ACCESS: [u8; 16] =
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8];
 pub const ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS: &str = "00000000000000000000000010";
 ///    - sys_admin / create_projects on system: (BASE32HEX_NOPAD: 00000000000000000000000014)
-pub const ID_PERM_SYS_ADMIN_CREATE_PROJECTS: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9];
+pub const ID_PERM_SYS_ADMIN_CREATE_PROJECTS: [u8; 16] =
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9];
 pub const ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS: &str = "00000000000000000000000014";
 ///    - sys_admin / manage_roles on system: (BASE32HEX_NOPAD: 00000000000000000000000100)
-pub const ID_PERM_SYS_ADMIN_MANAGE_ROLES: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0];
+pub const ID_PERM_SYS_ADMIN_MANAGE_ROLES: [u8; 16] =
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0];
 pub const ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ROLES: &str = "00000000000000000000000100";
 ///    - sys_admin / manage_project on project:__all__: (BASE32HEX_NOPAD: 00000000000000000000000104)
-pub const ID_PERM_SYS_ADMIN_MANAGE_PROJECT: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1];
+pub const ID_PERM_SYS_ADMIN_MANAGE_PROJECT: [u8; 16] =
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1];
 pub const ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT: &str = "00000000000000000000000104";
 ///    - default / create_projects on system: (BASE32HEX_NOPAD: 00000000000000000000000108)
-pub const ID_PERM_DEFAULT_CREATE_PROJECTS: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2];
+pub const ID_PERM_DEFAULT_CREATE_PROJECTS: [u8; 16] =
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2];
 pub const ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS: &str = "00000000000000000000000108";
 ///    - reserved `__all__` entity id: 00000000000000000000000021 (BASE32HEX_NOPAD: 00000000000000000000000204)
 pub const ID_ALL_ENTITIES: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1];
@@ -126,7 +131,8 @@ pub const ENCODED_ID_PROJECT_SANDBOX: &str = "0000000000000000000000020K";
 pub const ID_ROLE_PROJECT_CREATOR: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 6];
 pub const ENCODED_ID_ROLE_PROJECT_CREATOR: &str = "0000000000000000000000020O";
 ///- project_creator / create_projects on system permission row: byte 0x27 = "...20S".
-pub const ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 7];
+pub const ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS: [u8; 16] =
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 7];
 pub const ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS: &str = "0000000000000000000000020S";
 
 pub const DEFAULT_IDS: [[u8; 16]; 15] = [

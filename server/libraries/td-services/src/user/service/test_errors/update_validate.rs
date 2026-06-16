@@ -13,7 +13,7 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserUpdate;
 use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{
-    AccessTokenId, ProjectId, RoleId, UserEnabled, UserId, UserIdName, UserName,
+    AccessTokenId, ProjectId, UserEnabled, UserId, UserIdName, UserName,
 };
 use td_queries::test_utils::SeedEntry;
 
@@ -30,10 +30,7 @@ async fn test_update_request_has_nothing_to_update(db: TdPool) {
 
     let service = UpdateUserService::with_defaults(db.clone()).service();
 
-    let ctx = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    );
+    let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     let update = UserUpdate::builder()
         .full_name(None)

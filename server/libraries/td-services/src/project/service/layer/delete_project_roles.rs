@@ -38,13 +38,13 @@ pub async fn delete_project_roles(
     // The `roles.project_id` column is `Option<ProjectId>`; its SQL condition
     // is keyed on `Option<ProjectId>` (the column's registered type), so match
     // it with `Some(project_id)` rather than the bare id.
-    let by_project: Option<ProjectId> = Some(project_id.deref().clone());
-    let roles: Vec<RoleDB> = conn.live().fetch_all::<RoleDB>(by_project.clone()).await?;
+    let by_project: Option<ProjectId> = Some(*project_id.deref());
+    let roles: Vec<RoleDB> = conn.live().fetch_all::<RoleDB>(by_project).await?;
 
     // Drop the dependent rows first (FK `ON DELETE RESTRICT`), per role.
     for role in &roles {
-        conn.live().delete::<PermissionDB>(role.id.clone()).await?;
-        conn.live().delete::<UserRoleDB>(role.id.clone()).await?;
+        conn.live().delete::<PermissionDB>(role.id).await?;
+        conn.live().delete::<UserRoleDB>(role.id).await?;
     }
 
     // Then the role rows themselves.

@@ -113,7 +113,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        LogicalFunctionRunStatus, ProjectId, RoleId, TableNameDto, TransactionKey, UserId,
+        LogicalFunctionRunStatus, ProjectId, TableNameDto, TransactionKey, UserId,
         WorkerMessageStatus,
     };
     use td_queries::LiveEntry;

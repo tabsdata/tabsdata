@@ -31,7 +31,10 @@ async fn test_not_allowed_to_delete_collection(db: TdPool) {
     // delete collections in it.
     let user = db
         .seed()
-        .user(&UserName::try_from("joaquin").unwrap(), &UserEnabled::from(true))
+        .user(
+            &UserName::try_from("joaquin").unwrap(),
+            &UserEnabled::from(true),
+        )
         .await
         .unwrap();
     let role = db
@@ -57,7 +60,6 @@ async fn test_not_allowed_to_delete_collection(db: TdPool) {
 
     assert_service_error(service, request, |err| match err {
         RbacError::Forbidden(_, _) => {}
-        other => panic!("Expected 'Forbidden', got {other:?}"),
     })
     .await;
 }

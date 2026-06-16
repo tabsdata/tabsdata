@@ -159,7 +159,8 @@ mod tests {
     use td_objects::system::TD_FN_STATE_PREFIX;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, Decorator, Depth, FunctionName, FunctionRuntimeValues,
-        FunctionStatus, ProjectId, ResetStage, RoleId, TableId, TableName, TableStatus, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        FunctionStatus, ProjectId, ResetStage, TableId, TableName, TableStatus, UserId,
+        WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::recursion::RecursionOptions;
     use td_objects::{Buildable, and};
@@ -325,16 +326,15 @@ mod tests {
             .decorator(Decorator::Publisher)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("foo")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("foo")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -390,16 +390,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -454,18 +453,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .update(
-            FunctionParam::builder()
-                .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                .function(FunctionIdName::from_str("joaquin_workout")?)
-                .build()?,
-            update.clone(),
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -521,16 +517,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -583,15 +578,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         // Register via the service so the system state table is created.
-        let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .build()?,
-                    create,
-                )
-                .in_project(ProjectId::sandbox());
+        let register = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .build()?,
+                create,
+            )
+            .in_project(ProjectId::sandbox());
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -606,16 +600,15 @@ mod tests {
             .tables(Some(vec![TableNameDto::try_from("user_table")?]))
             .reset_state(ResetState::TRUE)
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("reset_fn")?)
-                        .build()?,
-                    update,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("reset_fn")?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -653,15 +646,14 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .build()?,
-                    create,
-                )
-                .in_project(ProjectId::sandbox());
+        let register = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .build()?,
+                create,
+            )
+            .in_project(ProjectId::sandbox());
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -674,16 +666,15 @@ mod tests {
             .name(Some("noreset_fn".try_into()?))
             .tables(Some(vec![TableNameDto::try_from("user_table")?]))
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("noreset_fn")?)
-                        .build()?,
-                    update,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("noreset_fn")?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -728,15 +719,14 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .build()?,
-                    create,
-                )
-                .in_project(ProjectId::sandbox());
+        let register = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .build()?,
+                create,
+            )
+            .in_project(ProjectId::sandbox());
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -751,16 +741,15 @@ mod tests {
             .name(Some("stage_fn".try_into()?))
             .reset_stage(ResetStage::TRUE)
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("stage_fn")?)
-                        .build()?,
-                    update,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("stage_fn")?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -796,15 +785,14 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .build()?,
-                    create,
-                )
-                .in_project(ProjectId::sandbox());
+        let register = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .build()?,
+                create,
+            )
+            .in_project(ProjectId::sandbox());
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -817,16 +805,15 @@ mod tests {
         let update = FunctionUpdate::builder()
             .name(Some("nostage_fn".try_into()?))
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("nostage_fn")?)
-                        .build()?,
-                    update,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("nostage_fn")?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -863,15 +850,14 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let register =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .build()?,
-                    create,
-                )
-                .in_project(ProjectId::sandbox());
+        let register = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .build()?,
+                create,
+            )
+            .in_project(ProjectId::sandbox());
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -884,16 +870,15 @@ mod tests {
             .name(Some("override_fn".try_into()?))
             .base_path(Some(BasePath::try_from("/over")?))
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("override_fn")?)
-                        .build()?,
-                    update,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("override_fn")?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -908,16 +893,15 @@ mod tests {
         let update = FunctionUpdate::builder()
             .name(Some("override_fn".try_into()?))
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("override_fn")?)
-                        .build()?,
-                    update,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("override_fn")?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -969,16 +953,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1034,16 +1017,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1100,16 +1082,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1185,16 +1166,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1269,18 +1249,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .update(
-            FunctionParam::builder()
-                .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                .function(FunctionIdName::from_str("joaquin_workout")?)
-                .build()?,
-            update.clone(),
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1356,16 +1333,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1455,16 +1431,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1519,16 +1494,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1548,16 +1522,15 @@ mod tests {
             .tables(Some(vec![TableNameDto::try_from("joaquin_table")?]))
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1577,16 +1550,15 @@ mod tests {
             .reuse_frozen_tables(true)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("joaquin_workout")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1643,30 +1615,28 @@ mod tests {
             .tables(Some(vec![TableNameDto::try_from("joaquin_table")?]))
             .build()?;
 
-        let update_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-                        .function(FunctionIdName::from_str("function_foo")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let update_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
+                    .function(FunctionIdName::from_str("function_foo")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(update_request).await;
         let update_response = response?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                        .build()?,
-                    create.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                    .build()?,
+                create.clone(),
+            )
+            .in_project(ProjectId::sandbox());
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let create_response = response?;
@@ -1818,19 +1788,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!(
-                            "{}",
-                            collection_2.name
-                        ))?)
-                        .function(FunctionIdName::from_str("function_2")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!(
+                        "{}",
+                        collection_2.name
+                    ))?)
+                    .function(FunctionIdName::from_str("function_2")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1883,19 +1852,18 @@ mod tests {
             .tables(tables)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!(
-                            "{}",
-                            collection_1.name
-                        ))?)
-                        .function(FunctionIdName::from_str("function")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!(
+                        "{}",
+                        collection_1.name
+                    ))?)
+                    .function(FunctionIdName::from_str("function")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1969,16 +1937,15 @@ mod tests {
 
         // With an update, a new function version and table version is created
         // But the trigger and dependency should still be valid (as the use id, not version id)
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .function(FunctionIdName::from_str("function_1")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("function_1")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -2085,16 +2052,15 @@ mod tests {
 
         // With an update, a new function version and table version is created
         // But the trigger and dependency should still be valid (as the use id, not version id)
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                        .function(FunctionIdName::from_str("function_2")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str("function_2")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -2176,16 +2142,15 @@ mod tests {
                 WorkerConfig::default(),
             )])))
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                        .function(FunctionIdName::from_str("function_1")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str("function_1")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_1 = service.raw_oneshot(request).await?;
         let workers: Vec<WorkerDB> = db
@@ -2209,16 +2174,15 @@ mod tests {
 
         // Then update with None
         let update = FunctionUpdate::builder().workers(None).build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                        .function(FunctionIdName::from_str("function_1")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str("function_1")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_2 = service.raw_oneshot(request).await?;
 
@@ -2269,16 +2233,15 @@ mod tests {
                 WorkerConfig::default(),
             )])))
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                        .function(FunctionIdName::from_str("function_1")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str("function_1")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_3 = service.raw_oneshot(request).await?;
 
@@ -2326,16 +2289,15 @@ mod tests {
         let update = FunctionUpdate::builder()
             .workers(Some(HashMap::new()))
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                        .function(FunctionIdName::from_str("function_1")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str("function_1")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_4 = service.raw_oneshot(request).await?;
 
@@ -2411,16 +2373,15 @@ mod tests {
                 (WorkerTypeDto::StageTrigger, WorkerConfig::default()),
             ])))
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                        .function(FunctionIdName::from_str("function_1")?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str("function_1")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
         assert!(res.is_err());

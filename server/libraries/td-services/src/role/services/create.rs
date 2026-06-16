@@ -5,7 +5,7 @@
 use crate::role::layers::set_custom_role_kind;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Rbac, ManageRoles, Scope, System};
+use td_authz::rbac::{ManageRoles, Rbac, Scope, System};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::role::{
     Role, RoleBuilder, RoleCreate, RoleDB, RoleDBBuilder, RoleDBWithNames,
@@ -62,7 +62,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_create_role(db: TdPool) {
-        use td_authz::rbac::{Rbac, ManageRoles, Scope, System};
+        use td_authz::rbac::{ManageRoles, Rbac, Scope, System};
         use td_tower::metadata::type_of_val;
 
         CreateRoleService::with_defaults(db)
@@ -92,11 +92,8 @@ mod tests {
             .try_description("test desc")?
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .create((), create);
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create);
 
         let service = CreateRoleService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

@@ -95,8 +95,8 @@ pub(crate) mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, Depth, Description, Enabled,
         ExecutionIdName, ExecutionName, ExecutionStatus, FunctionName, FunctionRuntimeValues,
         GroupId, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId,
-        ProjectName, RoleId, TableName, TableNameDto, TransactionKey, TransactionStatus,
-        TriggeredOn, UserId, VersionPos,
+        ProjectName, TableName, TableNameDto, TransactionKey, TransactionStatus, TriggeredOn,
+        UserId, VersionPos,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::{Buildable, and};
@@ -120,6 +120,7 @@ pub(crate) mod tests {
         };
         use crate::graph::layers::FunctionOrTable;
         use crate::graph::layers::build::GraphBuilder;
+        use crate::scheduler::layers::request::notify_scheduler;
         use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
         use td_database::scoped::Scoped;
         use td_objects::dxo::crudl::RequestContext;
@@ -130,7 +131,6 @@ pub(crate) mod tests {
             LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
         };
         use td_objects::dxo::transaction::{TransactionDB, TransactionDBBuilder};
-        use crate::scheduler::layers::request::notify_scheduler;
         use td_objects::tower_service::with::With;
         use td_objects::types::basic::ProjectId;
         use td_objects::types::basic::{
@@ -302,18 +302,15 @@ pub(crate) mod tests {
             .create
             .service()
             .raw_oneshot(
-                RequestContext::with(
-                    AccessTokenId::default(),
-                    UserId::admin()
-                )
-                .create(
-                    (),
-                    CollectionCreate::builder()
-                        .name(&collection_name)
-                        .description(&Description::try_from("c")?)
-                        .build()?,
-                )
-                .in_project(project.id),
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(
+                        (),
+                        CollectionCreate::builder()
+                            .name(&collection_name)
+                            .description(&Description::try_from("c")?)
+                            .build()?,
+                    )
+                    .in_project(project.id),
             )
             .await?;
 
@@ -486,7 +483,7 @@ pub(crate) mod tests {
         let _ = db.scoped(p).seed().function(collection, &create).await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)
@@ -607,7 +604,7 @@ pub(crate) mod tests {
         let read_service =
             ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone()).service();
         let read_request = || {
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::user())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(
                     ExecutionParam::builder()
                         .execution(ExecutionIdName::from_str(&response.id.to_string()).unwrap())
@@ -855,19 +852,18 @@ pub(crate) mod tests {
             .function(&collection_2, &create)
             .await?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&collection_0.name.to_string())?)
-                        .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
-                        .build()?,
-                    ExecutionRequest::builder()
-                        .name(Some(ExecutionName::try_from("test_execution")?))
-                        .function_only(single_function)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection_0.name.to_string())?)
+                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
+                    .build()?,
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .function_only(single_function)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1204,18 +1200,17 @@ pub(crate) mod tests {
             .await?;
 
         // And then run function_2
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                        .function(FunctionIdName::from_str(&FUNCTION_NAMES[2].to_string())?)
-                        .build()?,
-                    ExecutionRequest::builder()
-                        .name(Some(ExecutionName::try_from("test_execution")?))
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[2].to_string())?)
+                    .build()?,
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -1351,19 +1346,18 @@ pub(crate) mod tests {
             .function(&collection, &create)
             .await?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                        .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
-                        .build()?,
-                    ExecutionRequest::builder()
-                        .name(Some(ExecutionName::try_from("test_execution")?))
-                        .override_disabled_trigger(override_disabled_trigger)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?)
+                    .build()?,
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .override_disabled_trigger(override_disabled_trigger)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
 

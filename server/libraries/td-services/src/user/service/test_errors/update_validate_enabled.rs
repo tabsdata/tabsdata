@@ -12,7 +12,7 @@ use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserUpdate;
 use td_objects::rest_urls::UserParam;
-use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserIdName};
+use td_objects::types::basic::{AccessTokenId, UserEnabled, UserId, UserIdName};
 
 #[td_test::test(db)]
 async fn test_user_cannot_enable_disable_themselves(db: TdPool) {

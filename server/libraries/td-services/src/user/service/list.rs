@@ -41,7 +41,7 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserId, UserName};
+    use td_objects::types::basic::{AccessTokenId, UserEnabled, UserId, UserName};
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
@@ -79,9 +79,8 @@ mod tests {
 
         // `admin` is the only seeded user in `sys_admin` (holding manage_access),
         // so it is the requester able to list users.
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list((), ListParams::default());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list((), ListParams::default());
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();

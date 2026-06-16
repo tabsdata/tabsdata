@@ -11,18 +11,18 @@
 
 use crate::permission::authorize_permission_target;
 use crate::simple_permission::layers::{
-    assert_simple_permission_valid, resolve_grant, resolved_role_id, resolved_user_id,
-    ResolvedGrant,
+    ResolvedGrant, assert_simple_permission_valid, resolve_grant, resolved_role_id,
+    resolved_user_id,
 };
 use crate::user_role::layers::assert_not_fixed;
 use ta_services::factory::service_factory;
-use td_authz::{refresh_authz_context, AuthzContext};
+use td_authz::{AuthzContext, refresh_authz_context};
+use td_objects::And;
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
 use td_objects::dxo::user_role::{UserRoleDB, UserRoleDBWithNames};
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{RoleId, UserId};
-use td_objects::And;
 use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -39,7 +39,9 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<DeleteRequest<SimplePermissionGrant>>::extract::<RequestContext>),
-        from_fn(With::<DeleteRequest<SimplePermissionGrant>>::extract_name::<SimplePermissionGrant>),
+        from_fn(
+            With::<DeleteRequest<SimplePermissionGrant>>::extract_name::<SimplePermissionGrant>
+        ),
         // validate (reject org-wide wildcards; project required/forbidden)
         from_fn(assert_simple_permission_valid),
         // resolve the target role membership (and project for authz)
@@ -64,15 +66,15 @@ mod tests {
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_error::{assert_service_error, TdError};
+    use td_error::{TdError, assert_service_error};
+    use td_objects::Buildable;
     use td_objects::dxo::user_role::UserRoleDB;
     use td_objects::types::basic::{
         AccessTokenId, ProjectIdName, ProjectName, RoleId, RoleName, SimplePermissionType,
         UserEnabled, UserId, UserName,
     };
-    use td_objects::Buildable;
-    use td_queries::test_utils::SeedEntry;
     use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     async fn user_role_count(db: &TdPool, user: &UserId, role: &RoleId) -> usize {
@@ -97,8 +99,7 @@ mod tests {
         CreateProjectService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .create((), create),
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create),
             )
             .await?;
         Ok(())
@@ -124,9 +125,7 @@ mod tests {
             .project(Some(ProjectIdName::from_str("p0")?))
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .delete(grant);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(grant);
 
         let service = RevokeSimplePermissionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -145,14 +144,11 @@ mod tests {
             .project(None)
             .build()?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .delete(grant);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(grant);
 
         let service = RevokeSimplePermissionService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
             UserRoleError::FixedUserRole(_, _) => {}
-            other => panic!("Expected 'FixedUserRole', got {other:?}"),
         })
         .await;
         Ok(())

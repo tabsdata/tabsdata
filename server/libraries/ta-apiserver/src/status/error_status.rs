@@ -74,13 +74,20 @@ mod tests {
     #[tokio::test]
     async fn test_api_error_macro_accepts_status_code() {
         // Explicit `status =` expression form.
-        let (status, body) =
-            run(api_error!(status = StatusCode::LOCKED, "held by {}", "alice")).await;
+        let (status, body) = run(api_error!(
+            status = StatusCode::LOCKED,
+            "held by {}",
+            "alice"
+        ))
+        .await;
         assert_eq!(status, StatusCode::LOCKED);
         assert_eq!(body["error_description"], "held by alice");
 
-        let (status, _) =
-            run(api_error!(status = StatusCode::TOO_MANY_REQUESTS, "slow down")).await;
+        let (status, _) = run(api_error!(
+            status = StatusCode::TOO_MANY_REQUESTS,
+            "slow down"
+        ))
+        .await;
         assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
     }
 

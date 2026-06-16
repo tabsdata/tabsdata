@@ -7,7 +7,7 @@ use ta_objects::{Buildable, TryUpdater};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::{UserCreate, UserDB};
-use td_objects::types::basic::{AccessTokenId, Password, RoleId, UserEnabled, UserId, UserName};
+use td_objects::types::basic::{AccessTokenId, Password, UserEnabled, UserId, UserName};
 use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
 
@@ -25,10 +25,7 @@ pub(crate) async fn seed_user(
         .enabled(enabled)
         .build()?;
 
-    let request_context = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    );
+    let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     let user_db = UserDB::builder()
         .name(create.name)

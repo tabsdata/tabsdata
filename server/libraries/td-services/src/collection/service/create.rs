@@ -202,12 +202,12 @@ mod tests {
         FailingStore, bridge, create_collection, create_request, document, linked_connection,
         secrets, seed_dev_user,
     };
-    use td_error::ApiError;
     use crate::collection::service::list::ListCollectionsService;
     use td_bridge::connection::memory::InMemoryConnectionStore;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
+    use td_error::ApiError;
     use td_objects::Buildable;
     use td_objects::dxo::collection::CollectionCreateDB;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
@@ -543,7 +543,7 @@ mod tests {
             .description(Description::try_from("d").unwrap())
             .build()
             .unwrap();
-        let request = RequestContext::with(AccessTokenId::default(), dev.clone())
+        let request = RequestContext::with(AccessTokenId::default(), dev)
             .create((), create)
             .in_project(ProjectId::sandbox());
         CreateCollectionService::with_defaults(db.clone())

@@ -3,10 +3,10 @@
 //
 
 use crate::permission::layers::{
-    assert_role_is_not_fixed, authorize_permission_target, PermissionBuildService,
+    PermissionBuildService, assert_role_is_not_fixed, authorize_permission_target,
 };
 use ta_services::factory::service_factory;
-use td_authz::{refresh_authz_context, AuthzContext};
+use td_authz::{AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::permission::{
     Permission, PermissionBuilder, PermissionCreate, PermissionDB, PermissionDBBuilder,
@@ -16,8 +16,8 @@ use td_objects::dxo::role::RoleDB;
 use td_objects::rest_urls::RoleParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{PermissionId, RoleIdName};
-use td_queries::insert;
 use td_queries::By;
+use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -70,8 +70,8 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
-        AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleId,
-        RoleName, UserEnabled, UserId, UserName,
+        AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleName,
+        UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -122,11 +122,7 @@ mod tests {
             .unwrap()
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .create(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
             RoleParam::builder()
                 .role(RoleIdName::from_str(&RoleName::default_role().to_string())?)
                 .build()?,
@@ -178,13 +174,12 @@ mod tests {
             .build()?;
 
         // `admin` holds manage_project on `__all__`, so it can grant on any project.
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .create(
-                RoleParam::builder()
-                    .role(RoleIdName::from_str("r0")?)
-                    .build()?,
-                create,
-            );
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
+            RoleParam::builder()
+                .role(RoleIdName::from_str("r0")?)
+                .build()?,
+            create,
+        );
 
         let service = CreatePermissionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -249,7 +244,6 @@ mod tests {
 
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
-            other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
         Ok(())
@@ -268,11 +262,7 @@ mod tests {
             .unwrap()
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .create(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
             RoleParam::builder()
                 .role(RoleIdName::from_str(&RoleName::sys_admin().to_string())?)
                 .build()?,

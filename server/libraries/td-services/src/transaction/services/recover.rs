@@ -66,7 +66,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
-        ProjectId, RoleId, TableNameDto, TransactionStatus, UserId,
+        ProjectId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_tower::ctx_service::RawOneshot;
@@ -121,15 +121,14 @@ mod tests {
             let transaction = t[&test_transaction].id.to_string();
             async move {
                 // Execute test
-                let request =
-                    RequestContext::with(AccessTokenId::default(), UserId::admin())
-                        .update(
-                            TransactionParam::builder()
-                                .transaction(TransactionIdName::from_str(&transaction)?)
-                                .build()?,
-                            (),
-                        )
-                        .in_project(ProjectId::sandbox());
+                let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(
+                        TransactionParam::builder()
+                            .transaction(TransactionIdName::from_str(&transaction)?)
+                            .build()?,
+                        (),
+                    )
+                    .in_project(ProjectId::sandbox());
 
                 TransactionRecoverService::with_defaults(db.clone())
                     .service()

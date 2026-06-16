@@ -286,7 +286,7 @@ mod tests {
     use td_objects::dxo::logical::LogicalPointerDao;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus, ProjectId, RoleId,
+        LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus, ProjectId,
         TableNameDto, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
@@ -302,12 +302,9 @@ mod tests {
         collection: &CollectionDB,
         base_path: &BasePath,
     ) -> Result<(), TdError> {
-        let request_context = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin(),
-        )
-        .read::<String>("")
-        .context;
+        let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read::<String>("")
+            .context;
         let mut builder = CollectionUpdateDBBuilder::try_from(collection)?;
         let builder = TryUpdater::try_update_from(&mut builder, &request_context)?;
         let update = builder.clone().base_path(base_path.clone()).build()?;

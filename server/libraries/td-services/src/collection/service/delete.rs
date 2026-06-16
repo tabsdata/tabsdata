@@ -227,12 +227,12 @@ mod tests {
     use crate::collection::service::connection::test_support::{
         bridge, create_collection, create_request, linked_connection, seed_dev_user,
     };
-    use td_error::ApiError;
     use crate::collection::service::create::CreateCollectionService;
     use std::str::FromStr;
     use td_bridge::connection::memory::InMemoryConnectionStore;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
+    use td_error::ApiError;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::collection::CollectionCreateDB;

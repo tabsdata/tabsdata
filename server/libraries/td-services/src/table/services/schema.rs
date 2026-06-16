@@ -9,11 +9,11 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::params::{TableAtIdName, TableSchema};
+use td_objects::tower_service::with::With;
 #[cfg(test)]
 use td_objects::types::basic::CollectionIdName;
 #[cfg(feature = "test_tower_metadata")]
 use td_queries::By;
-use td_objects::tower_service::with::With;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -67,7 +67,7 @@ mod tests {
     use td_objects::rest_urls::{AtTimeParam, TableParam, UncommittedParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
-        ProjectId, RoleId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
+        ProjectId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
         UncommittedStatus, UserId,
     };
     use td_objects::{Buildable, and};
@@ -280,19 +280,18 @@ mod tests {
             let service =
                 TableSchemaService::new(db, Arc::new(AuthzContext::default()), storage).service();
 
-            let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .read(TableAtIdName::new(
-                        TableParam::builder()
-                            .collection(CollectionIdName::from_str(collection)?)
-                            .table(TableIdName::from_str(table)?)
-                            .build()?,
-                        AtTimeParam::builder().at(at_time).build()?,
-                        UncommittedParam::builder()
-                            .uncommitted(UncommittedStatus::TRUE)
-                            .build()?,
-                    ))
-                    .in_project(ProjectId::sandbox());
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .read(TableAtIdName::new(
+                    TableParam::builder()
+                        .collection(CollectionIdName::from_str(collection)?)
+                        .table(TableIdName::from_str(table)?)
+                        .build()?,
+                    AtTimeParam::builder().at(at_time).build()?,
+                    UncommittedParam::builder()
+                        .uncommitted(UncommittedStatus::TRUE)
+                        .build()?,
+                ))
+                .in_project(ProjectId::sandbox());
             service.raw_oneshot(request).await
         }
 

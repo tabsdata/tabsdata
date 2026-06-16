@@ -17,11 +17,11 @@ mod routes {
     use td_apiforge::apiserver_path;
     use td_database::scoped::InProject;
     use td_error::TdError;
+    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::metrics::{
         Dim, InflightQuery, InflightRequest, InflightResponse, InflightStatusQuery, MetricsQuery,
         MetricsRequest, MetricsResponse, SnapshotRequest, SnapshotResponse, StatusFilterError,
     };
-    use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::query_filters::{
         DimensionFilter, TimeWindow, WindowAlign, WindowSpec, WindowUnit,
     };
@@ -161,9 +161,12 @@ mod routes {
         Query(metrics): Query<MetricsQuery>,
         Query(inflight): Query<InflightStatusQuery>,
     ) -> Result<GetStatus<SnapshotResponse>, ErrorStatus> {
-        let request = context.read(
-            snapshot_query_into_request(metrics, inflight.inflight_status)?
-        ).in_project(project_id);
+        let request = context
+            .read(snapshot_query_into_request(
+                metrics,
+                inflight.inflight_status,
+            )?)
+            .in_project(project_id);
         let response = state.snapshot.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }
@@ -471,7 +474,10 @@ mod global_routes {
         Query(metrics): Query<MetricsQuery>,
         Query(inflight): Query<InflightStatusQuery>,
     ) -> Result<GetStatus<SnapshotResponse>, ErrorStatus> {
-        let request = context.read(snapshot_query_into_request(metrics, inflight.inflight_status)?);
+        let request = context.read(snapshot_query_into_request(
+            metrics,
+            inflight.inflight_status,
+        )?);
         let response = state.snapshot_global.service().oneshot(request).await?;
         Ok(GetStatus::OK(response))
     }

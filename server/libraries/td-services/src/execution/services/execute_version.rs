@@ -86,7 +86,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
         ExternalUid, FunctionIdName, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus,
-        ProjectId, RoleId, SkipIfRunning, TableNameDto, TransactionKey, UserId,
+        ProjectId, SkipIfRunning, TableNameDto, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -103,14 +103,14 @@ mod tests {
             build_transaction_map, build_transactions, resolve_execution_plan_versions,
             update_initial_function_run_status, validate_execution_plan, with_recursion_options,
         };
-        use crate::graph::layers::FunctionOrTable;
-        use crate::graph::layers::build::GraphBuilder;
-        use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
-        use td_database::scoped::Scoped;
         use crate::execution::layers::execution_version::{
             dedup_lock, reject_if_external_uid_in_use, reject_if_running,
         };
+        use crate::graph::layers::FunctionOrTable;
+        use crate::graph::layers::build::GraphBuilder;
         use crate::scheduler::layers::request::notify_scheduler;
+        use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+        use td_database::scoped::Scoped;
         use td_objects::And;
         use td_objects::dxo::crudl::RequestContext;
         use td_objects::dxo::execution::{
@@ -447,19 +447,18 @@ mod tests {
         }
 
         // Trigger function
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    FunctionVersionIdParam {
-                        function_version_id: function.id.clone(),
-                    },
-                    ExecutionRequestInternal::builder()
-                        .name(Some(ExecutionName::try_from("test_execution")?))
-                        .skip_if_running(skip_if_running)
-                        .trigger_type(TriggerType::CronTrigger)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                FunctionVersionIdParam {
+                    function_version_id: function.id.clone(),
+                },
+                ExecutionRequestInternal::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .skip_if_running(skip_if_running)
+                    .trigger_type(TriggerType::CronTrigger)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -496,39 +495,37 @@ mod tests {
 
         // Dummy update to create new version
         let update = FunctionUpdate::builder().name(function_0).build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!(
-                            "~{}",
-                            collection_0.id
-                        ))?)
-                        .function(FunctionIdName::from_str(&format!(
-                            "~{}",
-                            function.function_id
-                        ))?)
-                        .build()?,
-                    update.clone(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection_0.id
+                    ))?)
+                    .function(FunctionIdName::from_str(&format!(
+                        "~{}",
+                        function.function_id
+                    ))?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated = service.raw_oneshot(request).await?;
 
         // Now, using function.id will fail
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    FunctionVersionIdParam {
-                        function_version_id: function.id.clone(),
-                    },
-                    ExecutionRequestInternal::builder()
-                        .name(Some(ExecutionName::try_from("test_execution")?))
-                        .trigger_type(TriggerType::CronTrigger)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                FunctionVersionIdParam {
+                    function_version_id: function.id.clone(),
+                },
+                ExecutionRequestInternal::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .trigger_type(TriggerType::CronTrigger)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -570,19 +567,18 @@ mod tests {
         function_version_id: &FunctionVersionId,
         external_uid: Option<ExternalUid>,
     ) -> Result<ExecutionResponse, TdError> {
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    FunctionVersionIdParam {
-                        function_version_id: function_version_id.clone(),
-                    },
-                    ExecutionRequestInternal::builder()
-                        .name(Some(ExecutionName::try_from("test_execution")?))
-                        .external_uid(external_uid)
-                        .trigger_type(TriggerType::CronTrigger)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                FunctionVersionIdParam {
+                    function_version_id: function_version_id.clone(),
+                },
+                ExecutionRequestInternal::builder()
+                    .name(Some(ExecutionName::try_from("test_execution")?))
+                    .external_uid(external_uid)
+                    .trigger_type(TriggerType::CronTrigger)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
         ExecuteFunctionVersionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)

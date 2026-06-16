@@ -18,8 +18,7 @@ use td_objects::dxo::trigger::TriggerDB;
 use td_objects::rest_urls::TableParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
-    AtTime, CollectionIdName, CollectionName, FunctionId, TableId, TableIdName,
-    TableVersionId,
+    AtTime, CollectionIdName, CollectionName, FunctionId, TableId, TableIdName, TableVersionId,
 };
 use td_queries::By;
 use td_queries::{insert, insert_vec};
@@ -99,7 +98,7 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionIdName, FunctionRuntimeValues, ProjectId,
-        RoleId, TableName, TableNameDto, UserId,
+        TableName, TableNameDto, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
@@ -210,35 +209,29 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .update(
-            FunctionParam::builder()
-                .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                .function(FunctionIdName::from_str("joaquin_workout")?)
-                .build()?,
-            update.clone(),
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
         // Test remove tables.
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .delete(
-            TableParam::builder()
-                .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                .table(TableIdName::from_str("super_table")?)
-                .build()?,
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .delete(
+                TableParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .table(TableIdName::from_str("super_table")?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = TableDeleteService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -314,35 +307,29 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .update(
-            FunctionParam::builder()
-                .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                .function(FunctionIdName::from_str("joaquin_workout")?)
-                .build()?,
-            update.clone(),
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .function(FunctionIdName::from_str("joaquin_workout")?)
+                    .build()?,
+                update.clone(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let _response = response?;
 
         // Test remove tables.
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .delete(
-            TableParam::builder()
-                .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                .table(TableIdName::from_str("super_table")?)
-                .build()?,
-        )
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .delete(
+                TableParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .table(TableIdName::from_str("super_table")?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = TableDeleteService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;

@@ -6,8 +6,8 @@
 mod definitions {
     use crate::types::basic::{
         AccessToken, AccessTokenExpiration, AccessTokenId, AtTime, GrantType, NewPassword,
-        OldPassword, Password, RefreshToken, RefreshTokenId, SessionStatus,
-        TokenType, UserId, UserName,
+        OldPassword, Password, RefreshToken, RefreshTokenId, SessionStatus, TokenType, UserId,
+        UserName,
     };
 
     #[ta_objects::Dto]

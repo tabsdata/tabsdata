@@ -47,7 +47,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, CollectionName, Description, ProjectId, RoleId, UserId, UserName,
+        AccessTokenId, AtTime, CollectionName, Description, ProjectId, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -85,15 +85,14 @@ mod tests {
             .collection(&name, &UserId::admin())
             .await;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(&name.to_string()).unwrap())
-                        .build()
-                        .unwrap(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&name.to_string()).unwrap())
+                    .build()
+                    .unwrap(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = ReadCollectionService::with_defaults(db).service();
         let response = service.raw_oneshot(request).await;

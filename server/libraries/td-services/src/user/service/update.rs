@@ -70,7 +70,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::UserParam;
     use td_objects::types::basic::{
-        AccessTokenId, Email, FullName, Password, RoleId, UserEnabled, UserName,
+        AccessTokenId, Email, FullName, Password, UserEnabled, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -135,11 +135,7 @@ mod tests {
             .unwrap();
 
         let before = AtTime::now();
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .update(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
             UserParam::builder()
                 .user(UserIdName::from_str("u0").unwrap())
                 .build()
@@ -191,14 +187,13 @@ mod tests {
             .unwrap();
 
         let before = AtTime::now();
-        let request = RequestContext::with(AccessTokenId::default(), user.id)
-            .update(
-                UserParam::builder()
-                    .user(UserIdName::from_str("u0").unwrap())
-                    .build()
-                    .unwrap(),
-                user_update,
-            );
+        let request = RequestContext::with(AccessTokenId::default(), user.id).update(
+            UserParam::builder()
+                .user(UserIdName::from_str("u0").unwrap())
+                .build()
+                .unwrap(),
+            user_update,
+        );
         let request_time = request.context.time;
         let response = service.raw_oneshot(request).await;
         let updated = response.unwrap();

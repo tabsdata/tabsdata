@@ -4,8 +4,8 @@
 
 use crate::user_role::layers::assert_not_fixed;
 use ta_services::factory::service_factory;
-use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
 use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
 use td_objects::And;
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::role::RoleDB;
@@ -103,11 +103,7 @@ mod tests {
             .await?;
         let user_role = db.seed().user_role(&user.id, &role.id).await?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .delete(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
             UserRoleParam::builder()
                 .role(RoleIdName::from_str("king")?)
                 .user(UserIdName::from_str("joaquin")?)
@@ -124,11 +120,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_fixed_user_role(db: TdPool) -> Result<(), TdError> {
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .delete(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
             UserRoleParam::builder()
                 .role(RoleIdName::from_str(&RoleName::sys_admin().to_string())?)
                 .user(UserIdName::from_str(&UserName::admin().to_string())?)

@@ -15,8 +15,8 @@ use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
 };
 use td_objects::types::basic::{
-    AccessTokenId, DependencyPos, DependencyStatus, RoleId, TableFunctionParamPos, TableId,
-    TableName, TableStatus, UserId,
+    AccessTokenId, DependencyPos, DependencyStatus, TableFunctionParamPos, TableId, TableName,
+    TableStatus, UserId,
 };
 use td_objects::types::composed::TableVersions;
 use td_objects::types::table_ref::Versions;
@@ -29,10 +29,7 @@ pub(crate) async fn seed_system_tables(
     mut executor: impl QueryExecutor,
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {
-    let request_context = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    );
+    let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     // System tables
     let mut system_tables = vec![];

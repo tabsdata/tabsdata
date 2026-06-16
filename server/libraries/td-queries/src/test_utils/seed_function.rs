@@ -15,8 +15,8 @@ use td_objects::dxo::table::{TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBBuilder;
 use td_objects::dxo::worker::WorkerDBBuilder;
 use td_objects::types::basic::{
-    AccessTokenId, DependencyPos, DependencyStatus, RoleId, StorageVersion, TableFunctionParamPos,
-    TableId, TableName, TableStatus, TriggerStatus, UserId,
+    AccessTokenId, DependencyPos, DependencyStatus, StorageVersion, TableFunctionParamPos, TableId,
+    TableName, TableStatus, TriggerStatus, UserId,
 };
 
 /// Runs every statement on the caller's executor; if it is project-scoped
@@ -27,10 +27,7 @@ pub(crate) async fn seed_function(
     collection: &CollectionDB,
     function_create: &FunctionRegister,
 ) -> Result<FunctionDB, TdError> {
-    let request_context = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    );
+    let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     // Function version builder
     let mut builder = FunctionDBBuilder::try_from(function_create)?;

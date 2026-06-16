@@ -42,7 +42,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::role::RoleDB;
-    use td_objects::types::basic::{AccessTokenId, Description, RoleId, RoleName, UserId};
+    use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -76,11 +76,8 @@ mod tests {
             )
             .await;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .list((), ListParams::default());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list((), ListParams::default());
 
         let service = ListRoleService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

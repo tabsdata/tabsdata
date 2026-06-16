@@ -13,7 +13,7 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserUpdate;
 use td_objects::rest_urls::UserParam;
 use td_objects::types::basic::{
-    AccessTokenId, Email, FullName, Password, ProjectId, RoleId, UserEnabled, UserIdName, UserName,
+    AccessTokenId, Email, FullName, Password, ProjectId, UserEnabled, UserIdName, UserName,
 };
 use td_queries::test_utils::SeedEntry;
 

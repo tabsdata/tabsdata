@@ -12,14 +12,12 @@ use td_objects::dxo::table::TableDBWithNames;
 use td_objects::rest_urls::FileFormat;
 use td_objects::rest_urls::params::TableSampleAtName;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{
-    SampleLen, SampleOffset, Sql, TableName,
-};
 #[cfg(test)]
 use td_objects::types::basic::CollectionIdName;
+use td_objects::types::basic::{SampleLen, SampleOffset, Sql, TableName};
+use td_objects::types::stream::BoxedSyncStream;
 #[cfg(feature = "test_tower_metadata")]
 use td_queries::By;
-use td_objects::types::stream::BoxedSyncStream;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -82,8 +80,8 @@ mod tests {
     };
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
-        ProjectId, RoleId, StorageVersion, TableIdName, TableNameDto, TransactionKey,
-        UncommittedStatus, UserId,
+        ProjectId, StorageVersion, TableIdName, TableNameDto, TransactionKey, UncommittedStatus,
+        UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::LiveEntry;
@@ -322,27 +320,26 @@ mod tests {
             let service =
                 TableSampleService::new(db, Arc::new(AuthzContext::default()), storage).service();
 
-            let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .read(TableSampleAtName::new(
-                        TableParam::builder()
-                            .collection(CollectionIdName::from_str(collection)?)
-                            .table(TableIdName::from_str(table)?)
-                            .build()?,
-                        AtTimeParam::builder().at(at_time).build()?,
-                        UncommittedParam::builder()
-                            .uncommitted(UncommittedStatus::TRUE)
-                            .build()?,
-                        SampleOffsetLenParam::builder()
-                            .try_offset(offset)?
-                            .try_len(len)?
-                            .build()?,
-                        FileFormatParam::builder()
-                            .format(FileFormat::Parquet)
-                            .build()?,
-                        SqlParam::builder().sql(None).build()?,
-                    ))
-                    .in_project(ProjectId::sandbox());
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .read(TableSampleAtName::new(
+                    TableParam::builder()
+                        .collection(CollectionIdName::from_str(collection)?)
+                        .table(TableIdName::from_str(table)?)
+                        .build()?,
+                    AtTimeParam::builder().at(at_time).build()?,
+                    UncommittedParam::builder()
+                        .uncommitted(UncommittedStatus::TRUE)
+                        .build()?,
+                    SampleOffsetLenParam::builder()
+                        .try_offset(offset)?
+                        .try_len(len)?
+                        .build()?,
+                    FileFormatParam::builder()
+                        .format(FileFormat::Parquet)
+                        .build()?,
+                    SqlParam::builder().sql(None).build()?,
+                ))
+                .in_project(ProjectId::sandbox());
             let response = service.raw_oneshot(request).await;
             match response {
                 Ok(response) => {

@@ -76,7 +76,7 @@ mod tests {
     use td_objects::dxo::query_filters::DimensionFilter;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName,
-        FunctionRuntimeValues, GroupId, LogicalFunctionRunStatus, ProjectId, ProjectName, RoleId,
+        FunctionRuntimeValues, GroupId, LogicalFunctionRunStatus, ProjectId, ProjectName,
         TableNameDto, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
@@ -272,18 +272,15 @@ mod tests {
             .create
             .service()
             .raw_oneshot(
-                RequestContext::with(
-                    AccessTokenId::default(),
-                    UserId::admin()
-                )
-                .create(
-                    (),
-                    CollectionCreate::builder()
-                        .name(&coll_b_name)
-                        .description(&Description::try_from("d")?)
-                        .build()?,
-                )
-                .in_project(project_b.id),
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(
+                        (),
+                        CollectionCreate::builder()
+                            .name(&coll_b_name)
+                            .description(&Description::try_from("d")?)
+                            .build()?,
+                    )
+                    .in_project(project_b.id),
             )
             .await?;
         let coll_b: CollectionDB = db

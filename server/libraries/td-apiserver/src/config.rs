@@ -56,7 +56,19 @@ pub struct Config {
 }
 
 /// The security view the apiserver exposes. See [`Config::security_mode`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Display, EnumString, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    ValueEnum,
+    Display,
+    EnumString,
+    Default,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum SecurityMode {

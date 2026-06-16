@@ -11,8 +11,8 @@
 
 use crate::simple_permission::layers::list_project_access;
 use ta_services::factory::service_factory;
-use td_authz::rbac::{ManageAccess, ManageProject, Project, Rbac, Scope};
 use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, ManageProject, Project, Rbac, Scope};
 use td_objects::dxo::crudl::{ListResponse, RequestContext};
 use td_objects::dxo::project::ProjectDB;
 use td_objects::dxo::simple_permission::{ListByProjectRequest, SimpleProjectAccess};
@@ -51,22 +51,18 @@ mod tests {
     use ta_services::service::TdService;
     use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
-    use td_error::{assert_service_error, TdError};
+    use td_error::{TdError, assert_service_error};
+    use td_objects::Buildable;
     use td_objects::rest_urls::PermissionGrantProjectQuery;
     use td_objects::types::basic::{
         AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleId,
         RoleName, SimplePermissionType, UserEnabled, UserId, UserName,
     };
-    use td_objects::Buildable;
-    use td_queries::test_utils::SeedEntry;
     use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
-    fn req(
-        requester: UserId,
-        role: RoleId,
-        project: ProjectName,
-    ) -> ListByProjectRequest {
+    fn req(requester: UserId, _role: RoleId, project: ProjectName) -> ListByProjectRequest {
         ListByProjectRequest::new(
             RequestContext::with(AccessTokenId::default(), requester),
             PermissionGrantProjectQuery::builder()
@@ -88,8 +84,7 @@ mod tests {
         CreateProjectService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .create((), create),
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create),
             )
             .await?;
         Ok(())
@@ -122,7 +117,11 @@ mod tests {
 
         let service = ListSimplePermissionByProjectService::with_defaults(db.clone()).service();
         let response = service
-            .raw_oneshot(req(UserId::admin(), RoleId::sys_admin(), ProjectName::try_from("p0")?))
+            .raw_oneshot(req(
+                UserId::admin(),
+                RoleId::sys_admin(),
+                ProjectName::try_from("p0")?,
+            ))
             .await?;
 
         let alice_row = response
@@ -152,7 +151,7 @@ mod tests {
             .seed()
             .role(RoleName::try_from("dev_only")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = p0.id.clone().try_into()?;
+        let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::DevelopProject,
@@ -171,7 +170,6 @@ mod tests {
         let request = req(requester.id, dev_only.id, ProjectName::try_from("p0")?);
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
-            other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
         Ok(())

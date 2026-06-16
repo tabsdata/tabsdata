@@ -72,7 +72,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, ProjectId,
-        RoleId, TableNameDto, UserId,
+        TableNameDto, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;

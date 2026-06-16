@@ -192,21 +192,20 @@ impl TdService for UpdateCollectionService {
                         // The DB still references the old name — put the
                         // store back best-effort (idempotent; a retry of
                         // either direction overwrites).
-                        if let Some(rename) = &rename {
-                            if let Err(revert) = rename_stored_connection(
+                        if let Some(rename) = &rename
+                            && let Err(revert) = rename_stored_connection(
                                 store,
                                 &project,
                                 &rename.connection_id,
                                 &rename.old_name,
                             )
                             .await
-                            {
-                                warn!(
-                                    error = %revert,
-                                    "could not revert the connection store rename; \
-                                     upsert the connection to repair"
-                                );
-                            }
+                        {
+                            warn!(
+                                error = %revert,
+                                "could not revert the connection store rename; \
+                                 upsert the connection to repair"
+                            );
                         }
                         Err(e)
                     }
@@ -229,7 +228,6 @@ mod tests {
     use crate::collection::service::connection::test_support::{
         bridge, create_collection, create_request, linked_connection, seed_dev_user,
     };
-    use td_error::ApiError;
     use crate::collection::service::create::CreateCollectionService;
     use crate::function::services::register::RegisterFunctionService;
     use crate::function::services::upload::UploadFunctionService;
@@ -239,6 +237,7 @@ mod tests {
     use td_bridge::connection::memory::InMemoryConnectionStore;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
+    use td_error::ApiError;
     use td_error::{TdError, assert_service_error};
     use td_objects::Buildable;
     use td_objects::dxo::bundle::BundleDB;
@@ -667,7 +666,7 @@ mod tests {
             .service()
             .raw_oneshot(create_request("dev_df_u", None))
             .await?;
-        let request = RequestContext::with(AccessTokenId::default(), dev.clone())
+        let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(
                 CollectionParam::builder()
                     .collection(CollectionIdName::from_str("dev_df_u")?)

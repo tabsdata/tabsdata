@@ -159,7 +159,7 @@ mod tests {
         CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, GET_COLLECTION_CONNECTION,
         LIST_COLLECTIONS, UPDATE_COLLECTION, UPSERT_COLLECTION_CONNECTION,
     };
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, UserId};
     use td_services::Context;
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;
@@ -170,10 +170,7 @@ mod tests {
     ///   - A pre-populated `RequestContext` extension (bypassing the auth
     ///     layer — these tests don't issue real JWTs).
     async fn to_route<R: Into<Router> + Clone>(router: &R, db: TdPool) -> Router {
-        let context = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        );
+        let context = RequestContext::with(AccessTokenId::default(), UserId::admin());
         let router = router.clone().into();
         router
             .layer(from_fn_with_state(db, project_resolver_layer))

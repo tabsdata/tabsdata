@@ -13,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
+use td_objects::Buildable;
 use td_objects::dxo::crudl::{ListParams, ListResponse, ListResponseBuilder};
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::project::ProjectDB;
@@ -26,7 +27,6 @@ use td_objects::types::basic::{
     PermissionEntityType, PermissionType, ProjectId, ProjectIdName, ProjectName, RoleId, RoleName,
     SimplePermissionType, UserId, UserIdName, UserName,
 };
-use td_objects::Buildable;
 use td_queries::LiveEntry;
 use td_security::{PROJECT_CREATOR_ROLE, SYS_ADMIN_ROLE};
 use td_tower::extractors::{MutRef, Ref};
@@ -75,8 +75,7 @@ pub async fn assert_simple_permission_valid(
 
 /// Resolve `(user, permission, project?)` to its RBAC target role.
 ///
-/// - project permission: the `<project>_admin|_dev|_view` per-project role
-///;
+/// - project permission: the `<project>_admin|_dev|_view` per-project role;
 /// - `create_projects`: the `project_creator` role;
 /// - `manage_access` / `admin_all_projects`: the `sys_admin` role, which holds
 ///   the whole system bundle.
@@ -105,9 +104,7 @@ pub async fn resolve_grant(
                 .live()
                 .fetch_optional::<RoleDB>(&role_name)
                 .await?
-                .ok_or_else(|| {
-                    SimplePermissionError::ProjectRoleNotFound(role_name.to_string())
-                })?;
+                .ok_or_else(|| SimplePermissionError::ProjectRoleNotFound(role_name.to_string()))?;
             Ok(ResolvedGrant {
                 user_id: user.id,
                 role_id: role.id,
@@ -137,9 +134,9 @@ pub async fn resolve_grant(
             })
         }
         // wildcards are rejected by `assert_simple_permission_valid` first.
-        SimplePermissionType::ViewAllProjects | SimplePermissionType::DevelopAllProjects => {
-            Err(SimplePermissionError::RbacOnlyWildcard(grant.permission.clone()))?
-        }
+        SimplePermissionType::ViewAllProjects | SimplePermissionType::DevelopAllProjects => Err(
+            SimplePermissionError::RbacOnlyWildcard(grant.permission.clone()),
+        )?,
     }
 }
 
@@ -205,7 +202,10 @@ pub async fn flatten_user_permissions(
     mut conn: MutRef<DynamicConnection<'static>>,
     user_id_name: Ref<UserIdName>,
 ) -> Result<ListResponse<SimplePermission>, TdError> {
-    let user = conn.live().fetch_one::<UserDB>(user_id_name.deref()).await?;
+    let user = conn
+        .live()
+        .fetch_one::<UserDB>(user_id_name.deref())
+        .await?;
 
     let user_roles = conn.live().fetch_all::<UserRoleDB>(()).await?;
     let role_ids: HashSet<RoleId> = user_roles
@@ -219,11 +219,14 @@ pub async fn flatten_user_permissions(
 
     let mut seen: HashSet<SimplePermission> = HashSet::new();
     let mut out = Vec::new();
-    for perm in permissions.into_iter().filter(|p| role_ids.contains(&p.role_id)) {
-        if let Some(simple) = simple_permission_of(&perm, &projects)? {
-            if seen.insert(simple.clone()) {
-                out.push(simple);
-            }
+    for perm in permissions
+        .into_iter()
+        .filter(|p| role_ids.contains(&p.role_id))
+    {
+        if let Some(simple) = simple_permission_of(&perm, &projects)?
+            && seen.insert(simple.clone())
+        {
+            out.push(simple);
         }
     }
     list_response(out)
@@ -303,8 +306,7 @@ pub async fn list_project_access(
     let permissions = conn.live().fetch_all::<PermissionDB>(()).await?;
     let user_roles = conn.live().fetch_all::<UserRoleDB>(()).await?;
     let users = conn.live().fetch_all::<UserDB>(()).await?;
-    let user_names: HashMap<UserId, UserName> =
-        users.into_iter().map(|u| (u.id, u.name)).collect();
+    let user_names: HashMap<UserId, UserName> = users.into_iter().map(|u| (u.id, u.name)).collect();
 
     // Project-source roles: the three per-project roles bound to this project,
     // each mapped to its Simple permission and labelled `project (<rolename>)`.
@@ -313,13 +315,10 @@ pub async fn list_project_access(
     let mut system_source_roles: HashSet<RoleId> = HashSet::new();
 
     for role in &roles {
-        if role.project_id.as_ref() == Some(&project.id) {
-            if let Some(permission) = project_role_permission(role) {
-                project_source.insert(
-                    role.id,
-                    (permission, format!("project ({})", role.name)),
-                );
-            }
+        if role.project_id.as_ref() == Some(&project.id)
+            && let Some(permission) = project_role_permission(role)
+        {
+            project_source.insert(role.id, (permission, format!("project ({})", role.name)));
         }
     }
     for perm in &permissions {
@@ -339,7 +338,13 @@ pub async fn list_project_access(
         };
         // project-source membership
         if let Some((permission, source)) = project_source.get(&user_role.role_id) {
-            push_access(&mut seen, &mut out, user_name, permission.clone(), source.clone())?;
+            push_access(
+                &mut seen,
+                &mut out,
+                user_name,
+                permission.clone(),
+                source.clone(),
+            )?;
         }
         // system-source membership (admin_all_projects)
         if system_source_roles.contains(&user_role.role_id) {

@@ -56,9 +56,7 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::errors::SqlError;
-    use td_objects::types::basic::{
-        AccessTokenId, Description, GroupName, ProjectId, RoleId, UserId,
-    };
+    use td_objects::types::basic::{AccessTokenId, Description, GroupName, ProjectId, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -78,12 +76,9 @@ mod tests {
             .try_description("Analytics tier group")?
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .create((), create)
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create((), create)
+            .in_project(ProjectId::sandbox());
 
         let service = CreateGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -123,12 +118,9 @@ mod tests {
             .description(Description::try_from("collision").unwrap())
             .build()
             .unwrap();
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .create((), create)
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create((), create)
+            .in_project(ProjectId::sandbox());
 
         assert_service_error(service, request, |err| match err {
             SqlError::UniqueViolation(_, _, _) => {}
@@ -148,12 +140,7 @@ mod tests {
             return Ok(());
         }
 
-        let ctx = || {
-            RequestContext::with(
-                AccessTokenId::default(),
-                UserId::admin()
-            )
-        };
+        let ctx = || RequestContext::with(AccessTokenId::default(), UserId::admin());
         let dup = || {
             GroupCreate::builder()
                 .try_name("dup")

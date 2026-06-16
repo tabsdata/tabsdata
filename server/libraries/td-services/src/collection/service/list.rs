@@ -46,8 +46,8 @@ mod tests {
     use td_error::{TdError, assert_service_error};
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::types::basic::{
-        AccessTokenId, CollectionName, Description, ProjectId, RoleId, RoleName, UserEnabled,
-        UserId, UserName,
+        AccessTokenId, CollectionName, Description, ProjectId, RoleName, UserEnabled, UserId,
+        UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -83,10 +83,9 @@ mod tests {
             .await
             .unwrap();
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list((), ListParams::default())
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let service = ListCollectionsService::new(db, Arc::new(AuthzContext::default())).service();
         let response = service.raw_oneshot(request).await;
@@ -123,10 +122,9 @@ mod tests {
         // Within the project, every collection is visible to users with
         // view_project (the admin user holds sys_admin, which grants
         // manage_project on all projects).
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list((), ListParams::default())
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let service = ListCollectionsService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -143,7 +141,6 @@ mod tests {
         let service = ListCollectionsService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
-            other => panic!("Expected 'Forbidden', got {other:?}"),
         })
         .await;
         Ok(())

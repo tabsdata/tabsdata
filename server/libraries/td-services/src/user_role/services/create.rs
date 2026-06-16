@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
 use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user::UserDB;
@@ -125,11 +125,7 @@ mod tests {
             .user(UserName::try_from("joaquin")?)
             .build()?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .create(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
             RoleParam::builder()
                 .role(RoleIdName::from_str("king")?)
                 .build()?,

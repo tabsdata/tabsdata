@@ -51,7 +51,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::user::UserDB;
     use td_objects::rest_urls::UserParam;
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserEnabled, UserName};
+    use td_objects::types::basic::{AccessTokenId, UserEnabled, UserName};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -89,11 +89,7 @@ mod tests {
 
         let service = DeleteUserService::with_defaults(db.clone()).service();
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .delete(
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
             UserParam::builder()
                 .user(UserIdName::from_str("u0").unwrap())
                 .build()

@@ -474,7 +474,8 @@ impl EffectiveGrants<'_> {
 
     /// [`Grants::allows_somewhere`] over both stored and implicit grants.
     pub fn allows_somewhere<E: EntityKind>(&self, permission: E::Permission) -> bool {
-        self.user.allows_somewhere::<E>(permission) || self.request.allows_somewhere::<E>(permission)
+        self.user.allows_somewhere::<E>(permission)
+            || self.request.allows_somewhere::<E>(permission)
     }
 }
 
@@ -733,7 +734,9 @@ mod tests {
             "(system:__system__, manage_access)"
         );
         assert_eq!(
-            ProjectPermission::ManageProject.granted_on_all().to_string(),
+            ProjectPermission::ManageProject
+                .granted_on_all()
+                .to_string(),
             "(project:__all__, manage_project)"
         );
         let p = project();
@@ -793,7 +796,10 @@ mod tests {
         // `default` carries only create_projects (a system permission) — no
         // project grants, so nothing is viewable.
         let visible = VisibleProjects::from_grants(&SystemRole::Default.grants());
-        assert_eq!(visible, VisibleProjects::Only(std::collections::HashSet::new()));
+        assert_eq!(
+            visible,
+            VisibleProjects::Only(std::collections::HashSet::new())
+        );
         assert!(!visible.contains(&ProjectId::default()));
     }
 }

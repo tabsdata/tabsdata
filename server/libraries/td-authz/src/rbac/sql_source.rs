@@ -86,12 +86,7 @@ impl SqlRbacGrantsProvider {
     }
 
     /// Load `role_permission` rows and group them into a per-role [`Grants`].
-    #[instrument(
-        name = "authz.rbac.role_grants",
-        skip_all,
-        level = "debug",
-        err(Debug)
-    )]
+    #[instrument(name = "authz.rbac.role_grants", skip_all, level = "debug", err(Debug))]
     async fn role_grants(
         &self,
         conn: &mut DynamicConnection<'_>,
@@ -166,7 +161,10 @@ impl super::source::RbacSource for SqlRbacSource {
         user: &UserId,
     ) -> Result<Arc<Grants>, TdError> {
         let by_user = self.provider.get(conn).await?;
-        Ok(by_user.get(user).cloned().unwrap_or_else(|| self.empty.clone()))
+        Ok(by_user
+            .get(user)
+            .cloned()
+            .unwrap_or_else(|| self.empty.clone()))
     }
 
     async fn refresh(&self, conn: &mut DynamicConnection<'_>) -> Result<(), TdError> {

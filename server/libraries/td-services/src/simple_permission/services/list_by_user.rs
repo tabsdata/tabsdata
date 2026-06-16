@@ -20,8 +20,8 @@
 
 use crate::simple_permission::layers::flatten_user_permissions;
 use ta_services::factory::service_factory;
-use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
 use td_authz::AuthzContext;
+use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
 use td_objects::dxo::crudl::{ListResponse, RequestContext};
 use td_objects::dxo::simple_permission::{ListByUserRequest, SimplePermission};
 use td_objects::tower_service::with::With;
@@ -56,14 +56,14 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Buildable;
     use td_objects::rest_urls::PermissionGrantUserQuery;
     use td_objects::types::basic::{
         AccessTokenId, ProjectName, RoleId, RoleName, SimplePermissionType, UserEnabled, UserId,
         UserName,
     };
-    use td_objects::Buildable;
-    use td_queries::test_utils::SeedEntry;
     use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     fn req(target: UserName) -> ListByUserRequest {
@@ -88,8 +88,7 @@ mod tests {
         CreateProjectService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .create((), create),
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).create((), create),
             )
             .await?;
         Ok(())
@@ -113,7 +112,9 @@ mod tests {
             .await?;
 
         let service = ListSimplePermissionByUserService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(req(UserName::try_from("joaquin")?)).await?;
+        let response = service
+            .raw_oneshot(req(UserName::try_from("joaquin")?))
+            .await?;
 
         let perms: Vec<_> = response.data.iter().map(|p| p.permission.clone()).collect();
         assert!(perms.contains(&SimplePermissionType::DevelopProject));
@@ -147,7 +148,9 @@ mod tests {
         db.seed().user_role(&user.id, &RoleId::sys_admin()).await?;
 
         let service = ListSimplePermissionByUserService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(req(UserName::try_from("joaquin")?)).await?;
+        let response = service
+            .raw_oneshot(req(UserName::try_from("joaquin")?))
+            .await?;
 
         let perms: Vec<_> = response.data.iter().map(|p| p.permission.clone()).collect();
         assert!(perms.contains(&SimplePermissionType::ManageAccess));

@@ -71,7 +71,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::system::TD_FN_STATE_PREFIX;
-    use td_objects::types::basic::{AccessTokenId, RoleId};
+    use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::{
         AtTime, BundleId, CollectionName, Decorator, ProjectId, TableNameDto, UserId,
     };
@@ -196,13 +196,12 @@ mod tests {
                                        at_time: &AtTime|
                     -> Result<Bytes, TdError> {
             // with ids
-            let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .read(FunctionVersionAtId {
-                        function_version_id: function_version_id.clone(),
-                        at: *at_time,
-                    })
-                    .in_project(ProjectId::sandbox());
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .read(FunctionVersionAtId {
+                    function_version_id: function_version_id.clone(),
+                    at: *at_time,
+                })
+                .in_project(ProjectId::sandbox());
             let service = TableStateDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
@@ -211,13 +210,12 @@ mod tests {
                 None => Bytes::new(),
             };
             // with names
-            let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .read(FunctionVersionAtId {
-                        function_version_id: function_version_id.clone(),
-                        at: *at_time,
-                    })
-                    .in_project(ProjectId::sandbox());
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                .read(FunctionVersionAtId {
+                    function_version_id: function_version_id.clone(),
+                    at: *at_time,
+                })
+                .in_project(ProjectId::sandbox());
             let service = TableStateDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();

@@ -33,13 +33,7 @@ fn service() {
         // list (all collections in the current project)
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Function>, _>),
-        from_fn(
-            By::<()>::list_current::<
-                NoFilter,
-                { FunctionDBWithNames::Available },
-                Function,
-            >
-        ),
+        from_fn(By::<()>::list_current::<NoFilter, { FunctionDBWithNames::Available }, Function>),
     )
 }
 
@@ -56,7 +50,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName, ProjectId,
-        RoleId, RoleName, UserEnabled, UserId, UserName,
+        RoleName, UserEnabled, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -136,10 +130,9 @@ mod tests {
             .await?;
 
         // List current functions
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list((), ListParams::default())
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -214,12 +207,9 @@ mod tests {
             .await?;
 
         // All functions should be listed for authorized user
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .list((), ListParams::default())
-        .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
 
         let service = FunctionListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

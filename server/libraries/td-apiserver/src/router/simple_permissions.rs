@@ -11,8 +11,8 @@ use td_apiforge::router_ext;
 
 #[router_ext(SimplePermissionsRouter)]
 mod routes {
-    use axum::extract::State;
     use axum::Extension;
+    use axum::extract::State;
     use axum_extra::extract::Query;
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
@@ -26,8 +26,8 @@ mod routes {
         SimpleProjectAccess,
     };
     use td_objects::rest_urls::{
-        PermissionGrantProjectQuery, PermissionGrantUserQuery, GRANT_PERMISSION,
-        LIST_PERMISSION_GRANTS_BY_PROJECT, LIST_PERMISSION_GRANTS_BY_USER, REVOKE_PERMISSION,
+        GRANT_PERMISSION, LIST_PERMISSION_GRANTS_BY_PROJECT, LIST_PERMISSION_GRANTS_BY_USER,
+        PermissionGrantProjectQuery, PermissionGrantUserQuery, REVOKE_PERMISSION,
     };
     use td_services::simple_permission::services::SimplePermissionServices;
     use tower::ServiceExt;

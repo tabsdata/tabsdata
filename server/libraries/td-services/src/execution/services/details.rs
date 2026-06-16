@@ -71,7 +71,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, ProjectId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, ProjectId, UserId};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -120,14 +120,13 @@ mod tests {
         let execution = test_execute(db.clone(), false, false, false).await?;
 
         let service = ExecutionDetailsService::with_defaults(db.clone()).service();
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(
-                    ExecutionParam::builder()
-                        .execution(ExecutionIdName::from_str(&execution.id.to_string())?)
-                        .build()?,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(
+                ExecutionParam::builder()
+                    .execution(ExecutionIdName::from_str(&execution.id.to_string())?)
+                    .build()?,
+            )
+            .in_project(ProjectId::sandbox());
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.execution.id, execution.id);

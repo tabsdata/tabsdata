@@ -12,16 +12,13 @@ use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserUpdate;
 use td_objects::rest_urls::UserParam;
-use td_objects::types::basic::{AccessTokenId, Password, RoleId, UserId, UserIdName};
+use td_objects::types::basic::{AccessTokenId, Password, UserId, UserIdName};
 
 #[td_test::test(db)]
 async fn test_cannot_change_self_password(db: TdPool) {
     let service = UpdateUserService::with_defaults(db.clone()).service();
 
-    let ctx = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    );
+    let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     let update = UserUpdate::builder()
         .full_name(None)

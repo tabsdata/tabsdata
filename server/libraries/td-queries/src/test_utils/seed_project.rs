@@ -12,7 +12,7 @@ use td_objects::dxo::project::{
     ProjectCreate, ProjectCreateDBBuilder, ProjectDB, ProjectDBBuilder,
 };
 use td_objects::types::basic::{
-    AccessTokenId, Description, GroupId, GroupName, ProjectName, RoleId, System, UserId,
+    AccessTokenId, Description, GroupId, GroupName, ProjectName, System, UserId,
 };
 use td_security::SYSTEM_GROUPS;
 
@@ -27,10 +27,7 @@ use td_security::SYSTEM_GROUPS;
 /// from that scope, mirroring `seed_default_groups`. The `projects` row itself
 /// is not RLS-scoped, so it is inserted directly on the pool.
 pub(crate) async fn seed_project(db: &TdPool, name: ProjectName) -> Result<ProjectDB, TdError> {
-    let request_context = RequestContext::with(
-        AccessTokenId::default(),
-        UserId::admin()
-    );
+    let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     let project_create = ProjectCreate::builder()
         .name(name)

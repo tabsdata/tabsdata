@@ -56,8 +56,8 @@ mod tests {
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, ProjectId, RoleId, TableName,
-        TableNameDto, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, ProjectId, TableName, TableNameDto,
+        UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -130,15 +130,14 @@ mod tests {
             .await?;
 
         // List current tables by collection
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
-                        .build()?,
-                    ListParams::default(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
+                    .build()?,
+                ListParams::default(),
+            )
+            .in_project(ProjectId::sandbox());
 
         let service = TableListByCollectionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

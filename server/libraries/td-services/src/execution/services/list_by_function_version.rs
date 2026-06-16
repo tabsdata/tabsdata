@@ -56,7 +56,7 @@ mod tests {
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId,
-        RoleId, TableNameDto, TransactionKey, UserId, VersionPos,
+        TableNameDto, TransactionKey, UserId, VersionPos,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -236,15 +236,14 @@ mod tests {
 
         // Query by function_version_a — should return only execution_1.
         let service = ExecutionListByFunctionVersionService::with_defaults(db.clone()).service();
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(
-                    FunctionVersionIdParam::builder()
-                        .function_version_id(function_version_a.id.clone())
-                        .build()?,
-                    ListParams::default(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                FunctionVersionIdParam::builder()
+                    .function_version_id(function_version_a.id.clone())
+                    .build()?,
+                ListParams::default(),
+            )
+            .in_project(ProjectId::sandbox());
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.len, 1);
@@ -281,15 +280,14 @@ mod tests {
 
         // No function requirements exist for this function version.
         let service = ExecutionListByFunctionVersionService::with_defaults(db.clone()).service();
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .list(
-                    FunctionVersionIdParam::builder()
-                        .function_version_id(function_version.id.clone())
-                        .build()?,
-                    ListParams::default(),
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .list(
+                FunctionVersionIdParam::builder()
+                    .function_version_id(function_version.id.clone())
+                    .build()?,
+                ListParams::default(),
+            )
+            .in_project(ProjectId::sandbox());
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.len, 0);
