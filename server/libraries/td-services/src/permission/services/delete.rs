@@ -3,25 +3,19 @@
 //
 
 use crate::permission::layers::{
-    assert_permission_is_not_fixed, assert_role_in_permission,
-    is_permission_with_names_on_a_single_project,
+    assert_permission_is_not_fixed, assert_role_in_permission, authorize_permission_target,
 };
 use ta_services::factory::service_factory;
-use td_authz::rbac::{
-    ManageAccess, ManageProject, OnAnyProject, Project, Rbac, Scope, System,
-};
 use td_authz::{refresh_authz_context, AuthzContext};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::permission::{PermissionDB, PermissionDBWithNames};
 use td_objects::rest_urls::RolePermissionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{
-    EntityId, PermissionId, PermissionIdName, ProjectId, RoleIdName,
-};
+use td_objects::types::basic::{PermissionId, PermissionIdName, RoleIdName};
 use td_queries::By;
-use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service};
+use td_tower::layers;
 
 #[service_factory(
     name = DeletePermissionService,
@@ -34,33 +28,15 @@ use td_tower::{layers, service};
 fn service() {
     layers!(
         from_fn(With::<DeleteRequest<RolePermissionParam>>::extract::<RequestContext>),
-        from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
         from_fn(With::<DeleteRequest<RolePermissionParam>>::extract_name::<RolePermissionParam>),
         from_fn(With::<RolePermissionParam>::extract::<PermissionIdName>),
         from_fn(By::<PermissionIdName>::fetch_one::<PermissionDBWithNames>),
         // Check the role in the request matches the role in permission
         from_fn(With::<RolePermissionParam>::extract::<RoleIdName>),
         from_fn(assert_role_in_permission),
-        conditional(
-            If(service!(layers!(from_fn(
-                is_permission_with_names_on_a_single_project
-            )))),
-            Do(service!(layers!(
-                // a permission on a single project can also be deleted by a project admin
-                from_fn(With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
-                from_fn(With::<Option<EntityId>>::unwrap),
-                from_fn(With::<EntityId>::try_convert_to::<ProjectId, _>),
-                from_fn(Scope::<Project>::set),
-                from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check),
-            ))),
-            Else(service!(layers!(
-                // a permission on all projects can be deleted only by an
-                // identity holding manage_access on the system
-                from_fn(Scope::<System>::system),
-                from_fn(Rbac::<System, ManageAccess>::check),
-            )))
-        ),
+        // Authorize by the permission's target: manage_access on the system, or
+        // manage_project on the target project (single-project permissions only).
+        from_fn(authorize_permission_target::<PermissionDBWithNames>),
         from_fn(assert_permission_is_not_fixed),
         from_fn(With::<PermissionDBWithNames>::extract::<PermissionId>),
         from_fn(By::<PermissionId>::delete::<PermissionDB>),
@@ -85,8 +61,8 @@ mod tests {
     use td_objects::dxo::permission::PermissionCreate;
     use td_objects::rest_urls::RoleParam;
     use td_objects::types::basic::{
-        AccessTokenId, Description, EntityName, PermissionType, ProjectName, RoleId, RoleName,
-        UserEnabled, UserId, UserName,
+        AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleId,
+        RoleName, UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -105,8 +81,6 @@ mod tests {
 
         DeletePermissionService::with_defaults(db).metadata().await.assert_service::<DeleteRequest<RolePermissionParam>, ()>(&[
             type_of_val(&With::<DeleteRequest<RolePermissionParam>>::extract::<RequestContext>),
-            type_of_val(&Scope::<System>::system),
-            type_of_val(&Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
             type_of_val(
                 &With::<DeleteRequest<RolePermissionParam>>::extract_name::<RolePermissionParam>,
             ),
@@ -114,14 +88,7 @@ mod tests {
             type_of_val(&By::<PermissionIdName>::fetch_one::<PermissionDBWithNames>),
             type_of_val(&With::<RolePermissionParam>::extract::<RoleIdName>),
             type_of_val(&assert_role_in_permission),
-            type_of_val(&is_permission_with_names_on_a_single_project),
-            type_of_val(&With::<PermissionDBWithNames>::extract::<Option<EntityId>>),
-            type_of_val(&With::<Option<EntityId>>::unwrap),
-            type_of_val(&With::<EntityId>::try_convert_to::<ProjectId, _>),
-            type_of_val(&Scope::<Project>::set),
-            type_of_val(&Rbac::<Project, (ManageAccess, ManageProject)>::check),
-            type_of_val(&Scope::<System>::system),
-            type_of_val(&Rbac::<System, ManageAccess>::check),
+            type_of_val(&authorize_permission_target::<PermissionDBWithNames>),
             type_of_val(&assert_permission_is_not_fixed),
             type_of_val(&With::<PermissionDBWithNames>::extract::<PermissionId>),
             type_of_val(&By::<PermissionId>::delete::<PermissionDB>),

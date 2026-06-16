@@ -3,12 +3,9 @@
 //
 
 use crate::permission::layers::{
-    assert_role_is_not_fixed, is_permission_on_a_single_project, PermissionBuildService,
+    assert_role_is_not_fixed, authorize_permission_target, PermissionBuildService,
 };
 use ta_services::factory::service_factory;
-use td_authz::rbac::{
-    ManageAccess, ManageProject, OnAnyProject, Project, Rbac, Scope, System,
-};
 use td_authz::{refresh_authz_context, AuthzContext};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::permission::{
@@ -18,12 +15,12 @@ use td_objects::dxo::permission::{
 use td_objects::dxo::role::RoleDB;
 use td_objects::rest_urls::RoleParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{EntityId, PermissionId, ProjectId, RoleIdName};
+use td_objects::types::basic::{PermissionId, RoleIdName};
 use td_queries::insert;
 use td_queries::By;
-use td_tower::default_services::{Do, Else, If, TransactionProvider, conditional};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service};
+use td_tower::layers;
 
 #[service_factory(
     name = CreatePermissionService,
@@ -36,8 +33,6 @@ use td_tower::{layers, service};
 fn service() {
     layers!(
         from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>),
-        from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
         from_fn(With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>),
         from_fn(
             With::<CreateRequest<RoleParam, PermissionCreate>>::extract_data::<PermissionCreate>
@@ -51,24 +46,9 @@ fn service() {
         from_fn(assert_role_is_not_fixed),
         from_fn(With::<RoleDB>::update::<PermissionDBBuilder, _>),
         from_fn(With::<PermissionDBBuilder>::build_permission_db),
-        conditional(
-            If(service!(layers!(from_fn(
-                is_permission_on_a_single_project
-            )))),
-            Do(service!(layers!(
-                // a permission on a single project can also be created by a project admin
-                from_fn(With::<PermissionDB>::extract::<EntityId>),
-                from_fn(With::<EntityId>::try_convert_to::<ProjectId, _>),
-                from_fn(Scope::<Project>::set),
-                from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check),
-            ))),
-            Else(service!(layers!(
-                // a permission on all projects can be created only by an
-                // identity holding manage_access on the system
-                from_fn(Scope::<System>::system),
-                from_fn(Rbac::<System, ManageAccess>::check),
-            )))
-        ),
+        // Authorize by the permission's target: manage_access on the system, or
+        // manage_project on the target project (single-project permissions only).
+        from_fn(authorize_permission_target::<PermissionDB>),
         from_fn(insert::<PermissionDB>),
         from_fn(With::<PermissionDB>::extract::<PermissionId>),
         from_fn(By::<PermissionId>::fetch_one::<PermissionDBWithNames>),
@@ -90,8 +70,8 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::{
-        AccessTokenId, Description, EntityName, PermissionType, ProjectName, RoleId, RoleName,
-        UserEnabled, UserId, UserName,
+        AccessTokenId, Description, EntityId, EntityName, PermissionType, ProjectName, RoleId,
+        RoleName, UserEnabled, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -109,8 +89,6 @@ mod tests {
                 type_of_val(
                     &With::<CreateRequest<RoleParam, PermissionCreate>>::extract::<RequestContext>,
                 ),
-                type_of_val(&Scope::<System>::system),
-                type_of_val(&Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
                 type_of_val(
                     &With::<CreateRequest<RoleParam, PermissionCreate>>::extract_name::<RoleParam>,
                 ),
@@ -126,13 +104,7 @@ mod tests {
                 type_of_val(&assert_role_is_not_fixed),
                 type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
                 type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
-                type_of_val(&is_permission_on_a_single_project),
-                type_of_val(&With::<PermissionDB>::extract::<EntityId>),
-                type_of_val(&With::<EntityId>::try_convert_to::<ProjectId, _>),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageAccess, ManageProject)>::check),
-                type_of_val(&Scope::<System>::system),
-                type_of_val(&Rbac::<System, ManageAccess>::check),
+                type_of_val(&authorize_permission_target::<PermissionDB>),
                 type_of_val(&insert::<PermissionDB>),
                 type_of_val(&With::<PermissionDB>::extract::<PermissionId>),
                 type_of_val(&By::<PermissionId>::fetch_one::<PermissionDBWithNames>),
