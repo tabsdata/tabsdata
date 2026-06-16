@@ -9,7 +9,7 @@ use crate::role::services::read::ReadRoleService;
 use crate::role::services::update::UpdateRoleService;
 use ta_services::factory::ServiceFactory;
 
-mod create;
+pub(crate) mod create;
 mod delete;
 mod list;
 mod read;

@@ -4,7 +4,7 @@
 
 use crate::apiserver::internal::InternalServer;
 use crate::apiserver::{ApiServer, ApiServerCtx};
-use crate::config::{Config, DbSchema, Params};
+use crate::config::{Config, DbSchema, Params, SecurityMode};
 use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
@@ -204,6 +204,41 @@ pub fn run() {
             // postgres lifecycle) so it can be stopped explicitly on shutdown,
             // independently of the serving pools that only connect to it.
             let system_handle = system_pool.clone();
+
+            // Simple Security Mode requires the current RBAC configuration to be
+            // representable on the flat Simple surface (TEDC "What makes
+            // switching ... one-way"). If the operator booted in `simple` mode
+            // but the roles/permissions were arranged in RBAC-only ways (custom
+            // roles, modified built-in roles, specific-project rows on system
+            // roles, ...), Simple View cannot faithfully present them — refuse to
+            // start and list the offending rows so the operator can either revert
+            // the configuration or boot in `rbac` mode instead.
+            if config.security_mode == SecurityMode::Simple {
+                match td_services::security::representability::check_representability(&db).await {
+                    Ok(reasons) if reasons.is_empty() => {
+                        info!("Security mode 'simple': RBAC configuration is representable");
+                    }
+                    Ok(reasons) => {
+                        error!(
+                            "Cannot start in 'simple' security mode: the current RBAC \
+                             configuration is not representable on the Simple surface. Revert \
+                             the offending configuration or start in 'rbac' security mode. \
+                             Reasons ({} found):",
+                            reasons.len()
+                        );
+                        for reason in &reasons {
+                            error!("  - {reason}");
+                        }
+                        Err(ExitStatus::GeneralError)?
+                    }
+                    Err(e) => {
+                        error!("Error running security-mode representability check: {e:#?}");
+                        Err(ExitStatus::GeneralError)?
+                    }
+                }
+            } else {
+                info!("Security mode 'rbac': RBAC management endpoints enabled");
+            }
 
             // Create context
             let server_context = ApiServerCtx::new(

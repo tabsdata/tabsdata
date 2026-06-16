@@ -45,8 +45,38 @@ pub struct Config {
     pub transaction_by: TransactionBy,
     #[serde(default)]
     pub orchestrator: Orchestrator,
+    /// Which security view the apiserver exposes (TEDB / TEDC):
+    /// `simple` (default) exposes the flat `/permission-grants` facade and
+    /// blocks the raw RBAC role/permission/user-role management endpoints;
+    /// `rbac` exposes the RBAC management endpoints and blocks the facade.
+    #[serde(default)]
+    pub security_mode: SecurityMode,
     #[serde(flatten)]
     pub extended_config: ExtendedConfig,
+}
+
+/// The security view the apiserver exposes. See [`Config::security_mode`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Display, EnumString, Default)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum SecurityMode {
+    /// Simple Security Mode View — flat permissions, `/permission-grants`
+    /// facade available, RBAC management endpoints blocked.
+    #[default]
+    Simple,
+    /// RBAC Mode View — role/permission/user-role management endpoints
+    /// available, `/permission-grants` facade blocked.
+    Rbac,
+}
+
+impl SecurityMode {
+    pub fn is_simple(&self) -> bool {
+        matches!(self, SecurityMode::Simple)
+    }
+
+    pub fn is_rbac(&self) -> bool {
+        matches!(self, SecurityMode::Rbac)
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]
@@ -93,6 +123,7 @@ impl Default for Config {
             storage: Some(StorageConfig::default()),
             transaction_by: TransactionBy::default(),
             orchestrator: Orchestrator::default(),
+            security_mode: SecurityMode::default(),
             extended_config: ExtendedConfig::default(),
         }
     }
@@ -198,6 +229,9 @@ pub struct Params {
     #[clap(long, value_parser = parse_orchestrator)]
     /// Orchestrator backend the apiserver dispatches workloads to.
     orchestrator: Option<Orchestrator>,
+    #[clap(long, value_enum)]
+    /// Security view the apiserver exposes: `simple` (default) or `rbac`.
+    security_mode: Option<SecurityMode>,
     #[clap(flatten)]
     extended_params: ExtendedParams,
 }
@@ -309,6 +343,7 @@ impl Params {
                 .clone()
                 .unwrap_or_else(|| config.transaction_by.clone()),
             orchestrator: self.orchestrator.unwrap_or(config.orchestrator),
+            security_mode: self.security_mode.unwrap_or(config.security_mode),
             extended_config: self
                 .extended_params
                 .resolve(config.extended_config.clone())?,
@@ -411,6 +446,37 @@ database:
             Duration::hours(1).num_seconds()
         );
         assert_eq!(config.request_timeout, 60);
+        // security mode defaults to Simple (TEDB / TEDC).
+        assert_eq!(config.security_mode, SecurityMode::Simple);
+        assert!(config.security_mode.is_simple());
+    }
+
+    #[test]
+    fn test_security_mode_serde_and_parse() {
+        // serde round-trips lowercase names.
+        assert_eq!(
+            serde_json::to_string(&SecurityMode::Rbac).unwrap(),
+            "\"rbac\""
+        );
+        assert_eq!(
+            serde_json::from_str::<SecurityMode>("\"simple\"").unwrap(),
+            SecurityMode::Simple
+        );
+        // CLI / strum parsing accepts lowercase tokens.
+        assert_eq!(
+            <SecurityMode as FromStr>::from_str("rbac").unwrap(),
+            SecurityMode::Rbac
+        );
+        assert_eq!(
+            <SecurityMode as FromStr>::from_str("simple").unwrap(),
+            SecurityMode::Simple
+        );
+        // a config that omits security_mode falls back to the Simple default
+        // (the field carries #[serde(default)]).
+        let mut value = serde_json::to_value(Config::default()).unwrap();
+        value.as_object_mut().unwrap().remove("security_mode");
+        let cfg: Config = serde_json::from_value(value).unwrap();
+        assert_eq!(cfg.security_mode, SecurityMode::Simple);
     }
 
     #[test]
@@ -442,6 +508,7 @@ database:
             etc: None,
             msg: None,
             orchestrator: None,
+            security_mode: None,
             extended_params: ExtendedParams::default(),
         };
 
@@ -505,6 +572,7 @@ database:
             etc: None,
             msg: None,
             orchestrator: None,
+            security_mode: None,
             extended_params: ExtendedParams::default(),
         };
 

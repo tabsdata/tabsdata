@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::role::layers::set_custom_role_kind;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Rbac, RoleMgnt, Scope, System};
@@ -33,6 +34,10 @@ fn service() {
         from_fn(With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
         from_fn(With::<RoleCreate>::try_convert_to::<RoleDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<RoleDBBuilder, _>),
+        // API-created roles are tagged `Custom` (the builder otherwise defaults
+        // to `Default`), so the RBAC->Simple representability check can detect
+        // them (TEDC condition 1).
+        from_fn(set_custom_role_kind),
         from_fn(With::<RoleDBBuilder>::build::<RoleDB>),
         from_fn(insert::<RoleDB>),
         from_fn(With::<RoleDB>::extract::<RoleId>),
@@ -70,6 +75,7 @@ mod tests {
                 type_of_val(&With::<CreateRequest<(), RoleCreate>>::extract_data::<RoleCreate>),
                 type_of_val(&With::<RoleCreate>::try_convert_to::<RoleDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<RoleDBBuilder, _>),
+                type_of_val(&set_custom_role_kind),
                 type_of_val(&With::<RoleDBBuilder>::build::<RoleDB>),
                 type_of_val(&insert::<RoleDB>),
                 type_of_val(&With::<RoleDB>::extract::<RoleId>),
@@ -109,6 +115,9 @@ mod tests {
         assert_eq!(response.modified_on, found.modified_on);
         assert_eq!(response.modified_by_id, found.modified_by_id);
         assert_eq!(response.fixed, found.fixed);
+        // API-created roles are tagged `Custom` so the representability check
+        // can detect them (TEDC condition 1).
+        assert_eq!(found.kind, td_objects::types::basic::RoleKind::Custom);
         Ok(())
     }
 }

@@ -471,9 +471,13 @@ impl SimplePermissionType {
     }
 }
 
-/// The kind of a role, stored in `roles.kind` (TEDA's five user-visible role
-/// kinds). Two are system roles (`project_id` NULL), three are per-project
-/// roles (`project_id` set).
+/// The kind of a role, stored in `roles.kind` (TEDA's user-visible role kinds
+/// plus the API-created `custom` kind). The built-in system roles
+/// (`sys_admin`/`default`/`project_creator`) have `project_id` NULL; the three
+/// per-project kinds (`prj_admin`/`prj_dev`/`prj_view`) carry a `project_id`.
+/// `custom` is the kind of any role created through the RBAC `role create`
+/// surface — its presence is what makes a configuration unrepresentable in
+/// Simple Security Mode (TEDC condition 1).
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq)]
 pub enum RoleKind {
@@ -489,6 +493,8 @@ pub enum RoleKind {
     PrjDev,
     #[typed_enum(rename = "prj_view")]
     PrjView,
+    #[typed_enum(rename = "custom")]
+    Custom,
 }
 
 /// Kind of replay-audit row written by the replay / delete-replay

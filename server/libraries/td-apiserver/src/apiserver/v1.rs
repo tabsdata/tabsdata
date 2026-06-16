@@ -36,7 +36,9 @@ use crate::apiserver::server::{Server, ServerBuilder, ServerError};
 use crate::layers::authorization::authorization_layer;
 use crate::layers::compression::CompressionService;
 use crate::layers::cors::CorsService;
+use crate::config::SecurityMode;
 use crate::layers::project_resolver::project_resolver_layer;
+use crate::layers::security_mode::gated_router;
 use crate::layers::tracing::TraceService;
 use crate::router::auth::{SecureAuthRouter, UnsecureAuthRouter};
 use crate::router::collections::CollectionsRouter;
@@ -96,16 +98,41 @@ impl ApiServerV1 {
                 //     ProjectScopeProvider then uses to set the RLS GUC.
                 // Both subtrees sit behind the shared authorization layer.
                 .merge({
+                    let mode = context.config.security_mode;
+
+                    // RBAC-management endpoints (role CRUD, role-permission, and
+                    // user-role membership) — available only in `rbac` mode.
+                    // In `simple` mode a request to any of these paths returns a
+                    // clear 403 (TEDC: the raw RBAC surface is hidden behind the
+                    // `/permission-grants` facade).
+                    let rbac_management = gated_router(
+                        mode,
+                        SecurityMode::Rbac,
+                        utoipa_axum::router::OpenApiRouter::default()
+                            .merge(PermissionsRouter::router(context.services.clone()))
+                            .merge(RolesRouter::router(context.services.clone()))
+                            .merge(UserRolesRouter::router(context.services.clone())),
+                    );
+
+                    // Simple Security Mode `/permission-grants` facade —
+                    // available only in `simple` mode; blocked with a 403 in
+                    // `rbac` mode (use the RBAC role/membership endpoints there).
+                    let simple_facade = gated_router(
+                        mode,
+                        SecurityMode::Simple,
+                        utoipa_axum::router::OpenApiRouter::default()
+                            .merge(SimplePermissionsRouter::router(context.services.clone())),
+                    );
+
                     let global = utoipa_axum::router::OpenApiRouter::default()
                         .merge(SecureAuthRouter::router(context.services.clone()))
                         .merge(GlobalMetricsRouter::router(context.services.clone()))
-                        .merge(PermissionsRouter::router(context.services.clone()))
                         .merge(ProjectsRouter::router(context.services.clone()))
-                        .merge(RolesRouter::router(context.services.clone()))
                         .merge(ServerStatusRouter::router(context.services.clone()))
-                        .merge(SimplePermissionsRouter::router(context.services.clone()))
-                        .merge(UserRolesRouter::router(context.services.clone()))
                         .merge(UsersRouter::router(context.services.clone()))
+                        // mode-specific subtrees (each gated to its mode).
+                        .merge(rbac_management)
+                        .merge(simple_facade)
                         .merge(AuthenticatedExtendedRouter::router(
                             context.extended_services.clone(),
                         ));
