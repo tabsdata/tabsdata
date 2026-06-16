@@ -2,7 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::permission::layers::{is_permission_on_a_single_project, PermissionBuildService};
+use crate::permission::layers::{
+    assert_role_is_not_fixed, is_permission_on_a_single_project, PermissionBuildService,
+};
 use ta_services::factory::service_factory;
 use td_authz::rbac::{
     ManageAccess, ManageProject, OnAnyProject, Project, Rbac, Scope, System,
@@ -44,6 +46,9 @@ fn service() {
         from_fn(With::<RequestContext>::update::<PermissionDBBuilder, _>),
         from_fn(With::<RoleParam>::extract::<RoleIdName>),
         from_fn(By::<RoleIdName>::fetch_one::<RoleDB>),
+        // A system-managed (fixed) role's permission set is immutable; reject
+        // adding a permission to it from the user surface.
+        from_fn(assert_role_is_not_fixed),
         from_fn(With::<RoleDB>::update::<PermissionDBBuilder, _>),
         from_fn(With::<PermissionDBBuilder>::build_permission_db),
         conditional(
@@ -118,6 +123,7 @@ mod tests {
                 type_of_val(&With::<RequestContext>::update::<PermissionDBBuilder, _>),
                 type_of_val(&With::<RoleParam>::extract::<RoleIdName>),
                 type_of_val(&By::<RoleIdName>::fetch_one::<RoleDB>),
+                type_of_val(&assert_role_is_not_fixed),
                 type_of_val(&With::<RoleDB>::update::<PermissionDBBuilder, _>),
                 type_of_val(&With::<PermissionDBBuilder>::build_permission_db),
                 type_of_val(&is_permission_on_a_single_project),
@@ -273,6 +279,40 @@ mod tests {
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
             other => panic!("Expected 'Forbidden', got {other:?}"),
+        })
+        .await;
+        Ok(())
+    }
+
+    /// A system-managed (fixed) role's permission set is immutable: even
+    /// `admin` (who passes the RBAC check) cannot add a permission to the
+    /// seeded `sys_admin` role.
+    #[td_test::test(db)]
+    async fn test_create_permission_on_fixed_role_rejected(db: TdPool) -> Result<(), TdError> {
+        use crate::permission::PermissionError;
+
+        let create = PermissionCreate::builder()
+            .permission_type(PermissionType::CreateProjects)
+            .try_entity_name(None)
+            .unwrap()
+            .build()?;
+
+        let request = RequestContext::with(
+            AccessTokenId::default(),
+            UserId::admin(),
+            RoleId::sys_admin(),
+        )
+        .create(
+            RoleParam::builder()
+                .role(RoleIdName::from_str(&RoleName::sys_admin().to_string())?)
+                .build()?,
+            create,
+        );
+
+        let service = CreatePermissionService::with_defaults(db.clone()).service();
+        assert_service_error(service, request, |err| match err {
+            PermissionError::RoleIsFixed(_) => {}
+            other => panic!("Expected 'RoleIsFixed', got {other:?}"),
         })
         .await;
         Ok(())

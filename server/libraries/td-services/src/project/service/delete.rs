@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::project::service::layer::delete_project_roles::delete_project_roles;
 use crate::project::service::layer::guards::{
     reject_delete_non_empty_project, reject_delete_sandbox_on_single_project_backend,
 };
@@ -46,6 +47,10 @@ fn service() {
         from_fn(With::<RequestContext>::update::<ProjectDeleteDBBuilder, _>),
         from_fn(With::<ProjectDeleteDBBuilder>::build::<ProjectDeleteDB>),
         from_fn(By::<ProjectId>::update::<ProjectDeleteDB, ProjectDB>),
+        // System cascade: drop the project's three per-project roles together
+        // with their permission + membership rows (bypasses the `fixed` guard;
+        // see `delete_project_roles`).
+        from_fn(delete_project_roles),
     )
 }
 
@@ -76,6 +81,7 @@ mod tests {
                 type_of_val(&With::<RequestContext>::update::<ProjectDeleteDBBuilder, _>),
                 type_of_val(&With::<ProjectDeleteDBBuilder>::build::<ProjectDeleteDB>),
                 type_of_val(&By::<ProjectId>::update::<ProjectDeleteDB, ProjectDB>),
+                type_of_val(&delete_project_roles),
             ]);
     }
 }

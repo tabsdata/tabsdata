@@ -13,4 +13,6 @@ pub enum PermissionError {
     PermissionIsFixed = 0,
     #[error("The given role does not have the given permission")]
     RolePermissionMismatch = 1,
+    #[error("Role '{0}' is system-managed; its permissions cannot be modified")]
+    RoleIsFixed(td_objects::types::basic::RoleName) = 2,
 }
