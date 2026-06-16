@@ -84,7 +84,7 @@ pub async fn assert_permission_is_not_fixed(
 /// Reject adding a permission to a system-managed role from the user surface.
 ///
 /// System-managed roles: the `sys_admin` role, the `project_creator`
-/// role, and the three per-project roles (`prj_admin`/`prj_dev`/`prj_view`)
+/// role, and the three per-project roles (`project_admin`/`project_dev`/`project_view`)
 /// have permission sets fixed by the system — only their *membership* is
 /// editable. The role/permission delete
 /// services already block removal via the `fixed` flag; this mirrors that on
@@ -101,9 +101,9 @@ pub async fn assert_role_is_not_fixed(role: Ref<RoleDB>) -> Result<(), TdError> 
     match role.kind {
         RoleKind::SysAdmin
         | RoleKind::ProjectCreator
-        | RoleKind::PrjAdmin
-        | RoleKind::PrjDev
-        | RoleKind::PrjView => Err(PermissionError::RoleIsFixed(role.name.clone()))?,
+        | RoleKind::ProjectAdmin
+        | RoleKind::ProjectDev
+        | RoleKind::ProjectView => Err(PermissionError::RoleIsFixed(role.name.clone()))?,
         RoleKind::Default | RoleKind::Custom => Ok(()),
     }
 }

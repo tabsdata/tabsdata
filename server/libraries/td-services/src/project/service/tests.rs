@@ -185,9 +185,9 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
 
     let entity_id = EntityId::try_from(created.id)?;
     let expected = [
-        (RoleKind::PrjAdmin, "rocket_admin", PermissionType::ManageProject),
-        (RoleKind::PrjDev, "rocket_dev", PermissionType::DevelopProject),
-        (RoleKind::PrjView, "rocket_view", PermissionType::ViewProject),
+        (RoleKind::ProjectAdmin, "rocket_admin", PermissionType::ManageProject),
+        (RoleKind::ProjectDev, "rocket_dev", PermissionType::DevelopProject),
+        (RoleKind::ProjectView, "rocket_view", PermissionType::ViewProject),
     ];
 
     for (kind, role_name, permission_type) in expected {
@@ -212,7 +212,7 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
     // Creating user (admin) is a member of `<name>_admin`, NOT fixed.
     let admin_role = roles
         .iter()
-        .find(|r| r.kind == RoleKind::PrjAdmin)
+        .find(|r| r.kind == RoleKind::ProjectAdmin)
         .expect("admin role");
     let memberships = db
         .live()
@@ -226,7 +226,7 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
     );
 
     // `_dev` / `_view` start empty.
-    for kind in [RoleKind::PrjDev, RoleKind::PrjView] {
+    for kind in [RoleKind::ProjectDev, RoleKind::ProjectView] {
         let role = roles.iter().find(|r| r.kind == kind).unwrap();
         let memberships = db.live().fetch_all::<UserRoleDB>(role.id.clone()).await?;
         assert!(memberships.is_empty(), "{kind:?} role starts empty");

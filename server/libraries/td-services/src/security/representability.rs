@@ -119,13 +119,13 @@ pub fn evaluate(roles: &[RoleDB], permissions: &[PermissionDB]) -> Vec<String> {
             }
             // Condition 5: per-project roles must hold exactly their one
             // expected project permission and no system rows.
-            RoleKind::PrjAdmin => {
+            RoleKind::ProjectAdmin => {
                 check_per_project(role, role_perms, PermissionType::ManageProject, &mut reasons);
             }
-            RoleKind::PrjDev => {
+            RoleKind::ProjectDev => {
                 check_per_project(role, role_perms, PermissionType::DevelopProject, &mut reasons);
             }
-            RoleKind::PrjView => {
+            RoleKind::ProjectView => {
                 check_per_project(role, role_perms, PermissionType::ViewProject, &mut reasons);
             }
         }

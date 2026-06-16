@@ -474,7 +474,7 @@ impl SimplePermissionType {
 /// The kind of a role, stored in `roles.kind` (the user-visible role kinds
 /// plus the API-created `custom` kind). The built-in system roles
 /// (`sys_admin`/`default`/`project_creator`) have `project_id` NULL; the three
-/// per-project kinds (`prj_admin`/`prj_dev`/`prj_view`) carry a `project_id`.
+/// per-project kinds (`project_admin`/`project_dev`/`project_view`) carry a `project_id`.
 /// `custom` is the kind of any role created through the RBAC `role create`
 /// surface — its presence is what makes a configuration unrepresentable in
 /// Simple Security Mode (condition 1).
@@ -487,12 +487,12 @@ pub enum RoleKind {
     Default,
     #[typed_enum(rename = "project_creator")]
     ProjectCreator,
-    #[typed_enum(rename = "prj_admin")]
-    PrjAdmin,
-    #[typed_enum(rename = "prj_dev")]
-    PrjDev,
-    #[typed_enum(rename = "prj_view")]
-    PrjView,
+    #[typed_enum(rename = "project_admin")]
+    ProjectAdmin,
+    #[typed_enum(rename = "project_dev")]
+    ProjectDev,
+    #[typed_enum(rename = "project_view")]
+    ProjectView,
     #[typed_enum(rename = "custom")]
     Custom,
 }

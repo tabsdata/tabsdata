@@ -37,19 +37,19 @@ use td_tower::extractors::{MutRef, Ref};
 /// (kind, name suffix, permission, description template) form.
 const PER_PROJECT_ROLES: [(RoleKind, &str, PermissionType, &str); 3] = [
     (
-        RoleKind::PrjAdmin,
+        RoleKind::ProjectAdmin,
         "admin",
         PermissionType::ManageProject,
         "Project {name} administrators",
     ),
     (
-        RoleKind::PrjDev,
+        RoleKind::ProjectDev,
         "dev",
         PermissionType::DevelopProject,
         "Project {name} developers",
     ),
     (
-        RoleKind::PrjView,
+        RoleKind::ProjectView,
         "view",
         PermissionType::ViewProject,
         "Project {name} viewers",
@@ -78,7 +78,7 @@ pub async fn seed_project_roles(
 
     let mut admin_role_id = None;
     for (kind, suffix, permission_type, description_tmpl) in PER_PROJECT_ROLES {
-        let is_admin = matches!(kind, RoleKind::PrjAdmin);
+        let is_admin = matches!(kind, RoleKind::ProjectAdmin);
         let role_name = per_project_role_name(project_name, suffix)?;
         let description = Description::try_from(description_tmpl.replace("{name}", &project_name.to_string()))?;
 
@@ -117,7 +117,7 @@ pub async fn seed_project_roles(
     // user-managed (governed by `manage_project` on the project), so this
     // membership row is NOT fixed — it can be added/removed later by any
     // `manage_project` holder.
-    let admin_role_id = admin_role_id.expect("PrjAdmin role minted above");
+    let admin_role_id = admin_role_id.expect("ProjectAdmin role minted above");
     let user_role = UserRoleDB::builder()
         .try_update_from(context.deref())?
         .set(&context.user_id)

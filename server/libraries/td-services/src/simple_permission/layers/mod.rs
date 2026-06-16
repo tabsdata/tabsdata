@@ -172,9 +172,9 @@ pub fn per_project_role_name(project: &ProjectName, suffix: &str) -> Result<Role
 pub fn project_role_permission(role: &RoleDB) -> Option<SimplePermissionType> {
     use td_objects::types::basic::RoleKind;
     match role.kind {
-        RoleKind::PrjAdmin => Some(SimplePermissionType::ManageProject),
-        RoleKind::PrjDev => Some(SimplePermissionType::DevelopProject),
-        RoleKind::PrjView => Some(SimplePermissionType::ViewProject),
+        RoleKind::ProjectAdmin => Some(SimplePermissionType::ManageProject),
+        RoleKind::ProjectDev => Some(SimplePermissionType::DevelopProject),
+        RoleKind::ProjectView => Some(SimplePermissionType::ViewProject),
         _ => None,
     }
 }
