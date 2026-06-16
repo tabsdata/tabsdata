@@ -20,11 +20,11 @@ impl Decorator {
     /// Map this DB decorator to the wire-level `td_common` decorator carried
     /// on worker messages. (A `From` impl can't live here — both types are
     /// foreign to a single crate under the orphan rule.)
-    pub fn to_message(&self) -> td_common::server::Decorator {
+    pub fn to_message(&self) -> td_common::worker::Decorator {
         match self {
-            Decorator::Publisher => td_common::server::Decorator::Publisher,
-            Decorator::Transformer => td_common::server::Decorator::Transformer,
-            Decorator::Subscriber => td_common::server::Decorator::Subscriber,
+            Decorator::Publisher => td_common::worker::Decorator::Publisher,
+            Decorator::Transformer => td_common::worker::Decorator::Transformer,
+            Decorator::Subscriber => td_common::worker::Decorator::Subscriber,
         }
     }
 }

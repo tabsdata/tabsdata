@@ -14,12 +14,12 @@ use getset::Getters;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::RwLock;
-use td_common::execution_status::WorkerCallbackStatus;
-use td_common::server::OrchestratorMessage;
-use td_common::server::OrchestratorMessagePayload::{
+use td_bridge::messaging::OrchestratorMessage;
+use td_bridge::messaging::OrchestratorMessagePayload::{
     OrchestratorExceptionMessagePayload, OrchestratorFunctionRequestMessagePayload,
     OrchestratorRequestMessagePayload, OrchestratorResponseMessagePayload,
 };
+use td_common::execution_status::WorkerCallbackStatus;
 use thiserror::Error;
 use tokio::process::Child;
 
@@ -158,11 +158,14 @@ pub enum WorkerError {
 mod tests {
     use super::*;
     use crate::component::describer::TabsDataWorkerDescriberBuilder;
+    use crate::resource::instance::CONFIG_FOLDER;
     use crate::services::supervisor::WorkerLocation::Relative;
     use std::fs::create_dir_all;
+    use td_bridge::catalog::etc_folder::ETC_FOLDER;
+    use td_bridge::messaging::file_queue::MSG_FOLDER;
     use td_common::env::{get_current_exe_name, get_current_exe_path};
-    use td_common::server::WorkerClass::Regular;
-    use td_common::server::{CONFIG_FOLDER, ETC_FOLDER, MSG_FOLDER, WORK_FOLDER};
+    use td_common::worker::WORK_FOLDER;
+    use td_common::worker::WorkerClass::Regular;
     use tempfile::tempdir;
 
     //noinspection DuplicatedCode

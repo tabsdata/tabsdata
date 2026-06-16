@@ -9,10 +9,9 @@ use crate::logical::layers::index_lfrs_by_exec_fn;
 use crate::scheduler::message_builder::{build_function_v2, prefetch_dispatch};
 use std::collections::HashMap;
 use td_authz::jwt::JwtConfig;
-use td_common::server::{
-    FunctionRequest, FunctionStartRequest, MessageAction, Orchestrator, OrchestratorMessagePayload,
-    OrchestratorMessageQueueHandle, RequestMessagePayload, WorkerClass, WorkerName,
-};
+use td_bridge::messaging::{FunctionRequest, FunctionStartRequest, OrchestratorMessagePayload};
+use td_bridge::{BridgeProviderHandle, Orchestrator};
+use td_common::worker::{MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::TaggedExt;
@@ -211,12 +210,11 @@ pub async fn pfr_ids_from_minted_dispatch(
     err(Debug)
 )]
 pub async fn create_locked_function_runner_workers_start_request(
-    message_queue: Ref<OrchestratorMessageQueueHandle>,
+    bridge: Ref<BridgeProviderHandle>,
     storage: Ref<Storage>,
     server_addresses: Ref<InternalServerAddresses>,
     mut conn: MutRef<DynamicConnection<'static>>,
     at: Ref<AtTime>,
-    orchestrator: Ref<Orchestrator>,
     jwt: Ref<JwtConfig>,
     physical_function_runs: Ref<Vec<PhysicalFunctionRunToExecute>>,
 ) -> Result<Vec<WorkerDB>, TdError> {
@@ -224,7 +222,7 @@ pub async fn create_locked_function_runner_workers_start_request(
     // kubernetes path defers resolution to the resolve endpoint (the pod
     // pulls its message), so it skips the tick-wide prefetch + build and
     // ships a lean message carrying only a resolver callback.
-    let prefetch = match *orchestrator {
+    let prefetch = match bridge.orchestrator() {
         Orchestrator::Supervisor => {
             Some(prefetch_dispatch(&mut conn, physical_function_runs.as_slice(), &at).await?)
         }
@@ -320,7 +318,10 @@ pub async fn create_locked_function_runner_workers_start_request(
         };
 
         // Add it to the queue
-        message_queue.put(message.id.to_string(), payload).await?;
+        bridge
+            .message_queue()
+            .put(message.id.to_string(), payload)
+            .await?;
         results.push(message);
     }
 

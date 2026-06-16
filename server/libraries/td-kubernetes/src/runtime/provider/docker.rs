@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use indicatif::MultiProgress;
 use kube::Config;
-use td_common::server::DEFAULT_INSTANCE;
+use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::NoAction;
 
 use std::collections::BTreeMap;

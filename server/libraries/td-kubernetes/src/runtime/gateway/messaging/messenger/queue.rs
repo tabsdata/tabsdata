@@ -8,10 +8,11 @@ use async_trait::async_trait;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 use serde_yaml::Value;
-use td_common::server::{
-    FunctionRequest, MessageAction, OrchestratorMessage, OrchestratorMessagePayload,
-    OrchestratorMessageQueue, QueueError,
+use td_bridge::messaging::{
+    FunctionRequest, OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue,
+    QueueError,
 };
+use td_common::worker::MessageAction;
 use tracing::error;
 
 use crate::base::naming::to_fn_pod_name;

@@ -2,6 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::launcher::arg::{
+    DATABASE_FOLDER, ENVIRONMENTS_FOLDER, REPOSITORY_FOLDER, STORAGE_FOLDER, WORKSPACE_FOLDER,
+};
 use dir_size::get_size_in_bytes;
 use ignore::WalkBuilder;
 use indexmap::IndexMap;
@@ -13,10 +16,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use td_common::env::{TABSDATA_HOME_DIR, check_flag_env, get_home_dir};
 use td_common::logging::LOG_EXTENSION;
-use td_common::server::{
-    DATABASE_FOLDER, ENVIRONMENTS_FOLDER, EPHEMERAL_FOLDER, INIT_FOLDER, LOG_FOLDER, PROC_FOLDER,
-    REGULAR_FOLDER, REPOSITORY_FOLDER, STORAGE_FOLDER, TD_DETACHED_SUBPROCESSES, WORK_FOLDER,
-    WORKSPACE_FOLDER,
+use td_common::os::TD_DETACHED_SUBPROCESSES;
+use td_common::worker::{
+    EPHEMERAL_FOLDER, INIT_FOLDER, LOG_FOLDER, PROC_FOLDER, REGULAR_FOLDER, WORK_FOLDER,
 };
 
 pub type SpaceStats = (PathBuf, u64, String);

@@ -7,6 +7,9 @@
 use rustls::crypto::{CryptoProvider, aws_lc_rs, ring};
 use tracing::debug;
 
+pub const SSL_KEY_PEM_FILE: &str = "key.pem";
+pub const SSL_CERT_PEM_FILE: &str = "cert.pem";
+
 /// Ensures a process-global rustls [`CryptoProvider`] is installed, returning whether one is
 /// available afterwards.
 ///

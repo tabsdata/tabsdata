@@ -15,7 +15,7 @@ use crate::scheduler::layers::request::{
 };
 use ta_services::factory::service_factory;
 use td_authz::jwt::JwtConfig;
-use td_common::server::{Orchestrator, OrchestratorMessageQueueHandle};
+use td_bridge::BridgeProviderHandle;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
@@ -39,10 +39,9 @@ use td_tower::{layer, layers};
     connection = TransactionProvider,
     scope = "Global",
     context = Storage,
-    context = OrchestratorMessageQueueHandle,
+    context = BridgeProviderHandle,
     context = InternalServerAddresses,
     context = SchedulerNotify,
-    context = Orchestrator,
     context = JwtConfig,
 )]
 fn service() {
@@ -250,11 +249,11 @@ mod tests {
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_authz::jwt::decode_internal_token;
-    use td_common::server::OrchestratorMessagePayload;
-    use td_common::server::{
-        Callback, Decorator as MessageDecorator, FunctionRequest, InMemoryOrchestratorMessageQueue,
-        OrchestratorMessageQueueHandle,
-    };
+    use td_bridge::messaging::memory::InMemoryOrchestratorMessageQueue;
+    use td_bridge::messaging::{FunctionRequest, OrchestratorMessagePayload};
+    use td_bridge::test::TestBridgeProvider;
+    use td_bridge::{BridgeProviderHandle, Orchestrator};
+    use td_common::worker::{Callback, Decorator as MessageDecorator};
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_error::TdError;
@@ -451,7 +450,7 @@ mod tests {
             .oneshot(())
             .await?;
 
-        let created_message = context.orchestrator_queue.locked_messages().await;
+        let created_message = context.bridge.message_queue().locked_messages().await;
         assert_eq!(created_message.len(), 1);
 
         let created_message = &created_message[0].payload;
@@ -701,7 +700,7 @@ mod tests {
             .oneshot(())
             .await?;
 
-        let messages = context.orchestrator_queue.locked_messages().await;
+        let messages = context.bridge.message_queue().locked_messages().await;
         assert_eq!(
             messages.len(),
             1,
@@ -766,7 +765,7 @@ mod tests {
             .service()
             .oneshot(())
             .await?;
-        let messages_after = context.orchestrator_queue.locked_messages().await;
+        let messages_after = context.bridge.message_queue().locked_messages().await;
         assert_eq!(
             messages_after.len(),
             prior_messages_count,
@@ -824,16 +823,17 @@ mod tests {
         // Run the request tick with the kubernetes orchestrator. Use an
         // in-memory queue (the file queue only accepts request messages).
         let mut context = SchedulerContext::with_defaults(db.clone());
-        context.orchestrator_queue = Arc::new(OrchestratorMessageQueueHandle::new(Arc::new(
-            InMemoryOrchestratorMessageQueue::default(),
+        context.bridge = Arc::new(BridgeProviderHandle::new(Arc::new(
+            TestBridgeProvider::default()
+                .with_orchestrator(Orchestrator::Kubernetes)
+                .with_message_queue(InMemoryOrchestratorMessageQueue::default()),
         )));
-        context.orchestrator = Arc::new(Orchestrator::Kubernetes);
         RequestService::build(&context)
             .service()
             .oneshot(())
             .await?;
 
-        let created = context.orchestrator_queue.locked_messages().await;
+        let created = context.bridge.message_queue().locked_messages().await;
         assert_eq!(created.len(), 1);
 
         // Kubernetes emits the per-action FunctionRequest kind, carrying the

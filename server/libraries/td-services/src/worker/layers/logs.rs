@@ -4,7 +4,9 @@
 
 use bytes::Bytes;
 use futures_util::StreamExt;
-use td_common::server::{BridgeProviderHandle, WorkerLogStream, WorkerLogTarget, WorkerName};
+use td_bridge::BridgeProviderHandle;
+use td_bridge::worker::{WorkerLogStream, WorkerLogTarget};
+use td_common::worker::WorkerName;
 use td_error::TdError;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::rest_urls::LogsExtension;
@@ -55,7 +57,7 @@ pub async fn worker_logs(
     casts: Ref<Vec<LogsCastNumber>>,
 ) -> Result<BoxedSyncStream, TdError> {
     let target = worker_log_target(&worker, &extensions, &casts);
-    let stream = bridge.worker_logs(&target).await?;
+    let stream = bridge.worker_handler().logs(&target).await?;
     Ok(into_boxed_sync_stream(stream))
 }
 
@@ -66,6 +68,6 @@ pub async fn worker_logs_tail(
     casts: Ref<Vec<LogsCastNumber>>,
 ) -> Result<BoxedSyncStream, TdError> {
     let target = worker_log_target(&worker, &extensions, &casts);
-    let stream = bridge.worker_logs_tail(&target).await?;
+    let stream = bridge.worker_handler().logs_tail(&target).await?;
     Ok(into_boxed_sync_stream(stream))
 }

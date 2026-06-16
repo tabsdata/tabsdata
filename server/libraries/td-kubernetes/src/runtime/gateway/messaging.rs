@@ -4,5 +4,4 @@
 
 pub(crate) mod messenger;
 
-pub use messenger::provider::KubernetesOrchestratorMessagingProvider;
 pub use messenger::queue::KubernetesOrchestratorMessageQueue;

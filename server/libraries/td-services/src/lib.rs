@@ -29,7 +29,7 @@ use ta_services::factory::{FieldAccessors, ServiceFactory};
 use td_authz::AuthzContext;
 use td_authz::jwt::JwtConfig;
 use td_authz::session_provider::Sessions;
-use td_common::server::BridgeProviderHandle;
+use td_bridge::BridgeProviderHandle;
 use td_database::config::DatabaseDescriptor;
 use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;

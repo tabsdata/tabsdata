@@ -25,7 +25,7 @@ mod tests {
     use futures_util::StreamExt;
     use std::sync::Arc;
     use ta_services::service::TdService;
-    use td_common::server::SSL_CERT_PEM_FILE;
+    use td_common::crypto::SSL_CERT_PEM_FILE;
 
     use td_error::TdError;
     use td_tower::ctx_service::RawOneshot;

@@ -5,13 +5,25 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 use strum::{AsRefStr, EnumIter, EnumString};
+use td_bridge::messaging::OrchestratorMessage;
+use td_bridge::messaging::file_queue::{base, counter};
 use td_common::env::{EnvironmentError, to_absolute};
-use td_common::server::{
-    BIN_FOLDER, INPUT_FOLDER, LOCK_FOLDER, LOG_FOLDER, OUTPUT_FOLDER, OrchestratorMessage,
-    REQUEST_FOLDER, RESPONSE_FOLDER, RequestMessagePayload, base, counter,
+use td_common::worker::LOG_FOLDER;
+use td_common::worker::{
+    INPUT_FOLDER, OUTPUT_FOLDER, REQUEST_FOLDER, RESPONSE_FOLDER, RequestMessagePayload,
 };
 use td_objects::dxo::yaml::WorkerInput;
 use thiserror::Error;
+
+// The instance's on-disk tree, navigated by the launcher (and measured by the
+// disk monitor).
+pub const WORKSPACE_FOLDER: &str = "workspace";
+pub const REPOSITORY_FOLDER: &str = "repository";
+pub const ENVIRONMENTS_FOLDER: &str = "environments";
+pub const DATABASE_FOLDER: &str = "database";
+pub const STORAGE_FOLDER: &str = "storage";
+pub const BIN_FOLDER: &str = "bin";
+pub const LOCK_FOLDER: &str = "lock";
 
 #[derive(Debug, Clone, EnumIter, EnumString, AsRefStr)]
 #[strum(serialize_all = "kebab-case")]

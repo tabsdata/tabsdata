@@ -6,7 +6,7 @@ use crate::execution::layers::runtime_info::runtime_info;
 use getset::Getters;
 use serde::de::DeserializeOwned;
 use ta_services::factory::service_factory;
-use td_common::server::{EtcContent, ServerCatalog, ServerCatalogHandle};
+use td_bridge::catalog::{EtcContent, ServerCatalog};
 use td_error::{TdError, td_error};
 use td_objects::Buildable;
 use td_objects::dxo::crudl::ReadRequest;
@@ -33,11 +33,11 @@ pub struct RuntimeContext {
 }
 
 impl RuntimeContext {
-    pub async fn new(catalog: ServerCatalogHandle) -> Result<Self, TdError> {
+    pub async fn new(catalog: &dyn ServerCatalog) -> Result<Self, TdError> {
         let info = RuntimeInfo::builder()
-            .version(server_version(&catalog).await?)
-            .build_manifest(build_manifest(&catalog).await?)
-            .python_versions(valid_python_versions(&catalog).await?.versions.clone())
+            .version(server_version(catalog).await?)
+            .build_manifest(build_manifest(catalog).await?)
+            .python_versions(valid_python_versions(catalog).await?.versions.clone())
             .build()?;
         Ok(Self { info })
     }
@@ -64,7 +64,7 @@ enum RuntimeInfoError {
 }
 
 async fn deserialize<T: DeserializeOwned + Default>(
-    catalog: &ServerCatalogHandle,
+    catalog: &dyn ServerCatalog,
     etc_content: &EtcContent,
 ) -> Result<T, TdError> {
     let data = catalog.read(etc_content).await?;
@@ -83,7 +83,7 @@ async fn deserialize<T: DeserializeOwned + Default>(
 }
 
 async fn read_string(
-    catalog: &ServerCatalogHandle,
+    catalog: &dyn ServerCatalog,
     etc_content: &EtcContent,
 ) -> Result<String, TdError> {
     let data = catalog.read(etc_content).await?;
@@ -101,18 +101,18 @@ async fn read_string(
     Ok(data)
 }
 
-async fn server_version(catalog: &ServerCatalogHandle) -> Result<TabsdataVersion, TdError> {
+async fn server_version(catalog: &dyn ServerCatalog) -> Result<TabsdataVersion, TdError> {
     let server_version =
         deserialize::<ServerVersion>(catalog, &EtcContent::ServerVersion_yaml).await?;
     Ok(server_version.version)
 }
-async fn valid_python_versions(catalog: &ServerCatalogHandle) -> Result<PythonVersions, TdError> {
+async fn valid_python_versions(catalog: &dyn ServerCatalog) -> Result<PythonVersions, TdError> {
     let valid_python_versions =
         deserialize::<PythonVersions>(catalog, &EtcContent::ValidPythonVersions_yaml).await?;
     Ok(valid_python_versions)
 }
 
-async fn build_manifest(catalog: &ServerCatalogHandle) -> Result<BuildManifest, TdError> {
+async fn build_manifest(catalog: &dyn ServerCatalog) -> Result<BuildManifest, TdError> {
     let manifest: BuildManifest = read_string(catalog, &EtcContent::ServerBuildManifest_yaml)
         .await?
         .try_into()?;
@@ -141,13 +141,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_runtime_info() {
-        use td_common::server::{BridgeProvider, SupervisorBridgeProvider};
+        use td_bridge::catalog::etc_folder::EtcFolderStore;
 
-        let catalog = SupervisorBridgeProvider::new()
-            .server_catalog()
-            .await
-            .unwrap();
-        let res = RuntimeContext::new(catalog).await;
+        let catalog = EtcFolderStore::new().await.unwrap();
+        let res = RuntimeContext::new(&catalog).await;
         assert!(res.is_ok());
         assert!(res.unwrap().info().python_versions.is_empty());
     }

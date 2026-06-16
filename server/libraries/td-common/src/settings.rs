@@ -2,8 +2,8 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::env::INSTANCE_PATH_ENV;
 use crate::env::{TABSDATA_HOME_DIR, get_home_dir};
-use crate::server::INSTANCE_PATH_ENV;
 use config::{Config, File};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
@@ -19,6 +19,9 @@ pub const TRUE: &str = "true";
 pub const YES: &str = "yes";
 pub const ONE: &str = "1";
 pub const ON: &str = "on";
+
+pub const DEFAULT_INSTANCE: &str = "tabsdata";
+pub const INSTANCES_FOLDER: &str = "instances";
 
 pub const FALSE: &str = "true";
 pub const NOT: &str = "not";

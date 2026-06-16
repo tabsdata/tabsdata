@@ -11,8 +11,9 @@ use derive_builder::{Builder, UninitializedFieldError};
 use getset::{Getters, Setters};
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
+use td_bridge::messaging::OrchestratorMessage;
 use td_common::env::{EnvironmentError, to_absolute};
-use td_common::server::{OrchestratorMessage, WorkerClass};
+use td_common::worker::WorkerClass;
 use thiserror::Error;
 
 /// Describes a worker that can be run under the Tabsdata system.
@@ -347,12 +348,15 @@ pub enum DescriberError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resource::instance::CONFIG_FOLDER;
     use crate::services::supervisor::WorkerLocation::Relative;
     use std::fs::create_dir_all;
     use std::path::PathBuf;
+    use td_bridge::catalog::etc_folder::ETC_FOLDER;
+    use td_bridge::messaging::file_queue::MSG_FOLDER;
     use td_common::env::{get_current_exe_name, get_current_exe_path};
-    use td_common::server::WorkerClass::Regular;
-    use td_common::server::{CONFIG_FOLDER, ETC_FOLDER, MSG_FOLDER, WORK_FOLDER};
+    use td_common::worker::WORK_FOLDER;
+    use td_common::worker::WorkerClass::Regular;
     use tempfile::tempdir;
 
     //noinspection DuplicatedCode

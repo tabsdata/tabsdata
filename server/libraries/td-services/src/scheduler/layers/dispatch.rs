@@ -6,12 +6,12 @@
 //! All errors parsing or processing messages should be logged and the message should be removed from the queue.
 
 use serde_yaml::Value;
-use std::ops::Deref;
 use std::str::FromStr;
-use td_common::server::{
-    MessageAction, OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue,
-    OrchestratorMessageQueueHandle, RequestMessagePayload, WorkerName,
+use td_bridge::BridgeProviderHandle;
+use td_bridge::messaging::{
+    OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue,
 };
+use td_common::worker::{MessageAction, RequestMessagePayload, WorkerName};
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_execution::SchedulerNotify;
@@ -40,15 +40,15 @@ pub async fn notify_dispatcher(notify: Ref<SchedulerNotify>) -> Result<(), TdErr
     err(Debug)
 )]
 pub async fn unlock_workers_request(
-    message_queue: Ref<OrchestratorMessageQueueHandle>,
+    bridge: Ref<BridgeProviderHandle>,
     mut conn: MutRef<DynamicConnection<'static>>,
 ) -> Result<(), TdError> {
-    unlock_workers_request_infallible(message_queue, &mut conn).await;
+    unlock_workers_request_infallible(bridge.message_queue(), &mut conn).await;
     Ok(())
 }
 
 async fn unlock_workers_request_infallible(
-    message_queue: Ref<OrchestratorMessageQueueHandle>,
+    message_queue: &dyn OrchestratorMessageQueue,
     conn: &mut DynamicConnection<'_>,
 ) {
     let messages = message_queue.locked_messages().await;
@@ -71,7 +71,7 @@ async fn unlock_workers_request_infallible(
                 Ok(WorkerName::Function) => {
                     unlock_function_runner_worker(
                         &mut *conn,
-                        message_queue.deref(),
+                        message_queue,
                         &message,
                         worker_id,
                         payload,
@@ -81,7 +81,7 @@ async fn unlock_workers_request_infallible(
                 Ok(WorkerName::CronTrigger) => {
                     unlock_cron_trigger_workers(
                         &mut *conn,
-                        message_queue.deref(),
+                        message_queue,
                         &message,
                         worker_id,
                         payload,
@@ -91,7 +91,7 @@ async fn unlock_workers_request_infallible(
                 Ok(WorkerName::StageTrigger) => {
                     unlock_stage_trigger_workers(
                         &mut *conn,
-                        message_queue.deref(),
+                        message_queue,
                         &message,
                         worker_id,
                         payload,

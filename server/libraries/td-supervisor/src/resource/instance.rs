@@ -15,12 +15,18 @@ use std::string::ToString;
 use td_common::env::{EnvironmentError, TABSDATA_HOME_DIR, get_current_exe_dir};
 use td_common::files::ROOT;
 use td_common::os::{is_executable, name_program};
-use td_common::server::{
-    CONFIG_FOLDER, DEFAULT_INSTANCE, INSTANCES_FOLDER, REPOSITORY_FOLDER, WORKSPACE_FOLDER,
-};
+use td_common::settings::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
+use td_process::launcher::arg::{REPOSITORY_FOLDER, WORKSPACE_FOLDER};
 use thiserror::Error;
 use tracing::{error, info};
 use walkdir::WalkDir;
+
+pub const CONFIG_NAMESPACE: &str = "TD";
+pub const CONFIG_FOLDER: &str = "config";
+pub const CONFIG_FILE: &str = "config.yaml";
+pub const AVAILABLE_ENVIRONMENTS_FOLDER: &str = "available_environments";
+pub const MOLD_FOLDER: &str = "mold";
+pub const PARENT_FOLDER: &str = "..";
 
 /// Get the instance path of a given instance.
 pub fn get_instance_path_for_instance(instance: &Option<PathBuf>) -> PathBuf {

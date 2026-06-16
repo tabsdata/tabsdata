@@ -10,10 +10,10 @@ use std::fmt::{Debug, Formatter};
 use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::{fmt, io};
+use td_bridge::messaging::OrchestratorMessagePayload::OrchestratorRequestMessagePayload;
 use td_common::logging::LOG_LOCATION;
 use td_common::manifest::{Inf, WORKER_INF_FILE};
-use td_common::server::OrchestratorMessagePayload::OrchestratorRequestMessagePayload;
-use td_common::server::{REQUEST_FILE, REQUEST_FOLDER};
+use td_common::worker::{REQUEST_FILE, REQUEST_FOLDER};
 use thiserror::Error;
 
 /// Provides resources to a worker that can be run under the Tabsdata system.

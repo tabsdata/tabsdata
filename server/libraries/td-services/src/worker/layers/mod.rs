@@ -8,10 +8,10 @@ pub(crate) mod logs;
 pub(crate) mod tests {
     use std::env;
     use std::path::PathBuf;
-    use td_common::server::WorkerClass::Ephemeral;
-    use td_common::server::{
-        CAST_FOLDER, LOG_FOLDER, PROC_FOLDER, WORK_FOLDER, WORKSPACE_URI_ENV, WorkerName,
-    };
+    use td_common::env::WORKSPACE_URI_ENV;
+    use td_common::worker::WorkerClass::Ephemeral;
+    use td_common::worker::WorkerName;
+    use td_common::worker::{CAST_FOLDER, LOG_FOLDER, PROC_FOLDER, WORK_FOLDER};
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::LogsExtension;
     use td_objects::types::basic::WorkerType;

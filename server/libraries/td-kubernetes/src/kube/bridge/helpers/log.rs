@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use bytes::Bytes;
 use futures::AsyncReadExt;
-use td_common::server::{LogBridgeError, WorkerLogStream};
+use td_bridge::worker::{LogBridgeError, WorkerLogStream};
 
 use crate::base::constants::LOG_POD_POLL_INTERVAL;
 use crate::kube::api::LabelFilter;

@@ -10,7 +10,7 @@ use td_common::attach::attach;
 use td_common::env::{TABSDATA_HOME_DIR, get_home_dir};
 use td_common::logging;
 use td_common::logging::{CONSOLE_PROFILE, LoggingOptions};
-use td_common::server::TD_DETACHED_SUBPROCESSES;
+use td_common::os::TD_DETACHED_SUBPROCESSES;
 use td_common::settings::TRUE;
 use td_supervisor::services::tdserver;
 use td_supervisor::services::tdserver::show_banner;

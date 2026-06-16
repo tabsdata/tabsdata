@@ -11,8 +11,6 @@ use std::os::unix::fs::MetadataExt;
 
 #[cfg(target_os = "windows")]
 use crate::env::check_flag_env;
-#[cfg(target_os = "windows")]
-use crate::server::TD_DETACHED_SUBPROCESSES;
 #[cfg(not(target_os = "windows"))]
 use libc::pid_t;
 #[cfg(not(target_os = "windows"))]
@@ -23,6 +21,8 @@ use std::process;
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, Process, ProcessesToUpdate, Signal, System};
 use tracing::{info, warn};
+
+pub const TD_DETACHED_SUBPROCESSES: &str = "TD_DETACHED_SUBPROCESSES";
 
 #[allow(dead_code)]
 const OS_LINUX: &str = "linux";

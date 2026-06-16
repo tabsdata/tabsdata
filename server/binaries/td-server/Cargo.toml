@@ -111,6 +111,7 @@ tm-workspace = { workspace = true }
 ## Libraries
 
 td-apiserver = { workspace = true }
+td-bridge = { workspace = true }
 td-common = { workspace = true }
 td-crontrigger = { workspace = true }
 td-kubernetes = { workspace = true }
@@ -124,6 +125,7 @@ te-system = { workspace = true }
 
 # External dependencies
 
+async-trait = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 path-slash = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

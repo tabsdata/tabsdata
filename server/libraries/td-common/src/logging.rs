@@ -13,7 +13,6 @@
 //! background tokio tasks emit structured `ERROR` events through this
 //! pipeline rather than going to stderr only.
 
-use crate::constants::PYTEST_CONTEXT_ACTIVE;
 use crate::env::{get_current_dir, to_absolute};
 use crate::manifest::{Inf, WORKER_INF_FILE};
 use crate::settings::{LOG_WITH_ANSI, MANAGER, TRUE};
@@ -43,6 +42,8 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::reload::{Handle, Layer as ReloadLayer};
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
+
+pub const PYTEST_CONTEXT_ACTIVE: &str = "PYTEST_CURRENT_TEST";
 
 pub const SENSITIVE_MARKER: &str = "@@SENSITIVE@@";
 

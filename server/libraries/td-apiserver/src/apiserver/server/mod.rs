@@ -18,7 +18,7 @@ use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use td_common::crypto::install_crypto_provider;
-use td_common::server::{SSL_CERT_PEM_FILE, SSL_KEY_PEM_FILE};
+use td_common::crypto::{SSL_CERT_PEM_FILE, SSL_KEY_PEM_FILE};
 use td_common::server_runner::ServerRunnable;
 use td_objects::types::addresses::NonEmptyAddresses;
 use tokio::net::TcpListener;
@@ -199,7 +199,7 @@ mod tests {
     use std::net::{Ipv4Addr, SocketAddr};
     use ta_apiserver::router::RouterExtension;
     use td_apiforge::router_ext;
-    use td_common::constants::TD_CROSS_BUILD;
+    const TD_CROSS_BUILD: &str = "TD_CROSS_BUILD";
     use td_common::env::check_flag_env;
 
     use td_objects::types::addresses::NonEmptyAddresses;

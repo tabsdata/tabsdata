@@ -6,7 +6,7 @@ use crate::worker::layers::logs::{worker_logs, worker_logs_tail};
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
-use td_common::server::BridgeProviderHandle;
+use td_bridge::BridgeProviderHandle;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::rest_urls::{LogsExtension, WorkerLogsParams};
@@ -76,8 +76,11 @@ mod tests {
     use bytes::Bytes;
     use futures_util::TryStreamExt;
     use std::str::FromStr;
+    use std::sync::Arc;
     use ta_services::service::TdService;
-    use td_common::server::WORKSPACE_URI_ENV;
+    use td_bridge::test::TestBridgeProvider;
+    use td_bridge::worker::workspace::WorkspaceWorkerHandler;
+    use td_common::env::WORKSPACE_URI_ENV;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_error::TdError;
@@ -86,7 +89,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId,
-        RoleId, TransactionKey, UserId, WorkerMessageStatus,
+        TransactionKey, UserId, WorkerMessageStatus,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -236,7 +239,15 @@ mod tests {
                     // as the content.
                     create_log_files(&workers[0], 1, 1).await;
 
-                    let service = WorkerLogService::with_defaults(db.clone()).service();
+                    let bridge = BridgeProviderHandle::new(Arc::new(
+                        TestBridgeProvider::default().with_worker_handler(WorkspaceWorkerHandler),
+                    ));
+                    let service = WorkerLogService::new(
+                        db.clone(),
+                        Arc::new(AuthzContext::default()),
+                        Arc::new(bridge),
+                    )
+                    .service();
 
                     let request = RequestContext::with(
                         AccessTokenId::default(),

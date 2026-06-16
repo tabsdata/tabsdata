@@ -40,6 +40,7 @@ members = [
     "server/libraries/ta-tableframe",
     "server/libraries/td-apiserver",
     "server/libraries/td-authz",
+    "server/libraries/td-bridge",
     "server/libraries/td-common",
     "server/libraries/td-crontrigger",
     "server/libraries/td-database",
@@ -199,6 +200,9 @@ path = "server/libraries/td-apiserver"
 
 [workspace.dependencies.td-authz]
 path = "server/libraries/td-authz"
+
+[workspace.dependencies.td-bridge]
+path = "server/libraries/td-bridge"
 
 [workspace.dependencies.td-common]
 path = "server/libraries/td-common"

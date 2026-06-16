@@ -6,7 +6,7 @@ use crate::dxo::yaml::location::{Location, Locations};
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, WorkerConfig, WorkerId,
 };
-use td_common::server::HttpRequest;
+use td_common::worker::HttpRequest;
 
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]

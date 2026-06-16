@@ -10,7 +10,8 @@ use k8s_openapi::api::core::v1::{
     ConfigMap, ConfigMapEnvSource, Container, EnvFromSource, Pod, Secret, SecretEnvSource,
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use td_common::server::{Callback, FunctionStartRequest, HttpCallback};
+use td_bridge::messaging::FunctionStartRequest;
+use td_common::worker::{Callback, HttpCallback};
 
 use crate::base::constants::TABSDATA_LABEL_NAMESPACE;
 use crate::base::error::kubernetes::messaging::KubeMessagingError;

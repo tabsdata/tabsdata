@@ -12,7 +12,7 @@ use ta_services::extension::ContextExt;
 use ta_services::factory::ServiceFactory;
 use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
-use td_common::server::BridgeProviderHandle;
+use td_bridge::BridgeProviderHandle;
 use td_common::server_runner::ServerRunnable;
 use td_database::pool::TdPool;
 use td_error::TdError;

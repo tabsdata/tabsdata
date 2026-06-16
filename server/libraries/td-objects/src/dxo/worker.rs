@@ -21,7 +21,7 @@ mod definitions {
     use td_common::bucket::BucketFloors;
     use td_common::datetime::Timestamp;
     use td_common::execution_status::WorkerCallbackStatus;
-    use td_common::server::ResponseMessagePayload;
+    use td_common::worker::ResponseMessagePayload;
     use td_error::TdError;
 
     #[ta_objects::Dao]

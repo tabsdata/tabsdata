@@ -9,6 +9,7 @@ use crate::component::tracker::{
     WorkerStatus, WorkerTracker, check_status, get_listening_ports_for_pids, get_pid_path,
 };
 use crate::launch::worker::{TabsDataWorker, Worker};
+use crate::resource::instance::{AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FILE, CONFIG_FOLDER};
 use crate::resource::instance::{
     get_instance_path_for_instance, get_repository_path_for_instance,
     get_workspace_path_for_instance,
@@ -45,20 +46,22 @@ use tabled::settings::themes::BorderCorrection;
 use tabled::settings::{Alignment, Modify, Panel};
 use tabled::{Table, Tabled};
 use td_apiserver::config::DbSchema;
+use td_bridge::catalog::etc_folder::ETC_FOLDER;
+use td_bridge::messaging::file_queue::MSG_FOLDER;
 use td_build::environment::ENV_VALUE_TD_UI_MODE_EXTERNAL;
 use td_build::version::TABSDATA_VERSION;
+use td_common::env::REPOSITORY_URI_ENV;
 use td_common::env::{TABSDATA_HOME_DIR, check_flag_env, get_home_dir, to_absolute};
 use td_common::logging::set_log_level;
+use td_common::os::TD_DETACHED_SUBPROCESSES;
 use td_common::os::{name_program, terminate_process};
-use td_common::server::WorkerClass::Regular;
-use td_common::server::{
-    AVAILABLE_ENVIRONMENTS_FOLDER, CONFIG_FILE, CONFIG_FOLDER, ENVIRONMENTS_FOLDER, ETC_FOLDER,
-    INSTANCES_FOLDER, MSG_FOLDER, PROC_FOLDER, REGULAR_FOLDER, REPOSITORY_URI_ENV, STORAGE_FOLDER,
-    TD_DETACHED_SUBPROCESSES, WORK_FOLDER,
-};
+use td_common::settings::INSTANCES_FOLDER;
 use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
+use td_common::worker::WorkerClass::Regular;
+use td_common::worker::{PROC_FOLDER, REGULAR_FOLDER, WORK_FOLDER};
 use td_process::launcher::arg::InheritedArgumentKey;
 use td_process::launcher::arg::InheritedArgumentKey::*;
+use td_process::launcher::arg::{ENVIRONMENTS_FOLDER, STORAGE_FOLDER};
 use td_process::launcher::cli::{
     ARGUMENT_PREFIX, TRAILING_ARGUMENTS_PREFIX, parse_extra_arguments,
 };

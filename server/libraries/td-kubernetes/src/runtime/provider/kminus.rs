@@ -14,7 +14,7 @@ use indicatif::MultiProgress;
 use once_cell::sync::OnceCell;
 use td_common::env::TABSDATA_HOME_DIR;
 use td_common::os::name_program;
-use td_common::server::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
+use td_common::settings::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
 use td_common::status::ExitStatus::NoAction;
 use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;

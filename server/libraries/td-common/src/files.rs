@@ -2,11 +2,12 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-use crate::server::EXCLUSION_PREFIX;
 use std::fs;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+
+pub const EXCLUSION_PREFIX: char = '.';
 
 #[cfg(not(target_os = "windows"))]
 pub const ROOT: &str = "/";

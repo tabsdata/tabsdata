@@ -23,8 +23,8 @@ use std::process::Stdio;
 use std::{env, fmt};
 use td_common::env::{check_flag_env, get_current_dir};
 use td_common::logging::LOG_LOCATION;
-use td_common::server::WorkerName::Function;
-use td_common::server::{WORKER_ERR_FILE, WORKER_OUT_FILE, WorkerClass};
+use td_common::worker::WorkerName::Function;
+use td_common::worker::{WORKER_ERR_FILE, WORKER_OUT_FILE, WorkerClass};
 use td_error::TdError;
 use td_python::venv::{
     ENV_CONDA_PREFIX, ENV_PYENV_VERSION, ENV_PYTHONHOME, ENV_PYTHONPATH, ENV_UV_VENV,
@@ -131,7 +131,7 @@ impl WorkerRunner for TabsDataWorkerRunner {
 
         #[cfg(windows)]
         {
-            use td_common::server::TD_DETACHED_SUBPROCESSES;
+            use td_common::os::TD_DETACHED_SUBPROCESSES;
             if check_flag_env(TD_DETACHED_SUBPROCESSES) || detached {
                 use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
 

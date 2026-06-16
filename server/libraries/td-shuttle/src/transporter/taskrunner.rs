@@ -17,12 +17,16 @@ use tower::{ServiceBuilder, ServiceExt};
 use tracing::debug;
 
 /// Error type for request errors within the scope of a [`CancelMiddleware`].
+/// `Inner` is built explicitly, never via `#[from]`: a generic
+/// `impl<E> From<E>` overlaps (per coherence's future-compat rules) with any
+/// upstream `impl From<X> for X::Assoc`, so a routine dependency bump could
+/// break the build (`time` 0.3.48 did).
 #[derive(Debug, Error)]
 enum CancellationError<E> {
     #[error("request was cancelled")]
     Cancelled,
     #[error(transparent)]
-    Inner(#[from] E),
+    Inner(E),
 }
 
 /// A middleware that allows cancelling in-flight requests.

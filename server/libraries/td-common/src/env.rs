@@ -11,6 +11,21 @@ use std::path::PathBuf;
 use std::{fs, io};
 use thiserror::Error;
 
+// These environment variables are meant to be used as URI locations. Therefore, in Windows they will have a
+// leading slash (/), resulting in, for example, '/c:\folder\file' instead of 'c:\folder\file'
+pub const INSTANCE_URI_ENV: &str = "TD_URI_INSTANCE";
+pub const REPOSITORY_URI_ENV: &str = "TD_URI_REPOSITORY";
+pub const WORKSPACE_URI_ENV: &str = "TD_URI_WORKSPACE";
+pub const CONFIG_URI_ENV: &str = "TD_URI_CONFIG";
+pub const WORK_URI_ENV: &str = "TD_URI_WORK";
+
+// These environment variables are meant to be used as regular PATH locations.
+pub const INSTANCE_PATH_ENV: &str = "TD_PATH_INSTANCE";
+pub const REPOSITORY_PATH_ENV: &str = "TD_PATH_REPOSITORY";
+pub const WORKSPACE_PATH_ENV: &str = "TD_PATH_WORKSPACE";
+pub const CONFIG_PATH_ENV: &str = "TD_PATH_CONFIG";
+pub const WORK_PATH_ENV: &str = "TD_PATH_WORK";
+
 pub const TABSDATA_HOME_DIR: &str = ".tabsdata";
 pub const TABSDATA_DEV_HOME_DIR: &str = ".tabsdata-dev";
 

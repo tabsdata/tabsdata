@@ -8,17 +8,12 @@ use crate::config::{Config, DbSchema, Params, SecurityMode};
 use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
-use td_common::server::{
-    BridgeProvider, BridgeProviderHandle, Orchestrator, OrchestratorMessagingProvider,
-    SupervisorBridgeProvider, SupervisorMessagingProvider,
-};
+use td_bridge::{BridgeProviderFactory, BridgeProviderHandle};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
 use td_database::config::DatabaseDescriptor;
 use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;
-use td_kubernetes::kube::KubernetesBridgeProvider;
-use td_kubernetes::runtime::gateway::messaging::KubernetesOrchestratorMessagingProvider;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
 use td_services::execution::services::runtime_info::RuntimeContext;
@@ -35,7 +30,7 @@ mod scheduler;
 const CONFIG_NAME: &str = "apiserver";
 
 /// Run the apiserver. This function is the entry point for the `apiserver` binary.
-pub fn run() {
+pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
     Cli::<Config, Params>::exec_async(
         CONFIG_NAME,
         |config, params| async move {
@@ -146,55 +141,24 @@ pub fn run() {
             })?;
             let storage = Arc::new(storage);
 
-            // Create orchestrator messaging provider and its message queue
             info!("Orchestrator: {}", config.orchestrator);
-            let messaging_provider: Box<dyn OrchestratorMessagingProvider> = match config
-                .orchestrator
-            {
-                Orchestrator::Supervisor => Box::new(SupervisorMessagingProvider::new()),
-                Orchestrator::Kubernetes => {
-                    let provider = KubernetesOrchestratorMessagingProvider::from_pod_environment()
-                        .await
-                        .map_err(|e| {
-                            error!("Error creating kubernetes messaging provider: {e:#?}");
-                            ExitStatus::GeneralError
-                        })?;
-                    Box::new(provider)
-                }
-            };
-            let orchestrator_message_queue = Arc::new(
-                messaging_provider
-                    .orchestrator_message_queue()
-                    .await
-                    .map_err(|e| {
-                        error!("Error creating orchestrator message queue: {e:#?}");
-                        ExitStatus::GeneralError
-                    })?,
-            );
-
-            let bridge_provider: Arc<dyn BridgeProvider> = match config.orchestrator {
-                Orchestrator::Supervisor => Arc::new(SupervisorBridgeProvider::new()),
-                Orchestrator::Kubernetes => {
-                    let provider = KubernetesBridgeProvider::from_pod_environment()
-                        .await
-                        .map_err(|e| {
-                            error!("Error creating kubernetes bridge provider: {e:#?}");
-                            ExitStatus::GeneralError
-                        })?;
-                    Arc::new(provider)
-                }
-            };
-            let server_catalog = bridge_provider.server_catalog().await.map_err(|e| {
-                error!("Error creating server catalog: {e:#?}");
-                ExitStatus::GeneralError
-            })?;
+            let bridge_provider = bridge_factory
+                .build(config.orchestrator)
+                .await
+                .map_err(|e| {
+                    error!("Error creating bridge provider: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
             let bridge = Arc::new(BridgeProviderHandle::new(bridge_provider));
 
             // Create runtime context
-            let runtime_context = RuntimeContext::new(server_catalog).await.map_err(|e| {
-                error!("Error creating runtime context: {e:#?}");
-                ExitStatus::GeneralError
-            })?;
+            let runtime_context =
+                RuntimeContext::new(bridge.server_catalog())
+                    .await
+                    .map_err(|e| {
+                        error!("Error creating runtime context: {e:#?}");
+                        ExitStatus::GeneralError
+                    })?;
             let runtime_context = Arc::new(runtime_context);
 
             // Create shared scheduler notify
@@ -247,7 +211,7 @@ pub fn run() {
                 storage.clone(),
                 runtime_context.clone(),
                 scheduler_notify.clone(),
-                bridge,
+                bridge.clone(),
             )
             .await
             .map_err(|e| {
@@ -275,10 +239,9 @@ pub fn run() {
             let scheduler_context = SchedulerCtx::new(
                 db.clone(),
                 storage.clone(),
-                orchestrator_message_queue.clone(),
+                bridge.clone(),
                 internal_addresses.clone(),
                 scheduler_notify,
-                config.orchestrator,
                 Arc::new(config.jwt.clone()),
             );
             let function_request_server = FunctionRequester::new(&scheduler_context).await;

@@ -24,13 +24,13 @@ pub fn _py() -> Option<String> {
 }
 
 #[pyconstant(MODULE_PATH)]
-pub const REQUEST_FILE: &str = td_common::server::REQUEST_FILE;
+pub const REQUEST_FILE: &str = td_common::worker::REQUEST_FILE;
 
 #[pyconstant(MODULE_PATH)]
-pub const RESPONSE_FILE: &str = td_common::server::RESPONSE_FILE;
+pub const RESPONSE_FILE: &str = td_common::worker::RESPONSE_FILE;
 
 #[pyconstant(MODULE_PATH)]
-pub const EXCEPTION_FILE: &str = td_common::server::EXCEPTION_FILE;
+pub const EXCEPTION_FILE: &str = td_common::worker::EXCEPTION_FILE;
 
 /*
 ToDo

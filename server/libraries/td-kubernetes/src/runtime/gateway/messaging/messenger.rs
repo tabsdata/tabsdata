@@ -3,6 +3,5 @@
 //
 
 pub mod kit;
-pub mod provider;
 pub mod queue;
 pub mod template;

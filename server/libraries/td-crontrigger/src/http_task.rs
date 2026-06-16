@@ -11,7 +11,7 @@ use crate::task_runner::{Task, TaskRunnerError};
 use async_trait::async_trait;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
-use td_common::server::HttpRequest;
+use td_common::worker::HttpRequest;
 use tokio::sync::watch;
 use tracing::{debug, error, info};
 

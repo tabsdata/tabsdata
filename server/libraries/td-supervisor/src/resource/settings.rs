@@ -2,17 +2,18 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+use crate::resource::instance::{CONFIG_FILE, CONFIG_FOLDER};
 use crate::services::tdserver::TD_KEEP;
 use include_dir::{Dir, DirEntry, include_dir};
 use std::fs::{File, create_dir_all, write};
 use std::io::{Result, Write};
 use std::path::{Path, PathBuf};
 use td_common::env::TABSDATA_HOME_DIR;
+use td_common::files::EXCLUSION_PREFIX;
 use td_common::files::ROOT;
-use td_common::server::{
-    CONFIG_FILE, CONFIG_FOLDER, EXCLUSION_PREFIX, INSTANCES_FOLDER, WORKSPACE_FOLDER,
-};
+use td_common::settings::INSTANCES_FOLDER;
 use td_common::settings::{DEFAULT_SETTINGS, SETTINGS_FILE};
+use td_process::launcher::arg::WORKSPACE_FOLDER;
 use tracing::trace;
 
 pub static PROFILE: Dir<'_> = include_dir!("variant/resources/profile");

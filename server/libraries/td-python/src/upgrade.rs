@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use td_build::version::TABSDATA_VERSION;
 use td_common::env::check_flag_env;
+use td_common::os::TD_DETACHED_SUBPROCESSES;
 use td_common::os::name_program;
-use td_common::server::TD_DETACHED_SUBPROCESSES;
 use td_error::TdError;
 use tracing::error;
 

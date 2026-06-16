@@ -13,6 +13,9 @@ use crate::component::runner::RunnerError::{
 use crate::component::tracker::{WorkerStatus, check_status, get_pid_path, snapshot_live_pids};
 use crate::launch::worker::{TabsDataWorker, Worker, notify};
 use crate::resource::instance::{
+    CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE, MOLD_FOLDER, PARENT_FOLDER,
+};
+use crate::resource::instance::{
     copy_mold_tree, get_instance_path_for_instance, get_repository_path_for_instance,
     get_workspace_path_for_instance,
 };
@@ -53,29 +56,33 @@ use std::{fmt, panic, process};
 use strum::{AsRefStr, EnumString};
 use sysinfo::Signal::Kill;
 use sysinfo::{Pid, Signal};
+use td_bridge::catalog::etc_folder::ETC_FOLDER;
+use td_bridge::messaging::OrchestratorMessage;
+use td_bridge::messaging::OrchestratorMessagePayload::{
+    OrchestratorExceptionMessagePayload, OrchestratorFunctionRequestMessagePayload,
+    OrchestratorRequestMessagePayload, OrchestratorResponseMessagePayload,
+};
+use td_bridge::messaging::file_queue::{MSG_FOLDER, ONGOING_FOLDER, PLANNED_FOLDER, QUEUED_FOLDER};
 use td_common::attach::check_nowait_env;
 use td_common::env::to_absolute;
+use td_common::env::{
+    CONFIG_PATH_ENV, CONFIG_URI_ENV, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, REPOSITORY_PATH_ENV,
+    REPOSITORY_URI_ENV, WORK_PATH_ENV, WORK_URI_ENV, WORKSPACE_PATH_ENV, WORKSPACE_URI_ENV,
+};
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::files::YAML_EXTENSION;
 use td_common::id::id;
 use td_common::os::terminate_process;
-use td_common::server::MessageAction;
-use td_common::server::OrchestratorMessagePayload::{
-    OrchestratorExceptionMessagePayload, OrchestratorFunctionRequestMessagePayload,
-    OrchestratorRequestMessagePayload, OrchestratorResponseMessagePayload,
-};
-use td_common::server::WorkerClass::{Ephemeral, Init, Regular};
-use td_common::server::{
-    CAST_FOLDER, CONFIG_FILE, CONFIG_FOLDER, CONFIG_NAMESPACE, CONFIG_PATH_ENV, CONFIG_URI_ENV,
-    ETC_FOLDER, EXTENSION_DELIMITER, INSTANCE_PATH_ENV, INSTANCE_URI_ENV, MOLD_FOLDER, MSG_FOLDER,
-    ONGOING_FOLDER, OrchestratorMessage, PARENT_FOLDER, PLANNED_FOLDER, PROC_FOLDER, QUEUED_FOLDER,
-    REPOSITORY_PATH_ENV, REPOSITORY_URI_ENV, REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER,
-    WORK_FOLDER, WORK_PATH_ENV, WORK_URI_ENV, WORKSPACE_FOLDER, WORKSPACE_PATH_ENV,
-    WORKSPACE_URI_ENV, WorkerClass,
-};
 use td_common::signal::terminate;
 use td_common::status::ExitStatus::{GeneralError, Success, TabsDataError};
+use td_common::worker::MessageAction;
+use td_common::worker::WorkerClass::{Ephemeral, Init, Regular};
+use td_common::worker::{CAST_FOLDER, PROC_FOLDER, WORK_FOLDER};
+use td_common::worker::{
+    EXTENSION_DELIMITER, REQUEST_MESSAGE_FILE_PATTERN, RETRIES_DELIMITER, WorkerClass,
+};
 use td_process::launcher::arg::InheritedArgumentKey::*;
+use td_process::launcher::arg::WORKSPACE_FOLDER;
 use td_process::launcher::arg::{ArgumentKey, InheritedArgumentKey, MarkerKey};
 use td_process::launcher::cli::{Cli, TRAILING_ARGUMENTS_PREFIX, parse_extra_arguments};
 use td_process::launcher::config::Config;

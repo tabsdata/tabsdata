@@ -16,7 +16,7 @@ use std::{fs, io};
 use thiserror::Error;
 
 use td_common::os::check_process;
-use td_common::server::{WORKER_OK_FILE, WORKER_PID_FILE};
+use td_common::worker::{WORKER_OK_FILE, WORKER_PID_FILE};
 
 pub const DEFAULT_WORKER_FOLDER: &str = ".";
 pub const DEFAULT_WORKER_PID: i32 = -1;
@@ -339,7 +339,7 @@ mod tests {
     use std::time::Duration;
     use std::{fs, thread};
     use td_common::env::check_flag_env;
-    use td_common::server::TD_DETACHED_SUBPROCESSES;
+    use td_common::os::TD_DETACHED_SUBPROCESSES;
     use tempfile::tempdir;
     use tracing::info;
 

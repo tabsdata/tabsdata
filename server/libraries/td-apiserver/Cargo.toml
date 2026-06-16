@@ -38,6 +38,7 @@ td-test = [
     "ta-apiserver/td-test",
     "ta-services/td-test",
     "td-authz/td-test",
+    "td-bridge/td-test",
     "td-common/td-test",
     "td-database/td-test",
     "td-error/td-test",
@@ -86,10 +87,10 @@ ta-services = { workspace = true }
 td-apiforge = { workspace = true }
 td-authz = { workspace = true }
 td-build = { workspace = true }
+td-bridge = { workspace = true }
 td-common = { workspace = true }
 td-database = { workspace = true }
 td-execution = { workspace = true }
-td-kubernetes = { workspace = true }
 td-objects = { workspace = true }
 td-process = { workspace = true }
 td-queries = { workspace = true }
@@ -128,6 +129,7 @@ utoipa-axum = { workspace = true }
 utoipa-swagger-ui = { workspace = true, features = ["axum", "reqwest"] }
 
 [dev-dependencies]
+td-kubernetes = { workspace = true }
 td-apiserver = { workspace = true, features = ["td-test"] }
 td-test = { workspace = true }
 

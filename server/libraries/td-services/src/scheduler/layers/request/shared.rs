@@ -10,7 +10,7 @@ use http::Method;
 use std::collections::{BTreeMap, HashMap};
 use std::net::SocketAddr;
 use td_authz::jwt::{JwtConfig, encode_internal_token};
-use td_common::server::{Callback, HttpCallback, HttpRequest};
+use td_common::worker::{Callback, HttpCallback, HttpRequest};
 use td_error::td_error;
 use td_objects::rest_urls::BASE_URL;
 use url::Url;

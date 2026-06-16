@@ -6,11 +6,10 @@ use super::shared::{internal_post_callback, internal_request};
 use http::Method;
 use std::collections::HashMap;
 use td_authz::jwt::JwtConfig;
+use td_bridge::BridgeProviderHandle;
+use td_bridge::messaging::OrchestratorMessagePayload;
 use td_common::id;
-use td_common::server::{
-    MessageAction, OrchestratorMessagePayload, OrchestratorMessageQueueHandle,
-    RequestMessagePayload, WorkerClass, WorkerName,
-};
+use td_common::worker::{MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::TaggedExt;
 use td_objects::dxo::worker::WorkerDBWithNames;
@@ -29,7 +28,7 @@ use tracing::instrument;
     err(Debug)
 )]
 pub async fn create_locked_cron_trigger_workers_start_request(
-    message_queue: Ref<OrchestratorMessageQueueHandle>,
+    bridge: Ref<BridgeProviderHandle>,
     server_addresses: Ref<InternalServerAddresses>,
     jwt: Ref<JwtConfig>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
@@ -37,7 +36,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
     let futures: Vec<_> = cron_trigger_workers
         .iter()
         .map(|cron_trigger_worker| {
-            let message_queue = message_queue.clone();
+            let bridge = bridge.clone();
             let server_addresses = server_addresses.clone();
             let jwt = jwt.clone();
             async move {
@@ -100,7 +99,8 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                 };
 
                 // Add it to the queue
-                message_queue
+                bridge
+                    .message_queue()
                     .put(
                         worker_id,
                         OrchestratorMessagePayload::OrchestratorRequestMessagePayload(
@@ -123,7 +123,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
     err(Debug)
 )]
 pub async fn create_locked_cron_trigger_workers_stop_request(
-    message_queue: Ref<OrchestratorMessageQueueHandle>,
+    bridge: Ref<BridgeProviderHandle>,
     server_addresses: Ref<InternalServerAddresses>,
     jwt: Ref<JwtConfig>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
@@ -131,7 +131,7 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
     let futures: Vec<_> = cron_trigger_workers
         .iter()
         .map(|cron_trigger_worker| {
-            let message_queue = message_queue.clone();
+            let bridge = bridge.clone();
             let server_addresses = server_addresses.clone();
             let jwt = jwt.clone();
             async move {
@@ -161,7 +161,8 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
                 };
 
                 // Add it to the queue
-                message_queue
+                bridge
+                    .message_queue()
                     .put(
                         message_id,
                         OrchestratorMessagePayload::OrchestratorRequestMessagePayload(

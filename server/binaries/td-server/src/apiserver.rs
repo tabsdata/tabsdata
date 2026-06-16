@@ -2,9 +2,15 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+use async_trait::async_trait;
+use std::error::Error;
+use std::sync::Arc;
 use std::{env, process};
+use td_bridge::Orchestrator;
+use td_bridge::{BridgeProvider, BridgeProviderFactory, SupervisorBridgeProvider};
 use td_common::attach::attach;
 use td_common::{about, logging};
+use td_kubernetes::kube::KubernetesBridgeProvider;
 use td_process::launcher::hooks;
 use tracing::info;
 
@@ -30,7 +36,26 @@ fn main() {
     let command = arguments.join(" ");
     info!("Running apiserver with command: \n{}", command);
 
-    td_apiserver::run();
+    td_apiserver::run(Arc::new(ServerBridgeFactory));
+}
+
+/// Builds the bridge for whichever orchestrator the apiserver config names —
+/// the binary is the one place that sees every backend crate.
+struct ServerBridgeFactory;
+
+#[async_trait]
+impl BridgeProviderFactory for ServerBridgeFactory {
+    async fn build(
+        &self,
+        orchestrator: Orchestrator,
+    ) -> Result<Arc<dyn BridgeProvider>, Box<dyn Error + Send + Sync>> {
+        match orchestrator {
+            Orchestrator::Supervisor => Ok(Arc::new(SupervisorBridgeProvider::new().await?)),
+            Orchestrator::Kubernetes => Ok(Arc::new(
+                KubernetesBridgeProvider::from_pod_environment().await?,
+            )),
+        }
+    }
 }
 
 fn log_config_arg() -> Option<String> {

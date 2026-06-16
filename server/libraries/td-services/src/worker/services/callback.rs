@@ -50,8 +50,8 @@ mod tests {
     use super::*;
     use ta_services::service::TdService;
     use td_common::execution_status::WorkerCallbackStatus;
-    use td_common::server::{MessageAction, ResponseMessagePayload};
     use td_common::status::ExitStatus;
+    use td_common::worker::{MessageAction, ResponseMessagePayload};
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_error::TdError;

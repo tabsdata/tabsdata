@@ -3,6 +3,7 @@
 //
 
 use crate::component::describer::DescriberError;
+use crate::resource::instance::CONFIG_FOLDER;
 use crate::resource::instance::{
     InstanceError, create_instance_tree, get_instance_path_for_instance,
     get_repository_path_for_instance, get_workspace_path_for_instance,
@@ -17,9 +18,9 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{fs, io};
 use td_build::version::TABSDATA_VERSION;
-use td_common::server::{CONFIG_FOLDER, WORK_FOLDER};
 use td_common::status::ExitStatus;
 use td_common::status::ExitStatus::*;
+use td_common::worker::WORK_FOLDER;
 use td_process::launcher::cli::Cli;
 use td_process::launcher::config::Config;
 use thiserror::Error;

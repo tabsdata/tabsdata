@@ -4,7 +4,7 @@
 
 use crate::scheduler::layers::dispatch::unlock_workers_request;
 use ta_services::factory::service_factory;
-use td_common::server::OrchestratorMessageQueueHandle;
+use td_bridge::BridgeProviderHandle;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::{layer, layers};
@@ -15,7 +15,7 @@ use td_tower::{layer, layers};
     response = (),
     connection = TransactionProvider,
     scope = "Global",
-    context = OrchestratorMessageQueueHandle,
+    context = BridgeProviderHandle,
 )]
 fn service() {
     layers!(commit())
@@ -23,7 +23,7 @@ fn service() {
 
 // Requires:
 // - Transaction connection
-// - OrchestratorMessageQueueHandle (extracted via Ref)
+// - BridgeProviderHandle (extracted via Ref)
 #[layer]
 pub fn commit() {
     layers!(from_fn(unlock_workers_request))
@@ -39,11 +39,11 @@ mod tests {
     use std::sync::Arc;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
+    use td_bridge::BridgeProviderHandle;
+    use td_bridge::messaging::OrchestratorMessage;
+    use td_bridge::messaging::file_queue::{FileSupervisorMessageQueue, PayloadType};
+    use td_bridge::test::TestBridgeProvider;
     use td_common::files::{YAML_EXTENSION, get_files_in_folder_sorted_by_name};
-    use td_common::server::{
-        FileSupervisorMessageQueue, OrchestratorMessage, OrchestratorMessageQueueHandle,
-        PayloadType,
-    };
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_error::TdError;
@@ -124,17 +124,19 @@ mod tests {
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
-        let file_orchestrator_queue = Arc::new(FileSupervisorMessageQueue::default());
+        let queue_location = td_common::tdtestdir!();
+        let file_orchestrator_queue =
+            FileSupervisorMessageQueue::with_location(queue_location.clone()).unwrap();
         let mut context = SchedulerContext::with_defaults(db.clone());
-        context.orchestrator_queue = Arc::new(OrchestratorMessageQueueHandle::new(
-            file_orchestrator_queue.clone(),
-        ));
+        context.bridge = Arc::new(BridgeProviderHandle::new(Arc::new(
+            TestBridgeProvider::default().with_message_queue(file_orchestrator_queue),
+        )));
         RequestService::build(&context)
             .service()
             .oneshot(())
             .await?;
 
-        let created_messages = context.orchestrator_queue.locked_messages().await;
+        let created_messages = context.bridge.message_queue().locked_messages().await;
         assert_eq!(created_messages.len(), 1);
         let created_message = &created_messages[0];
 
@@ -144,14 +146,11 @@ mod tests {
             .oneshot(())
             .await?;
 
-        let locked_messages = context.orchestrator_queue.locked_messages().await;
+        let locked_messages = context.bridge.message_queue().locked_messages().await;
         assert_eq!(locked_messages.len(), 0);
 
-        let files = get_files_in_folder_sorted_by_name(
-            &file_orchestrator_queue.location,
-            Some(YAML_EXTENSION),
-        )
-        .unwrap();
+        let files =
+            get_files_in_folder_sorted_by_name(&queue_location, Some(YAML_EXTENSION)).unwrap();
         assert_eq!(files.len(), 1);
         let unlocked_file = &files[0];
 

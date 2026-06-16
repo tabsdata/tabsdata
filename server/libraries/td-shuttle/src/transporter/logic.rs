@@ -20,8 +20,8 @@ use polars_io::utils::sync_on_close::SyncOnCloseType;
 use serde::{Deserialize, Serialize};
 use std::string::ToString;
 use std::sync::{Arc, Mutex};
-use td_common::constants::PYTEST_CONTEXT_ACTIVE;
 use td_common::id;
+use td_common::logging::PYTEST_CONTEXT_ACTIVE;
 use td_tableframe::constants::{
     TD_OPT_TST_FN, TD_OPT_TST_SRV, TD_OPT_TST_TS, TD_OPT_TST_USR, TD_ORIGIN_FILE_LINE,
     TD_ORIGIN_FILE_PATH,

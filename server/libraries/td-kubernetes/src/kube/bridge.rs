@@ -2,22 +2,27 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+pub mod connection;
 pub mod helpers;
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::Serialize;
+use td_bridge::catalog::{EtcContent, EtcError, ServerCatalog};
+use td_bridge::connection::ConnectionStore;
+use td_bridge::messaging::OrchestratorMessageQueue;
+use td_bridge::worker::{LogBridgeError, WorkerHandler, WorkerLogStream, WorkerLogTarget};
+use td_bridge::{BridgeProvider, Orchestrator};
 use td_common::crypto::install_crypto_provider;
-use td_common::server::{
-    BridgeProvider, EtcContent, EtcError, LogBridgeError, ServerCatalog, ServerCatalogHandle,
-    WorkerLogStream, WorkerLogTarget,
-};
 
 use crate::base::error::kubernetes::KubernetesError;
 use crate::client::session::pod::PodContext;
+use crate::kube::bridge::connection::KubernetesConnectionStore;
 use crate::kube::bridge::helpers::log::stream_worker_logs;
 use crate::kube::context::KubeContext;
+use crate::runtime::gateway::messaging::messenger::queue::KubernetesOrchestratorMessageQueue;
+use crate::runtime::gateway::messaging::messenger::template::PodTemplateIndex;
 use crate::runtime::reporting::build_pod_kube_client;
 
 #[derive(Serialize)]
@@ -35,21 +40,35 @@ impl PythonVersions {
 
 pub struct KubernetesBridgeProvider {
     context: KubeContext,
+    server_catalog: KubernetesServerCatalog,
+    worker_handler: KubernetesWorkerHandler,
+    connection_store: KubernetesConnectionStore,
+    message_queue: KubernetesOrchestratorMessageQueue,
 }
 
 impl KubernetesBridgeProvider {
-    pub fn new(context: KubeContext) -> Self {
-        Self { context }
+    pub async fn new(context: KubeContext) -> Result<Self, KubernetesError> {
+        let server_catalog = KubernetesServerCatalog::new();
+        let worker_handler = KubernetesWorkerHandler {
+            context: context.clone(),
+        };
+        let connection_store = KubernetesConnectionStore::new();
+        let templates = PodTemplateIndex::load(&context).await?;
+        let message_queue = KubernetesOrchestratorMessageQueue::new(context.clone(), templates);
+        Ok(Self {
+            context,
+            server_catalog,
+            worker_handler,
+            connection_store,
+            message_queue,
+        })
     }
 
     pub async fn from_pod_environment() -> Result<Self, KubernetesError> {
         install_crypto_provider();
         let pod_context = PodContext::from_environment()?;
         let client = build_pod_kube_client().await?;
-        Ok(Self::new(KubeContext::new(
-            Arc::new(client),
-            pod_context.namespace,
-        )))
+        Self::new(KubeContext::new(Arc::new(client), pod_context.namespace)).await
     }
 
     pub fn context(&self) -> &KubeContext {
@@ -57,25 +76,40 @@ impl KubernetesBridgeProvider {
     }
 }
 
-#[async_trait]
 impl BridgeProvider for KubernetesBridgeProvider {
-    async fn server_catalog(&self) -> Result<ServerCatalogHandle, EtcError> {
-        Ok(ServerCatalogHandle::new(Arc::new(
-            KubernetesServerCatalog::new(),
-        )))
+    fn orchestrator(&self) -> Orchestrator {
+        Orchestrator::Kubernetes
     }
 
-    async fn worker_logs(
-        &self,
-        target: &WorkerLogTarget,
-    ) -> Result<WorkerLogStream, LogBridgeError> {
+    fn server_catalog(&self) -> &dyn ServerCatalog {
+        &self.server_catalog
+    }
+
+    fn worker_handler(&self) -> &dyn WorkerHandler {
+        &self.worker_handler
+    }
+
+    fn connection_store(&self) -> &dyn ConnectionStore {
+        &self.connection_store
+    }
+
+    fn message_queue(&self) -> &dyn OrchestratorMessageQueue {
+        &self.message_queue
+    }
+}
+
+/// Streams pod logs through the kube client.
+pub struct KubernetesWorkerHandler {
+    context: KubeContext,
+}
+
+#[async_trait]
+impl WorkerHandler for KubernetesWorkerHandler {
+    async fn logs(&self, target: &WorkerLogTarget) -> Result<WorkerLogStream, LogBridgeError> {
         Ok(stream_worker_logs(&self.context, &target.worker_id, false))
     }
 
-    async fn worker_logs_tail(
-        &self,
-        target: &WorkerLogTarget,
-    ) -> Result<WorkerLogStream, LogBridgeError> {
+    async fn logs_tail(&self, target: &WorkerLogTarget) -> Result<WorkerLogStream, LogBridgeError> {
         Ok(stream_worker_logs(&self.context, &target.worker_id, true))
     }
 }
