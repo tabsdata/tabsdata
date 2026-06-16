@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Simple Security Mode permission facade router (TEDB / TEDC). Flat per-user
+//! Simple Security Mode permission facade router. Flat per-user
 //! permission grant/revoke/list endpoints that translate to RBAC
 //! role-membership operations. Mounted alongside the RBAC `/roles/.../permissions`
 //! surface — both views operate on the same tables.

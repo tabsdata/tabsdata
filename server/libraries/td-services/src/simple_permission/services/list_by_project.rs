@@ -2,9 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! List everyone with authority on a project (TEDB `td permission list
-//! --project P`), with a source label (TEDC "Listing access on a project: two
-//! sources"):
+//! List everyone with authority on a project (`td permission list
+//! --project P`), with a source label:
 //!
 //! - `source = project (<rolename>)` — members of `<P>_admin|_dev|_view`;
 //! - `source = system (admin_all_projects)` — members of any role holding

@@ -2331,7 +2331,7 @@ PERMISSION_TYPES_WITH_ENTITY = [
 ]
 
 
-# --- Simple Security Mode permission facade (TEDB / TEDC) ---------------------
+# --- Simple Security Mode permission facade ---------------------
 # Flat per-user permissions, the surface exposed by `td permission`. The server
 # translates these into RBAC role-membership operations; there is no
 # `simple_permission` table. See `server/.../dxo/simple_permission.rs` and

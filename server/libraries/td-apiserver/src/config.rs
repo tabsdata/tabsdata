@@ -45,7 +45,7 @@ pub struct Config {
     pub transaction_by: TransactionBy,
     #[serde(default)]
     pub orchestrator: Orchestrator,
-    /// Which security view the apiserver exposes (TEDB / TEDC):
+    /// Which security view the apiserver exposes:
     /// `simple` (default) exposes the flat `/permission-grants` facade and
     /// blocks the raw RBAC role/permission/user-role management endpoints;
     /// `rbac` exposes the RBAC management endpoints and blocks the facade.
@@ -446,7 +446,7 @@ database:
             Duration::hours(1).num_seconds()
         );
         assert_eq!(config.request_timeout, 60);
-        // security mode defaults to Simple (TEDB / TEDC).
+        // security mode defaults to Simple.
         assert_eq!(config.security_mode, SecurityMode::Simple);
         assert!(config.security_mode.is_simple());
     }

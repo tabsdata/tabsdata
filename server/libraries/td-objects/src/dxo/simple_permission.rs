@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! DXO types for the Simple Security Mode permission facade (TEDB / TEDC).
+//! DXO types for the Simple Security Mode permission facade.
 //!
 //! These are pure surface types: they carry the flat
 //! [`SimplePermissionType`](crate::types::basic::SimplePermissionType) the user
@@ -50,8 +50,7 @@ mod definitions {
     }
 
     /// One row of "who has access to a project" (`td permission list
-    /// --project P`), with the source that conferred it (TEDC "Listing access
-    /// on a project: two sources"): `project (<rolename>)` for per-project role
+    /// --project P`), with the source that conferred it: `project (<rolename>)` for per-project role
     /// memberships, `system (admin_all_projects)` for wildcard holders.
     #[ta_objects::Dto]
     #[derive(Eq, PartialEq, Hash)]

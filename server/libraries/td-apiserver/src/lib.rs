@@ -206,8 +206,7 @@ pub fn run() {
             let system_handle = system_pool.clone();
 
             // Simple Security Mode requires the current RBAC configuration to be
-            // representable on the flat Simple surface (TEDC "What makes
-            // switching ... one-way"). If the operator booted in `simple` mode
+            // representable on the flat Simple surface. If the operator booted in `simple` mode
             // but the roles/permissions were arranged in RBAC-only ways (custom
             // roles, modified built-in roles, specific-project rows on system
             // roles, ...), Simple View cannot faithfully present them — refuse to

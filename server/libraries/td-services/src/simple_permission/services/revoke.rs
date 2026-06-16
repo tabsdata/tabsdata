@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Revoke a flat Simple permission from a user (TEDB `td permission revoke`).
+//! Revoke a flat Simple permission from a user (`td permission revoke`).
 //!
 //! The inverse of [`grant`](super::grant): resolves the same target role and
 //! removes the `user_role` membership, reusing the user_role delete behavior

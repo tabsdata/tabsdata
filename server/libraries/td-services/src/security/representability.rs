@@ -2,8 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! RBAC -> Simple representability check (TEDC "What makes switching ...
-//! one-way").
+//! RBAC -> Simple representability check.
 //!
 //! Simple Security Mode can faithfully present a configuration if and only if
 //! all five conditions below hold. The check reads `roles` + `role_permission`
@@ -31,7 +30,7 @@ use td_objects::dxo::role::RoleDB;
 use td_objects::types::basic::{PermissionEntityType, PermissionType, RoleId, RoleKind};
 use td_queries::{LiveEntry, QueryExecutor};
 
-/// The expected fixed composition of the `sys_admin` role (TEDC condition 2),
+/// The expected fixed composition of the `sys_admin` role (condition 2),
 /// as `(entity_type, on `__all__`?, permission)` triples. System rows are
 /// stored with `entity_id = __all__` but disambiguated by `entity_type`.
 const SYS_ADMIN_COMPOSITION: &[(PermissionEntityType, bool, PermissionType)] = &[
@@ -135,7 +134,7 @@ pub fn evaluate(roles: &[RoleDB], permissions: &[PermissionDB]) -> Vec<String> {
     reasons
 }
 
-/// Condition 2: `sys_admin` holds exactly its fixed composition (TEDC). Also
+/// Condition 2: `sys_admin` holds exactly its fixed composition. Also
 /// covers condition 4 for `sys_admin` (a specific-project row would not match
 /// the expected wildcard composition and surfaces here).
 fn check_sys_admin(role: &RoleDB, perms: &[&PermissionDB], reasons: &mut Vec<String>) {

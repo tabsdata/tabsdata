@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Simple Security Mode permission facade (TEDB / TEDC).
+//! Simple Security Mode permission facade.
 //!
 //! Exposes flat per-user permission operations (`grant` / `revoke` / `list`)
 //! that translate to the underlying RBAC role-membership / `role_permission`
@@ -22,7 +22,7 @@ pub mod services;
 #[td_error]
 pub enum SimplePermissionError {
     /// `view_all_projects` / `develop_all_projects` have no Simple-surface
-    /// mapping (TEDB) — only `admin_all_projects` is offered instance-wide.
+    /// mapping — only `admin_all_projects` is offered instance-wide.
     #[error(
         "'{0}' is not available in Simple Security Mode; grant 'view_project'/'develop_project' \
          per project, or switch to RBAC Mode View to grant an org-wide wildcard"

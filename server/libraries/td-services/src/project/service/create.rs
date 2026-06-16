@@ -48,7 +48,7 @@ fn service() {
         // system groups (default/source/destination) into the new project.
         from_fn(seed_default_groups),
         // Mint the three per-project roles (`<name>_admin/_dev/_view`) and add
-        // the creating user to `<name>_admin` (TEDA per-project roles).
+        // the creating user to `<name>_admin`.
         from_fn(seed_project_roles),
         from_fn(By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
         from_fn(With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),

@@ -4,8 +4,8 @@
 
 //! Tower integration: scope setting and enforcement layers.
 //!
-//! Two layers, mirroring the old `AuthzOn::set` / `Authz::check` pair but
-//! with the scope and the requirements tied together by the type system:
+//! Two layers, with the scope and the requirements tied together by the type
+//! system:
 //!
 //! ```ignore
 //! // project-scoped: manage_access on the system OR manage_project on the project
@@ -27,19 +27,17 @@
 //! type Rbac<E, R> = rbac::Enforce<RbacContext, E, R>;
 //! ```
 //!
-//! Differences from the old API:
+//! Design properties:
 //!
-//! - **One generic [`Scope::set`]** replaces the six hand-written
-//!   `AuthzOn<...>` impls; new entity kinds get theirs for free.
-//! - **Tuples are any-of** — `(A, B, C)` — replacing the `C1..C7` generics
-//!   padded with `NoPermissions`.
+//! - **One generic [`Scope::set`]** covers every entity kind — a new kind
+//!   gets its scope layer for free.
+//! - **Tuples are any-of** — `(A, B, C)` passes if any requirement passes.
 //! - **Scope/requirement mismatches don't compile.** `Rbac::<System,
 //!   ManageProject>` is a type error (`ManageProject` only implements
-//!   [`Requirement<Project>`]), where the old API failed at runtime with
-//!   `InvalidAuthzScope`.
+//!   [`Requirement<Project>`]).
 //! - **No special-case branches in [`Enforce::check`].** Wildcards are
-//!   ordinary grants, requester identity is an implicit grant, and the
-//!   "collection admin passes some system checks" hack is the explicit
+//!   ordinary grants, requester identity is an implicit grant, and "a
+//!   per-project admin passes some system checks" is the explicit
 //!   [`OnAnyProject`] requirement.
 //! - **The decision is pure.** [`enforce`] takes plain [`Grants`] values —
 //!   unit tests need no database, pool or tower context.
@@ -177,9 +175,8 @@ project_requirement!(
 /// Requires the project permission of `R` on *at least one* project
 /// (specific or `__all__`), regardless of scope.
 ///
-/// This is the explicit replacement for the old API's special-cased
-/// "`CollectionAdmin` on any collection passes a `System`-scoped check",
-/// e.g. letting per-project admins list roles:
+/// Lets a per-project admin pass a system-scoped check — e.g. letting
+/// per-project admins list roles:
 /// `Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>`.
 #[derive(Debug, Clone, Copy)]
 pub struct OnAnyProject<R: ProjectLevel> {
@@ -233,8 +230,8 @@ pub fn enforce<E: EntityKind, R: Requirement<E>>(
     R::allowed(&EffectiveGrants { user, request }, scope)
 }
 
-/// Service authorization enforcer: the layer counterpart of the old
-/// [`crate::tower::Authz`].
+/// Service authorization enforcer: the tower layer that checks a requirement
+/// against the requester's effective grants for the scope in context.
 pub struct Enforce<S: RbacSource, E: EntityKind, R: Requirement<E>> {
     _p: PhantomData<(S, E, R)>,
 }
@@ -372,10 +369,9 @@ mod tests {
     }
 
     #[test]
-    fn test_enforce_on_any_project_replaces_system_scope_special_case() {
-        // old API: AuthzOn<System> + Authz<SecAdmin, CollAdmin> passed for a
-        // role holding CollectionAdmin on any collection, via a special-case
-        // branch in check(). New API: explicit requirement, ordinary path.
+    fn test_enforce_on_any_project_for_system_scope() {
+        // A per-project admin passes a system-scoped check via the explicit
+        // OnAnyProject requirement (no special-casing in the enforce path).
         let none = Grants::new();
         let scope = On::<System>::Entity(SystemEntity);
         type CanListRoles = (ManageAccess, OnAnyProject<ManageProject>);
@@ -392,7 +388,6 @@ mod tests {
 
     #[test]
     fn test_enforce_self_user_or_manage_access() {
-        // old API: AuthzOn<SystemOrUserId> + Authz<Requester, SecAdmin>.
         let user_id = UserId::default();
         let request = identity(user_id);
         let none = Grants::new();

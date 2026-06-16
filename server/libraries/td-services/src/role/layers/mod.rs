@@ -21,7 +21,7 @@ pub async fn assert_not_fixed(role: Ref<RoleDBWithNames>) -> Result<(), TdError>
 /// surface. The `RoleDBBuilder` defaults `kind` to `RoleKind::Default`; only the
 /// system seed and the per-project minting set the built-in kinds explicitly, so
 /// every API-created role must be tagged `Custom` to make it detectable by the
-/// RBAC->Simple representability check (TEDC condition 1).
+/// RBAC->Simple representability check (condition 1).
 pub async fn set_custom_role_kind(builder: Ref<RoleDBBuilder>) -> Result<RoleDBBuilder, TdError> {
     let mut builder = builder.deref().clone();
     builder.kind(RoleKind::Custom);

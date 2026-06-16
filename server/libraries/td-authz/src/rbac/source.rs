@@ -4,12 +4,11 @@
 
 //! Grant sources: where a request's [`Grants`] come from.
 //!
-//! The async boundary of the new API lives here and only here — the
-//! enforcement decision itself ([`Grants::allows`]) is pure. A source
-//! resolves a user to their effective grants (the union across the user's
-//! assigned roles, per the TEDA doc); the SQL-backed implementation mirrors
-//! [`crate::authz_provider::SqlAuthzDataProvider`] (load `role_permission`
-//! rows, group, cache behind `CachedProvider`) once the new schema lands.
+//! The async boundary lives here and only here — the enforcement decision
+//! itself ([`Grants::allows`]) is pure. A source resolves a user to their
+//! effective grants (the union across the user's assigned roles); the
+//! SQL-backed implementation ([`super::sql_source`]) loads `role_permission`
+//! rows, groups them per user, and caches the result.
 
 use crate::rbac::model::{Grant, Grants, IdentityClaim, User};
 use std::collections::HashMap;
@@ -23,7 +22,7 @@ use td_objects::types::basic::UserId;
 ///
 /// Implementations are expected to cache: the contract is "return an
 /// `Arc<Grants>` snapshot", so the per-check cost is a map lookup plus a
-/// clone of the `Arc`, exactly like the current `AuthzContextT` role cache.
+/// clone of the `Arc`.
 pub trait RbacSource: Send + Sync {
     /// The effective grants for the user: the union of the grants of every
     /// role the user is assigned to. A user with no grants returns an empty
@@ -35,7 +34,7 @@ pub trait RbacSource: Send + Sync {
     ) -> impl Future<Output = Result<Arc<Grants>, TdError>> + Send;
 
     /// Invalidate any cached state. Must be called when role assignments or
-    /// role permissions change (same contract as `AuthzContextT::refresh`).
+    /// role permissions change.
     fn refresh(
         &self,
         conn: &mut DynamicConnection<'_>,
@@ -102,8 +101,7 @@ impl RbacSource for FixedRbacSource {
 /// The implicit grants of a request: the requester holds the
 /// [`IdentityClaim::Requester`] claim on their own user id.
 ///
-/// This replaces the old API's `Requester` / `SystemOrUser` special cases:
-/// "the requester may act on their own user" is an ordinary requirement
+/// "the requester may act on their own user" is then an ordinary requirement
 /// checked against these grants, with no dedicated branch in the enforcement
 /// path.
 pub fn identity_grants(request: &RequestContext) -> Grants {

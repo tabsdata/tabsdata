@@ -359,7 +359,7 @@ pub enum GlobalStatus {
 }
 
 /// The entity type a permission targets — the `entity_type` half of the
-/// `(entity_type, entity_id)` pair (TEDA).
+/// `(entity_type, entity_id)` pair.
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq)]
 pub enum PermissionEntityType {
@@ -370,7 +370,7 @@ pub enum PermissionEntityType {
 }
 
 /// A permission name, stored in `permissions.permission_type`. Three target the
-/// `system` entity, three target a `project` entity (TEDA). The stored value is
+/// `system` entity, three target a `project` entity. The stored value is
 /// the exact user-facing symbol — no internal/external translation layer.
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq)]
@@ -405,16 +405,16 @@ impl PermissionType {
 }
 
 /// The flat permission names exposed on the Simple Security Mode surface
-/// (TEDB). These never hit a table directly: the facade in `td-services`
+///. These never hit a table directly: the facade in `td-services`
 /// (`simple_permission`) translates each one into the RBAC role-membership /
-/// `role_permission` reads it maps to (TEDC "The mapping").
+/// `role_permission` reads it maps to.
 ///
 /// Three are project-scoped (`view_project`/`develop_project`/`manage_project`,
 /// always *on a project*) and three are system-scoped
 /// (`create_projects`/`manage_access`/`admin_all_projects`, instance-wide). The
 /// org-wide read/develop wildcards (`view_all_projects`/`develop_all_projects`)
 /// are intentionally absent — they have no Simple-surface name and are reachable
-/// only in RBAC Mode View (TEDB "System permissions").
+/// only in RBAC Mode View.
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq, Hash)]
 pub enum SimplePermissionType {
@@ -434,7 +434,7 @@ pub enum SimplePermissionType {
     AdminAllProjects,
     // org-wide read/develop wildcards: parseable so the facade can reject them
     // with a clear "use RBAC Mode View" error rather than a generic 400; they
-    // have no faithful Simple-surface mapping (TEDB "System permissions").
+    // have no faithful Simple-surface mapping.
     #[typed_enum(rename = "view_all_projects")]
     ViewAllProjects,
     #[typed_enum(rename = "develop_all_projects")]
@@ -471,13 +471,13 @@ impl SimplePermissionType {
     }
 }
 
-/// The kind of a role, stored in `roles.kind` (TEDA's user-visible role kinds
+/// The kind of a role, stored in `roles.kind` (the user-visible role kinds
 /// plus the API-created `custom` kind). The built-in system roles
 /// (`sys_admin`/`default`/`project_creator`) have `project_id` NULL; the three
 /// per-project kinds (`prj_admin`/`prj_dev`/`prj_view`) carry a `project_id`.
 /// `custom` is the kind of any role created through the RBAC `role create`
 /// surface — its presence is what makes a configuration unrepresentable in
-/// Simple Security Mode (TEDC condition 1).
+/// Simple Security Mode (condition 1).
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq)]
 pub enum RoleKind {

@@ -36,7 +36,7 @@ fn service() {
         from_fn(With::<RequestContext>::update::<RoleDBBuilder, _>),
         // API-created roles are tagged `Custom` (the builder otherwise defaults
         // to `Default`), so the RBAC->Simple representability check can detect
-        // them (TEDC condition 1).
+        // them (condition 1).
         from_fn(set_custom_role_kind),
         from_fn(With::<RoleDBBuilder>::build::<RoleDB>),
         from_fn(insert::<RoleDB>),
@@ -115,7 +115,7 @@ mod tests {
         assert_eq!(response.modified_by_id, found.modified_by_id);
         assert_eq!(response.fixed, found.fixed);
         // API-created roles are tagged `Custom` so the representability check
-        // can detect them (TEDC condition 1).
+        // can detect them (condition 1).
         assert_eq!(found.kind, td_objects::types::basic::RoleKind::Custom);
         Ok(())
     }

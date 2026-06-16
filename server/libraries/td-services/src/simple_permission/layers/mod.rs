@@ -5,7 +5,7 @@
 //! Shared validation + RBAC-translation helpers for the Simple-permission
 //! facade. These turn a flat `(user, permission, project?)` into the concrete
 //! `(user_id, role_id, project_id?)` of the RBAC role-membership the grant /
-//! revoke maps to (TEDC "The mapping").
+//! revoke maps to.
 
 use crate::simple_permission::SimplePermissionError;
 use std::collections::{HashMap, HashSet};
@@ -45,7 +45,7 @@ pub struct ResolvedGrant {
 
 /// Reject the org-wide read/develop wildcards (no Simple-surface mapping) and
 /// enforce the project-presence rule: required for project permissions,
-/// forbidden for system permissions (TEDB).
+/// forbidden for system permissions.
 pub async fn assert_simple_permission_valid(
     grant: Ref<SimplePermissionGrant>,
 ) -> Result<(), TdError> {
@@ -71,10 +71,10 @@ pub async fn is_grant_project_scoped(
 /// Resolve `(user, permission, project?)` to its RBAC target role.
 ///
 /// - project permission: the `<project>_admin|_dev|_view` per-project role
-///   (TEDC "Project permissions → project roles");
-/// - `create_projects`: the `project_creator` role (TEDB defaults);
+///;
+/// - `create_projects`: the `project_creator` role;
 /// - `manage_access` / `admin_all_projects`: the `sys_admin` role, which holds
-///   the whole system bundle (TEDC "System permissions").
+///   the whole system bundle.
 pub async fn resolve_grant(
     mut conn: MutRef<DynamicConnection<'static>>,
     grant: Ref<SimplePermissionGrant>,
@@ -181,8 +181,7 @@ pub fn project_role_permission(role: &RoleDB) -> Option<SimplePermissionType> {
 
 // ---------------------------------------------------------------------------
 // Listing: join user_role with role_permission and flatten to the Simple
-// surface (TEDC "How a permission grant flows through" / "Listing access on a
-// project: two sources").
+// surface.
 // ---------------------------------------------------------------------------
 
 /// `project_id -> project_name`, for resolving project-scoped permission rows
@@ -291,7 +290,7 @@ fn simple_permission_of(
 }
 
 /// List everyone with authority on a project, with a source label
-/// (TEDC "Listing access on a project: two sources"):
+///:
 ///
 /// - `source = project (<rolename>)` — members of `<P>_admin|_dev|_view`,
 ///   mapped to `manage|develop|view_project`;

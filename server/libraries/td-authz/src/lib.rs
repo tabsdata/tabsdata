@@ -4,7 +4,7 @@
 
 //! Tabsdata authorization.
 //!
-//! The authorization model is the project-oriented RBAC model (TEDA): a
+//! The authorization model is project-oriented RBAC: a
 //! permission targets an `(entity_type, entity_id)` entity, users gain
 //! authority through role assignment, and a request is authorized by checking
 //! the requester's effective [`rbac::Grants`] (the union across all their

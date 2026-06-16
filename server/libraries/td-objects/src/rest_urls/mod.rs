@@ -198,7 +198,7 @@ pub const LIST_PERMISSIONS: &str = url!(PERMISSIONS);
 pub const CREATE_PERMISSION: &str = url!(PERMISSIONS);
 pub const DELETE_PERMISSION: &str = url!(PERMISSION);
 
-// Simple Security Mode permission facade (TEDB / TEDC). Flat per-user
+// Simple Security Mode permission facade. Flat per-user
 // permission grants that translate to RBAC role-membership operations.
 // Top-level (system-scoped) resource, parallel to the RBAC `/roles/.../permissions`
 // surface — both views read/write the same tables.

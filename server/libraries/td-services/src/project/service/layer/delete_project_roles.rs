@@ -6,7 +6,7 @@
 //! (`<name>_admin/_dev/_view`) together with their `role_permission` and
 //! `user_role` rows.
 //!
-//! TEDA "System-managed roles": a per-project role's lifetime is bound to its
+//! System-managed roles: a per-project role's lifetime is bound to its
 //! project — minted atomically on create, dropped atomically on delete. This is
 //! an internal SYSTEM cascade (not the user-facing role/permission delete
 //! services), so it deliberately bypasses the `fixed` guard: the role rows and

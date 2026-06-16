@@ -24,7 +24,7 @@ from tabsdatak.sdk.tabsdata_server import (
 
 
 def _validate_permission(perm: str, project: str) -> None:
-    """Client-side validation matching the server's facade rules (TEDB).
+    """Client-side validation matching the server's facade rules.
 
     - The org-wide read/develop wildcards are RBAC Mode View only.
     - Project-scoped permissions require ``--project``; system-scoped

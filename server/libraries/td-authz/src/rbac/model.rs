@@ -8,7 +8,7 @@
 //! database / tower dependencies — the authorization *decision* is a pure
 //! function over a [`Grants`] value, which makes it trivially unit-testable.
 //!
-//! The model is the TEDA "Tabsdata RBAC Model" single primitive: a permission
+//! The model's single primitive: a permission
 //! targets an entity, an `(entity_type, entity_id)` pair. Entity types are
 //! Rust types implementing [`EntityKind`]; adding a new entity type requires
 //! no change to this file (see [`super`] module docs for the recipe).
@@ -407,10 +407,9 @@ impl Grants {
     }
 
     /// Whether a permission dominating `permission` is held on at least one
-    /// entity of the kind (specific or `__all__`).
-    ///
-    /// Replaces the old API's special-cased "`CollectionAdmin` on any
-    /// collection passes a `System`-scoped check" branch.
+    /// entity of the kind (specific or `__all__`) — e.g. holding a project
+    /// permission on any project, used to let a per-project admin pass a
+    /// system-scoped check (see [`super::OnAnyProject`]).
     pub fn allows_somewhere<E: EntityKind>(&self, permission: E::Permission) -> bool {
         self.of::<E>()
             .iter()

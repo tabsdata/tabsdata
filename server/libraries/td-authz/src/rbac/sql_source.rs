@@ -4,13 +4,11 @@
 
 //! SQL-backed [`RbacSource`]: the production grant source.
 //!
-//! Mirrors the old [`crate::authz_provider::SqlAuthzDataProvider`] +
-//! [`AuthzContextImplWithCache`](crate) contract: it loads `role_permission`
-//! and `user_role` rows once, builds a per-`UserId` [`Grants`] snapshot
-//! (effective = union across all the roles the user is assigned to, per TEDA),
-//! and caches the whole map behind a [`CachedProvider`]. The cache is
-//! invalidated via [`RbacSource::refresh`] whenever role assignments or role
-//! permissions change — same contract as the old `AuthzContextT::refresh`.
+//! Loads `role_permission` and `user_role` rows once, builds a per-`UserId`
+//! [`Grants`] snapshot (effective = union across all the roles the user is
+//! assigned to), and caches the whole map behind a [`CachedProvider`]. The
+//! cache is invalidated via [`RbacSource::refresh`] whenever role assignments
+//! or role permissions change.
 //!
 //! The async/database boundary lives entirely here; the enforcement decision
 //! ([`crate::rbac::model::Grants::allows`]) stays pure.
@@ -153,8 +151,8 @@ impl<'a, 'c> Provider<UserGrants, &'a mut DynamicConnection<'c>> for SqlRbacGran
 ///
 /// Construct it with [`Default`] and place an `Arc<SqlRbacSource>` in the
 /// service context (the `context = SqlRbacSource` argument of the service
-/// factory), exactly as the old API placed an `Arc<AuthzContext>`. The
-/// [`crate::rbac::Rbac`] enforcement layer reads it as `Ref<SqlRbacSource>`.
+/// factory). The [`crate::rbac::Rbac`] enforcement layer reads it as
+/// `Ref<SqlRbacSource>`.
 #[derive(Default)]
 pub struct SqlRbacSource {
     provider: CachedProvider<UserGrants, SqlRbacGrantsProvider>,

@@ -2,9 +2,9 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Grant a flat Simple permission to a user (TEDB `td permission grant`).
+//! Grant a flat Simple permission to a user (`td permission grant`).
 //!
-//! Translation (TEDC "The mapping" / "How a permission grant flows through"):
+//! Translation:
 //!
 //! | permission                         | membership add                 | authz scope |
 //! |------------------------------------|--------------------------------|-------------|

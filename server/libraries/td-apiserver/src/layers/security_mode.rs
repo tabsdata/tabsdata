@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Security-mode endpoint gating (TEDB / TEDC).
+//! Security-mode endpoint gating.
 //!
 //! The apiserver runs in one of two views, selected by the `security_mode`
 //! config switch:

@@ -2,11 +2,11 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! List a user's effective flat permissions (TEDB `td permission list
+//! List a user's effective flat permissions (`td permission list
 //! --user X`).
 //!
 //! Joins the user's `user_role` rows with `role_permission` and maps each row
-//! to a Simple permission (TEDC "How a permission grant flows through"):
+//! to a Simple permission:
 //!
 //! - `(project:P, view/develop/manage_project)` -> that permission on `<Pname>`;
 //! - `(project:__all__, manage_project)`        -> `admin_all_projects`;

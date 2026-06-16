@@ -83,7 +83,7 @@ pub async fn assert_permission_is_not_fixed(
 
 /// Reject adding a permission to a system-managed role from the user surface.
 ///
-/// TEDA "System-managed roles": the `sys_admin` role, the `project_creator`
+/// System-managed roles: the `sys_admin` role, the `project_creator`
 /// role, and the three per-project roles (`prj_admin`/`prj_dev`/`prj_view`)
 /// have permission sets fixed by the system — only their *membership* is
 /// editable. The role/permission delete
@@ -92,7 +92,7 @@ pub async fn assert_permission_is_not_fixed(
 /// system-managed role's permission set.
 ///
 /// Gating is on `kind`, not the row's `fixed` flag: the built-in `default` role
-/// is seeded `fixed = true` yet TEDA mandates its composition be editable (via
+/// is seeded `fixed = true` yet the model mandates its composition be editable (via
 /// `manage_roles`); custom roles (`kind = Custom`) are user-defined and freely
 /// editable. So `Default` (the built-in default role) and `Custom` (API-created
 /// roles) stay editable, while the four system-managed kinds are blocked.

@@ -6,7 +6,7 @@
 //! `<name>_view`) when a project is created, and add the creating user to
 //! `<name>_admin`.
 //!
-//! TEDA "Per-project roles" + "System-managed roles": each role is a
+//! Per-project, system-managed roles: each role is a
 //! system-managed role (`fixed = true`) carrying exactly one fixed permission
 //! on the new project — `manage_project` / `develop_project` / `view_project`
 //! respectively. Membership, by contrast, is user-managed (governed by

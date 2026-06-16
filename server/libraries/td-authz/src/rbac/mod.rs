@@ -2,8 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! New RBAC API (TEDA "Tabsdata RBAC Model"), side by side with the current
-//! [`crate::tower`] API. Nothing here is wired into services yet.
+//! Project-oriented RBAC: entity-targeted permission grants and the tower
+//! enforcement layers built on them.
 //!
 //! # Model
 //!
@@ -17,8 +17,8 @@
 //!   `create_projects`, `manage_roles` — independent flags.
 //! - `project` permissions ([`ProjectPermission`]): `manage_project` >
 //!   `develop_project` > `view_project` — ordered; holding a higher one
-//!   satisfies a lower requirement, which makes the doc's "effective
-//!   permission = max across rows" implicit in the check.
+//!   satisfies a lower requirement, so a user's effective permission on an
+//!   entity is the max across the grants that cover it.
 //!
 //! # Layering
 //!
@@ -30,41 +30,25 @@
 //!
 //! The authorization *decision* ([`Grants::allows`], [`layers::enforce`]) is
 //! a pure function — unit tests construct [`Grants`] literally and assert,
-//! with no database pool, async runtime or tower context (the old API's
-//! tests need `#[td_test::test(db)]` even when the connection is unused).
+//! with no database pool, async runtime or tower context.
 //!
-//! # Side by side with the current API
+//! # Service wiring
 //!
-//! | current ([`crate::tower`]) | new |
-//! |---|---|
-//! | `Permission::SysAdmin` | `(system:__system__, create_projects)` + `(project:__all__, manage_project)` (sys_admin role grants) |
-//! | `Permission::SecAdmin` | `(system:__system__, manage_access)` (+ `manage_roles`) |
-//! | `Permission::CollectionAdmin(e)` | `(project:e, manage_project)` |
-//! | `Permission::CollectionDev(e)` | `(project:e, develop_project)` |
-//! | `Permission::CollectionExec(e)` | folded into `develop_project` |
-//! | `Permission::CollectionRead(e)` | `(project:e, view_project)` |
-//! | `Permission::User(_)` / `Role(_)` pseudo-permissions | implicit identity grants ([`source::identity_grants`]) |
-//! | `AuthzEntity::All` + `augment_with_wildcards` | [`On::All`] handled by [`On::covers`] |
-//! | inter-collection permissions | gone — projects are silos; in-project access is free |
-//!
-//! Service wiring, before and after:
+//! A service wires a [`Scope`] layer (which entity the operation targets) then
+//! a [`Rbac`] check layer (which requirement(s) must hold):
 //!
 //! ```ignore
-//! // current: scope marker + up to 7 requirement generics, matched at runtime
-//! .layer(from_fn(AuthzOn::<CollectionId>::set))
-//! .layer(from_fn(Authz::<SecAdmin, CollAdmin>::check))
-//!
-//! // new: one generic scope layer + tuple any-of, matched at compile time
+//! // project-scoped (scope = the current project): manage_access on the
+//! // system OR manage_project on the project
 //! .layer(from_fn(Scope::<Project>::set))
 //! .layer(from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check))
 //! ```
 //!
-//! `Rbac::<System, ManageProject>` does not compile (scope/requirement
-//! mismatch); the old API raised `InvalidAuthzScope` at request time. The
-//! old `check()`'s special-case branches (wildcard augmentation, requester
-//! match, "collection admin passes system checks") are gone: wildcards and
-//! requester identity are ordinary grants, and the last one is the explicit
-//! [`layers::OnAnyProject`] requirement.
+//! Scope and requirement are tied by the type system: `Rbac::<System,
+//! ManageProject>` does not compile, since `ManageProject` only implements
+//! [`Requirement<Project>`]. Wildcards ([`On::All`]) and requester identity
+//! are ordinary grants; "a per-project admin passes a system-scoped check" is
+//! the explicit [`layers::OnAnyProject`] requirement.
 //!
 //! A unit test of an authorization rule:
 //!
@@ -101,18 +85,14 @@
 //! `Scope::<Container>::set` and tuple any-of come for free; requirement
 //! markers are a `project_requirement!`-style macro invocation each.
 //!
-//! # Semantic changes from the current API (decided)
+//! # Semantics
 //!
 //! - **Union across roles.** A user's effective permission is the union
 //!   across *all* their assigned roles ([`RbacSource::user_grants`] keys on
-//!   `UserId`), replacing the current API's authorization against the
-//!   session's *active* role (`RequestContext::role_id`).
-//! - **No inter-collection checks.** Projects are silos; cross-container
-//!   visibility moves inside the project (public/private tables, enforced at
-//!   runtime), so `InterColl`/`InterCollRead` and the `VisibleCollections`
-//!   plumbing have no equivalent here.
-//! - **`CollectionExec` is folded into `develop_project`** (trigger / replay
-//!   requires effective ≥ `develop_project`).
+//!   `UserId`); there is no per-session active role.
+//! - **Projects are silos.** Access within a project is governed by the
+//!   project permission alone — there are no inter-collection checks.
+//! - **Trigger / replay requires effective ≥ `develop_project`.**
 
 pub mod layers;
 pub mod model;

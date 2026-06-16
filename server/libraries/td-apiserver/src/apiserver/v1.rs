@@ -103,7 +103,7 @@ impl ApiServerV1 {
                     // RBAC-management endpoints (role CRUD, role-permission, and
                     // user-role membership) — available only in `rbac` mode.
                     // In `simple` mode a request to any of these paths returns a
-                    // clear 403 (TEDC: the raw RBAC surface is hidden behind the
+                    // clear 403 (the raw RBAC surface is hidden behind the
                     // `/permission-grants` facade).
                     let rbac_management = gated_router(
                         mode,
