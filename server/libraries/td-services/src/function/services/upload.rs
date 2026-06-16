@@ -5,7 +5,7 @@
 use crate::function::layers::upload::upload_function_write_to_storage;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::dxo::bundle::{Bundle, BundleBuilder, BundleDB, BundleDBBuilder};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
@@ -49,7 +49,7 @@ fn service() {
         from_fn(With::<CollectionDB>::extract::<BasePath>),
         // check requester can manage or develop the current project
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         // Get storage version.
         from_fn(With::<StorageVersion>::default),
         // Write to storage with new bundle id.
@@ -123,7 +123,7 @@ mod tests {
                 type_of_val(&With::<CollectionDB>::extract::<BasePath>),
                 // check requester can manage or develop the current project
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 // Get storage version.
                 type_of_val(&With::<StorageVersion>::default),
                 // Write to storage with new bundle id.
@@ -160,7 +160,7 @@ mod tests {
         let function_upload = FunctionUpload::new(request);
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)

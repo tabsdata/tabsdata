@@ -183,7 +183,7 @@ mod tests {
                 type_of_val(&assert_function_status),
                 // check requester can develop the current project (manage or develop)
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 // Get recursion options
                 type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                 type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
@@ -448,7 +448,7 @@ mod tests {
 
         // Trigger function
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     FunctionVersionIdParam {
                         function_version_id: function.id.clone(),
@@ -497,7 +497,7 @@ mod tests {
         // Dummy update to create new version
         let update = FunctionUpdate::builder().name(function_0).build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!(
@@ -518,7 +518,7 @@ mod tests {
 
         // Now, using function.id will fail
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     FunctionVersionIdParam {
                         function_version_id: function.id.clone(),
@@ -571,7 +571,7 @@ mod tests {
         external_uid: Option<ExternalUid>,
     ) -> Result<ExecutionResponse, TdError> {
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     FunctionVersionIdParam {
                         function_version_id: function_version_id.clone(),

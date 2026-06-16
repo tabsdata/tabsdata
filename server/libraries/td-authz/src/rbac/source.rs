@@ -11,7 +11,7 @@
 //! [`crate::authz_provider::SqlAuthzDataProvider`] (load `role_permission`
 //! rows, group, cache behind `CachedProvider`) once the new schema lands.
 
-use crate::rbac::model::{Grant, Grants, IdentityClaim, Role, User};
+use crate::rbac::model::{Grant, Grants, IdentityClaim, User};
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_database::dynamic::DynamicConnection;
@@ -100,16 +100,14 @@ impl RbacSource for FixedRbacSource {
 }
 
 /// The implicit grants of a request: the requester holds the
-/// [`IdentityClaim::Requester`] claim on their own user id and active role id.
+/// [`IdentityClaim::Requester`] claim on their own user id.
 ///
-/// This replaces the old API's `Requester` / `SystemOrUser` / `SystemOrRole`
-/// special cases: "the requester may act on their own user" is an ordinary
-/// requirement checked against these grants, with no dedicated branch in the
-/// enforcement path.
+/// This replaces the old API's `Requester` / `SystemOrUser` special cases:
+/// "the requester may act on their own user" is an ordinary requirement
+/// checked against these grants, with no dedicated branch in the enforcement
+/// path.
 pub fn identity_grants(request: &RequestContext) -> Grants {
-    Grants::new()
-        .with(Grant::<User>::on(request.user_id, IdentityClaim::Requester))
-        .with(Grant::<Role>::on(request.role_id, IdentityClaim::Requester))
+    Grants::new().with(Grant::<User>::on(request.user_id, IdentityClaim::Requester))
 }
 
 #[cfg(test)]
@@ -118,17 +116,15 @@ mod tests {
     use crate::rbac::model::{
         ProjectId, ProjectPermission, ProjectRole, Requires, SystemPermission, SystemRole,
     };
-    use td_objects::types::basic::{AccessTokenId, RoleId};
+    use td_objects::types::basic::AccessTokenId;
 
     #[test]
     fn test_identity_grants() {
         let user_id = UserId::default();
         let other_user = UserId::default();
-        let role_id = RoleId::default();
-        let request = RequestContext::with(AccessTokenId::default(), user_id, role_id);
+        let request = RequestContext::with(AccessTokenId::default(), user_id);
         let grants = identity_grants(&request);
         assert!(grants.allows(&Requires::<User>::on(user_id, IdentityClaim::Requester)));
-        assert!(grants.allows(&Requires::<Role>::on(role_id, IdentityClaim::Requester)));
         assert!(!grants.allows(&Requires::<User>::on(other_user, IdentityClaim::Requester)));
     }
 

@@ -4,12 +4,11 @@
 
 #[ta_objects::dxo]
 mod definitions {
-    use crate::dxo::auth::UserInfoUserRoleDB;
     use crate::dxo::crudl::RequestContext;
-    use crate::dxo::permission::Permission;
+    use crate::dxo::role::Role;
     use crate::types::basic::{
         AtTime, Email, FullName, Password, PasswordChangeTime, PasswordHash, PasswordMustChange,
-        RoleId, RoleName, UserEnabled, UserId, UserName,
+        UserEnabled, UserId, UserName,
     };
 
     #[ta_objects::Dao]
@@ -113,21 +112,6 @@ mod definitions {
     #[inherits(UserDBWithNames)]
     pub struct UserInfo {
         #[dxo(builder(skip), setter)]
-        pub current_role_id: RoleId,
-        #[dxo(builder(skip), setter)]
-        pub current_permissions: Vec<Permission>,
-        #[dxo(builder(skip), setter)]
-        pub user_roles: Vec<UserInfoRoleIdName>,
-    }
-
-    //NOTE: we cannot use RoleIdName as there is already one in the API.
-    //      For OpenAPI 'there can be only one'
-    #[ta_objects::Dto]
-    #[dxo(builder(try_from = UserInfoUserRoleDB))]
-    pub struct UserInfoRoleIdName {
-        #[dxo(builder(field = "role_id"))]
-        pub id: RoleId,
-        #[dxo(builder(field = "role"))]
-        pub name: RoleName,
+        pub user_roles: Vec<Role>,
     }
 }

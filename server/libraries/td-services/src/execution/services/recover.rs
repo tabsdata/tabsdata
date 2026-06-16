@@ -6,7 +6,7 @@ use crate::execution::layers::update_status::update_function_run_status;
 use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::execution::ExecutionDB;
@@ -39,7 +39,7 @@ fn service() {
         from_fn(By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
         // check requester can develop the current project (manage or develop)
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
         from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
         // Set recover status
@@ -93,7 +93,7 @@ mod tests {
                 type_of_val(&By::<ExecutionIdName>::fetch_one::<ExecutionDB>),
                 // check requester can develop the current project (manage or develop)
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
                 type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
                 // Set recover status
@@ -117,7 +117,7 @@ mod tests {
             async move {
                 // Execute test
                 let request =
-                    RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                    RequestContext::with(AccessTokenId::default(), UserId::admin())
                         .update(
                             ExecutionParam::builder()
                                 .execution(ExecutionIdName::from_str(&execution)?)

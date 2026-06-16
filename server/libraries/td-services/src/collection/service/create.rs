@@ -122,8 +122,7 @@ mod tests {
         let before = AtTime::now();
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .create((), create)
         .in_project(ProjectId::sandbox());
@@ -176,8 +175,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .create((), create)
         .in_project(ProjectId::sandbox());
@@ -229,8 +227,7 @@ mod tests {
                 .unwrap();
             let request = RequestContext::with(
                 AccessTokenId::default(),
-                UserId::admin(),
-                RoleId::sys_admin(),
+                UserId::admin()
             )
             .create((), create)
             .in_project(*project);
@@ -245,7 +242,7 @@ mod tests {
         // app applies no collection filter; RLS does the isolation.
         for (project, name) in [(&project_a, "ca"), (&project_b, "cb")] {
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .list((), ListParams::default())
                     .in_project(*project);
             let list = ListCollectionsService::with_defaults(db.clone())

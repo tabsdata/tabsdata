@@ -32,8 +32,7 @@ use td_tower::ctx_service::RawOneshot;
 fn admin_ctx() -> RequestContext {
     RequestContext::with(
         AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::sys_admin(),
+        UserId::admin()
     )
 }
 

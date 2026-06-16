@@ -137,7 +137,7 @@ mod tests {
 
         // List current functions
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 
@@ -216,8 +216,7 @@ mod tests {
         // All functions should be listed for authorized user
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .list((), ListParams::default())
         .in_project(ProjectId::sandbox());
@@ -234,7 +233,7 @@ mod tests {
         // A user whose role holds no project permission cannot view the
         // project: the request is rejected (rather than returning an empty
         // list as the old visibility-filtered service did).
-        let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
+        let request = RequestContext::with(AccessTokenId::default(), user.id)
             .list((), ListParams::default())
             .in_project(ProjectId::sandbox());
 

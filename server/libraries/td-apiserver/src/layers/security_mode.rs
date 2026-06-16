@@ -204,8 +204,7 @@ mod tests {
                 .split_for_parts();
             let context = RequestContext::with(
                 AccessTokenId::default(),
-                UserId::admin(),
-                RoleId::sys_admin(),
+                UserId::admin()
             );
             router.layer(Extension(context))
         }

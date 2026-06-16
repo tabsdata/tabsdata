@@ -150,7 +150,7 @@ mod tests {
             .tables(Some(tables))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -166,7 +166,7 @@ mod tests {
 
         // Delete table_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .delete(
                     TableParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -186,7 +186,7 @@ mod tests {
 
         // t0 -> no tables
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     CollectionAtName::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -205,7 +205,7 @@ mod tests {
 
         // t1 -> table_1 and table_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     CollectionAtName::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -228,7 +228,7 @@ mod tests {
 
         // t2 -> table_1
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     CollectionAtName::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)

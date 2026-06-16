@@ -46,7 +46,7 @@ async fn test_not_allowed_to_delete_collection(db: TdPool) {
 
     let service = DeleteCollectionService::with_defaults(db.clone()).service();
 
-    let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
+    let request = RequestContext::with(AccessTokenId::default(), user.id)
         .delete(
             CollectionParam::builder()
                 .collection(CollectionIdName::from_str(&name.to_string()).unwrap())

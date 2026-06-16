@@ -6,7 +6,6 @@ use sea_query::{
     Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement,
 };
 
-use super::roles::Roles;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -22,7 +21,6 @@ pub enum Sessions {
     AccessTokenId,
     RefreshTokenId,
     UserId,
-    RoleId,
     CreatedOn,
     ExpiresOn,
     StatusChangeOn,
@@ -39,7 +37,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Sessions::AccessTokenId).text().not_null().primary_key())
                 .col(ColumnDef::new(Sessions::RefreshTokenId).text().not_null().unique_key())
                 .col(ColumnDef::new(Sessions::UserId).text().not_null())
-                .col(ColumnDef::new(Sessions::RoleId).text().not_null())
                 .col(ColumnDef::new(Sessions::CreatedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Sessions::ExpiresOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Sessions::StatusChangeOn).timestamp_with_time_zone().not_null())
@@ -63,10 +60,8 @@ impl Entity for Defs {
             Query::select()
                 .expr(Expr::col((Sessions::Table, Asterisk)))
                 .expr_as(Expr::col((Users::Table, Users::Name)), Alias::new("user_name"))
-                .expr_as(Expr::col((Roles::Table, Roles::Name)), Alias::new("role_name"))
                 .from(Sessions::Table)
                 .join(JoinType::Join, Users::Table, Expr::col((Sessions::Table, Sessions::UserId)).equals((Users::Table, Users::Id)))
-                .join(JoinType::Join, Roles::Table, Expr::col((Sessions::Table, Sessions::RoleId)).equals((Roles::Table, Roles::Id)))
                 .to_owned(),
         )]
     }

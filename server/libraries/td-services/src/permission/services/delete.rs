@@ -145,8 +145,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .delete(
             RolePermissionParam::builder()
@@ -190,8 +189,7 @@ mod tests {
         // `admin` holds manage_project on `__all__`, so it can grant on any project.
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            project_admin_role.id,
+            UserId::admin()
         )
         .create(
             RoleParam::builder().role(RoleIdName::Id(role.id)).build()?,
@@ -242,8 +240,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            user.id,
-            project_admin_role.id,
+            user.id
         )
         .create(
             RoleParam::builder().role(RoleIdName::Id(role.id)).build()?,
@@ -293,8 +290,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            user.id,
-            project_admin_role.id,
+            user.id
         )
         .create(
             RoleParam::builder()
@@ -344,7 +340,7 @@ mod tests {
             .await?;
 
         // `admin` holds manage_project on `__all__`, so it can delete on any project.
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete(
                 RolePermissionParam::builder()
                     .role(RoleIdName::from_str("r0")?)
@@ -386,7 +382,7 @@ mod tests {
             )
             .await?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete(
                 RolePermissionParam::builder()
                     .role(RoleIdName::from_str("r_incorrect")?)
@@ -444,7 +440,7 @@ mod tests {
             .await?;
         db.seed().user_role(&user.id, &role0.id).await?;
 
-        let request = RequestContext::with(AccessTokenId::default(), user.id, role0.id).delete(
+        let request = RequestContext::with(AccessTokenId::default(), user.id).delete(
             RolePermissionParam::builder()
                 .role(RoleIdName::from_str("r1")?)
                 .permission(PermissionIdName::from_str(&perm1.id.to_string())?)
@@ -497,7 +493,7 @@ mod tests {
             .await?;
         db.seed().user_role(&user.id, &role.id).await?;
 
-        let request = RequestContext::with(AccessTokenId::default(), user.id, role.id).delete(
+        let request = RequestContext::with(AccessTokenId::default(), user.id).delete(
             RolePermissionParam::builder()
                 .role(RoleIdName::from_str("r0")?)
                 .permission(PermissionIdName::from_str(
@@ -534,8 +530,7 @@ mod tests {
 
             let request: DeleteRequest<RolePermissionParam> = RequestContext::with(
                 AccessTokenId::default(),
-                UserId::admin(),
-                RoleId::sys_admin(),
+                UserId::admin()
             )
             .delete(
                 RolePermissionParam::builder()

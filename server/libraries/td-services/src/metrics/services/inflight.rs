@@ -247,8 +247,7 @@ mod tests {
             .raw_oneshot(
                 RequestContext::with(
                     AccessTokenId::default(),
-                    UserId::admin(),
-                    RoleId::sys_admin(),
+                    UserId::admin()
                 )
                 .create(
                     (),

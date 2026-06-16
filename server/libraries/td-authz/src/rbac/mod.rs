@@ -121,11 +121,11 @@ pub mod sql_source;
 
 pub use layers::{
     CreateProjects, DevelopProject, Enforce, ManageAccess, ManageProject, OnAnyProject, RbacError,
-    Requirement, ManageRoles, Scope, SelfRole, SelfUser, ViewProject, enforce,
+    Requirement, ManageRoles, Scope, SelfUser, ViewProject, enforce,
 };
 pub use model::{
     EffectiveGrants, EntityKind, Grant, GrantedPermission, Grants, IdentityClaim, On, Project,
-    ProjectId, ProjectPermission, ProjectRole, Requires, Role, System, SystemEntity,
+    ProjectId, ProjectPermission, ProjectRole, Requires, System, SystemEntity,
     SystemPermission, SystemRole, User,
 };
 pub use source::{FixedRbacSource, RbacSource, identity_grants};

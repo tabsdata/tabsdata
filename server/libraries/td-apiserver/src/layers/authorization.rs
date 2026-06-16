@@ -68,7 +68,7 @@ pub async fn authorization_layer(
     })?;
     let access_token_id: AccessTokenId = token.jti.into();
 
-    // Get user_id/role_id from session
+    // Get user_id from session
     let session = sessions
         .get(&db)
         .await
@@ -89,8 +89,7 @@ pub async fn authorization_layer(
     // routes (auth, users, roles, projects CRUDL, server status, …) the project
     // stays `None` here, and the connection runs with RLS bypassed, which is
     // fine because those routes don't touch project-scoped tables.
-    let request_context =
-        RequestContext::with(&session.access_token_id, &session.user_id, &session.role_id);
+    let request_context = RequestContext::with(&session.access_token_id, &session.user_id);
     let mut request = request;
     request.extensions_mut().insert(request_context);
     request.extensions_mut().insert(access_token);
@@ -107,9 +106,7 @@ fn log_span(session: &Session) -> Span {
         Level::INFO,
         "authorized",
         user_id = %session.user_id,
-        role_id = %session.role_id,
         user_name = %session.user_name,
-        role_name = %session.role_name,
         access_token_id = %session.access_token_id.log(),
     )
 }
@@ -121,7 +118,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use td_objects::Buildable;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, RefreshTokenId, RoleId, RoleName, SessionStatus, UserId, UserName,
+        AccessTokenId, AtTime, RefreshTokenId, SessionStatus, UserId, UserName,
     };
     use tracing::info;
     use tracing::subscriber::set_default;
@@ -161,22 +158,18 @@ mod tests {
         let _guard = set_default(subscriber);
 
         // Create some logs
-        let role_name = RoleName::sys_admin();
         let user_name = UserName::admin();
         let access_token_id = AccessTokenId::default();
         let user_id = UserId::admin();
-        let role_id = RoleId::sys_admin();
         let session = Session::builder()
             .access_token_id(access_token_id)
             .refresh_token_id(RefreshTokenId::default())
             .user_id(user_id)
-            .role_id(role_id)
             .created_on(AtTime::default())
             .expires_on(AtTime::default())
             .status_change_on(AtTime::default())
             .status(SessionStatus::Active)
             .user_name(&user_name)
-            .role_name(&role_name)
             .build()
             .unwrap();
         let log_span = log_span(&session);
@@ -192,7 +185,7 @@ mod tests {
         let log_output = String::from_utf8_lossy(&logs);
         let trace_auth_id = access_token_id.log();
         assert!(log_output.contains(&format!(
-            "authorized{{user_id={user_id} role_id={role_id} user_name={user_name} role_name={role_name} access_token_id={trace_auth_id}}}"
+            "authorized{{user_id={user_id} user_name={user_name} access_token_id={trace_auth_id}}}"
         )));
     }
 }

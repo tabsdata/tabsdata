@@ -178,7 +178,7 @@ mod tests {
         let service =
             ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(
                     ExecutionParam::builder()
                         .execution(ExecutionIdName::from_str(&execution.id.to_string())?)

@@ -179,7 +179,7 @@ mod tests {
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(
                     TableParam::builder()
                         .collection(CollectionIdName::from_str(&collection_name.to_string())?)
@@ -312,7 +312,7 @@ mod tests {
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(
                     TableParam::builder()
                         .collection(CollectionIdName::from_str(&collection_name.to_string())?)
@@ -468,7 +468,7 @@ mod tests {
         // Actual test
         let service = TableFlowGraphService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(
                     TableParam::builder()
                         .collection(CollectionIdName::from_str(&collection_name.to_string())?)

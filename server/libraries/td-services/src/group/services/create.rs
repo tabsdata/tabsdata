@@ -80,8 +80,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .create((), create)
         .in_project(ProjectId::sandbox());
@@ -126,8 +125,7 @@ mod tests {
             .unwrap();
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .create((), create)
         .in_project(ProjectId::sandbox());
@@ -153,8 +151,7 @@ mod tests {
         let ctx = || {
             RequestContext::with(
                 AccessTokenId::default(),
-                UserId::admin(),
-                RoleId::sys_admin(),
+                UserId::admin()
             )
         };
         let dup = || {

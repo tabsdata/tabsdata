@@ -214,8 +214,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .update(
             FunctionParam::builder()
@@ -233,8 +232,7 @@ mod tests {
         // Test remove tables.
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .delete(
             TableParam::builder()
@@ -320,8 +318,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .update(
             FunctionParam::builder()
@@ -339,8 +336,7 @@ mod tests {
         // Test remove tables.
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .delete(
             TableParam::builder()

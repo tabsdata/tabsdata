@@ -29,8 +29,7 @@ pub(crate) async fn seed_function(
 ) -> Result<FunctionDB, TdError> {
     let request_context = RequestContext::with(
         AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::sys_admin(),
+        UserId::admin()
     );
 
     // Function version builder

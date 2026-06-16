@@ -26,8 +26,7 @@ pub async fn seed_permission(
 
     let request_context = RequestContext::with(
         AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::sys_admin(),
+        UserId::admin()
     );
 
     let mut builder = PermissionDBBuilder::try_from(&permission_create)?;

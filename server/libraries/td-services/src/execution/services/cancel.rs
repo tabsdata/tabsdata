@@ -117,7 +117,7 @@ mod tests {
             async move {
                 // Execute test
                 let request =
-                    RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                    RequestContext::with(AccessTokenId::default(), UserId::admin())
                         .update(
                             ExecutionParam::builder()
                                 .execution(ExecutionIdName::from_str(&execution)?)

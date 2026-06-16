@@ -110,7 +110,6 @@ pub const PING: &str = url!("/ping");
 pub const AUTH: &str = url!("/auth");
 pub const AUTH_LOGIN: &str = url!(AUTH, "/login");
 pub const AUTH_REFRESH: &str = url!(AUTH, "/refresh");
-pub const AUTH_ROLE_CHANGE: &str = url!(AUTH, "/role_change");
 pub const AUTH_LOGOUT: &str = url!(AUTH, "/logout");
 pub const AUTH_USER_INFO: &str = url!(AUTH, "/info");
 pub const AUTH_PASSWORD_CHANGE: &str = url!(AUTH, "/password_change");

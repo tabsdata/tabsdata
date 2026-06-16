@@ -156,7 +156,7 @@ mod tests {
 
         // Test
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(
                     FunctionVersionExecution::builder()
                         .function_version_id(function_version.id)

@@ -524,8 +524,6 @@ pub enum SessionStatus {
     InvalidPasswordChange,
     #[typed_enum(rename = "i_nt")]
     InvalidNewToken,
-    #[typed_enum(rename = "i_rc")]
-    InvalidRoleChange,
     #[typed_enum(rename = "i_l")]
     InvalidLogout,
     #[typed_enum(rename = "i_ud")]

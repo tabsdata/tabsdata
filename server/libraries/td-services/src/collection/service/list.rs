@@ -84,7 +84,7 @@ mod tests {
             .unwrap();
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 
@@ -124,7 +124,7 @@ mod tests {
         // view_project (the admin user holds sys_admin, which grants
         // manage_project on all projects).
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 
@@ -136,7 +136,7 @@ mod tests {
         assert_eq!(list.data[0].name, name);
 
         // A user whose role carries no view_project on the project is forbidden.
-        let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
+        let request = RequestContext::with(AccessTokenId::default(), user.id)
             .list((), ListParams::default())
             .in_project(ProjectId::sandbox());
 

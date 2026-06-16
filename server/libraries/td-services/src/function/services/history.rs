@@ -171,7 +171,7 @@ mod tests {
             .decorator(Decorator::Publisher)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -189,7 +189,7 @@ mod tests {
 
         // Delete function_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .delete(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -226,7 +226,7 @@ mod tests {
         // Actual test
         // t0 -> no functions yet
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     FunctionAtIdName::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -243,7 +243,7 @@ mod tests {
         assert!(response.is_err());
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     FunctionAtIdName::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -266,7 +266,7 @@ mod tests {
 
         // t2 -> function_1 and function_2 in history
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     FunctionAtIdName::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -287,7 +287,7 @@ mod tests {
 
         // t3 -> no function to retrieve the history
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     FunctionAtIdName::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)
@@ -304,7 +304,7 @@ mod tests {
         assert!(response.is_err());
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     FunctionAtIdName::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)

@@ -21,7 +21,7 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use td_authz::jwt::{InternalTokenClaims, JwtConfig, decode_internal_token};
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+use td_objects::types::basic::{AccessTokenId, UserId};
 use tracing::{Instrument, Level, error, span, warn};
 
 #[td_error]
@@ -85,8 +85,7 @@ pub async fn internal_token_layer(
     // is unchanged.
     request.extensions_mut().insert(RequestContext::with(
         AccessTokenId::default(),
-        UserId::system(),
-        RoleId::sys_admin(),
+        UserId::system()
     ));
 
     let log_span = span!(Level::INFO, "internal_token_request", scope = %claims.scope);

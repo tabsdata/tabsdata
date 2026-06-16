@@ -265,7 +265,7 @@ mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!(

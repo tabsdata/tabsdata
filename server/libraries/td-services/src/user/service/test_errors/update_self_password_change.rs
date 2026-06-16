@@ -36,7 +36,7 @@ async fn test_update_user_self(db: TdPool) {
         .build()
         .unwrap();
 
-    let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::default_role()).update(
+    let request = RequestContext::with(AccessTokenId::default(), user.id).update(
         UserParam::builder()
             .user(UserIdName::from_str("u0").unwrap())
             .build()

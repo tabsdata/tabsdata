@@ -43,8 +43,7 @@ async fn test_update_already_existing(db: TdPool) {
 
     let request = RequestContext::with(
         AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::sys_admin(),
+        UserId::admin()
     )
     .update(
         CollectionParam::builder()

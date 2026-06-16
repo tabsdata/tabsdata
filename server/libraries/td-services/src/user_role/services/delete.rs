@@ -105,8 +105,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .delete(
             UserRoleParam::builder()
@@ -127,8 +126,7 @@ mod tests {
     async fn test_delete_fixed_user_role(db: TdPool) -> Result<(), TdError> {
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .delete(
             UserRoleParam::builder()

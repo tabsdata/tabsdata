@@ -82,7 +82,7 @@ mod tests {
 
         let service = ReadUserService::with_defaults(db.clone()).service();
 
-        let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::default_role()).read(
+        let request = RequestContext::with(AccessTokenId::default(), user.id).read(
             UserParam::builder()
                 .user(UserIdName::from_str(&user_name.to_string()).unwrap())
                 .build()

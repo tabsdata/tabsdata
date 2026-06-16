@@ -55,7 +55,7 @@ async fn test_not_allowed_to_update_collection(db: TdPool) {
         .build()
         .unwrap();
 
-    let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
+    let request = RequestContext::with(AccessTokenId::default(), user.id)
         .update(
             CollectionParam::builder()
                 .collection(CollectionIdName::from_str(&name.to_string()).unwrap())

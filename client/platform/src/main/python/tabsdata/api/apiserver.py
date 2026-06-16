@@ -407,11 +407,9 @@ class APIServer:
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
-    def authentication_login(self, name: str, password: str, role: str = None):
+    def authentication_login(self, name: str, password: str):
         endpoint = "/auth/login"
-        data = self.get_params_dict(
-            ["name", "password", "role"], [name, password, role]
-        )
+        data = self.get_params_dict(["name", "password"], [name, password])
         time_of_request = time.time()
         response = self.post(endpoint, json=data, refresh_if_needed=False)
         response_data = response.json()
@@ -469,24 +467,6 @@ class APIServer:
             refresh_if_needed=False,
             content_type="application/x-www-form-urlencoded",
         )
-        response_data = response.json()
-        if HTTPStatus(response.status_code).is_success:
-            self.bearer_token = response_data["access_token"]
-            self.refresh_token = response_data["refresh_token"]
-            self.token_type = response_data["token_type"]
-            self.expires_in = response_data["expires_in"]
-            self.expiration_time = time_of_request + self.expires_in
-            if self.credentials_file:
-                self._store_in_file(self.credentials_file)
-            return response
-        else:
-            raise APIServerError(response_data)
-
-    def authentication_role_change(self, role: str):
-        endpoint = "/auth/role_change"
-        data = {"role": role}
-        time_of_request = time.time()
-        response = self.post(endpoint, json=data)
         response_data = response.json()
         if HTTPStatus(response.status_code).is_success:
             self.bearer_token = response_data["access_token"]
@@ -1489,10 +1469,9 @@ def obtain_connection(
     url: str,
     name: str = None,
     password: str = None,
-    role: str = None,
     credentials_file: str = None,
 ) -> APIServer:
     connection = APIServer(url, credentials_file=credentials_file)
     if name and password:
-        connection.authentication_login(name, password, role=role)
+        connection.authentication_login(name, password)
     return connection

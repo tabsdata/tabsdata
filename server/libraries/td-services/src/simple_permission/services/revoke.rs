@@ -108,7 +108,7 @@ mod tests {
         CreateProjectService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create((), create),
             )
             .await?;
@@ -136,7 +136,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .delete(grant);
 
         let service = RevokeSimplePermissionService::with_defaults(db.clone()).service();
@@ -157,7 +157,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .delete(grant);
 
         let service = RevokeSimplePermissionService::with_defaults(db.clone()).service();

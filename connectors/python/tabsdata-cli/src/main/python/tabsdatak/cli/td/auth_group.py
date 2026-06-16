@@ -92,13 +92,11 @@ def info(ctx: click.Context):
         table = Table(title="Current authenticated user")
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("Email")
-        table.add_column("Current role")
-        table.add_column("All roles")
+        table.add_column("Roles")
 
         table.add_row(
             info["name"],
             info["email"],
-            info["current_role"],
             beautify_list(info["roles"]),
         )
 
@@ -108,24 +106,6 @@ def info(ctx: click.Context):
         click.echo()
     except Exception as e:
         raise click.ClickException(f"Failed to display current user information: {e}")
-
-
-@auth.command()
-@click.argument("role", type=str)
-@click.pass_context
-def role_change(
-    ctx: click.Context,
-    role: str,
-):
-    """Change the role of the currently authenticated user"""
-    verify_login_or_prompt(ctx)
-    click.echo("Changing role")
-    click.echo("-" * 10)
-    try:
-        ctx.obj["tabsdataserver"].change_role(role)
-        click.echo("Role changed successfully")
-    except Exception as e:
-        raise click.ClickException(f"Failed to change role: {e}")
 
 
 @auth.command()

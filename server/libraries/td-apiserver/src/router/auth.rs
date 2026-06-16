@@ -13,14 +13,13 @@ mod secure_routes {
     use axum::{Extension, Form};
     use std::sync::Arc;
     use ta_apiserver::status::error_status::ErrorStatus;
-    use ta_apiserver::status::extractors::Json;
     use ta_apiserver::status::ok_status::{GetStatus, NoContent, RawStatus, UpdateStatus};
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_objects::dxo::auth::{RefreshRequestX, RoleChange, TokenResponseX};
+    use td_objects::dxo::auth::{RefreshRequestX, TokenResponseX};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::user::UserInfo;
-    use td_objects::rest_urls::{AUTH_LOGOUT, AUTH_REFRESH, AUTH_ROLE_CHANGE, AUTH_USER_INFO};
+    use td_objects::rest_urls::{AUTH_LOGOUT, AUTH_REFRESH, AUTH_USER_INFO};
     use td_services::auth::services::AuthServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -45,18 +44,6 @@ mod secure_routes {
     ) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
         let request = context.update((), request.refresh_token.clone());
         let response = state.refresh.service().raw_oneshot(request).await?;
-        Ok(RawStatus::OK(response))
-    }
-
-    #[apiserver_path(method = post, path = AUTH_ROLE_CHANGE, tag = AUTH_TAG)]
-    #[doc = "Role change"]
-    pub async fn role_change(
-        State(state): State<Arc<AuthServices>>,
-        Extension(context): Extension<RequestContext>,
-        Json(request): Json<RoleChange>,
-    ) -> Result<RawStatus<TokenResponseX>, ErrorStatus> {
-        let request = context.update((), request);
-        let response = state.role_change.service().raw_oneshot(request).await?;
         Ok(RawStatus::OK(response))
     }
 

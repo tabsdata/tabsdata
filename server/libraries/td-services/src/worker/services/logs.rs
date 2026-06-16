@@ -240,8 +240,7 @@ mod tests {
 
                     let request = RequestContext::with(
                         AccessTokenId::default(),
-                        UserId::admin(),
-                        RoleId::default_role(),
+                        UserId::admin()
                     )
                     .read(
                         WorkerLogsParams::builder()

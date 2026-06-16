@@ -15,9 +15,7 @@ use td_objects::dxo::auth::{
 };
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::tower_service::with::{With, builder};
-use td_objects::types::basic::{
-    AccessTokenId, AtTime, RefreshToken, RefreshTokenId, RoleId, UserId,
-};
+use td_objects::types::basic::{AccessTokenId, AtTime, RefreshToken, RefreshTokenId, UserId};
 use td_queries::By;
 use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
@@ -36,10 +34,9 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<UpdateRequest<(), RefreshToken>>::extract::<RequestContext>),
-        // extract access token id, user id, role id and request time from request context
+        // extract access token id, user id and request time from request context
         from_fn(With::<RequestContext>::extract::<AccessTokenId>),
         from_fn(With::<RequestContext>::extract::<UserId>),
-        from_fn(With::<RequestContext>::extract::<RoleId>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
         // extract refresh token from request
         from_fn(With::<UpdateRequest<(), RefreshToken>>::extract_data::<RefreshToken>),
@@ -54,7 +51,6 @@ fn service() {
         // create new session entry with new access token id and refresh token id
         from_fn(builder::<SessionDB>),
         from_fn(With::<UserId>::set::<SessionDBBuilder>),
-        from_fn(With::<RoleId>::set::<SessionDBBuilder>),
         from_fn(With::<AtTime>::set::<SessionDBBuilder>),
         from_fn(set_session_expiration),
         from_fn(With::<SessionDBBuilder>::build::<SessionDB>),
@@ -79,7 +75,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::auth::Login;
-    use td_objects::types::basic::{Password, RoleName, SessionStatus, UserName};
+    use td_objects::types::basic::{Password, SessionStatus, UserName};
     use td_queries::LiveEntry;
     use td_tower::ctx_service::RawOneshot;
 
@@ -93,10 +89,9 @@ mod tests {
             .await
             .assert_service::<UpdateRequest<(), RefreshToken>, TokenResponseX>(&[
                 type_of_val(&With::<UpdateRequest<(), RefreshToken>>::extract::<RequestContext>),
-                // extract access token id, user id, role id and request time from request context
+                // extract access token id, user id and request time from request context
                 type_of_val(&With::<RequestContext>::extract::<AccessTokenId>),
                 type_of_val(&With::<RequestContext>::extract::<UserId>),
-                type_of_val(&With::<RequestContext>::extract::<RoleId>),
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 // extract refresh token from request
                 type_of_val(&With::<UpdateRequest<(), RefreshToken>>::extract_data::<RefreshToken>),
@@ -111,7 +106,6 @@ mod tests {
                 // create new session entry with new access token id and refresh token id
                 type_of_val(&builder::<SessionDB>),
                 type_of_val(&With::<UserId>::set::<SessionDBBuilder>),
-                type_of_val(&With::<RoleId>::set::<SessionDBBuilder>),
                 type_of_val(&With::<AtTime>::set::<SessionDBBuilder>),
                 type_of_val(&set_session_expiration),
                 type_of_val(&With::<SessionDBBuilder>::build::<SessionDB>),
@@ -134,7 +128,6 @@ mod tests {
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
             .password(Password::try_from("tabsdata")?)
-            .role(RoleName::try_from("default")?)
             .build()?;
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
@@ -146,9 +139,8 @@ mod tests {
 
         let service = auth_services.refresh.service();
 
-        let request =
-            RequestContext::with(original_access_token_id, UserId::admin(), RoleId::default_role())
-                .update((), refresh_token.clone());
+        let request = RequestContext::with(original_access_token_id, UserId::admin())
+            .update((), refresh_token.clone());
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
         let token_response = res?;

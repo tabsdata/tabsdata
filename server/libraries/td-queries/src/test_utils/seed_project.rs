@@ -28,8 +28,7 @@ use td_objects::types::basic::{
 pub(crate) async fn seed_project(db: &TdPool, name: ProjectName) -> Result<ProjectDB, TdError> {
     let request_context = RequestContext::with(
         AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::sys_admin(),
+        UserId::admin()
     );
 
     let project_create = ProjectCreate::builder()

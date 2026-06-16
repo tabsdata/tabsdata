@@ -158,7 +158,6 @@ mod tests {
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
             .password(Password::try_from("tabsdata")?)
-            .role(RoleName::try_from("default")?)
             .build()?;
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());

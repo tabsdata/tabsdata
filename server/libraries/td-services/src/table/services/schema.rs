@@ -281,7 +281,7 @@ mod tests {
                 TableSchemaService::new(db, Arc::new(AuthzContext::default()), storage).service();
 
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(TableAtIdName::new(
                         TableParam::builder()
                             .collection(CollectionIdName::from_str(collection)?)

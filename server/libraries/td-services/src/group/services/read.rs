@@ -69,8 +69,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .read(
             GroupParam::builder()
@@ -95,8 +94,7 @@ mod tests {
     async fn test_read_system_group_by_name(db: TdPool) -> Result<(), TdError> {
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .read(
             GroupParam::builder()

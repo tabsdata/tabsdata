@@ -130,8 +130,7 @@ mod tests {
     async fn to_route<R: Into<Router> + Clone>(router: &R, db: TdPool) -> Router {
         let context = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         );
         let router = router.clone().into();
         router

@@ -284,7 +284,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     fn admin_ctx() -> RequestContext {
-        RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
+        RequestContext::with(AccessTokenId::default(), UserId::admin())
     }
 
     async fn create_project(db: &TdPool, name: &str) -> Result<ProjectDB, TdError> {

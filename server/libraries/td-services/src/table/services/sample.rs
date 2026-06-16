@@ -323,7 +323,7 @@ mod tests {
                 TableSampleService::new(db, Arc::new(AuthzContext::default()), storage).service();
 
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(TableSampleAtName::new(
                         TableParam::builder()
                             .collection(CollectionIdName::from_str(collection)?)

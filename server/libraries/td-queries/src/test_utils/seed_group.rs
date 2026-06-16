@@ -22,8 +22,7 @@ pub(crate) async fn seed_group(
 
     let request_context = RequestContext::with(
         AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::sys_admin(),
+        UserId::admin()
     );
 
     let group_db = GroupDBBuilder::try_from(&group_create)?

@@ -429,7 +429,7 @@ mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -675,7 +675,7 @@ mod tests {
             .logical_function_run(lfr_id.clone())
             .build()?;
         let replay_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(replay_param, ())
                 .in_project(ProjectId::sandbox());
         let replay_response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
@@ -805,7 +805,7 @@ mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)

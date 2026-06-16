@@ -209,8 +209,7 @@ mod tests {
 
         let request_context = td_objects::dxo::crudl::RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .read::<String>("")
         .context;

@@ -137,8 +137,7 @@ mod tests {
         let before = AtTime::now();
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .update(
             UserParam::builder()
@@ -192,7 +191,7 @@ mod tests {
             .unwrap();
 
         let before = AtTime::now();
-        let request = RequestContext::with(AccessTokenId::default(), user.id, RoleId::default_role())
+        let request = RequestContext::with(AccessTokenId::default(), user.id)
             .update(
                 UserParam::builder()
                     .user(UserIdName::from_str("u0").unwrap())

@@ -68,7 +68,7 @@ mod tests {
 
     fn req(target: UserName) -> ListByUserRequest {
         ListByUserRequest::new(
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin()),
+            RequestContext::with(AccessTokenId::default(), UserId::admin()),
             PermissionGrantUserQuery::builder()
                 .user(UserIdName::Name(target))
                 .build()
@@ -88,7 +88,7 @@ mod tests {
         CreateProjectService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create((), create),
             )
             .await?;

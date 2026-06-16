@@ -197,7 +197,7 @@ mod tests {
                     -> Result<Bytes, TdError> {
             // with ids
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(FunctionVersionAtId {
                         function_version_id: function_version_id.clone(),
                         at: *at_time,
@@ -212,7 +212,7 @@ mod tests {
             };
             // with names
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(FunctionVersionAtId {
                         function_version_id: function_version_id.clone(),
                         at: *at_time,

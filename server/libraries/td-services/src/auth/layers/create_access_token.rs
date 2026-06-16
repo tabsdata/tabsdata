@@ -28,7 +28,6 @@ pub async fn create_access_token(
         .build()?;
     info!(
         user_id = %session.user_id,
-        role_id = %session.role_id,
         access_token_id = %session.access_token_id,
         "auth.login: success"
     );

@@ -2,16 +2,18 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::types::basic::{AccessTokenId, AtTime, RoleId, UserId};
+use crate::types::basic::{AccessTokenId, AtTime, UserId};
 use serde::{Deserialize, Serialize};
 use serde_valid::Validate;
 use std::fmt::Debug;
 use td_error::td_error;
 use td_tower::error::{ConnectionError, FromHandlerError};
 
-/// Identity of the caller making a request: who, with what role, when. Carries
-/// no project — project scope is a separate, explicit value attached to the
-/// request via [`CreateRequest::in_project`] and friends.
+/// Identity of the caller making a request: who and when. Carries no project —
+/// project scope is a separate, explicit value attached to the request via
+/// [`CreateRequest::in_project`] and friends. Carries no role either:
+/// effective permissions are the union across all the user's assigned roles,
+/// so there is no per-session "active role".
 #[ta_objects::Dlo]
 pub struct RequestContext {
     /// The ID of the access token in the request.
@@ -20,9 +22,6 @@ pub struct RequestContext {
     /// The ID of the user making the request.
     #[dxo(extractor)]
     pub user_id: UserId,
-    /// The role of the user making the request.
-    #[dxo(extractor)]
-    pub role_id: RoleId,
     /// The time the request was made.
     #[dxo(extractor)]
     pub time: AtTime,
@@ -30,15 +29,10 @@ pub struct RequestContext {
 
 impl RequestContext {
     /// Construct a request context from the caller's identity.
-    pub fn with(
-        access_token_id: impl Into<AccessTokenId>,
-        user_id: impl Into<UserId>,
-        role_id: impl Into<RoleId>,
-    ) -> Self {
+    pub fn with(access_token_id: impl Into<AccessTokenId>, user_id: impl Into<UserId>) -> Self {
         Self {
             access_token_id: access_token_id.into(),
             user_id: user_id.into(),
-            role_id: role_id.into(),
             time: AtTime::default(),
         }
     }

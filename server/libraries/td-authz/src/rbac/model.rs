@@ -17,7 +17,7 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
-use td_objects::types::basic::{RoleId, UserId};
+use td_objects::types::basic::UserId;
 
 /// An entity type permissions can target (the `entity_type` of the
 /// `(entity_type, entity_id)` pair).
@@ -307,14 +307,10 @@ impl EntityKind for Project {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct User;
 
-/// The `role` identity kind: like [`User`], for the requester's active role.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Role;
-
-/// The single claim of the identity kinds: "this is the requester".
+/// The single claim of the identity kind: "this is the requester".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IdentityClaim {
-    /// Held (implicitly, per request) on the requester's own user and role.
+    /// Held (implicitly, per request) on the requester's own user.
     Requester,
 }
 
@@ -328,12 +324,6 @@ impl EntityKind for User {
     type Id = UserId;
     type Permission = IdentityClaim;
     const NAME: &'static str = "user";
-}
-
-impl EntityKind for Role {
-    type Id = RoleId;
-    type Permission = IdentityClaim;
-    const NAME: &'static str = "role";
 }
 
 // ---------------------------------------------------------------------------

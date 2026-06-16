@@ -32,8 +32,7 @@ async fn test_update_request_has_nothing_to_update(db: TdPool) {
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::sys_admin(),
+        UserId::admin()
     );
 
     let update = UserUpdate::builder()

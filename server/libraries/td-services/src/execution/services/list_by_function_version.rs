@@ -226,7 +226,7 @@ mod tests {
         // Query by function_version_a — should return only execution_1.
         let service = ExecutionListByFunctionVersionService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     FunctionVersionIdParam::builder()
                         .function_version_id(function_version_a.id.clone())
@@ -271,7 +271,7 @@ mod tests {
         // No function requirements exist for this function version.
         let service = ExecutionListByFunctionVersionService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     FunctionVersionIdParam::builder()
                         .function_version_id(function_version.id.clone())

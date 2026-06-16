@@ -152,8 +152,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .create(
             RoleParam::builder()
@@ -207,7 +206,7 @@ mod tests {
             .build()?;
 
         // `admin` holds manage_project on `__all__`, so it can grant on any project.
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin(), role.id)
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 RoleParam::builder()
                     .role(RoleIdName::from_str("r0")?)
@@ -267,7 +266,7 @@ mod tests {
             .unwrap()
             .build()?;
 
-        let request = RequestContext::with(AccessTokenId::default(), user.id, role.id).create(
+        let request = RequestContext::with(AccessTokenId::default(), user.id).create(
             RoleParam::builder()
                 .role(RoleIdName::from_str("r0")?)
                 .build()?,
@@ -299,8 +298,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .create(
             RoleParam::builder()

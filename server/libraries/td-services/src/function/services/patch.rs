@@ -6,7 +6,7 @@ use crate::function::layers::patch::{assert_patch_parent_matches_url, build_patc
 use crate::function::layers::register::bundle_registered;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
@@ -42,7 +42,7 @@ fn service() {
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<FunctionPatch>::extract::<FunctionVersionId>),
         from_fn(By::<FunctionVersionId>::fetch_one::<FunctionDB>),
         // Refuse if the parent fvid's function doesn't match the URL.
@@ -105,7 +105,7 @@ mod tests {
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(&With::<FunctionPatch>::extract::<FunctionVersionId>),
                 type_of_val(&By::<FunctionVersionId>::fetch_one::<FunctionDB>),
                 // Refuse if the parent fvid's function doesn't match the URL.
@@ -174,7 +174,7 @@ mod tests {
             .function(FunctionIdName::from_str(function).unwrap())
             .build()
             .unwrap();
-        RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+        RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(param, body)
             .in_project(ProjectId::sandbox())
     }

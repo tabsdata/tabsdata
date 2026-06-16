@@ -284,11 +284,6 @@ def info(third_party: bool, license: bool, release_notes: bool):
     help="Username for the Tabsdata Server. Will be prompted for it if not provided.",
 )
 @click.option(
-    "--role",
-    "-r",
-    help="Role of the username in the Tabsdata Server.",
-)
-@click.option(
     "--password",
     "-p",
     help=(
@@ -299,7 +294,7 @@ def info(third_party: bool, license: bool, release_notes: bool):
     ),
 )
 @click.pass_context
-def login(ctx: click.Context, server: str, user: str, role: str, password: str):
+def login(ctx: click.Context, server: str, user: str, password: str):
     """Login to the Tabsdata Server"""
     server = server or logical_prompt(ctx, "Tabsdata Server URL")
     user = user or logical_prompt(ctx, "Username for the Tabsdata Server")
@@ -308,8 +303,7 @@ def login(ctx: click.Context, server: str, user: str, role: str, password: str):
         "Password",
         hide_input=True,
     )
-    role = role or logical_prompt(ctx, "Role", default_value="user")
-    utils_login(ctx, server, user, password, role)
+    utils_login(ctx, server, user, password)
     execute_actions_for_command("login")
 
 

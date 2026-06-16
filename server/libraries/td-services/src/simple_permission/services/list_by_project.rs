@@ -69,7 +69,7 @@ mod tests {
         project: ProjectName,
     ) -> ListByProjectRequest {
         ListByProjectRequest::new(
-            RequestContext::with(AccessTokenId::default(), requester, role),
+            RequestContext::with(AccessTokenId::default(), requester),
             PermissionGrantProjectQuery::builder()
                 .project(ProjectIdName::Name(project))
                 .build()
@@ -89,7 +89,7 @@ mod tests {
         CreateProjectService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create((), create),
             )
             .await?;

@@ -359,15 +359,14 @@ def test_obtain_connection_returns_apiserver_without_login():
 def test_obtain_connection_triggers_login_when_creds_present(monkeypatch):
     seen: dict = {}
 
-    def fake_login(self, name, password, role=None):
+    def fake_login(self, name, password):
         seen["name"] = name
-        seen["role"] = role
         self.bearer_token = "tok"
 
     monkeypatch.setattr(a.APIServer, "authentication_login", fake_login)
-    conn = a.obtain_connection("host", name="alice", password="pw", role="admin")
+    conn = a.obtain_connection("host", name="alice", password="pw")
     assert conn.bearer_token == "tok"
-    assert seen == {"name": "alice", "role": "admin"}
+    assert seen == {"name": "alice"}
 
 
 # ---------------------------------------------------------------------------

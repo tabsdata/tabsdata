@@ -302,8 +302,7 @@ mod tests {
         // Test delete
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .delete(
             CollectionParam::builder()
@@ -424,8 +423,7 @@ mod tests {
 
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .delete(
             CollectionParam::builder()

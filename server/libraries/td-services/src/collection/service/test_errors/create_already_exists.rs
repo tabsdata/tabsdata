@@ -35,8 +35,7 @@ async fn test_create_already_existing(db: TdPool) {
 
     let request = RequestContext::with(
         AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::sys_admin(),
+        UserId::admin()
     )
     .create((), create)
     .in_project(ProjectId::sandbox());

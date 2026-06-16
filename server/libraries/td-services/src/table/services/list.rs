@@ -110,7 +110,7 @@ mod tests {
 
         // List current tables
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 
@@ -173,7 +173,7 @@ mod tests {
 
         // All tables are visible to authorized users
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 
@@ -187,7 +187,7 @@ mod tests {
         assert_eq!(data[1].name, TableName::try_from("table_2")?);
 
         // A user whose role carries no view_project on the project is forbidden.
-        let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
+        let request = RequestContext::with(AccessTokenId::default(), user.id)
             .list((), ListParams::default())
             .in_project(ProjectId::sandbox());
 

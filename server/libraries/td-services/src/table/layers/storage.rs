@@ -380,7 +380,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)

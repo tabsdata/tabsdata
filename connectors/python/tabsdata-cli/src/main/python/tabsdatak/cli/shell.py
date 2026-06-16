@@ -248,7 +248,6 @@ class SessionInfo:
         self._tool_name = tool_name
         self._mtime = None
         self.user = None
-        self.role = None
         self.server = None
         self.refresh()
 
@@ -281,14 +280,12 @@ class SessionInfo:
             tds.connection = conn
             info = tds.auth_info()
             self.user = info.get("name")
-            self.role = info.get("current_role")
         except Exception:
             self._clear()
 
     def _clear(self):
         self._mtime = None
         self.user = None
-        self.role = None
         self.server = None
 
     @property
@@ -298,16 +295,10 @@ class SessionInfo:
     def build_prompt(self):
         self.refresh()
         if self.logged_in:
-            if self.role == "sys_admin":
-                role_style = "bold #ccb233"  # amber — status-scheduled from UI
-            else:
-                role_style = "bold #82c369"  # green-400 from UI
             return [
                 ("#b4d296", self.server),
                 ("dim", " - "),
                 ("bold #b4d296", self.user),
-                ("", " "),
-                (role_style, f"[{self.role}]"),
                 ("", " "),
                 ("bold", self._tool_name),
                 ("", " ❯ "),

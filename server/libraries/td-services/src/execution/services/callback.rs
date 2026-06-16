@@ -274,7 +274,7 @@ mod tests {
                 };
 
                 let request =
-                    RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                    RequestContext::with(AccessTokenId::default(), UserId::admin())
                         .update(
                             PhysicalFunctionRunWorkerIdParam {
                                 function_run_id: physical_function_run.into(),

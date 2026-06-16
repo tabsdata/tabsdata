@@ -145,7 +145,7 @@ mod tests {
             .logical_function_run(lfr_id.clone())
             .build()
             .unwrap();
-        RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+        RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(param, ())
             .in_project(ProjectId::sandbox())
     }

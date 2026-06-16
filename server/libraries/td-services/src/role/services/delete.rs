@@ -171,8 +171,7 @@ mod tests {
     async fn test_delete_role(db: &TdPool, role_id_name: RoleIdName) -> Result<(), TdError> {
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .delete(RoleParam::builder().role(role_id_name.clone()).build()?);
         let service = DeleteRoleService::with_defaults(db.clone()).service();
@@ -209,8 +208,7 @@ mod tests {
     async fn test_delete_fixed_role(db: TdPool) -> Result<(), TdError> {
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .delete(
             RoleParam::builder()

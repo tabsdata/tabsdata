@@ -134,8 +134,7 @@ mod tests {
         let before = AtTime::now();
         let request = RequestContext::with(
             AccessTokenId::default(),
-            UserId::admin(),
-            RoleId::sys_admin(),
+            UserId::admin()
         )
         .create((), create);
         let response = service.raw_oneshot(request).await;

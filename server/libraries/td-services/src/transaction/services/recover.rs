@@ -124,7 +124,7 @@ mod tests {
             async move {
                 // Execute test
                 let request =
-                    RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                    RequestContext::with(AccessTokenId::default(), UserId::admin())
                         .update(
                             TransactionParam::builder()
                                 .transaction(TransactionIdName::from_str(&transaction)?)

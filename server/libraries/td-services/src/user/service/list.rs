@@ -80,7 +80,7 @@ mod tests {
         // `admin` is the only seeded user in `sys_admin` (holding manage_access),
         // so it is the requester able to list users.
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list((), ListParams::default());
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());

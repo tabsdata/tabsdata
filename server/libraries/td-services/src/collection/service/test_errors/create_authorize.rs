@@ -44,7 +44,7 @@ async fn test_not_allowed_to_create_collection(db: TdPool) {
         .build()
         .unwrap();
 
-    let request = RequestContext::with(AccessTokenId::default(), user.id, role.id)
+    let request = RequestContext::with(AccessTokenId::default(), user.id)
         .create((), create)
         .in_project(ProjectId::sandbox());
 

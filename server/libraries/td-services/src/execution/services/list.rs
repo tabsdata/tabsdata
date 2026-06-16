@@ -119,7 +119,7 @@ mod tests {
 
         let service = ExecutionListService::with_defaults(db.clone()).service();
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list((), ListParams::default())
                 .in_project(ProjectId::sandbox());
 

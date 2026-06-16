@@ -103,7 +103,7 @@ mod tests {
         role: RoleId,
         grant: SimplePermissionGrant,
     ) -> CreateRequest<(), SimplePermissionGrant> {
-        RequestContext::with(AccessTokenId::default(), user, role).create((), grant)
+        RequestContext::with(AccessTokenId::default(), user).create((), grant)
     }
 
     /// Create a project through the real create service so the per-project
@@ -119,7 +119,7 @@ mod tests {
         CreateProjectService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::sys_admin())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create((), create),
             )
             .await?;

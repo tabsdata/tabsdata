@@ -189,7 +189,7 @@ pub(crate) mod tests {
                     type_of_val(&assert_function_status),
                     // check requester can develop the current project (manage or develop)
                     type_of_val(&Scope::<Project>::set),
-                    type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
+                    type_of_val(&Rbac::<Project, DevelopProject>::check),
                     // Get recursion options
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),
                     type_of_val(&With::<FunctionId>::convert_to::<FunctionOrTable>),
@@ -304,8 +304,7 @@ pub(crate) mod tests {
             .raw_oneshot(
                 RequestContext::with(
                     AccessTokenId::default(),
-                    UserId::admin(),
-                    RoleId::sys_admin(),
+                    UserId::admin()
                 )
                 .create(
                     (),
@@ -856,7 +855,7 @@ pub(crate) mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection_0.name.to_string())?)
@@ -1205,7 +1204,7 @@ pub(crate) mod tests {
 
         // And then run function_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)
@@ -1352,7 +1351,7 @@ pub(crate) mod tests {
             .await?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&collection.name.to_string())?)
@@ -1398,7 +1397,7 @@ pub(crate) mod tests {
             .await?;
 
         let trigger = |external_uid: Option<ExternalUid>| {
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     FunctionParam::builder()
                         .collection(

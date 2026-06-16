@@ -110,14 +110,13 @@ def logical_prompt(
 
 
 def utils_login(
-    ctx: click.Context, server_url: str, username: str, password: str, role: str = None
+    ctx: click.Context, server_url: str, username: str, password: str
 ):
     try:
         obtain_connection(
             server_url,
             username,
             password,
-            role=role,
             credentials_file=get_credentials_file_path(ctx),
         )
     except Exception as e:
@@ -146,8 +145,7 @@ def request_login_information(ctx: click.Context):
     server_url = logical_prompt(ctx, "Server URL")
     username = logical_prompt(ctx, "Username")
     password = logical_prompt(ctx, "Password", hide_input=True)
-    role = logical_prompt(ctx, "Role", default_value="user")
-    return server_url, username, password, role
+    return server_url, username, password
 
 
 def initialise_tabsdata_server_connection(ctx: click.Context):
@@ -208,8 +206,8 @@ def store_pinned_objects(ctx: click.Context):
 def verify_login_or_prompt(ctx: click.Context):
     if not ctx.obj["tabsdataserver"]:
         click.echo("No credentials found. Please login first.")
-        server_url, username, password, role = request_login_information(ctx)
-        utils_login(ctx, server_url, username, password, role)
+        server_url, username, password = request_login_information(ctx)
+        utils_login(ctx, server_url, username, password)
         initialise_tabsdata_server_connection(ctx)
 
 

@@ -168,7 +168,7 @@ pub(crate) mod tests {
                     -> Result<Bytes, TdError> {
             // with ids
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(TableAtIdName::new(
                         TableParam::builder()
                             .collection(CollectionIdName::from_str(&format!("~{}", collection_id))?)
@@ -189,7 +189,7 @@ pub(crate) mod tests {
             };
             // with names
             let request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(TableAtIdName::new(
                         TableParam::builder()
                             .collection(CollectionIdName::from_str(&format!(

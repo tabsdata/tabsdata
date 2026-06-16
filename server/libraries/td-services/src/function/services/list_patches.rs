@@ -141,7 +141,7 @@ mod tests {
             .function(FunctionIdName::from_str("f0")?)
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(param, ListParams::default())
                 .in_project(ProjectId::sandbox());
         let response = ListFunctionPatchesService::with_defaults(db.clone())
@@ -172,7 +172,7 @@ mod tests {
                 .try_snippet(&format!("v{i}"))?
                 .build()?;
             let req =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(
                         FunctionParam::builder()
                             .collection(CollectionIdName::from_str("c0")?)
@@ -188,7 +188,7 @@ mod tests {
         }
 
         let read_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str("c0")?)

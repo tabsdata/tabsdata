@@ -6,7 +6,7 @@
 mod definitions {
     use crate::types::basic::{
         AccessToken, AccessTokenExpiration, AccessTokenId, AtTime, GrantType, NewPassword,
-        OldPassword, Password, RefreshToken, RefreshTokenId, RoleId, RoleName, SessionStatus,
+        OldPassword, Password, RefreshToken, RefreshTokenId, SessionStatus,
         TokenType, UserId, UserName,
     };
 
@@ -16,9 +16,6 @@ mod definitions {
         pub name: UserName,
         #[dxo(extractor)]
         pub password: Password,
-        #[dxo(extractor)]
-        #[serde(default = "RoleName::default_role")]
-        pub role: RoleName,
     }
 
     #[ta_objects::Dto]
@@ -34,12 +31,6 @@ mod definitions {
         pub refresh_token: RefreshToken,
         pub token_type: TokenType,
         pub expires_in: AccessTokenExpiration,
-    }
-
-    #[ta_objects::Dto]
-    pub struct RoleChange {
-        #[dxo(extractor)]
-        pub role: RoleName,
     }
 
     #[ta_objects::Dto]
@@ -62,8 +53,6 @@ mod definitions {
         #[dxo(setter)]
         pub user_id: UserId,
         #[dxo(setter)]
-        pub role_id: RoleId,
-        #[dxo(setter)]
         pub created_on: AtTime,
         pub expires_on: AtTime,
         #[builder(default = "AtTime::default()")]
@@ -78,7 +67,6 @@ mod definitions {
     #[inherits(SessionDB)]
     pub struct SessionDBWithNames {
         pub user_name: UserName,
-        pub role_name: RoleName,
     }
 
     #[ta_objects::Dao]
@@ -101,28 +89,11 @@ mod definitions {
 
     #[ta_objects::Dao]
     #[dao(sql_table = "sessions")]
-    pub struct SessionRoleChangeDB {
-        #[dxo(setter)]
-        pub status_change_on: AtTime,
-        #[builder(default = "SessionStatus::InvalidRoleChange")]
-        pub status: SessionStatus,
-    }
-
-    #[ta_objects::Dao]
-    #[dao(sql_table = "sessions")]
     pub struct SessionNewTokenDB {
         #[dxo(setter)]
         pub status_change_on: AtTime,
         #[builder(default = "SessionStatus::InvalidNewToken")]
         pub status: SessionStatus,
-    }
-
-    #[ta_objects::Dao]
-    #[dao(sql_table = "users_roles__with_names")]
-    pub struct UserInfoUserRoleDB {
-        pub user_id: UserId,
-        pub role_id: RoleId,
-        pub role: RoleName,
     }
 }
 

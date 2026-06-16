@@ -165,7 +165,7 @@ mod tests {
         ];
         for (at, expected_fn, expected_bundle, expected_payload) in cases {
             let download_request =
-                RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(FunctionMaybeAtIdName::new(
                         function_param.clone(),
                         OptionalAtTimeParam { at },
@@ -270,7 +270,7 @@ mod tests {
         let request = Request::builder().body(Body::from(payload)).unwrap();
         let upload = FunctionUpload::new(request);
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection))?)

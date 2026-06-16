@@ -19,8 +19,7 @@ async fn test_not_allowed_to_delete_themselves(db: TdPool) {
 
     let ctx = RequestContext::with(
         AccessTokenId::default(),
-        UserId::admin(),
-        RoleId::sys_admin(),
+        UserId::admin()
     );
 
     let request = ctx.delete(

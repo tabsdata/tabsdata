@@ -11,7 +11,7 @@ use crate::scheduler::layers::request::notify_scheduler;
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_execution::SchedulerNotify;
 use td_objects::And;
 use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
@@ -66,7 +66,7 @@ fn service() {
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester can manage or develop the current project
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject)>::check),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<CollectionDB>::extract::<CollectionName>),
         // Stage/checkpoint storage prefix is stamped from the collection base_path.
         from_fn(With::<CollectionDB>::extract::<BasePath>),
@@ -254,7 +254,7 @@ mod tests {
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester can manage or develop the current project
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject)>::check),
+                type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
                 type_of_val(&With::<CollectionDB>::extract::<BasePath>),
                 // Get function.
@@ -373,7 +373,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -417,7 +417,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -461,7 +461,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -510,7 +510,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -563,7 +563,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -632,7 +632,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -669,7 +669,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -716,7 +716,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -757,7 +757,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -831,7 +831,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
@@ -865,7 +865,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
@@ -920,7 +920,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
@@ -964,7 +964,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -1088,7 +1088,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name_2.as_str())?)
@@ -1137,7 +1137,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
@@ -1185,7 +1185,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
@@ -1221,7 +1221,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
@@ -1268,7 +1268,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name_1.as_str())?)
@@ -1313,7 +1313,7 @@ mod tests {
             )])))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)
@@ -1367,7 +1367,7 @@ mod tests {
             .build()?;
 
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .create(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(collection_name.as_str())?)

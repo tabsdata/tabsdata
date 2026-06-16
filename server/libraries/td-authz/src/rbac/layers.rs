@@ -46,7 +46,7 @@
 
 use crate::rbac::model::{
     EffectiveGrants, EntityKind, Grants, IdentityClaim, On, Project, ProjectPermission, Requires,
-    Role, System, SystemEntity, SystemPermission, User,
+    System, SystemEntity, SystemPermission, User,
 };
 use crate::rbac::source::{RbacSource, identity_grants};
 use std::any::type_name;
@@ -205,16 +205,6 @@ impl Requirement<User> for SelfUser {
     }
 }
 
-/// The requester's active role is the role in scope.
-#[derive(Debug, Clone, Copy)]
-pub struct SelfRole;
-
-impl Requirement<Role> for SelfRole {
-    fn allowed(grants: &EffectiveGrants<'_>, scope: &On<Role>) -> bool {
-        grants.allows(&Requires::at(*scope, IdentityClaim::Requester))
-    }
-}
-
 // --- any-of composition ------------------------------------------------------
 
 macro_rules! any_of_tuple {
@@ -280,14 +270,14 @@ mod tests {
     use super::*;
     use crate::rbac::model::{Grant, ProjectId, ProjectRole, SystemRole};
     use crate::rbac::source::FixedRbacSource;
-    use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
+    use td_objects::types::basic::{AccessTokenId, UserId};
 
-    fn request(user_id: UserId, role_id: RoleId) -> RequestContext {
-        RequestContext::with(AccessTokenId::default(), user_id, role_id)
+    fn request(user_id: UserId) -> RequestContext {
+        RequestContext::with(AccessTokenId::default(), user_id)
     }
 
-    fn identity(user_id: UserId, role_id: RoleId) -> Grants {
-        identity_grants(&request(user_id, role_id))
+    fn identity(user_id: UserId) -> Grants {
+        identity_grants(&request(user_id))
     }
 
     // ---- pure tests: no database, no pool, no tower context ----
@@ -382,8 +372,7 @@ mod tests {
     fn test_enforce_self_user_or_manage_access() {
         // old API: AuthzOn<SystemOrUserId> + Authz<Requester, SecAdmin>.
         let user_id = UserId::default();
-        let role_id = RoleId::default();
-        let request = identity(user_id, role_id);
+        let request = identity(user_id);
         let none = Grants::new();
         type SelfOrAccessAdmin = (SelfUser, ManageAccess);
 
@@ -402,19 +391,6 @@ mod tests {
             &request,
             &other
         ));
-    }
-
-    #[test]
-    fn test_enforce_self_role() {
-        let user_id = UserId::default();
-        let role_id = RoleId::default();
-        let request = identity(user_id, role_id);
-        let none = Grants::new();
-
-        let own = On::<Role>::Entity(role_id);
-        assert!(enforce::<Role, SelfRole>(&none, &request, &own));
-        let other = On::<Role>::Entity(RoleId::default());
-        assert!(!enforce::<Role, SelfRole>(&none, &request, &other));
     }
 
     #[test]
@@ -478,14 +454,13 @@ mod tests {
         use std::sync::Arc;
 
         let user_id = UserId::default();
-        let role_id = RoleId::default();
         let p = ProjectId::default();
 
         let source = Arc::new(
             FixedRbacSource::new()
                 .with_user_roles(user_id, [SystemRole::Default.grants(), ProjectRole::Dev.grants(p)]),
         );
-        let request = Arc::new(request(user_id, role_id));
+        let request = Arc::new(request(user_id));
         let scope = Arc::new(Scope::<Project>(On::Entity(p)));
 
         // develop_project on p: allowed
@@ -528,8 +503,7 @@ mod tests {
         // a user unknown to the source has empty grants: forbidden
         let unknown = Arc::new(RequestContext::with(
             AccessTokenId::default(),
-            UserId::default(),
-            role_id,
+            UserId::default()
         ));
         let conn = MutRef::new(db.acquire().await.unwrap());
         Enforce::<FixedRbacSource, Project, ViewProject>::check(

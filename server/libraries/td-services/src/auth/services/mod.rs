@@ -7,7 +7,6 @@ use crate::auth::services::login::LoginService;
 use crate::auth::services::logout::LogoutService;
 use crate::auth::services::password_change::PasswordChangeService;
 use crate::auth::services::refresh::RefreshService;
-use crate::auth::services::role_change::RoleChangeService;
 use crate::auth::services::user_info::UserInfoService;
 use ta_services::factory::ServiceFactory;
 
@@ -16,7 +15,6 @@ mod login;
 mod logout;
 mod password_change;
 mod refresh;
-mod role_change;
 mod user_info;
 
 #[derive(ServiceFactory)]
@@ -25,7 +23,6 @@ pub struct AuthServices {
     pub refresh: RefreshService,
     pub logout: LogoutService,
     pub user_info: UserInfoService,
-    pub role_change: RoleChangeService,
     pub password_change: PasswordChangeService,
     pub cert_download: CertDownloadService,
 }

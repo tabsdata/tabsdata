@@ -131,7 +131,7 @@ mod tests {
 
         // List current tables by collection
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     CollectionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("~{}", collection.id))?)

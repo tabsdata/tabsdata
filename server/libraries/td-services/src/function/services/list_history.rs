@@ -158,7 +158,7 @@ mod tests {
             .snippet(Some("function_foo snippet".try_into()?))
             .build()?;
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .update(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -176,7 +176,7 @@ mod tests {
 
         // Delete function_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .delete(
                     FunctionParam::builder()
                         .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -213,7 +213,7 @@ mod tests {
         // Actual test
         // t0 -> no functions
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     AtTimeParam::builder().at(t0).build()?,
                     ListParams::default(),
@@ -229,7 +229,7 @@ mod tests {
 
         // t1 -> function_1
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     AtTimeParam::builder().at(t1).build()?,
                     ListParamsBuilder::default()
@@ -249,7 +249,7 @@ mod tests {
 
         // t2 -> function_1 and function_2
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     AtTimeParam::builder().at(t2).build()?,
                     ListParams::default(),
@@ -267,7 +267,7 @@ mod tests {
 
         // t3 -> function_2 and function_3
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     AtTimeParam::builder().at(t3).build()?,
                     ListParams::default(),
@@ -285,7 +285,7 @@ mod tests {
 
         // t4 -> function_3
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     AtTimeParam::builder().at(t4).build()?,
                     ListParams::default(),
@@ -302,7 +302,7 @@ mod tests {
 
         // t5 -> function_3 and function_5
         let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin(), RoleId::default_role())
+            RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     AtTimeParam::builder().at(t5).build()?,
                     ListParams::default(),

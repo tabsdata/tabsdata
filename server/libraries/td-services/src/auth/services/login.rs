@@ -13,14 +13,10 @@ use ta_services::factory::service_factory;
 use td_authz::jwt::JwtConfig;
 use td_authz::session_provider::Sessions;
 use td_error::TdError;
-use td_objects::And;
 use td_objects::dxo::auth::{Login, SessionDB, SessionDBBuilder, TokenResponseX};
 use td_objects::dxo::user::UserDB;
-use td_objects::dxo::user_role::UserRoleDBWithNames;
 use td_objects::tower_service::with::{With, builder};
-use td_objects::types::basic::{
-    AtTime, Password, PasswordHash, RoleId, RoleName, UserId, UserName,
-};
+use td_objects::types::basic::{AtTime, Password, PasswordHash, UserId, UserName};
 use td_queries::{By, insert};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -46,7 +42,6 @@ fn service() {
             // extract info from request
             from_fn(With::<Login>::extract::<UserName>),
             from_fn(With::<Login>::extract::<Password>),
-            from_fn(With::<Login>::extract::<RoleName>),
             // get user from DB
             from_fn(By::<UserName>::fetch_one::<UserDB>),
             // check current password
@@ -58,14 +53,10 @@ fn service() {
             from_fn(assert_user_enabled),
             // check password is not required to be changed
             from_fn(assert_no_password_change_required),
-            // check user has the requested role
-            from_fn(With::<UserDB>::extract::<UserId>),
-            from_fn(By::<And![UserId, RoleName]>::fetch_one::<UserRoleDBWithNames>),
             // create user session
-            from_fn(With::<UserRoleDBWithNames>::extract::<RoleId>),
+            from_fn(With::<UserDB>::extract::<UserId>),
             from_fn(builder::<SessionDB>),
             from_fn(With::<UserId>::set::<SessionDBBuilder>),
-            from_fn(With::<RoleId>::set::<SessionDBBuilder>),
             from_fn(With::<AtTime>::set::<SessionDBBuilder>),
             from_fn(set_session_expiration),
             from_fn(With::<SessionDBBuilder>::build::<SessionDB>),
@@ -115,18 +106,14 @@ mod tests {
                 type_of_val(&With::<AtTime>::default),
                 type_of_val(&With::<Login>::extract::<UserName>),
                 type_of_val(&With::<Login>::extract::<Password>),
-                type_of_val(&With::<Login>::extract::<RoleName>),
                 type_of_val(&By::<UserName>::fetch_one::<UserDB>),
                 type_of_val(&With::<UserDB>::extract::<PasswordHash>),
                 type_of_val(&assert_current_password::<Password>),
                 type_of_val(&assert_user_enabled),
                 type_of_val(&assert_no_password_change_required),
                 type_of_val(&With::<UserDB>::extract::<UserId>),
-                type_of_val(&By::<And![UserId, RoleName]>::fetch_one::<UserRoleDBWithNames>),
-                type_of_val(&With::<UserRoleDBWithNames>::extract::<RoleId>),
                 type_of_val(&builder::<SessionDB>),
                 type_of_val(&With::<UserId>::set::<SessionDBBuilder>),
-                type_of_val(&With::<RoleId>::set::<SessionDBBuilder>),
                 type_of_val(&With::<AtTime>::set::<SessionDBBuilder>),
                 type_of_val(&set_session_expiration),
                 type_of_val(&With::<SessionDBBuilder>::build::<SessionDB>),
@@ -145,7 +132,6 @@ mod tests {
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
             .password(Password::try_from("tabsdata")?)
-            .role(RoleName::try_from("default")?)
             .build()?;
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
@@ -171,7 +157,6 @@ mod tests {
         let request = Login::builder()
             .name(UserName::try_from("invalid")?)
             .password(Password::try_from("tabsdata")?)
-            .role(RoleName::try_from("default")?)
             .build()?;
 
         assert_service_error(service, request, |err| match err {
@@ -192,26 +177,6 @@ mod tests {
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
             .password(Password::try_from("invalidpassword")?)
-            .role(RoleName::try_from("default")?)
-            .build()?;
-
-        assert_service_error(service, request, |err| match err {
-            AuthError::AuthenticationFailed => {}
-            other => panic!("Expected 'AuthenticationFailed', got {other:?}"),
-        })
-        .await;
-        Ok(())
-    }
-
-    #[td_test::test(db)]
-    async fn test_login_wrong_role_unauthz(db: TdPool) -> Result<(), td_error::TdError> {
-        let auth_services = AuthServices::build(&Context::with_defaults(db.clone()));
-        let service = auth_services.login.service();
-
-        let request = Login::builder()
-            .name(UserName::try_from("admin")?)
-            .password(Password::try_from("tabsdata")?)
-            .role(RoleName::try_from("invalid")?)
             .build()?;
 
         assert_service_error(service, request, |err| match err {

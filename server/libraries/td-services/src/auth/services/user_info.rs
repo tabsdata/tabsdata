@@ -3,12 +3,10 @@
 //
 
 use ta_services::factory::service_factory;
-use td_objects::dxo::auth::UserInfoUserRoleDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::permission::{Permission, PermissionBuilder, PermissionDBWithNames};
-use td_objects::dxo::user::{
-    UserDBWithNames, UserInfo, UserInfoBuilder, UserInfoRoleIdName, UserInfoRoleIdNameBuilder,
-};
+use td_objects::dxo::role::{Role, RoleBuilder, RoleDBWithNames};
+use td_objects::dxo::user::{UserDBWithNames, UserInfo, UserInfoBuilder};
+use td_objects::dxo::user_role::UserRoleDBWithNames;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{RoleId, UserId};
 use td_queries::By;
@@ -26,27 +24,19 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ReadRequest<()>>::extract::<RequestContext>),
-        // extract user id and role id from request context
+        // extract user id from request context
         from_fn(With::<RequestContext>::extract::<UserId>),
-        from_fn(With::<RequestContext>::extract::<RoleId>),
         // get user from database
         from_fn(By::<UserId>::fetch_one::<UserDBWithNames>),
-        // get user roles from database
-        from_fn(By::<UserId>::fetch_all::<UserInfoUserRoleDB>),
-        // get user current role permissions
-        from_fn(By::<RoleId>::fetch_all::<PermissionDBWithNames>),
         // set user data
         from_fn(With::<UserDBWithNames>::try_convert_to::<UserInfoBuilder, _>),
-        // set current role
-        from_fn(With::<RoleId>::set::<UserInfoBuilder>),
-        // set permissions of current role
-        from_fn(With::<PermissionDBWithNames>::vec_convert_to::<PermissionBuilder, _>),
-        from_fn(With::<Vec<PermissionBuilder>>::build::<Vec<Permission>>),
-        from_fn(With::<Vec<Permission>>::set::<UserInfoBuilder>),
-        // set all user roles
-        from_fn(With::<UserInfoUserRoleDB>::vec_convert_to::<UserInfoRoleIdNameBuilder, _>),
-        from_fn(With::<Vec<UserInfoRoleIdNameBuilder>>::build::<Vec<UserInfoRoleIdName>>),
-        from_fn(With::<Vec<UserInfoRoleIdName>>::set::<UserInfoBuilder>),
+        // resolve the user's roles: memberships -> role ids -> full role rows
+        from_fn(By::<UserId>::fetch_all::<UserRoleDBWithNames>),
+        from_fn(With::<Vec<UserRoleDBWithNames>>::extract::<Vec<RoleId>>),
+        from_fn(By::<Vec<RoleId>>::fetch_all_chunked::<RoleDBWithNames>),
+        from_fn(With::<RoleDBWithNames>::vec_convert_to::<RoleBuilder, _>),
+        from_fn(With::<Vec<RoleBuilder>>::build::<Vec<Role>>),
+        from_fn(With::<Vec<Role>>::set::<UserInfoBuilder>),
         // build UserInfo
         from_fn(With::<UserInfoBuilder>::build::<UserInfo>),
     )
@@ -65,7 +55,7 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::auth::Login;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{Password, RoleName, UserName};
+    use td_objects::types::basic::{Password, UserName};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -78,31 +68,19 @@ mod tests {
             .await
             .assert_service::<ReadRequest<()>, UserInfo>(&[
                 type_of_val(&With::<ReadRequest<()>>::extract::<RequestContext>),
-                // extract user id and role id from request context
+                // extract user id from request context
                 type_of_val(&With::<RequestContext>::extract::<UserId>),
-                type_of_val(&With::<RequestContext>::extract::<RoleId>),
                 // get user from database
                 type_of_val(&By::<UserId>::fetch_one::<UserDBWithNames>),
-                // get user roles from database
-                type_of_val(&By::<UserId>::fetch_all::<UserInfoUserRoleDB>),
-                // get user current role permissions
-                type_of_val(&By::<RoleId>::fetch_all::<PermissionDBWithNames>),
                 // set user data
                 type_of_val(&With::<UserDBWithNames>::try_convert_to::<UserInfoBuilder, _>),
-                // set current role
-                type_of_val(&With::<RoleId>::set::<UserInfoBuilder>),
-                // set permissions of current role
-                type_of_val(&With::<PermissionDBWithNames>::vec_convert_to::<PermissionBuilder, _>),
-                type_of_val(&With::<Vec<PermissionBuilder>>::build::<Vec<Permission>>),
-                type_of_val(&With::<Vec<Permission>>::set::<UserInfoBuilder>),
-                // set all user roles
-                type_of_val(
-                    &With::<UserInfoUserRoleDB>::vec_convert_to::<UserInfoRoleIdNameBuilder, _>,
-                ),
-                type_of_val(
-                    &With::<Vec<UserInfoRoleIdNameBuilder>>::build::<Vec<UserInfoRoleIdName>>,
-                ),
-                type_of_val(&With::<Vec<UserInfoRoleIdName>>::set::<UserInfoBuilder>),
+                // resolve the user's roles: memberships -> role ids -> full role rows
+                type_of_val(&By::<UserId>::fetch_all::<UserRoleDBWithNames>),
+                type_of_val(&With::<Vec<UserRoleDBWithNames>>::extract::<Vec<RoleId>>),
+                type_of_val(&By::<Vec<RoleId>>::fetch_all_chunked::<RoleDBWithNames>),
+                type_of_val(&With::<RoleDBWithNames>::vec_convert_to::<RoleBuilder, _>),
+                type_of_val(&With::<Vec<RoleBuilder>>::build::<Vec<Role>>),
+                type_of_val(&With::<Vec<Role>>::set::<UserInfoBuilder>),
                 // build UserInfo
                 type_of_val(&With::<UserInfoBuilder>::build::<UserInfo>),
             ]);
@@ -117,7 +95,6 @@ mod tests {
         let request = Login::builder()
             .name(UserName::try_from("admin")?)
             .password(Password::try_from("tabsdata")?)
-            .role(RoleName::try_from("default")?)
             .build()?;
         let res = service.raw_oneshot(request).await;
         assert!(res.is_ok());
@@ -127,14 +104,11 @@ mod tests {
 
         let service = auth_services.user_info.service();
 
-        let request =
-            RequestContext::with(access_token_id, UserId::admin(), RoleId::default_role()).read(());
+        let request = RequestContext::with(access_token_id, UserId::admin()).read(());
         let res = service.raw_oneshot(request).await;
         let user_info = res?;
         assert_eq!(user_info.name, UserName::try_from("admin")?);
-        assert_eq!(user_info.current_role_id, RoleId::default_role());
         assert_eq!(user_info.user_roles.len(), 2);
-        assert_eq!(user_info.current_permissions.len(), 1);
         Ok(())
     }
 }
