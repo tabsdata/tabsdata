@@ -5,7 +5,7 @@
 use crate::worker::layers::logs::{worker_logs, worker_logs_tail};
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope, ViewProject};
+use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_common::server::BridgeProviderHandle;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::worker::WorkerDB;
@@ -37,7 +37,7 @@ fn service() {
         from_fn(With::<WorkerDB>::extract::<ProjectId>),
         // check requester has access to the project
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         // Resolve worker message path.
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
@@ -62,7 +62,7 @@ fn logs_tail_service() {
         from_fn(By::<WorkerIdName>::fetch_one::<WorkerDB>),
         from_fn(With::<WorkerDB>::extract::<ProjectId>),
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
+        from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
         from_fn(With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),
         from_fn(worker_logs_tail),
@@ -114,7 +114,7 @@ mod tests {
                     // check requester has access to the project
                     type_of_val(&Scope::<Project>::set),
                     type_of_val(
-                        &Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check,
+                        &Rbac::<Project, DevelopProject>::check,
                     ),
                     // Resolve worker message path.
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
@@ -145,7 +145,7 @@ mod tests {
                     type_of_val(&With::<WorkerDB>::extract::<ProjectId>),
                     type_of_val(&Scope::<Project>::set),
                     type_of_val(
-                        &Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check,
+                        &Rbac::<Project, DevelopProject>::check,
                     ),
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsExtension>>),
                     type_of_val(&With::<WorkerLogsParams>::extract::<Vec<LogsCastNumber>>),

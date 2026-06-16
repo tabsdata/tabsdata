@@ -4,7 +4,7 @@
 
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope, ViewProject};
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::And;
 use td_objects::NoFilter;
 use td_objects::dxo::collection::CollectionDB;
@@ -39,7 +39,7 @@ fn service() {
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         // check requester can view the current project
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // extract attime (natural order)
         from_fn(With::<FunctionAtIdName>::extract::<AtTime>),
         // find function ID at time (as name could change in time)
@@ -105,7 +105,7 @@ mod tests {
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 // check requester can view the current project
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // extract attime (natural order)
                 type_of_val(&With::<FunctionAtIdName>::extract::<AtTime>),
                 // find function ID at time (as name could change in time)

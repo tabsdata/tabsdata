@@ -6,7 +6,7 @@ use crate::function::layers::read::{map_create_worker, vec_create_table_dependen
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope, ViewProject};
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::And;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::dependency::DependencyDBWithNames;
@@ -53,7 +53,7 @@ fn service() {
         ),
         // check requester can view the current project
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // Read function with tables, triggers and dependencies
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionId>),
         from_fn(With::<FunctionDBWithNames>::extract::<FunctionVersionId>),
@@ -159,7 +159,7 @@ mod tests {
                     // check requester can view the current project
                     type_of_val(&Scope::<Project>::set),
                     type_of_val(
-                        &Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check,
+                        &Rbac::<Project, ViewProject>::check,
                     ),
                     // Read function with tables, triggers and dependencies
                     type_of_val(&With::<FunctionDBWithNames>::extract::<FunctionId>),

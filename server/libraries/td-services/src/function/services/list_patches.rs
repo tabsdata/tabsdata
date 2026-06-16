@@ -4,7 +4,7 @@
 
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope, ViewProject};
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::And;
 use td_objects::NoFilter;
 use td_objects::dxo::collection::CollectionDB;
@@ -39,7 +39,7 @@ fn service() {
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
         from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // Resolve function id from the URL.
         from_fn(By::<And![CollectionId, FunctionIdName]>::assert_exists::<FunctionDBWithNames>),
         // list function patches (all collections in the current project)
@@ -87,7 +87,7 @@ mod tests {
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
                 type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, (ManageProject, DevelopProject, ViewProject)>::check),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Resolve function id from the URL.
                 type_of_val(
                     &By::<And![CollectionId, FunctionIdName]>::assert_exists::<FunctionDBWithNames>,
