@@ -25,6 +25,7 @@ from test_tabsdata.conftest import (
     FUNCTION_DATA_FOLDER,
     MOCK_COLLECTION,
     MOCK_COLLECTION_ID,
+    MOCK_PROJECT_ID,
     TESTING_RESOURCES_FOLDER,
     write_v2_function_yaml_file,
 )
@@ -192,6 +193,7 @@ def test_parse_minimal_input_yaml(tmp_path):
     config = parse_request_yaml(tmp_yaml_file)
     assert isinstance(config, FunctionV2)
     assert config.info == {
+        "project_id": MOCK_PROJECT_ID,
         "collection": MOCK_COLLECTION,
         "collection_id": MOCK_COLLECTION_ID,
         "execution_id": FAKE_EXECUTION_ID,

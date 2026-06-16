@@ -47,7 +47,7 @@ def store_results(
 ):
     logger.info(pad_string("[Storing results]"))
     destination_plugin = execution_context.destination
-    resolve_named_conn_if_needed(destination_plugin)
+    resolve_named_conn_if_needed(destination_plugin, execution_context.project_id)
     logger.info(f"Storing results in destination '{destination_plugin}'")
     logger.debug("Running the destination plugin")
     destination_plugin._run(execution_context, results)

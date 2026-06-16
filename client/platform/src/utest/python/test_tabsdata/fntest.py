@@ -70,6 +70,7 @@ from test_tabsdata.bootest import TDLOCAL_FOLDER
 from test_tabsdata.conftest import (
     LOCAL_PACKAGES_LIST,
     MOCK_COLLECTION,
+    MOCK_PROJECT_ID,
     write_v1_listener_yaml_file,
     write_v2_function_yaml_file,
 )
@@ -830,7 +831,7 @@ def _trigger(
 
     # Mirror execute_stage_trigger: resolve a NamedConn before driving the
     # trigger so test runs exercise the same conn-swap behavior as production.
-    resolve_named_conn_if_needed(trigger)
+    resolve_named_conn_if_needed(trigger, MOCK_PROJECT_ID)
 
     trigger.return_on_end = True
     try:

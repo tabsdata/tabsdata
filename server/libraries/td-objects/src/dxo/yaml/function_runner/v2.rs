@@ -6,9 +6,9 @@ use crate::dxo::yaml::location::{Location, Locations};
 use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId,
     ExecutionName, FunctionName, FunctionVersionId, InputIdx, IsEmptyVersions, PartitionFileName,
-    PartitionName, PhysicalFunctionRunId, PhysicalTableDataVersionId, RowCount, SchemaHash,
-    TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId, TriggeredOn,
-    VersionPos,
+    PartitionName, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId, RowCount,
+    SchemaHash, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
+    TriggeredOn, VersionPos,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -38,6 +38,9 @@ impl Locations for FunctionInput {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct FunctionInfo {
+    /// The run's project — workers resolve project-scoped resources (e.g.
+    /// the connection artifacts under `connections/<project_id>/`) with it.
+    pub project_id: ProjectId,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub function_version_id: FunctionVersionId,
@@ -260,8 +263,10 @@ mod tests {
         let scheduled_on = AtTime::default();
         let defined_on = AtTime::default();
 
+        let project_id = ProjectId::default();
         let input = WorkerInput::FunctionV2(Box::new(FunctionInput {
             info: FunctionInfo {
+                project_id,
                 collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
                 function_version_id: function_version_id.clone(),
@@ -364,6 +369,7 @@ mod tests {
             format!(
                 r#"!FunctionV2
 info:
+  project_id: {project_id}
   collection_id: {collection_id}
   collection: collection
   function_version_id: {function_version_id}
@@ -792,6 +798,7 @@ output:
         );
 
         let info = FunctionInfo::builder()
+            .project_id(ProjectId::default())
             .collection_id(CollectionId::default())
             .collection(CollectionName::try_from("cn")?)
             .function_version_id(FunctionVersionId::new())

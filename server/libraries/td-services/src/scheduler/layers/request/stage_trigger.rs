@@ -153,6 +153,7 @@ pub async fn create_locked_stage_trigger_workers_start_request(
         // TODO Urls are wrong as of now
         let info = stage_trigger::v1::Info {
             worker_id: stage_trigger_worker.id,
+            project_id: stage_trigger_worker.project_id,
             collection_id: stage_trigger_worker.collection_id,
             collection: stage_trigger_worker.collection.clone(),
             function_version_id: stage_trigger_worker.function_version_id.clone(),

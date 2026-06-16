@@ -90,7 +90,7 @@ def execute_stage_trigger(
     logger.info(pad_string("[Executing stage trigger]"))
     stage_trigger = execution_context.trigger_by
     logger.debug(f"Using stage trigger: {stage_trigger}")
-    resolve_named_conn_if_needed(stage_trigger)
+    resolve_named_conn_if_needed(stage_trigger, execution_context.project_id)
     request: StageTriggerYaml = execution_context.request
     if not isinstance(stage_trigger, StageTrigger):
         raise ValueError(
@@ -368,7 +368,7 @@ def obtain_user_provided_function_parameters(
         logger.debug(f"Using new ManifestStage {source}")
         execution_context._source_plugin = source
 
-    resolve_named_conn_if_needed(source)
+    resolve_named_conn_if_needed(source, execution_context.project_id)
 
     # noinspection PyProtectedMember
     parameters = source._run(execution_context)

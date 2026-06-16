@@ -270,6 +270,11 @@ class FunctionYaml(ABC):
 
     @property
     @abstractmethod
+    def project_id(self) -> str:
+        """Return the project ID of the request."""
+
+    @property
+    @abstractmethod
     def scheduled_on(self) -> str:
         """Timestamp of the scheduling of the whole execution."""
 
@@ -389,6 +394,10 @@ class FunctionV2(FunctionYaml):
         return self.content.get("output")
 
     @property
+    def project_id(self) -> str:
+        return self.info["project_id"]
+
+    @property
     def scheduled_on(self) -> str:
         return self.info["scheduled_on"]
 
@@ -498,6 +507,11 @@ class StageTriggerYaml(ABC):
     def function_stage_uri(self) -> str:
         """Return the function stage URI."""
 
+    @property
+    @abstractmethod
+    def project_id(self) -> str:
+        """Return the project ID of the request."""
+
 
 class StageTriggerV1(StageTriggerYaml):
     def __init__(self, content):
@@ -574,6 +588,10 @@ class StageTriggerV1(StageTriggerYaml):
     @property
     def info(self) -> dict:
         return self.content.get("info", {})
+
+    @property
+    def project_id(self) -> str:
+        return self.info["project_id"]
 
     def __repr__(self):
         return f"{self.__class__.__name__}(content={self.content})"

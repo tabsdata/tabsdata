@@ -39,6 +39,9 @@ from .. import pytestmark  # noqa: F401
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
 
+# Worker artifacts are project-namespaced; all tests use one test project.
+PROJECT = "test_project"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -47,7 +50,7 @@ from . import pytestmark  # noqa: F401
 
 def _write_connection_json(repo_dir, name, cx_dict):
     """Write a connection JSON file to the test repository."""
-    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
+    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER, PROJECT)
     os.makedirs(connections_dir, exist_ok=True)
     path = os.path.join(connections_dir, f"{name}.json")
     with open(path, "w") as f:
@@ -65,13 +68,13 @@ class TestLoadNamedConnEnvVar:
         monkeypatch.delenv(TD_URI_REPOSITORY, raising=False)
         nc = NamedConn(name="my_conn")
         with pytest.raises(ValueError, match="TD_URI_REPOSITORY"):
-            load_named_conn(nc)
+            load_named_conn(nc, PROJECT)
 
     def test_raises_when_env_var_empty(self, monkeypatch):
         monkeypatch.setenv(TD_URI_REPOSITORY, "")
         nc = NamedConn(name="my_conn")
         with pytest.raises(ValueError, match="TD_URI_REPOSITORY"):
-            load_named_conn(nc)
+            load_named_conn(nc, PROJECT)
 
 
 # ---------------------------------------------------------------------------
@@ -84,48 +87,44 @@ class TestLoadNamedConnFileErrors:
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         nc = NamedConn(name="nonexistent_conn")
         with pytest.raises(FileNotFoundError, match="nonexistent_conn"):
-            load_named_conn(nc)
+            load_named_conn(nc, PROJECT)
 
     def test_raises_when_json_invalid(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
-        connections_dir = os.path.join(str(tmp_path), CONNECTIONS_FOLDER)
+        connections_dir = os.path.join(str(tmp_path), CONNECTIONS_FOLDER, PROJECT)
         os.makedirs(connections_dir)
         path = os.path.join(connections_dir, "bad_json.json")
         with open(path, "w") as f:
             f.write("not valid json {{{")
         nc = NamedConn(name="bad_json")
         with pytest.raises(json.JSONDecodeError):
-            load_named_conn(nc)
+            load_named_conn(nc, PROJECT)
 
     def test_raises_when_name_mismatch(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mysqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "wrong_name",
-            "conn_type": "MySQLConn",
             "conn_configs": {"uri": "mysql://localhost/db"},
         }
         _write_connection_json(str(tmp_path), "my_conn", cx_dict)
         nc = NamedConn(name="my_conn")
         with pytest.raises(ValueError, match="does not match"):
-            load_named_conn(nc)
+            load_named_conn(nc, PROJECT)
 
     def test_raises_when_unknown_type(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "fakeSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "my_conn",
-            "conn_type": "FakeConn",
             "conn_configs": {"uri": "fake://localhost"},
         }
         _write_connection_json(str(tmp_path), "my_conn", cx_dict)
         nc = NamedConn(name="my_conn")
-        with pytest.raises(ValueError, match="Unknown connection type"):
-            load_named_conn(nc)
+        with pytest.raises(ValueError, match="Unknown connection kind"):
+            load_named_conn(nc, PROJECT)
 
 
 # ---------------------------------------------------------------------------
@@ -137,30 +136,26 @@ class TestLoadNamedConnLowercaseLookup:
     def test_uppercase_name_resolves_to_lowercase_file(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mysqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "My_Conn",
-            "conn_type": "MySQLConn",
             "conn_configs": {"uri": "mysql://localhost/mydb"},
         }
         # File is written with lowercase name
         _write_connection_json(str(tmp_path), "my_conn", cx_dict)
-        conn = load_named_conn(NamedConn(name="My_Conn"))
+        conn = load_named_conn(NamedConn(name="My_Conn"), PROJECT)
         assert isinstance(conn, MySQLConn)
 
     def test_mixed_case_name_resolves_to_lowercase_file(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "postgresSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "MyDatabase",
-            "conn_type": "PostgresConn",
             "conn_configs": {"uri": "postgresql://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "mydatabase", cx_dict)
-        conn = load_named_conn(NamedConn(name="MyDatabase"))
+        conn = load_named_conn(NamedConn(name="MyDatabase"), PROJECT)
         assert isinstance(conn, PostgresConn)
 
 
@@ -173,33 +168,29 @@ class TestLoadNamedConnMySQL:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mysqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "mysql_conn",
-            "conn_type": "MySQLConn",
             "conn_configs": {"uri": "mysql://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "mysql_conn", cx_dict)
-        conn = load_named_conn(NamedConn(name="mysql_conn"))
+        conn = load_named_conn(NamedConn(name="mysql_conn"), PROJECT)
         assert isinstance(conn, MySQLConn)
         assert conn.uri == "mysql://localhost/mydb"
 
     def test_with_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mysqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "mysql_creds",
-            "conn_type": "MySQLConn",
             "conn_configs": {
                 "uri": "mysql://localhost/mydb",
                 "credentials": {"user": "admin", "password": "secret"},
             },
         }
         _write_connection_json(str(tmp_path), "mysql_creds", cx_dict)
-        conn = load_named_conn(NamedConn(name="mysql_creds"))
+        conn = load_named_conn(NamedConn(name="mysql_creds"), PROJECT)
         assert isinstance(conn, MySQLConn)
         assert conn.credentials is not None
 
@@ -208,11 +199,9 @@ class TestLoadNamedConnMySQL:
         monkeypatch.setenv("TEST_MYSQL_USER", "env_user")
         monkeypatch.setenv("TEST_MYSQL_PASS", "env_pass")
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mysqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "mysql_env",
-            "conn_type": "MySQLConn",
             "conn_configs": {
                 "uri": "mysql://localhost/mydb",
                 "credentials": {
@@ -222,7 +211,7 @@ class TestLoadNamedConnMySQL:
             },
         }
         _write_connection_json(str(tmp_path), "mysql_env", cx_dict)
-        conn = load_named_conn(NamedConn(name="mysql_env"))
+        conn = load_named_conn(NamedConn(name="mysql_env"), PROJECT)
         assert isinstance(conn, MySQLConn)
         assert conn.credentials is not None
 
@@ -230,15 +219,13 @@ class TestLoadNamedConnMySQL:
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         monkeypatch.setenv("TEST_MYSQL_URI", "mysql://envhost/envdb")
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mysqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "mysql_env_uri",
-            "conn_type": "MySQLConn",
             "conn_configs": {"env:uri": "TEST_MYSQL_URI"},
         }
         _write_connection_json(str(tmp_path), "mysql_env_uri", cx_dict)
-        conn = load_named_conn(NamedConn(name="mysql_env_uri"))
+        conn = load_named_conn(NamedConn(name="mysql_env_uri"), PROJECT)
         assert isinstance(conn, MySQLConn)
         assert conn.uri == "mysql://envhost/envdb"
 
@@ -246,16 +233,14 @@ class TestLoadNamedConnMySQL:
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         monkeypatch.delenv("NONEXISTENT_VAR_12345", raising=False)
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mysqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "mysql_bad_env",
-            "conn_type": "MySQLConn",
             "conn_configs": {"env:uri": "NONEXISTENT_VAR_12345"},
         }
         _write_connection_json(str(tmp_path), "mysql_bad_env", cx_dict)
         with pytest.raises(ValueError, match="Environment variable"):
-            load_named_conn(NamedConn(name="mysql_bad_env"))
+            load_named_conn(NamedConn(name="mysql_bad_env"), PROJECT)
 
 
 # ---------------------------------------------------------------------------
@@ -267,33 +252,29 @@ class TestLoadNamedConnPostgres:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "postgresSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "pg_conn",
-            "conn_type": "PostgresConn",
             "conn_configs": {"uri": "postgresql://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "pg_conn", cx_dict)
-        conn = load_named_conn(NamedConn(name="pg_conn"))
+        conn = load_named_conn(NamedConn(name="pg_conn"), PROJECT)
         assert isinstance(conn, PostgresConn)
         assert conn.uri == "postgresql://localhost/mydb"
 
     def test_with_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "postgresSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "pg_creds",
-            "conn_type": "PostgresConn",
             "conn_configs": {
                 "uri": "postgresql://localhost/mydb",
                 "credentials": {"user": "pgadmin", "password": "pgpass"},
             },
         }
         _write_connection_json(str(tmp_path), "pg_creds", cx_dict)
-        conn = load_named_conn(NamedConn(name="pg_creds"))
+        conn = load_named_conn(NamedConn(name="pg_creds"), PROJECT)
         assert isinstance(conn, PostgresConn)
         assert conn.credentials is not None
 
@@ -307,33 +288,29 @@ class TestLoadNamedConnMariaDB:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mariadbSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "maria_conn",
-            "conn_type": "MariaDBConn",
             "conn_configs": {"uri": "mariadb://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "maria_conn", cx_dict)
-        conn = load_named_conn(NamedConn(name="maria_conn"))
+        conn = load_named_conn(NamedConn(name="maria_conn"), PROJECT)
         assert isinstance(conn, MariaDBConn)
         assert conn.uri == "mariadb://localhost/mydb"
 
     def test_with_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mariadbSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "maria_creds",
-            "conn_type": "MariaDBConn",
             "conn_configs": {
                 "uri": "mariadb://localhost/mydb",
                 "credentials": {"user": "maria", "password": "mariapass"},
             },
         }
         _write_connection_json(str(tmp_path), "maria_creds", cx_dict)
-        conn = load_named_conn(NamedConn(name="maria_creds"))
+        conn = load_named_conn(NamedConn(name="maria_creds"), PROJECT)
         assert isinstance(conn, MariaDBConn)
         assert conn.credentials is not None
 
@@ -347,33 +324,29 @@ class TestLoadNamedConnOracle:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "oracleSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "oracle_conn",
-            "conn_type": "OracleConn",
             "conn_configs": {"uri": "oracle://localhost:1521/orcl"},
         }
         _write_connection_json(str(tmp_path), "oracle_conn", cx_dict)
-        conn = load_named_conn(NamedConn(name="oracle_conn"))
+        conn = load_named_conn(NamedConn(name="oracle_conn"), PROJECT)
         assert isinstance(conn, OracleConn)
         assert conn.uri == "oracle://localhost:1521/orcl"
 
     def test_with_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "oracleSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "oracle_creds",
-            "conn_type": "OracleConn",
             "conn_configs": {
                 "uri": "oracle://localhost:1521/orcl",
                 "credentials": {"user": "sys", "password": "oraclepass"},
             },
         }
         _write_connection_json(str(tmp_path), "oracle_creds", cx_dict)
-        conn = load_named_conn(NamedConn(name="oracle_creds"))
+        conn = load_named_conn(NamedConn(name="oracle_creds"), PROJECT)
         assert isinstance(conn, OracleConn)
         assert conn.credentials is not None
 
@@ -387,34 +360,30 @@ class TestLoadNamedConnMSSQL:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mssqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "mssql_conn",
-            "conn_type": "MSSQLConn",
             "conn_configs": {
                 "connection_string_or_uri": "mssql://localhost/mydb",
             },
         }
         _write_connection_json(str(tmp_path), "mssql_conn", cx_dict)
-        conn = load_named_conn(NamedConn(name="mssql_conn"))
+        conn = load_named_conn(NamedConn(name="mssql_conn"), PROJECT)
         assert isinstance(conn, MSSQLConn)
 
     def test_with_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mssqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "mssql_creds",
-            "conn_type": "MSSQLConn",
             "conn_configs": {
                 "connection_string_or_uri": "mssql://localhost/mydb",
                 "credentials": {"user": "sa", "password": "mssqlpass"},
             },
         }
         _write_connection_json(str(tmp_path), "mssql_creds", cx_dict)
-        conn = load_named_conn(NamedConn(name="mssql_creds"))
+        conn = load_named_conn(NamedConn(name="mssql_creds"), PROJECT)
         assert isinstance(conn, MSSQLConn)
         assert conn.credentials is not None
 
@@ -423,11 +392,9 @@ class TestLoadNamedConnMSSQL:
         monkeypatch.setenv("TEST_MSSQL_USER", "env_sa")
         monkeypatch.setenv("TEST_MSSQL_PASS", "env_mssqlpass")
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mssqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "mssql_env",
-            "conn_type": "MSSQLConn",
             "conn_configs": {
                 "connection_string_or_uri": "mssql://localhost/mydb",
                 "credentials": {
@@ -437,7 +404,7 @@ class TestLoadNamedConnMSSQL:
             },
         }
         _write_connection_json(str(tmp_path), "mssql_env", cx_dict)
-        conn = load_named_conn(NamedConn(name="mssql_env"))
+        conn = load_named_conn(NamedConn(name="mssql_env"), PROJECT)
         assert isinstance(conn, MSSQLConn)
         assert conn.credentials is not None
 
@@ -451,11 +418,9 @@ class TestLoadNamedConnS3:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "s3SrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "s3_conn",
-            "conn_type": "S3Conn",
             "conn_configs": {
                 "bucket_uri": "s3://mybucket",
                 "credentials": {
@@ -465,17 +430,15 @@ class TestLoadNamedConnS3:
             },
         }
         _write_connection_json(str(tmp_path), "s3_conn", cx_dict)
-        conn = load_named_conn(NamedConn(name="s3_conn"))
+        conn = load_named_conn(NamedConn(name="s3_conn"), PROJECT)
         assert isinstance(conn, S3Conn)
 
     def test_with_region(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "s3SrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "s3_region",
-            "conn_type": "S3Conn",
             "conn_configs": {
                 "bucket_uri": "s3://mybucket",
                 "credentials": {
@@ -486,7 +449,7 @@ class TestLoadNamedConnS3:
             },
         }
         _write_connection_json(str(tmp_path), "s3_region", cx_dict)
-        conn = load_named_conn(NamedConn(name="s3_region"))
+        conn = load_named_conn(NamedConn(name="s3_region"), PROJECT)
         assert isinstance(conn, S3Conn)
         assert conn.region == "eu-west-1"
 
@@ -497,11 +460,9 @@ class TestLoadNamedConnS3:
             "TEST_AWS_SECRET", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
         )
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "s3SrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "s3_env",
-            "conn_type": "S3Conn",
             "conn_configs": {
                 "bucket_uri": "s3://mybucket",
                 "credentials": {
@@ -511,7 +472,7 @@ class TestLoadNamedConnS3:
             },
         }
         _write_connection_json(str(tmp_path), "s3_env", cx_dict)
-        conn = load_named_conn(NamedConn(name="s3_env"))
+        conn = load_named_conn(NamedConn(name="s3_env"), PROJECT)
         assert isinstance(conn, S3Conn)
 
 
@@ -524,11 +485,9 @@ class TestLoadNamedConnGCS:
     def test_plain(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "gcsSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "gcs_conn",
-            "conn_type": "GCSConn",
             "conn_configs": {
                 "bucket_uri": "gs://mybucket",
                 "credentials": {
@@ -537,18 +496,16 @@ class TestLoadNamedConnGCS:
             },
         }
         _write_connection_json(str(tmp_path), "gcs_conn", cx_dict)
-        conn = load_named_conn(NamedConn(name="gcs_conn"))
+        conn = load_named_conn(NamedConn(name="gcs_conn"), PROJECT)
         assert isinstance(conn, GCSConn)
 
     def test_with_env_credentials(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         monkeypatch.setenv("TEST_GCS_KEY", '{"conn_type": "service_account"}')
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "gcsSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "gcs_env",
-            "conn_type": "GCSConn",
             "conn_configs": {
                 "bucket_uri": "gs://mybucket",
                 "credentials": {
@@ -557,7 +514,7 @@ class TestLoadNamedConnGCS:
             },
         }
         _write_connection_json(str(tmp_path), "gcs_env", cx_dict)
-        conn = load_named_conn(NamedConn(name="gcs_env"))
+        conn = load_named_conn(NamedConn(name="gcs_env"), PROJECT)
         assert isinstance(conn, GCSConn)
 
 
@@ -570,48 +527,44 @@ class TestResolveNamedConnIfNeeded:
     def test_resolves_named_conn_on_source_plugin(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "mysqlSrcConn",
             "apiVersion": "1.0",
-            "conn_mode": "src",
             "name": "my_mysql",
-            "conn_type": "MySQLConn",
             "conn_configs": {"uri": "mysql://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "my_mysql", cx_dict)
 
         plugin = type("FakeSource", (), {"conn": NamedConn(name="my_mysql")})()
-        resolve_named_conn_if_needed(plugin)
+        resolve_named_conn_if_needed(plugin, PROJECT)
         assert isinstance(plugin.conn, MySQLConn)
         assert plugin.conn.uri == "mysql://localhost/mydb"
 
     def test_resolves_named_conn_on_destination_plugin(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "connectionDef",
+            "kind": "postgresDstConn",
             "apiVersion": "1.0",
-            "conn_mode": "dest",
             "name": "my_pg",
-            "conn_type": "PostgresConn",
             "conn_configs": {"uri": "postgresql://localhost/mydb"},
         }
         _write_connection_json(str(tmp_path), "my_pg", cx_dict)
 
         plugin = type("FakeDest", (), {"conn": NamedConn(name="my_pg")})()
-        resolve_named_conn_if_needed(plugin)
+        resolve_named_conn_if_needed(plugin, PROJECT)
         assert isinstance(plugin.conn, PostgresConn)
 
     def test_noop_when_conn_is_already_concrete(self):
         original_conn = MySQLConn(uri="mysql://localhost/mydb")
         plugin = type("FakePlugin", (), {"conn": original_conn})()
-        resolve_named_conn_if_needed(plugin)
+        resolve_named_conn_if_needed(plugin, PROJECT)
         assert plugin.conn is original_conn
 
     def test_noop_when_plugin_has_no_conn(self):
         plugin = type("FakeTableOutput", (), {})()
-        resolve_named_conn_if_needed(plugin)  # should not raise
+        resolve_named_conn_if_needed(plugin, PROJECT)  # should not raise
         assert not hasattr(plugin, "conn")
 
     def test_noop_when_conn_is_none(self):
         plugin = type("FakePlugin", (), {"conn": None})()
-        resolve_named_conn_if_needed(plugin)
+        resolve_named_conn_if_needed(plugin, PROJECT)
         assert plugin.conn is None

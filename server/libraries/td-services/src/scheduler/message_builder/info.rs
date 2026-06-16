@@ -55,6 +55,7 @@ pub(crate) fn build_function_info(
     let (function_run_location, _) = build_external_location(storage, &path)?;
 
     let info = FunctionInfo::builder()
+        .project_id(f.project_id)
         .collection_id(f.collection_id)
         .collection(f.collection.clone())
         .function_version_id(effective_fvid)

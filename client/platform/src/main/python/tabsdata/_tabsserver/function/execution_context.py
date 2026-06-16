@@ -79,6 +79,12 @@ class ExecutionContext:
         self.pending_cloud_copies = None
 
     @property
+    def project_id(self) -> str:
+        """The project of the run, from the request yaml — used to resolve
+        project-scoped resources (e.g. named connection artifacts)."""
+        return self.request.project_id
+
+    @property
     def tabsdata_function(self) -> TabsdataFunction:
         if not hasattr(self, "_tabsdata_function"):
             if self.paths.tabsdata_function_file:

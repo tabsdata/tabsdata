@@ -4,7 +4,8 @@
 
 use crate::dxo::yaml::location::{Location, Locations};
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, WorkerConfig, WorkerId,
+    AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, ProjectId, WorkerConfig,
+    WorkerId,
 };
 use td_common::worker::HttpRequest;
 
@@ -24,6 +25,10 @@ impl Locations for StageTriggerInput {
 #[derive(Eq, PartialEq)]
 pub struct Info {
     pub worker_id: WorkerId,
+    /// The trigger's project — workers resolve project-scoped resources
+    /// (e.g. the connection artifacts under `connections/<project_id>/`)
+    /// with it.
+    pub project_id: ProjectId,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub function_version_id: FunctionVersionId,
@@ -68,9 +73,11 @@ mod tests {
             start: Some(start),
             end: Some(end),
         };
+        let project_id = ProjectId::default();
         let input = WorkerInput::StageTriggerV1(Box::new(StageTriggerInput {
             info: Info {
                 worker_id,
+                project_id,
                 collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
                 function_version_id: function_version_id.clone(),
@@ -130,6 +137,7 @@ mod tests {
                 r#"!StageTriggerV1
 info:
   worker_id: {worker_id}
+  project_id: {project_id}
   collection_id: {collection_id}
   collection: collection
   function_version_id: {function_version_id}

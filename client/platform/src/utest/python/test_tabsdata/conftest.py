@@ -303,6 +303,7 @@ LOCAL_PACKAGES_LIST = []
 
 MOCK_COLLECTION = "td_collection"
 MOCK_COLLECTION_ID = 19
+MOCK_PROJECT_ID = "td_project"
 FAKE_EXECUTION_ID = 24
 FAKE_FUNCTION_RUN_ID = 60
 FAKE_SCHEDULED_TIME = 1248067890123
@@ -513,6 +514,7 @@ def write_v2_function_yaml_file(
         function_defined_on = datetime.now().timestamp() * 1000.0
     content: dict[str, Any] = {
         "info": {
+            "project_id": MOCK_PROJECT_ID,
             "collection": MOCK_COLLECTION,
             "collection_id": MOCK_COLLECTION_ID,
             "execution_id": FAKE_EXECUTION_ID,
@@ -634,6 +636,7 @@ def write_v1_listener_yaml_file(
 ):
     content: dict[str, Any] = {
         "info": {
+            "project_id": MOCK_PROJECT_ID,
             "collection": MOCK_COLLECTION,
             "collection_id": MOCK_COLLECTION_ID,
             "function_bundle": {

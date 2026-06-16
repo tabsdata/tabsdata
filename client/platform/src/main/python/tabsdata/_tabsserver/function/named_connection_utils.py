@@ -17,7 +17,7 @@ TD_URI_REPOSITORY = "TD_URI_REPOSITORY"
 CONNECTIONS_FOLDER = "connections"
 
 
-def resolve_named_conn_if_needed(plugin) -> None:
+def resolve_named_conn_if_needed(plugin, project_id: str) -> None:
     """Check if a plugin's ``conn`` attribute is a NamedConn and resolve it.
 
     If the plugin has a ``conn`` attribute that is a :class:`NamedConn`, it is
@@ -27,13 +27,15 @@ def resolve_named_conn_if_needed(plugin) -> None:
 
     Args:
         plugin: The source or destination plugin to inspect.
+        project_id: The run's project (connection artifacts are
+            project-namespaced).
     """
     conn = getattr(plugin, "conn", None)
     if isinstance(conn, NamedConn):
         logger.info(
             f"Resolving NamedConn '{conn.name}' for {plugin.__class__.__name__}"
         )
-        resolved = load_named_conn(conn)
+        resolved = load_named_conn(conn, project_id)
         plugin.conn = resolved
         logger.info(
             f"Resolved NamedConn '{conn.name}' to "
@@ -41,21 +43,26 @@ def resolve_named_conn_if_needed(plugin) -> None:
         )
 
 
-def load_named_conn(named_conn: NamedConn) -> Conn:
+def load_named_conn(named_conn: NamedConn, project_id: str) -> Conn:
     """Resolve a NamedConn into a concrete Conn instance.
 
     Reads the connection configuration from
-    ``${TD_URI_REPOSITORY}/connections/<name>.json`` and delegates to
-    :meth:`NamedConn._load` for type resolution and env-var substitution.
+    ``${TD_URI_REPOSITORY}/connections/<project_id>/<name>.json`` and
+    delegates to :meth:`NamedConn._load` for type resolution and env-var
+    substitution.
 
     Args:
         named_conn: The named connection reference to resolve.
+        project_id: The run's project (connection artifacts are
+            project-namespaced — same-named collections in different
+            projects must not collide).
 
     Returns:
         The resolved concrete connection configuration.
 
     Raises:
-        ValueError: If the ``TD_URI_REPOSITORY`` environment variable is not set.
+        ValueError: If the ``TD_URI_REPOSITORY`` environment variable is not
+            set or no project is provided.
         FileNotFoundError: If the connection configuration file does not exist.
     """
     repository_uri = os.environ.get(TD_URI_REPOSITORY)
@@ -64,9 +71,17 @@ def load_named_conn(named_conn: NamedConn) -> Conn:
             f"Environment variable '{TD_URI_REPOSITORY}' is not set. "
             f"Cannot resolve named connection '{named_conn.name}'."
         )
+    if not project_id:
+        raise ValueError(
+            f"No project provided. Cannot resolve named connection "
+            f"'{named_conn.name}'."
+        )
 
     connection_file = os.path.join(
-        repository_uri, CONNECTIONS_FOLDER, f"{named_conn.name.lower()}.json"
+        repository_uri,
+        CONNECTIONS_FOLDER,
+        project_id,
+        f"{named_conn.name.lower()}.json",
     )
     logger.debug(
         f"Loading named connection '{named_conn.name}' from '{connection_file}'"
