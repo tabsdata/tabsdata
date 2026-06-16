@@ -19,10 +19,12 @@ mod routes {
     use td_apiforge::apiserver_path;
     use td_database::scoped::InProject;
     use td_objects::dxo::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
+    use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::rest_urls::{
-        CREATE_COLLECTION, CollectionParam, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS,
-        UPDATE_COLLECTION,
+        CREATE_COLLECTION, CollectionParam, DELETE_COLLECTION, GET_COLLECTION,
+        GET_COLLECTION_CONNECTION, LIST_COLLECTIONS, UPDATE_COLLECTION,
+        UPSERT_COLLECTION_CONNECTION,
     };
     use td_objects::types::basic::ProjectId;
     use td_services::collection::service::CollectionServices;
@@ -93,9 +95,48 @@ mod routes {
         Extension(project_id): Extension<ProjectId>,
         Path(collection_param): Path<CollectionParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
+        // The delete service also drops the connection from the store (its
+        // best-effort cleanup layer) for source/destination collections.
         let request = context.delete(collection_param).in_project(project_id);
         let response = collection_state.delete.service().oneshot(request).await?;
         Ok(DeleteStatus::OK(response))
+    }
+
+    #[apiserver_path(method = post, path = UPSERT_COLLECTION_CONNECTION, tag = COLLECTIONS_TAG)]
+    #[doc = "Create or update the connection info of a source/destination collection"]
+    pub async fn upsert_collection_connection(
+        State(collection_state): State<Arc<CollectionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
+        Path(collection_param): Path<CollectionParam>,
+        Json(request): Json<ConnectionUpsert>,
+    ) -> Result<CreateStatus<ConnectionRead>, ErrorStatus> {
+        let request = context
+            .update(collection_param, request)
+            .in_project(project_id);
+        let response = collection_state
+            .connection_upsert
+            .service()
+            .oneshot(request)
+            .await?;
+        Ok(CreateStatus::CREATED(response))
+    }
+
+    #[apiserver_path(method = get, path = GET_COLLECTION_CONNECTION, tag = COLLECTIONS_TAG)]
+    #[doc = "Read the connection info of a source/destination collection (names only, no values)"]
+    pub async fn get_collection_connection(
+        State(collection_state): State<Arc<CollectionServices>>,
+        Extension(context): Extension<RequestContext>,
+        Extension(project_id): Extension<ProjectId>,
+        Path(collection_param): Path<CollectionParam>,
+    ) -> Result<GetStatus<ConnectionRead>, ErrorStatus> {
+        let request = context.read(collection_param).in_project(project_id);
+        let response = collection_state
+            .connection_read
+            .service()
+            .oneshot(request)
+            .await?;
+        Ok(GetStatus::OK(response))
     }
 }
 
@@ -115,7 +156,8 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::{
-        CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, LIST_COLLECTIONS, UPDATE_COLLECTION,
+        CREATE_COLLECTION, DELETE_COLLECTION, GET_COLLECTION, GET_COLLECTION_CONNECTION,
+        LIST_COLLECTIONS, UPDATE_COLLECTION, UPSERT_COLLECTION_CONNECTION,
     };
     use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
     use td_services::Context;
@@ -312,5 +354,114 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["data"]["len"], 0);
+    }
+
+    async fn create_collection_in<R: Into<Router> + Clone>(
+        router: &R,
+        db: TdPool,
+        name: &str,
+        group: Option<&str>,
+    ) {
+        let mut body = json!({"name": name, "description": "d"});
+        if let Some(group) = group {
+            body["group"] = json!(group);
+            if group == "source" || group == "destination" {
+                let suffix = if group == "source" { "Src" } else { "Dst" };
+                body["connection"] = json!({
+                    "kind": format!("mysql{suffix}Conn"),
+                    "name": name,
+                    "conn_configs": {"env:password": "CREDENTIALS_PASSWORD"},
+                });
+                body["secrets"] = json!([{"key": "CREDENTIALS_PASSWORD", "value": "hunter2"}]);
+                body["vars"] = json!([]);
+            }
+        }
+        let response = to_route(router, db)
+            .await
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(url(CREATE_COLLECTION))
+                    .header("content-type", "application/json")
+                    .body(serde_json::to_string(&body).unwrap())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    #[td_test::test(db)]
+    async fn test_collection_connection_endpoints(db: TdPool) {
+        let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
+            &Context::with_defaults(db.clone()),
+        )));
+
+        // Source collection (group `source` → CollectionType::Source).
+        create_collection_in(&router, db.clone(), "src_coll", Some("source")).await;
+
+        let conn_body = json!({
+            "connection": {
+                "kind": "mysqlSrcConn",
+                "name": "src_coll",
+                "conn_configs": {"env:password": "CREDENTIALS_PASSWORD"},
+            },
+            "secrets": [{"key": "CREDENTIALS_PASSWORD", "value": "hunter2"}],
+            "vars": []
+        });
+
+        // Upsert persists through the bridge's connection store; the response
+        // echoes the stored names — never values.
+        let response = to_route(&router, db.clone())
+            .await
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(url(UPSERT_COLLECTION_CONNECTION).replace("{collection}", "src_coll"))
+                    .header("content-type", "application/json")
+                    .body(serde_json::to_string(&conn_body).unwrap())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["data"]["secret_names"][0], "CREDENTIALS_PASSWORD");
+        assert!(!body.to_string().contains("hunter2"));
+
+        // GET reads the connection (names only) back.
+        let response = to_route(&router, db.clone())
+            .await
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(url(GET_COLLECTION_CONNECTION).replace("{collection}", "src_coll"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["data"]["secret_names"][0], "CREDENTIALS_PASSWORD");
+        assert!(!body.to_string().contains("hunter2"));
+
+        // A DataFactory collection (default group) cannot carry a connection.
+        create_collection_in(&router, db.clone(), "fac_coll", None).await;
+        let response = to_route(&router, db.clone())
+            .await
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(url(UPSERT_COLLECTION_CONNECTION).replace("{collection}", "fac_coll"))
+                    .header("content-type", "application/json")
+                    .body(serde_json::to_string(&conn_body).unwrap())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(response.status().is_client_error());
     }
 }

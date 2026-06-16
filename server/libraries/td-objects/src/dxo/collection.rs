@@ -4,10 +4,11 @@
 
 #[ta_objects::dxo]
 mod definitions {
+    use crate::dxo::connection::KeyValue;
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
-        AtTime, BasePath, CollectionId, CollectionName, Description, GroupId, GroupName, ProjectId,
-        UserId, UserName,
+        AtTime, BasePath, CollectionId, CollectionName, CollectionType, ConnectionId, Description,
+        GroupId, GroupName, ProjectId, UserId, UserName,
     };
     use td_common::id::Id;
 
@@ -42,6 +43,13 @@ mod definitions {
         #[dxo(builder(include))]
         #[builder(default)]
         pub base_path: BasePath,
+        // Inferred from the resolved group by the create service.
+        #[dxo(setter)]
+        pub collection_type: CollectionType,
+        // The connection minted with the collection (source/destination only).
+        #[dxo(setter)]
+        #[builder(default)]
+        pub connection_id: Option<ConnectionId>,
     }
 
     #[ta_objects::Dao]
@@ -65,6 +73,13 @@ mod definitions {
         pub group_id: GroupId,
         #[dxo(extractor)]
         pub base_path: BasePath,
+        #[dxo(extractor)]
+        pub collection_type: CollectionType,
+        /// The connection minted with this collection (source/destination
+        /// only — they are 1:1 with it).
+        #[dxo(builder(skip))]
+        #[builder(default)]
+        pub connection_id: Option<ConnectionId>,
     }
 
     #[ta_objects::Dao]
@@ -113,6 +128,19 @@ mod definitions {
         #[serde(default)]
         #[builder(default)]
         pub base_path: BasePath,
+        /// The connection triple — REQUIRED for source/destination collections
+        /// (they are 1:1 with their connection and cannot exist without it),
+        /// forbidden for a DataFactory.
+        #[schema(value_type = Object)]
+        #[serde(default)]
+        #[builder(default)]
+        pub connection: Option<serde_json::Value>,
+        #[serde(default)]
+        #[builder(default)]
+        pub secrets: Option<Vec<KeyValue>>,
+        #[serde(default)]
+        #[builder(default)]
+        pub vars: Option<Vec<KeyValue>>,
     }
 
     #[ta_objects::Dto]
@@ -156,5 +184,8 @@ mod definitions {
         pub group: GroupName,
         #[dto(list(filter, filter_like, order_by))]
         pub base_path: BasePath,
+        #[dto(list(filter, order_by))]
+        pub collection_type: CollectionType,
+        pub connection_id: Option<ConnectionId>,
     }
 }

@@ -279,6 +279,15 @@ pub const CREATE_COLLECTION: &str = url!(COLLECTIONS);
 pub const UPDATE_COLLECTION: &str = url!(COLLECTION);
 pub const DELETE_COLLECTION: &str = url!(COLLECTION);
 
+// Connection info of a source/destination collection (1:1 — created with
+// the collection, named by it, deleted with it). The apiserver forwards the
+// dehydrated connection + secrets + vars to the opaque store, keyed by
+// connection id. POST updates an existing connection; GET reads back names
+// only. Both require manage_project ("CRUD sources and destinations").
+pub const COLLECTION_CONNECTION: &str = url!(COLLECTION, "/connection");
+pub const UPSERT_COLLECTION_CONNECTION: &str = url!(COLLECTION_CONNECTION);
+pub const GET_COLLECTION_CONNECTION: &str = url!(COLLECTION_CONNECTION);
+
 // Functions
 pub const FUNCTIONS: &str = url!(COLLECTION, "/functions");
 pub const FUNCTION: &str = url!(FUNCTIONS, "/{function}");

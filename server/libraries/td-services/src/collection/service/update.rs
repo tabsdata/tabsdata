@@ -2,34 +2,64 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+//! Update a collection. Renaming a source/destination collection renames its
+//! connection too (1:1 — the collection's name IS the connection's name), so
+//! the orchestration mirrors create, store-first:
+//!
+//! 1. resolve (read-only): authz, validate, build the update row and detect
+//!    the rename — nothing persisted.
+//! 2. store rename (rename only): rewrite the stored document's `name`, which
+//!    also moves the worker artifact. No DB connection held across it.
+//! 3. update (short TX): apply the row update. If this fails, the store is
+//!    put back under the old name best-effort and the error surfaces.
+//!
+//! `collection_type` is immutable: it is inferred from the group at creation
+//! and never accepted on update. `CollectionUpdate` carries no group/type
+//! field and `CollectionUpdateDB` writes only name/description/modified_*, so
+//! the type is preserved for free. Any future "move collection to group"
+//! feature must reject the change when the collection_type is
+//! Source/Destination.
+
+use crate::collection::service::connection::{escalate_for_connected, rename_stored_connection};
 use crate::collection::service::layer::update::{
-    UpdateCollectionDBBuilderUpdate, update_collection_validate,
+    CollectionUpdatePlan, UpdateCollectionDBBuilderUpdate, apply_collection_update,
+    plan_collection_update, update_collection_validate,
 };
-use ta_services::factory::service_factory;
+use std::sync::Arc;
+use ta_services::factory::{FieldAccessor, ServiceFactory, service_factory};
+use ta_services::service::TdService;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
+use td_bridge::BridgeProviderHandle;
+use td_database::pool::TdPool;
+use td_database::scoped::{InProject, Scoped};
+use td_error::TdError;
 use td_objects::dxo::collection::{
-    CollectionDB, CollectionDBWithNames, CollectionRead, CollectionReadBuilder, CollectionUpdate,
-    CollectionUpdateDB, CollectionUpdateDBBuilder,
+    CollectionDB, CollectionRead, CollectionUpdate, CollectionUpdateDB, CollectionUpdateDBBuilder,
 };
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, CollectionIdName};
+use td_objects::types::basic::{CollectionIdName, CollectionType, ProjectId};
 use td_queries::By;
-use td_tower::default_services::TransactionProvider;
+use td_tower::ctx_service::{CtxResponse, RawOneshot, ReqCtx};
+use td_tower::default_services::{ConnectionProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
+use td_tower::service_provider::TdBoxService;
+use tower::service_fn;
+use tower::util::BoxCloneSyncService;
+use tracing::warn;
 
 #[service_factory(
-    name = UpdateCollectionService,
+    name = CollectionUpdateResolveService,
     request = UpdateRequest<CollectionParam, CollectionUpdate>,
-    response = CollectionRead,
-    connection = TransactionProvider,
+    response = CollectionUpdatePlan,
+    connection = ConnectionProvider,
     scope = "Project",
     context = AuthzContext,
 )]
-fn service() {
+fn resolve() {
     layers!(
         from_fn(
             With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract::<RequestContext>
@@ -41,7 +71,9 @@ fn service() {
         ),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        // source/destination collections carry connection config: manage_project
+        from_fn(With::<CollectionDB>::extract::<CollectionType>),
+        from_fn(escalate_for_connected),
         from_fn(
             With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract_data::<
                 CollectionUpdate,
@@ -52,11 +84,141 @@ fn service() {
         from_fn(With::<RequestContext>::update::<CollectionUpdateDBBuilder, _>),
         from_fn(With::<CollectionUpdate>::update_collection_update_db_builder),
         from_fn(With::<CollectionUpdateDBBuilder>::build::<CollectionUpdateDB>),
-        from_fn(By::<CollectionId>::update::<CollectionUpdateDB, CollectionDB>),
-        from_fn(By::<CollectionId>::fetch_one::<CollectionDBWithNames>),
-        from_fn(With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>),
-        from_fn(With::<CollectionReadBuilder>::build::<CollectionRead>),
+        from_fn(plan_collection_update),
     )
+}
+
+// Internal only (never routed; the orchestrator below is the routed surface),
+// so no authz layers — the resolve already gated the request.
+#[service_factory(
+    name = CollectionUpdateTxService,
+    request = UpdateRequest<(), CollectionUpdatePlan>,
+    response = CollectionRead,
+    connection = TransactionProvider,
+    scope = "Project",
+)]
+fn update() {
+    layers!(
+        from_fn(
+            With::<UpdateRequest<(), CollectionUpdatePlan>>::extract_data::<CollectionUpdatePlan>
+        ),
+        from_fn(apply_collection_update),
+    )
+}
+
+/// The routed update service: resolve → store rename (when renaming a
+/// connected collection) → update, each DB phase a factory-built sub-service
+/// with its own short, project-scoped connection.
+pub struct UpdateCollectionService {
+    resolve: CollectionUpdateResolveService,
+    update: CollectionUpdateTxService,
+    bridge: Arc<BridgeProviderHandle>,
+}
+
+impl UpdateCollectionService {
+    pub fn new(
+        db: TdPool,
+        authz_context: Arc<AuthzContext>,
+        bridge: Arc<BridgeProviderHandle>,
+    ) -> Self {
+        Self {
+            resolve: CollectionUpdateResolveService::new(db.clone(), authz_context),
+            update: CollectionUpdateTxService::new(db),
+            bridge,
+        }
+    }
+
+    #[cfg(feature = "test-utils")]
+    pub fn with_defaults(db: TdPool) -> Self {
+        Self::new(
+            db,
+            Arc::new(AuthzContext::default()),
+            Arc::new(BridgeProviderHandle::default()),
+        )
+    }
+}
+
+impl<C> ServiceFactory<C> for UpdateCollectionService
+where
+    TdPool: FieldAccessor<C>,
+    Arc<AuthzContext>: FieldAccessor<C>,
+    Arc<BridgeProviderHandle>: FieldAccessor<C>,
+{
+    type Service = Self;
+
+    fn build(ctx: &C) -> Self {
+        Self::new(
+            TdPool::get_field(ctx),
+            Arc::<AuthzContext>::get_field(ctx),
+            Arc::<BridgeProviderHandle>::get_field(ctx),
+        )
+    }
+}
+
+impl TdService for UpdateCollectionService {
+    type Request = Scoped<UpdateRequest<CollectionParam, CollectionUpdate>, ProjectId>;
+    type Response = CollectionRead;
+    type Error = TdError;
+
+    fn service(&self) -> TdBoxService<Self::Request, Self::Response, Self::Error> {
+        let resolve = self.resolve.service();
+        let update = self.update.service();
+        let bridge = self.bridge.clone();
+        BoxCloneSyncService::new(service_fn(move |request: Self::Request| {
+            let resolve = resolve.clone();
+            let update = update.clone();
+            let bridge = bridge.clone();
+            async move {
+                let project = request.project;
+                let context = request.inner.context.clone();
+                let plan = resolve.raw_oneshot(request).await?;
+                let store = bridge.connection_store();
+                let rename = plan.rename.clone();
+                if let Some(rename) = &rename {
+                    rename_stored_connection(
+                        store,
+                        &project,
+                        &rename.connection_id,
+                        &rename.new_name,
+                    )
+                    .await?;
+                }
+                let updated = update
+                    .raw_oneshot(context.update((), plan).in_project(project))
+                    .await;
+                match updated {
+                    Ok(read) => Ok(CtxResponse::new(read, ReqCtx::default())),
+                    Err(e) => {
+                        // The DB still references the old name — put the
+                        // store back best-effort (idempotent; a retry of
+                        // either direction overwrites).
+                        if let Some(rename) = &rename {
+                            if let Err(revert) = rename_stored_connection(
+                                store,
+                                &project,
+                                &rename.connection_id,
+                                &rename.old_name,
+                            )
+                            .await
+                            {
+                                warn!(
+                                    error = %revert,
+                                    "could not revert the connection store rename; \
+                                     upsert the connection to repair"
+                                );
+                            }
+                        }
+                        Err(e)
+                    }
+                }
+            }
+        }))
+    }
+
+    #[cfg(feature = "test_tower_metadata")]
+    async fn metadata(&self) -> td_tower::metadata::Metadata {
+        self.resolve.metadata().await
+    }
 }
 
 #[cfg(test)]
@@ -64,13 +226,17 @@ mod tests {
     use super::*;
     use crate::Context;
     use crate::collection::CollectionError;
+    use crate::collection::service::connection::test_support::{
+        bridge, create_collection, create_request, linked_connection, seed_dev_user,
+    };
+    use td_error::ApiError;
+    use crate::collection::service::create::CreateCollectionService;
     use crate::function::services::register::RegisterFunctionService;
     use crate::function::services::upload::UploadFunctionService;
     use axum::body::Body;
     use axum::extract::Request;
     use std::str::FromStr;
-    use ta_services::factory::ServiceFactory;
-    use ta_services::service::TdService;
+    use td_bridge::connection::memory::InMemoryConnectionStore;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_error::{TdError, assert_service_error};
@@ -84,12 +250,15 @@ mod tests {
     use td_objects::rest_urls::{CollectionParam, FunctionParam, OptionalAtTimeParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, CollectionName, Decorator, Description, FunctionIdName,
-        FunctionName, FunctionRuntimeValues, FunctionStatus, ProjectId, UserId, UserName,
+        FunctionName, FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, UserId,
+        UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
+    // The orchestrator's metadata is its resolve pipeline (the store/tx
+    // phases are hand-rolled around it).
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_update_collection(db: TdPool) {
@@ -99,7 +268,7 @@ mod tests {
         UpdateCollectionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<UpdateRequest<CollectionParam, CollectionUpdate>, ProjectId>, CollectionRead>(&[
+            .assert_service::<Scoped<UpdateRequest<CollectionParam, CollectionUpdate>, ProjectId>, CollectionUpdatePlan>(&[
                 type_of_val(
                     &With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract::<
                         RequestContext,
@@ -114,7 +283,8 @@ mod tests {
                 ),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionType>),
+                type_of_val(&escalate_for_connected),
                 type_of_val(
                     &With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract_data::<
                         CollectionUpdate,
@@ -125,13 +295,31 @@ mod tests {
                 type_of_val(&With::<RequestContext>::update::<CollectionUpdateDBBuilder, _>),
                 type_of_val(&With::<CollectionUpdate>::update_collection_update_db_builder),
                 type_of_val(&With::<CollectionUpdateDBBuilder>::build::<CollectionUpdateDB>),
-                type_of_val(&By::<CollectionId>::update::<CollectionUpdateDB, CollectionDB>),
-                type_of_val(&By::<CollectionId>::fetch_one::<CollectionDBWithNames>),
-                type_of_val(
-                    &With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>,
-                ),
-                type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead>),
+                type_of_val(&plan_collection_update),
             ]);
+    }
+
+    fn update_request(
+        collection: &str,
+        update: CollectionUpdate,
+    ) -> Scoped<UpdateRequest<CollectionParam, CollectionUpdate>, ProjectId> {
+        RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection).unwrap())
+                    .build()
+                    .unwrap(),
+                update,
+            )
+            .in_project(ProjectId::sandbox())
+    }
+
+    fn rename_to(name: &str) -> CollectionUpdate {
+        CollectionUpdate::builder()
+            .name(Some(CollectionName::try_from(name).unwrap()))
+            .description(None)
+            .build()
+            .unwrap()
     }
 
     #[td_test::test(db)]
@@ -154,21 +342,10 @@ mod tests {
             .build()
             .unwrap();
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .update(
-            CollectionParam::builder()
-                .collection(CollectionIdName::from_str(&create_name.to_string()).unwrap())
-                .build()
-                .unwrap(),
-            update,
-        )
-        .in_project(ProjectId::sandbox());
-
         let service = UpdateCollectionService::with_defaults(db).service();
-        let response = service.raw_oneshot(request).await;
+        let response = service
+            .raw_oneshot(update_request(&create_name.to_string(), update))
+            .await;
         assert!(response.is_ok());
         let updated = response.unwrap();
 
@@ -307,15 +484,14 @@ mod tests {
             .body(Body::from(payload.clone()))
             .unwrap();
         let upload = FunctionUpload::new(upload_request);
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                        .build()?,
-                    upload,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                    .build()?,
+                upload,
+            )
+            .in_project(ProjectId::sandbox());
         let bundle = UploadFunctionService::build(&context)
             .service()
             .raw_oneshot(request)
@@ -334,15 +510,14 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    CollectionParam::builder()
-                        .collection(CollectionIdName::from_str(collection_name.as_str())?)
-                        .build()?,
-                    create,
-                )
-                .in_project(ProjectId::sandbox());
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection_name.as_str())?)
+                    .build()?,
+                create,
+            )
+            .in_project(ProjectId::sandbox());
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -393,13 +568,12 @@ mod tests {
             .collection(CollectionIdName::from_str(collection_name.as_str())?)
             .function(FunctionIdName::from_str("artifact_fn")?)
             .build()?;
-        let download_request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(FunctionMaybeAtIdName::new(
-                    function_param,
-                    OptionalAtTimeParam { at: None },
-                ))
-                .in_project(ProjectId::sandbox());
+        let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(FunctionMaybeAtIdName::new(
+                function_param,
+                OptionalAtTimeParam { at: None },
+            ))
+            .in_project(ProjectId::sandbox());
         let response = DownloadBundleService::build(&context)
             .service()
             .raw_oneshot(download_request)
@@ -416,6 +590,112 @@ mod tests {
             "bundle still streams after the collection moved"
         );
 
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_rename_connected_collection_renames_the_connection(db: TdPool) {
+        let bridge = bridge(InMemoryConnectionStore::default());
+        let authz = Arc::new(AuthzContext::default());
+
+        CreateCollectionService::new(db.clone(), authz.clone(), bridge.clone())
+            .service()
+            .raw_oneshot(create_request("src0", Some(GroupName::source())))
+            .await
+            .unwrap();
+
+        let renamed = UpdateCollectionService::new(db.clone(), authz, bridge.clone())
+            .service()
+            .raw_oneshot(update_request("src0", rename_to("src1")))
+            .await
+            .unwrap();
+        assert_eq!(renamed.name.to_string(), "src1");
+
+        // The stored document followed the rename, values intact.
+        let connection = linked_connection(&db, "src1").await.unwrap();
+        let stored = bridge
+            .connection_store()
+            .fetch(&ProjectId::sandbox(), &connection.id)
+            .await
+            .unwrap();
+        assert_eq!(stored.connection["name"], "src1");
+        assert_eq!(stored.secret_names, vec!["CREDENTIALS_PASSWORD"]);
+    }
+
+    #[td_test::test(db)]
+    async fn test_failed_rename_puts_the_store_back(db: TdPool) {
+        let bridge = bridge(InMemoryConnectionStore::default());
+        let authz = Arc::new(AuthzContext::default());
+
+        CreateCollectionService::new(db.clone(), authz.clone(), bridge.clone())
+            .service()
+            .raw_oneshot(create_request("src0", Some(GroupName::source())))
+            .await
+            .unwrap();
+        let taken = CollectionName::try_from("taken").unwrap();
+        let _ = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&taken, &UserId::admin())
+            .await;
+
+        // The resolve pre-check rejects the taken name before the store is
+        // ever touched (the orchestrator's revert remains as the fallback
+        // for the create/rename race the pre-check cannot see).
+        UpdateCollectionService::new(db.clone(), authz, bridge.clone())
+            .service()
+            .raw_oneshot(update_request("src0", rename_to("taken")))
+            .await
+            .expect_err("renaming onto an existing collection must fail");
+
+        let connection = linked_connection(&db, "src0").await.unwrap();
+        let stored = bridge
+            .connection_store()
+            .fetch(&ProjectId::sandbox(), &connection.id)
+            .await
+            .unwrap();
+        assert_eq!(stored.connection["name"], "src0");
+    }
+    /// Renaming re-keys a source collection's connection document, so it
+    /// requires ManageProject; plain collections need only DevelopProject.
+    #[td_test::test(db)]
+    async fn test_source_update_requires_manage_project(db: TdPool) -> Result<(), TdError> {
+        let dev = seed_dev_user(&db).await;
+
+        // DataFactory rename with develop_project: fine.
+        CreateCollectionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(create_request("dev_df_u", None))
+            .await?;
+        let request = RequestContext::with(AccessTokenId::default(), dev.clone())
+            .update(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str("dev_df_u")?)
+                    .build()?,
+                rename_to("dev_df_u2"),
+            )
+            .in_project(ProjectId::sandbox());
+        UpdateCollectionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(request)
+            .await?;
+
+        // Source rename with develop_project: forbidden.
+        create_collection(&db, "dev_src_u", Some(GroupName::source())).await;
+        let request = RequestContext::with(AccessTokenId::default(), dev)
+            .update(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str("dev_src_u")?)
+                    .build()?,
+                rename_to("dev_src_u2"),
+            )
+            .in_project(ProjectId::sandbox());
+        let err = UpdateCollectionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(request)
+            .await
+            .expect_err("develop_project must not suffice to rename a source collection");
+        assert_eq!(err.api_error(), ApiError::Forbidden);
         Ok(())
     }
 }

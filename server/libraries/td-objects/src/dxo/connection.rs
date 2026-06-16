@@ -1,0 +1,85 @@
+//
+// Copyright 2026 Tabs Data Inc.
+//
+
+//! Transport DTOs for a collection's connection info: the dehydrated connection
+//! plus the secret/var key-values exchanged between the apiserver, the
+//! connection services, and (behind the store) the bridge. The connection JSON
+//! itself is opaque (`serde_json::Value`).
+
+use crate::types::basic::ConnectionId;
+
+/// One secret/var as `(key, value)`. Hand-written (not a `Dto`) so its `Debug`
+/// redacts `value`: these carry secret literals and the apiserver debug-logs
+/// request bodies. `ConnectionUpsert`'s derived `Debug` formats its secrets
+/// through this impl, so redaction holds.
+#[derive(Clone, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+pub struct KeyValue {
+    pub key: String,
+    pub value: Option<String>,
+}
+
+impl std::fmt::Debug for KeyValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KeyValue")
+            .field("key", &self.key)
+            .field("value", &self.value.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
+}
+
+/// The 3 JSON objects an upsert carries to the store. All optional so an update
+/// can carry just secrets or just vars; a create carries all three. Alignment of
+/// the triple is validated CLI-side.
+#[ta_objects::Dto]
+pub struct ConnectionUpsert {
+    #[schema(value_type = Object)]
+    pub connection: Option<serde_json::Value>,
+    pub secrets: Option<Vec<KeyValue>>,
+    pub vars: Option<Vec<KeyValue>>,
+}
+
+/// What the store returns on read: the dehydrated connection plus the names
+/// (never the values) of the stored secrets and vars. `id` is stamped by the
+/// apiserver (the connection row's id), not by the store backend.
+#[ta_objects::Dto]
+pub struct ConnectionRead {
+    #[serde(default)]
+    #[builder(default)]
+    pub id: Option<ConnectionId>,
+    #[schema(value_type = Object)]
+    pub connection: serde_json::Value,
+    pub secret_names: Vec<String>,
+    pub var_names: Vec<String>,
+}
+
+#[ta_objects::dxo]
+mod definitions {
+    use crate::dxo::crudl::RequestContext;
+    use crate::types::basic::{AtTime, ConnectionId, ConnectionKind, UserId};
+
+    /// A connection row: stable identity + connector kind, 1:1 with its
+    /// source/destination collection (created with it, named by it, deleted
+    /// with it). The connection CONTENT (dehydrated JSON, secrets, vars)
+    /// lives in the store backend, keyed by this row's id; the row pins the
+    /// connector kind across updates. The row exists only once a store write
+    /// succeeded (store-first ordering), so its presence IS the confirmation.
+    /// `project_id` is owned by RLS (field-less, like groups).
+    #[ta_objects::Dao]
+    #[dao(sql_table = "connections")]
+    #[dxo(updater(try_from = RequestContext, skip_all))]
+    pub struct ConnectionDB {
+        #[dxo(extractor)]
+        #[builder(default)]
+        pub id: ConnectionId,
+        pub kind: ConnectionKind,
+        #[dxo(updater(include, field = "time"))]
+        pub created_on: AtTime,
+        #[dxo(updater(include, field = "user_id"))]
+        pub created_by_id: UserId,
+        #[dxo(updater(include, field = "time"))]
+        pub modified_on: AtTime,
+        #[dxo(updater(include, field = "user_id"))]
+        pub modified_by_id: UserId,
+    }
+}

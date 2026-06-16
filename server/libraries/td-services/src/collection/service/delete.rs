@@ -2,47 +2,91 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+//! Delete a collection. The connection's store content goes with it (1:1),
+//! AFTER the transaction commits — never inside it (an outbound store call
+//! must not hold the transaction open) and never before it (a failed delete
+//! must not destroy a live collection's secrets):
+//!
+//! 1. resolve (read-only): authz and fetch the collection.
+//! 2. delete (short TX): soft-delete the collection and cascade over its
+//!    tables/functions/triggers/dependencies/workers.
+//! 3. store delete (source/destination only): best-effort once the DB row is
+//!    committed deleted — a failure leaves invisible content an idempotent
+//!    re-delete repairs; the connection row itself stays (the soft-deleted
+//!    collection still references it).
+
+use crate::collection::service::connection::{drop_connection_best_effort, escalate_for_connected};
 use crate::collection::service::layer::delete::{
     build_deleted_functions, build_deleted_tables, update_deleted_workers,
 };
 use crate::table::layers::delete::{
     build_deleted_dependencies, build_deleted_triggers, build_frozen_functions,
 };
-use ta_services::factory::service_factory;
+use std::sync::Arc;
+use ta_services::factory::{FieldAccessor, ServiceFactory, service_factory};
+use ta_services::service::TdService;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
+use td_bridge::BridgeProviderHandle;
+use td_database::pool::TdPool;
+use td_database::scoped::{InProject, Scoped};
+use td_error::TdError;
 use td_objects::dxo::collection::{CollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder};
-use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
+use td_objects::dxo::crudl::{DeleteRequest, RequestContext, UpdateRequest};
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::TriggerDB;
 use td_objects::rest_urls::CollectionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, CollectionIdName, FunctionId, TableId};
+use td_objects::types::basic::{
+    CollectionId, CollectionIdName, CollectionType, FunctionId, ProjectId, TableId,
+};
 use td_queries::By;
 use td_queries::insert_vec;
-use td_tower::default_services::TransactionProvider;
+use td_tower::ctx_service::{CtxResponse, RawOneshot, ReqCtx};
+use td_tower::default_services::{ConnectionProvider, TransactionProvider};
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
+use td_tower::service_provider::TdBoxService;
+use tower::service_fn;
+use tower::util::BoxCloneSyncService;
 
 #[service_factory(
-    name = DeleteCollectionService,
+    name = CollectionDeleteResolveService,
     request = DeleteRequest<CollectionParam>,
-    response = (),
-    connection = TransactionProvider,
+    response = CollectionDB,
+    connection = ConnectionProvider,
     scope = "Project",
     context = AuthzContext,
 )]
-fn service() {
+fn resolve() {
     layers!(
         from_fn(With::<DeleteRequest<CollectionParam>>::extract::<RequestContext>),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<DeleteRequest<CollectionParam>>::extract_name::<CollectionParam>),
-        // Get collection
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
+        // source/destination collections carry connection config: manage_project
+        from_fn(With::<CollectionDB>::extract::<CollectionType>),
+        from_fn(escalate_for_connected),
+    )
+}
+
+// Internal only (never routed; the orchestrator below is the routed surface),
+// so no authz layers — the resolve already gated the request.
+#[service_factory(
+    name = CollectionDeleteTxService,
+    request = UpdateRequest<(), CollectionDB>,
+    response = (),
+    connection = TransactionProvider,
+    scope = "Project",
+)]
+fn delete() {
+    layers!(
+        from_fn(With::<UpdateRequest<(), CollectionDB>>::extract::<RequestContext>),
+        from_fn(With::<UpdateRequest<(), CollectionDB>>::extract_data::<CollectionDB>),
         // Build deleted collection
         from_fn(With::<CollectionDB>::try_convert_to::<CollectionDeleteDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionDeleteDBBuilder, _>),
@@ -90,11 +134,103 @@ fn service() {
     )
 }
 
+/// The routed delete service: resolve → delete TX → store delete (after
+/// commit, source/destination only), each DB phase a factory-built
+/// sub-service with its own short, project-scoped connection.
+pub struct DeleteCollectionService {
+    resolve: CollectionDeleteResolveService,
+    delete: CollectionDeleteTxService,
+    bridge: Arc<BridgeProviderHandle>,
+}
+
+impl DeleteCollectionService {
+    pub fn new(
+        db: TdPool,
+        authz_context: Arc<AuthzContext>,
+        bridge: Arc<BridgeProviderHandle>,
+    ) -> Self {
+        Self {
+            resolve: CollectionDeleteResolveService::new(db.clone(), authz_context),
+            delete: CollectionDeleteTxService::new(db),
+            bridge,
+        }
+    }
+
+    #[cfg(feature = "test-utils")]
+    pub fn with_defaults(db: TdPool) -> Self {
+        Self::new(
+            db,
+            Arc::new(AuthzContext::default()),
+            Arc::new(BridgeProviderHandle::default()),
+        )
+    }
+}
+
+impl<C> ServiceFactory<C> for DeleteCollectionService
+where
+    TdPool: FieldAccessor<C>,
+    Arc<AuthzContext>: FieldAccessor<C>,
+    Arc<BridgeProviderHandle>: FieldAccessor<C>,
+{
+    type Service = Self;
+
+    fn build(ctx: &C) -> Self {
+        Self::new(
+            TdPool::get_field(ctx),
+            Arc::<AuthzContext>::get_field(ctx),
+            Arc::<BridgeProviderHandle>::get_field(ctx),
+        )
+    }
+}
+
+impl TdService for DeleteCollectionService {
+    type Request = Scoped<DeleteRequest<CollectionParam>, ProjectId>;
+    type Response = ();
+    type Error = TdError;
+
+    fn service(&self) -> TdBoxService<Self::Request, Self::Response, Self::Error> {
+        let resolve = self.resolve.service();
+        let delete = self.delete.service();
+        let bridge = self.bridge.clone();
+        BoxCloneSyncService::new(service_fn(move |request: Self::Request| {
+            let resolve = resolve.clone();
+            let delete = delete.clone();
+            let bridge = bridge.clone();
+            async move {
+                let project = request.project;
+                let context = request.inner.context.clone();
+                let collection = resolve.raw_oneshot(request).await?;
+                let connection_id = collection.connection_id;
+                delete
+                    .raw_oneshot(context.update((), collection).in_project(project))
+                    .await?;
+                // The row is committed deleted; now drop the store content so
+                // its secrets aren't orphaned.
+                if let Some(connection_id) = &connection_id {
+                    drop_connection_best_effort(bridge.connection_store(), &project, connection_id)
+                        .await;
+                }
+                Ok(CtxResponse::new((), ReqCtx::default()))
+            }
+        }))
+    }
+
+    #[cfg(feature = "test_tower_metadata")]
+    async fn metadata(&self) -> td_tower::metadata::Metadata {
+        self.resolve.metadata().await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::collection::service::connection::test_support::{
+        bridge, create_collection, create_request, linked_connection, seed_dev_user,
+    };
+    use td_error::ApiError;
+    use crate::collection::service::create::CreateCollectionService;
     use std::str::FromStr;
-    use ta_services::service::TdService;
+    use td_bridge::connection::memory::InMemoryConnectionStore;
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_error::TdError;
@@ -109,7 +245,7 @@ mod tests {
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, DependencyStatus, FunctionName,
-        FunctionRuntimeValues, FunctionStatus, LogicalFunctionRunStatus, ProjectId, RoleId,
+        FunctionRuntimeValues, FunctionStatus, GroupName, LogicalFunctionRunStatus, ProjectId,
         TableName, TableNameDto, TableStatus, TransactionKey, TriggerStatus, UserId,
         WorkerMessageStatus, WorkerStatus, WorkerType,
     };
@@ -118,6 +254,8 @@ mod tests {
     use td_queries::{CurrentEntry, LiveEntry};
     use td_tower::ctx_service::RawOneshot;
 
+    // The orchestrator's metadata is its resolve pipeline; the TX layers are
+    // asserted below against the sub-service directly.
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_collection(db: TdPool) {
@@ -127,16 +265,32 @@ mod tests {
         DeleteCollectionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<DeleteRequest<CollectionParam>, ProjectId>, ()>(&[
+            .assert_service::<Scoped<DeleteRequest<CollectionParam>, ProjectId>, CollectionDB>(&[
                 type_of_val(&With::<DeleteRequest<CollectionParam>>::extract::<RequestContext>),
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(
                     &With::<DeleteRequest<CollectionParam>>::extract_name::<CollectionParam>,
                 ),
-                // Get collection
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
+                type_of_val(&With::<CollectionDB>::extract::<CollectionType>),
+                type_of_val(&escalate_for_connected),
+            ]);
+    }
+
+    #[cfg(feature = "test_tower_metadata")]
+    #[td_test::test(db)]
+    async fn test_tower_metadata_delete_collection_tx(db: TdPool) {
+        use td_database::scoped::Scoped;
+        use td_tower::metadata::type_of_val;
+
+        CollectionDeleteTxService::with_defaults(db)
+            .metadata()
+            .await
+            .assert_service::<Scoped<UpdateRequest<(), CollectionDB>, ProjectId>, ()>(&[
+                type_of_val(&With::<UpdateRequest<(), CollectionDB>>::extract::<RequestContext>),
+                type_of_val(&With::<UpdateRequest<(), CollectionDB>>::extract_data::<CollectionDB>),
                 // Build deleted collection
                 type_of_val(&With::<CollectionDB>::try_convert_to::<CollectionDeleteDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<CollectionDeleteDBBuilder, _>),
@@ -198,6 +352,44 @@ mod tests {
                 // And last, set to stop whatever workers are running in the collection.
                 type_of_val(&update_deleted_workers),
             ]);
+    }
+
+    fn delete_request(collection: &str) -> Scoped<DeleteRequest<CollectionParam>, ProjectId> {
+        RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .delete(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection).unwrap())
+                    .build()
+                    .unwrap(),
+            )
+            .in_project(ProjectId::sandbox())
+    }
+
+    #[td_test::test(db)]
+    async fn test_delete_drops_the_connection_store_content(db: TdPool) {
+        let bridge = bridge(InMemoryConnectionStore::default());
+        let authz = Arc::new(AuthzContext::default());
+
+        CreateCollectionService::new(db.clone(), authz.clone(), bridge.clone())
+            .service()
+            .raw_oneshot(create_request("src0", Some(GroupName::source())))
+            .await
+            .unwrap();
+        let connection = linked_connection(&db, "src0").await.unwrap();
+
+        DeleteCollectionService::new(db.clone(), authz, bridge.clone())
+            .service()
+            .raw_oneshot(delete_request("src0"))
+            .await
+            .unwrap();
+
+        // Deterministically gone once the delete returns — no polling.
+        let err = bridge
+            .connection_store()
+            .fetch(&ProjectId::sandbox(), &connection.id)
+            .await
+            .expect_err("store content must be dropped with the collection");
+        assert!(err.to_string().contains("no connection configured"));
     }
 
     #[td_test::test(db)]
@@ -300,20 +492,9 @@ mod tests {
             .await?;
 
         // Test delete
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .delete(
-            CollectionParam::builder()
-                .collection(CollectionIdName::from_str(&name.to_string())?)
-                .build()?,
-        )
-        .in_project(ProjectId::sandbox());
-
         DeleteCollectionService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(request)
+            .raw_oneshot(delete_request(&name.to_string()))
             .await?;
 
         // Assert collection is deleted
@@ -421,20 +602,9 @@ mod tests {
             .function(&collection_1, &create)
             .await?;
 
-        let request = RequestContext::with(
-            AccessTokenId::default(),
-            UserId::admin()
-        )
-        .delete(
-            CollectionParam::builder()
-                .collection(CollectionIdName::from_str(&name_c_0.to_string())?)
-                .build()?,
-        )
-        .in_project(ProjectId::sandbox());
-
         DeleteCollectionService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(request)
+            .raw_oneshot(delete_request(&name_c_0.to_string()))
             .await?;
 
         // Assert only c_1 is active
@@ -459,5 +629,26 @@ mod tests {
         assert_eq!(found.len(), 1);
 
         Ok(())
+    }
+    /// Deleting a source collection destroys its connection, so it requires
+    /// ManageProject.
+    #[td_test::test(db)]
+    async fn test_source_delete_requires_manage_project(db: TdPool) {
+        create_collection(&db, "dev_src_d", Some(GroupName::source())).await;
+        let dev = seed_dev_user(&db).await;
+        let request = RequestContext::with(AccessTokenId::default(), dev)
+            .delete(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str("dev_src_d").unwrap())
+                    .build()
+                    .unwrap(),
+            )
+            .in_project(ProjectId::sandbox());
+        let err = DeleteCollectionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(request)
+            .await
+            .expect_err("develop_project must not suffice to delete a source collection");
+        assert_eq!(err.api_error(), ApiError::Forbidden);
     }
 }

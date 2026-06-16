@@ -4,6 +4,7 @@
 
 mod bundles;
 mod collections;
+mod connections;
 mod dependencies;
 mod dependencies_current;
 mod executions;
@@ -61,6 +62,7 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &users::Defs,
     &groups::Defs,
     &projects::Defs,
+    &connections::Defs,
     &collections::Defs,
     &roles::Defs,
     &users_roles::Defs,
@@ -102,6 +104,7 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
 /// omission (which would silently skip RLS for that table) fails the build.
 pub(crate) const PROJECT_SCOPED_TABLES: &[&str] = &[
     "groups",
+    "connections",
     "collections",
     "bundles",
     "functions",
@@ -133,9 +136,9 @@ impl SchemaVersion for Schema {
     // Refresh via `cargo test -p td-schema --lib print_schema_fingerprints --
     // --ignored --nocapture` after any intentional change to current/.
     const FINGERPRINTS: [&'static str; 3] = [
-        "2d581755fcf87646a9e9112ba5701d25ca5c83eb397ddb224922b473e2abced5", // Sqlite
-        "b1b9b41fb8ad8e6bd782db2e17592f81c813d8f4792e05579e191d26a738fcec", // Postgres
-        "633ac2c80ea9ca5a7e5a0a13cfd6976924af24042ba85fb6759b39da414b85a6", // MySql
+        "dec33bfc6e17623430e33fba1282fd5771c34608327a680a8cb8235a90a711aa", // Sqlite
+        "0485d7f668fe2fb9c3b9cf3ff64bc92fc6a0978b021e56b94a6a94dea21cf2bf", // Postgres
+        "c95b794402b9bb15e669fa8ea0848c8c763685b8402ebb0a4b55e0c1ad72c597", // MySql
     ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {

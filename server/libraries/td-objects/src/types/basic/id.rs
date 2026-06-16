@@ -36,6 +36,9 @@ impl CollectionId {
     }
 }
 
+#[ta_objects::typed(id)]
+pub struct ConnectionId;
+
 #[ta_objects::typed(id, try_from = EntityId)]
 pub struct ProjectId;
 

@@ -38,6 +38,37 @@ pub enum DependencyStatus {
     Deleted,
 }
 
+/// Flavour of a collection, inferred from its group at creation time and then
+/// immutable. `DataFactory` is the default; `Source`/`Destination` collections
+/// carry connection info.
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq)]
+pub enum CollectionType {
+    #[typed_enum(rename = "F")]
+    DataFactory,
+    #[typed_enum(rename = "S")]
+    Source,
+    #[typed_enum(rename = "D")]
+    Destination,
+}
+
+impl CollectionType {
+    /// Infer the flavour from the collection's group. The reserved `source` and
+    /// `destination` groups map to `Source`/`Destination`; every other group
+    /// (default or user-created) is a `DataFactory`. Keying on the group *id* is
+    /// sound because the seeded system groups carry the same well-known id in
+    /// every project (group ids are unique per project, not globally).
+    pub fn from_group_id(group: &super::GroupId) -> Self {
+        if *group == super::GroupId::source() {
+            CollectionType::Source
+        } else if *group == super::GroupId::destination() {
+            CollectionType::Destination
+        } else {
+            CollectionType::DataFactory
+        }
+    }
+}
+
 /// Represents the status of an execution.
 /// It is a summary of the statuses of all function runs within the execution.
 #[ta_objects::typed_enum]
@@ -702,6 +733,28 @@ impl From<WorkerTypeDto> for WorkerType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::basic::GroupId;
+
+    #[test]
+    fn test_collection_type_from_group_id() {
+        assert_eq!(
+            CollectionType::from_group_id(&GroupId::source()),
+            CollectionType::Source
+        );
+        assert_eq!(
+            CollectionType::from_group_id(&GroupId::destination()),
+            CollectionType::Destination
+        );
+        assert_eq!(
+            CollectionType::from_group_id(&GroupId::default_group()),
+            CollectionType::DataFactory
+        );
+        // Any fresh (user-created) group id is a DataFactory.
+        assert_eq!(
+            CollectionType::from_group_id(&GroupId::default()),
+            CollectionType::DataFactory
+        );
+    }
 
     /// Pin the persisted codes of the sticky-terminal `FunctionRunStatus`
     /// variants. The td-schema `logical_function_runs__sticky_terminals`

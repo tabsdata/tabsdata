@@ -26,6 +26,7 @@
 pub mod auth;
 pub mod bundle;
 pub mod collection;
+pub mod connection;
 pub mod crudl;
 pub mod dependency;
 pub mod execution;

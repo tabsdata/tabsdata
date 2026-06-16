@@ -7,6 +7,7 @@ use sea_query::{
     TableCreateStatement,
 };
 
+use super::connections::Connections;
 use super::groups::Groups;
 use super::users::Users;
 use crate::schema::Entity;
@@ -27,6 +28,8 @@ pub enum Collections {
     NameWhenDeleted,
     GroupId,
     BasePath,
+    CollectionType,
+    ConnectionId,
 }
 
 #[derive(Iden, Clone, Copy)]
@@ -62,12 +65,25 @@ impl Entity for Defs {
                 // the `/` default is applied by the BasePath Rust newtype, not here.
                 // Mutable; physical backend is selected by mounts.
                 .col(ColumnDef::new(Collections::BasePath).text().not_null())
+                // Collection flavour (DataFactory/Source/Destination), single-char code.
+                .col(ColumnDef::new(Collections::CollectionType).text().not_null())
+                // The collection's connection (source/destination only); set on the
+                // first connection upsert. Connection ids are only unique per
+                // project, hence the composite FK.
+                .col(ColumnDef::new(Collections::ConnectionId).text().null())
                 // Group ids are only unique per project (same pattern as the
                 // composite FKs on transactions/LTDV/LFR).
                 .foreign_key(
                     ForeignKey::create()
                         .from(Collections::Table, (Collections::ProjectId, Collections::GroupId))
                         .to(Groups::Table, (Groups::ProjectId, Groups::Id))
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Collections::Table, (Collections::ProjectId, Collections::ConnectionId))
+                        .to(Connections::Table, (Connections::ProjectId, Connections::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -114,6 +130,8 @@ impl Entity for Defs {
                     .column(Collections::ModifiedById)
                     .column(Collections::GroupId)
                     .column(Collections::BasePath)
+                    .column(Collections::CollectionType)
+                    .column(Collections::ConnectionId)
                     .from(Collections::Table)
                     .and_where(Expr::col(Collections::NameWhenDeleted).is_null())
                     .to_owned(),

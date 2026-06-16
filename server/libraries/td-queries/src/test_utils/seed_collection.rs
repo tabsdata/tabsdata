@@ -8,7 +8,9 @@ use ta_objects::Buildable;
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionCreateDB, CollectionDB};
 use td_objects::dxo::group::GroupDB;
-use td_objects::types::basic::{AtTime, CollectionName, Description, GroupId, GroupName, UserId};
+use td_objects::types::basic::{
+    AtTime, CollectionName, CollectionType, Description, GroupId, GroupName, UserId,
+};
 
 pub(crate) async fn seed_collection(
     mut executor: impl QueryExecutor,
@@ -38,6 +40,10 @@ pub(crate) async fn seed_collection_in_group(
     created_by: &UserId,
     group_id: GroupId,
 ) -> Result<CollectionDB, TdError> {
+    // Infer the flavour from the group id, mirroring the create service, so
+    // seeded source/destination collections carry the right type.
+    let collection_type = CollectionType::from_group_id(&group_id);
+
     let created_on = AtTime::now();
     let collection = CollectionCreateDB::builder()
         .name(collection_name.clone())
@@ -47,6 +53,7 @@ pub(crate) async fn seed_collection_in_group(
         .modified_on(created_on)
         .modified_by_id(created_by)
         .group_id(group_id)
+        .collection_type(collection_type)
         .build()?;
 
     executor.reuse().live().insert(&collection).await?;
