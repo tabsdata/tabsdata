@@ -24,9 +24,10 @@ use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::rest_urls::ProjectParam;
 use td_objects::types::basic::{
     AccessTokenId, Description, EntityId, PermissionEntityType, PermissionType, ProjectId,
-    ProjectIdName, ProjectName, RoleId, RoleKind, RoleName, UserId,
+    ProjectIdName, ProjectName, RoleId, RoleKind, RoleName, UserEnabled, UserId, UserName,
 };
 use td_queries::LiveEntry;
+use td_queries::test_utils::SeedEntry;
 use td_tower::ctx_service::RawOneshot;
 
 fn admin_ctx() -> RequestContext {
@@ -95,6 +96,63 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
         .await?;
     assert_eq!(list.len, 1, "only sandbox remains after delete");
     assert_eq!(list.data[0].name, ProjectName::try_from("sandbox")?);
+
+    Ok(())
+}
+
+/// `project list` is filtered to the projects the requester may view: a
+/// non-admin sees only projects it holds a grant on; a sys_admin (manage_project
+/// on `__all__`) sees every project.
+#[td_test::test(db)]
+async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError> {
+    // Two extra projects beside the bootstrap `sandbox` (seeded directly: the
+    // create service is Postgres-only, but listing is backend-agnostic).
+    let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
+    let _beta = db.seed().project(ProjectName::try_from("beta")?).await?;
+
+    // A non-admin user: member of `default` (its `create_projects` grant gates
+    // the list endpoint) plus a role granting `view_project` on `alpha` only.
+    let bob = db
+        .seed()
+        .user(&UserName::try_from("bob")?, &UserEnabled::from(true))
+        .await?;
+    let default_role = db
+        .live()
+        .fetch_one::<RoleDB>(&RoleName::try_from("default")?)
+        .await?;
+    db.seed().user_role(&bob.id, &default_role.id).await?;
+    let alpha_viewers = db
+        .seed()
+        .role(
+            RoleName::try_from("alpha_viewers")?,
+            Description::try_from("alpha viewers")?,
+        )
+        .await?;
+    db.seed()
+        .permission(
+            PermissionType::ViewProject,
+            None,
+            Some(EntityId::try_from(alpha.id.clone())?),
+            &alpha_viewers,
+        )
+        .await?;
+    db.seed().user_role(&bob.id, &alpha_viewers.id).await?;
+
+    // Bob sees only `alpha`.
+    let bob_ctx = RequestContext::with(AccessTokenId::default(), bob.id.clone());
+    let bob_list = ListProjectsService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(bob_ctx.list((), ListParams::default()))
+        .await?;
+    let bob_names: Vec<_> = bob_list.data.iter().map(|p| p.name.to_string()).collect();
+    assert_eq!(bob_names, vec!["alpha".to_string()], "bob should see only alpha");
+
+    // The admin (sys_admin) sees all three (sandbox, alpha, beta).
+    let admin_list = ListProjectsService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(admin_ctx().list((), ListParams::default()))
+        .await?;
+    assert_eq!(admin_list.len, 3, "admin should see every project");
 
     Ok(())
 }

@@ -12,4 +12,3 @@ pub mod recursion;
 pub mod status_count;
 pub mod stream;
 pub mod table_ref;
-pub mod visible_collections;

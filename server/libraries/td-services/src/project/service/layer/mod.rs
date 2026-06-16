@@ -9,3 +9,4 @@ pub(crate) mod seed_groups;
 pub(crate) mod seed_project_roles;
 pub(crate) mod single_project;
 pub(crate) mod update;
+pub(crate) mod visible_projects_filter;

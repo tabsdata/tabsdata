@@ -2,10 +2,10 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::project::service::layer::visible_projects_filter::VisibleProjectsFilter;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{CreateProjects, Rbac, Scope, System};
-use td_objects::NoFilter;
+use td_authz::rbac::{CreateProjects, Rbac, Scope, System, Visible};
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::project::ProjectRead;
 use td_objects::list::params::ListQueryParams;
@@ -30,9 +30,11 @@ fn service() {
         // List is open to any authenticated role: every user holds the
         // `default` system role, whose `create_projects` grant gates this.
         from_fn(Rbac::<System, CreateProjects>::check),
+        // Resolve the requester's viewable projects; the list is filtered to them.
+        from_fn(Visible::projects),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<ProjectRead>, _>),
-        from_fn(By::<()>::list::<NoFilter, ProjectRead>),
+        from_fn(By::<()>::list::<VisibleProjectsFilter, ProjectRead>),
     )
 }
 
@@ -52,9 +54,10 @@ mod tests {
                 type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
                 type_of_val(&Scope::<System>::system),
                 type_of_val(&Rbac::<System, CreateProjects>::check),
+                type_of_val(&Visible::projects),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<ProjectRead>, _>),
-                type_of_val(&By::<()>::list::<NoFilter, ProjectRead>),
+                type_of_val(&By::<()>::list::<VisibleProjectsFilter, ProjectRead>),
             ]);
     }
 }
