@@ -10,10 +10,12 @@ use crate::execution::layers::read::{
 };
 use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::factory::service_factory;
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_execution::TransactionBy;
 use td_objects::StateFilter;
 use td_objects::States;
-use td_objects::dxo::crudl::ReadRequest;
+use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunInputDB};
@@ -56,12 +58,17 @@ where
     connection = ConnectionProvider,
     scope = "Project",
     context = TransactionBy,
+    context = AuthzContext,
 )]
 fn service<const FUNCTION_STATE: u8>()
 where
     FunctionDB: States<FUNCTION_STATE>,
 {
     layers!(
+        // Authorize: the requester must be able to view the project in scope.
+        from_fn(With::<ReadRequest<ExecutionParam>>::extract::<RequestContext>),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // Extract from request.
         from_fn(With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
         // TODO: when ExecutionParam carries an AtParam, thread it as the
@@ -123,6 +130,10 @@ mod tests {
             .metadata()
             .await
             .assert_service::<Scoped<ReadRequest<ExecutionParam>, ProjectId>, ExecutionResponse>(&[
+                // Authorize: the requester must be able to view the project in scope.
+                type_of_val(&With::<ReadRequest<ExecutionParam>>::extract::<RequestContext>),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Extract from request.
                 type_of_val(&With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
                 // Find Plan and its TriggeredOn (and convert to AtTime).

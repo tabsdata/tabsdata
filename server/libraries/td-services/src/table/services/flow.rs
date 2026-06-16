@@ -5,6 +5,8 @@
 use crate::graph::layers::{FunctionOrTable, GraphConfig, generate_td_graph};
 use crate::table::layers::flow::{build_response, with_recursion_options};
 use ta_services::factory::service_factory;
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::And;
 use td_objects::StateFilter;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
@@ -35,12 +37,16 @@ impl GraphConfig for GraphOpts {
     response = TableFlowGraphResponse,
     connection = ConnectionProvider,
     scope = "Project",
+    context = AuthzContext,
 )]
 fn service() {
     layers!(
         // Extract from request.
         from_fn(With::<ReadRequest<TableParam>>::extract_name::<TableParam>),
         from_fn(With::<ReadRequest<TableParam>>::extract::<RequestContext>),
+        // Authorize: the requester must be able to view the project in scope.
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(With::<TableParam>::extract::<CollectionIdName>),
         from_fn(With::<TableParam>::extract::<TableIdName>),
@@ -100,6 +106,9 @@ mod tests {
                     // Extract from request.
                     type_of_val(&With::<ReadRequest<TableParam>>::extract_name::<TableParam>),
                     type_of_val(&With::<ReadRequest<TableParam>>::extract::<RequestContext>),
+                    // Authorize: the requester must be able to view the project in scope.
+                    type_of_val(&Scope::<Project>::set),
+                    type_of_val(&Rbac::<Project, ViewProject>::check),
                     type_of_val(&With::<RequestContext>::extract::<AtTime>),
                     type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
                     type_of_val(&With::<TableParam>::extract::<TableIdName>),

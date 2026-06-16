@@ -3,8 +3,10 @@
 //
 
 use ta_services::factory::service_factory;
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::NoFilter;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::synchrotron::SynchrotronResponse;
 use td_objects::list::params::ListQueryParams;
 use td_objects::tower_service::with::With;
@@ -23,12 +25,15 @@ use td_tower::layers;
     response = ListResponse<SynchrotronResponse>,
     connection = ConnectionProvider,
     scope = "Project",
+    context = AuthzContext,
 )]
 fn service() {
     layers!(
-        // No need for authz for this service.
-
-        // List all transactions in the system.
+        // Authorize: the requester must be able to view the project in scope.
+        from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
+        // List all transactions in the project.
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<SynchrotronResponse>, _>),
         from_fn(By::<()>::list::<NoFilter, SynchrotronResponse>),
@@ -62,7 +67,11 @@ mod tests {
             .metadata()
             .await
             .assert_service::<Scoped<ListRequest<()>, ProjectId>, ListResponse<SynchrotronResponse>>(&[
-                // List all transactions in the system.
+                // Authorize: the requester must be able to view the project in scope.
+                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
+                // List all transactions in the project.
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(
                     &With::<ListParams>::try_convert_to::<ListQueryParams<SynchrotronResponse>, _>,

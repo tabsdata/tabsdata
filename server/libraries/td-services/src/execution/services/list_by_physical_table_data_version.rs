@@ -4,7 +4,9 @@
 
 use crate::execution::layers::list::list_executions_by_tdv;
 use ta_services::factory::service_factory;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse};
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::execution::Execution;
 use td_objects::list::params::ListQueryParams;
 use td_objects::rest_urls::PhysicalTableDataVersionParam;
@@ -20,9 +22,14 @@ use td_tower::layers;
     response = ListResponse<Execution>,
     connection = ConnectionProvider,
     scope = "Project",
+    context = AuthzContext,
 )]
 fn service() {
     layers!(
+        // Authorize: the requester must be able to view the project in scope.
+        from_fn(With::<ListRequest<PhysicalTableDataVersionParam>>::extract::<RequestContext>),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // Extract PhysicalTableDataVersionId from request.
         from_fn(
             With::<ListRequest<PhysicalTableDataVersionParam>>::extract_name::<
@@ -70,6 +77,10 @@ mod tests {
             .metadata()
             .await
             .assert_service::<Scoped<ListRequest<PhysicalTableDataVersionParam>, ProjectId>, ListResponse<Execution>>(&[
+                // Authorize: the requester must be able to view the project in scope.
+                type_of_val(&With::<ListRequest<PhysicalTableDataVersionParam>>::extract::<RequestContext>),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Extract PhysicalTableDataVersionId from request.
                 type_of_val(
                     &With::<ListRequest<PhysicalTableDataVersionParam>>::extract_name::<

@@ -3,7 +3,9 @@
 //
 
 use ta_services::factory::service_factory;
-use td_objects::dxo::crudl::ReadRequest;
+use td_authz::AuthzContext;
+use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
+use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::execution::{
     Execution, ExecutionBuilder, ExecutionDBWithStatus, ExecutionDetails, ExecutionDetailsBuilder,
 };
@@ -23,9 +25,14 @@ use td_tower::layers;
     response = ExecutionDetails,
     connection = ConnectionProvider,
     scope = "Project",
+    context = AuthzContext,
 )]
 fn service() {
     layers!(
+        // Authorize: the requester must be able to view the project in scope.
+        from_fn(With::<ReadRequest<ExecutionParam>>::extract::<RequestContext>),
+        from_fn(Scope::<Project>::set),
+        from_fn(Rbac::<Project, ViewProject>::check),
         // Extract from request.
         from_fn(With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
         // Find Plan and its ID.
@@ -78,6 +85,10 @@ mod tests {
             .metadata()
             .await
             .assert_service::<Scoped<ReadRequest<ExecutionParam>, ProjectId>, ExecutionDetails>(&[
+                // Authorize: the requester must be able to view the project in scope.
+                type_of_val(&With::<ReadRequest<ExecutionParam>>::extract::<RequestContext>),
+                type_of_val(&Scope::<Project>::set),
+                type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Extract from request.
                 type_of_val(&With::<ReadRequest<ExecutionParam>>::extract_name::<ExecutionParam>),
                 // Find Plan and its ID.
