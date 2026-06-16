@@ -39,7 +39,7 @@ fn service() {
 /// `GET /inflight` (global) — the same point-in-time aggregation across every
 /// project. `scope = "Global"` bypasses RLS so the query spans all tenants;
 /// the result is then narrowed to the projects the requester may view
-/// (`Visible::resolve` + the `*_global` builder).
+/// (`Visible::projects` + the `*_global` builder).
 #[service_factory(
     name = InflightGlobalService,
     request = ReadRequest<InflightRequest>,
@@ -53,7 +53,7 @@ fn service_global() {
         from_fn(With::<ReadRequest<InflightRequest>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<InflightRequest>>::extract_name::<InflightRequest>),
         // Narrow the cross-project aggregation to the requester's viewable projects.
-        from_fn(Visible::resolve),
+        from_fn(Visible::projects),
         from_fn(build_inflight_response_global),
     )
 }

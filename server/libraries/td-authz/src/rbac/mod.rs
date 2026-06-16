@@ -132,6 +132,6 @@ pub type Rbac<E, R> = Enforce<SqlRbacSource, E, R>;
 
 /// The service-facing [`VisibleProjects`] resolver with the production grant
 /// source fixed in: a cross-project (global) read wires a
-/// `Visible::resolve` layer to put the requester's viewable-project set in the
+/// `Visible::projects` layer to put the requester's viewable-project set in the
 /// service context, then a downstream layer filters its result set against it.
 pub type Visible = VisibleProjectsResolver<SqlRbacSource>;

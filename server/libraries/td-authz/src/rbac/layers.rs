@@ -274,7 +274,7 @@ pub struct VisibleProjectsResolver<S: RbacSource> {
 impl<S: RbacSource> VisibleProjectsResolver<S> {
     /// Layer fn: resolve the requester's viewable-project set from their
     /// effective grants (union across the user's assigned roles).
-    pub async fn resolve(
+    pub async fn projects(
         source: Ref<S>,
         mut conn: MutRef<DynamicConnection<'static>>,
         request: Ref<RequestContext>,

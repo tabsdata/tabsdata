@@ -43,7 +43,7 @@ fn service() {
 /// `GET /metrics` (global) — the same nodes+edges aggregation across every
 /// project. `scope = "Global"` bypasses RLS so the query spans all tenants;
 /// the result is then narrowed to the projects the requester may view
-/// (`Visible::resolve` + the `*_global` builder).
+/// (`Visible::projects` + the `*_global` builder).
 #[service_factory(
     name = MetricsGlobalService,
     request = ReadRequest<MetricsRequest>,
@@ -57,7 +57,7 @@ fn service_global() {
         from_fn(With::<ReadRequest<MetricsRequest>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<MetricsRequest>>::extract_name::<MetricsRequest>),
         // Narrow the cross-project aggregation to the requester's viewable projects.
-        from_fn(Visible::resolve),
+        from_fn(Visible::projects),
         from_fn(build_metrics_response_global),
     )
 }

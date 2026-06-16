@@ -40,7 +40,7 @@ fn service() {
 /// `GET /snapshot` (global) — combined `/metrics` + `/inflight` across every
 /// project on one connection. `scope = "Global"` bypasses RLS so the query
 /// spans all tenants; the result is then narrowed to the projects the requester
-/// may view (`Visible::resolve` + the `*_global` builder).
+/// may view (`Visible::projects` + the `*_global` builder).
 #[service_factory(
     name = SnapshotGlobalService,
     request = ReadRequest<SnapshotRequest>,
@@ -54,7 +54,7 @@ fn service_global() {
         from_fn(With::<ReadRequest<SnapshotRequest>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<SnapshotRequest>>::extract_name::<SnapshotRequest>),
         // Narrow the cross-project aggregation to the requester's viewable projects.
-        from_fn(Visible::resolve),
+        from_fn(Visible::projects),
         from_fn(build_snapshot_response_global),
     )
 }
