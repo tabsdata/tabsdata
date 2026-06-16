@@ -3,7 +3,8 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
+    TableCreateStatement,
 };
 
 use super::groups::Groups;
@@ -61,6 +62,15 @@ impl Entity for Defs {
                 // the `/` default is applied by the BasePath Rust newtype, not here.
                 // Mutable; physical backend is selected by mounts.
                 .col(ColumnDef::new(Collections::BasePath).text().not_null())
+                // Group ids are only unique per project (same pattern as the
+                // composite FKs on transactions/LTDV/LFR).
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Collections::Table, (Collections::ProjectId, Collections::GroupId))
+                        .to(Groups::Table, (Groups::ProjectId, Groups::Id))
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
                 .to_owned(),
         ]
     }
@@ -147,7 +157,11 @@ fn collections_with_names(b: &Backend) -> ViewDef {
                 JoinType::LeftJoin,
                 Groups::Table,
                 groups_alias.clone(),
-                Expr::col((CollectionsActive, Collections::GroupId)).equals((groups_alias, Groups::Id)),
+                // Group ids are only unique per project; matching project_id too
+                // keeps the join exact under RLS-bypass (global) sessions.
+                Expr::col((CollectionsActive, Collections::GroupId))
+                    .equals((groups_alias.clone(), Groups::Id))
+                    .and(Expr::col((CollectionsActive, Collections::ProjectId)).equals((groups_alias, Groups::ProjectId))),
             )
             .to_owned(),
     )

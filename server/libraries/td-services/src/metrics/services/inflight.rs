@@ -76,7 +76,7 @@ mod tests {
     use td_objects::dxo::query_filters::DimensionFilter;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName,
-        FunctionRuntimeValues, LogicalFunctionRunStatus, ProjectId, ProjectName, RoleId,
+        FunctionRuntimeValues, GroupId, LogicalFunctionRunStatus, ProjectId, ProjectName, RoleId,
         TableNameDto, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
@@ -242,9 +242,10 @@ mod tests {
     }
 
     /// The global `/inflight` service aggregates across every project (bypass
-    /// RLS) and attributes each row to its owning project — so two projects'
-    /// identically-named `default` groups surface as distinct, project-tagged
-    /// rows. Postgres-only (bypass-vs-RLS is the whole point).
+    /// RLS), attributing each row to its owning project. System groups carry
+    /// the same fixed id in every project, so this doubles as the regression
+    /// pin for bypass fan-out: a groups join not matching project_id would
+    /// multiply the counts. Postgres-only (bypass-vs-RLS is the whole point).
     #[td_test::test(db)]
     async fn test_inflight_global_spans_and_attributes_projects(db: TdPool) -> Result<(), TdError> {
         if !matches!(db.kind(), DatabaseBackend::Postgres) {
@@ -321,11 +322,14 @@ mod tests {
         // Each row is attributed to its own project.
         assert_eq!(row_a.project_id, ProjectId::sandbox());
         assert_eq!(row_b.project_id, project_b.id);
-        // Both are the `default` group by name, but distinct ids in distinct
-        // projects — the project tag is what disambiguates them globally.
+        // Both `default` groups share the fixed id; the project tag disambiguates.
         assert_eq!(row_a.group_id, coll_a.group_id);
         assert_eq!(row_b.group_id, coll_b.group_id);
-        assert_ne!(coll_a.group_id, coll_b.group_id);
+        assert_eq!(coll_a.group_id, GroupId::default_group());
+        assert_eq!(coll_b.group_id, GroupId::default_group());
+        // A groups join not matching project_id would fan out and double these.
+        assert_eq!(row_a.count, 1, "fan-out: sandbox count inflated");
+        assert_eq!(row_b.count, 1, "fan-out: project B count inflated");
         Ok(())
     }
 }

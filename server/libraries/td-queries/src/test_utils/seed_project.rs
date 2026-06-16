@@ -12,8 +12,9 @@ use td_objects::dxo::project::{
     ProjectCreate, ProjectCreateDBBuilder, ProjectDB, ProjectDBBuilder,
 };
 use td_objects::types::basic::{
-    AccessTokenId, Description, GroupName, ProjectName, RoleId, System, UserId,
+    AccessTokenId, Description, GroupId, GroupName, ProjectName, RoleId, System, UserId,
 };
+use td_security::SYSTEM_GROUPS;
 
 /// Seed a project together with the system groups (`default`, `source`,
 /// `destination`) — the same set the schema bootstraps into `sandbox` and the
@@ -40,31 +41,19 @@ pub(crate) async fn seed_project(db: &TdPool, name: ProjectName) -> Result<Proje
         .build()?;
     db.live().insert(&project_db).await?;
 
-    let system_groups = [
-        (
-            GroupName::default_group(),
-            "Default group — assigned to collections that do not specify a group.",
-        ),
-        (
-            GroupName::source(),
-            "Source group — assigned to ingestion collections.",
-        ),
-        (
-            GroupName::destination(),
-            "Destination group — assigned to publisher collections.",
-        ),
-    ];
-    // Seed the system groups into the *new* project: scope each insert to it so
-    // the field-less `GroupDB` defaults its `project_id` from the GUC (and RLS
-    // `WITH CHECK` enforces the match).
-    for (group_name, group_description) in system_groups {
+    // Seed the system groups into the *new* project with the well-known fixed
+    // ids, mirroring `seed_default_groups`. Scope each insert to the new project
+    // so the field-less `GroupDB` defaults its `project_id` from the GUC (and
+    // RLS `WITH CHECK` enforces the match).
+    for (group_id, group_name, group_description) in SYSTEM_GROUPS {
         let group_create = GroupCreate::builder()
-            .name(group_name)
+            .name(GroupName::try_from(group_name)?)
             .description(Description::try_from(group_description)?)
             .build()?;
         let group = GroupDBBuilder::try_from(&group_create)?
             .try_update_from(&request_context)?
-            .system(System::from(true))
+            .id(GroupId::try_from(group_id)?)
+            .system(System::TRUE)
             .build()?;
         db.scoped(project_db.id)
             .live()
@@ -82,7 +71,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
     use td_objects::dxo::project::ProjectDB;
-    use td_objects::types::basic::{GroupName, ProjectName};
+    use td_objects::types::basic::{GroupId, GroupName, ProjectName};
 
     #[td_test::test(db)]
     async fn test_seed_project(db: TdPool) {
@@ -96,14 +85,15 @@ mod tests {
         assert_eq!(found.id, project.id);
         assert_eq!(found.name, project.name);
 
-        // The three system groups land in the new project. `project_id` is no
-        // longer a `GroupDB` field (RLS owns it via the column default); that
-        // the rows are tagged with the new project — not the session-default
+        // The three system groups land in the new project, carrying the
+        // well-known fixed ids (group ids are unique per project). `project_id`
+        // is no longer a `GroupDB` field (RLS owns it via the column default);
+        // that the rows are tagged with the new project — not the session-default
         // sandbox — is covered end-to-end by `test_collection_rls_scoped_by_project`.
-        for name in [
-            GroupName::default_group(),
-            GroupName::source(),
-            GroupName::destination(),
+        for (id, name) in [
+            (GroupId::default_group(), GroupName::default_group()),
+            (GroupId::source(), GroupName::source()),
+            (GroupId::destination(), GroupName::destination()),
         ] {
             let group: GroupDB = db
                 .scoped(project.id)
@@ -111,6 +101,10 @@ mod tests {
                 .fetch_one::<GroupDB>(&name)
                 .await
                 .unwrap();
+            assert_eq!(
+                group.id, id,
+                "system group '{name}' must carry the fixed id"
+            );
             assert!(*group.system);
         }
     }

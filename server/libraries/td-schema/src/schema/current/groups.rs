@@ -30,7 +30,7 @@ pub enum Groups {
     System,
 }
 
-use td_security::{ENCODED_ID_PROJECT_SANDBOX, ENCODED_ID_SYSTEM as SYSTEM_USER_ID};
+use td_security::{ENCODED_ID_PROJECT_SANDBOX, ENCODED_ID_SYSTEM as SYSTEM_USER_ID, SYSTEM_GROUPS};
 
 pub(super) struct Defs;
 
@@ -39,13 +39,17 @@ impl Entity for Defs {
         vec![
             Table::create()
                 .table(Groups::Table)
-                .col(ColumnDef::new(Groups::Id).text().not_null().primary_key())
+                // Composite PK (project_id, id): system groups share the same
+                // well-known id in every project. Joins on groups.id from
+                // project-scoped tables must also match project_id.
+                .col(ColumnDef::new(Groups::Id).text().not_null())
                 // Tenant tag. No base default — fail-closed on every backend: a
                 // write that omits it hits NOT NULL. On postgres the RLS phase
                 // sets the column default to read `app.project_id` (the request's
                 // project); the no-RLS single-project backends (sqlite/mysql) keep
                 // no default at all, so writes there must set `project_id`.
                 .col(ColumnDef::new(Groups::ProjectId).text().not_null())
+                .primary_key(Index::create().col(Groups::ProjectId).col(Groups::Id))
                 .col(ColumnDef::new(Groups::Name).text().not_null())
                 .col(ColumnDef::new(Groups::Description).text().not_null())
                 .col(ColumnDef::new(Groups::CreatedOn).timestamp_with_time_zone().not_null())
@@ -112,13 +116,7 @@ impl Entity for Defs {
     }
 
     fn seeds(&self) -> Vec<InsertStatement> {
-        let group_inserts = [
-            ("00000000000000000000000208", "default", "Default group — assigned to collections that do not specify a group."),
-            ("0000000000000000000000020C", "source", "Source group — assigned to ingestion collections."),
-            ("0000000000000000000000020G", "destination", "Destination group — assigned to publisher collections."),
-        ];
-
-        group_inserts
+        SYSTEM_GROUPS
             .iter()
             .map(|(id, name, desc)| {
                 Query::insert()

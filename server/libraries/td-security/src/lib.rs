@@ -64,6 +64,28 @@ pub const DEFAULT_GROUP: &str = "default";
 pub const SOURCE_GROUP: &str = "source";
 pub const DESTINATION_GROUP: &str = "destination";
 
+/// The per-project system groups as `(encoded id, name, description)` — the
+/// single source every seeder (schema bootstrap, project create, test utils)
+/// derives from. Group ids are unique per project, so these fixed ids are
+/// minted in every project.
+pub const SYSTEM_GROUPS: [(&str, &str, &str); 3] = [
+    (
+        ENCODED_ID_GROUP_DEFAULT,
+        DEFAULT_GROUP,
+        "Default group — assigned to collections that do not specify a group.",
+    ),
+    (
+        ENCODED_ID_GROUP_SOURCE,
+        SOURCE_GROUP,
+        "Source group — assigned to ingestion collections.",
+    ),
+    (
+        ENCODED_ID_GROUP_DESTINATION,
+        DESTINATION_GROUP,
+        "Destination group — assigned to egestion collections.",
+    ),
+];
+
 ///- Permissions (the five rows the bootstrap seeds):
 ///    - sys_admin / manage_access on system: (BASE32HEX_NOPAD: 00000000000000000000000010)
 pub const ID_PERM_SYS_ADMIN_MANAGE_ACCESS: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8];

@@ -323,10 +323,11 @@ pub(crate) mod tests {
             .fetch_one::<CollectionDB>(&collection_name)
             .await?;
         assert_eq!(collection.project_id, project.id);
-        assert_ne!(
+        assert_eq!(
             collection.group_id,
             GroupId::try_from(td_security::ENCODED_ID_GROUP_DEFAULT).unwrap(),
-            "collection must resolve its project's own default group, not sandbox's",
+            "system groups carry the same well-known id in every project; the \
+             project's own row is what scopes it (asserted via project_id)",
         );
 
         // Register a publisher function in that collection and seed a run

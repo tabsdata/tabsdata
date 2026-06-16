@@ -91,9 +91,10 @@ impl Entity for Defs {
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
+                    // Composite: group ids are only unique per project.
                     ForeignKey::create()
-                        .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)
-                        .to(Groups::Table, Groups::Id)
+                        .from(LogicalTableDataVersions::Table, (LogicalTableDataVersions::ProjectId, LogicalTableDataVersions::GroupId))
+                        .to(Groups::Table, (Groups::ProjectId, Groups::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -295,7 +296,13 @@ impl Entity for Defs {
                         JoinType::LeftJoin,
                         Groups::Table,
                         groups_alias.clone(),
-                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)).equals((groups_alias, Groups::Id)),
+                        // Group ids are only unique per project; match project_id too.
+                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId))
+                            .equals((groups_alias.clone(), Groups::Id))
+                            .and(
+                                Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::ProjectId))
+                                    .equals((groups_alias, Groups::ProjectId)),
+                            ),
                     )
                     .to_owned(),
             ),

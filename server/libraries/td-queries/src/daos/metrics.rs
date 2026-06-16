@@ -1325,11 +1325,24 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
     .join(
         JoinType::LeftJoin,
         GroupDBIden::Table,
+        // Group ids are only unique per project (the system groups share the
+        // same well-known id in every project); matching project_id too keeps
+        // this exact under the Global (RLS-bypass) variant — without it the
+        // join fans out across projects and inflates the counts.
         Expr::col((
             LogicalFunctionRunDBIden::Table,
             LogicalFunctionRunDBIden::GroupId,
         ))
-        .equals((GroupDBIden::Table, GroupDBIden::Id)),
+        .equals((GroupDBIden::Table, GroupDBIden::Id))
+        .and(
+            Expr::col((
+                LogicalFunctionRunDBIden::Table,
+                LogicalFunctionRunDBIden::ProjectId,
+            ))
+            // `GroupDB` is a field-less DAO (RLS owns project_id), so the
+            // column isn't on its Iden — address it by name.
+            .equals((GroupDBIden::Table, Alias::new("project_id"))),
+        ),
     )
     .join(
         JoinType::LeftJoin,

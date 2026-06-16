@@ -4,8 +4,8 @@
 
 use td_common::id::{ID_LENGTH, Id};
 use td_security::{
-    ID_ALL_ENTITIES, ID_PROJECT_SANDBOX, ID_ROLE_DEFAULT, ID_ROLE_PROJECT_CREATOR,
-    ID_ROLE_SYS_ADMIN, ID_SYSTEM, ID_USER_ADMIN,
+    ID_ALL_ENTITIES, ID_GROUP_DEFAULT, ID_GROUP_DESTINATION, ID_GROUP_SOURCE, ID_PROJECT_SANDBOX,
+    ID_ROLE_DEFAULT, ID_ROLE_PROJECT_CREATOR, ID_ROLE_SYS_ADMIN, ID_SYSTEM, ID_USER_ADMIN,
 };
 
 #[ta_objects::typed(id)]
@@ -91,6 +91,27 @@ pub struct FunctionVersionId;
 
 #[ta_objects::typed(id)]
 pub struct GroupId;
+
+impl GroupId {
+    // Group ids are unique per project (composite PK), and the seeded system
+    // groups carry these well-known ids in EVERY project — so the helpers are
+    // valid universally, unlike ordinary ids.
+
+    /// The seeded `default` group.
+    pub fn default_group() -> Self {
+        Self(Id::_new(ID_GROUP_DEFAULT))
+    }
+
+    /// The seeded `source` group — collections in it are `Source` flavour.
+    pub fn source() -> Self {
+        Self(Id::_new(ID_GROUP_SOURCE))
+    }
+
+    /// The seeded `destination` group — collections in it are `Destination` flavour.
+    pub fn destination() -> Self {
+        Self(Id::_new(ID_GROUP_DESTINATION))
+    }
+}
 
 #[ta_objects::typed(id)]
 pub struct InterCollectionPermissionId;

@@ -66,9 +66,11 @@ impl Entity for Defs {
                         .on_update(ForeignKeyAction::Restrict),
                 )
                 .foreign_key(
+                    // Composite: group ids are only unique per project, and this
+                    // also forbids cross-project group references at the DB level.
                     ForeignKey::create()
-                        .from(Transactions::Table, Transactions::GroupId)
-                        .to(Groups::Table, Groups::Id)
+                        .from(Transactions::Table, (Transactions::ProjectId, Transactions::GroupId))
+                        .to(Groups::Table, (Groups::ProjectId, Groups::Id))
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -126,7 +128,11 @@ impl Entity for Defs {
                     JoinType::LeftJoin,
                     Groups::Table,
                     groups_alias.clone(),
-                    Expr::col((Transactions::Table, Transactions::GroupId)).equals((groups_alias, Groups::Id)),
+                    // Group ids are only unique per project; matching project_id
+                    // too keeps the join exact under RLS-bypass (global) sessions.
+                    Expr::col((Transactions::Table, Transactions::GroupId))
+                        .equals((groups_alias.clone(), Groups::Id))
+                        .and(Expr::col((Transactions::Table, Transactions::ProjectId)).equals((groups_alias, Groups::ProjectId))),
                 )
                 .to_owned(),
         )]
