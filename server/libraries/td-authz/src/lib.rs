@@ -15,6 +15,7 @@ use tracing::instrument;
 
 pub mod authz_provider;
 pub mod jwt;
+pub mod rbac;
 pub mod session_provider;
 pub mod tower;
 
