@@ -675,6 +675,15 @@ def _format_expected_signature(
         if allow_trx_ctx
         else ""
     )
+    # With a single output slot the lone TableFrameSpec may be returned
+    # bare, without the enclosing 1-tuple -- surface that alternative so
+    # the error block is not misleading.
+    single_out_note = (
+        "\n    # a single output may also be returned bare, without the "
+        f"1-tuple:\n    def {name}(...) -> TableFrameSpec:\n        ..."
+        if output_count == 1
+        else ""
+    )
 
     return (
         f"\n\nExpected signature ({input_count} input slot(s), "
@@ -683,7 +692,7 @@ def _format_expected_signature(
         f"    def {name}(\n"
         f"        {params},\n"
         f"    ) -> tuple[{out_args}]:\n"
-        f"        ..."
+        f"        ...{single_out_note}"
     )
 
 
@@ -805,12 +814,21 @@ def check_callable_signature(
                 f"slot ({_slot_mode_hint(input_mode)}){expected}"
             )
 
-    # Return: tuple of exactly output_count single-mode slots.
+    # Return shape:
+    #   - canonically a fixed-length ``tuple`` of exactly
+    #     ``output_count`` single-mode slots; or
+    #   - as a single-output convenience, when ``output_count == 1``
+    #     the lone output may be returned bare -- a ``TableFrameSpec``
+    #     (``TableFrame | None``) without the enclosing 1-tuple.
     ret_hint = hints.get("return")
     if ret_hint is None:
         raise ValueError(f"{name!r}: return type must be annotated{expected}")
 
     if typing.get_origin(ret_hint) is not tuple:
+        # Single-output convenience: accept a bare TableFrameSpec
+        # when exactly one output slot is declared.
+        if output_count == 1 and _is_single_slot(ret_hint):
+            return
         raise ValueError(
             f"{name!r}: return type must be a tuple of {output_count} "
             f"TableFrame element(s) (got {_render_type(ret_hint)}){expected}"

@@ -358,6 +358,12 @@ def _invoke_user_function(func, call_args: list, output_tables: list[str]) -> tu
 
     Expected return: a tuple with exactly `len(output_tables)` elements.
     Each element must be a `TableFrame` or `None`.
+
+    Single-output convenience: when the function declares exactly one
+    output slot, the lone value may be returned bare, without the
+    enclosing 1-tuple -- it is wrapped here so the downstream length /
+    element checks see the canonical tuple shape. This mirrors the
+    signature relaxation in ``tabsdatak._api.check_callable_signature``.
     """
     from tabsdatak.tableframe import TableFrame
 
@@ -367,7 +373,12 @@ def _invoke_user_function(func, call_args: list, output_tables: list[str]) -> tu
         raise RunFunctionErrorCode.RF_12.exception(cause=exc, detail=str(exc))
 
     if not isinstance(result, tuple):
-        raise RunFunctionErrorCode.RF_13.exception(actual_type=type(result).__name__)
+        if len(output_tables) == 1:
+            result = (result,)
+        else:
+            raise RunFunctionErrorCode.RF_13.exception(
+                actual_type=type(result).__name__
+            )
     if len(result) != len(output_tables):
         raise RunFunctionErrorCode.RF_14.exception(
             returned=len(result),

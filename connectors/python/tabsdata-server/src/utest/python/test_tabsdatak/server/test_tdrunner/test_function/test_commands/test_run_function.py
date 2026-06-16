@@ -702,11 +702,34 @@ def test_invoke_user_function_raises_maps_to_user_function_failed():
 
 
 def test_invoke_user_function_non_tuple_return_raises_shape_mismatch():
+    # With more than one output slot a bare (non-tuple) return is still
+    # rejected -- the single-output convenience does not apply.
     def fn(in_1):
-        return _fake_lf()  # missing tuple wrap
+        return _fake_lf()  # missing tuple wrap, but 2 outputs expected
 
     with pytest.raises(OutputShapeMismatchError):
-        _invoke_user_function(fn, [_fake_lf()], ["t1"])
+        _invoke_user_function(fn, [_fake_lf()], ["t1", "t2"])
+
+
+def test_invoke_user_function_bare_single_output_is_wrapped():
+    # Single-output convenience: a lone value returned bare is wrapped
+    # into a 1-tuple, mirroring the relaxed signature check.
+    def fn(in_1):
+        return in_1  # bare LazyFrame, one output slot
+
+    result = _invoke_user_function(fn, [_fake_lf()], ["t1"])
+    assert isinstance(result, tuple)
+    assert len(result) == 1
+    assert isinstance(result[0], pl.LazyFrame)
+
+
+def test_invoke_user_function_bare_single_output_none_is_wrapped():
+    # A bare ``None`` for a single output slot is also wrapped.
+    def fn(in_1):
+        return None
+
+    result = _invoke_user_function(fn, [_fake_lf()], ["t1"])
+    assert result == (None,)
 
 
 def test_invoke_user_function_wrong_length_raises_shape_mismatch():

@@ -1032,6 +1032,104 @@ def test_transformer_signature_allows_optional_trailing_trx_ctx():
 
 
 # ---------------------------------------------------------------------------
+# Single-output convenience: when exactly one output slot is declared the
+# lone TableFrameSpec may be returned bare, without the enclosing 1-tuple.
+# ---------------------------------------------------------------------------
+
+
+def test_publisher_signature_allows_bare_tableframe_return():
+    @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"])
+    def my_pub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
+
+    assert isinstance(my_pub, _info.PublisherInfo)
+
+
+def test_transformer_signature_allows_bare_tableframe_return():
+    @m.transformer(input_tables=["in1"], output_tables=["out1"])
+    def my_xf(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
+
+    assert isinstance(my_xf, _info.TransformerInfo)
+
+
+def test_subscriber_signature_allows_bare_tableframe_return():
+    # `_dest()` has cardinality 1, so a single bare output is valid.
+    @m.subscriber(conn=_Conn(), destination=_dest(), input_tables=["coll/t1"])
+    def my_sub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
+
+    assert isinstance(my_sub, _info.SubscriberInfo)
+
+
+def test_stream_publisher_signature_allows_bare_tableframe_return():
+    @m.stream_publisher(conn=_Conn(),
+        source=_auto_src(),
+        flush_interval_mins=10,
+        output_tables=["t1"],
+    )
+    def my_pub(
+        t1: list[tableframe.TableFrame | None] | None,
+    ) -> tableframe.TableFrame | None:
+        return None
+
+    assert isinstance(my_pub, _info.StreamPublisherInfo)
+
+
+def test_bare_return_allowed_with_trailing_trx_ctx():
+    # The single-output bare-return convenience composes with the
+    # optional trailing ``ctx: TrxCtx`` parameter.
+    @m.transformer(input_tables=["coll/t1"], output_tables=["out"])
+    def my_xf(
+        t1: tableframe.TableFrame | None,
+        ctx: m.TrxCtx,
+    ) -> tableframe.TableFrame | None:
+        return t1
+
+    assert isinstance(my_xf, _info.TransformerInfo)
+
+
+def test_bare_return_rejected_when_multiple_outputs():
+    # The bare form is only a single-output convenience; with 2 output
+    # slots the return must still be a fixed-length tuple.
+    src = _src2()  # 2 input slots
+
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(conn=_Conn(), source=src, output_tables=["a", "b"])  # 2 outputs
+        def my_pub(
+            t1: tableframe.TableFrame | None, t2: tableframe.TableFrame | None,
+        ) -> tableframe.TableFrame | None:  # bare, but 2 outputs expected
+            return t1
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+    assert "must be a tuple of 2" in str(excinfo.value)
+
+
+def test_bare_return_rejects_wrong_slot_type():
+    # A non-tuple return with a single output must still be a valid
+    # single-mode slot -- a bare list is rejected.
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"])
+        def my_pub(
+            t1: tableframe.TableFrame | None,
+        ) -> list[tableframe.TableFrame | None] | None:  # not a single slot
+            return None
+    assert excinfo.value.api_error is ApiErrorCode.API_17
+
+
+def test_signature_error_block_mentions_bare_return_for_single_output():
+    # On a single-output failure the "Expected signature" block should
+    # surface the bare-return alternative so an iterating caller knows
+    # it is allowed.
+    with pytest.raises(ApiException) as excinfo:
+        @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"])
+        def _bad() -> tuple[tableframe.TableFrame | None]:  # zero params, expects 1
+            return (None,)
+    msg = str(excinfo.value)
+    assert "returned bare" in msg
+    assert "-> TableFrameSpec" in msg
+
+
+# ---------------------------------------------------------------------------
 # AutoSrc / AutoSrcDef
 # ---------------------------------------------------------------------------
 

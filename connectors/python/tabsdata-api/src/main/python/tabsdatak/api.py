@@ -52,6 +52,11 @@ from tabsdatak.tableframe import TableFrame
 #     empty) and may pass ``None`` for individual elements of the list
 #     (some upstream tables had no batch), so both layers must accept
 #     ``None``.
+#
+# The return is a fixed-length ``tuple`` with one ``TableFrameSpec``
+# slot per output table. As a single-output convenience, a function
+# that declares exactly one output table may return the lone
+# ``TableFrameSpec`` bare, without the enclosing 1-tuple.
 TableFrameSpec: TypeAlias = TableFrame | None
 TableFramesSpec: TypeAlias = list[TableFrame | None] | None
 
