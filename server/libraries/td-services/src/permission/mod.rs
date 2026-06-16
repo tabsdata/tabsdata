@@ -7,6 +7,12 @@ use td_error::td_error;
 mod layers;
 pub mod services;
 
+// The target-based permission authorization construct is shared with the
+// Simple-permission facade (grant/revoke).
+pub(crate) use layers::{
+    authorize_permission_target, PermissionTarget, PermissionTargetScope,
+};
+
 #[td_error]
 pub enum PermissionError {
     #[error("The permission is a system permission that cannot be deleted")]

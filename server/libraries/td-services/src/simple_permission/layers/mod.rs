@@ -7,6 +7,7 @@
 //! `(user_id, role_id, project_id?)` of the RBAC role-membership the grant /
 //! revoke maps to.
 
+use crate::permission::{PermissionTarget, PermissionTargetScope};
 use crate::simple_permission::SimplePermissionError;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
@@ -28,7 +29,6 @@ use td_objects::types::basic::{
 use td_objects::Buildable;
 use td_queries::LiveEntry;
 use td_security::{PROJECT_CREATOR_ROLE, SYS_ADMIN_ROLE};
-use td_tower::default_services::Condition;
 use td_tower::extractors::{MutRef, Ref};
 
 /// The concrete RBAC target a Simple grant/revoke resolves to: the user, the
@@ -41,6 +41,19 @@ pub struct ResolvedGrant {
     /// `Some` for the three project permissions (authz scope = this project),
     /// `None` for the three system permissions (authz scope = system).
     pub project_id: Option<ProjectId>,
+}
+
+/// The grant/revoke authorization scope: a project permission authorizes
+/// against its project, a system permission against the system — the same
+/// rule the raw permission API uses (see
+/// [`authorize_permission_target`](crate::permission::authorize_permission_target)).
+impl PermissionTarget for ResolvedGrant {
+    fn target_scope(&self) -> Result<PermissionTargetScope, TdError> {
+        Ok(match &self.project_id {
+            Some(project_id) => PermissionTargetScope::Project(*project_id),
+            None => PermissionTargetScope::Global,
+        })
+    }
 }
 
 /// Reject the org-wide read/develop wildcards (no Simple-surface mapping) and
@@ -58,14 +71,6 @@ pub async fn assert_simple_permission_valid(
         (false, true) => Err(SimplePermissionError::ProjectForbidden(permission.clone()))?,
         _ => Ok(()),
     }
-}
-
-/// Branch predicate for the grant/revoke authz: project-scoped permissions
-/// authorize against the project, system-scoped ones against the system.
-pub async fn is_grant_project_scoped(
-    grant: Ref<SimplePermissionGrant>,
-) -> Result<Condition, TdError> {
-    Ok(Condition(grant.permission.is_project_scoped()))
 }
 
 /// Resolve `(user, permission, project?)` to its RBAC target role.
@@ -147,17 +152,6 @@ pub async fn resolved_user_id(resolved: Ref<ResolvedGrant>) -> Result<UserId, Td
 /// the grant).
 pub async fn resolved_role_id(resolved: Ref<ResolvedGrant>) -> Result<RoleId, TdError> {
     Ok(resolved.role_id)
-}
-
-/// Extract the project the operation authorizes against. Only the project
-/// branch of the grant/revoke conditional calls this, and `resolve_grant`
-/// always sets `project_id` for project permissions, so the `None` case is
-/// unreachable in practice.
-pub async fn resolved_project_id(resolved: Ref<ResolvedGrant>) -> Result<ProjectId, TdError> {
-    resolved
-        .project_id
-        .clone()
-        .ok_or_else(|| TdError::from(SimplePermissionError::ProjectRoleNotFound(String::new())))
 }
 
 /// Derive a `<project>_<suffix>` per-project role name, mirroring the minting

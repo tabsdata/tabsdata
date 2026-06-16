@@ -9,13 +9,13 @@
 //! including the fixed-row guard (e.g. the `admin` user cannot be removed from
 //! `sys_admin`). Same authz as grant.
 
+use crate::permission::authorize_permission_target;
 use crate::simple_permission::layers::{
-    assert_simple_permission_valid, is_grant_project_scoped, resolve_grant, resolved_project_id,
-    resolved_role_id, resolved_user_id,
+    assert_simple_permission_valid, resolve_grant, resolved_role_id, resolved_user_id,
+    ResolvedGrant,
 };
 use crate::user_role::layers::assert_not_fixed;
 use ta_services::factory::service_factory;
-use td_authz::rbac::{ManageAccess, ManageProject, Project, Rbac, Scope, System};
 use td_authz::{refresh_authz_context, AuthzContext};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
@@ -24,9 +24,9 @@ use td_objects::tower_service::with::With;
 use td_objects::types::basic::{RoleId, UserId};
 use td_objects::And;
 use td_queries::By;
-use td_tower::default_services::{conditional, Do, Else, If, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service};
+use td_tower::layers;
 
 #[service_factory(
     name = RevokeSimplePermissionService,
@@ -44,19 +44,8 @@ fn service() {
         from_fn(assert_simple_permission_valid),
         // resolve the target role membership (and project for authz)
         from_fn(resolve_grant),
-        // authz: same as grant.
-        conditional(
-            If(service!(layers!(from_fn(is_grant_project_scoped)))),
-            Do(service!(layers!(
-                from_fn(resolved_project_id),
-                from_fn(Scope::<Project>::set),
-                from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check),
-            ))),
-            Else(service!(layers!(
-                from_fn(Scope::<System>::system),
-                from_fn(Rbac::<System, ManageAccess>::check),
-            )))
-        ),
+        // authz by target (shared with grant and the raw permission API).
+        from_fn(authorize_permission_target::<ResolvedGrant>),
         // membership remove, reusing the user_role delete fixed-row guard.
         from_fn(resolved_role_id),
         from_fn(resolved_user_id),

@@ -15,12 +15,12 @@
 //! Authz: a project permission requires `manage_access` (system) OR
 //! `manage_project` on P; a system permission requires `manage_access`.
 
+use crate::permission::authorize_permission_target;
 use crate::simple_permission::layers::{
-    assert_simple_permission_valid, is_grant_project_scoped, resolve_grant, resolved_project_id,
-    resolved_role_id, resolved_user_id,
+    assert_simple_permission_valid, resolve_grant, resolved_role_id, resolved_user_id,
+    ResolvedGrant,
 };
 use ta_services::factory::service_factory;
-use td_authz::rbac::{ManageAccess, ManageProject, Project, Rbac, Scope, System};
 use td_authz::{refresh_authz_context, AuthzContext};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
@@ -28,9 +28,9 @@ use td_objects::dxo::user_role::{UserRoleDB, UserRoleDBBuilder};
 use td_objects::tower_service::with::{builder, With};
 use td_objects::types::basic::{RoleId, UserId};
 use td_queries::insert;
-use td_tower::default_services::{conditional, Do, Else, If, TransactionProvider};
+use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
-use td_tower::{layers, service};
+use td_tower::layers;
 
 #[service_factory(
     name = GrantSimplePermissionService,
@@ -50,20 +50,9 @@ fn service() {
         from_fn(assert_simple_permission_valid),
         // resolve the target role membership (and project for authz)
         from_fn(resolve_grant),
-        // authz: project perm -> manage_access | manage_project on P;
-        //        system perm  -> manage_access on the system.
-        conditional(
-            If(service!(layers!(from_fn(is_grant_project_scoped)))),
-            Do(service!(layers!(
-                from_fn(resolved_project_id),
-                from_fn(Scope::<Project>::set),
-                from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check),
-            ))),
-            Else(service!(layers!(
-                from_fn(Scope::<System>::system),
-                from_fn(Rbac::<System, ManageAccess>::check),
-            )))
-        ),
+        // authz by target: project perm -> manage_access | manage_project on P;
+        // system perm -> manage_access on the system (shared with the raw API).
+        from_fn(authorize_permission_target::<ResolvedGrant>),
         // membership add (same as user_role create; a duplicate surfaces the
         // user_role create unique-constraint error).
         from_fn(builder::<UserRoleDB>),
