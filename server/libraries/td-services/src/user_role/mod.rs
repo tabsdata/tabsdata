@@ -5,7 +5,7 @@
 use td_error::td_error;
 use td_objects::types::basic::{RoleName, UserName};
 
-mod layers;
+pub mod layers;
 pub mod services;
 
 #[td_error]

@@ -404,6 +404,73 @@ impl PermissionType {
     }
 }
 
+/// The flat permission names exposed on the Simple Security Mode surface
+/// (TEDB). These never hit a table directly: the facade in `td-services`
+/// (`simple_permission`) translates each one into the RBAC role-membership /
+/// `role_permission` reads it maps to (TEDC "The mapping").
+///
+/// Three are project-scoped (`view_project`/`develop_project`/`manage_project`,
+/// always *on a project*) and three are system-scoped
+/// (`create_projects`/`manage_access`/`admin_all_projects`, instance-wide). The
+/// org-wide read/develop wildcards (`view_all_projects`/`develop_all_projects`)
+/// are intentionally absent — they have no Simple-surface name and are reachable
+/// only in RBAC Mode View (TEDB "System permissions").
+#[ta_objects::typed_enum]
+#[derive(Eq, PartialEq, Hash)]
+pub enum SimplePermissionType {
+    // project-scoped — require a project
+    #[typed_enum(rename = "view_project")]
+    ViewProject,
+    #[typed_enum(rename = "develop_project")]
+    DevelopProject,
+    #[typed_enum(rename = "manage_project")]
+    ManageProject,
+    // system-scoped — must not carry a project
+    #[typed_enum(rename = "create_projects")]
+    CreateProjects,
+    #[typed_enum(rename = "manage_access")]
+    ManageAccess,
+    #[typed_enum(rename = "admin_all_projects")]
+    AdminAllProjects,
+    // org-wide read/develop wildcards: parseable so the facade can reject them
+    // with a clear "use RBAC Mode View" error rather than a generic 400; they
+    // have no faithful Simple-surface mapping (TEDB "System permissions").
+    #[typed_enum(rename = "view_all_projects")]
+    ViewAllProjects,
+    #[typed_enum(rename = "develop_all_projects")]
+    DevelopAllProjects,
+}
+
+impl SimplePermissionType {
+    /// The org-wide read/develop wildcards have no Simple-surface mapping and
+    /// are rejected by the facade (reachable only in RBAC Mode View).
+    pub fn is_rbac_only_wildcard(&self) -> bool {
+        matches!(self, Self::ViewAllProjects | Self::DevelopAllProjects)
+    }
+
+    /// Whether this permission is project-scoped (a project is required) or
+    /// system-scoped (a project is forbidden). Only meaningful for the
+    /// non-wildcard permissions; the RBAC-only wildcards are rejected before
+    /// this is consulted.
+    pub fn is_project_scoped(&self) -> bool {
+        matches!(
+            self,
+            Self::ViewProject | Self::DevelopProject | Self::ManageProject
+        )
+    }
+
+    /// For a project-scoped permission, the `<project>_<suffix>` per-project
+    /// role suffix it maps to (`admin`/`dev`/`view`). `None` for system perms.
+    pub fn project_role_suffix(&self) -> Option<&'static str> {
+        match self {
+            Self::ManageProject => Some("admin"),
+            Self::DevelopProject => Some("dev"),
+            Self::ViewProject => Some("view"),
+            _ => None,
+        }
+    }
+}
+
 /// The kind of a role, stored in `roles.kind` (TEDA's five user-visible role
 /// kinds). Two are system roles (`project_id` NULL), three are per-project
 /// roles (`project_id` set).
@@ -414,6 +481,8 @@ pub enum RoleKind {
     SysAdmin,
     #[typed_enum(rename = "default")]
     Default,
+    #[typed_enum(rename = "project_creator")]
+    ProjectCreator,
     #[typed_enum(rename = "prj_admin")]
     PrjAdmin,
     #[typed_enum(rename = "prj_dev")]

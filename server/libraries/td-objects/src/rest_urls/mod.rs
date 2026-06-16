@@ -199,6 +199,34 @@ pub const LIST_PERMISSIONS: &str = url!(PERMISSIONS);
 pub const CREATE_PERMISSION: &str = url!(PERMISSIONS);
 pub const DELETE_PERMISSION: &str = url!(PERMISSION);
 
+// Simple Security Mode permission facade (TEDB / TEDC). Flat per-user
+// permission grants that translate to RBAC role-membership operations.
+// Top-level (system-scoped) resource, parallel to the RBAC `/roles/.../permissions`
+// surface — both views read/write the same tables.
+pub const PERMISSION_GRANTS: &str = url!("/permission-grants");
+
+/// `?user=X` for the list-by-user endpoint: a user's effective flat
+/// permissions.
+#[ta_objects::QueryParam]
+pub struct PermissionGrantUserQuery {
+    #[dxo(extractor)]
+    pub user: UserIdName,
+}
+
+/// `?project=P` for the list-by-project endpoint: everyone with authority on a
+/// project.
+#[ta_objects::QueryParam]
+pub struct PermissionGrantProjectQuery {
+    #[dxo(extractor)]
+    pub project: ProjectIdName,
+}
+
+pub const GRANT_PERMISSION: &str = url!(PERMISSION_GRANTS);
+pub const REVOKE_PERMISSION: &str = url!(PERMISSION_GRANTS);
+// Two list shapes (different response types), so two routes:
+pub const LIST_PERMISSION_GRANTS_BY_USER: &str = url!(PERMISSION_GRANTS, "/by-user");
+pub const LIST_PERMISSION_GRANTS_BY_PROJECT: &str = url!(PERMISSION_GRANTS, "/by-project");
+
 // User roles
 pub const USER_ROLES: &str = url!(ROLE, "/users");
 pub const USER_ROLE: &str = url!(USER_ROLES, "/{user}");

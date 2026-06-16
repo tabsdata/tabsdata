@@ -110,6 +110,7 @@ impl Entity for Defs {
         let role_inserts = [
             ("00000000000000000000000008", "sys_admin", "System Administrator Role", "sys_admin"),
             ("0000000000000000000000000G", "default", "Default Role", "default"),
+            ("0000000000000000000000020O", "project_creator", "Project Creator Role", "project_creator"),
         ];
 
         role_inserts

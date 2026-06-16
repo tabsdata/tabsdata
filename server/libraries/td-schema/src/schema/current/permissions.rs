@@ -143,6 +143,8 @@ impl Entity for Defs {
             ("00000000000000000000000104", "sys_admin", "manage_project", "project", true),
             // default role: every user can create projects.
             ("00000000000000000000000108", "default", "create_projects", "system", false),
+            // project_creator role: confers exactly create_projects on system (system-managed).
+            ("0000000000000000000000020S", "project_creator", "create_projects", "system", true),
         ];
 
         assignments

@@ -51,6 +51,7 @@ use crate::router::ping::ping_router;
 use crate::router::projects::ProjectsRouter;
 use crate::router::roles::RolesRouter;
 use crate::router::server_status::ServerStatusRouter;
+use crate::router::simple_permissions::SimplePermissionsRouter;
 use crate::router::tables::TablesRouter;
 use crate::router::transactions::TransactionsRouter;
 use crate::router::user_roles::UserRolesRouter;
@@ -102,6 +103,7 @@ impl ApiServerV1 {
                         .merge(ProjectsRouter::router(context.services.clone()))
                         .merge(RolesRouter::router(context.services.clone()))
                         .merge(ServerStatusRouter::router(context.services.clone()))
+                        .merge(SimplePermissionsRouter::router(context.services.clone()))
                         .merge(UserRolesRouter::router(context.services.clone()))
                         .merge(UsersRouter::router(context.services.clone()))
                         .merge(AuthenticatedExtendedRouter::router(

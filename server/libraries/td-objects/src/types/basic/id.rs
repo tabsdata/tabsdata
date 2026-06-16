@@ -4,8 +4,8 @@
 
 use td_common::id::{ID_LENGTH, Id};
 use td_security::{
-    ID_ALL_ENTITIES, ID_PROJECT_SANDBOX, ID_ROLE_DEFAULT, ID_ROLE_SYS_ADMIN, ID_SYSTEM,
-    ID_USER_ADMIN,
+    ID_ALL_ENTITIES, ID_PROJECT_SANDBOX, ID_ROLE_DEFAULT, ID_ROLE_PROJECT_CREATOR,
+    ID_ROLE_SYS_ADMIN, ID_SYSTEM, ID_USER_ADMIN,
 };
 
 #[ta_objects::typed(id)]
@@ -135,6 +135,10 @@ impl RoleId {
 
     pub fn default_role() -> Self {
         Self(Id::_new(ID_ROLE_DEFAULT))
+    }
+
+    pub fn project_creator() -> Self {
+        Self(Id::_new(ID_ROLE_PROJECT_CREATOR))
     }
 }
 

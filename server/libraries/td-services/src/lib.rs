@@ -14,6 +14,7 @@ use crate::metrics::services::OperationalMetricsServices;
 use crate::permission::services::PermissionServices;
 use crate::project::service::ProjectServices;
 use crate::role::services::RoleServices;
+use crate::simple_permission::services::SimplePermissionServices;
 use crate::system::services::SystemServices;
 use crate::table::services::TableServices;
 use crate::transaction::services::TransactionServices;
@@ -50,6 +51,7 @@ pub mod permission;
 pub mod project;
 pub mod role;
 pub mod scheduler;
+pub mod simple_permission;
 pub mod system;
 pub mod table;
 pub mod transaction;
@@ -70,6 +72,7 @@ pub struct Services {
     permission: Arc<PermissionServices>,
     project: Arc<ProjectServices>,
     role: Arc<RoleServices>,
+    simple_permission: Arc<SimplePermissionServices>,
     system: Arc<SystemServices>,
     table: Arc<TableServices>,
     transaction: Arc<TransactionServices>,

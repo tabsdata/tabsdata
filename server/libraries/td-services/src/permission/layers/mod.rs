@@ -83,9 +83,10 @@ pub async fn assert_permission_is_not_fixed(
 
 /// Reject adding a permission to a system-managed role from the user surface.
 ///
-/// TEDA "System-managed roles": the `sys_admin` role and the three per-project
-/// roles (`prj_admin`/`prj_dev`/`prj_view`) have permission sets fixed by the
-/// system — only their *membership* is editable. The role/permission delete
+/// TEDA "System-managed roles": the `sys_admin` role, the `project_creator`
+/// role, and the three per-project roles (`prj_admin`/`prj_dev`/`prj_view`)
+/// have permission sets fixed by the system — only their *membership* is
+/// editable. The role/permission delete
 /// services already block removal via the `fixed` flag; this mirrors that on
 /// the create path so a `manage_access`/`manage_project` holder cannot grow a
 /// system-managed role's permission set.
@@ -98,9 +99,11 @@ pub async fn assert_permission_is_not_fixed(
 pub async fn assert_role_is_not_fixed(role: Ref<RoleDB>) -> Result<(), TdError> {
     use td_objects::types::basic::RoleKind;
     match role.kind {
-        RoleKind::SysAdmin | RoleKind::PrjAdmin | RoleKind::PrjDev | RoleKind::PrjView => {
-            Err(PermissionError::RoleIsFixed(role.name.clone()))?
-        }
+        RoleKind::SysAdmin
+        | RoleKind::ProjectCreator
+        | RoleKind::PrjAdmin
+        | RoleKind::PrjDev
+        | RoleKind::PrjView => Err(PermissionError::RoleIsFixed(role.name.clone()))?,
         RoleKind::Default => Ok(()),
     }
 }

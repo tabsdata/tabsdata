@@ -17,6 +17,10 @@ pub const SYS_ADMIN_ROLE: &str = "sys_admin";
 /// Predefined role for the default role (auto-assigned to every user).
 pub const DEFAULT_ROLE: &str = "default";
 
+/// Predefined role conferring exactly the `create_projects` system permission.
+/// Membership target for the Simple-mode "grant create_projects to a user" facade.
+pub const PROJECT_CREATOR_ROLE: &str = "project_creator";
+
 /// Default IDs:
 ///
 /// - System: 00000000000000000000000000 (BASE32HEX_NOPAD: 00000000000000000000000000)
@@ -95,7 +99,15 @@ pub const ENCODED_ID_ALL_ENTITIES: &str = "00000000000000000000000204";
 pub const ID_PROJECT_SANDBOX: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 5];
 pub const ENCODED_ID_PROJECT_SANDBOX: &str = "0000000000000000000000020K";
 
-pub const DEFAULT_IDS: [[u8; 16]; 13] = [
+///- project_creator role: confers exactly `create_projects` on system.
+///  Byte 0x26 (sandbox is byte 0x25 = "...20K", so 0x26 = "...20O").
+pub const ID_ROLE_PROJECT_CREATOR: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 6];
+pub const ENCODED_ID_ROLE_PROJECT_CREATOR: &str = "0000000000000000000000020O";
+///- project_creator / create_projects on system permission row: byte 0x27 = "...20S".
+pub const ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 7];
+pub const ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS: &str = "0000000000000000000000020S";
+
+pub const DEFAULT_IDS: [[u8; 16]; 15] = [
     ID_SYSTEM,
     ID_USER_ADMIN,
     ID_ROLE_SYS_ADMIN,
@@ -109,9 +121,11 @@ pub const DEFAULT_IDS: [[u8; 16]; 13] = [
     ID_PERM_DEFAULT_CREATE_PROJECTS,
     ID_ALL_ENTITIES,
     ID_PROJECT_SANDBOX,
+    ID_ROLE_PROJECT_CREATOR,
+    ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
 ];
 
-pub const DEFAULT_ENCODED_IDS: [&str; 13] = [
+pub const DEFAULT_ENCODED_IDS: [&str; 15] = [
     ENCODED_ID_SYSTEM,
     ENCODED_ID_USER_ADMIN,
     ENCODED_ID_ROLE_SYS_ADMIN,
@@ -125,4 +139,6 @@ pub const DEFAULT_ENCODED_IDS: [&str; 13] = [
     ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS,
     ENCODED_ID_ALL_ENTITIES,
     ENCODED_ID_PROJECT_SANDBOX,
+    ENCODED_ID_ROLE_PROJECT_CREATOR,
+    ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
 ];

@@ -10,8 +10,8 @@ use crate::parse::{
 use std::fmt::Debug;
 use td_error::{ApiError, api_error};
 use td_security::{
-    ADMIN_USER, DEFAULT_GROUP, DEFAULT_ROLE, DESTINATION_GROUP, SOURCE_GROUP, SYS_ADMIN_ROLE,
-    SYSTEM_USER,
+    ADMIN_USER, DEFAULT_GROUP, DEFAULT_ROLE, DESTINATION_GROUP, PROJECT_CREATOR_ROLE, SOURCE_GROUP,
+    SYS_ADMIN_ROLE, SYSTEM_USER,
 };
 
 #[ta_objects::typed(string(secret))]
@@ -168,6 +168,10 @@ impl RoleName {
 
     pub fn default_role() -> Self {
         Self(DEFAULT_ROLE.to_string())
+    }
+
+    pub fn project_creator() -> Self {
+        Self(PROJECT_CREATOR_ROLE.to_string())
     }
 }
 

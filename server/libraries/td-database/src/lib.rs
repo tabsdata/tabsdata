@@ -59,9 +59,11 @@ mod tests {
     #[cfg(postgres)]
     use sqlx::postgres::PgPoolOptions;
     use td_security::{
-        ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS,
-        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT,
-        ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT, ENCODED_ID_ROLE_DEFAULT, ENCODED_ID_ROLE_SYS_ADMIN,
+        ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS,
+        ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
+        ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS,
+        ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT, ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT,
+        ENCODED_ID_ROLE_DEFAULT, ENCODED_ID_ROLE_PROJECT_CREATOR, ENCODED_ID_ROLE_SYS_ADMIN,
         ENCODED_ID_USER_ADMIN, ENCODED_ID_USER_ROLE_ADMIN_DEFAULT,
         ENCODED_ID_USER_ROLE_ADMIN_SYS_ADMIN,
     };
@@ -257,12 +259,19 @@ mod tests {
             .unwrap();
         assert_eq!(row.id, ENCODED_ID_ROLE_DEFAULT);
 
+        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'project_creator'")
+            .build_query_as()
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(row.id, ENCODED_ID_ROLE_PROJECT_CREATOR);
+
         let count: i64 = raw_query!(db, "SELECT count(*) FROM roles")
             .build_query_scalar()
             .fetch_one(&mut conn)
             .await
             .unwrap();
-        assert_eq!(count, 2);
+        assert_eq!(count, 3);
     }
 
     #[cfg(postgres)]
@@ -286,12 +295,19 @@ mod tests {
             .unwrap();
         assert_eq!(row.id, ENCODED_ID_ROLE_DEFAULT);
 
+        let row: Value = raw_query!(db, "SELECT id FROM roles WHERE name = 'project_creator'")
+            .build_query_as()
+            .fetch_one(&mut conn)
+            .await
+            .unwrap();
+        assert_eq!(row.id, ENCODED_ID_ROLE_PROJECT_CREATOR);
+
         let count: i64 = raw_query!(db, "SELECT count(*) FROM roles")
             .build_query_scalar()
             .fetch_one(&mut conn)
             .await
             .unwrap();
-        assert_eq!(count, 2);
+        assert_eq!(count, 3);
     }
 
     #[cfg(sqlite)]
@@ -460,12 +476,30 @@ mod tests {
         .unwrap();
         assert_eq!(row.id, ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS);
 
+        // project_creator role: create_projects on system.
+        let row: Value = raw_query!(
+            db,
+            r#"
+            SELECT id FROM permissions
+            WHERE
+                role_id = {ENCODED_ID_ROLE_PROJECT_CREATOR} AND
+                permission_type = 'create_projects' AND
+                entity_type = 'system' AND
+                entity_id = '00000000000000000000000204'
+            "#
+        )
+        .build_query_as()
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+        assert_eq!(row.id, ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS);
+
         let count: i64 = raw_query!(db, "SELECT count(*) FROM permissions")
             .build_query_scalar()
             .fetch_one(&mut conn)
             .await
             .unwrap();
-        assert_eq!(count, 5);
+        assert_eq!(count, 6);
     }
 
     // -------------------------------------------------------------------

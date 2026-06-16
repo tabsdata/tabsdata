@@ -86,16 +86,20 @@ mod tests {
         let service = ListRoleService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
-        assert_eq!(response.len, 3); // 2 default roles + 1
+        assert_eq!(response.len, 4); // 3 default roles + 1
         let response = response.data;
+        // Ordered ascending by id; the seeded roles sort ahead of the
+        // freshly-minted "joaquin" id: sys_admin (...008), default (...00G),
+        // project_creator (...020O), then joaquin.
         assert_eq!(response[0].name, RoleName::try_from("sys_admin")?);
         assert_eq!(response[1].name, RoleName::try_from("default")?);
+        assert_eq!(response[2].name, RoleName::try_from("project_creator")?);
 
         let found = db
             .live()
             .fetch_one::<RoleDB>(&RoleName::try_from("joaquin").unwrap())
             .await?;
-        let role = response.get(2).unwrap();
+        let role = response.get(3).unwrap();
         assert_eq!(role.id, found.id);
         assert_eq!(role.name, found.name);
         assert_eq!(role.description, found.description);

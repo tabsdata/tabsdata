@@ -91,6 +91,7 @@ mod tests {
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_security::{
+        ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
         ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS,
         ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT, ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT,
     };
@@ -522,6 +523,8 @@ mod tests {
             ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS,
             ENCODED_ID_PERM_SYS_ADMIN_ROLE_MGNT,
             ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT,
+            // project_creator's create_projects row is system-managed (fixed).
+            ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
         ]);
 
         let permissions = db.live().fetch_all::<PermissionDB>(()).await?;
