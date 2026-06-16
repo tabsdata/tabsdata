@@ -154,11 +154,18 @@ impl SqlCondition for () {
     }
 }
 
-/// `Option<T>` delegates to the inner value's `SeaValue` impl, which handles
-/// NULL via [`NullableSeaValue`].
+/// `Option<T>`: `Some(v)` matches `col = v`; `None` matches `col IS NULL`
+/// (a bound `= NULL` never matches in SQL, so equality would make a `None`
+/// condition unsatisfiable).
 impl<T: NullableSeaValue + SqlCondition + 'static> SqlCondition for Option<T> {
     fn resolve<D: DaoCore>(&self) -> Result<sea_query::Condition, SqlError> {
-        resolve_leaf_eq::<D>(self)
+        match self {
+            Some(_) => resolve_leaf_eq::<D>(self),
+            None => {
+                let col = col_for_sea_value::<D>(self)?;
+                Ok(sea_query::Condition::all().add(Expr::col(col).is_null()))
+            }
+        }
     }
 }
 
