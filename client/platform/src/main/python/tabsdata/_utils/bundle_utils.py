@@ -47,6 +47,7 @@ CONFIG_OUTPUT_KEY = "output"
 CONFIG_TRIGGERBY_KEY = "triggerBy"
 IGNORED_FOLDERS = (
     ".cargo",
+    ".claude",
     ".coverage",
     ".git",
     ".github",
