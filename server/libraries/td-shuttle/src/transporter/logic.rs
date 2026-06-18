@@ -312,12 +312,29 @@ fn import_file_with_polars(
     Ok(())
 }
 
+/// Produces the path string handed to Polars for a source [`Url`].
+///
+/// For `file://` URLs the percent-encoded URL form (e.g. a space rendered as
+/// `%20`) is decoded back to the real filesystem path, as Polars treats the
+/// `file://` scheme as a verbatim path and would otherwise look for a file
+/// whose name literally contains `%20`. Cloud URLs are passed through
+/// unchanged.
+fn polars_source_path(url: &Url) -> String {
+    if url.scheme() == "file"
+        && let Ok(path) = url.to_file_path()
+        && let Some(path) = path.to_str()
+    {
+        return path.to_string();
+    }
+    url.to_string()
+}
+
 /// Creates the LazyFrame for the file to be imported using the provided importer options.
 fn importer_lazy_frame(
     url: &Url,
     importer_options: &ImporterOptions,
 ) -> Result<LazyFrame, PolarsError> {
-    let url_str = url.to_string();
+    let url_str = polars_source_path(url);
     let pl_path = PlPath::new(url_str.as_str());
     let cloud_config = CloudOptions::from_untyped_config(
         pl_path.cloud_scheme().as_ref(),
@@ -518,7 +535,7 @@ mod tests {
     use crate::transporter::args::Params;
     use crate::transporter::logic::{
         MAX_FILE_LIMIT, file_last_modified_comparator, get_files_from_object_store,
-        take_files_limit, to_file_to_import_instructions,
+        polars_source_path, take_files_limit, to_file_to_import_instructions,
     };
     use object_store::path::Path;
     use std::borrow::Cow;
@@ -552,6 +569,30 @@ mod tests {
     fn parquet_extension_length() -> usize {
         // .parquet
         8
+    }
+
+    #[test]
+    fn test_polars_source_path_decodes_file_url_with_space() {
+        let folder = td_common::tdtestdir!();
+        let file = folder.join("badge_scans copy.csv");
+        let url = Url::from_file_path(&file).unwrap();
+
+        // The URL form keeps the space percent-encoded as %20.
+        assert!(url.as_str().contains("%20"));
+
+        // The path handed to Polars must be the decoded filesystem path so the
+        // object store does not look for a file literally named ...%20....
+        let source_path = polars_source_path(&url);
+        assert_eq!(source_path, file.to_str().unwrap());
+        assert!(source_path.contains("badge_scans copy.csv"));
+        assert!(!source_path.contains("%20"));
+    }
+
+    #[test]
+    fn test_polars_source_path_passes_cloud_url_through() {
+        let url = Url::parse("s3://bucket/folder/badge_scans%20copy.csv").unwrap();
+        let source_path = polars_source_path(&url);
+        assert_eq!(source_path, url.to_string());
     }
 
     #[tokio::test]

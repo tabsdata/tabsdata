@@ -886,7 +886,8 @@ pub struct FileImportReport {
     pub import_millis: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Getters)]
+#[getset(get = "pub")]
 pub struct ImportReport {
     files: Vec<FileImportReport>,
     lastmod_info: Option<String>,

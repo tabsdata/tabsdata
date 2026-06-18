@@ -118,22 +118,17 @@ pub fn create_sink_target(
 
 fn create_local_sink_target(url: &Url) -> PolarsResult<SinkTarget> {
     let target = if url.scheme() == "file" {
-        #[cfg(not(windows))]
-        {
-            SinkTarget::Path(PlPath::new(url.path().to_string().as_str()))
-        }
-        #[cfg(windows)]
-        {
-            let mut path_str = url.path().to_string();
-            if path_str.starts_with('/')
-                && path_str.len() > 1
-                && path_str.chars().nth(2) == Some(':')
-            {
-                path_str.remove(0);
-            }
-            path_str = path_str.replace("/", "\\");
-            SinkTarget::Path(PlPath::new(path_str.as_str()))
-        }
+        // Decode the percent-encoded URL back to the real filesystem path
+        // (e.g. a space encoded as %20) and resolve the Windows drive letter,
+        // so Polars does not write to a path whose name literally contains
+        // the encoded sequence.
+        let path = url.to_file_path().map_err(|()| {
+            PolarsError::ComputeError(format!("Invalid local file URL: {url}").into())
+        })?;
+        let path_str = path.to_str().ok_or_else(|| {
+            PolarsError::ComputeError(format!("Non-UTF-8 local file path: {url}").into())
+        })?;
+        SinkTarget::Path(PlPath::new(path_str))
     } else {
         SinkTarget::Path(PlPath::new(url.as_str()))
     };

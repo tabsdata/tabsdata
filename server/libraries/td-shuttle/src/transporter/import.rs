@@ -373,15 +373,15 @@ pub async fn import(request: ImportRequest) -> Result<ImportReport, TransporterE
 #[cfg(test)]
 mod tests {
     use crate::transporter::api::{
-        BaseUrl, FileImportReport, ImportFormat, ImportRequest, ImportRequestBuilder,
-        ImportTargetBuilder, LastModifiedInfoAccessor, LastModifiedInfoState, Location,
-        WildcardSourceBuilder, WildcardUrl,
+        BaseUrl, FileImportReport, ImportCsvOptions, ImportFormat, ImportRequest,
+        ImportRequestBuilder, ImportTargetBuilder, LastModifiedInfoAccessor, LastModifiedInfoState,
+        Location, WildcardSourceBuilder, WildcardUrl,
     };
     use crate::transporter::error::TransporterError;
     use crate::transporter::files_importer::Importer;
     use crate::transporter::import::{
         FileFinder, PatternFileFinder, PatternLastModFileFinder, SingleFileFinder,
-        SingleFileLastModFinder, find_and_import,
+        SingleFileLastModFinder, find_and_import, import,
     };
     use async_trait::async_trait;
     use chrono::{DateTime, Utc};
@@ -398,6 +398,49 @@ mod tests {
     fn create_file(path: &std::path::Path) {
         let mut file = File::create(path).unwrap();
         file.write_all(b"test").unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_import_wildcard_csv_with_space_in_file_name() {
+        let folder = td_common::tdtestdir!();
+
+        // A source file whose name contains a space, which gets percent-encoded
+        // (%20) in its file:// URL.
+        let source_file = folder.join("badge_scans copy.csv");
+        let mut file = File::create(&source_file).unwrap();
+        file.write_all(b"col_a,col_b\n1,2\n3,4\n").unwrap();
+
+        let source_pattern = folder.join("*.csv");
+        let source_url = Url::from_file_path(&source_pattern).unwrap();
+
+        let target_url = Url::from_directory_path(&folder).unwrap();
+
+        let request = ImportRequestBuilder::default()
+            .source(
+                WildcardSourceBuilder::default()
+                    .location(Location::LocalFile {
+                        url: WildcardUrl(source_url),
+                    })
+                    .initial_lastmod(None)
+                    .lastmod_info(None)
+                    .build()
+                    .unwrap(),
+            )
+            .format(ImportFormat::Csv(ImportCsvOptions::default()))
+            .target(
+                ImportTargetBuilder::default()
+                    .location(Location::LocalFile {
+                        url: BaseUrl(target_url),
+                    })
+                    .build()
+                    .unwrap(),
+            )
+            .parallelism(None)
+            .build()
+            .unwrap();
+
+        let report = import(request).await.unwrap();
+        assert_eq!(report.files().len(), 1);
     }
 
     async fn test_single_file_finder(url: Url, found: Vec<Url>) {
