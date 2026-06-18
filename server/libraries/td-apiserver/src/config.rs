@@ -182,6 +182,8 @@ pub enum DbSchema {
     Upgrade,
     /// Creates or upgrades Tabsdata database as needed
     Auto,
+    /// Checks that every configured schema is reachable and exits
+    Ping,
 }
 
 #[derive(Debug, Clone, Args)]

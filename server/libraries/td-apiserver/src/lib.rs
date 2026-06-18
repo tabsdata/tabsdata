@@ -46,6 +46,13 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
                 ExitStatus::GeneralError
             })?;
 
+            if matches!(params.db_schema, Some(DbSchema::Ping)) {
+                info!("Pinging database");
+                ping_database(database_descriptor).await?;
+                info!("Database is reachable");
+                Err(ExitStatus::Success)?
+            }
+
             let system_db = database_descriptor
                 .assemble(td_database::config::SYSTEM_SCHEMA_KEY)
                 .map_err(|e| {
@@ -89,6 +96,7 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
                             })?;
                         upgrade_schemas(database_descriptor, &system_pool).await?;
                     }
+                    DbSchema::Ping => unreachable!("ping is handled before the system pool is built"),
                 }
             }
 
@@ -299,4 +307,57 @@ async fn upgrade_schemas(
         })?;
     }
     Ok(())
+}
+
+async fn ping_database(database_descriptor: &DatabaseDescriptor) -> Result<(), ExitStatus> {
+    if database_descriptor.mode().is_embedded() {
+        error!("Ping is not supported for an embedded database; it has no externally running server to reach");
+        Err(ExitStatus::GeneralError)?
+    }
+    for (name, _) in database_descriptor.schemas() {
+        let schema_db = database_descriptor.assemble(name).map_err(|e| {
+            error!("Error resolving '{name}' database configuration: {e:#?}");
+            ExitStatus::GeneralError
+        })?;
+        let pool = td_database::db(&schema_db).await.map_err(|e| {
+            error!("Error connecting to '{name}' schema: {e:#?}");
+            ExitStatus::GeneralError
+        })?;
+        pool.acquire().await.map_err(|e| {
+            error!("Error reaching '{name}' schema: {e:#?}");
+            ExitStatus::GeneralError
+        })?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn ping_is_rejected_for_embedded_database() {
+        let yaml = r#"
+database:
+  mode: embedded
+  system:
+    data_dir: /tmp/x
+    persistent: true
+    schema: public
+  apiserver:
+    schema: td_apiserver
+"#;
+        let built = ::config::Config::builder()
+            .add_source(::config::Config::try_from(&Config::default()).unwrap())
+            .add_source(::config::File::from_str(yaml, ::config::FileFormat::Yaml))
+            .build()
+            .unwrap();
+        let loaded: Config = built.try_deserialize().unwrap();
+
+        let result = ping_database(&loaded.database).await;
+        assert!(
+            matches!(result, Err(ExitStatus::GeneralError)),
+            "Ping must be rejected for an embedded database, which has no externally running server."
+        );
+    }
 }
