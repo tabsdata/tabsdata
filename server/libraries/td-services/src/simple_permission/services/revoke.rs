@@ -140,7 +140,7 @@ mod tests {
     async fn test_revoke_fixed_membership_rejected(db: TdPool) -> Result<(), TdError> {
         let grant = SimplePermissionGrant::builder()
             .user(UserName::admin())
-            .permission(SimplePermissionType::ManageAccess)
+            .permission(SimplePermissionType::ManageSystem)
             .project(None)
             .build()?;
 

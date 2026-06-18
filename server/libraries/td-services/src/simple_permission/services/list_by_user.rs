@@ -9,12 +9,13 @@
 //! to a Simple permission:
 //!
 //! - `(project:P, view/develop/manage_project)` -> that permission on `<Pname>`;
-//! - `(project:__all__, manage_project)`        -> `admin_all_projects`;
-//! - `(system, manage_access)`                  -> `manage_access`;
+//! - `(system, manage_access)`                  -> `manage_system`;
 //! - `(system, create_projects)`                -> `create_projects`;
 //! - `(system, manage_roles)`                       -> SKIP (internal, not user-facing);
-//! - other `project:__all__` rows (org-wide view/develop wildcards) -> SKIP
-//!   (no Simple-surface name; RBAC Mode View only).
+//! - `(project:__all__, *)` rows                -> SKIP (no standalone Simple
+//!   name; for a `sys_admin` the org-wide `manage_project` is part of the
+//!   `manage_system` bundle, and the view/develop wildcards are RBAC Mode View
+//!   only).
 //!
 //! Results are de-duplicated (the same permission can come from several roles).
 
@@ -136,9 +137,9 @@ mod tests {
         Ok(())
     }
 
-    /// A `sys_admin` member flattens to the system bundle: `manage_access`,
-    /// `create_projects` and `admin_all_projects` (the `(project:__all__,
-    /// manage_project)` row). `manage_roles` is skipped.
+    /// A `sys_admin` member flattens to the system bundle: `manage_system`
+    /// (from the `manage_access` row) and `create_projects`. `manage_roles` and
+    /// the org-wide `manage_project` row have no standalone Simple name.
     #[td_test::test(db)]
     async fn test_list_by_user_sys_admin_bundle(db: TdPool) -> Result<(), TdError> {
         let user = db
@@ -153,9 +154,8 @@ mod tests {
             .await?;
 
         let perms: Vec<_> = response.data.iter().map(|p| p.permission.clone()).collect();
-        assert!(perms.contains(&SimplePermissionType::ManageAccess));
+        assert!(perms.contains(&SimplePermissionType::ManageSystem));
         assert!(perms.contains(&SimplePermissionType::CreateProjects));
-        assert!(perms.contains(&SimplePermissionType::AdminAllProjects));
         // manage_roles has no Simple-surface name and must not leak.
         assert!(perms.iter().all(|p| !matches!(
             p,

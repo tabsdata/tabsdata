@@ -22,7 +22,8 @@ pub mod services;
 #[td_error]
 pub enum SimplePermissionError {
     /// `view_all_projects` / `develop_all_projects` have no Simple-surface
-    /// mapping — only `admin_all_projects` is offered instance-wide.
+    /// mapping — org-wide authority is offered only via `manage_system`
+    /// (full system admin).
     #[error(
         "'{0}' is not available in Simple Security Mode; grant 'view_project'/'develop_project' \
          per project, or switch to RBAC Mode View to grant an org-wide wildcard"

@@ -10,7 +10,7 @@
 //! |------------------------------------|--------------------------------|-------------|
 //! | `view/develop/manage_project` on P | `<P>_view`/`_dev`/`_admin`     | project P   |
 //! | `create_projects`                  | `project_creator`              | system      |
-//! | `manage_access` / `admin_all_projects` | `sys_admin`               | system      |
+//! | `manage_system`                    | `sys_admin`                    | system      |
 //!
 //! Authz: a project permission requires `manage_access` (system) OR
 //! `manage_project` on P; a system permission requires `manage_access`.
@@ -177,7 +177,7 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_grant_manage_access_adds_to_sys_admin(db: TdPool) -> Result<(), TdError> {
+    async fn test_grant_manage_system_adds_to_sys_admin(db: TdPool) -> Result<(), TdError> {
         let user = db
             .seed()
             .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
@@ -185,31 +185,7 @@ mod tests {
 
         let grant = SimplePermissionGrant::builder()
             .user(UserName::try_from("joaquin")?)
-            .permission(SimplePermissionType::ManageAccess)
-            .project(None)
-            .build()?;
-
-        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
-        let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
-        service.raw_oneshot(request).await?;
-
-        assert_eq!(
-            user_role_count(&db, &user.id, &RoleId::sys_admin()).await,
-            1
-        );
-        Ok(())
-    }
-
-    #[td_test::test(db)]
-    async fn test_grant_admin_all_projects_adds_to_sys_admin(db: TdPool) -> Result<(), TdError> {
-        let user = db
-            .seed()
-            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
-            .await?;
-
-        let grant = SimplePermissionGrant::builder()
-            .user(UserName::try_from("joaquin")?)
-            .permission(SimplePermissionType::AdminAllProjects)
+            .permission(SimplePermissionType::ManageSystem)
             .project(None)
             .build()?;
 
@@ -230,7 +206,7 @@ mod tests {
     async fn test_grant_to_system_user_rejected(db: TdPool) -> Result<(), TdError> {
         let grant = SimplePermissionGrant::builder()
             .user(UserName::system())
-            .permission(SimplePermissionType::ManageAccess)
+            .permission(SimplePermissionType::ManageSystem)
             .project(None)
             .build()?;
 

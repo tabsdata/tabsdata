@@ -6,8 +6,8 @@
 //! --project P`), with a source label:
 //!
 //! - `source = project (<rolename>)` — members of `<P>_admin|_dev|_view`;
-//! - `source = system (admin_all_projects)` — members of any role holding
-//!   `(project:__all__, manage_project)`.
+//! - `source = system (manage_system)` — members of any role holding
+//!   `(project:__all__, manage_project)` (i.e. system admins).
 
 use crate::simple_permission::layers::list_project_access;
 use ta_services::factory::service_factory;
@@ -91,8 +91,8 @@ mod tests {
     }
 
     /// Both sources appear with their labels: a `<P>_admin` member as
-    /// `project (p0_admin)` / `manage_project`, and an `admin_all_projects`
-    /// holder (a `sys_admin` member) as `system (admin_all_projects)`.
+    /// `project (p0_admin)` / `manage_project`, and a `sys_admin` member as
+    /// `manage_system` / `system (manage_system)`.
     #[td_test::test(db)]
     async fn test_list_by_project_two_sources(db: TdPool) -> Result<(), TdError> {
         create_project(&db, "p0").await?;
@@ -137,14 +137,14 @@ mod tests {
             .iter()
             .find(|r| r.user.to_string() == "carol")
             .expect("carol present");
-        assert_eq!(carol_row.permission, SimplePermissionType::AdminAllProjects);
-        assert_eq!(carol_row.source, "system (admin_all_projects)");
+        assert_eq!(carol_row.permission, SimplePermissionType::ManageSystem);
+        assert_eq!(carol_row.source, "system (manage_system)");
         Ok(())
     }
 
     /// The system user is excluded from the roster even when it holds roles that
     /// would otherwise surface it — here both `p0_admin` (project source) and
-    /// `sys_admin` (system / `admin_all_projects` source).
+    /// `sys_admin` (system / `manage_system` source).
     #[td_test::test(db)]
     async fn test_list_by_project_excludes_system_user(db: TdPool) -> Result<(), TdError> {
         create_project(&db, "p0").await?;

@@ -9,12 +9,12 @@ These exercise the ``td permission`` Simple-Security facade through the API
 client (:meth:`TabsdataServer.grant_permission` / ``revoke_permission`` /
 ``list_permissions_by_user`` / ``list_permissions_by_project``) and assert both:
 
-* the happy path (an ``admin`` holding ``manage_access`` can grant/revoke/list),
+* the happy path (an ``admin`` holding ``manage_system`` can grant/revoke/list),
 * the scope rules (project permissions require a project; system permissions
   forbid one), and
 * enforcement -- a user holding only the auto-assigned ``default`` role (no
-  ``manage_access`` / ``manage_project``) is rejected with ``APIServerError``,
-  and a freshly-granted ``manage_access`` then *enables* the operation.
+  ``manage_system`` / ``manage_project``) is rejected with ``APIServerError``,
+  and a freshly-granted ``manage_system`` then *enables* the operation.
 
 All operations go through API calls, not the CLI. Project-scoped grants depend
 on the per-project roles minted at project-create time, which is Postgres-only
@@ -72,7 +72,7 @@ def admin_client() -> TabsdataServer:
 @pytest.fixture
 def regular_user(admin_client):
     """A freshly-created, enabled user holding only the auto-assigned
-    ``default`` role (no ``manage_access`` / ``manage_project``), with an API
+    ``default`` role (no ``manage_system`` / ``manage_project``), with an API
     client logged in as that user.
 
     Yields ``(name, client)``.
@@ -103,25 +103,25 @@ def other_user(admin_client):
 
 
 # --------------------------------------------------------------------------- #
-# Happy path -- admin (manage_access) grants / lists / revokes
+# Happy path -- admin (manage_system) grants / lists / revokes
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.integration
 def test_grant_list_revoke_system_permission(admin_client, other_user):
-    # `manage_access` is a system permission the `default` role does NOT hold,
+    # `manage_system` is a system permission the `default` role does NOT hold,
     # so it is a clean grant/revoke target (unlike `create_projects`, which
     # every user already has via `default`).
-    admin_client.grant_permission(other_user, "manage_access")
+    admin_client.grant_permission(other_user, "manage_system")
     perms = admin_client.list_permissions_by_user(other_user)
     assert any(
-        p.permission == "manage_access" and p.project is None for p in perms
-    ), f"manage_access not granted; got {perms}"
+        p.permission == "manage_system" and p.project is None for p in perms
+    ), f"manage_system not granted; got {perms}"
 
-    admin_client.revoke_permission(other_user, "manage_access")
+    admin_client.revoke_permission(other_user, "manage_system")
     perms = admin_client.list_permissions_by_user(other_user)
-    assert not any(p.permission == "manage_access" for p in perms), (
-        f"manage_access still present after revoke; got {perms}"
+    assert not any(p.permission == "manage_system" for p in perms), (
+        f"manage_system still present after revoke; got {perms}"
     )
 
 
@@ -134,7 +134,7 @@ def test_grant_list_revoke_system_permission(admin_client, other_user):
 def test_system_permission_with_project_rejected(admin_client, other_user):
     with pytest.raises(APIServerError):
         admin_client.grant_permission(
-            other_user, "manage_access", project="sandbox"
+            other_user, "manage_system", project="sandbox"
         )
 
 
@@ -154,9 +154,9 @@ def test_project_permission_without_project_rejected(
 @pytest.mark.integration
 def test_grant_forbidden_for_non_privileged_user(regular_user, other_user):
     _, client = regular_user
-    # only `default` (no manage_access / manage_project) -> Forbidden
+    # only `default` (no manage_system / manage_project) -> Forbidden
     with pytest.raises(APIServerError):
-        client.grant_permission(other_user, "manage_access")
+        client.grant_permission(other_user, "manage_system")
 
 
 @pytest.mark.integration
@@ -165,13 +165,13 @@ def test_revoke_forbidden_for_non_privileged_user(
 ):
     _, client = regular_user
     # admin first grants something so a revoke target exists
-    admin_client.grant_permission(other_user, "manage_access")
+    admin_client.grant_permission(other_user, "manage_system")
     try:
         with pytest.raises(APIServerError):
-            client.revoke_permission(other_user, "manage_access")
+            client.revoke_permission(other_user, "manage_system")
     finally:
         admin_client.revoke_permission(
-            other_user, "manage_access", raise_for_status=False
+            other_user, "manage_system", raise_for_status=False
         )
 
 
@@ -184,22 +184,22 @@ def test_list_by_project_forbidden_for_non_privileged_user(regular_user):
 
 
 # --------------------------------------------------------------------------- #
-# Enforcement of a granted permission -- manage_access enables granting
+# Enforcement of a granted permission -- manage_system enables granting
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.integration
-def test_manage_access_grant_enables_granting(
+def test_manage_system_grant_enables_granting(
     admin_client, regular_user, other_user
 ):
     name, client = regular_user
 
     # Before: the plain user cannot grant.
     with pytest.raises(APIServerError):
-        client.grant_permission(other_user, "manage_access")
+        client.grant_permission(other_user, "manage_system")
 
-    # Admin grants manage_access to the user (Simple facade -> sys_admin role).
-    admin_client.grant_permission(name, "manage_access")
+    # Admin grants manage_system to the user (Simple facade -> sys_admin role).
+    admin_client.grant_permission(name, "manage_system")
     try:
         # Re-login so the client carries a token issued after the grant.
         elevated = _client_for(name)
@@ -213,7 +213,7 @@ def test_manage_access_grant_enables_granting(
             other_user, "create_projects", raise_for_status=False
         )
         admin_client.revoke_permission(
-            name, "manage_access", raise_for_status=False
+            name, "manage_system", raise_for_status=False
         )
 
 
@@ -286,7 +286,7 @@ def test_project_manager_can_grant_on_own_project_only(
         )
         # But a project manager cannot grant a *system* permission.
         with pytest.raises(APIServerError):
-            manager.grant_permission(other_user, "manage_access")
+            manager.grant_permission(other_user, "manage_system")
     finally:
         admin_client.revoke_permission(
             other_user, "view_project", project=created_project, raise_for_status=False

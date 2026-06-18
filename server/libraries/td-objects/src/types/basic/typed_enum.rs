@@ -470,11 +470,12 @@ impl PermissionType {
 /// `role_permission` reads it maps to.
 ///
 /// Three are project-scoped (`view_project`/`develop_project`/`manage_project`,
-/// always *on a project*) and three are system-scoped
-/// (`create_projects`/`manage_access`/`admin_all_projects`, instance-wide). The
-/// org-wide read/develop wildcards (`view_all_projects`/`develop_all_projects`)
-/// are intentionally absent — they have no Simple-surface name and are reachable
-/// only in RBAC Mode View.
+/// always *on a project*) and two are system-scoped
+/// (`create_projects`/`manage_system`, instance-wide). `manage_system` is full
+/// system admin (`sys_admin`): user/role administration plus authority over all
+/// projects. The org-wide read/develop wildcards
+/// (`view_all_projects`/`develop_all_projects`) are intentionally absent — they
+/// have no Simple-surface name and are reachable only in RBAC Mode View.
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq, Hash)]
 pub enum SimplePermissionType {
@@ -488,10 +489,8 @@ pub enum SimplePermissionType {
     // system-scoped — must not carry a project
     #[typed_enum(rename = "create_projects")]
     CreateProjects,
-    #[typed_enum(rename = "manage_access")]
-    ManageAccess,
-    #[typed_enum(rename = "admin_all_projects")]
-    AdminAllProjects,
+    #[typed_enum(rename = "manage_system")]
+    ManageSystem,
     // org-wide read/develop wildcards: parseable so the facade can reject them
     // with a clear "use RBAC Mode View" error rather than a generic 400; they
     // have no faithful Simple-surface mapping.

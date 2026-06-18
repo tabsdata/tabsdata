@@ -24,10 +24,10 @@ mod definitions {
     /// `project`.
     ///
     /// `project` is REQUIRED for the three project permissions
-    /// (`view`/`develop`/`manage_project`) and FORBIDDEN for the three system
-    /// permissions (`create_projects`/`manage_access`/`admin_all_projects`); the
-    /// service validates this and rejects the org-wide read/develop wildcards
-    /// (which have no Simple-surface name).
+    /// (`view`/`develop`/`manage_project`) and FORBIDDEN for the two system
+    /// permissions (`create_projects`/`manage_system`); the service validates
+    /// this and rejects the org-wide read/develop wildcards (which have no
+    /// Simple-surface name).
     #[ta_objects::Dto]
     pub struct SimplePermissionGrant {
         #[dxo(extractor)]
@@ -51,7 +51,7 @@ mod definitions {
 
     /// One row of "who has access to a project" (`td permission list
     /// --project P`), with the source that conferred it: `project (<rolename>)` for per-project role
-    /// memberships, `system (admin_all_projects)` for wildcard holders.
+    /// memberships, `system (manage_system)` for system admins.
     #[ta_objects::Dto]
     #[derive(Eq, PartialEq, Hash)]
     pub struct SimpleProjectAccess {

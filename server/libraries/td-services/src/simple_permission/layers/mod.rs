@@ -77,8 +77,8 @@ pub async fn assert_simple_permission_valid(
 ///
 /// - project permission: the `<project>_admin|_dev|_view` per-project role;
 /// - `create_projects`: the `project_creator` role;
-/// - `manage_access` / `admin_all_projects`: the `sys_admin` role, which holds
-///   the whole system bundle.
+/// - `manage_system`: the `sys_admin` role, which holds the whole system bundle
+///   (user/role administration plus authority over all projects).
 pub async fn resolve_grant(
     mut conn: MutRef<DynamicConnection<'static>>,
     grant: Ref<SimplePermissionGrant>,
@@ -123,7 +123,7 @@ pub async fn resolve_grant(
                 project_id: None,
             })
         }
-        SimplePermissionType::ManageAccess | SimplePermissionType::AdminAllProjects => {
+        SimplePermissionType::ManageSystem => {
             let role = conn
                 .live()
                 .fetch_one::<RoleDB>(&RoleName::try_from(SYS_ADMIN_ROLE.to_string())?)
@@ -241,7 +241,9 @@ fn simple_permission_of(
 ) -> Result<Option<SimplePermission>, TdError> {
     let simple = match perm.entity_type.as_str() {
         "system" => match perm.permission_type.as_str() {
-            "manage_access" => Some((SimplePermissionType::ManageAccess, None)),
+            // `manage_access` is the marker of the `sys_admin` bundle, surfaced as
+            // the consolidated `manage_system` Simple permission.
+            "manage_access" => Some((SimplePermissionType::ManageSystem, None)),
             "create_projects" => Some((SimplePermissionType::CreateProjects, None)),
             // manage_roles is internal — not user-facing on the Simple surface;
             // any other (e.g. extension) system permission likewise has no
@@ -250,12 +252,11 @@ fn simple_permission_of(
         },
         "project" => {
             if perm.entity_id.is_all_entities() {
-                match perm.permission_type.as_str() {
-                    // (project:__all__, manage_project) is `admin_all_projects`.
-                    "manage_project" => Some((SimplePermissionType::AdminAllProjects, None)),
-                    // org-wide view/develop wildcards: RBAC-only, no Simple name.
-                    _ => None,
-                }
+                // Org-wide project rows have no standalone Simple name. For a
+                // `sys_admin`, `(project:__all__, manage_project)` is part of the
+                // `manage_system` bundle (surfaced via its `manage_access` row);
+                // the view/develop wildcards are RBAC Mode View only.
+                None
             } else {
                 let project_id = ProjectId::from(*perm.entity_id);
                 let project_name = projects.get(&project_id).cloned();
@@ -286,8 +287,9 @@ fn simple_permission_of(
 ///
 /// - `source = project (<rolename>)` — members of `<P>_admin|_dev|_view`,
 ///   mapped to `manage|develop|view_project`;
-/// - `source = system (admin_all_projects)` — members of any role holding
-///   `(project:__all__, manage_project)`, mapped to `admin_all_projects`.
+/// - `source = system (manage_system)` — members of any role holding
+///   `(project:__all__, manage_project)` (i.e. system admins), mapped to
+///   `manage_system`.
 pub async fn list_project_access(
     mut conn: MutRef<DynamicConnection<'static>>,
     project_id_name: Ref<ProjectIdName>,
@@ -341,14 +343,14 @@ pub async fn list_project_access(
                 source.clone(),
             )?;
         }
-        // system-source membership (admin_all_projects)
+        // system-source membership (manage_system)
         if system_source_roles.contains(&user_role.role_id) {
             push_access(
                 &mut seen,
                 &mut out,
                 user_name,
-                SimplePermissionType::AdminAllProjects,
-                "system (admin_all_projects)".to_string(),
+                SimplePermissionType::ManageSystem,
+                "system (manage_system)".to_string(),
             )?;
         }
     }

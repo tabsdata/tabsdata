@@ -2355,12 +2355,12 @@ SIMPLE_PROJECT_PERMISSION_TYPES = [
     "manage_project",
 ]
 
-# System-scoped permissions: must not carry `--project`. `admin_all_projects` is
-# the instance-wide equivalent of `manage_project`.
+# System-scoped permissions: must not carry `--project`. `manage_system` is full
+# system admin (sys_admin): user/role administration plus authority over all
+# projects.
 SIMPLE_SYSTEM_PERMISSION_TYPES = [
     "create_projects",
-    "manage_access",
-    "admin_all_projects",
+    "manage_system",
 ]
 
 VALID_SIMPLE_PERMISSION_TYPES = (
@@ -2404,8 +2404,7 @@ class SimpleProjectAccess:
     (`td permission list --project P`).
 
     `source` records what conferred the access: ``project (<rolename>)`` for
-    per-project role memberships, ``system (admin_all_projects)`` for wildcard
-    holders.
+    per-project role memberships, ``system (manage_system)`` for system admins.
     """
 
     def __init__(self, user: str, permission: str, source: str, **kwargs):
