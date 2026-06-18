@@ -30,7 +30,6 @@ fn sample_kminus() -> Session {
         namespace: "default".to_owned(),
         inputs: KminusInputs {
             name: Some("tabsdata".to_owned()),
-            path: None,
         },
     }
 }
@@ -126,7 +125,6 @@ fn kminus_round_trips_through_json() {
     assert_eq!(cluster, "kminus-cluster");
     assert_eq!(namespace, "default");
     assert_eq!(inputs.name.as_deref(), Some("tabsdata"));
-    assert!(inputs.path.is_none());
 }
 
 #[test]
@@ -161,7 +159,6 @@ fn docker_inputs_default_has_all_optional_fields_unset() {
 fn kminus_inputs_default_has_all_optional_fields_unset() {
     let inputs = KminusInputs::default();
     assert!(inputs.name.is_none());
-    assert!(inputs.path.is_none());
 }
 
 #[test]
@@ -215,20 +212,15 @@ fn to_args_for_docker_preserves_cluster_arguments() {
     assert!(!cluster.current);
     assert_eq!(cluster.namespace.as_deref(), Some("dev-ns"));
     assert!(instance.name.is_none());
-    assert!(instance.path.is_none());
 }
 
 #[test]
-fn to_args_for_kminus_passes_path_through_instance_arguments() {
+fn to_args_for_kminus_passes_name_through_instance_arguments() {
     let (cluster, instance) = sample_kminus().to_args();
     assert!(matches!(cluster.provider, Some(ClusterProvider::Kminus)));
     assert!(cluster.context.is_none());
     assert!(cluster.kubeconfig.is_none());
     assert!(!cluster.current);
     assert!(cluster.namespace.is_none());
-    assert!(instance.name.is_none());
-    assert_eq!(
-        instance.path,
-        Some(PathBuf::from("/home/user/.tabsdata/instances/tabsdata"))
-    );
+    assert_eq!(instance.name.as_deref(), Some("tabsdata"));
 }

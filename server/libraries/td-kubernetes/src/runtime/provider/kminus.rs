@@ -26,6 +26,7 @@ use crate::base::constants::{
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
 use crate::client::registry::instances_root;
+use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::client::session::pin::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
@@ -94,51 +95,15 @@ impl KminusProvider {
             }
             .into());
         }
-        if instance.name.is_some() && instance.path.is_some() {
-            return Err(ProviderError::MutuallyExclusiveArguments {
-                first: "name".to_owned(),
-                second: "path".to_owned(),
-            }
-            .into());
-        }
-
         let inputs = KminusInputs {
             name: instance.name.clone(),
-            path: instance.path.clone(),
         };
 
-        let instances_root = instances_root()?;
-        let (name, folder) = match (instance.name.as_deref(), instance.path.as_deref()) {
-            (None, None) => {
-                let name = DEFAULT_INSTANCE.to_string();
-                let folder = instances_root.join(&name);
-                (name, folder)
-            }
-            (Some(name), None) => {
-                let folder = instances_root.join(name);
-                (name.to_owned(), folder)
-            }
-            (None, Some(path)) => {
-                let folder = if path.is_relative() {
-                    instances_root.join(path)
-                } else {
-                    path.to_path_buf()
-                };
-                let name = folder
-                    .file_name()
-                    .and_then(|component| component.to_str())
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| DEFAULT_INSTANCE.to_string());
-                (name, folder)
-            }
-            (Some(_), Some(_)) => {
-                return Err(ProviderError::MutuallyExclusiveArguments {
-                    first: "name".to_owned(),
-                    second: "path".to_owned(),
-                }
-                .into());
-            }
-        };
+        let name = instance
+            .name
+            .clone()
+            .unwrap_or_else(|| DEFAULT_INSTANCE.to_string());
+        let folder = instances_root()?.join(&name);
 
         if let Err(error) = validate_instance_name(&name) {
             return Err(ProviderError::InvalidInstanceName {
@@ -333,6 +298,20 @@ impl Provider for KminusProvider {
             cluster_name: Some(kube.cluster),
             namespace: Some(kube.namespace),
         }
+    }
+
+    fn cluster_settings(&self, _provided: ClusterProperties) -> CommandResult<ClusterSettings> {
+        Ok(ClusterSettings::default())
+    }
+
+    fn cluster_descriptor(&self, settings: ClusterSettings) -> CommandResult<ClusterDescriptor> {
+        Ok(ClusterDescriptor {
+            kubeconfig: settings.kubeconfig,
+            context: settings.context,
+            namespace: settings.namespace,
+            cluster: None,
+            url: None,
+        })
     }
 
     async fn ensure_pinnable_server(&self) -> CommandResult {

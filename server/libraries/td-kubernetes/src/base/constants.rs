@@ -69,6 +69,10 @@ pub const SINGLETON_NAME_MANIFEST: &str = "manifest.yaml";
 
 pub const INIT_FOLDER: &str = "init";
 pub const SETTINGS_FILE: &str = ".settings.json";
+pub const CLUSTER_FOLDER: &str = "cluster";
+pub const KUBE_FOLDER: &str = "kube";
+pub const CLUSTER_CONFIG_FOLDER: &str = "config";
+pub const KUBECONFIG_FILE: &str = "kubeconfig.yaml";
 
 pub const PROGRAM_TD_RESOURCE: &str = "td_resource";
 

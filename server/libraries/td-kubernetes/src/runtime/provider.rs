@@ -31,6 +31,7 @@ use crate::core::pod::{ValidationError, container as container_pod, process as p
 use crate::core::system::exit::CommandResult;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
+use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::profile::bundle::Axis;
 use crate::runtime::provider::axes::{Lifecycle, Location, Platform, Workload};
 use crate::runtime::provider::docker::DockerProvider;
@@ -216,6 +217,9 @@ pub trait Provider: Send + Sync {
     fn secret_generators(&self, phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>>;
 
     fn summary(&self) -> Summary;
+
+    fn cluster_settings(&self, provided: ClusterProperties) -> CommandResult<ClusterSettings>;
+    fn cluster_descriptor(&self, settings: ClusterSettings) -> CommandResult<ClusterDescriptor>;
 
     async fn ensure_pinnable_server(&self) -> CommandResult;
     async fn ensure_creatable_server(&self) -> CommandResult;

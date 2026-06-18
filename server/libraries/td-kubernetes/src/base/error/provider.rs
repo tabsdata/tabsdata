@@ -112,6 +112,15 @@ pub enum ProviderError {
     #[error("Could not determine the user home directory.")]
     HomeDirNotFound = 6002,
     #[error(
+        "The instance '{name}' is in the '{found}' state, but this command requires \
+         it to be in one of these states: {expected}."
+    )]
+    UnexpectedInstanceState {
+        name: String,
+        found: String,
+        expected: String,
+    } = 6003,
+    #[error(
         "The cluster is not running. \
          Start it with `tdkserver cluster start ...` and try again."
     )]

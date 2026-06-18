@@ -10,10 +10,13 @@ use td_common::env::TABSDATA_HOME_DIR;
 use td_common::settings::INSTANCES_FOLDER;
 use td_error::TdError;
 
-use crate::base::constants::{INIT_FOLDER, SETTINGS_FILE};
+use crate::base::constants::{
+    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, INIT_FOLDER, KUBECONFIG_FILE, KUBE_FOLDER, SETTINGS_FILE,
+};
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
 use crate::core::system::exit::CommandResult;
+use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::axes::Locality;
 
@@ -37,11 +40,49 @@ pub fn instance_settings_file(name: &str) -> CommandResult<PathBuf> {
     Ok(instance_folder(name)?.join(SETTINGS_FILE))
 }
 
+pub fn instance_kube_folder(name: &str) -> CommandResult<PathBuf> {
+    Ok(instance_folder(name)?.join(KUBE_FOLDER))
+}
+
+pub fn kminus_kubeconfig_file(name: &str) -> CommandResult<PathBuf> {
+    Ok(instance_folder(name)?
+        .join(CLUSTER_FOLDER)
+        .join(CLUSTER_CONFIG_FOLDER)
+        .join(KUBECONFIG_FILE))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClusterViews {
+    pub provided: ClusterProperties,
+    pub adjusted: ClusterSettings,
+    pub resolved: ClusterDescriptor,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InstanceState {
+    Initialized,
+    Created,
+    Registered,
+}
+
+impl InstanceState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Initialized => "initialized",
+            Self::Created => "created",
+            Self::Registered => "registered",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstanceSettings {
+    pub state: InstanceState,
     pub name: String,
     pub provider: ClusterProvider,
     pub locality: Locality,
+    pub cluster: ClusterViews,
 }
 
 impl InstanceSettings {
@@ -77,5 +118,22 @@ impl InstanceSettings {
             })
         })?;
         Ok(())
+    }
+
+    pub fn require_one_of(&self, expected: &[InstanceState]) -> CommandResult {
+        if expected.contains(&self.state) {
+            return Ok(());
+        }
+        let expected = expected
+            .iter()
+            .map(|state| state.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        Err(ProviderError::UnexpectedInstanceState {
+            name: self.name.clone(),
+            found: self.state.as_str().to_owned(),
+            expected,
+        }
+        .into())
     }
 }

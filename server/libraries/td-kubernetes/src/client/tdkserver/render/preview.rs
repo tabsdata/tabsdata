@@ -107,7 +107,7 @@ pub fn apply_config(summary: &Summary) {
     render_summary_lines(summary);
 }
 
-fn render_summary_lines(summary: &Summary) {
+pub(crate) fn render_summary_lines(summary: &Summary) {
     info!("  - provider.....: {}", summary.provider.as_str());
     if let Some(name) = &summary.instance_name {
         info!("  - instance name: {name}");

@@ -33,6 +33,7 @@ use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
+use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{RenderedConfigmap, load_profile, render_for_configmaps};
 use crate::runtime::instance::verify_manifest_compatibility;
@@ -60,7 +61,7 @@ pub struct DockerProvider {
 impl DockerProvider {
     pub async fn build(
         cluster: ClusterArguments,
-        instance: InstanceArguments,
+        _instance: InstanceArguments,
         verbose: bool,
     ) -> CommandResult<Self> {
         if cluster.kubeconfig.is_none() && cluster.context.is_none() && !cluster.current {
@@ -74,20 +75,6 @@ impl DockerProvider {
             return Err(ProviderError::MutuallyExclusiveArguments {
                 first: "context".to_owned(),
                 second: "current".to_owned(),
-            }
-            .into());
-        }
-        if instance.name.is_some() {
-            return Err(ProviderError::ArgumentNotValidForProvider {
-                argument: "name".to_owned(),
-                provider: ClusterProvider::Docker.as_str().to_owned(),
-            }
-            .into());
-        }
-        if instance.path.is_some() {
-            return Err(ProviderError::ArgumentNotValidForProvider {
-                argument: "path".to_owned(),
-                provider: ClusterProvider::Docker.as_str().to_owned(),
             }
             .into());
         }
@@ -197,6 +184,24 @@ impl Provider for DockerProvider {
             cluster_name: Some(self.cluster_name.clone()),
             namespace: Some(self.config.default_namespace.clone()),
         }
+    }
+
+    fn cluster_settings(&self, _provided: ClusterProperties) -> CommandResult<ClusterSettings> {
+        Ok(ClusterSettings {
+            kubeconfig: Some(self.kubefile.clone()),
+            context: Some(self.context.clone()),
+            namespace: Some(self.config.default_namespace.clone()),
+        })
+    }
+
+    fn cluster_descriptor(&self, settings: ClusterSettings) -> CommandResult<ClusterDescriptor> {
+        Ok(ClusterDescriptor {
+            kubeconfig: settings.kubeconfig,
+            context: settings.context,
+            namespace: settings.namespace,
+            cluster: Some(self.cluster_name.clone()),
+            url: Some(self.config.cluster_url.to_string()),
+        })
     }
 
     async fn ensure_pinnable_server(&self) -> CommandResult {

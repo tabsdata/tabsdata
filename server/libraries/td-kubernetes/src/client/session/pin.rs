@@ -22,8 +22,6 @@ const SERVER_SESSION_FILE: &str = ".tdserver-session.json";
 pub struct KminusInputs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<PathBuf>,
 }
 
 #[allow(dead_code)]
@@ -295,10 +293,16 @@ impl Session {
 
     pub fn to_args(&self) -> (ClusterArguments, InstanceArguments) {
         match self {
-            Session::Kminus { path, .. } => (
-                ClusterArguments::new(Some(ClusterProvider::Kminus), None, None, false, None),
-                InstanceArguments::new(None, Some(path.clone())),
-            ),
+            Session::Kminus { path, .. } => {
+                let name = path
+                    .file_name()
+                    .and_then(|component| component.to_str())
+                    .map(str::to_owned);
+                (
+                    ClusterArguments::new(Some(ClusterProvider::Kminus), None, None, false, None),
+                    InstanceArguments::new(name),
+                )
+            }
             Session::Docker {
                 kubeconfig,
                 context,
@@ -312,15 +316,15 @@ impl Session {
                     false,
                     Some(namespace.clone()),
                 ),
-                InstanceArguments::new(None, None),
+                InstanceArguments::new(None),
             ),
             Session::Eks { .. } => (
                 ClusterArguments::new(Some(ClusterProvider::Eks), None, None, false, None),
-                InstanceArguments::new(None, None),
+                InstanceArguments::new(None),
             ),
             Session::Fargate { .. } => (
                 ClusterArguments::new(Some(ClusterProvider::Fargate), None, None, false, None),
-                InstanceArguments::new(None, None),
+                InstanceArguments::new(None),
             ),
         }
     }

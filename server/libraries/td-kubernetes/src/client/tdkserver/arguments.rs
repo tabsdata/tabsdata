@@ -196,29 +196,16 @@ pub struct InstanceArguments {
         long,
         name = "name",
         required = false,
-        long_help = "Instance name. \
-                     Valid only for the 'kminus' provider. \
-                     The instance is created in ~/.tabsdata/instances/<name>. \
-                     Mutually exclusive with --path."
+        long_help = "Instance name. The instance lives in ~/.tabsdata/instances/<name>. \
+                     For the 'kminus' provider it is initialized, created and registered \
+                     there; for every other provider it is initialized and registered there, \
+                     while its cluster is managed externally."
     )]
     pub name: Option<String>,
-
-    #[arg(
-        long,
-        name = "path",
-        required = false,
-        value_parser = clap::value_parser!(PathBuf),
-        long_help = "Instance path. \
-                     Valid only for the 'kminus' provider. \
-                     Relative paths resolve under ~/.tabsdata/instances. \
-                     Absolute paths are used as-is. \
-                     Mutually exclusive with --name."
-    )]
-    pub path: Option<PathBuf>,
 }
 
 impl InstanceArguments {
-    pub fn new(name: Option<String>, path: Option<PathBuf>) -> Self {
-        Self { name, path }
+    pub fn new(name: Option<String>) -> Self {
+        Self { name }
     }
 }

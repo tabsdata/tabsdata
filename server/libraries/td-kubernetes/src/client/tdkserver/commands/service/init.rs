@@ -2,22 +2,30 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::path::{Path, PathBuf};
+
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::{Cancelled, GeneralError, NoAction};
+use td_error::TdError;
 use tracing::info;
 
+use crate::base::constants::KUBECONFIG_FILE;
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::{InteractiveReporter, Reporter};
-use crate::client::registry::{InstanceSettings, instance_folder, instance_init_folder};
-use crate::client::tdkserver::arguments::GlobalArguments;
+use crate::client::registry::{
+    ClusterViews, InstanceSettings, InstanceState, instance_folder, instance_init_folder,
+    instance_kube_folder,
+};
+use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::template::get::get_templates;
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
-use crate::client::tdkserver::render::preview;
+use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort, abort_with};
-use crate::runtime::provider::ClusterProvider;
+use crate::runtime::instance::cluster::ClusterProperties;
 use crate::runtime::provider::axes::Locality;
+use crate::runtime::provider::{ClusterProvider, provider_for};
 
 const DEFAULT_PROVIDER: ClusterProvider = ClusterProvider::Kminus;
 
@@ -32,15 +40,8 @@ pub struct InitArguments {
     )]
     pub instance: Option<String>,
 
-    #[arg(
-        long,
-        name = "provider",
-        required = false,
-        value_enum,
-        long_help = "Provider of the instance: 'kminus', 'docker', 'eks' or 'fargate'. \
-                     Shapes the produced input config. Defaults to 'kminus'."
-    )]
-    pub provider: Option<ClusterProvider>,
+    #[command(flatten)]
+    pub cluster: ClusterArguments,
 
     #[arg(
         long,
@@ -56,6 +57,16 @@ pub struct InitArguments {
 
     #[arg(
         long,
+        name = "save",
+        required = false,
+        default_value_t = false,
+        long_help = "Copy the cluster settings files (kubeconfig, etc.) into the instance \
+                     folder so the instance is self-contained."
+    )]
+    pub save: bool,
+
+    #[arg(
+        long,
         name = "yes",
         short = 'y',
         required = false,
@@ -68,15 +79,17 @@ pub struct InitArguments {
 pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -> CommandResult {
     let InitArguments {
         instance,
-        provider,
+        mut cluster,
+        save,
         preview,
         yes,
     } = arguments;
 
     let instance_defaulted = instance.is_none();
-    let provider_defaulted = provider.is_none();
+    let provider_defaulted = cluster.provider.is_none();
     let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
-    let provider = provider.unwrap_or(DEFAULT_PROVIDER);
+    let provider = cluster.provider.unwrap_or(DEFAULT_PROVIDER);
+    cluster.provider = Some(provider);
 
     if preview {
         preview::init_service(
@@ -98,6 +111,29 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
             ProviderError::InstanceFolderExists(folder.display().to_string()),
         );
     }
+
+    let provided = ClusterProperties {
+        context: cluster.context.clone(),
+        kubeconfig: cluster.kubeconfig.clone(),
+        current: cluster.current,
+        namespace: cluster.namespace.clone(),
+    };
+
+    let built = provider_for(
+        cluster,
+        InstanceArguments::new(Some(instance.clone())),
+        globals.verbose,
+    )
+    .await?;
+
+    let mut adjusted = built.cluster_settings(provided.clone())?;
+    if save
+        && provider != ClusterProvider::Kminus
+        && let Some(kubeconfig) = &adjusted.kubeconfig
+    {
+        adjusted.kubeconfig = Some(save_kubeconfig(&instance, kubeconfig)?);
+    }
+    let resolved = built.cluster_descriptor(adjusted.clone())?;
 
     let init_folder = instance_init_folder(&instance)?;
 
@@ -123,9 +159,15 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
 
     let step = reporter.step("Writing tabsdata instance settings");
     let settings = InstanceSettings {
+        state: InstanceState::Initialized,
         name: instance.clone(),
         provider,
         locality: Locality::Local,
+        cluster: ClusterViews {
+            provided,
+            adjusted,
+            resolved,
+        },
     };
     if let Err(error) = settings.save() {
         step.fail();
@@ -133,5 +175,29 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     }
     step.done("Wrote tabsdata instance settings");
 
+    report::service::initialized_service(&settings);
+
     Ok(())
+}
+
+fn save_kubeconfig(instance: &str, source: &Path) -> CommandResult<PathBuf> {
+    let kube_folder = instance_kube_folder(instance)?;
+    std::fs::create_dir_all(&kube_folder).map_err(|error| {
+        TdError::from(CliError::FolderCreateFailed {
+            folder: kube_folder.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    let file_name = source
+        .file_name()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(KUBECONFIG_FILE));
+    let target = kube_folder.join(file_name);
+    std::fs::copy(source, &target).map_err(|error| {
+        TdError::from(CliError::FileWriteFailed {
+            file: target.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    Ok(target)
 }
