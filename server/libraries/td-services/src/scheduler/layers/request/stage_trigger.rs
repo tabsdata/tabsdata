@@ -7,10 +7,13 @@ use crate::scheduler::message_builder::build_external_location;
 use http::Method;
 use std::collections::HashMap;
 use td_authz::jwt::JwtConfig;
-use td_bridge::BridgeProviderHandle;
-use td_bridge::messaging::OrchestratorMessagePayload;
+use td_bridge::messaging::{
+    OrchestratorMessagePayload, StageTriggerRequest, StageTriggerStartRequest,
+    StageTriggerStopRequest,
+};
+use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::id;
-use td_common::worker::{MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
+use td_common::worker::{Callback, MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::TaggedExt;
@@ -44,12 +47,15 @@ pub async fn create_locked_stage_trigger_workers_start_request(
     mut conn: MutRef<DynamicConnection<'static>>,
     stage_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
-    // Pre-fetch every function record — joined with its effective bundle's
-    // stamped base_path — in one chunked query instead of per-worker round-trips
-    // inside the loop. The bundle base_path is frozen on the bundle row;
-    // stage/checkpoint use the function's own stamped stage_base_path + stage_id
-    // (carried on FunctionDB), so they don't relocate when the collection
-    // base_path later changes.
+    // Both orchestrators need the function's external storage locations
+    // (bundle / stage / checkpoint), so pre-fetch every function record —
+    // joined with its effective bundle's stamped base_path — in one chunked
+    // query instead of per-worker round-trips inside the loop. The bundle
+    // base_path is frozen on the bundle row; stage/checkpoint use the function's
+    // own stamped stage_base_path + stage_id (carried on FunctionDB), so they
+    // don't relocate when the collection base_path later changes. The supervisor
+    // resolves the full message here; the kubernetes path ships a lean request
+    // carrying just the callbacks, the locations, and the worker-row identity.
     let fvids: Vec<FunctionVersionId> = stage_trigger_workers
         .iter()
         .map(|w| w.function_version_id.clone())
@@ -61,6 +67,8 @@ pub async fn create_locked_stage_trigger_workers_start_request(
         .into_iter()
         .map(|f| (f.id.clone(), f))
         .collect();
+
+    let kubernetes = matches!(bridge.orchestrator(), Orchestrator::Kubernetes);
 
     for stage_trigger_worker in stage_trigger_workers.iter() {
         let worker_id = stage_trigger_worker.id.to_string();
@@ -81,30 +89,14 @@ pub async fn create_locked_stage_trigger_workers_start_request(
             ("function_version_id", function_version_id.as_str()),
         ];
 
-        // Build fn_trigger / fn_state / fn_status requests (tokenized).
+        // POST endpoint to trigger the function (tokenized). Needed by both
+        // orchestrators (supervisor embeds it in the resolved message; the
+        // kubernetes lean request carries it directly).
         let fn_trigger = internal_request(
             &jwt,
             server_address,
             Method::POST,
             FUNCTION_VERSION_EXECUTE,
-            &fv_binding,
-            HashMap::new(),
-            false,
-        )?;
-        let fn_state = internal_request(
-            &jwt,
-            server_address,
-            Method::GET,
-            DOWNLOAD_FUNCTION_STATE,
-            &fv_binding,
-            HashMap::new(),
-            false,
-        )?;
-        let fn_status = internal_request(
-            &jwt,
-            server_address,
-            Method::GET,
-            FUNCTION_VERSION_EXECUTION_STATUS,
             &fv_binding,
             HashMap::new(),
             true,
@@ -149,54 +141,93 @@ pub async fn create_locked_stage_trigger_workers_start_request(
             .build()?;
         let (function_checkpoint, _) = build_external_location(&storage, &path)?;
 
-        // Build info
-        // TODO Urls are wrong as of now
-        let info = stage_trigger::v1::Info {
-            worker_id: stage_trigger_worker.id,
-            project_id: stage_trigger_worker.project_id,
-            collection_id: stage_trigger_worker.collection_id,
-            collection: stage_trigger_worker.collection.clone(),
-            function_version_id: stage_trigger_worker.function_version_id.clone(),
-            function: stage_trigger_worker.function.clone(),
-            function_defined_on: f.defined_on,
-            function_bundle,
-            function_stage,
-            function_checkpoint,
-            scheduled_on: AtTime::now(),
-            fn_trigger,
-            fn_state,
-            config: WorkerConfig::serialize(&stage_trigger_worker.worker_config)?,
-            fn_status,
-        };
-        // Build message context
-        let stage_trigger_input = StageTriggerInput { info };
-        let context = WorkerInput::StageTriggerV1(Box::new(stage_trigger_input));
+        let payload = if kubernetes {
+            // Kubernetes: lean request carrying the callbacks, the resolved
+            // locations, and the worker-row identity.
+            OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
+                StageTriggerRequest::Start(StageTriggerStartRequest {
+                    worker: WorkerName::StageTrigger,
+                    worker_id: stage_trigger_worker.id,
+                    decorator: f.decorator.to_message(),
+                    trigger: Callback::Http(fn_trigger),
+                    responder: callback,
+                    collection_id: stage_trigger_worker.collection_id,
+                    collection: stage_trigger_worker.collection.clone(),
+                    function_version_id: stage_trigger_worker.function_version_id.clone(),
+                    function: stage_trigger_worker.function.clone(),
+                    function_bundle,
+                    function_stage,
+                    function_checkpoint,
+                    scheduled_on: AtTime::now(),
+                    config: WorkerConfig::serialize(&stage_trigger_worker.worker_config)?,
+                }),
+            )
+        } else {
+            // Supervisor: resolve the full message here. fn_state / fn_status are
+            // only embedded in the eagerly-resolved message.
+            let fn_state = internal_request(
+                &jwt,
+                server_address,
+                Method::GET,
+                DOWNLOAD_FUNCTION_STATE,
+                &fv_binding,
+                HashMap::new(),
+                false,
+            )?;
+            let fn_status = internal_request(
+                &jwt,
+                server_address,
+                Method::GET,
+                FUNCTION_VERSION_EXECUTION_STATUS,
+                &fv_binding,
+                HashMap::new(),
+                true,
+            )?;
 
-        // Build message payload
-        // TODO ADD get_states to states
-        let message_payload = RequestMessagePayload::<serde_yaml::Value> {
-            class: WorkerClass::Ephemeral,
-            worker: WorkerName::StageTrigger.as_ref().to_string(),
-            worker_id: worker_id.clone(),
-            action: MessageAction::Start,
-            arguments: Vec::new(),
-            callback: Some(callback),
-            context: Some(serde_yaml::to_value(&context).map_err(|e| {
-                api_error!(
-                    ApiError::InternalError,
-                    "Failed to serialize stage trigger input: {e}"
-                )
-            })?),
+            // Build info
+            // TODO Urls are wrong as of now
+            let info = stage_trigger::v1::Info {
+                worker_id: stage_trigger_worker.id,
+                project_id: stage_trigger_worker.project_id,
+                collection_id: stage_trigger_worker.collection_id,
+                collection: stage_trigger_worker.collection.clone(),
+                function_version_id: stage_trigger_worker.function_version_id.clone(),
+                function: stage_trigger_worker.function.clone(),
+                function_defined_on: f.defined_on,
+                function_bundle,
+                function_stage,
+                function_checkpoint,
+                scheduled_on: AtTime::now(),
+                fn_trigger,
+                fn_state,
+                config: WorkerConfig::serialize(&stage_trigger_worker.worker_config)?,
+                fn_status,
+            };
+            // Build message context
+            let stage_trigger_input = StageTriggerInput { info };
+            let context = WorkerInput::StageTriggerV1(Box::new(stage_trigger_input));
+
+            // Build message payload
+            // TODO ADD get_states to states
+            let message_payload = RequestMessagePayload::<serde_yaml::Value> {
+                class: WorkerClass::Ephemeral,
+                worker: WorkerName::StageTrigger.as_ref().to_string(),
+                worker_id: worker_id.clone(),
+                action: MessageAction::Start,
+                arguments: Vec::new(),
+                callback: Some(callback),
+                context: Some(serde_yaml::to_value(&context).map_err(|e| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "Failed to serialize stage trigger input: {e}"
+                    )
+                })?),
+            };
+            OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message_payload)
         };
 
         // Add it to the queue
-        bridge
-            .message_queue()
-            .put(
-                worker_id,
-                OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message_payload),
-            )
-            .await?;
+        bridge.message_queue().put(worker_id, payload).await?;
     }
     Ok(())
 }
@@ -213,6 +244,8 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
     jwt: Ref<JwtConfig>,
     stage_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
+    let kubernetes = matches!(bridge.orchestrator(), Orchestrator::Kubernetes);
+
     let futures: Vec<_> = stage_trigger_workers
         .iter()
         .map(|stage_trigger_worker| {
@@ -220,8 +253,8 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
             let server_addresses = server_addresses.clone();
             let jwt = jwt.clone();
             async move {
-                let server_address = server_addresses.first();
                 let worker_id = stage_trigger_worker.id.to_string();
+                let server_address = server_addresses.first();
                 let proj = stage_trigger_worker.project_id.tagged::<ProjectIdName>();
                 let callback = internal_post_callback(
                     &jwt,
@@ -230,31 +263,39 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
                     &[("project", proj.as_str()), ("worker_id", &worker_id)],
                 )?;
 
-                // Different message ID than the worker ID for STOP — current
-                // messaging impl needs a distinct file name.
-                let message_id = id::id().to_string();
-
-                // Build message payload
-                let message_payload = RequestMessagePayload::<serde_yaml::Value> {
-                    class: WorkerClass::Ephemeral,
-                    worker: WorkerName::StageTrigger.as_ref().to_string(),
-                    worker_id: worker_id.clone(),
-                    action: MessageAction::Stop,
-                    arguments: Vec::new(),
-                    callback: Some(callback),
-                    context: None,
-                };
-
-                // Add it to the queue
-                bridge
-                    .message_queue()
-                    .put(
-                        message_id,
+                // Kubernetes ships a lean Stop keyed by the worker id (so the
+                // gateway can derive the pod to delete); supervisor ships a flat
+                // Stop on the file queue under a distinct message id.
+                let (message_id, payload) = if kubernetes {
+                    (
+                        worker_id,
+                        OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
+                            StageTriggerRequest::Stop(StageTriggerStopRequest {
+                                worker: WorkerName::StageTrigger,
+                                worker_id: stage_trigger_worker.id,
+                                responder: callback,
+                            }),
+                        ),
+                    )
+                } else {
+                    let message_payload = RequestMessagePayload::<serde_yaml::Value> {
+                        class: WorkerClass::Ephemeral,
+                        worker: WorkerName::StageTrigger.as_ref().to_string(),
+                        worker_id,
+                        action: MessageAction::Stop,
+                        arguments: Vec::new(),
+                        callback: Some(callback),
+                        context: None,
+                    };
+                    (
+                        id::id().to_string(),
                         OrchestratorMessagePayload::OrchestratorRequestMessagePayload(
                             message_payload,
                         ),
                     )
-                    .await?;
+                };
+
+                bridge.message_queue().put(message_id, payload).await?;
                 Ok::<_, TdError>(())
             }
         })

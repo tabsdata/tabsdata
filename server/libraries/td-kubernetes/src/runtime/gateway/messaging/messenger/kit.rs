@@ -56,12 +56,14 @@ pub fn build_function_run_kit(
     namespace: &str,
     request: &FunctionStartRequest,
 ) -> Result<FunctionRunKit, KubeMessagingError> {
-    let resolver = expect_http(&request.resolver, &request.worker, &request.worker_id)?;
-    let responder = expect_http(&request.responder, &request.worker, &request.worker_id)?;
+    let worker = request.worker.as_ref();
+    let worker_id = request.worker_id.to_string();
+    let resolver = expect_http(&request.resolver, worker, &worker_id)?;
+    let responder = expect_http(&request.responder, worker, &worker_id)?;
 
     let mut config_data = BTreeMap::new();
-    config_data.insert(ENV_TD_WORKER.to_owned(), request.worker.clone());
-    config_data.insert(ENV_TD_WORKER_ID.to_owned(), request.worker_id.clone());
+    config_data.insert(ENV_TD_WORKER.to_owned(), worker.to_owned());
+    config_data.insert(ENV_TD_WORKER_ID.to_owned(), worker_id.clone());
     config_data.insert(
         ENV_TD_DECORATOR.to_owned(),
         request.decorator.as_ref().to_owned(),
@@ -108,12 +110,15 @@ pub fn build_function_run_kit(
     let labels = vec![
         (
             LABEL_COLLECTION_ID.to_owned(),
-            request.collection_id.clone(),
+            request.collection_id.to_string(),
         ),
-        (LABEL_COLLECTION.to_owned(), request.collection.clone()),
-        (LABEL_FUNCTION_ID.to_owned(), request.function_id.clone()),
-        (LABEL_FUNCTION.to_owned(), request.function.clone()),
-        (LABEL_WORKER_ID.to_owned(), request.worker_id.clone()),
+        (LABEL_COLLECTION.to_owned(), request.collection.to_string()),
+        (
+            LABEL_FUNCTION_ID.to_owned(),
+            request.function_id.to_string(),
+        ),
+        (LABEL_FUNCTION.to_owned(), request.function.to_string()),
+        (LABEL_WORKER_ID.to_owned(), worker_id.clone()),
     ];
 
     Ok(FunctionRunKit {

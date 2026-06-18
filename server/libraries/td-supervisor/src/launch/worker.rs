@@ -16,8 +16,9 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 use td_bridge::messaging::OrchestratorMessage;
 use td_bridge::messaging::OrchestratorMessagePayload::{
-    OrchestratorExceptionMessagePayload, OrchestratorFunctionRequestMessagePayload,
-    OrchestratorRequestMessagePayload, OrchestratorResponseMessagePayload,
+    OrchestratorCronRequestMessagePayload, OrchestratorExceptionMessagePayload,
+    OrchestratorFunctionRequestMessagePayload, OrchestratorRequestMessagePayload,
+    OrchestratorResponseMessagePayload, OrchestratorStageTriggerRequestMessagePayload,
 };
 use td_common::execution_status::WorkerCallbackStatus;
 use thiserror::Error;
@@ -126,7 +127,9 @@ pub async fn notify(
         OrchestratorRequestMessagePayload(payload) => payload,
         OrchestratorResponseMessagePayload(_)
         | OrchestratorExceptionMessagePayload(_)
-        | OrchestratorFunctionRequestMessagePayload(_) => {
+        | OrchestratorFunctionRequestMessagePayload(_)
+        | OrchestratorStageTriggerRequestMessagePayload(_)
+        | OrchestratorCronRequestMessagePayload(_) => {
             return Err(InvalidMessageType);
         }
     };

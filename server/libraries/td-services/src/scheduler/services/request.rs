@@ -250,10 +250,12 @@ mod tests {
     use ta_services::service::TdService;
     use td_authz::jwt::decode_internal_token;
     use td_bridge::messaging::memory::InMemoryOrchestratorMessageQueue;
-    use td_bridge::messaging::{FunctionRequest, OrchestratorMessagePayload};
+    use td_bridge::messaging::{
+        CronRequest, FunctionRequest, OrchestratorMessagePayload, StageTriggerRequest,
+    };
     use td_bridge::test::TestBridgeProvider;
     use td_bridge::{BridgeProviderHandle, Orchestrator};
-    use td_common::worker::{Callback, Decorator as MessageDecorator};
+    use td_common::worker::{Callback, Decorator as MessageDecorator, WorkerName};
     use td_database::pool::TdPool;
     use td_database::scoped::InProject;
     use td_error::TdError;
@@ -269,7 +271,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, EnvPrefix,
         ExecutionName, FunctionIdName, FunctionRuntimeValues, ProjectId, TableName, TableNameDto,
-        UserId, WorkerMessageStatus,
+        UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
@@ -459,7 +461,9 @@ mod tests {
             }
             OrchestratorMessagePayload::OrchestratorResponseMessagePayload(_)
             | OrchestratorMessagePayload::OrchestratorExceptionMessagePayload(_)
-            | OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(_) => {
+            | OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(_)
+            | OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(_)
+            | OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(_) => {
                 panic!("Unexpected OrchestratorMessagePayload")
             }
         };
@@ -817,14 +821,8 @@ mod tests {
             .raw_oneshot(request)
             .await?;
 
-        // Run the request tick with the kubernetes orchestrator. Use an
-        // in-memory queue (the file queue only accepts request messages).
-        let mut context = SchedulerContext::with_defaults(db.clone());
-        context.bridge = Arc::new(BridgeProviderHandle::new(Arc::new(
-            TestBridgeProvider::default()
-                .with_orchestrator(Orchestrator::Kubernetes)
-                .with_message_queue(InMemoryOrchestratorMessageQueue::default()),
-        )));
+        // Run the request tick with the kubernetes orchestrator.
+        let context = kubernetes_scheduler_context(&db);
         RequestService::build(&context)
             .service()
             .oneshot(())
@@ -874,6 +872,195 @@ mod tests {
             claims.bindings.get("function_run_id").unwrap(),
             &function_run_id.to_string()
         );
+
+        Ok(())
+    }
+
+    /// A `SchedulerContext` wired to the kubernetes orchestrator with an
+    /// in-memory queue (the file queue only accepts flat request messages).
+    fn kubernetes_scheduler_context(db: &TdPool) -> SchedulerContext {
+        let mut context = SchedulerContext::with_defaults(db.clone());
+        context.bridge = Arc::new(BridgeProviderHandle::new(Arc::new(
+            TestBridgeProvider::default()
+                .with_orchestrator(Orchestrator::Kubernetes)
+                .with_message_queue(InMemoryOrchestratorMessageQueue::default()),
+        )));
+        context
+    }
+
+    /// Assert a callback is a tokenized HTTP POST.
+    fn assert_http_post(callback: &Callback) {
+        let Callback::Http(http) = callback;
+        assert_eq!(http.method, Method::POST);
+    }
+
+    /// Seed a collection + function and a worker of `worker_type` in
+    /// `worker_status`, then run the request tick against the kubernetes
+    /// orchestrator with an in-memory queue. Returns the single enqueued
+    /// message plus the seeded worker.
+    async fn schedule_trigger_kubernetes(
+        db: &TdPool,
+        collection_name: &str,
+        worker_type: WorkerType,
+        worker_status: WorkerStatus,
+    ) -> Result<(OrchestratorMessagePayload<serde_yaml::Value>, String, WorkerDB), TdError> {
+        let collection = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&CollectionName::try_from(collection_name)?, &UserId::admin())
+            .await?;
+        let create = FunctionRegister::builder()
+            .try_name("function_1")?
+            .try_description("d")?
+            .bundle_id(BundleId::default())
+            .try_snippet("s")?
+            .decorator(Decorator::Publisher)
+            .dependencies(vec![TableDependencyDto::try_from("table_1")?])
+            .triggers(None)
+            .tables(vec![TableNameDto::try_from("table_1")?])
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let function = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(&collection, &create)
+            .await?;
+        let worker = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .worker(
+                &collection,
+                &function,
+                &worker_type,
+                &worker_status,
+                &WorkerMessageStatus::Locked,
+            )
+            .await?;
+
+        let context = kubernetes_scheduler_context(db);
+        RequestService::build(&context)
+            .service()
+            .oneshot(())
+            .await?;
+
+        let mut created = context.bridge.message_queue().locked_messages().await;
+        assert_eq!(created.len(), 1);
+        let message = created.remove(0);
+        Ok((message.payload, message.id, worker))
+    }
+
+    /// Kubernetes stage-trigger start: lean `StageTriggerRequest::Start`
+    /// carrying the decorator, POST trigger + responder, and the three resolved
+    /// external locations — all built from the worker + function rows.
+    #[td_test::test(db)]
+    async fn test_schedule_stage_trigger_start_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let (payload, _id, worker) = schedule_trigger_kubernetes(
+            &db,
+            "c_stage_start",
+            WorkerType::StageTrigger,
+            WorkerStatus::Scheduled,
+        )
+        .await?;
+
+        let OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
+            StageTriggerRequest::Start(start),
+        ) = &payload
+        else {
+            panic!("expected a StageTriggerRequest::Start payload");
+        };
+        assert_eq!(start.worker, WorkerName::StageTrigger);
+        assert_eq!(start.decorator, MessageDecorator::Publisher);
+        assert_eq!(start.function_version_id, worker.function_version_id);
+        assert_eq!(start.collection_id, worker.collection_id);
+
+        assert_http_post(&start.trigger);
+        assert_http_post(&start.responder);
+
+        // The three external locations are distinct (bundle vs stage vs
+        // checkpoint use different path builders).
+        assert_ne!(start.function_bundle.uri, start.function_stage.uri);
+        assert_ne!(start.function_stage.uri, start.function_checkpoint.uri);
+
+        Ok(())
+    }
+
+    /// Kubernetes stage-trigger stop: lean `StageTriggerRequest::Stop` keyed by
+    /// the worker id (so the gateway can derive the pod to delete).
+    #[td_test::test(db)]
+    async fn test_stop_stage_trigger_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let (payload, id, worker) = schedule_trigger_kubernetes(
+            &db,
+            "c_stage_stop",
+            WorkerType::StageTrigger,
+            WorkerStatus::StopScheduled,
+        )
+        .await?;
+
+        let OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
+            StageTriggerRequest::Stop(stop),
+        ) = &payload
+        else {
+            panic!("expected a StageTriggerRequest::Stop payload");
+        };
+        assert_eq!(stop.worker, WorkerName::StageTrigger);
+        assert_http_post(&stop.responder);
+        // The message id is the worker id.
+        assert_eq!(id, worker.id.to_string());
+
+        Ok(())
+    }
+
+    /// Kubernetes cron-trigger start: lean `CronRequest::Start` carrying the
+    /// POST trigger + responder and the worker-row identity (no fetch, no
+    /// external locations).
+    #[td_test::test(db)]
+    async fn test_schedule_cron_trigger_start_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let (payload, _id, worker) = schedule_trigger_kubernetes(
+            &db,
+            "c_cron_start",
+            WorkerType::CronTrigger,
+            WorkerStatus::Scheduled,
+        )
+        .await?;
+
+        let OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Start(
+            start,
+        )) = &payload
+        else {
+            panic!("expected a CronRequest::Start payload");
+        };
+        assert_eq!(start.worker, WorkerName::CronTrigger);
+        assert_eq!(start.function_version_id, worker.function_version_id);
+        assert_eq!(start.collection_id, worker.collection_id);
+
+        assert_http_post(&start.trigger);
+        assert_http_post(&start.responder);
+
+        Ok(())
+    }
+
+    /// Kubernetes cron-trigger stop: lean `CronRequest::Stop` keyed by the
+    /// worker id.
+    #[td_test::test(db)]
+    async fn test_stop_cron_trigger_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let (payload, id, worker) = schedule_trigger_kubernetes(
+            &db,
+            "c_cron_stop",
+            WorkerType::CronTrigger,
+            WorkerStatus::StopScheduled,
+        )
+        .await?;
+
+        let OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Stop(
+            stop,
+        )) = &payload
+        else {
+            panic!("expected a CronRequest::Stop payload");
+        };
+        assert_eq!(stop.worker, WorkerName::CronTrigger);
+        assert_http_post(&stop.responder);
+        assert_eq!(id, worker.id.to_string());
 
         Ok(())
     }

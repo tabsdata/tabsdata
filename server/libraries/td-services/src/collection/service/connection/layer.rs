@@ -138,9 +138,8 @@ pub fn validate_connection_document(
     secrets: &[KeyValue],
     vars: &[KeyValue],
 ) -> Result<ConnectionDocument, TdError> {
-    let raw = RawConnectionDocument::deserialize(document).map_err(|e| {
-        api_error!(ApiError::InputError, "invalid dehydrated connection: {e}")
-    })?;
+    let raw = RawConnectionDocument::deserialize(document)
+        .map_err(|e| api_error!(ApiError::InputError, "invalid dehydrated connection: {e}"))?;
     let kind = ConnectionKind::try_from(raw.kind.as_str())?;
     let name = raw.name;
 

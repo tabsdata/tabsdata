@@ -6,10 +6,12 @@ use super::shared::{internal_post_callback, internal_request};
 use http::Method;
 use std::collections::HashMap;
 use td_authz::jwt::JwtConfig;
-use td_bridge::BridgeProviderHandle;
-use td_bridge::messaging::OrchestratorMessagePayload;
+use td_bridge::messaging::{
+    CronRequest, CronStartRequest, CronStopRequest, OrchestratorMessagePayload,
+};
+use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::id;
-use td_common::worker::{MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
+use td_common::worker::{Callback, MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::TaggedExt;
 use td_objects::dxo::worker::WorkerDBWithNames;
@@ -33,6 +35,12 @@ pub async fn create_locked_cron_trigger_workers_start_request(
     jwt: Ref<JwtConfig>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
+    // Supervisor resolves the full cron-trigger message eagerly here; the
+    // kubernetes path defers resolution to the gateway/pod and ships a lean
+    // request built entirely from the worker row. Both shapes are assembled
+    // from `WorkerDBWithNames` alone — no extra fetch.
+    let kubernetes = matches!(bridge.orchestrator(), Orchestrator::Kubernetes);
+
     let futures: Vec<_> = cron_trigger_workers
         .iter()
         .map(|cron_trigger_worker| {
@@ -66,48 +74,57 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                     true,
                 )?;
 
-                // Build info
-                let info = cron_trigger::v1::Info {
-                    worker_id: cron_trigger_worker.id,
-                    collection_id: cron_trigger_worker.collection_id,
-                    collection: cron_trigger_worker.collection.clone(),
-                    function_version_id: cron_trigger_worker.function_version_id.clone(),
-                    function: cron_trigger_worker.function.clone(),
-                    scheduled_on: AtTime::now(),
-                    task,
-                    config: WorkerConfig::serialize(&cron_trigger_worker.worker_config)?,
-                };
-                // Build message context
-                let cron_trigger_input = CronTriggerInput { info };
-                let context = WorkerInput::CronTriggerV1(Box::new(cron_trigger_input));
+                let payload = if kubernetes {
+                    // Kubernetes: lean request built entirely from the worker row.
+                    OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(
+                        CronRequest::Start(CronStartRequest {
+                            worker: WorkerName::CronTrigger,
+                            worker_id: cron_trigger_worker.id,
+                            trigger: Callback::Http(task),
+                            responder: callback,
+                            collection_id: cron_trigger_worker.collection_id,
+                            collection: cron_trigger_worker.collection.clone(),
+                            function_version_id: cron_trigger_worker.function_version_id.clone(),
+                            function: cron_trigger_worker.function.clone(),
+                            scheduled_on: AtTime::now(),
+                            config: WorkerConfig::serialize(&cron_trigger_worker.worker_config)?,
+                        }),
+                    )
+                } else {
+                    // Supervisor: resolve the full message here.
+                    // TODO ADD get_states to states
+                    let info = cron_trigger::v1::Info {
+                        worker_id: cron_trigger_worker.id,
+                        collection_id: cron_trigger_worker.collection_id,
+                        collection: cron_trigger_worker.collection.clone(),
+                        function_version_id: cron_trigger_worker.function_version_id.clone(),
+                        function: cron_trigger_worker.function.clone(),
+                        scheduled_on: AtTime::now(),
+                        task,
+                        config: WorkerConfig::serialize(&cron_trigger_worker.worker_config)?,
+                    };
+                    let cron_trigger_input = CronTriggerInput { info };
+                    let context = WorkerInput::CronTriggerV1(Box::new(cron_trigger_input));
 
-                // Build message payload
-                // TODO ADD get_states to states
-                let message_payload = RequestMessagePayload::<serde_yaml::Value> {
-                    class: WorkerClass::Ephemeral,
-                    worker: WorkerName::CronTrigger.as_ref().to_string(),
-                    worker_id: worker_id.clone(),
-                    action: MessageAction::Start,
-                    arguments: Vec::new(),
-                    callback: Some(callback),
-                    context: Some(serde_yaml::to_value(&context).map_err(|e| {
-                        api_error!(
-                            ApiError::InternalError,
-                            "Failed to serialize cron trigger input: {e}"
-                        )
-                    })?),
+                    let message_payload = RequestMessagePayload::<serde_yaml::Value> {
+                        class: WorkerClass::Ephemeral,
+                        worker: WorkerName::CronTrigger.as_ref().to_string(),
+                        worker_id: worker_id.clone(),
+                        action: MessageAction::Start,
+                        arguments: Vec::new(),
+                        callback: Some(callback),
+                        context: Some(serde_yaml::to_value(&context).map_err(|e| {
+                            api_error!(
+                                ApiError::InternalError,
+                                "Failed to serialize cron trigger input: {e}"
+                            )
+                        })?),
+                    };
+                    OrchestratorMessagePayload::OrchestratorRequestMessagePayload(message_payload)
                 };
 
                 // Add it to the queue
-                bridge
-                    .message_queue()
-                    .put(
-                        worker_id,
-                        OrchestratorMessagePayload::OrchestratorRequestMessagePayload(
-                            message_payload,
-                        ),
-                    )
-                    .await?;
+                bridge.message_queue().put(worker_id, payload).await?;
                 Ok::<_, TdError>(())
             }
         })
@@ -128,6 +145,8 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
     jwt: Ref<JwtConfig>,
     cron_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
+    let kubernetes = matches!(bridge.orchestrator(), Orchestrator::Kubernetes);
+
     let futures: Vec<_> = cron_trigger_workers
         .iter()
         .map(|cron_trigger_worker| {
@@ -145,31 +164,40 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
                     &[("project", proj.as_str()), ("worker_id", &worker_id)],
                 )?;
 
-                // Different message ID than the worker ID for STOP — current
-                // messaging impl needs a distinct file name.
-                let message_id = id::id().to_string();
-
-                // Build message payload
-                let message_payload = RequestMessagePayload::<serde_yaml::Value> {
-                    class: WorkerClass::Ephemeral,
-                    worker: WorkerName::CronTrigger.as_ref().to_string(),
-                    worker_id,
-                    action: MessageAction::Stop,
-                    arguments: Vec::new(),
-                    callback: Some(callback),
-                    context: None,
-                };
-
-                // Add it to the queue
-                bridge
-                    .message_queue()
-                    .put(
-                        message_id,
+                // Kubernetes ships a lean Stop keyed by the worker id (so the
+                // gateway can derive the pod to delete); supervisor ships a flat
+                // Stop on the file queue under a distinct message id.
+                let (message_id, payload) = if kubernetes {
+                    (
+                        worker_id,
+                        OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(
+                            CronRequest::Stop(CronStopRequest {
+                                worker: WorkerName::CronTrigger,
+                                worker_id: cron_trigger_worker.id,
+                                responder: callback,
+                            }),
+                        ),
+                    )
+                } else {
+                    let message_payload = RequestMessagePayload::<serde_yaml::Value> {
+                        class: WorkerClass::Ephemeral,
+                        worker: WorkerName::CronTrigger.as_ref().to_string(),
+                        worker_id,
+                        action: MessageAction::Stop,
+                        arguments: Vec::new(),
+                        callback: Some(callback),
+                        context: None,
+                    };
+                    (
+                        id::id().to_string(),
                         OrchestratorMessagePayload::OrchestratorRequestMessagePayload(
                             message_payload,
                         ),
                     )
-                    .await?;
+                };
+
+                // Add it to the queue
+                bridge.message_queue().put(message_id, payload).await?;
                 Ok::<_, TdError>(())
             }
         })

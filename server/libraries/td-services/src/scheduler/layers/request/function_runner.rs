@@ -284,15 +284,15 @@ pub async fn create_locked_function_runner_workers_start_request(
                 )?;
                 OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
                     FunctionRequest::Start(FunctionStartRequest {
-                        worker: WorkerName::Function.as_ref().to_string(),
-                        worker_id: worker_id.to_string(),
+                        worker: WorkerName::Function,
+                        worker_id,
                         decorator: f.decorator.to_message(),
                         resolver,
                         responder,
-                        collection_id: f.collection_id.to_string(),
-                        collection: f.collection.to_string(),
-                        function_id: f.function_id.to_string(),
-                        function: f.name.to_string(),
+                        collection_id: f.collection_id,
+                        collection: f.collection.clone(),
+                        function_id: f.function_id,
+                        function: f.name.clone(),
                     }),
                 )
             }
