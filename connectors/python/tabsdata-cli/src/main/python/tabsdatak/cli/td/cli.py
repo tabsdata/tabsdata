@@ -34,6 +34,7 @@ from tabsdatak.cli.td import examples_guide
 from tabsdatak.cli.td.auth_group import auth
 from tabsdatak.cli.td.collection_group import collection
 from tabsdatak.cli.td.config_utils import execute_actions_for_command
+from tabsdatak.cli.td.connection_group import connection
 from tabsdatak.cli.td.cron_group import cron
 from tabsdatak.cli.td.exe_group import exe
 from tabsdatak.cli.td.fn_group import fn
@@ -117,6 +118,7 @@ def cli(ctx: click.Context, no_prompt: bool, project: str):
 
 cli.add_command(auth)
 cli.add_command(collection)
+cli.add_command(connection)
 cli.add_command(cron)
 cli.add_command(exe)
 cli.add_command(fn)
