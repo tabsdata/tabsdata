@@ -73,10 +73,13 @@ struct CliParser<P: Params> {
     stdin_config: Option<bool>,
     #[arg(
         long = "config-file",
-        help = "Path to a YAML configuration file. Applied as the highest-precedence \
-                YAML source (after the discovered files, before env vars and stdin)."
+        action = clap::ArgAction::Append,
+        help = "Path to a YAML configuration file. Repeatable; the files are applied \
+                as the highest-precedence YAML sources in the given order (each later \
+                file overriding earlier ones), after the discovered files and before \
+                env vars and stdin."
     )]
-    config_file: Option<PathBuf>,
+    config_file: Vec<PathBuf>,
     #[arg(
         long = "log-config",
         short = 'c',

@@ -443,6 +443,43 @@ database:
     }
 
     #[test]
+    fn config_merges_split_apiserver_database_storage_files() {
+        let apiserver_yaml = r#"
+request_timeout: 90
+orchestrator: kubernetes
+"#;
+        let database_yaml = r#"
+database:
+  mode: sidecar
+  system:
+    schema: public
+  apiserver:
+    schema: td_apiserver
+"#;
+        let storage_yaml = r#"
+storage:
+  mounts:
+    - id: ROOT
+      path: /
+      uri: file:///tmp/storage/data/
+"#;
+        let built = config::Config::builder()
+            .add_source(config::Config::try_from(&Config::default()).unwrap())
+            .add_source(config::File::from_str(apiserver_yaml, config::FileFormat::Yaml))
+            .add_source(config::File::from_str(database_yaml, config::FileFormat::Yaml))
+            .add_source(config::File::from_str(storage_yaml, config::FileFormat::Yaml))
+            .add_source(config::Environment::with_prefix("apiserver"))
+            .build()
+            .unwrap();
+        let config: Config = built.try_deserialize().unwrap();
+        assert_eq!(config.request_timeout, 90);
+        assert_eq!(config.orchestrator, Orchestrator::Kubernetes);
+        assert_eq!(config.database.mode(), DatabaseMode::Sidecar);
+        assert!(config.database.assemble("apiserver").is_ok());
+        assert_eq!(config.storage_mounts().unwrap().len(), 1);
+    }
+
+    #[test]
     fn test_default_config() {
         let config = Config::default();
         assert!(config.database.system().is_none());

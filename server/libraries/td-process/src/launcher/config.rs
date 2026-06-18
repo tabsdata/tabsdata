@@ -54,7 +54,7 @@ const EXTENSION: &str = "yaml";
 pub fn load_config<T: Config>(
     config_name: &str,
     config_folder: Option<PathBuf>,
-    config_file: Option<PathBuf>,
+    config_files: Vec<PathBuf>,
     stdin: bool,
 ) -> T {
     info!(config = %config_name, stdin = stdin, "process.launcher: loading config");
@@ -100,7 +100,7 @@ pub fn load_config<T: Config>(
             config::File::with_name(home_dir_config_file.to_str().unwrap()).required(false),
         );
 
-    if let Some(path) = config_file.as_ref() {
+    for path in &config_files {
         info!(
             "Loading configuration from explicit file: {}",
             path.display()
@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_load_config_no_files() {
-        let config = load_config::<MyConfig>("my-config", None, None, false);
+        let config = load_config::<MyConfig>("my-config", None, vec![], false);
         assert_eq!(config.name, "default_name");
         assert_eq!(config.port(), &1u16);
     }
@@ -237,7 +237,7 @@ mod tests {
             },
         );
 
-        let config = load_config::<MyConfig>("my-config", None, None, false);
+        let config = load_config::<MyConfig>("my-config", None, vec![], false);
         assert_eq!(config.name, "app_config_name");
         assert_eq!(config.port(), &2u16);
     }
@@ -261,7 +261,7 @@ mod tests {
             },
         );
 
-        let config = load_config::<MyConfig>("my-config", None, None, false);
+        let config = load_config::<MyConfig>("my-config", None, vec![], false);
         assert_eq!(config.name, "user_config_name");
         assert_eq!(config.port(), &3u16);
     }
@@ -297,7 +297,7 @@ mod tests {
             },
         );
 
-        let config = load_config::<MyConfig>("my-config", None, None, false);
+        let config = load_config::<MyConfig>("my-config", None, vec![], false);
 
         assert_eq!(config.name, "user_home_dir_config_name");
         assert_eq!(config.port(), &4u16);
@@ -343,7 +343,7 @@ mod tests {
             std::env::set_var("MY_CONFIG_ENV_PORT", "5");
         }
 
-        let config = load_config::<MyConfig>("my-config-env", None, None, false);
+        let config = load_config::<MyConfig>("my-config-env", None, vec![], false);
 
         assert_eq!(config.name, "env_config_name");
         assert_eq!(config.port(), &5u16);
@@ -362,7 +362,7 @@ mod tests {
         )
         .expect("write explicit config");
 
-        let config = load_config::<MyConfig>("my-config-resolve", None, Some(path.clone()), false);
+        let config = load_config::<MyConfig>("my-config-resolve", None, vec![path.clone()], false);
 
         assert_eq!(config.name, "from-env");
         assert_eq!(config.port(), &7777u16);
@@ -381,12 +381,54 @@ mod tests {
         let path = get_current_dir().join("explicit-secret.yaml");
         std::fs::write(&path, "name: ${secret}\nport: 9999\n").expect("write explicit config");
 
-        let config = load_config::<MyConfig>("my-config-secret", None, Some(path.clone()), false);
+        let config = load_config::<MyConfig>("my-config-secret", None, vec![path.clone()], false);
 
         assert_eq!(config.name, "from-secret");
         assert_eq!(config.port(), &9999u16);
 
         std::fs::remove_file(&path).ok();
         unsafe { std::env::remove_var("NAME") };
+    }
+
+    #[test]
+    fn test_load_config_multiple_files_merge_additively() {
+        let first = get_current_dir().join("multi-first.yaml");
+        std::fs::write(
+            &first,
+            r#"
+name: from-first
+port: 100
+"#,
+        )
+        .expect("write first config");
+        // The second file sets only `name`, so the `port` from the first file must survive.
+        let second = get_current_dir().join("multi-second.yaml");
+        std::fs::write(
+            &second,
+            r#"
+name: from-second
+"#,
+        )
+        .expect("write second config");
+
+        let config = load_config::<MyConfig>(
+            "my-config-multi",
+            None,
+            vec![first.clone(), second.clone()],
+            false,
+        );
+
+        assert_eq!(
+            config.name, "from-second",
+            "The later file should override the field it sets."
+        );
+        assert_eq!(
+            config.port(),
+            &100u16,
+            "A field the later file omits should be preserved from the earlier file."
+        );
+
+        std::fs::remove_file(&first).ok();
+        std::fs::remove_file(&second).ok();
     }
 }
