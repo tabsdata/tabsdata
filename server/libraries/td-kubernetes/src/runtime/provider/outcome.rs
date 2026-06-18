@@ -55,3 +55,21 @@ pub struct ServerRestartOutcome {
     pub stop: Option<ServerStopOutcome>,
     pub start: ServerStartOutcome,
 }
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct ServiceStartOutcome {
+    pub cluster: ClusterStartOutcome,
+    pub instance: InstanceStartOutcome,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct ServiceStopOutcome {
+    pub cluster: ClusterStopOutcome,
+    pub instance: InstanceStopOutcome,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct ServiceRestartOutcome {
+    pub stop: Option<ServiceStopOutcome>,
+    pub start: ServiceStartOutcome,
+}

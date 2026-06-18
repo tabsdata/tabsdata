@@ -39,7 +39,7 @@ use crate::runtime::provider::kminus::KminusProvider;
 use crate::runtime::provider::outcome::{
     ClusterRestartOutcome, ClusterStartOutcome, ClusterStopOutcome, InstanceRestartOutcome,
     InstanceStartOutcome, InstanceStopOutcome, ServerRestartOutcome, ServerStartOutcome,
-    ServerStopOutcome,
+    ServerStopOutcome, ServiceRestartOutcome, ServiceStartOutcome, ServiceStopOutcome,
 };
 use crate::runtime::provider::summary::Summary;
 use crate::runtime::reporting::build_kube_client;
@@ -158,7 +158,8 @@ impl Transaction for () {
     fn commit(self: Box<Self>) {}
 }
 
-pub trait Cluster: Send + Sync {
+#[allow(dead_code)]
+pub(crate) trait Cluster: Send + Sync {
     fn create(&self) -> CommandResult;
     fn start(&self) -> impl Future<Output = CommandResult> + Send;
     fn stop(&self) -> impl Future<Output = CommandResult<bool>> + Send;
@@ -175,7 +176,8 @@ pub trait Cluster: Send + Sync {
     }
 }
 
-pub trait Instance: Send + Sync {
+#[allow(dead_code)]
+pub(crate) trait Instance: Send + Sync {
     fn start(&self, multi: &MultiProgress) -> impl Future<Output = CommandResult> + Send;
     fn stop(&self, multi: &MultiProgress) -> impl Future<Output = CommandResult<bool>> + Send;
 
@@ -185,6 +187,13 @@ pub trait Instance: Send + Sync {
     }
 }
 
+// Cluster  -> only the cluster.
+// Instance -> only the workload (pods/jobs).
+// Server   -> cluster & workload, end-to-end (always both).
+// Service  -> cluster (only if hosted+local) + workload; manages whatever the
+//             topology allows. Server and Service are near-identical in shape but
+//             conceptually distinct; Service is the topology-gated lifecycle the
+//             public verbs drive.
 #[async_trait]
 pub trait Provider: Send + Sync {
     fn name(&self) -> &'static str;
@@ -208,6 +217,12 @@ pub trait Provider: Send + Sync {
 
     async fn ensure_pinnable_server(&self) -> CommandResult;
     async fn ensure_creatable_server(&self) -> CommandResult;
+    async fn ensure_pinnable_service(&self) -> CommandResult {
+        self.ensure_pinnable_server().await
+    }
+    async fn ensure_creatable_service(&self) -> CommandResult {
+        self.ensure_creatable_server().await
+    }
 
     async fn create_cluster_hook(
         &self,
@@ -310,6 +325,42 @@ pub trait Provider: Send + Sync {
     async fn ensure_startable_server(&self) -> CommandResult;
     async fn ensure_stoppable_server(&self) -> CommandResult;
     async fn ensure_restartable_server(&self) -> CommandResult;
+
+    async fn service_alive(&self) -> bool {
+        self.server_alive().await
+    }
+    async fn service_dead(&self) -> bool {
+        self.server_dead().await
+    }
+    async fn start_service(&self, reporter: &dyn Reporter) -> CommandResult<ServiceStartOutcome> {
+        let ServerStartOutcome { cluster, instance } = self.start_server(reporter).await?;
+        Ok(ServiceStartOutcome { cluster, instance })
+    }
+    async fn stop_service(&self, reporter: &dyn Reporter) -> CommandResult<ServiceStopOutcome> {
+        let ServerStopOutcome { cluster, instance } = self.stop_server(reporter).await?;
+        Ok(ServiceStopOutcome { cluster, instance })
+    }
+    async fn restart_service(
+        &self,
+        reporter: &dyn Reporter,
+    ) -> CommandResult<ServiceRestartOutcome> {
+        let stop = if self.service_alive().await {
+            Some(self.stop_service(reporter).await?)
+        } else {
+            None
+        };
+        let start = self.start_service(reporter).await?;
+        Ok(ServiceRestartOutcome { stop, start })
+    }
+    async fn ensure_startable_service(&self) -> CommandResult {
+        self.ensure_startable_server().await
+    }
+    async fn ensure_stoppable_service(&self) -> CommandResult {
+        self.ensure_stoppable_server().await
+    }
+    async fn ensure_restartable_service(&self) -> CommandResult {
+        self.ensure_restartable_server().await
+    }
 }
 
 pub async fn require_started_cluster(provider: &dyn Provider) -> Result<(), ProviderError> {

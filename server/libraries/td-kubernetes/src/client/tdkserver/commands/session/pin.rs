@@ -52,7 +52,7 @@ pub async fn command_pin(arguments: PinArguments, globals: &GlobalArguments) -> 
     } = arguments;
 
     let provider = provider_for(cluster, instance, globals.verbose).await?;
-    provider.ensure_pinnable_server().await?;
+    provider.ensure_pinnable_service().await?;
 
     if preview {
         preview::pin_server(&provider.summary());
