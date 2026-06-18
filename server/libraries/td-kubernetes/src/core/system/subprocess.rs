@@ -7,7 +7,7 @@ use std::process::{Command as SystemCommand, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sysinfo::{Pid, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessStatus, ProcessesToUpdate, System};
 use tracing::info;
 
 pub fn run(command: &mut SystemCommand, label: &str, verbose: bool) -> io::Result<Output> {
@@ -86,7 +86,10 @@ pub fn apply_subprocess_flags(command: &mut SystemCommand) {
 pub fn is_alive(pid: u32) -> bool {
     let mut system = System::new();
     system.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
-    system.process(Pid::from_u32(pid)).is_some()
+    match system.process(Pid::from_u32(pid)) {
+        Some(process) => process.status() != ProcessStatus::Zombie,
+        None => false,
+    }
 }
 
 pub fn terminate_process(pid: u32, grace: Duration) {

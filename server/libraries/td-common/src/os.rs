@@ -19,7 +19,7 @@ use std::env::consts::OS;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{Duration, Instant};
-use sysinfo::{Pid, Process, ProcessesToUpdate, Signal, System};
+use sysinfo::{Pid, Process, ProcessStatus, ProcessesToUpdate, Signal, System};
 use tracing::{info, warn};
 
 pub const TD_DETACHED_SUBPROCESSES: &str = "TD_DETACHED_SUBPROCESSES";
@@ -69,7 +69,10 @@ pub fn name_program(path: &Path) -> PathBuf {
 pub fn check_process(pid: i32) -> bool {
     let mut system = System::new_all();
     system.refresh_all();
-    system.process(Pid::from_u32(pid as u32)).is_some()
+    match system.process(Pid::from_u32(pid as u32)) {
+        Some(process) => process.status() != ProcessStatus::Zombie,
+        None => false,
+    }
 }
 
 /// Function to terminate a process with a given PID using a specified signal.
@@ -395,7 +398,10 @@ mod tests {
         fn is_process_alive(pid: Pid) -> bool {
             let mut system = System::new();
             system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
-            system.process(pid).is_some()
+            match system.process(pid) {
+                Some(process) => process.status() != ProcessStatus::Zombie,
+                None => false,
+            }
         }
 
         let pid = spawn_dummy_process();
