@@ -23,8 +23,8 @@ import pytest
 import yaml
 
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
-    MANIFEST_FILES_KEY,
-    MANIFEST_NAME_KEY,
+    build_entry,
+    build_table_record,
     write_inputs_manifest,
 )
 from tabsdatak.server._tdrunner.function._lib.system_columns import (
@@ -39,11 +39,11 @@ from tabsdatak.server._tdrunner.function._lib.system_columns import (
 )
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs import _stamp_file, main
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
-    BadInputParquetError,
     BadManifestError,
     BadRequestError,
     StampFailedError,
 )
+from tabsdatak.tableframe._engine.model.frame import DataVersion
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -85,6 +85,39 @@ def _write_user_parquet(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(path)
     return path
+
+
+def _data_version(
+    *,
+    execution: str = "exec-1",
+    transaction: str = "tx-1",
+    version: str = EMPTY_VERSION,
+    timestamp=EMPTY_TIMESTAMP,
+) -> DataVersion:
+    return (
+        DataVersion.builder()
+        .with_execution(execution)
+        .with_transaction(transaction)
+        .with_version(version)
+        .with_timestamp(timestamp)
+        .build()
+    )
+
+
+def _slot_entry(name: str, table_pos: int, files: list[str]) -> dict:
+    """Build an inputs-manifest entry from a list of parquet paths.
+
+    One table record per file, each with a sequential ``input_idx`` and
+    the single-version sentinel ``version_pos`` (-1).
+    """
+    return build_entry(
+        name=name,
+        table_pos=table_pos,
+        tables=[
+            build_table_record(file=file, input_idx=index, version_pos=-1)
+            for index, file in enumerate(files)
+        ],
+    )
 
 
 def _set_argv(
@@ -136,10 +169,8 @@ def test_stamp_file_writes_enriched_parquet(tmp_path):
     _stamp_file(
         src,
         dest,
-        execution="exec-1",
-        transaction="tx-1",
-        version=EMPTY_VERSION,
-        timestamp=EMPTY_TIMESTAMP,
+        version=_data_version(execution="exec-1", transaction="tx-1"),
+        idx=0,
     )
 
     stamped = pl.read_parquet(dest)
@@ -157,26 +188,25 @@ def test_stamp_file_creates_missing_dest_parent(tmp_path):
     _stamp_file(
         src,
         dest,
-        execution="e",
-        transaction="t",
-        version=EMPTY_VERSION,
-        timestamp=EMPTY_TIMESTAMP,
+        version=_data_version(execution="e", transaction="t"),
+        idx=0,
     )
     assert dest.is_file()
 
 
-def test_stamp_file_unreadable_src_raises_bad_input_parquet(tmp_path):
+def test_stamp_file_unreadable_src_raises_stamp_failed(tmp_path):
+    # `pl.scan_parquet` is lazy, so a garbage file slips past the scan
+    # and the parquet error surfaces when the TableFrame build reads the
+    # schema -> mapped to StampFailedError (SI_4), not BadInputParquetError.
     bogus = tmp_path / "not-a-parquet.parquet"
     bogus.write_bytes(b"this is not parquet")
     dest = tmp_path / "out.parquet"
-    with pytest.raises(BadInputParquetError):
+    with pytest.raises(StampFailedError):
         _stamp_file(
             bogus,
             dest,
-            execution="e",
-            transaction="t",
-            version=EMPTY_VERSION,
-            timestamp=EMPTY_TIMESTAMP,
+            version=_data_version(execution="e", transaction="t"),
+            idx=0,
         )
 
 
@@ -188,10 +218,8 @@ def test_stamp_file_write_to_directory_raises_stamp_failed(tmp_path):
         _stamp_file(
             src,
             a_dir,  # writing to a directory triggers OSError
-            execution="e",
-            transaction="t",
-            version=EMPTY_VERSION,
-            timestamp=EMPTY_TIMESTAMP,
+            version=_data_version(execution="e", transaction="t"),
+            idx=0,
         )
 
 
@@ -245,12 +273,7 @@ def test_main_end_to_end_happy_path(tmp_path, monkeypatch, http_ok_url):
     raw_parquet = _write_user_parquet(tmp_path / "raw" / "rows.parquet")
     inputs_manifest = tmp_path / "inputs.yaml"
     write_inputs_manifest(
-        [
-            {
-                MANIFEST_NAME_KEY: "in_1",
-                MANIFEST_FILES_KEY: [str(raw_parquet)],
-            }
-        ],
+        [_slot_entry("in_1", 0, [str(raw_parquet)])],
         inputs_manifest,
     )
 
@@ -283,7 +306,14 @@ def test_main_end_to_end_happy_path(tmp_path, monkeypatch, http_ok_url):
     # Stamped values are the request-derived ones.
     assert stamped[TD_VER_EXECUTION].to_list() == ["exec-42"] * 3
     assert stamped[TD_VER_TRANSACTION].to_list() == ["tx-42"] * 3
-    assert stamped[TD_VER_VERSION].to_list() == [EMPTY_VERSION] * 3
+    # The version is the empty sentinel broadcast across all rows; the
+    # TableFrame engine re-encodes the UUID, so assert on the broadcast
+    # invariant (one identical, non-null value per row) rather than the
+    # raw EMPTY_VERSION literal.
+    versions = stamped[TD_VER_VERSION].to_list()
+    assert len(versions) == 3
+    assert len(set(versions)) == 1
+    assert versions[0] is not None
     # Timestamp dtype + value.
     dtype = stamped.schema[TD_VER_TIMESTAMP]
     assert isinstance(dtype, pl.Datetime)
@@ -300,8 +330,11 @@ def test_main_end_to_end_happy_path(tmp_path, monkeypatch, http_ok_url):
     assert len(data["inputs"]) == 1
     entry = data["inputs"][0]
     assert entry["name"] == "in_1"
-    assert len(entry["files"]) == 1
-    assert Path(entry["files"][0]).samefile(enriched_parquets[0])
+    assert len(entry["tables"]) == 1
+    record = entry["tables"][0]
+    assert Path(record["file"]).samefile(enriched_parquets[0])
+    # stamp-inputs assigns each stamped record a unique input_idx.
+    assert record["input_idx"] == 0
 
     assert liveness.exists()
 
@@ -313,7 +346,7 @@ def test_main_empty_slot_passes_through(tmp_path, monkeypatch, http_ok_url):
 
     inputs_manifest = tmp_path / "inputs.yaml"
     write_inputs_manifest(
-        [{MANIFEST_NAME_KEY: "in_1", MANIFEST_FILES_KEY: []}],
+        [_slot_entry("in_1", 0, [])],
         inputs_manifest,
     )
 
@@ -333,7 +366,11 @@ def test_main_empty_slot_passes_through(tmp_path, monkeypatch, http_ok_url):
     assert main() == 0
 
     data = yaml.safe_load(enriched_manifest.read_text())
-    assert data == {"inputs": [{"name": "in_1", "files": []}]}
+    assert data == {
+        "inputs": [
+            {"name": "in_1", "table_pos": 0, "is_empty": False, "tables": []}
+        ]
+    }
 
 
 # --- decorator metadata -------------------------------------------------

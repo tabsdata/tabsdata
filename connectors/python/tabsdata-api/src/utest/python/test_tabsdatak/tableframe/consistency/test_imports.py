@@ -128,7 +128,15 @@ def test_no_circular_imports_static():
 
 @pytest.mark.parametrize("name", _modules())
 def test_each_module_imports_in_isolation(name):
-    for loaded in [m for m in sys.modules if m == ROOT or m.startswith(f"{ROOT}.")]:
+    def tableframe_modules():
+        return [
+            module
+            for module in list(sys.modules)
+            if module == ROOT or module.startswith(f"{ROOT}.")
+        ]
+
+    saved = {module: sys.modules[module] for module in tableframe_modules()}
+    for loaded in saved:
         del sys.modules[loaded]
     try:
         importlib.import_module(name)
@@ -137,3 +145,7 @@ def test_each_module_imports_in_isolation(name):
         if "circular" in message or "partially initialized" in message:
             pytest.fail(f"{name} fails with a circular import: {error}")
         raise
+    finally:
+        for loaded in tableframe_modules():
+            del sys.modules[loaded]
+        sys.modules.update(saved)

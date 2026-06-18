@@ -63,8 +63,6 @@ def atomic_login():
             APISERVER_URL,
             "--user",
             "admin",
-            "--role",
-            "sys_admin",
             "--password",
             "tabsdata",
         ],
@@ -77,9 +75,6 @@ def atomic_login():
     # surfacing as spurious NoProjectSelectedError. The project is only ever
     # set (below), never unset.
     result = runner.invoke(cli, ["--no-prompt", "pin", "unset", "--coll"])
-    logger.debug(result.output)
-    assert result.exit_code == 0
-    result = runner.invoke(cli, ["--no-prompt", "role", "unpin"])
     logger.debug(result.output)
     assert result.exit_code == 0
     # Pin the bootstrap-seeded `sandbox` project so project-scoped commands have

@@ -11,6 +11,7 @@ import polars as pl
 import pytest
 
 import tabsdata as td
+from tabsdata._io.connections.named_connection.kind_registry import kind_for
 from tabsdata._secret import DirectSecret, EnvironmentSecret
 from tabsdata._tabsserver.function.named_connection_utils import (
     CONNECTIONS_FOLDER,
@@ -18,6 +19,7 @@ from tabsdata._tabsserver.function.named_connection_utils import (
 )
 from tabsdata.connector.databricks._connector import _table_fqn_4sql
 from tabsdata.exceptions import ParameterValidationError, SourceConfigurationError
+from test_tabsdata.conftest import MOCK_PROJECT_ID
 from test_tabsdata.fntest import tdfnrun
 from test_tabsdata_databricks.test_input_databricks import (
     DATABRICKS_BUDGET_SAFETY_TIMEOUT,
@@ -43,14 +45,12 @@ DATABRICKS_NAMED_CONN_NAME = "test_databricks_named"
 def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs, conn_mode):
     """Create a temporary repository with a single named-connection JSON."""
     repo_dir = os.path.join(str(tmp_path), "repository")
-    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
+    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER, MOCK_PROJECT_ID)
     os.makedirs(connections_dir, exist_ok=True)
     cx_dict = {
-        "kind": "connectionDef",
+        "kind": kind_for(conn_type, conn_mode),
         "apiVersion": "1.0",
         "name": name,
-        "conn_mode": conn_mode,
-        "conn_type": conn_type,
         "conn_configs": conn_configs,
     }
     connection_file = os.path.join(connections_dir, f"{name.lower()}.json")

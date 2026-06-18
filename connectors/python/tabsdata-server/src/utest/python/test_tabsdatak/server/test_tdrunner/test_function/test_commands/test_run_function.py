@@ -30,8 +30,8 @@ from tabsdatak._info import PublisherInfo
 from tabsdatak.api import TableFrameSpec, TableFramesSpec
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
-    MANIFEST_FILES_KEY,
-    MANIFEST_NAME_KEY as INPUTS_NAME_KEY,
+    build_entry,
+    build_table_record,
     write_inputs_manifest,
 )
 from tabsdatak.server._tdrunner.function.commands.run_function import (
@@ -62,6 +62,8 @@ from tabsdatak.server._tdrunner.function.commands.run_function.error import (
     UserFunctionFailedError,
 )
 from tabsdatak.spi import DestContext, FunctionCtx, SrcPluginCtx, TableMode
+from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -101,6 +103,22 @@ def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec, TableFrameSpec]
 def _write_sample_parquet(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     pl.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]}).write_parquet(path)
+
+
+def _slot_entry(name: str, table_pos: int, files: list[str]) -> dict:
+    """Build an inputs-manifest entry from a list of parquet paths.
+
+    One table record per file, each carrying a sequential ``input_idx``
+    and the single-version sentinel ``version_pos`` (-1).
+    """
+    return build_entry(
+        name=name,
+        table_pos=table_pos,
+        tables=[
+            build_table_record(file=file, input_idx=index, version_pos=-1)
+            for index, file in enumerate(files)
+        ],
+    )
 
 
 @pytest.fixture
@@ -251,14 +269,16 @@ def multi_publisher(
     in_a: TableFramesSpec, in_b: TableFramesSpec
 ) -> tuple[TableFrameSpec]:
     import polars as pl
+    from tabsdatak.tableframe import TableFrame
 
     frames = []
     for slot in (in_a, in_b):
         if slot:
-            frames.extend(f for f in slot if f is not None)
+            frames.extend(f.to_polars_lf() for f in slot if f is not None)
     if not frames:
         return (None,)
-    return (pl.concat(frames, how="vertical_relaxed"),)
+    combined = pl.concat(frames, how="vertical_relaxed")
+    return (TableFrame.from_polars(combined),)
 """
 
 
@@ -309,17 +329,19 @@ def multi_transformer(
     a: TableFrameSpec, b: TableFramesSpec, c: TableFrameSpec
 ) -> tuple[TableFrameSpec]:
     import polars as pl
+    from tabsdatak.tableframe import TableFrame
 
     frames = []
     if a is not None:
-        frames.append(a)
+        frames.append(a.to_polars_lf())
     if b:
-        frames.extend(f for f in b if f is not None)
+        frames.extend(f.to_polars_lf() for f in b if f is not None)
     if c is not None:
-        frames.append(c)
+        frames.append(c.to_polars_lf())
     if not frames:
         return (None,)
-    return (pl.concat(frames, how="vertical_relaxed"),)
+    combined = pl.concat(frames, how="vertical_relaxed")
+    return (TableFrame.from_polars(combined),)
 """
 
 
@@ -640,14 +662,21 @@ def test_scan_parquet_garbage_raises_bad_input_parquet(tmp_path):
 
 
 def test_materialise_single_zero_files_is_none(tmp_path):
-    assert _materialize_input_slot([], table_mode=TableMode.SINGLE) is None
+    assert (
+        _materialize_input_slot(
+            _slot_entry("in_1", 0, []), table_mode=TableMode.SINGLE, info=None
+        )
+        is None
+    )
 
 
-def test_materialise_single_one_file_is_lazyframe(tmp_path):
+def test_materialise_single_one_file_is_table_frame(tmp_path):
     p = tmp_path / "x.parquet"
     _write_sample_parquet(p)
-    out = _materialize_input_slot([str(p)], table_mode=TableMode.SINGLE)
-    assert isinstance(out, pl.LazyFrame)
+    out = _materialize_input_slot(
+        _slot_entry("in_1", 0, [str(p)]), table_mode=TableMode.SINGLE, info=None
+    )
+    assert isinstance(out, TableFrame)
 
 
 def test_materialise_single_two_files_raises_bad_manifest(tmp_path):
@@ -656,40 +685,50 @@ def test_materialise_single_two_files_raises_bad_manifest(tmp_path):
     _write_sample_parquet(a)
     _write_sample_parquet(b)
     with pytest.raises(BadManifestError):
-        _materialize_input_slot([str(a), str(b)], table_mode=TableMode.SINGLE)
+        _materialize_input_slot(
+            _slot_entry("in_1", 0, [str(a), str(b)]),
+            table_mode=TableMode.SINGLE,
+            info=None,
+        )
 
 
-def test_materialise_array_returns_list_of_lazyframes(tmp_path):
+def test_materialise_array_returns_list_of_table_frames(tmp_path):
     a = tmp_path / "a.parquet"
     b = tmp_path / "b.parquet"
     _write_sample_parquet(a)
     _write_sample_parquet(b)
-    out = _materialize_input_slot([str(a), str(b)], table_mode=TableMode.ARRAY)
+    out = _materialize_input_slot(
+        _slot_entry("in_1", 0, [str(a), str(b)]),
+        table_mode=TableMode.ARRAY,
+        info=None,
+    )
     assert isinstance(out, list)
     assert len(out) == 2
-    assert all(isinstance(x, pl.LazyFrame) for x in out)
+    assert all(isinstance(x, TableFrame) for x in out)
 
 
 def test_materialise_array_empty_is_empty_list():
-    out = _materialize_input_slot([], table_mode=TableMode.ARRAY)
+    out = _materialize_input_slot(
+        _slot_entry("in_1", 0, []), table_mode=TableMode.ARRAY, info=None
+    )
     assert out == []
 
 
 # --- unit: _invoke_user_function ----------------------------------------
 
 
-def _fake_lf() -> pl.LazyFrame:
-    return pl.DataFrame({"x": [1]}).lazy()
+def _fake_table_frame() -> TableFrame:
+    return TableFrame._build(pl.DataFrame({"x": [1]}).lazy(), CreationMode.MUT)
 
 
 def test_invoke_user_function_happy():
     def fn(in_1):
         return (in_1, None)
 
-    result = _invoke_user_function(fn, [_fake_lf()], ["t1", "t2"])
+    result = _invoke_user_function(fn, [_fake_table_frame()], ["t1", "t2"])
     assert isinstance(result, tuple)
     assert len(result) == 2
-    assert isinstance(result[0], pl.LazyFrame)
+    assert isinstance(result[0], TableFrame)
     assert result[1] is None
 
 
@@ -698,29 +737,29 @@ def test_invoke_user_function_raises_maps_to_user_function_failed():
         raise RuntimeError("boom")
 
     with pytest.raises(UserFunctionFailedError):
-        _invoke_user_function(fn, [_fake_lf()], ["t1"])
+        _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
 
 
 def test_invoke_user_function_non_tuple_return_raises_shape_mismatch():
     # With more than one output slot a bare (non-tuple) return is still
     # rejected -- the single-output convenience does not apply.
     def fn(in_1):
-        return _fake_lf()  # missing tuple wrap, but 2 outputs expected
+        return _fake_table_frame()  # missing tuple wrap, but 2 outputs expected
 
     with pytest.raises(OutputShapeMismatchError):
-        _invoke_user_function(fn, [_fake_lf()], ["t1", "t2"])
+        _invoke_user_function(fn, [_fake_table_frame()], ["t1", "t2"])
 
 
 def test_invoke_user_function_bare_single_output_is_wrapped():
     # Single-output convenience: a lone value returned bare is wrapped
     # into a 1-tuple, mirroring the relaxed signature check.
     def fn(in_1):
-        return in_1  # bare LazyFrame, one output slot
+        return in_1  # bare TableFrame, one output slot
 
-    result = _invoke_user_function(fn, [_fake_lf()], ["t1"])
+    result = _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
     assert isinstance(result, tuple)
     assert len(result) == 1
-    assert isinstance(result[0], pl.LazyFrame)
+    assert isinstance(result[0], TableFrame)
 
 
 def test_invoke_user_function_bare_single_output_none_is_wrapped():
@@ -728,31 +767,31 @@ def test_invoke_user_function_bare_single_output_none_is_wrapped():
     def fn(in_1):
         return None
 
-    result = _invoke_user_function(fn, [_fake_lf()], ["t1"])
+    result = _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
     assert result == (None,)
 
 
 def test_invoke_user_function_wrong_length_raises_shape_mismatch():
     def fn(in_1):
-        return (_fake_lf(), _fake_lf())  # returns 2, expects 1
+        return (_fake_table_frame(), _fake_table_frame())  # returns 2, expects 1
 
     with pytest.raises(OutputShapeMismatchError):
-        _invoke_user_function(fn, [_fake_lf()], ["t1"])
+        _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
 
 
 def test_invoke_user_function_wrong_element_type_raises_shape_mismatch():
     def fn(in_1):
-        return ("not a lazyframe",)
+        return ("not a table frame",)
 
     with pytest.raises(OutputShapeMismatchError):
-        _invoke_user_function(fn, [_fake_lf()], ["t1"])
+        _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
 
 
 # --- unit: _sink_outputs ------------------------------------------------
 
 
-def test_sink_outputs_writes_each_lazyframe(tmp_path):
-    result = (_fake_lf(), _fake_lf())
+def test_sink_outputs_writes_each_table_frame(tmp_path):
+    result = (_fake_table_frame(), _fake_table_frame())
     entries = _sink_outputs(result, ["t1", "t2"], tmp_path)
     assert len(entries) == 2
     for i, entry in enumerate(entries):
@@ -765,7 +804,7 @@ def test_sink_outputs_writes_each_lazyframe(tmp_path):
 
 
 def test_sink_outputs_none_value_records_null_file(tmp_path):
-    result = (None, _fake_lf())
+    result = (None, _fake_table_frame())
     entries = _sink_outputs(result, ["t1", "t2"], tmp_path)
     assert entries[0] == {"name": "t1", "file": None}
     assert entries[1]["file"] is not None
@@ -775,12 +814,12 @@ def test_sink_outputs_none_value_records_null_file(tmp_path):
 
 
 def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkeypatch):
-    def _broken_sink(self, dest):
+    def broken_sink(self, dest):
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(pl.LazyFrame, "sink_parquet", _broken_sink)
+    monkeypatch.setattr(TableFrame, "_sink_native", broken_sink)
     with pytest.raises(OutputWriteFailedError):
-        _sink_outputs((_fake_lf(),), ["t1"], tmp_path)
+        _sink_outputs((_fake_table_frame(),), ["t1"], tmp_path)
 
 
 # --- main: error paths --------------------------------------------------
@@ -834,7 +873,7 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     _write_sample_parquet(raw_parquet)
     inputs_manifest = tmp_path / "inputs.yaml"
     write_inputs_manifest(
-        [{INPUTS_NAME_KEY: "in_1", MANIFEST_FILES_KEY: [str(raw_parquet)]}],
+        [_slot_entry("in_1", 0, [str(raw_parquet)])],
         inputs_manifest,
     )
 
@@ -892,7 +931,7 @@ def test_main_outputs_manifest_write_failure(
     _write_sample_parquet(raw_parquet)
     inputs_manifest = tmp_path / "inputs.yaml"
     write_inputs_manifest(
-        [{INPUTS_NAME_KEY: "in_1", MANIFEST_FILES_KEY: [str(raw_parquet)]}],
+        [_slot_entry("in_1", 0, [str(raw_parquet)])],
         inputs_manifest,
     )
 
@@ -936,8 +975,8 @@ def test_main_multi_cardinality_publisher_concatenates_two_slots(
     inputs_manifest = tmp_path / "inputs.yaml"
     write_inputs_manifest(
         [
-            {INPUTS_NAME_KEY: "in_a", MANIFEST_FILES_KEY: [str(a_parquet)]},
-            {INPUTS_NAME_KEY: "in_b", MANIFEST_FILES_KEY: [str(b_parquet)]},
+            _slot_entry("in_a", 0, [str(a_parquet)]),
+            _slot_entry("in_b", 1, [str(b_parquet)]),
         ],
         inputs_manifest,
     )
@@ -986,9 +1025,9 @@ def test_main_multi_cardinality_transformer_with_mixed_modes(
     inputs_manifest = tmp_path / "inputs.yaml"
     write_inputs_manifest(
         [
-            {INPUTS_NAME_KEY: "a", MANIFEST_FILES_KEY: [str(a)]},
-            {INPUTS_NAME_KEY: "b", MANIFEST_FILES_KEY: [str(b)]},
-            {INPUTS_NAME_KEY: "c", MANIFEST_FILES_KEY: [str(c)]},
+            _slot_entry("a", 0, [str(a)]),
+            _slot_entry("b", 1, [str(b)]),
+            _slot_entry("c", 2, [str(c)]),
         ],
         inputs_manifest,
     )
@@ -1028,7 +1067,7 @@ def test_main_manifest_length_mismatch_returns_bad_manifest(
 
     inputs_manifest = tmp_path / "inputs.yaml"
     write_inputs_manifest(
-        [{INPUTS_NAME_KEY: "in_a", MANIFEST_FILES_KEY: [str(a_parquet)]}],
+        [_slot_entry("in_a", 0, [str(a_parquet)])],
         inputs_manifest,
     )
 
@@ -1156,9 +1195,7 @@ def ctx_aware_built_bundle(tmp_path, monkeypatch) -> Path:
 def _write_inputs_manifest_for(input_files: list[str], path: Path) -> None:
     """Helper: write a minimal inputs manifest mapping ``in_1`` to
     ``input_files`` (ARRAY mode → list)."""
-    write_inputs_manifest(
-        [{INPUTS_NAME_KEY: "in_1", MANIFEST_FILES_KEY: input_files}], path
-    )
+    write_inputs_manifest([_slot_entry("in_1", 0, input_files)], path)
 
 
 def _request_with_state_slots(

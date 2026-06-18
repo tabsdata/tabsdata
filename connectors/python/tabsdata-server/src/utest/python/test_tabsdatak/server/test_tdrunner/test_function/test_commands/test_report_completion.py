@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
+import argparse
 import http.server
+import io
 import json
 import socket
 import sys
@@ -18,11 +20,12 @@ import pyarrow.parquet as pq
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function.commands.report_completion import _post, main
+from tabsdatak.server._tdrunner.function._lib import command as command_lib
+from tabsdatak.server._tdrunner.function._lib.command import UnexpectedError
+from tabsdatak.server._tdrunner.function.commands.report_completion import main
 from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
     BadManifestError,
     BadRequestError,
-    HttpPostError,
     ManifestMismatchError,
     WriteFailedError,
 )
@@ -30,33 +33,43 @@ from tabsdatak.server._tdrunner.function.commands.report_completion.error import
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
+@pytest.fixture
+def no_responder_retry(monkeypatch):
+    """Collapse the responder retry budget so a failing POST gives up on
+    the first attempt instead of retrying for the full 32-second window."""
+    monkeypatch.setattr(command_lib, "_RESPONDER_RETRY_TOTAL_SECONDS", 0)
+    monkeypatch.setattr(command_lib, "_RESPONDER_RETRY_WAIT_SECONDS", 0)
+
+
 # --- helpers ---
+
+
+def _write_journal(path: Path, *, start: int = 1780000000000) -> Path:
+    """Write a minimal valid journal so report-completion can stamp
+    ``end`` and ``notify_done`` can read ``start`` / ``end`` back."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump({"start": start, "end": None}))
+    return path
 
 
 def _set_argv(
     monkeypatch,
     *,
-    url,
-    authorization,
     request,
     outputs_manifest,
     state_dir,
     out,
     liveness,
     responder_url,
+    journal_file,
     responder_method="POST",
     responder_authorization="Bearer tok",
-    journal_file="/tmp/journal.yaml",
 ):
     monkeypatch.setattr(
         sys,
         "argv",
         [
             "report-completion",
-            "--url",
-            str(url),
-            "--authorization",
-            str(authorization),
             "--request",
             str(request),
             "--outputs-manifest",
@@ -139,12 +152,17 @@ def _write_parquet(path: Path, **columns):
     pq.write_table(table, path)
 
 
-# --- HTTP fixture ---
+# --- responder fixture ---
 
 
 @pytest.fixture
-def http_server():
-    """Tiny HTTP server in a thread. Yields (base_url, request_log, server)."""
+def responder():
+    """Tiny HTTP server in a thread acting as the responder endpoint.
+
+    Yields (base_url, request_log, server). ``report-completion`` POSTs
+    its ``Done`` callback (carrying the response as the ``WorkerOutput``
+    context) here via ``--responder-url``.
+    """
     requests_log = []
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -182,10 +200,8 @@ def http_server():
 # --- happy path ---
 
 
-def test_main_writes_response_and_posts(
-    monkeypatch, tmp_path, http_server, http_ok_url
-):
-    base_url, request_log, _ = http_server
+def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
+    base_url, request_log, _ = responder
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[{"name": "customers"}],
@@ -201,21 +217,20 @@ def test_main_writes_response_and_posts(
     )
 
     out = tmp_path / "response.yaml"
+    journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(
         monkeypatch,
-        url=f"{base_url}/api/v1/done",
-        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=state_dir,
         out=out,
         liveness=tmp_path / "live",
-        responder_url=http_ok_url,
+        responder_url=f"{base_url}/api/v1/done",
+        journal_file=journal,
     )
     assert main() == 0
 
-    # The on-disk artifact stays YAML for human readability/audit; the
-    # wire body is JSON (the apiserver expects application/json).
+    # The on-disk artifact stays YAML for human readability/audit.
     yaml_artifact = yaml.safe_load(out.read_bytes())
     by_name = {e["table"]: e for e in yaml_artifact["output"]}
     assert by_name["customers"]["info"]["row_count"] == 3
@@ -226,27 +241,30 @@ def test_main_writes_response_and_posts(
     assert by_name["td-initial-values"]["info"]["column_count"] == 1
     assert by_name["td-initial-values"]["info"]["data_bytes"] > 0
 
-    # POST happened with JSON content-type and a body that decodes to
-    # the same structure as the YAML artifact.
+    # The responder received exactly one Done POST carrying the response
+    # as the WorkerOutput context (JSON, externally-tagged Data/NoData).
     assert len(request_log) == 1
     posted = request_log[0]
     assert posted["path"] == "/api/v1/done"
     assert posted["headers"]["Authorization"] == "Bearer tok"
     assert posted["headers"]["Content-Type"] == "application/json"
-    posted_payload = json.loads(posted["body"])
-    posted_by_name = {e["table"]: e for e in posted_payload["output"]}
+    payload = json.loads(posted["body"])
+    assert payload["status"] == "Done"
+    written = payload["context"]["FunctionV2"]["output"]
+    posted_by_name = {
+        next(iter(entry.values()))["table"]: entry for entry in written
+    }
+    assert "Data" in posted_by_name["customers"]
     assert (
-        posted_by_name["customers"]["info"]["row_count"]
+        posted_by_name["customers"]["Data"]["info"]["row_count"]
         == by_name["customers"]["info"]["row_count"]
     )
 
 
-def test_main_no_info_when_manifest_file_is_null(
-    monkeypatch, tmp_path, http_server, http_ok_url
-):
+def test_main_no_info_when_manifest_file_is_null(monkeypatch, tmp_path, responder):
     """A manifest entry with `file: null` (user returned None for that
     slot) yields a NoData entry in the response."""
-    base_url, _, _ = http_server
+    base_url, request_log, _ = responder
     request_yaml = _write_request(
         tmp_path / "request.yaml", output=[{"name": "missing"}]
     )
@@ -255,66 +273,69 @@ def test_main_no_info_when_manifest_file_is_null(
         [{"name": "missing", "file": None}],
     )
     out = tmp_path / "response.yaml"
+    journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(
         monkeypatch,
-        url=f"{base_url}/done",
-        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
-        responder_url=http_ok_url,
+        responder_url=f"{base_url}/done",
+        journal_file=journal,
     )
     assert main() == 0
     parsed = yaml.safe_load(out.read_text())
     assert parsed["output"][0] == {"table": "missing"}
+    # NoData on the wire too.
+    payload = json.loads(request_log[0]["body"])
+    written = payload["context"]["FunctionV2"]["output"]
+    assert written[0] == {"NoData": {"table": "missing"}}
 
 
-def test_main_no_info_when_state_parquet_missing(
-    monkeypatch, tmp_path, http_server, http_ok_url
-):
+def test_main_no_info_when_state_parquet_missing(monkeypatch, tmp_path, responder):
     """A request.system_output table whose parquet doesn't exist in
     state_dir yields a NoData entry."""
-    base_url, _, _ = http_server
+    base_url, _, _ = responder
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         system_output=[{"name": "unwritten-state"}],
     )
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     out = tmp_path / "response.yaml"
+    journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(
         monkeypatch,
-        url=f"{base_url}/done",
-        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
-        responder_url=http_ok_url,
+        responder_url=f"{base_url}/done",
+        journal_file=journal,
     )
     assert main() == 0
     parsed = yaml.safe_load(out.read_text())
     assert parsed["output"][0] == {"table": "unwritten-state"}
 
 
-def test_main_resolves_env_refs(monkeypatch, tmp_path, http_server, http_ok_url):
-    base_url, request_log, _ = http_server
+def test_main_resolves_responder_env_refs(monkeypatch, tmp_path, responder):
+    base_url, request_log, _ = responder
     monkeypatch.setenv("TD_TEST_RC_URL", f"{base_url}/done")
     monkeypatch.setenv("TD_TEST_RC_TOK", "Bearer secret")
     request_yaml = _write_request(tmp_path / "request.yaml")
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
+    journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(
         monkeypatch,
-        url="env:TD_TEST_RC_URL",
-        authorization="env:TD_TEST_RC_TOK",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
-        responder_url=http_ok_url,
+        responder_url="env:TD_TEST_RC_URL",
+        responder_authorization="env:TD_TEST_RC_TOK",
+        journal_file=journal,
     )
     assert main() == 0
     assert request_log[0]["headers"]["Authorization"] == "Bearer secret"
@@ -323,186 +344,179 @@ def test_main_resolves_env_refs(monkeypatch, tmp_path, http_server, http_ok_url)
 # --- error paths ---
 
 
-def test_main_missing_request_returns_bad_request(
-    monkeypatch, tmp_path, http_server, http_ok_url
-):
-    base_url, _, _ = http_server
+def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, responder):
+    base_url, _, _ = responder
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
+    journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(
         monkeypatch,
-        url=f"{base_url}/done",
-        authorization="Bearer tok",
         request=tmp_path / "no-request.yaml",
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
-        responder_url=http_ok_url,
+        responder_url=f"{base_url}/done",
+        journal_file=journal,
     )
     assert main() == BadRequestError.exit_code
 
 
-def test_main_missing_manifest_returns_bad_manifest(
-    monkeypatch, tmp_path, http_server, http_ok_url
-):
-    base_url, _, _ = http_server
+def test_main_missing_manifest_returns_bad_manifest(monkeypatch, tmp_path, responder):
+    base_url, _, _ = responder
     request_yaml = _write_request(tmp_path / "request.yaml")
+    journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(
         monkeypatch,
-        url=f"{base_url}/done",
-        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=tmp_path / "no-manifest.yaml",
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
-        responder_url=http_ok_url,
+        responder_url=f"{base_url}/done",
+        journal_file=journal,
     )
     assert main() == BadManifestError.exit_code
 
 
-def test_main_malformed_manifest_returns_bad_manifest(
-    monkeypatch, tmp_path, http_server, http_ok_url
-):
-    base_url, _, _ = http_server
+def test_main_malformed_manifest_returns_bad_manifest(monkeypatch, tmp_path, responder):
+    base_url, _, _ = responder
     request_yaml = _write_request(tmp_path / "request.yaml")
     bad = tmp_path / "outputs_manifest.yaml"
     bad.write_text("outputs: [{unclosed")
+    journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(
         monkeypatch,
-        url=f"{base_url}/done",
-        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=bad,
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
-        responder_url=http_ok_url,
+        responder_url=f"{base_url}/done",
+        journal_file=journal,
     )
     assert main() == BadManifestError.exit_code
 
 
 def test_main_output_table_missing_from_manifest_returns_mismatch(
-    monkeypatch, tmp_path, http_server, http_ok_url
+    monkeypatch, tmp_path, responder
 ):
-    base_url, _, _ = http_server
+    base_url, _, _ = responder
     request_yaml = _write_request(tmp_path / "request.yaml", output=[{"name": "ghost"}])
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
+    journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(
         monkeypatch,
-        url=f"{base_url}/done",
-        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
-        responder_url=http_ok_url,
+        responder_url=f"{base_url}/done",
+        journal_file=journal,
     )
     assert main() == ManifestMismatchError.exit_code
 
 
-def test_main_http_error_returns_http_error_but_writes_out(
-    monkeypatch, tmp_path, http_server, http_ok_url
+def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, responder):
+    base_url, _, _ = responder
+    request_yaml = _write_request(tmp_path / "request.yaml")
+    manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
+    journal = _write_journal(tmp_path / "journal.yaml")
+    # Make the write fail by pointing `--out` *under* a regular file:
+    # `write_response` mkdirs missing parents, but mkdir into a path that
+    # already exists as a file raises OSError.
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a dir")
+    _set_argv(
+        monkeypatch,
+        request=request_yaml,
+        outputs_manifest=manifest,
+        state_dir=tmp_path / "state",
+        out=blocker / "nested" / "response.yaml",
+        liveness=tmp_path / "live",
+        responder_url=f"{base_url}/done",
+        journal_file=journal,
+    )
+    assert main() == WriteFailedError.exit_code
+
+
+def test_main_responder_http_error_returns_unexpected_but_writes_out(
+    monkeypatch, tmp_path, responder, no_responder_retry
 ):
-    base_url, _, server = http_server
+    """When the Done POST gets an HTTP error, main fails — but the `--out`
+    artifact is written before the POST, so it survives the failure."""
+    base_url, _, server = responder
     server.next_status = 500
     request_yaml = _write_request(tmp_path / "request.yaml")
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     out = tmp_path / "response.yaml"
+    journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(
         monkeypatch,
-        url=f"{base_url}/done",
-        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=out,
         liveness=tmp_path / "live",
-        responder_url=http_ok_url,
+        responder_url=f"{base_url}/done",
+        journal_file=journal,
     )
-    assert main() == HttpPostError.exit_code
-    # --out is written before POST so it survives the failure.
+    assert main() == UnexpectedError.exit_code
+    # --out is written before the POST, so it survives the failure.
     assert out.exists()
 
 
-def test_main_url_error_returns_http_error(monkeypatch, tmp_path, http_ok_url):
-    """URLError (network unreachable) is mapped to HttpPostError."""
-
-    real_urlopen = urllib.request.urlopen
-
-    def fake(req, *args, **kwargs):
-        if req.full_url.startswith(http_ok_url):
-            return real_urlopen(req, *args, **kwargs)
-        raise urllib.error.URLError("connection refused")
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
+def test_main_responder_url_error_returns_unexpected(
+    monkeypatch, tmp_path, no_responder_retry
+):
+    """A URLError (responder unreachable) fails the command."""
     request_yaml = _write_request(tmp_path / "request.yaml")
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
+    journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(
         monkeypatch,
-        url="http://127.0.0.1:1/done",
-        authorization="Bearer tok",
         request=request_yaml,
         outputs_manifest=manifest,
         state_dir=tmp_path / "state",
         out=tmp_path / "response.yaml",
         liveness=tmp_path / "live",
-        responder_url=http_ok_url,
+        # Port 1 is unbound, so the POST raises URLError immediately.
+        responder_url="http://127.0.0.1:1/done",
+        journal_file=journal,
     )
-    assert main() == HttpPostError.exit_code
+    assert main() == UnexpectedError.exit_code
 
 
-def test_post_http_error_includes_response_body_in_detail(monkeypatch):
-    """HTTPError's response body (apiserver's specific complaint) must
-    end up in the raised HttpPostError's detail — otherwise a 400 like
-    'missing field `status`' bottoms out at a bare 'Bad Request' and
-    forces a manual chase to figure out what the apiserver objected to.
-    """
-    import io
-
+def test_responder_http_error_surfaces_response_body(
+    monkeypatch, tmp_path, no_responder_retry
+):
+    """The apiserver's error body (its specific complaint) must reach the
+    raised error — otherwise a 400 like 'missing field `status`' bottoms
+    out at a bare 'Bad Request' and forces a manual chase."""
     apiserver_body = b'{"error":"missing field `status` at line 1 column 9"}'
 
-    def fake_urlopen(req, *args, **kwargs):
+    def failing_urlopen(request, *args, **kwargs):
         raise urllib.error.HTTPError(
-            req.full_url,
+            request.full_url,
             400,
             "Bad Request",
             {},
             io.BytesIO(apiserver_body),
         )
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    with pytest.raises(HttpPostError) as exc_info:
-        _post("http://api/done", "Bearer t", b"{}")
-    rendered = str(exc_info.value)
+    monkeypatch.setattr(urllib.request, "urlopen", failing_urlopen)
+    journal = _write_journal(tmp_path / "journal.yaml")
+    args = argparse.Namespace(
+        responder_url="http://127.0.0.1:1/done",
+        responder_method="POST",
+        responder_authorization="Bearer tok",
+        journal_file=str(journal),
+    )
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        command_lib.notify_done(args, context=None)
+    rendered = str(caught.value)
     assert "Bad Request" in rendered
     assert apiserver_body.decode("utf-8") in rendered
-
-
-def test_main_write_error_returns_write_failed(
-    monkeypatch, tmp_path, http_server, http_ok_url
-):
-    base_url, _, _ = http_server
-    request_yaml = _write_request(tmp_path / "request.yaml")
-    manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
-    # Make the write fail by pointing `--out` *under* a regular file:
-    # `write_response` mkdirs missing parents (TD-2338), but mkdir into
-    # a path that already exists as a file raises OSError.
-    blocker = tmp_path / "blocker"
-    blocker.write_text("not a dir")
-    _set_argv(
-        monkeypatch,
-        url=f"{base_url}/done",
-        authorization="Bearer tok",
-        request=request_yaml,
-        outputs_manifest=manifest,
-        state_dir=tmp_path / "state",
-        out=blocker / "nested" / "response.yaml",
-        liveness=tmp_path / "live",
-        responder_url=http_ok_url,
-    )
-    assert main() == WriteFailedError.exit_code
 
 
 def test_main_invalid_options_returns_1(monkeypatch):

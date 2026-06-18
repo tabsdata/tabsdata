@@ -121,7 +121,7 @@ pub(crate) mod tests {
         use crate::graph::layers::FunctionOrTable;
         use crate::graph::layers::build::GraphBuilder;
         use crate::scheduler::layers::request::notify_scheduler;
-        use td_authz::rbac::{DevelopProject, ManageProject, Project, Rbac, Scope};
+        use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
         use td_database::scoped::Scoped;
         use td_objects::dxo::crudl::RequestContext;
         use td_objects::dxo::execution::{ExecutionDB, ExecutionDBBuilder, ExecutionRequest};

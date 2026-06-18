@@ -55,14 +55,10 @@ def _client_for(name: str, password: str = _PASSWORD) -> TabsdataServer:
 
 @pytest.fixture(scope="module")
 def admin_client() -> TabsdataServer:
-    """Admin API client (``manage_access`` via the ``sys_admin`` role).
+    """Admin API client.
 
     Built directly instead of through the shared ``tabsserver_connection``
-    fixture: that fixture still passes a removed ``role`` argument
-    (``TabsdataServer(url, "admin", "tabsdata", "sys_admin")``) and so raises
-    ``TypeError`` at the tip -- TD-2417 dropped ``role`` from the client/CLI but
-    did not update the test fixtures. Keeping this self-contained lets the
-    module run independently of that breakage.
+    fixture so the module stays self-contained and can run independently.
     """
     return _client_for("admin", "tabsdata")
 
@@ -78,6 +74,10 @@ def regular_user(admin_client):
     name = _unique("authz_user")
     admin_client.delete_user(name, raise_for_status=False)
     admin_client.create_user(name, _PASSWORD)
+    # A freshly-created user is flagged `password_must_change`, so its first
+    # login is rejected until the password is changed. Clear the flag by
+    # changing the password (to the same value) so the user can authenticate.
+    admin_client.change_password(name, _PASSWORD, _PASSWORD)
     try:
         yield name, _client_for(name)
     finally:

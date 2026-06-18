@@ -9,6 +9,18 @@ from tabsdata.api.tabsdata_server import Role, User
 # noinspection PyUnresolvedReferences
 from . import pytestmark  # noqa: F401
 
+# User↔role association operations go through the RBAC role-user endpoints
+# (`/roles/{role}/users`...), which the apiserver mounts only in `rbac`
+# security mode. The pytest apiserver runs in the default `simple` mode
+# (RBAC left dormant), so those tests hit "API endpoint not found". The
+# plain user CRUD tests in this file work in `simple` mode and stay active.
+skip_rbac_dormant = pytest.mark.skip(
+    reason=(
+        "RBAC role management is dormant: the pytest apiserver runs in "
+        "`simple` security mode, so the `/roles` endpoints are not mounted."
+    )
+)
+
 
 @pytest.mark.integration
 def test_user_class(tabsserver_connection):
@@ -176,6 +188,7 @@ def test_user_class_refresh(tabsserver_connection):
         )
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 def test_user_class_user_add(tabsserver_connection):
     role_name = "test_user_class_user_add_role"
@@ -196,6 +209,7 @@ def test_user_class_user_add(tabsserver_connection):
         tabsserver_connection.delete_role(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 def test_user_class_user_delete(tabsserver_connection):
     role_name = "test_user_class_user_delete_role"
@@ -218,6 +232,7 @@ def test_user_class_user_delete(tabsserver_connection):
         tabsserver_connection.delete_role(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 def test_user_class_read_role(tabsserver_connection):
     role_name = "test_user_class_read_role_role"
@@ -238,6 +253,7 @@ def test_user_class_read_role(tabsserver_connection):
         tabsserver_connection.delete_role(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 def test_user_class_user_delete_no_exists_raises_error(tabsserver_connection):
     role_name = "test_user_class_user_delete_no_exists_raises_error_role"

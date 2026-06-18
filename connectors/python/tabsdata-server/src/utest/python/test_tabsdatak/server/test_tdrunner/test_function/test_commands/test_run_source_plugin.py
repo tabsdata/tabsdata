@@ -464,11 +464,28 @@ def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
     produced = [[Path("/tmp/a.parquet"), Path("/tmp/b.parquet")]]
     _write_inputs_manifest(fixture_publisher, produced, out)
     data = yaml.safe_load(out.read_text())
+
+    def _record(file):
+        return {
+            "file": file,
+            "input_idx": None,
+            "version_pos": -1,
+            "execution_id": None,
+            "transaction_id": None,
+            "table_data_version_id": None,
+            "triggered_on": None,
+        }
+
     assert data == {
         "inputs": [
             {
                 "name": "in_1",
-                "files": ["/tmp/a.parquet", "/tmp/b.parquet"],
+                "table_pos": 0,
+                "is_empty": False,
+                "tables": [
+                    _record("/tmp/a.parquet"),
+                    _record("/tmp/b.parquet"),
+                ],
             }
         ],
     }
@@ -482,7 +499,9 @@ def test_write_inputs_manifest_normalises_file_uris(tmp_path, fixture_publisher)
     produced = [[Path("file:///tmp/uri-shaped.parquet")]]
     _write_inputs_manifest(fixture_publisher, produced, out)
     data = yaml.safe_load(out.read_text())
-    assert data["inputs"][0]["files"] == ["/tmp/uri-shaped.parquet"]
+    assert [t["file"] for t in data["inputs"][0]["tables"]] == [
+        "/tmp/uri-shaped.parquet"
+    ]
 
 
 def test_write_inputs_manifest_cardinality_mismatch_raises(tmp_path, fixture_publisher):
@@ -609,10 +628,10 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     assert len(data["inputs"]) == 1
     entry = data["inputs"][0]
     assert entry["name"] == "in_1"
-    assert len(entry["files"]) == 1
+    assert len(entry["tables"]) == 1
     # Resolve symlinks (e.g. macOS /tmp -> /private/tmp) on both sides
     # before comparing — `samefile` handles that.
-    assert Path(entry["files"][0]).samefile(parquets[0])
+    assert Path(entry["tables"][0]["file"]).samefile(parquets[0])
 
     # Liveness file was created by the context manager.
     assert liveness.exists()

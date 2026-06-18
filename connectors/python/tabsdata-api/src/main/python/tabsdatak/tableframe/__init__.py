@@ -227,6 +227,8 @@ def _load_registry() -> None:
     ):
         importlib.import_module(f"{__name__}.{submodule}")
 
+    importlib.import_module("tabsdatak.tableframe._engine.frame.hook")
+
     from tabsdatak.tableframe._core.hooks import tableframe_of
     from tabsdatak.tableframe._core.translate import register_factory
 

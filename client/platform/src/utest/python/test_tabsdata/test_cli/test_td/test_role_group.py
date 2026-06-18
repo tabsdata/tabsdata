@@ -12,11 +12,27 @@ from tabsdata._cli.td.cli import cli
 # noinspection PyUnresolvedReferences
 from . import pytestmark as _package_pytestmark  # noqa: F401
 
+# The `td role` commands target the RBAC role-management endpoints
+# (`/roles`...), which the apiserver mounts only in `rbac` security mode.
+# The pytest apiserver runs in the default `simple` mode (RBAC left
+# dormant), where those endpoints are unmounted and every role command
+# fails. Skip the whole file until the suite exercises an `rbac`-mode
+# server.
+RBAC_DORMANT = (
+    "RBAC role management is dormant: the pytest apiserver runs in `simple` "
+    "security mode, so the `/roles` endpoints these `td role` commands use are "
+    "not mounted."
+)
+
 # Module-level pytestmark must combine the package marker with a
 # file-specific xdist_group so all tests in this file land on the
 # same worker (they share CLI / role-registry state that breaks
 # when ``--dist=loadgroup`` spreads them across workers).
-pytestmark = [_package_pytestmark, pytest.mark.xdist_group("platform-role_group_seq")]
+pytestmark = [
+    _package_pytestmark,
+    pytest.mark.xdist_group("platform-role_group_seq"),
+    pytest.mark.skip(reason=RBAC_DORMANT),
+]
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

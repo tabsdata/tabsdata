@@ -400,7 +400,7 @@ def clean_polars_df(df, sort=True):
 
 @pytest.fixture(scope="session")
 def apiserver_connection() -> APIServer:
-    connection = obtain_connection(APISERVER_URL, "admin", "tabsdata", "sys_admin")
+    connection = obtain_connection(APISERVER_URL, "admin", "tabsdata")
     # Tenant-scoped calls ride the active project on the connection; the tests
     # target the bootstrap-seeded `sandbox` project (the only one the server
     # seeds). Without it every tenant call fails with NoProjectSelectedError.
@@ -410,7 +410,7 @@ def apiserver_connection() -> APIServer:
 
 @pytest.fixture(scope="session")
 def tabsserver_connection() -> TabsdataServer:
-    server = TabsdataServer(APISERVER_URL, "admin", "tabsdata", "sys_admin")
+    server = TabsdataServer(APISERVER_URL, "admin", "tabsdata")
     server.connection.project = TESTING_PROJECT
     return server
 

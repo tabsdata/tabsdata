@@ -374,7 +374,14 @@ def _write_test_namespace_inits(base: Path) -> list[Path]:
     copyright = _copyright().removeprefix("# ")
     text = template.read_text().replace("__COPYRIGHT__", copyright)
     parts = base.parts
-    root = parts.index("python") + 1
+    # Namespace inits belong only to the importable test package, i.e. the
+    # folders below the source root (the `.../src/utest/python` segment). Start
+    # at the LAST "python" segment, not the first — a root-dir like
+    # `./python/tabsdata-api/src/main/python` has two, and anchoring on the
+    # first would scaffold spurious inits into the non-package layout folders
+    # (tabsdata-api/, src/, src/utest/).
+    last_python = len(parts) - 1 - parts[::-1].index("python")
+    root = last_python + 1
     written: list[Path] = []
     folder = Path(*parts[:root])
     for part in parts[root:]:
@@ -422,17 +429,41 @@ _VALUE_LIVE = {"Expr": 'Expr._wrap(pl.col("a"))'}
 # opens a blocking matplotlib window under a pytest worker.
 _LIVE_ARGS = {"show_graph": "show=False"}
 
+# Minimal live-call arguments per hook kind (keyed by hook_name, the same
+# taxonomy as _HOOK_SHAPES). A hooked op's smoke test must call the op with
+# arguments its hook can actually run against, so adding a new hook to
+# _HOOK_SHAPES is all that is needed to cover its generated tests — no per-op
+# entry here. The source-frame count comes from _HOOK_SHAPES; the extra source
+# frames are spliced in ahead of these keyword arguments.
+_HOOK_LIVE_ARGS = {
+    "join": 'on="a"',
+}
 
-def _live_call(receiver: str, name: str, is_property: bool) -> str:
-    if is_property:
+
+def _live_call(receiver: str, sym: Symbol) -> str:
+    name = _member(sym)
+    if sym.is_property:
         return f"{receiver}.{name}"
-    return f"{receiver}.{name}({_LIVE_ARGS.get(name, '')})"
+    args = _live_call_args(sym)
+    return f"{receiver}.{name}({args})"
 
 
-def _live_test(safe: str, result_stmt: str) -> list[str]:
+def _live_call_args(sym: Symbol) -> str:
+    name = _member(sym)
+    if sym.hook_name in _HOOK_SHAPES:
+        source_count, _ = _HOOK_SHAPES[sym.hook_name]
+        parts = ["_live_frame()"] * (source_count - 1)
+        keywords = _HOOK_LIVE_ARGS.get(sym.hook_name, "")
+        if keywords:
+            parts.append(keywords)
+        return ", ".join(parts)
+    return _LIVE_ARGS.get(name, "")
+
+
+def _live_test(safe: str, suffix: str, result_stmt: str) -> list[str]:
     return [
         "",
-        f"def test_{safe}_runs():",
+        f"def test_{safe}_{suffix}():",
         "    try:",
         f"        {result_stmt}",
         "    except Exception as exc:  # noqa: BLE001",
@@ -502,8 +533,8 @@ def _render_value_test(syms: list[Symbol], root: str) -> str:
                     f"    getattr(inner, {name!r}).assert_called()",
                 ]
             if receiver is not None:
-                stmt = f"result = {_live_call(receiver, name, sym.is_property)}"
-                lines += _live_test(safe, stmt)
+                stmt = f"result = {_live_call(receiver, sym)}"
+                lines += _live_test(safe, "runs", stmt)
     return "\n".join(lines) + "\n"
 
 
@@ -531,9 +562,7 @@ def _render_functions_test(syms: list[Symbol], root: str) -> str:
             f"    _module.{name}()",
             "    spy.assert_called()",
         ]
-        lines += _live_test(
-            safe, f"result = {_live_call('_module', name, sym.is_property)}"
-        )
+        lines += _live_test(safe, "runs", f"result = {_live_call('_module', sym)}")
     return "\n".join(lines) + "\n"
 
 
@@ -544,42 +573,19 @@ def _render_tableframe_test(syms: list[Symbol], root: str) -> str:
         "",
         "import polars as pl",
         "import pytest",
-        "from unittest.mock import MagicMock",
         "",
         f"from {root} import TableFrame",
         f"from {root}._core.hooks import tableframe_of",
-        f"from {root}._engine.model.frame import TableFrameState",
-        "",
-        "",
-        "def _frame():",
-        "    grant = {TableFrame._ACCESS_KEY: TableFrame._ACCESS_SECRET}",
-        "    frame = TableFrame.__new__(TableFrame, **grant)",
-        "    frame._lf = MagicMock()",
-        "    frame._state = TableFrameState.empty()",
-        "    return frame",
         "",
         "",
         "def _live_frame():",
         '    return tableframe_of(pl.LazyFrame({"a": [1.0], "b": [2.0]}))',
     ]
     for sym in syms:
-        name = _member(sym)
-        safe = _safe(name)
-        lines += ["", f"def test_{safe}_delegates():", "    frame = _frame()"]
-        if sym.is_property:
-            lines.append(f"    assert frame.{name} is frame._lf.{name}")
-        else:
-            if sym.hook_name == "join":
-                call = f"frame.{name}(_frame())"
-            elif sym.hook_name == "rename":
-                call = f"frame.{name}({{}})"
-            elif name in ("__eq__", "__ne__"):
-                call = f"frame.{name}(MagicMock())"
-            else:
-                call = f"frame.{name}()"
-            lines += [f"    {call}", f"    frame._lf.{name}.assert_called()"]
-        stmt = f"result = {_live_call('_live_frame()', name, sym.is_property)}"
-        lines += _live_test(safe, stmt)
+        safe = _safe(_member(sym))
+        stmt = f"result = {_live_call('_live_frame()', sym)}"
+        lines += _live_test(safe, "delegates", stmt)
+        lines += _live_test(safe, "runs", stmt)
     return "\n".join(lines) + "\n"
 
 
@@ -622,7 +628,8 @@ def _render_lazygroupby_test(syms: list[Symbol], root: str) -> str:
         ]
         lines += _live_test(
             safe,
-            f"result = {_live_call('_live_group_by()', name, sym.is_property)}",
+            "runs",
+            f"result = {_live_call('_live_group_by()', sym)}",
         )
     return "\n".join(lines) + "\n"
 
@@ -756,6 +763,8 @@ def _render_tableframe_py(
         "",
         f"    for submodule in {tuple(submodules)!r}:",
         '        importlib.import_module(f"{__name__}.{submodule}")',
+        "",
+        f'    importlib.import_module("{root}._engine.frame.hook")',
         "",
         f"    from {root}._core.translate import register_factory",
         f"    from {root}._core.hooks import tableframe_of",

@@ -252,6 +252,3 @@ class EngineFrame(BaseFrame):
             .collect(no_optimization=True)
             .to_dict(as_series=False)
         )
-
-
-from tabsdatak.tableframe._engine.frame import hook  # noqa: E402,F401

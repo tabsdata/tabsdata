@@ -13,12 +13,14 @@ import polars as pl
 import pytest
 
 import tabsdata as td
+from tabsdata._io.connections.named_connection.kind_registry import kind_for
 from tabsdata._tabsserver.function.named_connection_utils import (
     CONNECTIONS_FOLDER,
     TD_URI_REPOSITORY,
 )
 from tabsdata.exceptions import ParameterValidationError
 from test_tabsdata.conftest import (
+    MOCK_PROJECT_ID,
     clean_polars_df,
 )
 from test_tabsdata.fntest import tdfnrun
@@ -45,14 +47,12 @@ SALESFORCE_NAMED_CONN_NAME = "test_salesforce_named"
 def _write_named_conn_repository(tmp_path, name, conn_type, conn_configs, conn_mode):
     """Create a temporary repository with a single named-connection JSON."""
     repo_dir = os.path.join(str(tmp_path), "repository")
-    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER)
+    connections_dir = os.path.join(repo_dir, CONNECTIONS_FOLDER, MOCK_PROJECT_ID)
     os.makedirs(connections_dir, exist_ok=True)
     cx_dict = {
-        "kind": "connectionDef",
+        "kind": kind_for(conn_type, conn_mode),
         "apiVersion": "1.0",
         "name": name,
-        "conn_mode": conn_mode,
-        "conn_type": conn_type,
         "conn_configs": conn_configs,
     }
     connection_file = os.path.join(connections_dir, f"{name.lower()}.json")

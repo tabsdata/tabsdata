@@ -12,8 +12,6 @@ use td_objects::rest_urls::params::{TableAtIdName, TableSchema};
 use td_objects::tower_service::with::With;
 #[cfg(test)]
 use td_objects::types::basic::CollectionIdName;
-#[cfg(feature = "test_tower_metadata")]
-use td_queries::By;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -107,7 +105,7 @@ mod tests {
                 // Only active or frozen tables
                 // Find Table ID, looking at the version at the time
                 type_of_val(
-                    &By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
+                    &td_queries::By::<And![CollectionIdName, TableIdName]>::historic_fetch_one::<
                         { TableDBWithNames::Available },
                         TableDBWithNames,
                     >,

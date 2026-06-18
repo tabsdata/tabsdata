@@ -214,10 +214,10 @@ def test_main_inputs_manifest_lists_input_tables(monkeypatch, tmp_path, http_ok_
     assert rc == 0
     data = yaml.safe_load(inputs_manifest.read_text())
     assert [e["name"] for e in data["inputs"]] == ["t_a", "t_b"]
-    assert data["inputs"][0]["files"] == [
+    assert [t["file"] for t in data["inputs"][0]["tables"]] == [
         str((in_dir / "t_a.parquet").absolute()),
     ]
-    assert data["inputs"][1]["files"] == [
+    assert [t["file"] for t in data["inputs"][1]["tables"]] == [
         str((in_dir / "t_b.parquet").absolute()),
     ]
 
@@ -226,7 +226,9 @@ def test_main_inputs_manifest_empty_files_for_null_location(
     monkeypatch, tmp_path, http_ok_url
 ):
     """A request.input entry with `location is None` produces a manifest
-    entry with an empty `files` list."""
+    entry that is not empty but whose single table record carries a null
+    `file` (so downstream materialisation preserves the slot position as
+    a `None` value)."""
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         inputs=[{"name": "t_x"}],  # no location
@@ -246,7 +248,10 @@ def test_main_inputs_manifest_empty_files_for_null_location(
     )
     assert rc == 0
     data = yaml.safe_load(inputs_manifest.read_text())
-    assert data["inputs"] == [{"name": "t_x", "files": []}]
+    assert [e["name"] for e in data["inputs"]] == ["t_x"]
+    entry = data["inputs"][0]
+    assert entry["is_empty"] is False
+    assert [t["file"] for t in entry["tables"]] == [None]
 
 
 def test_main_state_manifest_lists_system_input_tables(

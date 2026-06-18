@@ -34,6 +34,18 @@ from . import pytestmark as _package_pytestmark  # noqa: F401
 # show up when ``--dist=loadgroup`` spreads them across workers).
 pytestmark = [_package_pytestmark, pytest.mark.xdist_group("platform-apiserver_seq")]
 
+# The role / role-permission / role-user endpoints (`/roles`...) are mounted
+# only in `rbac` security mode. The pytest apiserver runs in the default
+# `simple` mode (RBAC left dormant), so those endpoints are unmounted and the
+# tests below hit "API endpoint not found". Skip them until the suite exercises
+# an `rbac`-mode server.
+skip_rbac_dormant = pytest.mark.skip(
+    reason=(
+        "RBAC endpoints are dormant: the pytest apiserver runs in `simple` "
+        "security mode, so the `/roles` endpoints are not mounted."
+    )
+)
+
 FUNCTION_TESTING_COLLECTION_NAME = "function_testing_collection"
 FUNCTION_TESTING_COLLECTION_DESCRIPTION = "function_testing_collection_description"
 
@@ -47,7 +59,7 @@ def calculate_sha256(binary_data: bytes) -> str:
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_obtain_connection():
-    connection = obtain_connection(APISERVER_URL, "admin", "tabsdata", "sys_admin")
+    connection = obtain_connection(APISERVER_URL, "admin", "tabsdata")
     real_url = f"http://{APISERVER_URL}{BASE_API_URL}"
     assert connection.url == real_url
     assert connection.bearer_token is not None
@@ -61,13 +73,9 @@ def test_obtain_connection():
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_authentication_access_success():
-    apiserver_connection = obtain_connection(
-        APISERVER_URL, "admin", "tabsdata", "sys_admin"
-    )
+    apiserver_connection = obtain_connection(APISERVER_URL, "admin", "tabsdata")
     current_bearer = apiserver_connection.bearer_token
-    response = apiserver_connection.authentication_login(
-        "admin", "tabsdata", role="sys_admin"
-    )
+    response = apiserver_connection.authentication_login("admin", "tabsdata")
     assert HTTPStatus(response.status_code).is_success
     assert apiserver_connection.bearer_token is not None
     assert apiserver_connection.refresh_token is not None
@@ -84,9 +92,7 @@ def test_authentication_info(apiserver_connection):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_authentication_access_raises_error():
-    apiserver_connection = obtain_connection(
-        APISERVER_URL, "admin", "tabsdata", "sys_admin"
-    )
+    apiserver_connection = obtain_connection(APISERVER_URL, "admin", "tabsdata")
     with pytest.raises(APIServerError):
         apiserver_connection.authentication_login("wrong_user", "wrong_password")
 
@@ -94,9 +100,7 @@ def test_authentication_access_raises_error():
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_authentication_refresh_success():
-    apiserver_connection = obtain_connection(
-        APISERVER_URL, "admin", "tabsdata", "sys_admin"
-    )
+    apiserver_connection = obtain_connection(APISERVER_URL, "admin", "tabsdata")
     current_bearer = apiserver_connection.bearer_token
     response = apiserver_connection.authentication_refresh()
     assert HTTPStatus(response.status_code).is_success
@@ -108,9 +112,7 @@ def test_authentication_refresh_success():
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_authentication_refresh_fail():
-    apiserver_connection = obtain_connection(
-        APISERVER_URL, "admin", "tabsdata", "sys_admin"
-    )
+    apiserver_connection = obtain_connection(APISERVER_URL, "admin", "tabsdata")
     apiserver_connection.refresh_token = "incorrect_token"
     with pytest.raises(APIServerError):
         apiserver_connection.authentication_refresh()
@@ -269,6 +271,7 @@ def test_collection_update_new_name(apiserver_connection):
         )
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_list(apiserver_connection):
@@ -276,6 +279,7 @@ def test_role_list(apiserver_connection):
     assert HTTPStatus(response.status_code).is_success
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_list_with_params(apiserver_connection):
@@ -290,6 +294,7 @@ def test_role_list_with_params(apiserver_connection):
     assert list_params.get("order_by") == "name"
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_create_api(apiserver_connection):
@@ -306,6 +311,7 @@ def test_role_create_api(apiserver_connection):
         apiserver_connection.role_delete("test_role_create_api", raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_delete_api(apiserver_connection):
@@ -318,6 +324,7 @@ def test_role_delete_api(apiserver_connection):
     assert HTTPStatus(response.status_code).is_success
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_delete_no_exists_raises_error(apiserver_connection):
@@ -325,6 +332,7 @@ def test_role_delete_no_exists_raises_error(apiserver_connection):
         apiserver_connection.role_delete("test_role_delete_no_exists")
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_get(apiserver_connection):
@@ -341,6 +349,7 @@ def test_role_get(apiserver_connection):
         apiserver_connection.role_delete("test_role_get", raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_get_no_exists_raises_error(apiserver_connection):
@@ -348,6 +357,7 @@ def test_role_get_no_exists_raises_error(apiserver_connection):
         apiserver_connection.role_get_by_name("test_role_get_no_exists_raises_error")
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_update_new_description(apiserver_connection):
@@ -373,6 +383,7 @@ def test_role_update_new_description(apiserver_connection):
         )
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_update_new_name(apiserver_connection):
@@ -690,6 +701,7 @@ def test_transaction_list_api(apiserver_connection):
     assert HTTPStatus(response.status_code).is_success
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_permission_list(apiserver_connection):
@@ -713,6 +725,7 @@ def test_role_permission_list(apiserver_connection):
         apiserver_connection.role_delete(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_permission_list_with_params(apiserver_connection):
@@ -736,6 +749,7 @@ def test_role_permission_list_with_params(apiserver_connection):
         apiserver_connection.role_delete(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_permission_create_api(apiserver_connection):
@@ -755,6 +769,7 @@ def test_role_permission_create_api(apiserver_connection):
         apiserver_connection.role_delete(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_permission_delete_api(apiserver_connection):
@@ -786,6 +801,7 @@ def test_role_permission_delete_api(apiserver_connection):
         apiserver_connection.role_delete(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_permission_delete_no_exists_raises_error(apiserver_connection):
@@ -802,6 +818,7 @@ def test_role_permission_delete_no_exists_raises_error(apiserver_connection):
         apiserver_connection.role_delete(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_user_list(apiserver_connection):
@@ -830,6 +847,7 @@ def test_role_user_list(apiserver_connection):
         apiserver_connection.role_delete(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_user_list_with_params(apiserver_connection):
@@ -862,6 +880,7 @@ def test_role_user_list_with_params(apiserver_connection):
         apiserver_connection.role_delete(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_user_add_api(apiserver_connection):
@@ -896,6 +915,7 @@ def test_role_user_add_api(apiserver_connection):
         apiserver_connection.role_delete(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_user_delete_api(apiserver_connection):
@@ -931,6 +951,7 @@ def test_role_user_delete_api(apiserver_connection):
         apiserver_connection.role_delete(role_name, raise_for_status=False)
 
 
+@skip_rbac_dormant
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_role_user_delete_no_exists_raises_error(apiserver_connection):

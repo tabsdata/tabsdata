@@ -298,8 +298,13 @@ def _notify_status(
         reraise=True,
     )
     def post(request: urllib.request.Request) -> None:
-        with urllib.request.urlopen(request) as response:
-            response.read()
+        try:
+            with urllib.request.urlopen(request) as response:
+                response.read()
+        except urllib.error.HTTPError as error:
+            body = error.read().decode("utf-8", errors="replace")
+            error.msg = f"{error.msg}: {body}" if body else error.msg
+            raise
 
     url = resolve_value(args.responder_url)
     method = resolve_value(args.responder_method)

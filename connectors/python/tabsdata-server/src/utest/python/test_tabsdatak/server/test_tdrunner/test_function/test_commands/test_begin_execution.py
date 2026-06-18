@@ -67,30 +67,34 @@ def _required_args(
     )
 
 
-def test_main_writes_journal_yaml(monkeypatch, tmp_path):
+def test_main_writes_journal_yaml(monkeypatch, tmp_path, http_ok_url):
     journal_file = tmp_path / "journal.yaml"
-    before = int(datetime.now(tz=timezone.utc).timestamp())
+    before = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
     _required_args(
         monkeypatch,
         journal_file=journal_file,
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == 0
     written = yaml.safe_load(journal_file.read_text())
     assert isinstance(written, dict)
-    assert set(written) == {"start"}
-    after = int(datetime.now(tz=timezone.utc).timestamp())
-    # start is unix-epoch seconds, captured at command time.
+    assert set(written) == {"start", "end"}
+    # begin-execution only stamps `start`; `end` is filled by a later step.
+    assert written["end"] is None
+    after = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+    # start is unix-epoch milliseconds, captured at command time.
     assert before <= written["start"] <= after
 
 
-def test_main_creates_parent_folders_when_absent(monkeypatch, tmp_path):
+def test_main_creates_parent_folders_when_absent(monkeypatch, tmp_path, http_ok_url):
     nested = tmp_path / "deep" / "nested" / "path" / "journal.yaml"
     assert not nested.parent.exists()
     _required_args(
         monkeypatch,
         journal_file=nested,
         liveness=tmp_path / "live",
+        responder_url=http_ok_url,
     )
     assert main() == 0
     assert nested.is_file()

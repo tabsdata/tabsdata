@@ -526,6 +526,7 @@ mod tests {
         let expected = vec![
             "bundles",
             "collections",
+            "connections",
             "dependencies",
             "dependencies_current",
             "executions",
@@ -826,8 +827,8 @@ mod tests {
     #[tokio::test]
     async fn test_rls_project_isolation() {
         const INSERT: &str = "INSERT INTO collections \
-            (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path) \
-            VALUES ($1, $2, 'd', now(), 'u', now(), 'u', 'g', '/')";
+            (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type) \
+            VALUES ($1, $2, 'd', now(), 'u', now(), 'u', 'g', '/', 'F')";
         const SET_PROJECT: &str = "SELECT set_config('app.project_id', $1, true)";
         const COUNT: &str = "SELECT count(*) FROM collections";
 
@@ -852,6 +853,22 @@ mod tests {
             format!("ALTER ROLE app_user SET search_path TO \"{schema}\""),
         ] {
             sqlx::query(&stmt).execute(&su).await.unwrap();
+        }
+
+        // Collections carry a composite FK (project_id, group_id) -> groups, so
+        // seed a group 'g' in both projects the test tags rows with. Inserted as
+        // the bootstrap (superuser) role, which bypasses RLS; the bootstrap role
+        // has no search_path set, so the table is schema-qualified.
+        for project_id in ["A", "B"] {
+            sqlx::query(&format!(
+                "INSERT INTO \"{schema}\".groups \
+                 (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) \
+                 VALUES ('g', $1, 'g', 'd', now(), 'u', now(), 'u', false)"
+            ))
+            .bind(project_id)
+            .execute(&su)
+            .await
+            .unwrap();
         }
 
         // Connect a second pool as the app role.
@@ -905,8 +922,8 @@ mod tests {
             .unwrap();
         let bad = sqlx::query(
             "INSERT INTO collections \
-             (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, project_id) \
-             VALUES ('x', 'x', 'd', now(), 'u', now(), 'u', 'g', '/', 'A')",
+             (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type, project_id) \
+             VALUES ('x', 'x', 'd', now(), 'u', now(), 'u', 'g', '/', 'F', 'A')",
         )
         .execute(&mut *t)
         .await;
@@ -1039,9 +1056,19 @@ mod tests {
             let DynamicConnection::Postgres(h) = &mut c else {
                 unreachable!()
             };
+            // Collections carry a composite FK (project_id, group_id) -> groups,
+            // so seed group 'g' in project A before the collection insert.
             sqlx::query(
-                "INSERT INTO collections (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path) \
-                 VALUES ('col', 'c', 'd', now(), 'u', now(), 'u', 'g', '/')",
+                "INSERT INTO groups \
+                 (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) \
+                 VALUES ('g', 'A', 'g', 'd', now(), 'u', now(), 'u', false)",
+            )
+            .execute(&mut **h)
+            .await
+            .unwrap();
+            sqlx::query(
+                "INSERT INTO collections (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type) \
+                 VALUES ('col', 'c', 'd', now(), 'u', now(), 'u', 'g', '/', 'F')",
             )
             .execute(&mut **h)
             .await
