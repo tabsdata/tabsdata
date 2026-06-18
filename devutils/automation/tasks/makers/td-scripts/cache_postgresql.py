@@ -51,6 +51,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 THESEUS_REPOSITORY = "theseus-rs/postgresql-binaries"
 RELEASES_API = f"https://api.github.com/repos/{THESEUS_REPOSITORY}/releases/latest"
+
+PINNED_VERSION = "18.4.0"
 RELEASE_DOWNLOAD = (
     f"https://github.com/{THESEUS_REPOSITORY}/releases/download"
     "/{version}/postgresql-{version}-{target}.tar.gz"
@@ -163,7 +165,7 @@ class Report:
             lines.append(row("error", self.error))
         lines.append(footer)
 
-        emit_logger = logger.error if self.error else logger.info
+        emit_logger = logger.error if self.error else logger.debug
         for line in lines:
             emit_logger(line)
 
@@ -271,17 +273,24 @@ def open_url(url: str, accept: str | None = None):
     )
 
 
-def fetch_latest_version(report: Report) -> str:
-    pinned = os.getenv("TD_POSTGRESQL_VERSION")
-    if pinned:
-        report.version_pin_environment = pinned
-        report.version = pinned
-        report.version_source = "TD_POSTGRESQL_VERSION (environment pin)"
+def resolve_version(report: Report) -> str:
+    override = os.getenv("TD_POSTGRESQL_VERSION")
+    if override:
+        report.version_pin_environment = override
+        report.version = override
+        report.version_source = "TD_POSTGRESQL_VERSION (environment override)"
         logger.debug(
-            f"Using PostgreSQL version pin from TD_POSTGRESQL_VERSION: {pinned}"
+            f"Using PostgreSQL version override from TD_POSTGRESQL_VERSION: {override}"
         )
-        return pinned
+        return override
 
+    report.version = PINNED_VERSION
+    report.version_source = "PINNED_VERSION (cache_postgresql.py)"
+    logger.debug(f"Using pinned PostgreSQL version: {PINNED_VERSION}")
+    return PINNED_VERSION
+
+
+def fetch_latest_version(report: Report) -> str:
     logger.debug(f"Resolving latest PostgreSQL version from: {RELEASES_API}")
     last_error: Exception | None = None
     with Progress(
@@ -292,7 +301,8 @@ def fetch_latest_version(report: Report) -> str:
     ) as progress:
         for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
             description = (
-                f"resolve latest version attempt {attempt}/{DOWNLOAD_ATTEMPTS}"
+                f"Resolve latest postgresql embedded version attempt "
+                f"{attempt}/{DOWNLOAD_ATTEMPTS}"
             )
             task = progress.add_task(description, total=None)
             try:
@@ -350,11 +360,14 @@ def download(url: str, destination: Path, report: Report) -> None:
     ) as progress:
         for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
             report.download_attempts_used = attempt
-            description = f"download attempt {attempt}/{DOWNLOAD_ATTEMPTS}"
+            description = (
+                f"PostgreSQL {PINNED_VERSION} download attempt "
+                f"{attempt}/{DOWNLOAD_ATTEMPTS}"
+            )
             task = progress.add_task(description, total=None)
             logger.debug(
-                "Downloading PostgreSQL archive"
-                f" (attempt {attempt}/{DOWNLOAD_ATTEMPTS}): {url}"
+                "Downloading PostgreSQL {PINNED_VERSION} archive "
+                f"(attempt {attempt}/{DOWNLOAD_ATTEMPTS}): {url}"
             )
             try:
                 with open_url(url) as response, open(temporary, "wb") as output_file:
@@ -404,7 +417,7 @@ def cache_directory() -> Path:
 
 def run(report: Report) -> None:
     target = resolve_target_triple(report)
-    version = fetch_latest_version(report)
+    version = resolve_version(report)
 
     cache_directory_path = cache_directory()
     report.cache_directory = cache_directory_path

@@ -20,3 +20,4 @@ RUST_BACKTRACE = "1"
 RUST_LOG = "error"
 RUSTDOC_LOG = "error"
 SWAGGER_UI_OVERWRITE_FOLDER = { value = "server/binaries/td-server/resources/swagger", relative = true, force = true }
+POSTGRESQL_VERSION = "=18.4.0"

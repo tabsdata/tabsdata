@@ -11,7 +11,7 @@
 
 use crate::config::EmbeddedConfig;
 use crate::error::DbError;
-use postgresql_embedded::{PostgreSQL, Settings};
+use postgresql_embedded::{PostgreSQL, Settings, VersionReq};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
@@ -21,6 +21,10 @@ use url::Url;
 /// `Settings::default()` regenerates a random password on every call, which
 /// would not match what `initdb` baked into the existing catalog — so we
 /// own the password lifecycle for the persistent case.
+/// Exact embedded PostgreSQL version. Must match the bundled archive selected
+/// at build time via `POSTGRESQL_VERSION` in `.cargo/config.toml`.
+const EMBEDDED_POSTGRES_VERSION: &str = "=18.4.0";
+
 const PASSWORD_FILE: &str = ".td_embedded_password";
 
 const OWNER_PASSWORD_FILE_PREFIX: &str = ".td_embedded_owner_password.";
@@ -107,6 +111,8 @@ impl Drop for EmbeddedPostgres {
 /// Boot a fresh embedded Postgres and return its [`EmbeddedPostgres`] handle.
 pub async fn start(cfg: &EmbeddedConfig) -> Result<(EmbeddedPostgres, Url), DbError> {
     let mut settings = Settings {
+        version: VersionReq::parse(EMBEDDED_POSTGRES_VERSION)
+            .expect("EMBEDDED_POSTGRES_VERSION must be a valid version requirement"),
         temporary: !cfg.persistent,
         ..Settings::default()
     };
