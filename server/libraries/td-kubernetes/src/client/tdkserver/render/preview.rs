@@ -61,6 +61,27 @@ pub fn restart_server(summary: &Summary) {
     render_summary_lines(summary);
 }
 
+pub fn init_service(
+    instance: &str,
+    instance_defaulted: bool,
+    provider: &str,
+    provider_defaulted: bool,
+) {
+    info!("About to initialize tabsdata instance:");
+    info!(
+        "  - instance.....: {instance}{}",
+        default_marker(instance_defaulted)
+    );
+    info!(
+        "  - provider.....: {provider}{}",
+        default_marker(provider_defaulted)
+    );
+}
+
+fn default_marker(defaulted: bool) -> &'static str {
+    if defaulted { " (default)" } else { "" }
+}
+
 pub fn create_service(summary: &Summary) {
     info!("About to create tabsdata instance:");
     render_summary_lines(summary);

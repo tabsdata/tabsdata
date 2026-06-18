@@ -80,6 +80,7 @@ colored = { workspace = true }
 const_format = { workspace = true }
 dirs = { workspace = true }
 futures = { workspace = true }
+homedir = { workspace = true }
 humantime = { workspace = true }
 indicatif = { workspace = true }
 k8s-openapi = { workspace = true, features = ["latest"] }

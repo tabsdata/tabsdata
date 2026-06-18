@@ -15,6 +15,7 @@ use std::future::Future;
 use async_trait::async_trait;
 use clap_derive::ValueEnum;
 use indicatif::MultiProgress;
+use serde::{Deserialize, Serialize};
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 use kube::Config;
@@ -67,7 +68,8 @@ const AXES: &[Axis] = &[Axis {
     known: PROVIDER_VALUES,
 }];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ClusterProvider {
     Kminus,
     Docker,

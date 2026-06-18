@@ -67,6 +67,9 @@ pub const KIND_MANIFEST: &str = "manifest";
 pub const SINGLETON_ID_TABSDATA: &str = "tabsdata";
 pub const SINGLETON_NAME_MANIFEST: &str = "manifest.yaml";
 
+pub const INIT_FOLDER: &str = "init";
+pub const SETTINGS_FILE: &str = ".settings.json";
+
 pub const PROGRAM_TD_RESOURCE: &str = "td_resource";
 
 pub const DEFAULT_INSTANCE_NAME: &str = "tabsdata";

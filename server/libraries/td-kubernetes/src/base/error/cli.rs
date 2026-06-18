@@ -34,6 +34,10 @@ pub enum CliError {
     FileReadFailed { file: String, cause: String } = 5006,
     #[error("File '{file}' is not valid UTF-8: {cause}.")]
     FileNotUtf8 { file: String, cause: String } = 5007,
+    #[error("Could not parse file '{file}': {cause}.")]
+    FileParseFailed { file: String, cause: String } = 5008,
+    #[error("Could not serialize file '{file}': {cause}.")]
+    FileSerializeFailed { file: String, cause: String } = 5009,
 }
 
 #[cfg(test)]

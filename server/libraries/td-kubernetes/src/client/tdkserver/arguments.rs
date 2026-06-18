@@ -22,6 +22,7 @@ use crate::client::tdkserver::commands::service::restart::RestartArguments;
 use crate::client::tdkserver::commands::service::start::StartArguments;
 use crate::client::tdkserver::commands::service::stop::StopArguments;
 use crate::client::tdkserver::commands::session::SessionCommands;
+use crate::client::tdkserver::commands::template::TemplateCommands;
 use crate::runtime::provider::ClusterProvider;
 
 #[derive(Debug, Clone, Parser)]
@@ -95,6 +96,8 @@ pub enum Commands {
     Status(InstanceNameArguments),
     #[command(about = "Initialize, create and start a tabsdata instance in one step")]
     Quickstart(QuickstartArguments),
+    #[command(subcommand, about = "Manage tabsdata templates")]
+    Template(TemplateCommands),
     #[command(subcommand, about = "Manage tabsdata configs")]
     Config(ConfigCommands),
     #[command(subcommand, about = "Manage tabsdata secrets")]

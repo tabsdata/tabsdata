@@ -12,9 +12,8 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use indicatif::MultiProgress;
 use once_cell::sync::OnceCell;
-use td_common::env::TABSDATA_HOME_DIR;
 use td_common::os::name_program;
-use td_common::settings::{DEFAULT_INSTANCE, INSTANCES_FOLDER};
+use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::NoAction;
 use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;
@@ -26,6 +25,7 @@ use crate::base::constants::{
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
+use crate::client::registry::instances_root;
 use crate::client::session::pin::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
@@ -107,10 +107,7 @@ impl KminusProvider {
             path: instance.path.clone(),
         };
 
-        let instances_root = dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("/"))
-            .join(TABSDATA_HOME_DIR)
-            .join(INSTANCES_FOLDER);
+        let instances_root = instances_root()?;
         let (name, folder) = match (instance.name.as_deref(), instance.path.as_deref()) {
             (None, None) => {
                 let name = DEFAULT_INSTANCE.to_string();

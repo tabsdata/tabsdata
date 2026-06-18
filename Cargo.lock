@@ -9215,6 +9215,7 @@ dependencies = [
  "const_format",
  "dirs",
  "futures",
+ "homedir",
  "humantime",
  "indicatif",
  "k8s-openapi",
