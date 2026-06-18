@@ -31,6 +31,47 @@ spec:
     # runAsUser: 1000     # enable after confirming image's USER and filesystem ownership
     # runAsGroup: 1000    # enable together with runAsUser
     # fsGroup: 1000       # only relevant once Pod has volumes
+  initContainers:
+    - name: dbready
+      image: tabsdata/kube/tabsdata:2.0.0
+      imagePullPolicy: IfNotPresent
+      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/bin/td_dbready"]
+      args:
+        - --config-file
+        - /tabsdata/config/apiserver.database.yaml
+        - --log-config-py
+        - /tabsdata/config/tabsdata.log.py.yaml
+        - --log-config-rs
+        - /tabsdata/config/apiserver.log.yaml
+        - --timeout
+        - "600"
+        - --interval
+        - "2"
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "32Mi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      env:
+        - name: CONTAINER_ROOT
+          value: ""
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_TABSDATA_INSTANCE
+          value: "${sys:TDK_INSTANCE_NAME}"
+      volumeMounts:
+        - name: config
+          mountPath: /tabsdata/config
+          readOnly: true
   containers:
     - name: apiserver
       image: tabsdata/kube/tabsdata:2.0.0
@@ -51,7 +92,7 @@ spec:
           protocol: TCP
         - name: private-http
           containerPort: 2458
-          protocol: TCP	  
+          protocol: TCP
       resources:
         requests:
           cpu: "100m"
@@ -118,5 +159,7 @@ spec:
               name: td-app-apiserver-config-apiserver.storage.yaml
           - configMap:
               name: td-app-apiserver-config-apiserver.log.yaml
+          - configMap:
+              name: td-app-tabsdata-config-tabsdata.log.py.yaml
           - configMap:
               name: td-app-tabsdata-config-tabsdata.yaml

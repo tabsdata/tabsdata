@@ -34,7 +34,7 @@ ARG_TIMEOUT = "--timeout"
 ARG_INTERVAL = "--interval"
 
 PROG = "td_apiready"
-DESCRIPTION = "Wait until the apiserver is reachable."
+DESCRIPTION = "Wait until the apiserver becomes reachable."
 CONFIG_FILE_HELP = "Path to an apiserver configuration file. Repeatable."
 LOG_CONFIG_HELP = "Path to a logging configuration YAML for this worker."
 TIMEOUT_HELP = "Maximum number of seconds to wait for the apiserver."
@@ -79,13 +79,13 @@ class ApiReady(PollWorker):
                 if response.status == HTTP_OK:
                     return True
                 logger.debug(
-                    f"Attempt {self.attempts}: apiserver returned status "
+                    f"Attempt {self.attempts}: the apiserver returned status "
                     f"{response.status} at {self.url} [elapsed {elapsed:.1f}s]."
                 )
                 return False
         except (urllib.error.URLError, OSError) as urlerror:
             logger.debug(
-                f"Attempt {self.attempts}: apiserver not ready at {self.url} "
+                f"Attempt {self.attempts}: the apiserver is not ready at {self.url} "
                 f"({urlerror}) [elapsed {elapsed:.1f}s]."
             )
             return False
@@ -131,24 +131,24 @@ def main() -> int:
         interval=args.interval,
     )
     logger.info(
-        f"Polling apiserver readiness at {worker.url} "
+        f"Polling the apiserver for readiness at {worker.url} "
         f"(timeout={args.timeout}s, interval={args.interval}s)."
     )
     code = worker.run()
     elapsed = time.monotonic() - worker.started
     if code == ExitCode.SUCCESS:
         logger.info(
-            f"Apiserver is ready at {worker.url} after {worker.attempts} "
+            f"The apiserver is ready at {worker.url} after {worker.attempts} "
             f"attempts ({elapsed:.1f}s)."
         )
     elif code == ExitCode.ABORTED:
         logger.warning(
-            f"Apiserver readiness polling at {worker.url} was aborted after "
+            f"Polling the apiserver for readiness at {worker.url} was aborted after "
             f"{worker.attempts} attempts ({elapsed:.1f}s)."
         )
     else:
         logger.warning(
-            f"Apiserver was not ready at {worker.url} after {worker.attempts} "
+            f"The apiserver was not ready at {worker.url} after {worker.attempts} "
             f"attempts ({elapsed:.1f}s)."
         )
     return code

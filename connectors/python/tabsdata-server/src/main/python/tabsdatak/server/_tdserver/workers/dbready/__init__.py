@@ -9,6 +9,8 @@ import logging
 import sys
 import time
 
+import yaml
+
 from tabsdatak._logging import setup_logging
 from tabsdatak.common._interpreter.python.binary import Binary, current_scripts_dir
 from tabsdatak.common._runtime.worker.error import ExitCode, WorkerErrorCode
@@ -17,6 +19,10 @@ from tabsdatak.common._runtime.worker.poll import PollWorker
 logger = logging.getLogger(__name__)
 
 APISERVER_BINARY = "td_apiserver"
+
+DATABASE_KEY = "database"
+MODE_KEY = "mode"
+IN_PROCESS_MODES = ("embedded", "sidecar")
 
 ARG_CONFIG_FILE = "--config-file"
 ARG_DB_SCHEMA = "--db-schema"
@@ -29,7 +35,7 @@ ARG_TIMEOUT = "--timeout"
 ARG_INTERVAL = "--interval"
 
 PROG = "td_dbready"
-DESCRIPTION = "Wait until the database is reachable."
+DESCRIPTION = "Wait until the database becomes reachable."
 CONFIG_FILE_HELP = "Path to a database configuration file. Repeatable."
 LOG_CONFIG_PY_HELP = "Path to a logging configuration YAML for this worker."
 LOG_CONFIG_RS_HELP = "Path to a logging configuration YAML forwarded to the apiserver."
@@ -74,7 +80,7 @@ class DbReady(PollWorker):
             return True
         elapsed = time.monotonic() - self.started
         logger.debug(
-            f"Attempt {self.attempts}: database not ready via {' '.join(argv)} "
+            f"Attempt {self.attempts}: the database is not ready via {' '.join(argv)} "
             f"(status {completed.returncode}) [elapsed {elapsed:.1f}s]."
         )
         return False
@@ -117,9 +123,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def database_mode(config_files: list[str]) -> str | None:
+    mode: str | None = None
+    for config_file in config_files:
+        with open(config_file, encoding="utf-8") as handle:
+            loaded = yaml.safe_load(handle) or {}
+        database = loaded.get(DATABASE_KEY)
+        if isinstance(database, dict) and MODE_KEY in database:
+            mode = database[MODE_KEY]
+    return mode
+
+
 def main() -> int:
     args = build_parser().parse_args()
     setup_logging(args.log_config_py)
+    mode = database_mode(args.config_file)
+    if mode in IN_PROCESS_MODES:
+        logger.info(
+            f"Polling the database for readiness was skipped: the database runs "
+            f"in-process (mode '{mode}'), so there is no separate server to wait for."
+        )
+        return int(ExitCode.SUCCESS)
     worker = DbReady(
         config_files=args.config_file,
         log_config_rs=args.log_config_rs,
@@ -127,7 +151,7 @@ def main() -> int:
         interval=args.interval,
     )
     logger.info(
-        f"Polling database readiness via {APISERVER_BINARY} "
+        f"Polling the database for readiness via {APISERVER_BINARY} "
         f"(configs={args.config_file}, timeout={args.timeout}s, "
         f"interval={args.interval}s)."
     )
@@ -135,16 +159,17 @@ def main() -> int:
     elapsed = time.monotonic() - worker.started
     if code == ExitCode.SUCCESS:
         logger.info(
-            f"Database is ready after {worker.attempts} attempts ({elapsed:.1f}s)."
+            f"The database is ready after {worker.attempts} attempts ({elapsed:.1f}s)."
         )
     elif code == ExitCode.ABORTED:
         logger.warning(
-            f"Database readiness polling was aborted after {worker.attempts} "
+            f"Polling the database for readiness was aborted after {worker.attempts} "
             f"attempts ({elapsed:.1f}s)."
         )
     else:
         logger.warning(
-            f"Database was not ready after {worker.attempts} attempts ({elapsed:.1f}s)."
+            f"The database was not ready after {worker.attempts} "
+            f"attempts ({elapsed:.1f}s)."
         )
     return code
 
