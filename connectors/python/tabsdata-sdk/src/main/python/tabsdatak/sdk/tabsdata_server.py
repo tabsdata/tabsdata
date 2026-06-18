@@ -2364,8 +2364,7 @@ SIMPLE_RBAC_ONLY_WILDCARD_TYPES = [
 ]
 
 RBAC_ONLY_WILDCARD_MESSAGE = (
-    "org-wide view/develop is RBAC Mode View only; grant per project or use "
-    "RBAC Mode."
+    "org-wide view/develop is RBAC Mode View only; grant per project or use RBAC Mode."
 )
 
 
@@ -2383,7 +2382,10 @@ class SimplePermission:
         self.kwargs = kwargs
 
     def __repr__(self) -> str:
-        return f"SimplePermission(permission={self.permission!r}, project={self.project!r})"
+        return (
+            f"SimplePermission(permission={self.permission!r}, "
+            f"project={self.project!r})"
+        )
 
 
 class SimpleProjectAccess:

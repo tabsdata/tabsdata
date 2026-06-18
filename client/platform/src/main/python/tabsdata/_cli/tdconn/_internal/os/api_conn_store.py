@@ -114,4 +114,3 @@ class ApiConnStore(ConnStore):
             for collection in collections
             if collection.get("connection_id")
         )
-

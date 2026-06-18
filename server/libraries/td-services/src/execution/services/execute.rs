@@ -482,19 +482,18 @@ pub(crate) mod tests {
             .build()?;
         let _ = db.scoped(p).seed().function(collection, &create).await?;
 
-        let request =
-            RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .create(
-                    FunctionParam::builder()
-                        .collection(CollectionIdName::from_str(&collection.name.to_string())?)
-                        .function(FunctionIdName::from_str("consumer")?)
-                        .build()?,
-                    ExecutionRequest::builder()
-                        .name(Some(ExecutionName::try_from("range_dep_execution")?))
-                        .function_only(false)
-                        .build()?,
-                )
-                .in_project(p);
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str(&collection.name.to_string())?)
+                    .function(FunctionIdName::from_str("consumer")?)
+                    .build()?,
+                ExecutionRequest::builder()
+                    .name(Some(ExecutionName::try_from("range_dep_execution")?))
+                    .function_only(false)
+                    .build()?,
+            )
+            .in_project(p);
         ExecuteFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)

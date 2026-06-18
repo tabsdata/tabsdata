@@ -73,8 +73,7 @@ def load_named_conn(named_conn: NamedConn, project_id: str) -> Conn:
         )
     if not project_id:
         raise ValueError(
-            f"No project provided. Cannot resolve named connection "
-            f"'{named_conn.name}'."
+            f"No project provided. Cannot resolve named connection '{named_conn.name}'."
         )
 
     connection_file = os.path.join(

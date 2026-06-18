@@ -164,9 +164,7 @@ def logical_prompt(
         raise click.exceptions.Exit(0)
 
 
-def utils_login(
-    ctx: click.Context, server_url: str, username: str, password: str
-):
+def utils_login(ctx: click.Context, server_url: str, username: str, password: str):
     try:
         obtain_connection(
             server_url,

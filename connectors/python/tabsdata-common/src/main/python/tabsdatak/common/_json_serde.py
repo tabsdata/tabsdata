@@ -230,8 +230,12 @@ def list_refs(dehydrated_data: JsonSerdeData) -> tuple[list[str], list[str]]:
     dehydrated connection carries, for alignment checks against a separately
     supplied secrets/vars set.
     """
-    secret_keys = [_to_key(path) for path, _ in find_by_kind(dehydrated_data, _SECRET_REF_KIND)]
-    var_keys = [_to_key(path) for path, _ in find_by_kind(dehydrated_data, _VAR_REF_KIND)]
+    secret_keys = [
+        _to_key(path) for path, _ in find_by_kind(dehydrated_data, _SECRET_REF_KIND)
+    ]
+    var_keys = [
+        _to_key(path) for path, _ in find_by_kind(dehydrated_data, _VAR_REF_KIND)
+    ]
     return secret_keys, var_keys
 
 
