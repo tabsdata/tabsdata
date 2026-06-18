@@ -22,7 +22,7 @@ use kube::Config;
 use crate::base::constants::KMINUS_MIN_NOFILE;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
-use crate::client::session::pin::{PinContext, Session};
+use crate::client::session::pin::Session;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use std::sync::Arc;
 
@@ -470,11 +470,5 @@ pub async fn provider_for_or_tdkcontext(
     if cluster.provider.is_some() {
         return provider_for(cluster, instance, verbose).await;
     }
-    match PinContext::load()?.session {
-        Some(session) => {
-            let (cluster, instance) = session.to_args();
-            provider_for(cluster, instance, verbose).await
-        }
-        None => Err(ProviderError::NoClusterSpecification.into()),
-    }
+    Err(ProviderError::NoClusterSpecification.into())
 }

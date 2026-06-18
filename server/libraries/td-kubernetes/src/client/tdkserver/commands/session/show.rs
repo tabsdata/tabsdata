@@ -12,9 +12,9 @@ use crate::core::system::exit::CommandResult;
 pub struct ShowArguments {}
 
 pub async fn command_show(_arguments: ShowArguments) -> CommandResult {
-    match PinContext::load()?.session {
-        Some(session) => session.report_active(),
-        None => println!("{}", "No active tabsdata session is set.".dimmed()),
+    match PinContext::pinned_instance() {
+        Some(name) => println!("Pinned tabsdata instance: {name}"),
+        None => println!("{}", "No tabsdata instance is pinned.".dimmed()),
     }
     Ok(())
 }

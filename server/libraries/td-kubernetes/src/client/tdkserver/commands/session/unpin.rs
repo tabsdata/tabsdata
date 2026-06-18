@@ -13,10 +13,10 @@ use crate::cwarn;
 pub struct UnpinArguments {}
 
 pub async fn command_unpin(_arguments: UnpinArguments) -> CommandResult {
-    if PinContext::unpin_session()? {
-        info!("Cleared the active tabsdata session.");
+    if PinContext::unpin_instance()? {
+        info!("Cleared the pinned tabsdata instance.");
     } else {
-        cwarn!("No active tabsdata session is set.");
+        cwarn!("No tabsdata instance is pinned.");
     }
     Ok(())
 }

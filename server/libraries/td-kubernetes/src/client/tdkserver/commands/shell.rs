@@ -152,14 +152,13 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
 }
 
 fn show_initial_active_context() {
-    if let Some(session) = PinContext::read().session {
+    if let Some(name) = PinContext::pinned_instance() {
         info!(
-            "Active tabsdata session: {} (from {}).",
-            session.display_name(),
+            "Pinned tabsdata instance: {name} (from {}).",
             tdkpin_path().display()
         );
     } else {
-        info!("No active tabsdata session is set.");
+        info!("No tabsdata instance is pinned.");
     }
 }
 
@@ -323,11 +322,11 @@ impl ShellPrompt {
 impl Prompt for ShellPrompt {
     fn render_prompt_left(&self) -> Cow<'_, str> {
         let tool = format!("{} ❯", self.tool_name).bold().green().to_string();
-        let label = match PinContext::read().session {
-            Some(session) => format!("[{}]", session.display_name())
+        let label = match PinContext::pinned_instance() {
+            Some(name) => format!("[{name}]")
                 .truecolor(0xCC, 0xB2, 0x33)
                 .to_string(),
-            None => "[no tabsdata session]".dimmed().to_string(),
+            None => "[no tabsdata instance]".dimmed().to_string(),
         };
         Cow::Owned(format!("{label} {tool} "))
     }

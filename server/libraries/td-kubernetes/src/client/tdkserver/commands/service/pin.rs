@@ -2,16 +2,16 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::base::error::provider::ProviderError;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::InstanceNameArguments;
-use crate::core::system::exit::{CommandError, CommandResult};
+use crate::client::tdkserver::commands::session::pin::{
+    PinArguments, command_pin as command_session_pin,
+};
+use crate::core::system::exit::CommandResult;
 
 pub async fn command_pin(
-    _arguments: InstanceNameArguments,
-    _globals: &GlobalArguments,
+    arguments: InstanceNameArguments,
+    globals: &GlobalArguments,
 ) -> CommandResult {
-    Err(CommandError::from(ProviderError::CommandNotImplemented(
-        "pin".to_owned(),
-    )))
+    command_session_pin(PinArguments { instance: arguments }, globals).await
 }

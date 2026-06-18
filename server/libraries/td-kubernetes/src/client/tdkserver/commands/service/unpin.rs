@@ -2,12 +2,13 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::base::error::provider::ProviderError;
 use crate::client::tdkserver::arguments::GlobalArguments;
-use crate::core::system::exit::{CommandError, CommandResult};
+use crate::client::tdkserver::commands::session::unpin::{
+    UnpinArguments, command_unpin as command_session_unpin,
+};
+use crate::core::system::exit::CommandResult;
 
-pub async fn command_unpin(_globals: &GlobalArguments) -> CommandResult {
-    Err(CommandError::from(ProviderError::CommandNotImplemented(
-        "unpin".to_owned(),
-    )))
+pub async fn command_unpin(globals: &GlobalArguments) -> CommandResult {
+    let _ = globals;
+    command_session_unpin(UnpinArguments {}).await
 }

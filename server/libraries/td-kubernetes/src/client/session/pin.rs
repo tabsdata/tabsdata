@@ -15,8 +15,9 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::runtime::provider::ClusterProvider;
 
-const TDKPIN_FILE: &str = "tdkpin.json";
+const SERVER_SESSION_FILE: &str = ".tdserver-session.json";
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct KminusInputs {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -25,6 +26,7 @@ pub struct KminusInputs {
     pub path: Option<PathBuf>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DockerInputs {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -37,12 +39,15 @@ pub struct DockerInputs {
     pub namespace: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct EksInputs {}
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FargateInputs {}
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "provider", rename_all = "lowercase")]
 pub enum Session {
@@ -79,18 +84,35 @@ pub struct Autoconfirm {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PinContext {
+pub struct InstancePin {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Pins {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<Session>,
+    pub instance: Option<InstancePin>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PinContext {
+    #[serde(default, skip_serializing_if = "Pins::is_empty")]
+    pub pins: Pins,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub autoconfirm: Option<Autoconfirm>,
+}
+
+impl Pins {
+    fn is_empty(&self) -> bool {
+        self.instance.is_none()
+    }
 }
 
 pub fn tdkpin_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(TABSDATA_HOME_DIR)
-        .join(TDKPIN_FILE)
+        .join(SERVER_SESSION_FILE)
 }
 
 impl PinContext {
@@ -110,7 +132,7 @@ impl PinContext {
             Ok(pin_context) => Ok(pin_context),
             Err(error) => {
                 cerror!(
-                    "Failed to parse '{}': {error}. Run 'tdkserver session unpin' to clear the active tabsdata session.",
+                    "Failed to parse '{}': {error}. Run 'tdkserver unpin' to clear the pinned tabsdata instance.",
                     path.display()
                 );
                 abort(GeneralError)
@@ -149,7 +171,7 @@ impl PinContext {
     }
 
     fn delete_if_empty(&self) -> CommandResult {
-        if self.session.is_none() && self.autoconfirm.is_none() {
+        if self.pins.is_empty() && self.autoconfirm.is_none() {
             let path = tdkpin_path();
             if path.exists()
                 && let Err(error) = fs::remove_file(&path)
@@ -162,18 +184,22 @@ impl PinContext {
         self.save()
     }
 
-    pub fn pin_session(session: Session) -> CommandResult {
+    pub fn pin_instance(name: String) -> CommandResult {
         let mut pin = Self::load()?;
-        pin.session = Some(session);
+        pin.pins.instance = Some(InstancePin { name });
         pin.save()
     }
 
-    pub fn unpin_session() -> CommandResult<bool> {
+    pub fn unpin_instance() -> CommandResult<bool> {
         let mut pin = Self::load()?;
-        let existed = pin.session.is_some();
-        pin.session = None;
+        let existed = pin.pins.instance.is_some();
+        pin.pins.instance = None;
         pin.delete_if_empty()?;
         Ok(existed)
+    }
+
+    pub fn pinned_instance() -> Option<String> {
+        Self::read().pins.instance.map(|instance| instance.name)
     }
 
     pub fn pin_autoconfirm(enabled: bool) -> CommandResult {

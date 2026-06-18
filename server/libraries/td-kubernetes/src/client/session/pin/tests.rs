@@ -36,11 +36,11 @@ fn sample_kminus() -> Session {
 }
 
 #[test]
-fn tdkpin_path_ends_with_tdkpin_json() {
+fn tdkpin_path_ends_with_server_session_file() {
     let path = tdkpin_path();
     assert_eq!(
         path.file_name().and_then(|name| name.to_str()),
-        Some(TDKPIN_FILE)
+        Some(SERVER_SESSION_FILE)
     );
 }
 
