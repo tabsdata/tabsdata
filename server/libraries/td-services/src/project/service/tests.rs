@@ -127,7 +127,7 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
         .await?;
     db.seed()
         .permission(
-            PermissionType::ViewProject,
+            PermissionType::view_project(),
             None,
             Some(EntityId::try_from(alpha.id)?),
             &alpha_viewers,
@@ -247,17 +247,17 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
         (
             RoleKind::ProjectAdmin,
             "rocket_admin",
-            PermissionType::ManageProject,
+            PermissionType::manage_project(),
         ),
         (
             RoleKind::ProjectDev,
             "rocket_dev",
-            PermissionType::DevelopProject,
+            PermissionType::develop_project(),
         ),
         (
             RoleKind::ProjectView,
             "rocket_view",
-            PermissionType::ViewProject,
+            PermissionType::view_project(),
         ),
     ];
 
@@ -278,7 +278,7 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
             perm.permission_type, permission_type,
             "{role_name} permission"
         );
-        assert_eq!(perm.entity_type, PermissionEntityType::Project);
+        assert_eq!(perm.entity_type, PermissionEntityType::project());
         assert_eq!(
             perm.entity_id, entity_id,
             "{role_name} entity is the project"

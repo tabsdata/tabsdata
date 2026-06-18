@@ -45,6 +45,8 @@ fn service() {
         // adding a permission to it from the user surface.
         from_fn(assert_role_is_not_fixed),
         from_fn(With::<RoleDB>::update::<PermissionDBBuilder, _>),
+        // build_permission_db derives entity_type from the authorization
+        // registry, so an unregistered permission is already rejected here.
         from_fn(With::<PermissionDBBuilder>::build_permission_db),
         // Authorize by the permission's target: manage_access on the system, or
         // manage_project on the target project (single-project permissions only).
@@ -117,7 +119,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_create_permission(db: TdPool) -> Result<(), TdError> {
         let create = PermissionCreate::builder()
-            .permission_type(PermissionType::ManageAccess)
+            .permission_type(PermissionType::manage_access())
             .try_entity_name(None)
             .unwrap()
             .build()?;
@@ -160,7 +162,7 @@ mod tests {
         let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::ManageProject,
+                PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
@@ -168,7 +170,7 @@ mod tests {
             .await?;
 
         let create = PermissionCreate::builder()
-            .permission_type(PermissionType::ViewProject)
+            .permission_type(PermissionType::view_project())
             .try_entity_name(Some(EntityName::try_from("p0")?))
             .unwrap()
             .build()?;
@@ -213,7 +215,7 @@ mod tests {
         let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::ManageProject,
+                PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
@@ -228,7 +230,7 @@ mod tests {
         db.seed().user_role(&user.id, &role.id).await?;
 
         let create = PermissionCreate::builder()
-            .permission_type(PermissionType::ViewProject)
+            .permission_type(PermissionType::view_project())
             .try_entity_name(Some(EntityName::try_from("p1")?))
             .unwrap()
             .build()?;
@@ -257,7 +259,7 @@ mod tests {
         use crate::permission::PermissionError;
 
         let create = PermissionCreate::builder()
-            .permission_type(PermissionType::CreateProjects)
+            .permission_type(PermissionType::create_projects())
             .try_entity_name(None)
             .unwrap()
             .build()?;

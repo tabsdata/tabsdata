@@ -128,10 +128,16 @@ impl<'a, 'c> Provider<UserGrants, &'a mut DynamicConnection<'c>> for SqlRbacGran
 /// service context (the `context = SqlRbacSource` argument of the service
 /// factory). The [`crate::rbac::Rbac`] enforcement layer reads it as
 /// `Ref<SqlRbacSource>`.
-#[derive(Default)]
 pub struct SqlRbacSource {
     provider: CachedProvider<UserGrants, SqlRbacGrantsProvider>,
     empty: Arc<Grants>,
+    registry: Arc<AuthzRegistry>,
+}
+
+impl Default for SqlRbacSource {
+    fn default() -> Self {
+        Self::with_registry(Arc::new(AuthzRegistry::default()))
+    }
 }
 
 impl SqlRbacSource {
@@ -140,9 +146,17 @@ impl SqlRbacSource {
     /// uses the built-in kinds.
     pub fn with_registry(registry: Arc<AuthzRegistry>) -> Self {
         Self {
-            provider: CachedProvider::cache(SqlRbacGrantsProvider::new(registry)),
+            provider: CachedProvider::cache(SqlRbacGrantsProvider::new(registry.clone())),
             empty: Arc::new(Grants::new()),
+            registry,
         }
+    }
+
+    /// The authorization registry backing this source — the registered entity
+    /// kinds and their permissions. Used to validate a grant request's
+    /// `(entity_type, permission)` against the registered (valid) set.
+    pub fn registry(&self) -> &AuthzRegistry {
+        &self.registry
     }
 }
 

@@ -391,46 +391,75 @@ pub enum GlobalStatus {
 
 /// The entity type a permission targets — the `entity_type` half of the
 /// `(entity_type, entity_id)` pair.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
-pub enum PermissionEntityType {
-    #[typed_enum(rename = "system")]
-    System,
-    #[typed_enum(rename = "project")]
-    Project,
+///
+/// An open string (not a closed enum): the built-in OS entity types are
+/// `system` and `project`, but extensions register their own (e.g. `ai`) in the
+/// authorization registry. The set of *valid* values is whatever the registry
+/// has registered — validated at the grant-create boundary, not by this type.
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq, Hash)]
+pub struct PermissionEntityType;
+
+impl PermissionEntityType {
+    /// The built-in `system` entity type.
+    pub fn system() -> Self {
+        Self::try_from("system").expect("built-in entity type")
+    }
+
+    /// The built-in `project` entity type.
+    pub fn project() -> Self {
+        Self::try_from("project").expect("built-in entity type")
+    }
 }
 
-/// A permission name, stored in `permissions.permission_type`. Three target the
-/// `system` entity, three target a `project` entity. The stored value is
-/// the exact user-facing symbol — no internal/external translation layer.
-#[ta_objects::typed_enum]
-#[derive(Eq, PartialEq)]
-pub enum PermissionType {
-    // system permissions (entity `system:__system__`)
-    #[typed_enum(rename = "manage_access")]
-    ManageAccess,
-    #[typed_enum(rename = "create_projects")]
-    CreateProjects,
-    #[typed_enum(rename = "manage_roles")]
-    ManageRoles,
-    // project permissions (entity `project:<id>` or `project:__all__`)
-    #[typed_enum(rename = "view_project")]
-    ViewProject,
-    #[typed_enum(rename = "develop_project")]
-    DevelopProject,
-    #[typed_enum(rename = "manage_project")]
-    ManageProject,
-}
+/// A permission name, stored in `permissions.permission_type`. The stored value
+/// is the exact user-facing symbol — no internal/external translation layer.
+///
+/// An open string (not a closed enum): the six built-in OS permissions are
+/// listed below, but extensions register their own (e.g. `manage_ai`) in the
+/// authorization registry. The set of *valid* `(entity_type, permission)` pairs
+/// is whatever the registry has registered — validated at the grant-create
+/// boundary, not by this type.
+#[ta_objects::typed(string)]
+#[derive(Eq, PartialEq, Hash)]
+pub struct PermissionType;
 
 impl PermissionType {
-    pub fn on_entity_type(&self) -> PermissionEntityType {
-        match self {
-            Self::ManageAccess | Self::CreateProjects | Self::ManageRoles => {
-                PermissionEntityType::System
+    // system permissions (entity `system:__system__`)
+    pub fn manage_access() -> Self {
+        Self::try_from("manage_access").expect("built-in permission")
+    }
+    pub fn create_projects() -> Self {
+        Self::try_from("create_projects").expect("built-in permission")
+    }
+    pub fn manage_roles() -> Self {
+        Self::try_from("manage_roles").expect("built-in permission")
+    }
+    // project permissions (entity `project:<id>` or `project:__all__`)
+    pub fn view_project() -> Self {
+        Self::try_from("view_project").expect("built-in permission")
+    }
+    pub fn develop_project() -> Self {
+        Self::try_from("develop_project").expect("built-in permission")
+    }
+    pub fn manage_project() -> Self {
+        Self::try_from("manage_project").expect("built-in permission")
+    }
+
+    /// The entity type a *built-in* permission targets, or `None` for a
+    /// permission unknown to the OS core (e.g. an extension permission). The
+    /// authoritative mapping for extension permissions lives in the
+    /// authorization registry; this covers only the built-ins, which is all the
+    /// OS-core create/translation paths handle.
+    pub fn on_entity_type(&self) -> Option<PermissionEntityType> {
+        match self.as_str() {
+            "manage_access" | "create_projects" | "manage_roles" => {
+                Some(PermissionEntityType::system())
             }
-            Self::ViewProject | Self::DevelopProject | Self::ManageProject => {
-                PermissionEntityType::Project
+            "view_project" | "develop_project" | "manage_project" => {
+                Some(PermissionEntityType::project())
             }
+            _ => None,
         }
     }
 }

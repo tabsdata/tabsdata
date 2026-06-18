@@ -238,42 +238,36 @@ fn simple_permission_of(
     perm: &PermissionDB,
     projects: &HashMap<ProjectId, ProjectName>,
 ) -> Result<Option<SimplePermission>, TdError> {
-    let simple = match perm.entity_type {
-        PermissionEntityType::System => match perm.permission_type {
-            PermissionType::ManageAccess => Some((SimplePermissionType::ManageAccess, None)),
-            PermissionType::CreateProjects => Some((SimplePermissionType::CreateProjects, None)),
-            // manage_roles is internal — not user-facing on the Simple surface.
-            PermissionType::ManageRoles => None,
-            // a project permission on the system entity is malformed; skip.
+    let simple = match perm.entity_type.as_str() {
+        "system" => match perm.permission_type.as_str() {
+            "manage_access" => Some((SimplePermissionType::ManageAccess, None)),
+            "create_projects" => Some((SimplePermissionType::CreateProjects, None)),
+            // manage_roles is internal — not user-facing on the Simple surface;
+            // any other (e.g. extension) system permission likewise has no
+            // Simple name.
             _ => None,
         },
-        PermissionEntityType::Project => {
+        "project" => {
             if perm.entity_id.is_all_entities() {
-                match perm.permission_type {
+                match perm.permission_type.as_str() {
                     // (project:__all__, manage_project) is `admin_all_projects`.
-                    PermissionType::ManageProject => {
-                        Some((SimplePermissionType::AdminAllProjects, None))
-                    }
+                    "manage_project" => Some((SimplePermissionType::AdminAllProjects, None)),
                     // org-wide view/develop wildcards: RBAC-only, no Simple name.
                     _ => None,
                 }
             } else {
                 let project_id = ProjectId::from(*perm.entity_id);
                 let project_name = projects.get(&project_id).cloned();
-                match perm.permission_type {
-                    PermissionType::ViewProject => {
-                        Some((SimplePermissionType::ViewProject, project_name))
-                    }
-                    PermissionType::DevelopProject => {
-                        Some((SimplePermissionType::DevelopProject, project_name))
-                    }
-                    PermissionType::ManageProject => {
-                        Some((SimplePermissionType::ManageProject, project_name))
-                    }
+                match perm.permission_type.as_str() {
+                    "view_project" => Some((SimplePermissionType::ViewProject, project_name)),
+                    "develop_project" => Some((SimplePermissionType::DevelopProject, project_name)),
+                    "manage_project" => Some((SimplePermissionType::ManageProject, project_name)),
                     _ => None,
                 }
             }
         }
+        // an unknown/extension entity type has no Simple-surface representation.
+        _ => None,
     };
     simple
         .map(|(permission, project)| {
@@ -322,9 +316,9 @@ pub async fn list_project_access(
         }
     }
     for perm in &permissions {
-        if perm.entity_type == PermissionEntityType::Project
+        if perm.entity_type == PermissionEntityType::project()
             && perm.entity_id.is_all_entities()
-            && perm.permission_type == PermissionType::ManageProject
+            && perm.permission_type == PermissionType::manage_project()
         {
             system_source_roles.insert(perm.role_id);
         }

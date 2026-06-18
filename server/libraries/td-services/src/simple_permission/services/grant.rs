@@ -312,7 +312,7 @@ mod tests {
         let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::DevelopProject,
+                PermissionType::develop_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &dev_only,

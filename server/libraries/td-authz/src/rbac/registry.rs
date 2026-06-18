@@ -145,10 +145,29 @@ impl AuthzRegistry {
     }
 
     /// Register an entity kind (and, with it, its whole permission set). Idempotent
-    /// per [`EntityKind::NAME`] — re-registering replaces the handler.
+    /// per [`EntityKind::NAME`] — re-registering the same kind replaces the handler.
+    ///
+    /// # Panics
+    ///
+    /// Permission names must be globally unique across kinds, so
+    /// [`Self::entity_type_of`] (and the grant-create path that derives a row's
+    /// entity type from its permission name) is unambiguous. Panics if a
+    /// permission of `E` is already registered under a *different* entity kind —
+    /// a startup wiring error, surfaced eagerly.
     pub fn register<E: DecodeEntityId>(&mut self) -> &mut Self {
-        self.by_entity_type
-            .insert(E::NAME, Box::new(Handler::<E>(PhantomData)));
+        let handler = Handler::<E>(PhantomData);
+        for permission in handler.permissions() {
+            if let Some(owner) = self.entity_type_of(permission)
+                && owner != E::NAME
+            {
+                panic!(
+                    "authz registry: permission '{permission}' is already registered under \
+                     entity type '{owner}'; cannot register it under '{}'",
+                    E::NAME
+                );
+            }
+        }
+        self.by_entity_type.insert(E::NAME, Box::new(handler));
         self
     }
 
@@ -177,6 +196,26 @@ impl AuthzRegistry {
         self.by_entity_type
             .get(entity_type)
             .map(|h| h.permissions())
+    }
+
+    /// The entity type that a registered permission targets, derived from the
+    /// registry (a kind owns its permissions). Lets the grant-create path set a
+    /// row's `entity_type` from its permission name alone, for built-in *and*
+    /// extension permissions, without a hard-coded mapping. `None` if no
+    /// registered kind declares `permission`.
+    ///
+    /// Assumes permission names are unique across kinds (they are for the
+    /// built-ins and any well-behaved extension); returns the first match
+    /// otherwise.
+    pub fn entity_type_of(&self, permission: &str) -> Option<&'static str> {
+        self.by_entity_type
+            .iter()
+            .find_map(|(entity_type, handler)| {
+                handler
+                    .permissions()
+                    .contains(&permission)
+                    .then_some(*entity_type)
+            })
     }
 
     /// Decode a stored `(entity_type, permission, entity_id)` row into a typed
@@ -369,5 +408,52 @@ mod tests {
         // every row is skipped — no handler registered
         registry.add_grant(&mut grants, "system", "manage_access", &EntityId::default());
         assert!(!grants.allows(&Requires::system(SystemPermission::ManageAccess)));
+    }
+
+    #[test]
+    fn entity_type_of_resolves_permission_to_its_kind() {
+        let registry = AuthzRegistry::default().with::<Widget>();
+        assert_eq!(registry.entity_type_of("manage_access"), Some("system"));
+        assert_eq!(registry.entity_type_of("manage_project"), Some("project"));
+        assert_eq!(registry.entity_type_of("manage_widget"), Some("widget"));
+        assert_eq!(registry.entity_type_of("nonsuch"), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "already registered under entity type")]
+    fn registering_a_duplicate_permission_name_panics() {
+        // A kind whose permission name collides with a built-in (`manage_access`,
+        // owned by `system`) must be rejected at registration so `entity_type_of`
+        // stays unambiguous.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        struct Clash;
+
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        enum ClashPermission {
+            ManageAccess,
+        }
+
+        impl GrantedPermission for ClashPermission {
+            fn name(self) -> &'static str {
+                "manage_access"
+            }
+            fn all() -> &'static [Self] {
+                &[ClashPermission::ManageAccess]
+            }
+        }
+
+        impl EntityKind for Clash {
+            type Id = ProjectId;
+            type Permission = ClashPermission;
+            const NAME: &'static str = "clash";
+        }
+
+        impl DecodeEntityId for Clash {
+            fn decode_id(stored: &EntityId) -> ProjectId {
+                ProjectId::from(**stored)
+            }
+        }
+
+        AuthzRegistry::default().with::<Clash>();
     }
 }

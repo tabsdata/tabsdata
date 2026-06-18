@@ -89,7 +89,7 @@ mod tests {
             .await?;
         let seeded = db
             .seed()
-            .permission(PermissionType::CreateProjects, None, None, &role)
+            .permission(PermissionType::create_projects(), None, None, &role)
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(

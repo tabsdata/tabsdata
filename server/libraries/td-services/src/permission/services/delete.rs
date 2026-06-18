@@ -107,7 +107,7 @@ mod tests {
             .await?;
         let seeded = db
             .seed()
-            .permission(PermissionType::CreateProjects, None, None, &role)
+            .permission(PermissionType::create_projects(), None, None, &role)
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(
@@ -137,7 +137,7 @@ mod tests {
         let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::ManageProject,
+                PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &project_admin_role,
@@ -153,7 +153,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
             RoleParam::builder().role(RoleIdName::Id(role.id)).build()?,
             PermissionCreate::builder()
-                .permission_type(PermissionType::DevelopProject)
+                .permission_type(PermissionType::develop_project())
                 .entity_name(EntityName::try_from("p0")?)
                 .build()?,
         );
@@ -175,7 +175,7 @@ mod tests {
         let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::ManageProject,
+                PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &project_admin_role,
@@ -200,7 +200,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), user.id).create(
             RoleParam::builder().role(RoleIdName::Id(role.id)).build()?,
             PermissionCreate::builder()
-                .permission_type(PermissionType::DevelopProject)
+                .permission_type(PermissionType::develop_project())
                 .entity_name(EntityName::try_from("p1")?)
                 .build()?,
         );
@@ -225,7 +225,7 @@ mod tests {
         let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::ManageProject,
+                PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &project_admin_role,
@@ -247,7 +247,7 @@ mod tests {
                 .role(RoleIdName::Id(project_admin_role.id))
                 .build()?,
             PermissionCreate::builder()
-                .permission_type(PermissionType::DevelopProject)
+                .permission_type(PermissionType::develop_project())
                 .entity_name(None)
                 .build()?,
         );
@@ -272,7 +272,7 @@ mod tests {
         let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::ManageProject,
+                PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
@@ -281,7 +281,7 @@ mod tests {
         let project_dev_perm = db
             .seed()
             .permission(
-                PermissionType::DevelopProject,
+                PermissionType::develop_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
@@ -319,7 +319,7 @@ mod tests {
         let entity_id: EntityId = p0.id.try_into()?;
         db.seed()
             .permission(
-                PermissionType::ManageProject,
+                PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
@@ -328,7 +328,7 @@ mod tests {
         let project_dev_perm = db
             .seed()
             .permission(
-                PermissionType::DevelopProject,
+                PermissionType::develop_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(entity_id),
                 &role,
@@ -371,7 +371,7 @@ mod tests {
         // requester user holds manage_project on p0 only (via role0).
         db.seed()
             .permission(
-                PermissionType::ManageProject,
+                PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(p0.id.try_into()?),
                 &role0,
@@ -380,7 +380,7 @@ mod tests {
         let perm1 = db
             .seed()
             .permission(
-                PermissionType::DevelopProject,
+                PermissionType::develop_project(),
                 Some(EntityName::try_from("p1")?),
                 Some(p1.id.try_into()?),
                 &role1,
@@ -422,7 +422,7 @@ mod tests {
         // requester user holds manage_project on p0 only.
         db.seed()
             .permission(
-                PermissionType::ManageProject,
+                PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
                 Some(p0.id.try_into()?),
                 &role,
@@ -432,7 +432,7 @@ mod tests {
         let all_project_dev_perm = db
             .seed()
             .permission(
-                PermissionType::DevelopProject,
+                PermissionType::develop_project(),
                 Some(EntityName::try_from("p0")?),
                 None,
                 &role,

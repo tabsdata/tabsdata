@@ -35,23 +35,25 @@ use td_tower::extractors::{MutRef, Ref};
 
 /// The three per-project roles minted for every project, in
 /// (kind, name suffix, permission, description template) form.
-const PER_PROJECT_ROLES: [(RoleKind, &str, PermissionType, &str); 3] = [
+// Permission held as a `&str` (built at use-site): the permission type is now
+// an open string, no longer a const-constructible enum variant.
+const PER_PROJECT_ROLES: [(RoleKind, &str, &str, &str); 3] = [
     (
         RoleKind::ProjectAdmin,
         "admin",
-        PermissionType::ManageProject,
+        "manage_project",
         "Project {name} administrators",
     ),
     (
         RoleKind::ProjectDev,
         "dev",
-        PermissionType::DevelopProject,
+        "develop_project",
         "Project {name} developers",
     ),
     (
         RoleKind::ProjectView,
         "view",
-        PermissionType::ViewProject,
+        "view_project",
         "Project {name} viewers",
     ),
 ];
@@ -78,6 +80,7 @@ pub async fn seed_project_roles(
 
     let mut admin_role_id = None;
     for (kind, suffix, permission_type, description_tmpl) in PER_PROJECT_ROLES {
+        let permission_type = PermissionType::try_from(permission_type)?;
         let is_admin = matches!(kind, RoleKind::ProjectAdmin);
         let role_name = per_project_role_name(project_name, suffix)?;
         let description =
@@ -101,7 +104,7 @@ pub async fn seed_project_roles(
             .try_update_from(context.deref())?
             .try_update_from(&role)?
             .permission_type(permission_type)
-            .entity_type(PermissionEntityType::Project)
+            .entity_type(PermissionEntityType::project())
             .entity_id(entity_id)
             .fixed(Fixed::from(true))
             .build()?;

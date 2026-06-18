@@ -33,53 +33,41 @@ use td_queries::{LiveEntry, QueryExecutor};
 /// The expected fixed composition of the `sys_admin` role (condition 2),
 /// as `(entity_type, on `__all__`?, permission)` triples. System rows are
 /// stored with `entity_id = __all__` but disambiguated by `entity_type`.
-const SYS_ADMIN_COMPOSITION: &[(PermissionEntityType, bool, PermissionType)] = &[
-    (
-        PermissionEntityType::System,
-        true,
-        PermissionType::ManageAccess,
-    ),
-    (
-        PermissionEntityType::System,
-        true,
-        PermissionType::CreateProjects,
-    ),
-    (
-        PermissionEntityType::System,
-        true,
-        PermissionType::ManageRoles,
-    ),
+// (entity_type, on_all, permission) of the fixed `sys_admin` composition.
+// String literals because the permission types are now open strings (no longer
+// const-constructible enum variants); rows are compared by their stored value.
+const SYS_ADMIN_COMPOSITION: &[(&str, bool, &str)] = &[
+    ("system", true, "manage_access"),
+    ("system", true, "create_projects"),
+    ("system", true, "manage_roles"),
     // (project:__all__, manage_project) — the org-wide admin wildcard.
-    (
-        PermissionEntityType::Project,
-        true,
-        PermissionType::ManageProject,
-    ),
+    ("project", true, "manage_project"),
 ];
 
 /// Classify one permission row for human-readable reasons.
 fn describe_row(perm: &PermissionDB) -> String {
-    let target = match perm.entity_type {
-        PermissionEntityType::System => "system".to_string(),
-        PermissionEntityType::Project => {
+    let target = match perm.entity_type.as_str() {
+        "system" => "system".to_string(),
+        "project" => {
             if perm.entity_id.is_all_entities() {
                 "project:__all__".to_string()
             } else {
                 format!("project:{}", *perm.entity_id)
             }
         }
+        other => other.to_string(),
     };
     format!("({target}, {})", perm.permission_type)
 }
 
 /// Whether this row targets a *specific* project (not the `__all__` wildcard).
 fn is_specific_project_row(perm: &PermissionDB) -> bool {
-    perm.entity_type == PermissionEntityType::Project && !perm.entity_id.is_all_entities()
+    perm.entity_type == PermissionEntityType::project() && !perm.entity_id.is_all_entities()
 }
 
 /// Whether this row targets a system entity.
 fn is_system_row(perm: &PermissionDB) -> bool {
-    perm.entity_type == PermissionEntityType::System
+    perm.entity_type == PermissionEntityType::system()
 }
 
 /// Run the RBAC -> Simple representability check against the live `roles` and
@@ -137,7 +125,7 @@ pub fn evaluate(roles: &[RoleDB], permissions: &[PermissionDB]) -> Vec<String> {
                 check_per_project(
                     role,
                     role_perms,
-                    PermissionType::ManageProject,
+                    PermissionType::manage_project(),
                     &mut reasons,
                 );
             }
@@ -145,12 +133,17 @@ pub fn evaluate(roles: &[RoleDB], permissions: &[PermissionDB]) -> Vec<String> {
                 check_per_project(
                     role,
                     role_perms,
-                    PermissionType::DevelopProject,
+                    PermissionType::develop_project(),
                     &mut reasons,
                 );
             }
             RoleKind::ProjectView => {
-                check_per_project(role, role_perms, PermissionType::ViewProject, &mut reasons);
+                check_per_project(
+                    role,
+                    role_perms,
+                    PermissionType::view_project(),
+                    &mut reasons,
+                );
             }
         }
     }
@@ -164,8 +157,8 @@ pub fn evaluate(roles: &[RoleDB], permissions: &[PermissionDB]) -> Vec<String> {
 fn check_sys_admin(role: &RoleDB, perms: &[&PermissionDB], reasons: &mut Vec<String>) {
     let matches_expected = |p: &PermissionDB| {
         SYS_ADMIN_COMPOSITION.iter().any(|(et, on_all, pt)| {
-            p.entity_type == *et
-                && p.permission_type == *pt
+            p.entity_type.as_str() == *et
+                && p.permission_type.as_str() == *pt
                 && p.entity_id.is_all_entities() == *on_all
         })
     };
@@ -183,15 +176,16 @@ fn check_sys_admin(role: &RoleDB, perms: &[&PermissionDB], reasons: &mut Vec<Str
     // Any expected row missing is also a modification.
     for (et, on_all, pt) in SYS_ADMIN_COMPOSITION {
         let present = perms.iter().any(|p| {
-            p.entity_type == *et
-                && p.permission_type == *pt
+            p.entity_type.as_str() == *et
+                && p.permission_type.as_str() == *pt
                 && p.entity_id.is_all_entities() == *on_all
         });
         if !present {
-            let target = match (et, on_all) {
-                (PermissionEntityType::System, _) => "system".to_string(),
-                (PermissionEntityType::Project, true) => "project:__all__".to_string(),
-                (PermissionEntityType::Project, false) => "project".to_string(),
+            let target = match (*et, *on_all) {
+                ("system", _) => "system".to_string(),
+                ("project", true) => "project:__all__".to_string(),
+                ("project", false) => "project".to_string(),
+                (other, _) => other.to_string(),
             };
             reasons.push(format!(
                 "the 'sys_admin' role is missing its default permission ({target}, {pt}); \
@@ -214,7 +208,7 @@ fn check_default(role: &RoleDB, perms: &[&PermissionDB], reasons: &mut Vec<Strin
                 describe_row(p),
                 role.name
             ));
-        } else if is_system_row(p) && p.permission_type != PermissionType::CreateProjects {
+        } else if is_system_row(p) && p.permission_type != PermissionType::create_projects() {
             reasons.push(format!(
                 "the 'default' role holds the system permission {} on role '{}', which the \
                  Simple surface cannot describe (only 'create_projects' is allowed on 'default')",
@@ -386,7 +380,7 @@ mod tests {
         // Add (project:foo, view_project) directly onto the `default` role.
         db.seed()
             .permission(
-                PermissionType::ViewProject,
+                PermissionType::view_project(),
                 None,
                 Some(EntityId::try_from(project.id)?),
                 &default_role,
@@ -412,7 +406,7 @@ mod tests {
 
         db.seed()
             .permission(
-                PermissionType::ManageProject,
+                PermissionType::manage_project(),
                 None,
                 Some(EntityId::try_from(project.id)?),
                 &project_creator,
@@ -437,7 +431,7 @@ mod tests {
 
         // manage_access is a system permission; entity_id defaults to __all__.
         db.seed()
-            .permission(PermissionType::ManageAccess, None, None, &default_role)
+            .permission(PermissionType::manage_access(), None, None, &default_role)
             .await?;
 
         let reasons = check_representability(&db).await?;

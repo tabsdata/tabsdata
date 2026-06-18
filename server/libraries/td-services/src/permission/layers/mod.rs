@@ -26,6 +26,7 @@ use td_tower::extractors::{MutRef, Ref};
 
 pub trait PermissionBuildService {
     fn build_permission_db(
+        source: Ref<AuthzContext>,
         conn: MutRef<DynamicConnection<'static>>,
         input: Ref<PermissionDBBuilder>,
         permission_create: Ref<PermissionCreate>,
@@ -34,13 +35,22 @@ pub trait PermissionBuildService {
 
 impl PermissionBuildService for With<PermissionDBBuilder> {
     async fn build_permission_db(
+        source: Ref<AuthzContext>,
         mut conn: MutRef<DynamicConnection<'static>>,
         input: Ref<PermissionDBBuilder>,
         permission_create: Ref<PermissionCreate>,
     ) -> Result<PermissionDB, TdError> {
         let permission_type = &permission_create.permission_type;
         let entity_name = &permission_create.entity_name;
-        let entity_type = permission_type.on_entity_type();
+        // Derive the entity type from the authorization registry — a kind owns
+        // its permissions — so this works for built-in *and* extension
+        // permissions without a hard-coded mapping (replaces the built-in-only
+        // `PermissionType::on_entity_type`).
+        let entity_type = source
+            .registry()
+            .entity_type_of(permission_type.as_str())
+            .ok_or_else(|| PermissionError::UnknownPermission(permission_type.clone()))?;
+        let entity_type = PermissionEntityType::try_from(entity_type)?;
 
         let entity_id = if let Some(entity_name) = entity_name {
             let project_name = ProjectName::try_from(entity_name.to_string())?;
@@ -118,8 +128,7 @@ pub trait PermissionTarget {
 
 impl PermissionTarget for PermissionDB {
     fn target_scope(&self) -> Result<PermissionTargetScope, TdError> {
-        if self.permission_type.on_entity_type() == PermissionEntityType::Project
-            && !self.entity_id.is_all_entities()
+        if self.entity_type == PermissionEntityType::project() && !self.entity_id.is_all_entities()
         {
             Ok(PermissionTargetScope::Project(ProjectId::try_from(
                 self.entity_id,
@@ -132,7 +141,7 @@ impl PermissionTarget for PermissionDB {
 
 impl PermissionTarget for PermissionDBWithNames {
     fn target_scope(&self) -> Result<PermissionTargetScope, TdError> {
-        if self.permission_type.on_entity_type() == PermissionEntityType::Project
+        if self.entity_type == PermissionEntityType::project()
             && let Some(entity_id) = self.entity_id
         {
             Ok(PermissionTargetScope::Project(ProjectId::try_from(

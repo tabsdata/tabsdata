@@ -19,4 +19,8 @@ pub enum PermissionError {
     RolePermissionMismatch = 1,
     #[error("Role '{0}' is system-managed; its permissions cannot be modified")]
     RoleIsFixed(td_objects::types::basic::RoleName) = 2,
+    #[error(
+        "Permission '{0}' is not registered in the authorization registry (no built-in or extension entity kind declares it)"
+    )]
+    UnknownPermission(td_objects::types::basic::PermissionType) = 3,
 }

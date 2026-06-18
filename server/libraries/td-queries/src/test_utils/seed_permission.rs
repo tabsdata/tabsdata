@@ -29,7 +29,9 @@ pub async fn seed_permission(
         .try_update_from(&request_context)?
         .try_update_from(role_db)?;
 
-    let permission_entity_type = permission_type.on_entity_type();
+    let permission_entity_type = permission_type
+        .on_entity_type()
+        .expect("seed_permission: permission_type must be a built-in permission");
     builder.entity_type(permission_entity_type);
     let entity_id = entity_id.unwrap_or_else(EntityId::all_entities);
     builder.entity_id(entity_id);
