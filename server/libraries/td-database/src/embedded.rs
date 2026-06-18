@@ -21,9 +21,10 @@ use url::Url;
 /// `Settings::default()` regenerates a random password on every call, which
 /// would not match what `initdb` baked into the existing catalog — so we
 /// own the password lifecycle for the persistent case.
-/// Exact embedded PostgreSQL version. Must match the bundled archive selected
-/// at build time via `POSTGRESQL_VERSION` in `.cargo/config.toml`.
-const EMBEDDED_POSTGRES_VERSION: &str = "=18.4.0";
+/// Exact embedded PostgreSQL version. Read at compile time from the same
+/// `POSTGRESQL_VERSION` that `postgresql_embedded` uses to select the bundled
+/// archive, so the runtime requirement cannot drift from what was bundled.
+const EMBEDDED_POSTGRES_VERSION: &str = env!("POSTGRESQL_VERSION");
 
 const PASSWORD_FILE: &str = ".td_embedded_password";
 

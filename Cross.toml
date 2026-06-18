@@ -6,16 +6,20 @@
 
 [target.x86_64-unknown-linux-musl]
 pre-build = [
-    "echo ...",
+    "mkdir -p \"$THESEUS_CACHE_HOME\"",
+    "rm -rf \"$HOME/.theseus\"",
+    "ln -s \"$THESEUS_CACHE_HOME\" \"$HOME/.theseus\"",
 ]
 
 [target.x86_64-unknown-linux-musl.env]
-volumes = ["TABSDATA_SOLUTION_HOME"]
+volumes = ["TABSDATA_SOLUTION_HOME", "THESEUS_CACHE_HOME"]
 passthrough = [
     # >>> passthrough:MOUNTS:BEGIN >>>
     "TABSDATA_SOLUTION_HOME",
+    "THESEUS_CACHE_HOME",
     # >>> passthrough:MOUNTS:END >>>
     "TD_CROSS_BUILD=true",
+    "GITHUB_TOKEN",
     # >>> passthrough:MAKE:BEGIN >>>
     "TD_ON_GA",
     "CARGO_TERM_COLOR",
