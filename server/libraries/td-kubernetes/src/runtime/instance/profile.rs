@@ -10,7 +10,7 @@ use std::process::Command as SystemCommand;
 use chrono::Utc;
 use td_python::python::resolve_python_binary;
 use td_python::tabsdata::tabsdata_version;
-use tracing::info;
+use tracing::debug;
 
 use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, Family, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
@@ -189,7 +189,7 @@ fn load_configmap_folder(
             ));
         }
         if winner.file != stripped_name {
-            info!(
+            debug!(
                 "Bundle resolved '{folder}/{stripped_name}' from '{folder}/{}'",
                 winner.file
             );

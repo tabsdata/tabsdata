@@ -290,6 +290,7 @@ class PythonEnvironment:
             for binary in package.binaries:
                 binary.link(source_root, self.root)
         self.link_libexec_launchers(recipe.packages)
+        # self.compile(verbose=verbose)
 
     def link_libexec_launchers(self, packages: tuple[PackageRecipe, ...]) -> None:
         target = self.root / LIBEXEC_INSTALL_RELATIVE_PATH
@@ -460,6 +461,29 @@ class PythonEnvironment:
     def python(self) -> Path:
         # noinspection PyDeprecation
         return self.scripts() / ("python" + sysconfig.get_config_var(SYSCONFIG_VAR_EXE))
+
+    def lib(self) -> Path:
+        paths = sysconfig.get_paths(
+            scheme="venv",
+            vars={"base": str(self.root), "platbase": str(self.root)},
+        )
+        return Path(paths["purelib"]).parent
+
+    def compile(self, *, verbose: bool = False) -> None:
+        command = [
+            str(self.python()),
+            "-m",
+            "compileall",
+            "-f",
+            "-j",
+            "0",
+            "--invalidation-mode",
+            "unchecked-hash",
+        ]
+        if not verbose:
+            command.append("-q")
+        command.append(str(self.lib()))
+        subprocess.run(command, capture_output=not verbose)
 
     def binary(self, name: str) -> Path:
         scripts = self.scripts()
