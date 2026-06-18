@@ -58,7 +58,14 @@ use crate::runtime::secrets::{KubeconfigSecretGenerator, SecretGenerator, Secret
 
 const APISERVER_BINARY: &str = "td_apiserver";
 const PYVENV_BINARY: &str = "td_pyvenv";
-const APISERVER_CONFIG_KEY: &str = "apiserver.yaml";
+const APISERVER_SERVICE_CONFIG_KEY: &str = "apiserver.service.yaml";
+const APISERVER_DATABASE_CONFIG_KEY: &str = "apiserver.database.yaml";
+const APISERVER_STORAGE_CONFIG_KEY: &str = "apiserver.storage.yaml";
+const APISERVER_CONFIG_KEYS: &[&str] = &[
+    APISERVER_SERVICE_CONFIG_KEY,
+    APISERVER_DATABASE_CONFIG_KEY,
+    APISERVER_STORAGE_CONFIG_KEY,
+];
 
 pub struct KminusProvider {
     name: String,
@@ -374,53 +381,54 @@ impl Provider for KminusProvider {
     async fn create_database(&self, reporter: &dyn Reporter) -> CommandResult {
         let loaded = self.profile()?;
         let resolver = ConfigurationResolver::new(self.system_values()?);
-        let apiserver_config = resolve_profile_entry(
-            loaded,
-            &resolver,
-            &KPROFILE_CONFIGS_FAMILY,
-            APISERVER_CONFIG_KEY,
-        )
-        .await?;
-        let mut config_file = tempfile::Builder::new()
-            .prefix("td-apiserver-")
-            .suffix(".yaml")
-            .tempfile()
-            .map_err(|error| ProviderError::ApiserverTempConfigCreateFailed(error.to_string()))?;
-        config_file
-            .write_all(apiserver_config.as_bytes())
-            .map_err(|error| {
+        let context = self.kube_context().await?;
+        auto_fill_generated_secrets(&context).await?;
+
+        let mut config_files: Vec<tempfile::NamedTempFile> = Vec::new();
+        let mut secret_env: Vec<(String, String)> = Vec::new();
+        for config_key in APISERVER_CONFIG_KEYS {
+            let config =
+                resolve_profile_entry(loaded, &resolver, &KPROFILE_CONFIGS_FAMILY, config_key)
+                    .await?;
+            let mut config_file = tempfile::Builder::new()
+                .prefix("td-apiserver-")
+                .suffix(".yaml")
+                .tempfile()
+                .map_err(|error| {
+                    ProviderError::ApiserverTempConfigCreateFailed(error.to_string())
+                })?;
+            config_file.write_all(config.as_bytes()).map_err(|error| {
                 ProviderError::ApiserverTempConfigWriteFailed(
                     config_file.path().display().to_string(),
                     error.to_string(),
                 )
             })?;
-        config_file.flush().map_err(|error| {
-            ProviderError::ApiserverTempConfigFlushFailed(
-                config_file.path().display().to_string(),
-                error.to_string(),
-            )
-        })?;
-        let context = self.kube_context().await?;
-        auto_fill_generated_secrets(&context).await?;
-        let apiserver_secret_name = to_secret_name(APISERVER_CONFIG_KEY)?;
-        let secret_env: Vec<(String, String)> = match get_secret(&context, &apiserver_secret_name)
-            .await?
-        {
-            Some(data) => data
-                .into_iter()
-                .filter_map(|(key, value)| String::from_utf8(value).ok().map(|text| (key, text)))
-                .collect(),
-            None => Vec::new(),
-        };
+            config_file.flush().map_err(|error| {
+                ProviderError::ApiserverTempConfigFlushFailed(
+                    config_file.path().display().to_string(),
+                    error.to_string(),
+                )
+            })?;
+            config_files.push(config_file);
+
+            let secret_name = to_secret_name(config_key)?;
+            if let Some(data) = get_secret(&context, &secret_name).await? {
+                for (key, value) in data {
+                    if let Ok(text) = String::from_utf8(value) {
+                        secret_env.push((key, text));
+                    }
+                }
+            }
+        }
+
         let apiserver = name_program(&PathBuf::from(APISERVER_BINARY));
         let command_label = format!("{} --db-schema create", apiserver.display());
         let step = reporter.step("Creating tabsdata database schema");
         let mut command = std::process::Command::new(&apiserver);
-        command
-            .arg("--config-file")
-            .arg(config_file.path())
-            .arg("--db-schema")
-            .arg("create");
+        for config_file in &config_files {
+            command.arg("--config-file").arg(config_file.path());
+        }
+        command.arg("--db-schema").arg("create");
         for (key, value) in &secret_env {
             command.env(key, value);
         }

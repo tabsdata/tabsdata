@@ -38,7 +38,11 @@ spec:
       command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/bin/td_apiserver"]
       args:
         - --config-file
-        - /tabsdata/config/apiserver.yaml
+        - /tabsdata/config/apiserver.service.yaml
+        - --config-file
+        - /tabsdata/config/apiserver.database.yaml
+        - --config-file
+        - /tabsdata/config/apiserver.storage.yaml
         - --log-config
         - /tabsdata/config/apiserver.log.yaml
       ports:
@@ -107,7 +111,11 @@ spec:
       projected:
         sources:
           - configMap:
-              name: td-app-apiserver-config-apiserver.yaml
+              name: td-app-apiserver-config-apiserver.service.yaml
+          - configMap:
+              name: td-app-apiserver-config-apiserver.database.yaml
+          - configMap:
+              name: td-app-apiserver-config-apiserver.storage.yaml
           - configMap:
               name: td-app-apiserver-config-apiserver.log.yaml
           - configMap:

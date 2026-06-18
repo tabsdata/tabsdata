@@ -1,0 +1,19 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+addresses:
+  - 0.0.0.0:2457
+internal_addresses:
+  - 0.0.0.0:2458
+password:
+  algorithm: argon2id
+  version: 19
+  memory_cost_mib: 20
+  time_cost: 2
+  parallelism_cost: 1
+jwt:
+  secret: ${secret:jwt_signing_key}
+  access_token_expiration: 3600
+request_timeout: 60
+orchestrator: kubernetes

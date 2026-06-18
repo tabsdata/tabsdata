@@ -85,7 +85,11 @@ spec:
               - configMap:
                   name: td-sys-crontrigger-pod-crontrigger.yaml
               - configMap:
-                  name: td-sys-function-pod-function.yaml
+                  name: td-sys-function-publisher-pod-function-publisher.yaml
+              - configMap:
+                  name: td-sys-function-subscriber-pod-function-subscriber.yaml
+              - configMap:
+                  name: td-sys-function-transformer-pod-function-transformer.yaml
               - configMap:
                   name: td-sys-inspector-pod-inspector.yaml
               - configMap:
@@ -94,7 +98,11 @@ spec:
           projected:
             sources:
               - configMap:
-                  name: td-app-apiserver-config-apiserver.yaml
+                  name: td-app-apiserver-config-apiserver.service.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.database.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
               - configMap:
                   name: td-app-apiserver-config-apiserver.log.yaml
               - configMap:
