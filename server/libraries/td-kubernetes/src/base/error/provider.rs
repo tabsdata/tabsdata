@@ -107,6 +107,8 @@ pub enum ProviderError {
     NofileLimitTooLow { required: u64, soft: u64, hard: u64 } = 12,
     #[error("Provider '{0}' is not yet implemented.")]
     NotImplemented(String) = 6000,
+    #[error("Command '{0}' is not yet implemented.")]
+    CommandNotImplemented(String) = 6001,
     #[error(
         "The cluster is not running. \
          Start it with `tdkserver cluster start ...` and try again."

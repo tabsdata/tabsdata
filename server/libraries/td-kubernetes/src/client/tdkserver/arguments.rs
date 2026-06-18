@@ -13,6 +13,14 @@ use crate::client::tdkserver::commands::config::ConfigCommands;
 use crate::client::tdkserver::commands::instance::InstanceCommands;
 use crate::client::tdkserver::commands::secret::SecretCommands;
 use crate::client::tdkserver::commands::server::ServerCommands;
+use crate::client::tdkserver::commands::service::InstanceNameArguments;
+use crate::client::tdkserver::commands::service::create::CreateArguments;
+use crate::client::tdkserver::commands::service::init::InitArguments;
+use crate::client::tdkserver::commands::service::quickstart::QuickstartArguments;
+use crate::client::tdkserver::commands::service::register::RegisterArguments;
+use crate::client::tdkserver::commands::service::restart::RestartArguments;
+use crate::client::tdkserver::commands::service::start::StartArguments;
+use crate::client::tdkserver::commands::service::stop::StopArguments;
 use crate::client::tdkserver::commands::session::SessionCommands;
 use crate::runtime::provider::ClusterProvider;
 
@@ -63,6 +71,30 @@ pub enum Commands {
     Instance(InstanceCommands),
     #[command(subcommand, about = "Manage tabsdata servers")]
     Server(ServerCommands),
+    #[command(about = "Produce an editable input config folder for a tabsdata instance")]
+    Init(InitArguments),
+    #[command(about = "Create a tabsdata instance")]
+    Create(CreateArguments),
+    #[command(about = "Register an existing tabsdata instance")]
+    Register(RegisterArguments),
+    #[command(about = "Unregister a tabsdata instance")]
+    Unregister(InstanceNameArguments),
+    #[command(about = "List registered tabsdata instances")]
+    List,
+    #[command(about = "Pin a tabsdata instance as the default")]
+    Pin(InstanceNameArguments),
+    #[command(about = "Unpin the default tabsdata instance")]
+    Unpin,
+    #[command(about = "Start a tabsdata instance")]
+    Start(StartArguments),
+    #[command(about = "Stop a tabsdata instance")]
+    Stop(StopArguments),
+    #[command(about = "Restart a tabsdata instance")]
+    Restart(RestartArguments),
+    #[command(about = "Show the status of a tabsdata instance")]
+    Status(InstanceNameArguments),
+    #[command(about = "Initialize, create and start a tabsdata instance in one step")]
+    Quickstart(QuickstartArguments),
     #[command(subcommand, about = "Manage tabsdata configs")]
     Config(ConfigCommands),
     #[command(subcommand, about = "Manage tabsdata secrets")]

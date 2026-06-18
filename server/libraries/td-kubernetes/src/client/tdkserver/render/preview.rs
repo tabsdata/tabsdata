@@ -61,6 +61,26 @@ pub fn restart_server(summary: &Summary) {
     render_summary_lines(summary);
 }
 
+pub fn create_service(summary: &Summary) {
+    info!("About to create tabsdata instance:");
+    render_summary_lines(summary);
+}
+
+pub fn start_service(summary: &Summary) {
+    info!("About to start tabsdata instance:");
+    render_summary_lines(summary);
+}
+
+pub fn stop_service(summary: &Summary) {
+    info!("About to stop tabsdata instance:");
+    render_summary_lines(summary);
+}
+
+pub fn restart_service(summary: &Summary) {
+    info!("About to restart tabsdata instance:");
+    render_summary_lines(summary);
+}
+
 pub fn apply_config(summary: &Summary) {
     info!("About to apply tabsdata configs and restart the instance:");
     render_summary_lines(summary);
