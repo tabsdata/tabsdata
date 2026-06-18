@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
-use td_objects::Buildable;
+use td_objects::{and, not, Buildable};
 use td_objects::dxo::crudl::{ListParams, ListResponse, ListResponseBuilder};
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::project::ProjectDB;
@@ -84,7 +84,8 @@ pub async fn resolve_grant(
     grant: Ref<SimplePermissionGrant>,
 ) -> Result<ResolvedGrant, TdError> {
     // Resolve the user by name (the grant surface carries a UserName).
-    let user = conn.live().fetch_one::<UserDB>(&grant.user).await?;
+    // Ignoring system user.
+    let user = conn.live().fetch_one::<UserDB>(and!(&grant.user,not!(UserId::system()))).await?;
 
     match grant.permission {
         SimplePermissionType::ViewProject
@@ -299,7 +300,7 @@ pub async fn list_project_access(
     let roles = conn.live().fetch_all::<RoleDB>(()).await?;
     let permissions = conn.live().fetch_all::<PermissionDB>(()).await?;
     let user_roles = conn.live().fetch_all::<UserRoleDB>(()).await?;
-    let users = conn.live().fetch_all::<UserDB>(()).await?;
+    let users = conn.live().fetch_all::<UserDB>(not!(UserId::system())).await?;
     let user_names: HashMap<UserId, UserName> = users.into_iter().map(|u| (u.id, u.name)).collect();
 
     // Project-source roles: the three per-project roles bound to this project,

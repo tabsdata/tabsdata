@@ -3,13 +3,13 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::AuthzContext;
-use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
-use td_objects::NoFilter;
-use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
+use td_error::TdError;
+use td_objects::{NoFilter, Not};
+use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse};
 use td_objects::dxo::user::UserRead;
 use td_objects::list::params::ListQueryParams;
 use td_objects::tower_service::with::With;
+use td_objects::types::basic::UserId;
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -21,17 +21,19 @@ use td_tower::layers;
     response = ListResponse<UserRead>,
     connection = ConnectionProvider,
     scope = "Global",
-    context = AuthzContext,
 )]
 fn service() {
     layers!(
-        from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, ManageAccess>::check),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<UserRead>, _>),
-        from_fn(By::<()>::list::<NoFilter, UserRead>),
+        from_fn(set_system_user),
+        from_fn(By::<Not![UserId]>::list::<NoFilter, UserRead>),
     )
+}
+
+// Ignoring system user.
+pub async fn set_system_user() -> Result<UserId, TdError> {
+    Ok(UserId::system())
 }
 
 #[cfg(test)]
@@ -54,12 +56,10 @@ mod tests {
             .metadata()
             .await
             .assert_service::<ListRequest<()>, ListResponse<UserRead>>(&[
-                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&Scope::<System>::system),
-                type_of_val(&Rbac::<System, ManageAccess>::check),
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<UserRead>, _>),
-                type_of_val(&By::<()>::list::<NoFilter, UserRead>),
+                type_of_val(&set_system_user),
+                type_of_val(&By::<Not![UserId]>::list::<NoFilter, UserRead>),
             ]);
     }
 
@@ -84,20 +84,18 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();
-        assert_eq!(list.len, 4);
-        let system = list
-            .data
-            .iter()
-            .find(|u| u.name == UserName::system())
-            .expect("system user should be present");
-        assert_eq!(system.enabled, UserEnabled::from(false));
+        // The system user is excluded from the listing.
+        assert_eq!(list.len, 3);
+        assert!(
+            list.data.iter().all(|u| u.name != UserName::system()),
+            "system user should be excluded from the listing"
+        );
         let users = list
             .data
             .into_iter()
             .map(|u| u.name)
             .collect::<HashSet<_>>();
         let expected = HashSet::from([
-            UserName::system(),
             UserName::admin(),
             UserName::try_from("u0").unwrap(),
             UserName::try_from("u1").unwrap(),

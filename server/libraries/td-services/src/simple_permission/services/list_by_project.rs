@@ -142,6 +142,40 @@ mod tests {
         Ok(())
     }
 
+    /// The system user is excluded from the roster even when it holds roles that
+    /// would otherwise surface it — here both `p0_admin` (project source) and
+    /// `sys_admin` (system / `admin_all_projects` source).
+    #[td_test::test(db)]
+    async fn test_list_by_project_excludes_system_user(db: TdPool) -> Result<(), TdError> {
+        create_project(&db, "p0").await?;
+
+        let admin_role = db
+            .live()
+            .fetch_one::<td_objects::dxo::role::RoleDB>(&RoleName::try_from("p0_admin")?)
+            .await?;
+        db.seed()
+            .user_role(&UserId::system(), &admin_role.id)
+            .await?;
+        db.seed()
+            .user_role(&UserId::system(), &RoleId::sys_admin())
+            .await?;
+
+        let service = ListSimplePermissionByProjectService::with_defaults(db.clone()).service();
+        let response = service
+            .raw_oneshot(req(
+                UserId::admin(),
+                RoleId::sys_admin(),
+                ProjectName::try_from("p0")?,
+            ))
+            .await?;
+
+        assert!(
+            response.data.iter().all(|r| r.user != UserName::system()),
+            "system user should be excluded from the project roster"
+        );
+        Ok(())
+    }
+
     /// A requester holding only `develop_project` on the project cannot list
     /// its roster — forbidden (needs manage_project / manage_access).
     #[td_test::test(db)]

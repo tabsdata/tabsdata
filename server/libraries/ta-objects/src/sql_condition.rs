@@ -343,6 +343,28 @@ impl<T: SqlCondition> SqlCondition for Not<T> {
     }
 }
 
+/// Type-position macro: `Not![T]` → `Not<T>`.
+#[allow(non_snake_case)]
+#[macro_export]
+macro_rules! Not {
+      ($t:ty $(,)?) => { $crate::sql_condition::Not<$t> };
+  }
+
+impl<T: ConditionExtract> ConditionExtract for Not<T>
+where
+    Not<T::Storage>: SqlCondition,
+{
+    type Storage = Not<T::Storage>;
+
+    fn extract(handler: &mut Handler) -> Result<Self::Storage, FromHandlerError> {
+        Ok(Not(<T as ConditionExtract>::extract(handler)?))
+    }
+
+    #[cfg(feature = "test_tower_metadata")]
+    fn metadata_used_types() -> Vec<String> {
+        <T as ConditionExtract>::metadata_used_types()
+    }
+}
 /// Value-position macro: `not!(a)` → `Not(a)`.
 #[macro_export]
 macro_rules! not {

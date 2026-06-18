@@ -79,6 +79,7 @@ mod tests {
     use td_error::{TdError, assert_service_error};
     use td_objects::Buildable;
     use td_objects::dxo::user_role::UserRoleDB;
+    use td_objects::errors::SqlError;
     use td_objects::types::basic::{
         AccessTokenId, EntityId, EntityName, PermissionType, ProjectIdName, ProjectName, RoleId,
         RoleName, SimplePermissionType, UserEnabled, UserId, UserName,
@@ -220,6 +221,26 @@ mod tests {
             user_role_count(&db, &user.id, &RoleId::sys_admin()).await,
             1
         );
+        Ok(())
+    }
+
+    /// The system user is excluded from grant resolution: targeting it by name
+    /// resolves to no user, so the grant fails with a not-found error.
+    #[td_test::test(db)]
+    async fn test_grant_to_system_user_rejected(db: TdPool) -> Result<(), TdError> {
+        let grant = SimplePermissionGrant::builder()
+            .user(UserName::system())
+            .permission(SimplePermissionType::ManageAccess)
+            .project(None)
+            .build()?;
+
+        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant);
+        assert_service_error(service, request, |err| match err {
+            SqlError::RowNotFound(_, _) => {}
+            other => panic!("Expected 'RowNotFound', got {other:?}"),
+        })
+        .await;
         Ok(())
     }
 
