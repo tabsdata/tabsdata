@@ -103,6 +103,10 @@ class SqlCdcErrorCode(ErrorCode):
         SqlCdcException,
         "Invalid CDC format specification",
     )
+    CDC_15 = ErrorDef(
+        SqlCdcException,
+        "Failed to process staged CDC files for output slot {index}: {reason}",
+    )
 
 
 def cdc_validate_call(

@@ -24,6 +24,7 @@ import logging
 from typing import Any
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
+from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DEFAULT_BUFFER_MAX_BYTES,
@@ -51,7 +52,6 @@ from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
 from tabsdatak.spi import (
     Explorer,
     StreamSrcDef,
-    StreamStageSrc,
 )
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
@@ -150,6 +150,6 @@ MYSQL_CDC_STREAM_SRC = StreamSrcDef(
     src=MySQLCdcStreamSrc,
     cardinality=lambda src: len(src.tables),
     plugin=MySQLCdcStreamSrcPlugin,
-    publisher_src=StreamStageSrc,
+    publisher_src=CdcStageSrc,
     explorer=MySQLCdcExplorer,
 )

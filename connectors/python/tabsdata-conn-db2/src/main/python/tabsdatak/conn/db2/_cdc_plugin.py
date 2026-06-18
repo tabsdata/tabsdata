@@ -22,6 +22,7 @@ import logging
 from typing import Any
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
+from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DEFAULT_BUFFER_MAX_BYTES,
@@ -49,7 +50,6 @@ from tabsdatak.conn.db2._cdc_impl import DEFAULT_FETCH_SIZE, SqlReplicaIngester
 from tabsdatak.spi import (
     Explorer,
     StreamSrcDef,
-    StreamStageSrc,
 )
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
@@ -153,6 +153,6 @@ DB2_CDC_STREAM_SRC = StreamSrcDef(
     src=Db2CdcStreamSrc,
     cardinality=lambda src: len(src.tables),
     plugin=Db2CdcStreamSrcPlugin,
-    publisher_src=StreamStageSrc,
+    publisher_src=CdcStageSrc,
     explorer=Db2CdcExplorer,
 )

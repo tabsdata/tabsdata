@@ -41,6 +41,9 @@ dynamic = [
     "optional-dependencies",
 ]
 
+[project.entry-points."tabsdatak.connectors"]
+src_cdc_stage = "tabsdatak.conn.common.sql.cdc._stage_plugin:CDC_STAGE_SRC"
+
 [project.urls]
 Homepage = "https://tabsdata.com"
 Documentation = "https://docs.tabsdata.com"
