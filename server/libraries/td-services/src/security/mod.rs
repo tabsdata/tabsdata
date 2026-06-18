@@ -12,3 +12,4 @@
 //! startup when `security_mode = simple`.
 
 pub mod representability;
+pub mod sys_admin;

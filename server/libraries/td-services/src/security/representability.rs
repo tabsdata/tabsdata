@@ -78,15 +78,22 @@ fn is_system_row(perm: &PermissionDB) -> bool {
 /// called both at apiserver startup and from a service/test. `Copy` is required
 /// because each `.live()` consumes the executor and the check issues two reads;
 /// `&TdPool` (and the connection references) are `Copy`.
-pub async fn check_representability(db: impl QueryExecutor + Copy) -> Result<Vec<String>, TdError> {
+pub async fn check_representability(
+    db: impl QueryExecutor + Copy,
+    sys_admin_extras: &[(&str, &str)],
+) -> Result<Vec<String>, TdError> {
     let roles = db.live().fetch_all::<RoleDB>(()).await?;
     let permissions = db.live().fetch_all::<PermissionDB>(()).await?;
-    Ok(evaluate(&roles, &permissions))
+    Ok(evaluate(&roles, &permissions, sys_admin_extras))
 }
 
 /// Pure evaluation of the five conditions over already-loaded `roles` and
 /// `permissions`. Split out so it can be unit-tested without a DB.
-pub fn evaluate(roles: &[RoleDB], permissions: &[PermissionDB]) -> Vec<String> {
+pub fn evaluate(
+    roles: &[RoleDB],
+    permissions: &[PermissionDB],
+    sys_admin_extras: &[(&str, &str)],
+) -> Vec<String> {
     let mut reasons = Vec::new();
 
     // Index permissions by role for per-role composition checks.
@@ -109,7 +116,7 @@ pub fn evaluate(roles: &[RoleDB], permissions: &[PermissionDB]) -> Vec<String> {
             }
             // Condition 2: sys_admin must hold its default composition.
             RoleKind::SysAdmin => {
-                check_sys_admin(role, role_perms, &mut reasons);
+                check_sys_admin(role, role_perms, &mut reasons, sys_admin_extras);
             }
             // Condition 3: default role's composition must be Simple-describable.
             RoleKind::Default => {
@@ -154,9 +161,22 @@ pub fn evaluate(roles: &[RoleDB], permissions: &[PermissionDB]) -> Vec<String> {
 /// Condition 2: `sys_admin` holds exactly its fixed composition. Also
 /// covers condition 4 for `sys_admin` (a specific-project row would not match
 /// the expected wildcard composition and surfaces here).
-fn check_sys_admin(role: &RoleDB, perms: &[&PermissionDB], reasons: &mut Vec<String>) {
+fn check_sys_admin(
+    role: &RoleDB,
+    perms: &[&PermissionDB],
+    reasons: &mut Vec<String>,
+    sys_admin_extras: &[(&str, &str)],
+) {
+    // Expected composition = the OS built-ins plus any extension permissions
+    // declared to ride on sys_admin (stored on `__all__`, like the system rows).
+    let expected: Vec<(&str, bool, &str)> = SYS_ADMIN_COMPOSITION
+        .iter()
+        .copied()
+        .chain(sys_admin_extras.iter().map(|(et, pt)| (*et, true, *pt)))
+        .collect();
+
     let matches_expected = |p: &PermissionDB| {
-        SYS_ADMIN_COMPOSITION.iter().any(|(et, on_all, pt)| {
+        expected.iter().any(|(et, on_all, pt)| {
             p.entity_type.as_str() == *et
                 && p.permission_type.as_str() == *pt
                 && p.entity_id.is_all_entities() == *on_all
@@ -174,7 +194,7 @@ fn check_sys_admin(role: &RoleDB, perms: &[&PermissionDB], reasons: &mut Vec<Str
         }
     }
     // Any expected row missing is also a modification.
-    for (et, on_all, pt) in SYS_ADMIN_COMPOSITION {
+    for (et, on_all, pt) in &expected {
         let present = perms.iter().any(|p| {
             p.entity_type.as_str() == *et
                 && p.permission_type.as_str() == *pt
@@ -329,7 +349,7 @@ mod tests {
     /// A fresh bootstrap (only the built-in roles) is representable.
     #[td_test::test(db)]
     async fn test_fresh_bootstrap_is_representable(db: TdPool) -> Result<(), TdError> {
-        let reasons = check_representability(&db).await?;
+        let reasons = check_representability(&db, &[]).await?;
         assert!(
             reasons.is_empty(),
             "expected no violations, got: {reasons:?}"
@@ -341,7 +361,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_with_project_is_representable(db: TdPool) -> Result<(), TdError> {
         create_project(&db, "foo").await?;
-        let reasons = check_representability(&db).await?;
+        let reasons = check_representability(&db, &[]).await?;
         assert!(
             reasons.is_empty(),
             "expected no violations, got: {reasons:?}"
@@ -361,7 +381,7 @@ mod tests {
             .raw_oneshot(admin_ctx().create((), create))
             .await?;
 
-        let reasons = check_representability(&db).await?;
+        let reasons = check_representability(&db, &[]).await?;
         assert!(
             reasons
                 .iter()
@@ -387,7 +407,7 @@ mod tests {
             )
             .await?;
 
-        let reasons = check_representability(&db).await?;
+        let reasons = check_representability(&db, &[]).await?;
         assert!(
             reasons
                 .iter()
@@ -413,7 +433,7 @@ mod tests {
             )
             .await?;
 
-        let reasons = check_representability(&db).await?;
+        let reasons = check_representability(&db, &[]).await?;
         assert!(
             reasons
                 .iter()
@@ -434,7 +454,7 @@ mod tests {
             .permission(PermissionType::manage_access(), None, None, &default_role)
             .await?;
 
-        let reasons = check_representability(&db).await?;
+        let reasons = check_representability(&db, &[]).await?;
         assert!(
             reasons
                 .iter()

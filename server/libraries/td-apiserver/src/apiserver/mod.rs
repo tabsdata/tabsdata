@@ -45,6 +45,7 @@ impl ApiServerCtx {
         runtime_context: Arc<RuntimeContext>,
         scheduler_notify: SchedulerNotify,
         bridge: Arc<BridgeProviderHandle>,
+        authz_registry: Arc<td_authz::rbac::AuthzRegistry>,
     ) -> Result<Self, TdError> {
         let scheduler_notify = Arc::new(scheduler_notify);
         let context = Context {
@@ -53,7 +54,9 @@ impl ApiServerCtx {
             database_descriptor: Arc::new(config.database.clone()),
             server_addresses: Arc::new(config.addresses.clone()),
             jwt_config: Arc::new(config.jwt.clone()),
-            auth_context: Arc::new(AuthzContext::default()),
+            // Authorization source built from the wired registry (built-in kinds
+            // plus extensions, e.g. te-authz's `ai` / `manage_ai`).
+            auth_context: Arc::new(AuthzContext::with_registry(authz_registry)),
             sessions: Arc::new(Sessions::default()),
             password_settings: {
                 // to verify up front configuration is OK.

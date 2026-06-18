@@ -120,6 +120,9 @@ impl<E: DecodeEntityId> EntityKindHandler for Handler<E> {
 /// listing the permission surface ([`Self::permissions`]).
 pub struct AuthzRegistry {
     by_entity_type: HashMap<&'static str, Box<dyn EntityKindHandler>>,
+    /// `(entity_type, permission)` pairs extensions have added to the built-in
+    /// `sys_admin` role's fixed composition (beyond the OS built-ins).
+    sys_admin: Vec<(&'static str, &'static str)>,
 }
 
 impl Default for AuthzRegistry {
@@ -141,6 +144,7 @@ impl AuthzRegistry {
     pub fn empty() -> Self {
         Self {
             by_entity_type: HashMap::new(),
+            sys_admin: Vec::new(),
         }
     }
 
@@ -216,6 +220,32 @@ impl AuthzRegistry {
                     .contains(&permission)
                     .then_some(*entity_type)
             })
+    }
+
+    /// Declare that `permission` (of the registered kind `E`) is part of the
+    /// built-in `sys_admin` role's fixed composition — so granting full admin
+    /// (Simple `manage_access`, i.e. `sys_admin` membership) confers it.
+    ///
+    /// The OS seeds `sys_admin`'s built-in permissions; this lets an extension
+    /// add its own without the OS core hard-coding the extension's permission.
+    /// Both the startup seed-reconciliation and the RBAC→Simple representability
+    /// check read [`Self::sys_admin_permissions`], so they stay consistent.
+    /// Idempotent.
+    pub fn grant_to_sys_admin<E: DecodeEntityId>(
+        &mut self,
+        permission: E::Permission,
+    ) -> &mut Self {
+        let pair = (E::NAME, permission.name());
+        if !self.sys_admin.contains(&pair) {
+            self.sys_admin.push(pair);
+        }
+        self
+    }
+
+    /// The `(entity_type, permission)` pairs extensions have added to the
+    /// built-in `sys_admin` composition (see [`Self::grant_to_sys_admin`]).
+    pub fn sys_admin_permissions(&self) -> &[(&'static str, &'static str)] {
+        &self.sys_admin
     }
 
     /// Decode a stored `(entity_type, permission, entity_id)` row into a typed

@@ -177,6 +177,37 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
             // independently of the serving pools that only connect to it.
             let system_handle = system_pool.clone();
 
+            // Build the authorization registry (built-in kinds plus extensions)
+            // once. Reconcile sys_admin's composition with any extension
+            // permissions that ride on it (e.g. te-authz's `manage_ai`) before
+            // the representability check reads the same extras — the OS schema
+            // seed cannot know about extension permissions.
+            let authz_registry = Arc::new(td_authz::rbac::AuthzRegistry::default());
+            {
+                // Writes go through the read-write pool's transaction (the
+                // read-only `acquire()` would reject the INSERT).
+                let mut tx = db.begin().await.map_err(|e| {
+                    error!("Error starting transaction for sys_admin reconciliation: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
+                {
+                    let mut conn = tx.as_mut_conn();
+                    td_services::security::sys_admin::ensure_sys_admin_permissions(
+                        &mut conn,
+                        authz_registry.sys_admin_permissions(),
+                    )
+                    .await
+                    .map_err(|e| {
+                        error!("Error reconciling sys_admin permissions: {e:#?}");
+                        ExitStatus::GeneralError
+                    })?;
+                }
+                tx.commit().await.map_err(|e| {
+                    error!("Error committing sys_admin reconciliation: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
+            }
+
             // Simple Security Mode requires the current RBAC configuration to be
             // representable on the flat Simple surface. If the operator booted in `simple` mode
             // but the roles/permissions were arranged in RBAC-only ways (custom
@@ -185,7 +216,12 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
             // start and list the offending rows so the operator can either revert
             // the configuration or boot in `rbac` mode instead.
             if config.security_mode == SecurityMode::Simple {
-                match td_services::security::representability::check_representability(&db).await {
+                match td_services::security::representability::check_representability(
+                    &db,
+                    authz_registry.sys_admin_permissions(),
+                )
+                .await
+                {
                     Ok(reasons) if reasons.is_empty() => {
                         info!("Security mode 'simple': RBAC configuration is representable");
                     }
@@ -220,6 +256,7 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
                 runtime_context.clone(),
                 scheduler_notify.clone(),
                 bridge.clone(),
+                authz_registry.clone(),
             )
             .await
             .map_err(|e| {
