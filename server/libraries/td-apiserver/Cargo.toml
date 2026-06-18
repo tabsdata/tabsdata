@@ -99,6 +99,7 @@ td-services = { workspace = true }
 td-storage = { workspace = true }
 td-tower = { workspace = true }
 te-apiserver = { workspace = true }
+te-authz = { workspace = true }
 te-services = { workspace = true }
 
 # External dependencies

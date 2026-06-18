@@ -8950,6 +8950,7 @@ dependencies = [
  "td-test",
  "td-tower",
  "te-apiserver",
+ "te-authz",
  "te-services",
  "thiserror 2.0.18",
  "tokio",
@@ -9706,6 +9707,18 @@ dependencies = [
  "td-error",
  "te-apiserver",
  "utoipa-axum",
+]
+
+[[package]]
+name = "te-authz"
+version = "2.0.0"
+dependencies = [
+ "openssl",
+ "td-authz",
+ "td-error",
+ "td-objects",
+ "te-authz",
+ "tokio",
 ]
 
 [[package]]

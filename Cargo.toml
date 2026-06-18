@@ -61,6 +61,7 @@ members = [
     "server/libraries/td-test",
     "server/libraries/td-tower",
     "extensions/rust/te-apiserver",
+    "extensions/rust/te-authz",
     "extensions/rust/te-execution",
     "extensions/rust/te-services",
     "extensions/rust/te-system",
@@ -221,6 +222,9 @@ path = "server/libraries/td-execution"
 
 [workspace.dependencies.td-kubernetes]
 path = "server/libraries/td-kubernetes"
+
+[workspace.dependencies.te-authz]
+path = "extensions/rust/te-authz"
 
 [workspace.dependencies.te-services]
 path = "extensions/rust/te-services"

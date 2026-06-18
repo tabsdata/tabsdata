@@ -177,12 +177,15 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
             // independently of the serving pools that only connect to it.
             let system_handle = system_pool.clone();
 
-            // Build the authorization registry (built-in kinds plus extensions)
-            // once. Reconcile sys_admin's composition with any extension
-            // permissions that ride on it (e.g. te-authz's `manage_ai`) before
-            // the representability check reads the same extras — the OS schema
-            // seed cannot know about extension permissions.
-            let authz_registry = Arc::new(td_authz::rbac::AuthzRegistry::default());
+            // Build the base (built-in) registry and let each extension augment
+            // it — the OS owns the default; te-authz adds its `ai` kind (and the
+            // `manage_ai` permission riding on sys_admin). Reconcile sys_admin's
+            // composition with those extras before the representability check
+            // reads the same list — the OS schema seed cannot know about
+            // extension permissions.
+            let authz_registry = Arc::new(te_authz::register_ext(
+                td_authz::rbac::AuthzRegistry::default(),
+            ));
             {
                 // Writes go through the read-write pool's transaction (the
                 // read-only `acquire()` would reject the INSERT).
