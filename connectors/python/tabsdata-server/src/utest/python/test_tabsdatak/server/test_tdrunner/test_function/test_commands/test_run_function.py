@@ -25,10 +25,14 @@ import polars as pl
 import pytest
 import yaml
 
-from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak._info import PublisherInfo
 from tabsdatak.api import TableFrameSpec, TableFramesSpec
+from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
+from tabsdatak.server._tdrunner.function._lib.initial_values import (
+    read_initial_values,
+    write_initial_values,
+)
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     build_entry,
     build_table_record,
@@ -44,10 +48,6 @@ from tabsdatak.server._tdrunner.function.commands.run_function import (
     _scan_parquet_or_fail,
     _sink_outputs,
     main,
-)
-from tabsdatak.server._tdrunner.function._lib.initial_values import (
-    read_initial_values,
-    write_initial_values,
 )
 from tabsdatak.server._tdrunner.function.commands.run_function.error import (
     BadBundleError,
@@ -246,6 +246,57 @@ def subscriber_bundle(tmp_path, monkeypatch) -> Path:
 
     for name in list(sys.modules):
         if name == "sub_pkg" or name.startswith("sub_pkg."):
+            del sys.modules[name]
+
+
+# A trivial @stream_publisher-decorated function used to verify kind
+# dispatch routes correctly to StreamPublisherInfo. By the time
+# run-function executes the function-publisher chain has already
+# materialised inputs on disk (via run_source_plugin's stream-publisher
+# substitution + stamp-inputs) so the call shape here is identical to a
+# regular publisher's.
+_USER_STREAM_PUBLISHER_SRC = """\
+from __future__ import annotations
+
+from tabsdatak.api import TableFrameSpec, TableFramesSpec, stream_publisher
+from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
+
+
+@stream_publisher(
+    conn=KafkaStreamSrcConn(servers="x:9092", group_id="g"),
+    source=KafkaStreamSrc(data_format="json", schema="{}", topic="people"),
+    flush_interval_mins=1,
+    output_tables=["people_streamed"],
+)
+def my_stream_publisher(t: TableFramesSpec) -> tuple[TableFrameSpec]:
+    return (None,)
+"""
+
+
+@pytest.fixture
+def stream_publisher_bundle(tmp_path, monkeypatch) -> Path:
+    """Materialise a tiny @stream_publisher-decorated function in a
+    fresh project, build + extract its bundle, return the extracted
+    dir."""
+    project = tmp_path / "sp_project"
+    pkg = project / "sp_pkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "stream_publisher.py").write_text(_USER_STREAM_PUBLISHER_SRC)
+    monkeypatch.syspath_prepend(str(project))
+    importlib.invalidate_caches()
+
+    from sp_pkg.stream_publisher import my_stream_publisher  # noqa: E402
+
+    bundle_path = tmp_path / "sp_bundle.tar.zst"
+    build_bundle(my_stream_publisher, project, bundle_path)
+    extracted = tmp_path / "sp_extracted"
+    extract_bundle(bundle_path, extracted)
+
+    yield extracted
+
+    for name in list(sys.modules):
+        if name == "sp_pkg" or name.startswith("sp_pkg."):
             del sys.modules[name]
 
 
@@ -548,6 +599,22 @@ def test_load_function_def_subscriber_kind_loads_subscriber_info(
     # SubscriberInfo has no `output_tables` attribute — names get
     # synthesised by `_output_table_names`.
     assert not hasattr(info, "output_tables")
+
+
+def test_load_function_def_stream_publisher_kind_loads_stream_publisher_info(
+    stream_publisher_bundle,
+):
+    """A streamPublisherDef bundle deserialises as StreamPublisherInfo.
+
+    Without this, `td fn trigger` on a `@stream_publisher` fails at
+    `0080-run-function` with WrongKindError (RF_4) — even though
+    upstream steps (`run-source-plugin`'s substitution) have done their
+    job materialising the staged inputs."""
+    from tabsdatak._info import StreamPublisherInfo
+
+    info = _load_function_def(stream_publisher_bundle)
+    assert isinstance(info, StreamPublisherInfo)
+    assert list(info.output_tables) == ["people_streamed"]
 
 
 # --- unit: _output_table_names -----------------------------------------

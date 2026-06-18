@@ -40,9 +40,11 @@ from tabsdatak._api import _is_array_slot, _is_single_slot, has_trx_ctx_param
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
+    KIND_STREAM_PUBLISHER_DEF,
     KIND_SUBSCRIBER_DEF,
     KIND_TRANSFORMER_DEF,
     PublisherInfo,
+    StreamPublisherInfo,
     SubscriberInfo,
     TransformerInfo,
     _unwrap_info,
@@ -72,7 +74,14 @@ logger = logging.getLogger(__name__)
 # agnostic of *what* the function does — it just needs the call shape
 # (input modes, output names/count) which it derives uniformly from
 # each Info shape via `_output_table_names`.
-FunctionInfo = PublisherInfo | TransformerInfo | SubscriberInfo
+#
+# StreamPublisherInfo shares Publisher's call shape: by the time this
+# command runs, the inputs have already been materialised on disk by
+# `run_source_plugin` (which substitutes the user-declared
+# StreamSrc/StreamSrcConn for the publisher-side StreamStageSrc +
+# ManifestStageSrcPlugin). The user function is invoked exactly the
+# same way; only the upstream input-production differs.
+FunctionInfo = PublisherInfo | StreamPublisherInfo | TransformerInfo | SubscriberInfo
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
@@ -157,6 +166,7 @@ class _FunctionContext(FromRequestCtx, FunctionCtx):
 
 _INFO_BY_KIND: dict[str, type[FunctionInfo]] = {
     KIND_PUBLISHER_DEF: PublisherInfo,
+    KIND_STREAM_PUBLISHER_DEF: StreamPublisherInfo,
     KIND_TRANSFORMER_DEF: TransformerInfo,
     KIND_SUBSCRIBER_DEF: SubscriberInfo,
 }
@@ -311,7 +321,14 @@ def _build_input(record: dict, *, info: FunctionInfo):
     if file is None:
         return None
     lf = _scan_parquet_or_fail(Path(file))
-    if isinstance(info, PublisherInfo):
+    if isinstance(info, (PublisherInfo, StreamPublisherInfo)):
+        # Stream-publisher inputs are also publisher-side: the
+        # ``stamp-inputs`` step (0070) wrote enriched parquets with
+        # the framework's system columns, just like a regular
+        # publisher's. TAB mode preserves those columns instead of
+        # regenerating them via MUT (which is the right choice for
+        # transformer / subscriber inputs that come from stored
+        # tables).
         return TableFrame._build(lf, CreationMode.TAB)
     return TableFrame._build(
         lf,
