@@ -13,7 +13,8 @@
 //! The async/database boundary lives entirely here; the enforcement decision
 //! ([`crate::rbac::model::Grants::allows`]) stays pure.
 
-use crate::rbac::model::{Grant, Grants, Project, ProjectId, ProjectPermission, SystemPermission};
+use crate::rbac::model::Grants;
+use crate::rbac::registry::AuthzRegistry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_common::provider::{CachedProvider, Provider};
@@ -21,9 +22,9 @@ use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::user_role::UserRoleDB;
-use td_objects::types::basic::{PermissionEntityType, PermissionType, RoleId, UserId};
+use td_objects::types::basic::{RoleId, UserId};
 use td_queries::LiveEntry;
-use tracing::{debug, error, instrument};
+use tracing::{debug, instrument};
 
 /// Per-user effective grants, keyed by [`UserId`].
 ///
@@ -34,55 +35,34 @@ type UserGrants = HashMap<UserId, Arc<Grants>>;
 
 /// [`Provider`] that rebuilds the per-user grants map from the database on
 /// every `get` (the [`CachedProvider`] caches the result until `purge`d).
+///
+/// Carries the [`AuthzRegistry`] used to turn stored `(entity_type,
+/// permission, entity_id)` rows into typed grants; [`Default`] uses the
+/// built-in kinds.
 #[derive(Debug, Default)]
-pub struct SqlRbacGrantsProvider;
+pub struct SqlRbacGrantsProvider {
+    registry: Arc<AuthzRegistry>,
+}
 
 impl SqlRbacGrantsProvider {
-    /// Map one `role_permission` row to a model [`Grant`] and add it to the
-    /// role's grant set. A row that does not map (unknown id shape) is logged
-    /// and skipped rather than failing the whole load, matching the old
-    /// provider's row-skipping behavior.
-    fn add_grant(grants: &mut Grants, perm: &PermissionDB) {
-        match &perm.entity_type {
-            PermissionEntityType::System => {
-                let permission = match &perm.permission_type {
-                    PermissionType::ManageAccess => SystemPermission::ManageAccess,
-                    PermissionType::CreateProjects => SystemPermission::CreateProjects,
-                    PermissionType::ManageRoles => SystemPermission::ManageRoles,
-                    other => {
-                        error!(
-                            permission_id = %perm.id,
-                            "authz: project permission {other:?} on a system entity; skipping"
-                        );
-                        return;
-                    }
-                };
-                grants.add(Grant::system(permission));
-            }
-            PermissionEntityType::Project => {
-                let permission = match &perm.permission_type {
-                    PermissionType::ViewProject => ProjectPermission::ViewProject,
-                    PermissionType::DevelopProject => ProjectPermission::DevelopProject,
-                    PermissionType::ManageProject => ProjectPermission::ManageProject,
-                    other => {
-                        error!(
-                            permission_id = %perm.id,
-                            "authz: system permission {other:?} on a project entity; skipping"
-                        );
-                        return;
-                    }
-                };
-                if perm.entity_id.is_all_entities() {
-                    grants.add(Grant::<Project>::all(permission));
-                } else {
-                    // every typed id is `From<Id>` and Derefs to `Id`; the
-                    // project entity id is stored as a generic EntityId, so we
-                    // rebuild a ProjectId from its inner id.
-                    let project = ProjectId::from(*perm.entity_id);
-                    grants.add(Grant::<Project>::on(project, permission));
-                }
-            }
-        }
+    /// A provider that decodes stored grants through `registry` — pass one
+    /// carrying any extension entity kinds registered by other crates.
+    pub fn new(registry: Arc<AuthzRegistry>) -> Self {
+        Self { registry }
+    }
+
+    /// Map one `role_permission` row to a model grant and add it to the role's
+    /// grant set, dispatching on the stored entity-type / permission names
+    /// through the [`AuthzRegistry`]. A row that maps to no registered
+    /// kind/permission is logged and skipped (by the registry) rather than
+    /// failing the whole load.
+    fn add_grant(&self, grants: &mut Grants, perm: &PermissionDB) {
+        self.registry.add_grant(
+            grants,
+            &perm.entity_type.to_string(),
+            &perm.permission_type.to_string(),
+            &perm.entity_id,
+        );
     }
 
     /// Load `role_permission` rows and group them into a per-role [`Grants`].
@@ -96,7 +76,7 @@ impl SqlRbacGrantsProvider {
         let mut by_role: HashMap<RoleId, Grants> = HashMap::new();
         for perm in &permissions {
             let grants = by_role.entry(perm.role_id).or_default();
-            Self::add_grant(grants, perm);
+            self.add_grant(grants, perm);
         }
         debug!(
             role_count = by_role.len(),
@@ -154,6 +134,18 @@ pub struct SqlRbacSource {
     empty: Arc<Grants>,
 }
 
+impl SqlRbacSource {
+    /// A source that decodes stored grants through `registry` — use this to
+    /// wire in extension entity kinds registered by other crates. [`Default`]
+    /// uses the built-in kinds.
+    pub fn with_registry(registry: Arc<AuthzRegistry>) -> Self {
+        Self {
+            provider: CachedProvider::cache(SqlRbacGrantsProvider::new(registry)),
+            empty: Arc::new(Grants::new()),
+        }
+    }
+}
+
 impl super::source::RbacSource for SqlRbacSource {
     async fn user_grants(
         &self,
@@ -175,7 +167,7 @@ impl super::source::RbacSource for SqlRbacSource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rbac::model::{ProjectPermission, Requires, SystemPermission};
+    use crate::rbac::model::{Project, ProjectPermission, Requires, SystemPermission};
     use crate::rbac::source::RbacSource;
     use td_database::pool::TdPool;
     use td_objects::types::basic::UserId;

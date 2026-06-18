@@ -73,6 +73,7 @@
 //! impl GrantedPermission for ContainerPermission {
 //!     fn name(self) -> &'static str { ... }
 //!     fn satisfies(self, required: Self) -> bool { self >= required }
+//!     fn all() -> &'static [Self] { &[Self::ViewContainer, Self::ManageContainer] }
 //! }
 //!
 //! impl EntityKind for Container {
@@ -83,7 +84,10 @@
 //! ```
 //!
 //! `Scope::<Container>::set` and tuple any-of come for free; requirement
-//! markers are a `project_requirement!`-style macro invocation each.
+//! markers are a `project_requirement!`-style macro invocation each. To make
+//! the kind's *stored* grants loadable, also `impl DecodeEntityId for
+//! Container` and [`register`](registry::AuthzRegistry::register) it — see
+//! [`registry`].
 //!
 //! # Semantics
 //!
@@ -96,6 +100,7 @@
 
 pub mod layers;
 pub mod model;
+pub mod registry;
 pub mod source;
 pub mod sql_source;
 
@@ -109,6 +114,7 @@ pub use model::{
     ProjectId, ProjectPermission, ProjectRole, Requires, System, SystemEntity, SystemPermission,
     SystemRole, User, VisibleProjects,
 };
+pub use registry::{AuthzRegistry, DecodeEntityId};
 pub use source::{FixedRbacSource, RbacSource, identity_grants};
 pub use sql_source::{SqlRbacGrantsProvider, SqlRbacSource};
 

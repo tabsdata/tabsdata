@@ -49,6 +49,24 @@ pub trait GrantedPermission: Copy + Eq + Debug + Send + Sync + 'static {
     fn satisfies(self, required: Self) -> bool {
         self == required
     }
+
+    /// Every permission of this kind. The catalog the registry exposes for
+    /// introspection and the basis for name-based parsing
+    /// ([`Self::from_name`]). Ordered kinds list ascending (matching the
+    /// derived [`Ord`]).
+    fn all() -> &'static [Self]
+    where
+        Self: Sized;
+
+    /// Reverse of [`Self::name`]: resolve a stored / user-facing permission
+    /// name to its value, or `None` if no permission of this kind carries it.
+    /// Default: a linear scan over [`Self::all`].
+    fn from_name(name: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        Self::all().iter().copied().find(|p| p.name() == name)
+    }
 }
 
 /// The target of a grant or requirement: a specific entity or all entities
@@ -224,6 +242,14 @@ impl GrantedPermission for SystemPermission {
             SystemPermission::ManageRoles => "manage_roles",
         }
     }
+
+    fn all() -> &'static [Self] {
+        &[
+            SystemPermission::ManageAccess,
+            SystemPermission::CreateProjects,
+            SystemPermission::ManageRoles,
+        ]
+    }
 }
 
 impl EntityKind for System {
@@ -272,6 +298,15 @@ impl GrantedPermission for ProjectPermission {
     fn satisfies(self, required: Self) -> bool {
         self >= required
     }
+
+    /// Ascending dominance order, matching the derived [`Ord`].
+    fn all() -> &'static [Self] {
+        &[
+            ProjectPermission::ViewProject,
+            ProjectPermission::DevelopProject,
+            ProjectPermission::ManageProject,
+        ]
+    }
 }
 
 impl ProjectPermission {
@@ -317,6 +352,10 @@ pub enum IdentityClaim {
 impl GrantedPermission for IdentityClaim {
     fn name(self) -> &'static str {
         "requester"
+    }
+
+    fn all() -> &'static [Self] {
+        &[IdentityClaim::Requester]
     }
 }
 
