@@ -27,20 +27,9 @@ import pyarrow.parquet as pq
 import pytest
 import yaml
 
-from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak._info import PublisherInfo
+from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
-    BadBundleError,
-    BadRequestError,
-    BadStateInError,
-    BadStateOutError,
-    BadUserCodeError,
-    ManifestWriteFailedError,
-    NoPluginError,
-    PluginFailedError,
-    RunSourcePluginErrorCode,
-)
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
     drain_ctx_to_state_or_raise,
     hydrate_ctx_from_state_or_raise,
@@ -55,13 +44,24 @@ from tabsdatak.server._tdrunner.function._lib.request import (
     Request,
 )
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
-    _SrcContext,
     _invoke_read_in,
     _load_function_def,
     _normalise_table_file,
     _resolve_plugin,
+    _SrcContext,
     _write_inputs_manifest,
     main,
+)
+from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
+    BadBundleError,
+    BadRequestError,
+    BadStateInError,
+    BadStateOutError,
+    BadUserCodeError,
+    ManifestWriteFailedError,
+    NoPluginError,
+    PluginFailedError,
+    RunSourcePluginErrorCode,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -154,6 +154,7 @@ def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
 
 def _info_payload(bundle_uri: str = "file:///bundle.tgz") -> dict:
     return {
+        "project_id": "P-1",
         "collection_id": 1,
         "collection": "c",
         "function_version_id": "FV-1",
@@ -663,6 +664,7 @@ def _bare_ctx() -> _SrcContext:
 
 def _bare_info() -> Info:
     return Info(
+        project_id="P-1",
         collection_id=1,
         collection="c",
         function_version_id="FV-1",
@@ -744,7 +746,9 @@ def test_hydrate_noop_when_state_file_missing(tmp_path):
     req = _bare_request(
         system_input=(_input_table("iv", location=Location(uri="file:///x")),),
     )
-    hydrate_ctx_from_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
+    hydrate_ctx_from_state_or_raise(
+        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
+    )
     assert ctx.drain() == {}
 
 
@@ -755,7 +759,9 @@ def test_hydrate_loads_values_when_state_file_present(tmp_path):
     req = _bare_request(
         system_input=(_input_table("iv", location=Location(uri="file:///x")),),
     )
-    hydrate_ctx_from_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
+    hydrate_ctx_from_state_or_raise(
+        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
+    )
     assert ctx.drain() == {"last-modified": "2026-05-27T00:00:00Z"}
 
 
@@ -767,7 +773,9 @@ def test_hydrate_malformed_state_file_raises_bad_initial_values(tmp_path):
         system_input=(_input_table("iv", location=Location(uri="file:///x")),),
     )
     with pytest.raises(BadStateInError):
-        hydrate_ctx_from_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9)
+        hydrate_ctx_from_state_or_raise(
+            ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_9
+        )
 
 
 def test_drain_noop_when_system_output_empty(tmp_path):
@@ -802,14 +810,15 @@ def test_drain_noop_when_slot_has_no_location(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
-
 def test_drain_writes_state_file_when_slot_present(tmp_path):
     ctx = _bare_ctx()
     ctx.store_attr("last-modified", "2026-05-28T00:00:00Z")
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10)
+    drain_ctx_to_state_or_raise(
+        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
+    )
     written = tmp_path / "iv.parquet"
     assert written.is_file()
     assert read_initial_values(written) == {"last-modified": "2026-05-28T00:00:00Z"}
@@ -822,7 +831,9 @@ def test_drain_writes_empty_file_when_ctx_empty(tmp_path):
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10)
+    drain_ctx_to_state_or_raise(
+        ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
+    )
     written = tmp_path / "iv.parquet"
     assert written.is_file()
     assert read_initial_values(written) == {}
@@ -836,7 +847,9 @@ def test_drain_creates_state_dir_if_missing(tmp_path):
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
-    drain_ctx_to_state_or_raise(ctx, req, state_dir, error_code=RunSourcePluginErrorCode.RSP_10)
+    drain_ctx_to_state_or_raise(
+        ctx, req, state_dir, error_code=RunSourcePluginErrorCode.RSP_10
+    )
     assert (state_dir / "iv.parquet").is_file()
 
 
@@ -851,7 +864,9 @@ def test_drain_bad_value_raises_bad_initial_values(tmp_path, monkeypatch):
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
     with pytest.raises(BadStateOutError):
-        drain_ctx_to_state_or_raise(ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10)
+        drain_ctx_to_state_or_raise(
+            ctx, req, tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
+        )
 
 
 # --- main: end-to-end with initial_values round-trip --------------------

@@ -43,6 +43,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 def _info(**overrides: Any) -> Info:
     fields: dict[str, Any] = {
+        "project_id": "P-1",
         "collection_id": 1,
         "collection": "c",
         "function_version_id": "FV-1",

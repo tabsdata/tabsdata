@@ -35,6 +35,7 @@ RESOURCES = Path(__file__).parent / "resources"
 def _info_payload(**overrides: Any) -> dict:
     """A complete, valid `info` payload with overridable fields."""
     base: dict[str, Any] = {
+        "project_id": "P-1",
         "collection_id": 19,
         "collection": "my_collection",
         "function_version_id": "FV-1",
@@ -568,6 +569,7 @@ def test_output_table_is_frozen():
 
 def _build_info(triggered_on: int) -> Info:
     return Info(
+        project_id="P-1",
         collection_id=19,
         collection="c",
         function_version_id="FV-1",

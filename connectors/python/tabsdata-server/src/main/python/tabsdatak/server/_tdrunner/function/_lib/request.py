@@ -112,6 +112,7 @@ class OutputTable(BaseModel):
 class Info(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    project_id: str | int
     collection_id: str | int
     collection: str
     function_version_id: str | int

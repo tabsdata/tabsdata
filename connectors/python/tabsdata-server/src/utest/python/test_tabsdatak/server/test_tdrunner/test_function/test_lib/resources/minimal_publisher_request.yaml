@@ -1,5 +1,6 @@
 FunctionV2:
   info:
+    project_id: P-1
     collection_id: 19
     collection: my_collection
     function_version_id: FV-1
