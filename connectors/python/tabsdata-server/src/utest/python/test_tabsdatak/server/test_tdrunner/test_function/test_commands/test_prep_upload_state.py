@@ -16,6 +16,9 @@ from tabsdatak.server._tdrunner.function.commands.prep_upload_state.error import
     BadRequestError,
     WriteFailedError,
 )
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
+    info_payload as _info,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -56,24 +59,6 @@ def _set_argv(
     )
 
 
-def _info(bundle_uri: str) -> dict:
-    return {
-        "collection": "c",
-        "collection_id": 1,
-        "function_version_id": "FV-1",
-        "function_defined_on": 1780000000000,
-        "function": "fn",
-        "function_run_id": 4,
-        "function_bundle": {"uri": bundle_uri, "env_prefix": "ROOT"},
-        "function_stage": {"uri": "file:///stage", "env_prefix": "ROOT"},
-        "triggered_on": 1780000000100,
-        "transaction_id": 3,
-        "execution_id": 2,
-        "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
-        "scheduled_on": 1780000000200,
-    }
-
-
 def _table(entry: dict, index: int) -> dict:
     table = {
         "collection_id": 1,
@@ -97,8 +82,7 @@ def _write_request(
         "FunctionV2": {
             "info": _info(bundle_uri),
             "system_output": [
-                _table(entry, index)
-                for index, entry in enumerate(system_output or [])
+                _table(entry, index) for index, entry in enumerate(system_output or [])
             ],
         }
     }
@@ -187,9 +171,7 @@ def test_main_missing_request_returns_bad_request(monkeypatch, tmp_path, http_ok
     assert rc == BadRequestError.exit_code
 
 
-def test_main_malformed_request_returns_bad_request(
-    monkeypatch, tmp_path, http_ok_url
-):
+def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path, http_ok_url):
     bad = tmp_path / "request.yaml"
     bad.write_text("info: { unclosed")
     rc = main_with_args(

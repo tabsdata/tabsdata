@@ -22,6 +22,7 @@ from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle.error impor
     ExtractFailedError,
     TransporterFailedError,
 )
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -86,30 +87,7 @@ def paths(tmp_path):
 
 
 def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
-    path.write_text(
-        yaml.safe_dump({
-            "FunctionV2": {
-                "info": {
-                    "collection": "c",
-                    "collection_id": 1,
-                    "function_version_id": "FV-1",
-                    "function_defined_on": 1780000000000,
-                    "function": "fn",
-                    "function_run_id": 4,
-                    "function_bundle": {"uri": bundle_uri, "env_prefix": "ROOT"},
-                    "function_stage": {
-                        "uri": "file:///stage",
-                        "env_prefix": "ROOT",
-                    },
-                    "triggered_on": 1780000000100,
-                    "transaction_id": 3,
-                    "execution_id": 2,
-                    "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
-                    "scheduled_on": 1780000000200,
-                },
-            }
-        })
-    )
+    path.write_text(yaml.safe_dump({"FunctionV2": {"info": info_payload(bundle_uri)}}))
     return path
 
 

@@ -25,8 +25,8 @@ import pyarrow.parquet as pq
 import pytest
 import yaml
 
-from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak._info import SubscriberInfo
+from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_FILE_KEY,
@@ -50,6 +50,8 @@ from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.error i
     PluginFailedError,
     WrongKindError,
 )
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
+
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
@@ -122,24 +124,12 @@ def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
     path.write_text(
         yaml.safe_dump({
             "FunctionV2": {
-                "info": {
-                    "collection": "c",
-                    "collection_id": 1,
-                    "function_version_id": "FV-1",
-                    "function_defined_on": 1780000000000,
-                    "function": "fn",
-                    "function_run_id": 7,
-                    "function_bundle": {"uri": bundle_uri, "env_prefix": "ROOT"},
-                    "function_stage": {
-                        "uri": "file:///stage",
-                        "env_prefix": "ROOT",
-                    },
-                    "triggered_on": 1780000000100,
-                    "transaction_id": 99,
-                    "execution_id": 42,
-                    "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
-                    "scheduled_on": 1780000000200,
-                },
+                "info": info_payload(
+                    bundle_uri,
+                    function_run_id=7,
+                    transaction_id=99,
+                    execution_id=42,
+                ),
             }
         })
     )

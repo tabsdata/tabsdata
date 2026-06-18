@@ -44,6 +44,7 @@ from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     StampFailedError,
 )
 from tabsdatak.tableframe._engine.model.frame import DataVersion
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payload
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -52,30 +53,20 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
 def _write_request(path: Path) -> Path:
-    """Minimal request.yaml — stamp-inputs only reads execution_id and
-    transaction_id from info."""
+    """Minimal request.yaml -- stamp-inputs only reads execution_id and
+    transaction_id from info. ``exec-42`` / ``tx-42`` are asserted on
+    in the stamped-parquet test, so they're passed as explicit
+    overrides instead of letting the helper's defaults through."""
     path.write_text(
-        yaml.safe_dump(
-            {
-                "FunctionV2": {
-                    "info": {
-                        "collection": "c",
-                        "collection_id": 1,
-                        "function_version_id": "FV-1",
-                        "function_defined_on": 1780000000000,
-                        "function": "fn",
-                        "function_run_id": 7,
-                        "function_bundle": {"uri": "file:///bundle.tgz"},
-                        "function_stage": {"uri": "file:///stage"},
-                        "triggered_on": 1780000000100,
-                        "transaction_id": "tx-42",
-                        "execution_id": "exec-42",
-                        "function_data": {"uri": "file:///data"},
-                        "scheduled_on": 1780000000200,
-                    },
-                }
+        yaml.safe_dump({
+            "FunctionV2": {
+                "info": info_payload(
+                    function_run_id=7,
+                    transaction_id="tx-42",
+                    execution_id="exec-42",
+                ),
             }
-        )
+        })
     )
     return path
 
@@ -95,7 +86,8 @@ def _data_version(
     timestamp=EMPTY_TIMESTAMP,
 ) -> DataVersion:
     return (
-        DataVersion.builder()
+        DataVersion
+        .builder()
         .with_execution(execution)
         .with_transaction(transaction)
         .with_version(version)
@@ -367,9 +359,7 @@ def test_main_empty_slot_passes_through(tmp_path, monkeypatch, http_ok_url):
 
     data = yaml.safe_load(enriched_manifest.read_text())
     assert data == {
-        "inputs": [
-            {"name": "in_1", "table_pos": 0, "is_empty": False, "tables": []}
-        ]
+        "inputs": [{"name": "in_1", "table_pos": 0, "is_empty": False, "tables": []}]
     }
 
 

@@ -64,6 +64,9 @@ from tabsdatak.server._tdrunner.function.commands.run_function.error import (
 from tabsdatak.spi import DestContext, FunctionCtx, SrcPluginCtx, TableMode
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
+    info_payload as _info,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -420,24 +423,6 @@ def multi_transformer_bundle(tmp_path, monkeypatch) -> Path:
     for name in list(sys.modules):
         if name == "mtx_pkg" or name.startswith("mtx_pkg."):
             del sys.modules[name]
-
-
-def _info(bundle_uri: str = "file:///bundle.tgz") -> dict:
-    return {
-        "collection": "c",
-        "collection_id": 1,
-        "function_version_id": "FV-1",
-        "function_defined_on": 1780000000000,
-        "function": "fn",
-        "function_run_id": 7,
-        "function_bundle": {"uri": bundle_uri, "env_prefix": "ROOT"},
-        "function_stage": {"uri": "file:///stage", "env_prefix": "ROOT"},
-        "triggered_on": 1780000000100,
-        "transaction_id": 99,
-        "execution_id": 42,
-        "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
-        "scheduled_on": 1780000000200,
-    }
 
 
 def _input_table(entry: dict, index: int) -> dict:

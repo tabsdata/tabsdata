@@ -6,9 +6,55 @@ from __future__ import annotations
 
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Iterator
+from typing import Any, Iterator
 
 import pytest
+
+# --- Shared synthetic Request.info builder --------------------------------
+#
+# Single source of truth for the ``FunctionV2.info`` payload used by
+# tests that need a request.yaml on disk. Each command's ``test_*.py``
+# previously defined its own near-identical ``_info`` (or inlined the
+# dict in ``_write_request``) -- eight copies in total, each missing
+# every new required ``Info`` field at the moment the schema changed
+# (TD-2471 added ``project_id`` and broke ~60 tests). Centralising here
+# means adding a new required field is a one-line change instead of a
+# fan-out across every test module.
+#
+# Note: ``Info`` is declared with ``extra="forbid"`` (see
+# ``_lib/request.py``), so this dict must contain only fields the
+# Pydantic model knows about. Defaults are filler values; override any
+# subset by keyword for per-test specifics (e.g.
+# ``execution_id="exec-42"``).
+
+
+def info_payload(
+    bundle_uri: str = "file:///bundle.tgz",
+    **overrides: Any,
+) -> dict[str, Any]:
+    """Build a synthetic ``FunctionV2.info`` dict.
+
+    ``bundle_uri`` is the most-commonly-overridden field, so it's a
+    positional shortcut; everything else goes through ``**overrides``.
+    """
+    base: dict[str, Any] = {
+        "project_id": "P-1",
+        "collection_id": 1,
+        "collection": "c",
+        "function_version_id": "FV-1",
+        "function_defined_on": 1780000000000,
+        "function": "fn",
+        "function_run_id": 4,
+        "function_bundle": {"uri": bundle_uri, "env_prefix": "ROOT"},
+        "function_stage": {"uri": "file:///stage", "env_prefix": "ROOT"},
+        "triggered_on": 1780000000100,
+        "transaction_id": 3,
+        "execution_id": 2,
+        "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
+        "scheduled_on": 1780000000200,
+    }
+    base.update(overrides)
+    return base
 
 
 class _OkHandler(BaseHTTPRequestHandler):

@@ -29,6 +29,9 @@ from tabsdatak.server._tdrunner.function.commands.report_completion.error import
     ManifestMismatchError,
     WriteFailedError,
 )
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
+    info_payload as _info,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -90,24 +93,6 @@ def _set_argv(
             str(journal_file),
         ],
     )
-
-
-def _info():
-    return {
-        "collection": "c",
-        "collection_id": 1,
-        "function_version_id": "FV-1",
-        "function_defined_on": 1780000000000,
-        "function": "fn",
-        "function_run_id": 4,
-        "function_bundle": {"uri": "file:///bundle.tgz", "env_prefix": "ROOT"},
-        "function_stage": {"uri": "file:///stage", "env_prefix": "ROOT"},
-        "triggered_on": 1780000000100,
-        "transaction_id": 3,
-        "execution_id": 2,
-        "function_data": {"uri": "file:///data", "env_prefix": "ROOT"},
-        "scheduled_on": 1780000000200,
-    }
 
 
 def _output_table(entry, index):
@@ -251,9 +236,7 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
     payload = json.loads(posted["body"])
     assert payload["status"] == "Done"
     written = payload["context"]["FunctionV2"]["output"]
-    posted_by_name = {
-        next(iter(entry.values()))["table"]: entry for entry in written
-    }
+    posted_by_name = {next(iter(entry.values()))["table"]: entry for entry in written}
     assert "Data" in posted_by_name["customers"]
     assert (
         posted_by_name["customers"]["Data"]["info"]["row_count"]

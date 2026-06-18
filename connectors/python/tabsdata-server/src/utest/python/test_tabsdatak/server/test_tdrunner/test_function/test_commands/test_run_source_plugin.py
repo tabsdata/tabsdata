@@ -63,6 +63,9 @@ from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import
     PluginFailedError,
     RunSourcePluginErrorCode,
 )
+from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
+    info_payload as _info_payload,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -150,26 +153,6 @@ def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
     extracted = tmp_path / "extracted"
     extract_bundle(bundle_path, extracted)
     return extracted
-
-
-def _info_payload(bundle_uri: str = "file:///bundle.tgz") -> dict:
-    return {
-        "project_id": "P-1",
-        "collection_id": 1,
-        "collection": "c",
-        "function_version_id": "FV-1",
-        "function_defined_on": 1780000000000,
-        "function": "fn",
-        "function_run_id": 4,
-        "function_bundle": {"uri": bundle_uri},
-        "function_stage": {"uri": "file:///stage"},
-        "triggered_on": 1780000000100,
-        "transaction_id": 3,
-        "execution_id": 2,
-        "execution_name": None,
-        "function_data": {"uri": "file:///data"},
-        "scheduled_on": 1780000000200,
-    }
 
 
 def _input_table_payload(name: str, *, location: dict | None = None) -> dict:
