@@ -220,7 +220,9 @@ for path in yaml_root_folder_tabsdatak.rglob("*.yaml"):
 console_scripts: list[str] = [
     "td = tabsdata._cli.td.cli:cli",
     "tdk = tabsdatak.cli.td.cli:cli",
+    "td_apiready = tabsdatak.server._tdserver.workers.apiready:main",
     "td_cfgrsv = tabsdata._tabsserver.tools.config_resolver:main",
+    "td_dbready = tabsdatak.server._tdserver.workers.dbready:main",
     "td_function = tabsdata._tabsserver.invoker:main",
     "td_invoker = tabsdata._tabsserver.invoker:main",
     "td_janitor = tabsdata._tabsserver.tools.janitor:main",
