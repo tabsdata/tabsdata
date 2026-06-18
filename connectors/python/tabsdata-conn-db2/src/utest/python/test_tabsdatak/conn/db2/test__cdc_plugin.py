@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.spi import StreamStageSrc
+from tabsdatak.conn.common.sql.cdc import CdcStageSrc
 from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.db2 import (
@@ -56,7 +56,7 @@ def test_stream_src_def_is_for_db2_cdc():
     assert DB2_CDC_STREAM_SRC.src is Db2CdcStreamSrc
     assert DB2_CDC_STREAM_SRC.plugin is Db2CdcStreamSrcPlugin
     assert DB2_CDC_STREAM_SRC.src_type == "db2-cdc"
-    assert DB2_CDC_STREAM_SRC.publisher_src is StreamStageSrc
+    assert DB2_CDC_STREAM_SRC.publisher_src is CdcStageSrc
 
 
 def test_stream_src_def_cardinality_matches_table_count():
