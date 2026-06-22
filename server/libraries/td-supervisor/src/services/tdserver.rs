@@ -45,7 +45,6 @@ use tabled::settings::style::{HorizontalLine, Style, VerticalLine};
 use tabled::settings::themes::BorderCorrection;
 use tabled::settings::{Alignment, Modify, Panel};
 use tabled::{Table, Tabled};
-use td_apiserver::config::DbSchema;
 use td_bridge::catalog::etc_folder::ETC_FOLDER;
 use td_bridge::messaging::file_queue::MSG_FOLDER;
 use td_build::environment::ENV_VALUE_TD_UI_MODE_EXTERNAL;
@@ -61,7 +60,7 @@ use td_common::worker::WorkerClass::Regular;
 use td_common::worker::{PROC_FOLDER, REGULAR_FOLDER, WORK_FOLDER};
 use td_process::launcher::arg::InheritedArgumentKey;
 use td_process::launcher::arg::InheritedArgumentKey::*;
-use td_process::launcher::arg::{ENVIRONMENTS_FOLDER, STORAGE_FOLDER};
+use td_process::launcher::arg::ENVIRONMENTS_FOLDER;
 use td_process::launcher::cli::{
     ARGUMENT_PREFIX, TRAILING_ARGUMENTS_PREFIX, parse_extra_arguments,
 };
@@ -76,7 +75,6 @@ use thiserror::Error;
 use tm_workspace::workspace_root;
 use tokio::time::{Duration, Instant};
 use tracing::{Level, error, info, warn};
-use url::Url;
 use walkdir::WalkDir;
 
 pub const SUPERVISOR_NAME: &str = "supervisor";
@@ -84,15 +82,20 @@ pub const SUPERVISOR_PROGRAM: &str = "td_supervisor";
 
 pub const APISERVER: &str = "td_apiserver";
 pub const APISERVER_WORKER: &str = "apiserver";
-// The supervisor intentionally does not pass `--database-url` to apiserver
-// invocations: the apiserver picks its database URL from its YAML (set by
-// the user for an external postgres), and otherwise boots an in-process
-// embedded postgres rooted at `$TD_URI_REPOSITORY/database/`. This keeps
-// the supervisor backend-agnostic — it only deals with on-disk instance
-// layout.
+// Schema management (create/upgrade) is the privileged `td_dbmanager` command's
+// job — the only thing that opens a system pool. The supervisor runs it as a
+// one-shot before the serving apiserver. The apiserver itself sources its
+// database setup from the `database:` section of its YAML (an external postgres
+// URL, or an embedded instance whose `data_dir` the config templates in as
+// `${env:TD_URI_REPOSITORY}/database`); the supervisor only ensures
+// `TD_URI_REPOSITORY` is set so that substitution resolves.
 pub const APISERVER_ARGUMENT_CONFIG_FILE: &str = "--config-file";
-pub const APISERVER_ARGUMENT_STORAGE_URL: &str = "--storage-url";
-pub const APISERVER_ARGUMENT_DB_SCHEMA: &str = "--db-schema";
+// The privileged db-admin binary and its one-shot subcommands.
+pub const DBMANAGER: &str = "td_dbmanager";
+pub const DBMANAGER_COMMAND_START: &str = "start";
+pub const DBMANAGER_COMMAND_STOP: &str = "stop";
+pub const DBMANAGER_COMMAND_CREATE: &str = "create";
+pub const DBMANAGER_COMMAND_UPGRADE: &str = "upgrade";
 
 pub const TD_KEEP: &str = ".tdkeep";
 
@@ -892,30 +895,25 @@ fn create_instance(instance: &Option<PathBuf>, profile: &Option<PathBuf>) {
 }
 
 //noinspection DuplicatedCode
-fn create_database(instance: &Option<PathBuf>) {
-    let supervisor_instance = get_instance_path_for_instance(instance);
-    let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
+/// Path to the apiserver regular-worker config file for an instance — the
+/// `database:` section the `td_dbmanager` one-shots read.
+fn apiserver_config_file(instance_absolute: &Path) -> PathBuf {
+    get_workspace_path_for_instance(&Some(instance_absolute.to_path_buf()))
+        .join(CONFIG_FOLDER)
+        .join(PROC_FOLDER)
+        .join(REGULAR_FOLDER)
+        .join(APISERVER_WORKER)
+        .join(CONFIG_FOLDER)
+        .join(CONFIG_FILE)
+}
 
-    let supervisor_repository =
-        get_repository_path_for_instance(&Some(supervisor_instance_absolute.clone()));
-    let supervisor_repository_absolute = to_absolute(&supervisor_repository.clone()).unwrap();
-
-    let supervisor_storage = supervisor_repository_absolute.clone().join(STORAGE_FOLDER);
-    let supervisor_storage_absolute = to_absolute(&supervisor_storage.clone()).unwrap();
-    let supervisor_storage_url = Url::from_file_path(supervisor_storage_absolute.clone())
-        .expect("Failed to convert storage folder path to file:// URL");
-
-    let apiserver_config_file =
-        get_workspace_path_for_instance(&Some(supervisor_instance_absolute.clone()))
-            .join(CONFIG_FOLDER)
-            .join(PROC_FOLDER)
-            .join(REGULAR_FOLDER)
-            .join(APISERVER_WORKER)
-            .join(CONFIG_FOLDER)
-            .join(CONFIG_FILE);
-
-    let apiserver = name_program(&PathBuf::from(APISERVER));
-    let mut binary = Command::new(apiserver);
+/// Build a `td_dbmanager <subcommand> --config-file <apiserver config>` command,
+/// carrying `TD_URI_REPOSITORY` so the embedded backend's data directory
+/// (`${env:TD_URI_REPOSITORY}/database`) resolves. The shared shape for the
+/// start / create / upgrade / stop one-shots.
+fn dbmanager_command(subcommand: &str, repository_absolute: &Path, config_file: &Path) -> Command {
+    let dbmanager = name_program(&PathBuf::from(DBMANAGER));
+    let mut binary = Command::new(dbmanager);
     if check_flag_env(TD_DETACHED_SUBPROCESSES) {
         #[cfg(windows)]
         {
@@ -925,49 +923,95 @@ fn create_database(instance: &Option<PathBuf>) {
             binary.creation_flags(CREATE_NO_WINDOW);
         }
     }
-    let command = binary
-        // The apiserver resolves its database URL from env: `TD_DATABASE_URL`
-        // if set, otherwise it boots an in-process embedded postgres rooted
-        // at `$TD_URI_REPOSITORY/database/`. Both env vars are inherited by
-        // the spawned child; we only need to ensure `TD_URI_REPOSITORY` is
-        // set here because the regular worker path sets it later in the
-        // lifecycle and the one-shot runs first.
+    binary
         .env(
             REPOSITORY_URI_ENV,
-            prepend_slash(supervisor_repository_absolute.clone()),
+            prepend_slash(repository_absolute.to_path_buf()),
         )
+        .arg(subcommand)
         .arg(APISERVER_ARGUMENT_CONFIG_FILE)
-        .arg(apiserver_config_file.to_string_lossy().to_string())
-        .arg(APISERVER_ARGUMENT_STORAGE_URL)
-        .arg(supervisor_storage_url.clone().to_string())
-        .arg(APISERVER_ARGUMENT_DB_SCHEMA)
-        .arg(DbSchema::Create.to_string());
-    let result = command.output();
-    match result {
+        .arg(config_file.to_string_lossy().to_string());
+    binary
+}
+
+/// Run a `td_dbmanager` one-shot for `instance`, exiting the process on failure.
+/// Used for the server lifecycle (`start`/`stop`) and `create`; `upgrade` keeps its
+/// own handling for the "already up to date" exit code.
+fn run_dbmanager(
+    subcommand: &str,
+    repository_absolute: &Path,
+    config_file: &Path,
+    instance: &Path,
+) {
+    match dbmanager_command(subcommand, repository_absolute, config_file).output() {
         Ok(output) => {
             if !output.status.success() {
                 show_std_out_and_err(&output);
                 error!(
-                    "Bad exit code creating database for instance '{}': {}",
-                    supervisor_instance_absolute.clone().display(),
+                    "Bad exit code running 'td_dbmanager {subcommand}' for instance '{}': {}",
+                    instance.display(),
                     output.status
                 );
                 exit(GeneralError.code())
-            };
-            info!(
-                "Database for instance '{}' successfully created!",
-                supervisor_instance_absolute.clone().display()
-            );
+            }
         }
         Err(error) => {
             error!(
-                "Error creating database for instance '{}': {}",
-                supervisor_instance_absolute.clone().display(),
+                "Error running 'td_dbmanager {subcommand}' for instance '{}': {}",
+                instance.display(),
                 error
             );
             exit(GeneralError.code())
         }
     }
+}
+
+/// Provision the schema against an already-running server (the `create` one-shot).
+/// The caller owns the server lifecycle (`start`/`stop`); for sidecar/remote the
+/// server is external and those are no-ops.
+fn provision_database(repository_absolute: &Path, config_file: &Path, instance: &Path) {
+    run_dbmanager(
+        DBMANAGER_COMMAND_CREATE,
+        repository_absolute,
+        config_file,
+        instance,
+    );
+    info!(
+        "Database for instance '{}' successfully created!",
+        instance.display()
+    );
+}
+
+fn create_database(instance: &Option<PathBuf>) {
+    let supervisor_instance = get_instance_path_for_instance(instance);
+    let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
+
+    let supervisor_repository =
+        get_repository_path_for_instance(&Some(supervisor_instance_absolute.clone()));
+    let supervisor_repository_absolute = to_absolute(&supervisor_repository.clone()).unwrap();
+
+    let config_file = apiserver_config_file(&supervisor_instance_absolute);
+
+    // Standalone instance creation is a one-shot: bring the (embedded) server up,
+    // provision the schema against it, then bring it back down. `start`/`stop` are
+    // no-ops for sidecar/remote, whose server is external.
+    run_dbmanager(
+        DBMANAGER_COMMAND_START,
+        &supervisor_repository_absolute,
+        &config_file,
+        &supervisor_instance_absolute,
+    );
+    provision_database(
+        &supervisor_repository_absolute,
+        &config_file,
+        &supervisor_instance_absolute,
+    );
+    run_dbmanager(
+        DBMANAGER_COMMAND_STOP,
+        &supervisor_repository_absolute,
+        &config_file,
+        &supervisor_instance_absolute,
+    );
 }
 
 //noinspection DuplicatedCode
@@ -978,11 +1022,6 @@ fn command_upgrade(arguments: UpgradeArguments) {
     let supervisor_repository =
         get_repository_path_for_instance(&Some(supervisor_instance_absolute.clone()));
     let supervisor_repository_absolute = to_absolute(&supervisor_repository.clone()).unwrap();
-
-    let supervisor_storage = supervisor_repository_absolute.clone().join(STORAGE_FOLDER);
-    let supervisor_storage_absolute = to_absolute(&supervisor_storage.clone()).unwrap();
-    let supervisor_storage_url = Url::from_file_path(supervisor_storage_absolute.clone())
-        .expect("Failed to convert storage folder path to file:// URL");
 
     let supervisor_workspace = get_workspace_path_for_instance(arguments.instance.instance());
     let supervisor_work = supervisor_workspace.clone().join(WORK_FOLDER);
@@ -1024,38 +1063,27 @@ fn command_upgrade(arguments: UpgradeArguments) {
                 }
             }
 
-            let apiserver = name_program(&PathBuf::from(APISERVER));
-            let mut binary = Command::new(apiserver);
-            if check_flag_env(TD_DETACHED_SUBPROCESSES) {
-                #[cfg(windows)]
-                {
-                    use std::os::windows::process::CommandExt;
-                    use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
-
-                    binary.creation_flags(CREATE_NO_WINDOW);
-                }
-            }
             set_log_level(Level::ERROR);
-            let apiserver_config_file =
-                get_workspace_path_for_instance(&Some(supervisor_instance_absolute.clone()))
-                    .join(CONFIG_FOLDER)
-                    .join(PROC_FOLDER)
-                    .join(REGULAR_FOLDER)
-                    .join(APISERVER_WORKER)
-                    .join(CONFIG_FOLDER)
-                    .join(CONFIG_FILE);
-            let command = binary
-                .env(
-                    REPOSITORY_URI_ENV,
-                    prepend_slash(supervisor_repository_absolute.clone()),
-                )
-                .arg(APISERVER_ARGUMENT_CONFIG_FILE)
-                .arg(apiserver_config_file.to_string_lossy().to_string())
-                .arg(APISERVER_ARGUMENT_STORAGE_URL)
-                .arg(supervisor_storage_url.clone().to_string())
-                .arg(APISERVER_ARGUMENT_DB_SCHEMA)
-                .arg(DbSchema::Upgrade.to_string());
-            let result = command.output();
+            let config_file = apiserver_config_file(&supervisor_instance_absolute);
+            // Upgrade runs while the instance is stopped, so the server is down:
+            // bring the (embedded) server up, upgrade against it, then bring it back
+            // down regardless of the upgrade outcome. `start`/`stop` are no-ops for
+            // sidecar/remote.
+            run_dbmanager(
+                DBMANAGER_COMMAND_START,
+                &supervisor_repository_absolute,
+                &config_file,
+                &supervisor_instance_absolute,
+            );
+            let result =
+                dbmanager_command(DBMANAGER_COMMAND_UPGRADE, &supervisor_repository_absolute, &config_file)
+                    .output();
+            run_dbmanager(
+                DBMANAGER_COMMAND_STOP,
+                &supervisor_repository_absolute,
+                &config_file,
+                &supervisor_instance_absolute,
+            );
             match result {
                 Ok(output) => {
                     if !output.status.success() {
@@ -1216,7 +1244,8 @@ fn command_start(arguments: StartArguments) {
             );
         }
         _ => {
-            if !supervisor_instance_absolute.exists() {
+            let fresh_instance = !supervisor_instance_absolute.exists();
+            if fresh_instance {
                 create_instance_folders(
                     supervisor_instance_absolute.clone(),
                     supervisor_repository_absolute.clone(),
@@ -1225,7 +1254,27 @@ fn command_start(arguments: StartArguments) {
                     supervisor_work_absolute.clone(),
                 );
                 create_instance(arguments.instance(), &None);
-                create_database(arguments.instance());
+            }
+
+            // Bring the (embedded) database server up once before launching the worker
+            // tree: the apiserver connects to it app-only and never boots it. A fresh
+            // instance provisions its schema against this same running server (no
+            // stop/restart). The detached server outlives this command and any
+            // apiserver restart; `command_stop` brings it down. Idempotent, and a
+            // no-op for sidecar/remote.
+            let apiserver_config = apiserver_config_file(&supervisor_instance_absolute);
+            run_dbmanager(
+                DBMANAGER_COMMAND_START,
+                &supervisor_repository_absolute,
+                &apiserver_config,
+                &supervisor_instance_absolute,
+            );
+            if fresh_instance {
+                provision_database(
+                    &supervisor_repository_absolute,
+                    &apiserver_config,
+                    &supervisor_instance_absolute,
+                );
             }
 
             let describer = build_instance_describer(
@@ -1296,6 +1345,10 @@ fn command_restart(arguments: RestartArguments) {
 fn command_stop(arguments: StopArguments) {
     let supervisor_instance = get_instance_path_for_instance(arguments.control.instance());
     let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
+
+    let supervisor_repository =
+        get_repository_path_for_instance(&Some(supervisor_instance_absolute.clone()));
+    let supervisor_repository_absolute = to_absolute(&supervisor_repository.clone()).unwrap();
 
     let supervisor_workspace =
         get_workspace_path_for_instance(&arguments.control.instance().clone());
@@ -1388,6 +1441,19 @@ fn command_stop(arguments: StopArguments) {
                 other
             )
         }
+    }
+
+    // The worker tree (and the apiserver with it) is down; now bring the
+    // (embedded) database server down too. Guarded on the config file so a
+    // never-created instance is skipped; idempotent and a no-op for sidecar/remote.
+    let config_file = apiserver_config_file(&supervisor_instance_absolute);
+    if config_file.exists() {
+        run_dbmanager(
+            DBMANAGER_COMMAND_STOP,
+            &supervisor_repository_absolute,
+            &config_file,
+            &supervisor_instance_absolute,
+        );
     }
 }
 

@@ -57,7 +57,7 @@ use crate::runtime::secrets::reconciliation::auto_fill_generated_secrets;
 use crate::runtime::secrets::source::to_secret_name;
 use crate::runtime::secrets::{KubeconfigSecretGenerator, SecretGenerator, SecretPhase};
 
-const APISERVER_BINARY: &str = "td_apiserver";
+const DBMANAGER_BINARY: &str = "td_dbmanager";
 const PYVENV_BINARY: &str = "td_pyvenv";
 const APISERVER_SERVICE_CONFIG_KEY: &str = "apiserver.service.yaml";
 const APISERVER_DATABASE_CONFIG_KEY: &str = "apiserver.database.yaml";
@@ -397,19 +397,19 @@ impl Provider for KminusProvider {
             }
         }
 
-        let apiserver = name_program(&PathBuf::from(APISERVER_BINARY));
-        let command_label = format!("{} --db-schema create", apiserver.display());
+        let dbmanager = name_program(&PathBuf::from(DBMANAGER_BINARY));
+        let command_label = format!("{} create", dbmanager.display());
         let step = reporter.step("Creating tabsdata database schema");
-        let mut command = std::process::Command::new(&apiserver);
+        let mut command = std::process::Command::new(&dbmanager);
+        command.arg("create");
         for config_file in &config_files {
             command.arg("--config-file").arg(config_file.path());
         }
-        command.arg("--db-schema").arg("create");
         for (key, value) in &secret_env {
             command.env(key, value);
         }
         apply_detached_flags(&mut command);
-        let output = match subprocess::run(&mut command, APISERVER_BINARY, self.verbose) {
+        let output = match subprocess::run(&mut command, DBMANAGER_BINARY, self.verbose) {
             Ok(output) => output,
             Err(error) => {
                 step.fail();
