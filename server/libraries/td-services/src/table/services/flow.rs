@@ -76,7 +76,7 @@ mod tests {
     use std::sync::LazyLock;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
@@ -95,7 +95,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_table_flow_graph(db: TdPool) {
         use crate::graph::layers::build::GraphBuilder;
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_tower::metadata::type_of_val;
 
         TableFlowGraphService::with_defaults(db)

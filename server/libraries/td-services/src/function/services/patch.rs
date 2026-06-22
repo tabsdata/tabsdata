@@ -65,8 +65,8 @@ mod tests {
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
-    use td_database::scoped::Scoped;
+    use td_database::pool::scoped::InProject;
+    use td_database::pool::scoped::Scoped;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::function::FunctionRegister;

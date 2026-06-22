@@ -80,7 +80,7 @@ mod tests {
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::types::basic::{
@@ -94,7 +94,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_upload_function(db: TdPool) -> Result<(), TdError> {
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_tower::metadata::type_of_val;
 
         UploadFunctionService::with_defaults(db)

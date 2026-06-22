@@ -17,7 +17,7 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_objects::dxo::collection::{CollectionCreate, CollectionRead, CollectionUpdate};
     use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
     use td_objects::dxo::crudl::{ListParams, RequestContext};

@@ -65,7 +65,7 @@ mod tests {
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -88,7 +88,7 @@ mod tests {
             AtTime, CollectionIdName, TableId, TableIdName, TriggeredOn, UncommittedStatus,
         };
 
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_objects::And;
         use td_tower::metadata::type_of_val;
 

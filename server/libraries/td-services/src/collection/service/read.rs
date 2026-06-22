@@ -42,7 +42,7 @@ mod tests {
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::rest_urls::CollectionParam;
@@ -55,7 +55,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_read_collection(db: TdPool) {
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_tower::metadata::type_of_val;
 
         ReadCollectionService::with_defaults(db)

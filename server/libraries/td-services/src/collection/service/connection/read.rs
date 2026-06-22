@@ -19,7 +19,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project, Rbac, Scope};
 use td_bridge::BridgeProviderHandle;
 use td_database::pool::TdPool;
-use td_database::scoped::Scoped;
+use td_database::pool::scoped::Scoped;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::connection::ConnectionRead;

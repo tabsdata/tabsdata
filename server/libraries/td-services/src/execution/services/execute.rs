@@ -74,7 +74,7 @@ pub(crate) mod tests {
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_error::{ApiError, TdError};
     use td_execution::EXECUTION_GRAPH_OPTIONS;
@@ -122,7 +122,7 @@ pub(crate) mod tests {
         use crate::graph::layers::build::GraphBuilder;
         use crate::scheduler::layers::request::notify_scheduler;
         use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_objects::dxo::crudl::RequestContext;
         use td_objects::dxo::execution::{ExecutionDB, ExecutionDBBuilder, ExecutionRequest};
         use td_objects::dxo::function::FunctionDBWithNames;

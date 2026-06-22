@@ -45,7 +45,7 @@ mod tests {
     use td_bridge::test::TestBridgeProvider;
     use td_common::files::{YAML_EXTENSION, get_files_in_folder_sorted_by_name};
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;

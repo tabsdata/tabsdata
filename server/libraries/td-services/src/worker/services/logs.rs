@@ -82,7 +82,7 @@ mod tests {
     use td_bridge::worker::workspace::WorkspaceWorkerHandler;
     use td_common::env::WORKSPACE_URI_ENV;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -97,7 +97,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_worker_logs(db: TdPool) {
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
@@ -128,7 +128,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_worker_logs_tail(db: TdPool) {
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 

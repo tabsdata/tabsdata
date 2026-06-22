@@ -90,7 +90,7 @@ mod tests {
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
@@ -107,7 +107,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_table(db: TdPool) {
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_tower::metadata::type_of_val;
 
         TableDeleteService::with_defaults(db)

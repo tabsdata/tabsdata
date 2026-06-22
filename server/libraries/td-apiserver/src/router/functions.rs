@@ -19,7 +19,7 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_objects::dxo::bundle::Bundle;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::file::DownloadResponse;

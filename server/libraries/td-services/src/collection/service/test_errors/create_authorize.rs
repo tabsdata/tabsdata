@@ -6,7 +6,7 @@ use crate::collection::service::create::CreateCollectionService;
 use ta_services::service::TdService;
 use td_authz::rbac::RbacError;
 use td_database::pool::TdPool;
-use td_database::scoped::InProject;
+use td_database::pool::scoped::InProject;
 use td_error::assert_service_error;
 use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionCreate;

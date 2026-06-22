@@ -17,7 +17,7 @@ mod routes {
     };
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::group::{Group, GroupCreate, GroupUpdate};
     use td_objects::rest_urls::{

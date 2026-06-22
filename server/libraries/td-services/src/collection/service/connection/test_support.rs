@@ -18,7 +18,7 @@ use td_bridge::BridgeProviderHandle;
 use td_bridge::connection::ConnectionStore;
 use td_bridge::test::TestBridgeProvider;
 use td_database::pool::TdPool;
-use td_database::scoped::{InProject, Scoped};
+use td_database::pool::scoped::{InProject, Scoped};
 use td_error::{TdError, api_error};
 use td_objects::Buildable;
 use td_objects::dxo::collection::{CollectionCreate, CollectionDB};

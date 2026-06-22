@@ -75,7 +75,7 @@ mod tests {
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::{ApiError, TdError};
     use td_objects::Buildable;
     use td_objects::dxo::execution::ExecutionDB;
@@ -110,7 +110,7 @@ mod tests {
         use crate::graph::layers::build::GraphBuilder;
         use crate::scheduler::layers::request::notify_scheduler;
         use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_objects::And;
         use td_objects::dxo::crudl::RequestContext;
         use td_objects::dxo::execution::{

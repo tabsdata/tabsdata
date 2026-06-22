@@ -148,7 +148,7 @@ mod tests {
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_execution::VersionResolverError;
     use td_objects::Buildable;
@@ -220,7 +220,7 @@ mod tests {
         use td_objects::tower_service::with::With;
         use td_queries::insert_vec;
 
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_tower::metadata::type_of_val;
 
         RegisterFunctionService::with_defaults(db)

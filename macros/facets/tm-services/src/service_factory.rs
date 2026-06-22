@@ -199,7 +199,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     let (actual_req, project_scope_provider) = match &args.scope {
         None => (quote! { #req_ty }, vec![]),
         Some(Scope::Project) => (
-            quote! { ::td_database::scoped::Scoped<#req_ty, ::td_objects::types::basic::ProjectId> },
+            quote! { ::td_database::pool::scoped::Scoped<#req_ty, ::td_objects::types::basic::ProjectId> },
             vec![quote! {
                 ::td_tower::project_scope::ProjectScopeProvider::<#req_ty, ::td_objects::types::basic::ProjectId>::new()
             }],

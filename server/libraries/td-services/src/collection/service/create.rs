@@ -27,7 +27,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_bridge::BridgeProviderHandle;
 use td_database::pool::TdPool;
-use td_database::scoped::{InProject, Scoped};
+use td_database::pool::scoped::{InProject, Scoped};
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionCreate, CollectionRead};
 use td_objects::dxo::connection::ConnectionUpsert;
@@ -205,7 +205,7 @@ mod tests {
     use crate::collection::service::list::ListCollectionsService;
     use td_bridge::connection::memory::InMemoryConnectionStore;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_error::ApiError;
     use td_objects::Buildable;
@@ -223,7 +223,7 @@ mod tests {
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_create_collection(db: TdPool) {
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_objects::dxo::group::GroupDB;
         use td_tower::metadata::type_of_val;
 

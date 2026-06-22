@@ -257,7 +257,7 @@ mod tests {
     use td_bridge::{BridgeProviderHandle, Orchestrator};
     use td_common::worker::{Callback, Decorator as MessageDecorator, WorkerName};
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;

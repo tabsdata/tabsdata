@@ -15,7 +15,7 @@ mod routes {
     use ta_apiserver::status::ok_status::GetStatus;
     use ta_services::service::TdService;
     use td_apiforge::apiserver_path;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::metrics::{

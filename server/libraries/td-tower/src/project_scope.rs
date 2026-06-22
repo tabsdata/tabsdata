@@ -15,7 +15,7 @@
 //! * **`scope = Project`** services take their project as part of the service
 //!   input: the request is wrapped in [`Scoped`] (`{ project, inner }`) by the
 //!   caller via
-//!   [`InProject::in_project`](td_database::scoped::InProject::in_project).
+//!   [`InProject::in_project`](td_database::pool::scoped::InProject::in_project).
 //!   [`ProjectScopeProvider`] unwraps it,
 //!   runs `set_project_scope` (`SET LOCAL app.project_id`, clearing any bypass),
 //!   then puts the bare request and the project id back on the handler — so
@@ -57,7 +57,7 @@ use tower::{Layer, Service};
 
 use crate::error::ConnectionError;
 use crate::handler::Handler;
-use td_database::scoped::Scoped;
+use td_database::pool::scoped::Scoped;
 
 /// Bypass project scope on the handler's connection (`SET LOCAL app.bypass_rls
 /// = on`) for cross-project (global) work. The connection already runs as the

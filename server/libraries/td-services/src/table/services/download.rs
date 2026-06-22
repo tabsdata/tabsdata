@@ -62,7 +62,7 @@ pub(crate) mod tests {
     use ta_services::service::TdService;
     use td_common::absolute_path::AbsolutePath;
     use td_database::pool::TdPool;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -86,7 +86,7 @@ pub(crate) mod tests {
         use td_objects::dxo::table::TableDBWithNames;
         use td_objects::types::basic::{TableId, TableIdName, TriggeredOn, UncommittedStatus};
 
-        use td_database::scoped::Scoped;
+        use td_database::pool::scoped::Scoped;
         use td_objects::And;
         use td_tower::metadata::type_of_val;
 
