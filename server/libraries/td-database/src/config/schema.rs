@@ -2,8 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Definitions common to all database backends. Backend-specific configuration
-//! lives in the per-engine submodules (`postgres`, `sqlite`, `mysql`).
+//! [`Schema`] — a PostgreSQL schema name, plus the shared test schema constant.
 
 use std::fmt;
 use std::ops::Deref;
@@ -16,26 +15,6 @@ use serde::{Deserialize, Serialize};
 /// source for the test fixtures and the config unit tests.
 #[cfg(any(test, feature = "test-utils"))]
 pub const TEST_SCHEMA: &str = "td_apiserver";
-
-/// Where the database process runs.
-///
-/// `Embedded` the database runs in-process.
-/// `Sidecar` the database runs as an alongside process.
-/// `Remote` the database runs as a remote process.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum DatabaseMode {
-    #[default]
-    Embedded,
-    Sidecar,
-    Remote,
-}
-
-impl DatabaseMode {
-    pub fn is_embedded(self) -> bool {
-        matches!(self, DatabaseMode::Embedded | DatabaseMode::Sidecar)
-    }
-}
 
 /// PostgreSQL schema name. Mandatory on the PostgreSQL path — there is no
 /// `public` default, so each component's objects stay isolated in their own

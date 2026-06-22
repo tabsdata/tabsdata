@@ -43,5 +43,5 @@ impl<'de> Deserialize<'de> for MySqlUrl {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MySqlConfig {
-    pub(super) url: MySqlUrl,
+    pub(crate) url: MySqlUrl,
 }

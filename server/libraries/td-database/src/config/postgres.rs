@@ -47,5 +47,5 @@ impl<'de> Deserialize<'de> for PostgresUrl {
 /// [`super::DatabaseConfig`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostgresConfig {
-    pub(super) url: PostgresUrl,
+    pub(crate) url: PostgresUrl,
 }

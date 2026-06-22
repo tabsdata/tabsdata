@@ -43,5 +43,5 @@ impl<'de> Deserialize<'de> for SqliteUrl {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SqliteConfig {
-    pub(super) url: SqliteUrl,
+    pub(crate) url: SqliteUrl,
 }

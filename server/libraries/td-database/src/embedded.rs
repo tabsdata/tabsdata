@@ -194,8 +194,10 @@ pub fn live_admin(cfg: &EmbeddedConfig) -> Result<(Url, String, String), DbError
 /// URL of an already-running embedded server, derived without booting it: the
 /// configured fixed port, else the live port from `postmaster.pid` in `data_dir`.
 /// Lets a separate process (e.g. `dbmanager ping`) reach the server the apiserver
-/// booted. Errors when no server is running. The returned URL carries placeholder
-/// credentials; callers set the real ones.
+/// booted. Errors when no server is running. The returned URL is credential-free —
+/// `Settings::url` embeds placeholder userinfo, which we strip so the resulting
+/// [`DatabaseConfig`](crate::config::DatabaseConfig) passes its credential-free-URL
+/// validation; callers supply the real identity in the explicit credential fields.
 pub fn live_url(cfg: &EmbeddedConfig) -> Result<Url, DbError> {
     let port = match cfg.port {
         Some(port) => port,
@@ -208,7 +210,11 @@ pub fn live_url(cfg: &EmbeddedConfig) -> Result<Url, DbError> {
         port,
         ..Settings::default()
     };
-    Url::parse(&settings.url("postgres")).map_err(|e| DbError::EmbeddedPostgres(e.to_string()))
+    let mut url =
+        Url::parse(&settings.url("postgres")).map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
+    url.set_username("").ok();
+    url.set_password(None).ok();
+    Ok(url)
 }
 
 /// The relevant fields of a `postmaster.pid` file (PG writes one line each):
