@@ -91,6 +91,7 @@ te-system = { workspace = true }
 async-stream = { workspace = true }
 async-trait = { workspace = true }
 futures-util = { workspace = true }
+inventory = { workspace = true }
 postgresql_embedded = { workspace = true, features = ["bundled", "tokio"], optional = true }
 sea-query = { workspace = true, features = ["derive", "sqlx-utils"] }
 sea-query-sqlx = { workspace = true }

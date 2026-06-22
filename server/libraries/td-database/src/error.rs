@@ -87,26 +87,27 @@ pub enum DbError {
     )]
     UnexpectedCredentials = 5030,
     #[error(
-        "No system entry in the database configuration. The database must define \
-         a `system` entry carrying the connection target and admin credentials."
+        "No system entry in the database configuration. A managed database \
+         (`embedded`/`sidecar`) must define a `system` entry carrying the \
+         connection target and admin credentials."
     )]
     MissingSystemEntry = 5025,
     #[error(
-        "The database schema entry '{0}' must not carry its own connection \
-         target. Only the system entry defines where the database is; schema \
-         entries inherit it and declare only their schema and credentials."
+        "Unexpected `system` entry in the database configuration. A `remote` \
+         database is not managed by Tabsdata; remove the `system` entry."
     )]
-    SchemaEntryHasBackend(String) = 5026,
-    #[error(
-        "The database schema entry '{0}' must not set `username`. Its owner role \
-         is always the schema name; remove `username` and set only `password`."
-    )]
-    SchemaEntryHasOwner(String) = 5032,
+    UnexpectedSystemEntry = 5026,
     #[error(
         "Unknown database schema entry '{0}'. Add an entry named '{0}' to the \
          database configuration."
     )]
     UnknownSchemaEntry(String) = 5027,
+    #[error(
+        "No database schema components are registered. This binary is missing the \
+         `te_database::force_link!()` anchor, so the linker dropped the component \
+         registrations. Add the anchor at the binary's top level."
+    )]
+    NoComponentsRegistered = 5032,
     #[error(
         "Unexpected database schema entries. Expected exactly: {expected}. Found: \
          {actual}. Adjust the `database` configuration to define those entries."
