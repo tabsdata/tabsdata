@@ -6,13 +6,16 @@ use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::RngExt;
 use rand::prelude::{IndexedRandom, IteratorRandom};
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::time::Instant;
 use strum::IntoEnumIterator;
 use td_common::logging;
 use td_common::logging::{CONSOLE_PROFILE, LoggingOptions};
-use td_database::config::{BackendConfig, DatabaseConfig, EmbeddedConfig, Schema};
-use td_database::schema::{ApiserverSchemaManager, SchemaManager};
+use td_database::config::{
+    BackendConfig, ComponentOverride, DatabaseDescriptor, DatabaseMode, EmbeddedConfig, Schema,
+    SystemConfig,
+};
 use td_execution::TransactionBy;
 use td_objects::Buildable;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -26,9 +29,12 @@ use td_objects::types::basic::{
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_queries::LiveEntry;
 use td_queries::test_utils::SeedEntry;
+use te_database::{
+    APISERVER_COMPONENT_KEY, build_pool, connect_system, provision_all, start_server, stop_server,
+    upgrade_all,
+};
 use tracing::Level;
 use tracing::{debug, info};
-use url::Url;
 
 /// Schema the load test isolates its objects in.
 const LOAD_TEST_SCHEMA: &str = "td_load_test";
@@ -67,10 +73,6 @@ struct Args {
     /// Max number of transactions per execution.
     #[arg(long, default_value_t = 5)]
     transactions: usize,
-
-    /// Database URL (defaults to env var DATABASE_URL or specific file)
-    #[arg(long)]
-    db_url: Option<Url>,
 }
 
 /// Automated script to bulk load a tabsdata database. The created database is used to test
@@ -97,34 +99,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         triggers: 20_000,
         executions: 1_000_000,
         transactions: 5,
-        db_url: None,
     };
     info!("Starting load test with config: {:?}", args);
 
-    // The embedded server (when used) is owned by the returned `TdPool`
-    // and shuts down cleanly when `db` drops at end of main.
-    let schema = Schema::new(LOAD_TEST_SCHEMA);
-    let database_config = match args.db_url {
-        Some(url) => {
-            let mut config = DatabaseConfig::new(url).unwrap();
-            config.schema = Some(schema);
-            config
-        }
-        None => DatabaseConfig {
-            conn: Some(BackendConfig::embedded_postgres(EmbeddedConfig {
+    // Build the embedded database descriptor the apiserver/td_dbmanager consume,
+    // then drive the production lifecycle helpers — start the server, provision +
+    // upgrade, open the serving pool — instead of hand-rolling credential plumbing.
+    // The detached embedded server is brought up by `start_server` and stopped by
+    // `stop_server` at the end; its owner password is generated and persisted under
+    // the data dir.
+    let descriptor = DatabaseDescriptor {
+        mode: DatabaseMode::Embedded,
+        conn: None,
+        system: Some(SystemConfig {
+            conn: BackendConfig::embedded_postgres(EmbeddedConfig {
                 data_dir: Some(td_common::tdtestdir!().join("postgres")),
                 port: None,
                 persistent: true,
                 username: None,
                 password: None,
-            })),
-            schema: Some(schema),
-            ..Default::default()
-        },
+            }),
+            username: None,
+            password: None,
+            pool: Default::default(),
+        }),
+        components: BTreeMap::from([(
+            APISERVER_COMPONENT_KEY.to_owned(),
+            ComponentOverride {
+                schema: Some(Schema::new(LOAD_TEST_SCHEMA)),
+                ..Default::default()
+            },
+        )]),
     };
-    info!("Connecting to database with: {database_config:?}");
-    let db = td_database::db(&database_config).await?;
-    ApiserverSchemaManager.upgrade(&db).await?;
+
+    info!("Connecting to database with descriptor: {descriptor:?}");
+    // The apiserver no longer boots the embedded server; bring it up first (the
+    // detached server `td_dbmanager start` would otherwise own), then connect.
+    start_server(&descriptor).await?;
+    let system = connect_system(&descriptor).await?;
+    provision_all(&descriptor, &system).await?;
+    system.close().await;
+    upgrade_all(&descriptor).await?;
+    let db = build_pool(&descriptor, APISERVER_COMPONENT_KEY).await?;
 
     let start_total = Instant::now();
 
@@ -331,5 +347,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     info!("Total load test time: {:.2?}", start_total.elapsed());
+
+    // Close the serving pool, then stop the detached embedded server we started.
+    db.shutdown().await;
+    stop_server(&descriptor).await?;
     Ok(())
 }

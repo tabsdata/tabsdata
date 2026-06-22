@@ -4,33 +4,33 @@
 
 use crate::apiserver::internal::InternalServer;
 use crate::apiserver::{ApiServer, ApiServerCtx};
-use crate::config::{Config, DbSchema, Params, SecurityMode};
+use crate::bridge::ServerBridgeFactory;
+use crate::config::{Config, Params, SecurityMode};
 use crate::scheduler::{FunctionDispatcher, FunctionRequester, SchedulerCtx};
 use std::sync::Arc;
 use std::time::Duration;
 use td_bridge::{BridgeProviderFactory, BridgeProviderHandle};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
-use td_database::config::DatabaseDescriptor;
-use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
 use td_services::execution::services::runtime_info::RuntimeContext;
 use td_storage::Storage;
-use te_apiserver::schema::SchemaManagerResolver;
+use te_database as dbm;
 use tracing::{error, info};
 
 mod apiserver;
+mod bridge;
 pub mod config;
 mod layers;
 mod router;
 mod scheduler;
 
-const CONFIG_NAME: &str = "apiserver";
+pub const CONFIG_NAME: &str = "apiserver";
 
 /// Run the apiserver. This function is the entry point for the `apiserver` binary.
-pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
+pub fn run() {
     Cli::<Config, Params>::exec_async(
         CONFIG_NAME,
         |config, params| async move {
@@ -41,96 +41,38 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
             })?;
 
             let database_descriptor = &config.database;
-            te_apiserver::config::validate_database(database_descriptor).map_err(|e| {
+            dbm::validate_descriptor(database_descriptor).map_err(|e| {
                 error!("Invalid database configuration: {e:#?}");
                 ExitStatus::GeneralError
             })?;
 
-            if matches!(params.db_schema, Some(DbSchema::Ping)) {
-                info!("Pinging database");
-                ping_database(database_descriptor).await?;
-                info!("Database is reachable");
-                Err(ExitStatus::Success)?
-            }
-
-            let system_db = database_descriptor
-                .assemble(td_database::config::SYSTEM_SCHEMA_KEY)
+            // Connect the database, app-only, in every mode: one step builds a serving
+            // pool for each registered component so each context grabs the one it needs.
+            // The apiserver never boots or manages the database — the in-process embedded
+            // server is brought up by `td_dbmanager start` and schemas are
+            // provisioned/upgraded by `td_dbmanager create`/`upgrade`, out of band — so it
+            // holds no privileged system access.
+            let serving_pools = dbm::connect_app_all(database_descriptor)
+                .await
                 .map_err(|e| {
-                    error!("Error resolving system database configuration: {e:#?}");
+                    error!("Error connecting to database: {e:#?}");
                     ExitStatus::GeneralError
                 })?;
-            let system_pool = td_database::db(&system_db).await.map_err(|e| {
-                error!("Error connecting to system database: {e:#?}");
+            // Runtime check runs on the serving pools themselves — no system access.
+            dbm::check_pools(&serving_pools).await.map_err(|e| {
+                error!("Error checking if database is up to date: {e:#?}");
                 ExitStatus::GeneralError
             })?;
+            info!("Database is up to date, starting apiserver");
 
-            if let Some(db_schema) = &params.db_schema {
-                match db_schema {
-                    DbSchema::Create => {
-                        info!("Creating database");
-                        database_descriptor
-                            .provision(&system_pool)
-                            .await
-                            .map_err(|e| {
-                                error!("Error provisioning database: {e:#?}");
-                                ExitStatus::GeneralError
-                            })?;
-                        upgrade_schemas(database_descriptor, &system_pool).await?;
-                        info!("Database created");
-                        Err(ExitStatus::Success)?
-                    }
-                    DbSchema::Upgrade => {
-                        info!("Upgrading database");
-                        upgrade_schemas(database_descriptor, &system_pool).await?;
-                        info!("Database upgraded");
-                        Err(ExitStatus::Success)?
-                    }
-                    DbSchema::Auto => {
-                        info!("Creating or upgrading database");
-                        database_descriptor
-                            .provision(&system_pool)
-                            .await
-                            .map_err(|e| {
-                                error!("Error provisioning database: {e:#?}");
-                                ExitStatus::GeneralError
-                            })?;
-                        upgrade_schemas(database_descriptor, &system_pool).await?;
-                    }
-                    DbSchema::Ping => unreachable!("ping is handled before the system pool is built"),
-                }
-            }
-
-            // Connect the runtime apiserver pool against the running server.
-            let apiserver_db = database_descriptor
-                .serving_config(CONFIG_NAME, &system_pool)
+            // The apiserver's own pool, for the boot-time wiring below.
+            let db = serving_pools
+                .get(dbm::APISERVER_COMPONENT_KEY)
                 .map_err(|e| {
-                    error!("Error resolving apiserver database configuration: {e:#?}");
+                    error!("Error resolving apiserver database pool: {e:#?}");
                     ExitStatus::GeneralError
-                })?;
-            let db = match td_database::db(&apiserver_db).await {
-                Ok(db) => {
-                    info!("Connected to database: {}", db.url());
-                    let manager =
-                        SchemaManagerResolver::for_component(CONFIG_NAME).map_err(|e| {
-                            error!("Error resolving apiserver schema manager: {e:#?}");
-                            ExitStatus::GeneralError
-                        })?;
-                    match manager.check(&db).await {
-                        Ok(_) => {
-                            info!("Database is up to date, starting apiserver");
-                        }
-                        Err(e) => {
-                            error!("Error checking if database is up to date: {e:#?}");
-                            Err(ExitStatus::GeneralError)?
-                        }
-                    }
-                    db
-                }
-                Err(e) => {
-                    error!("Error connecting to database: {e:#?}");
-                    Err(ExitStatus::GeneralError)?
-                }
-            };
+                })?
+                .clone();
 
             // setup IdL Generators
             initialize_logical_ids(&db).await.map_err(|e| {
@@ -150,7 +92,7 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
             let storage = Arc::new(storage);
 
             info!("Orchestrator: {}", config.orchestrator);
-            let bridge_provider = bridge_factory
+            let bridge_provider = ServerBridgeFactory
                 .build(config.orchestrator)
                 .await
                 .map_err(|e| {
@@ -170,12 +112,7 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
             let runtime_context = Arc::new(runtime_context);
 
             // Create shared scheduler notify
-            let scheduler_notify = SchedulerNotify::new();
-
-            // Retain a handle to the system pool (which owns the embedded
-            // postgres lifecycle) so it can be stopped explicitly on shutdown,
-            // independently of the serving pools that only connect to it.
-            let system_handle = system_pool.clone();
+            let scheduler_notify = Arc::new(SchedulerNotify::new());
 
             // Build the base (built-in) registry and let each extension augment
             // it — the OS owns the default; te-authz adds its `ai` kind (and the
@@ -253,8 +190,7 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
             // Create context
             let server_context = ApiServerCtx::new(
                 config.clone(),
-                system_pool,
-                db.clone(),
+                serving_pools.clone(),
                 storage.clone(),
                 runtime_context.clone(),
                 scheduler_notify.clone(),
@@ -305,99 +241,15 @@ pub fn run(bridge_factory: Arc<dyn BridgeProviderFactory>) {
                 .run()
                 .await;
 
-            // Explicit shutdown so the embedded postgres lifecycle does not
-            // depend on Drop ordering during tokio runtime teardown. Close the
-            // serving pool's connections first, then stop the system pool, which
-            // owns the embedded server and tears it down with a fast shutdown
-            // that disconnects any remaining client sessions.
-            db.shutdown().await;
-            system_handle.shutdown().await;
+            // Close every serving pool's connections explicitly, rather than at the
+            // mercy of Drop ordering during tokio runtime teardown. The apiserver owns
+            // no database server in any mode — the embedded server's lifecycle belongs
+            // to `td_dbmanager start`/`stop` — so there is nothing else to tear down here.
+            serving_pools.shutdown().await;
 
             outcome
         },
         None,
         None,
     );
-}
-
-/// Connect each component schema's serving pool and upgrade it through the
-/// schema manager the extension resolves for that component.
-async fn upgrade_schemas(
-    database_descriptor: &DatabaseDescriptor,
-    system_pool: &TdPool,
-) -> Result<(), ExitStatus> {
-    for (name, _) in database_descriptor.schemas() {
-        let schema_db = database_descriptor
-            .serving_config(name, system_pool)
-            .map_err(|e| {
-                error!("Error resolving '{name}' database configuration: {e:#?}");
-                ExitStatus::GeneralError
-            })?;
-        let pool = td_database::db(&schema_db).await.map_err(|e| {
-            error!("Error connecting to '{name}' schema: {e:#?}");
-            ExitStatus::GeneralError
-        })?;
-        let manager = SchemaManagerResolver::for_component(name).map_err(|e| {
-            error!("Error resolving '{name}' schema manager: {e:#?}");
-            ExitStatus::GeneralError
-        })?;
-        manager.upgrade(&pool).await.map_err(|e| {
-            error!("Error upgrading '{name}' schema: {e:#?}");
-            ExitStatus::GeneralError
-        })?;
-    }
-    Ok(())
-}
-
-async fn ping_database(database_descriptor: &DatabaseDescriptor) -> Result<(), ExitStatus> {
-    if database_descriptor.mode().is_embedded() {
-        error!("Ping is not supported for an embedded database; it has no externally running server to reach");
-        Err(ExitStatus::GeneralError)?
-    }
-    for (name, _) in database_descriptor.schemas() {
-        let schema_db = database_descriptor.assemble(name).map_err(|e| {
-            error!("Error resolving '{name}' database configuration: {e:#?}");
-            ExitStatus::GeneralError
-        })?;
-        let pool = td_database::db(&schema_db).await.map_err(|e| {
-            error!("Error connecting to '{name}' schema: {e:#?}");
-            ExitStatus::GeneralError
-        })?;
-        pool.acquire().await.map_err(|e| {
-            error!("Error reaching '{name}' schema: {e:#?}");
-            ExitStatus::GeneralError
-        })?;
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn ping_is_rejected_for_embedded_database() {
-        let yaml = r#"
-database:
-  mode: embedded
-  system:
-    data_dir: /tmp/x
-    persistent: true
-    schema: public
-  apiserver:
-    schema: td_apiserver
-"#;
-        let built = ::config::Config::builder()
-            .add_source(::config::Config::try_from(&Config::default()).unwrap())
-            .add_source(::config::File::from_str(yaml, ::config::FileFormat::Yaml))
-            .build()
-            .unwrap();
-        let loaded: Config = built.try_deserialize().unwrap();
-
-        let result = ping_database(&loaded.database).await;
-        assert!(
-            matches!(result, Err(ExitStatus::GeneralError)),
-            "Ping must be rejected for an embedded database, which has no externally running server."
-        );
-    }
 }

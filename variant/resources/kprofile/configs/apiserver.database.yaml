@@ -6,17 +6,25 @@ database:
   mode: sidecar
   system:
     data_dir: ${sys:TDK_DATABASE_PATH}
+    port: 7542
     persistent: true
-    schema: public
     username: ${secret:postgres_system_user}
     password: ${secret:postgres_password}
     min_connections: 1
-    max_connections: 10
+    max_connections: 2
     acquire_timeout: 30
-    max_lifetime: 3600
-    idle_timeout: 60
+    max_lifetime: 1800
+    idle_timeout: 30
     test_before_acquire: true
     log_level: off
-  apiserver:
-    schema: td_apiserver
-    password: ${secret:postgres_password}
+  components:
+    apiserver:
+      schema: td_apiserver
+      password: ${secret:postgres_password}
+      min_connections: 1
+      max_connections: 10
+      acquire_timeout: 30
+      max_lifetime: 3600
+      idle_timeout: 60
+      test_before_acquire: true
+      log_level: off

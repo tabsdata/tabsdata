@@ -13,19 +13,15 @@ use strum::{Display, EnumString, ParseError};
 use ta_services::factory::FieldAccessors;
 use td_authz::jwt::JwtConfig;
 use td_bridge::Orchestrator;
-use td_database::config::{BackendConfig, DatabaseDescriptor};
+use td_database::config::DatabaseDescriptor;
 use td_error::{TdError, td_error};
 use td_execution::TransactionBy;
 use td_objects::types::addresses::{
     ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
 };
-#[cfg(feature = "embedded-postgres")]
-use td_process::launcher::arg::DATABASE_FOLDER;
 use td_security::config::PasswordHashingConfig;
 use td_storage::{MountDef, StorageError};
 use te_apiserver::config::{ExtendedConfig, ExtendedParams};
-use tracing::log::LevelFilter;
-use url::Url;
 
 #[derive(Clone, Serialize, Deserialize, FieldAccessors)]
 pub struct Config {
@@ -173,40 +169,14 @@ impl From<&Config> for PasswordHashingConfig {
     }
 }
 
-#[derive(Debug, Clone, ValueEnum, Display, EnumString)]
-#[strum(serialize_all = "lowercase")]
-pub enum DbSchema {
-    /// Creates Tabsdata database
-    Create,
-    /// Upgrades Tabsdata database
-    Upgrade,
-    /// Creates or upgrades Tabsdata database as needed
-    Auto,
-    /// Checks that every configured schema is reachable and exits
-    Ping,
-}
-
+/// CLI parameters that overlay the YAML [`Config`]. Database configuration is
+/// not among them: the apiserver sources its entire database setup from the
+/// `database:` section of its config file (the embedded data directory is
+/// templated in via `${env:TD_URI_REPOSITORY}`), and schema management is the
+/// `td_dbmanager` command's job, so there are no `--database-*` / `--db-schema`
+/// flags.
 #[derive(Debug, Clone, Args)]
 pub struct Params {
-    #[clap(long, alias = "db", env = "TD_DATABASE_URL")]
-    /// Database URL.
-    database_url: Option<Url>,
-    #[clap(long, env = "TD_URI_REPOSITORY", hide = true)]
-    /// Repository URI, populated from `TD_URI_REPOSITORY`.
-    repository_uri: Option<String>,
-    #[cfg(feature = "embedded-postgres")]
-    #[clap(long, env = "TD_EMBEDDED_POSTGRES_PORT")]
-    /// Fixed port for the embedded postgres instance. Without this the
-    /// embedded server picks a random ephemeral port at startup.
-    embedded_postgres_port: Option<u16>,
-    #[cfg(feature = "embedded-postgres")]
-    #[clap(long, env = "TD_EMBEDDED_POSTGRES_DATA_DIR")]
-    /// Override for the embedded postgres data directory. Defaults to
-    /// `$TD_URI_REPOSITORY/DATABASE_FOLDER/`.
-    embedded_postgres_data_dir: Option<PathBuf>,
-    #[clap(long)]
-    /// Database log level
-    database_log_level: Option<LevelFilter>,
     #[clap(long)]
     /// Storage location (it must be a file:// URI)
     storage_url: Option<String>,
@@ -231,9 +201,6 @@ pub struct Params {
     #[clap(long, value_parser = parse_transaction_by)]
     /// Transaction by
     transaction_by: Option<TransactionBy>,
-    #[clap(long)]
-    /// The apiserver will create or upgrade the DB schema on startup, default is false
-    pub db_schema: Option<DbSchema>,
     #[clap(long)]
     /// The etc directory
     etc: Option<String>, // not used via clap.Added for etc_service to work correctly with CLI option
@@ -263,61 +230,6 @@ impl Params {
             resolved_storage.mounts = None;
         }
         let resolved_storage = Some(resolved_storage);
-
-        let database = {
-            let mut database = config.database;
-            let db = database.system_mut();
-            if let Some(url) = &self.database_url {
-                db.conn = Some(match db.conn.take() {
-                    Some(existing) => existing.with_url(url.clone())?,
-                    None => BackendConfig::from_url(url.clone())?,
-                });
-            }
-            // Embedded-postgres knob resolution:
-            //   - If the config file declared `EmbeddedPostgres` (data_dir /
-            //     port / persistent fields), keep those values and only
-            //     overlay them with CLI flags that were explicitly passed.
-            //   - If no backend is configured at all, fall back to a fresh
-            //     `EmbeddedPostgres` rooted at the CLI flag or, failing that,
-            //     `<repository_uri>/<DATABASE_FOLDER>` from `TD_URI_REPOSITORY`.
-            //
-            // The previous shape replaced the whole `db.conn` whenever
-            // `db.url().is_none()`, which silently dropped any data_dir set
-            // through the config file (an EmbeddedPostgres backend has
-            // `url() == None`, so the guard always fired).
-            #[cfg(feature = "embedded-postgres")]
-            {
-                match db.conn.take() {
-                    Some(BackendConfig::EmbeddedPostgres(mut embedded)) => {
-                        if let Some(data_dir) = self.embedded_postgres_data_dir.clone() {
-                            embedded.data_dir = Some(data_dir);
-                        }
-                        if let Some(port) = self.embedded_postgres_port {
-                            embedded.port = Some(port);
-                        }
-                        db.conn = Some(BackendConfig::EmbeddedPostgres(embedded));
-                    }
-                    None => {
-                        let data_dir = self.embedded_postgres_data_dir.clone().or_else(|| {
-                            self.repository_uri
-                                .as_deref()
-                                .map(|r| PathBuf::from(r).join(DATABASE_FOLDER))
-                        });
-                        db.conn = Some(BackendConfig::embedded_postgres_persistent(
-                            data_dir,
-                            self.embedded_postgres_port,
-                        ));
-                    }
-                    Some(other) => {
-                        db.conn = Some(other);
-                    }
-                }
-            }
-            if let Some(log_level) = self.database_log_level {
-                db.pool.log_level = log_level;
-            }
-            database
-        };
 
         let config = Config {
             addresses: self
@@ -350,7 +262,7 @@ impl Params {
                 .ssl_folder
                 .clone()
                 .unwrap_or_else(|| config.ssl_folder.clone()),
-            database,
+            database: config.database,
             storage: resolved_storage,
             transaction_by: self
                 .transaction_by
@@ -420,9 +332,12 @@ mod tests {
 database:
   mode: sidecar
   system:
-    schema: public
-  apiserver:
-    schema: td_apiserver
+    url: postgres://localhost/tabsdata
+    username: admin
+    password: secret
+  components:
+    apiserver:
+      password: owner_secret
 "#;
         let built = config::Config::builder()
             .add_source(config::Config::try_from(&Config::default()).unwrap())
@@ -432,16 +347,16 @@ database:
             .unwrap();
         let config: Config = built.try_deserialize().unwrap();
         assert_eq!(config.database.mode(), DatabaseMode::Sidecar);
-        assert!(config.database.system().is_some());
+        // Managed: the backend lives in the `system` entry, not top-level.
+        assert!(config.database.backend().is_none());
+        config.database.validate().unwrap();
         assert_eq!(
             config
                 .database
-                .schema_keys()
-                .map(String::as_str)
-                .collect::<Vec<_>>(),
-            vec!["apiserver", "system"]
+                .component_override("apiserver")
+                .and_then(|o| o.password.as_deref()),
+            Some("owner_secret")
         );
-        assert!(config.database.assemble("apiserver").is_ok());
     }
 
     #[test]
@@ -454,9 +369,12 @@ orchestrator: kubernetes
 database:
   mode: sidecar
   system:
-    schema: public
-  apiserver:
-    schema: td_apiserver
+    url: postgres://localhost/tabsdata
+    username: admin
+    password: secret
+  components:
+    apiserver:
+      password: owner_secret
 "#;
         let storage_yaml = r#"
 storage:
@@ -467,9 +385,18 @@ storage:
 "#;
         let built = config::Config::builder()
             .add_source(config::Config::try_from(&Config::default()).unwrap())
-            .add_source(config::File::from_str(apiserver_yaml, config::FileFormat::Yaml))
-            .add_source(config::File::from_str(database_yaml, config::FileFormat::Yaml))
-            .add_source(config::File::from_str(storage_yaml, config::FileFormat::Yaml))
+            .add_source(config::File::from_str(
+                apiserver_yaml,
+                config::FileFormat::Yaml,
+            ))
+            .add_source(config::File::from_str(
+                database_yaml,
+                config::FileFormat::Yaml,
+            ))
+            .add_source(config::File::from_str(
+                storage_yaml,
+                config::FileFormat::Yaml,
+            ))
             .add_source(config::Environment::with_prefix("apiserver"))
             .build()
             .unwrap();
@@ -477,14 +404,18 @@ storage:
         assert_eq!(config.request_timeout, 90);
         assert_eq!(config.orchestrator, Orchestrator::Kubernetes);
         assert_eq!(config.database.mode(), DatabaseMode::Sidecar);
-        assert!(config.database.assemble("apiserver").is_ok());
+        let resolver = config.database.resolve().unwrap();
+        assert_eq!(
+            resolver.assemble("td_apiserver", None).unwrap().schema.as_deref(),
+            Some("td_apiserver")
+        );
         assert_eq!(config.storage_mounts().unwrap().len(), 1);
     }
 
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert!(config.database.system().is_none());
+        assert!(config.database.backend().is_none());
         assert_eq!(
             *config.addresses,
             NonEmptyAddresses::new(nonempty![SocketAddr::from(([0, 0, 0, 0], 2457))])
@@ -534,16 +465,7 @@ storage:
     fn test_params_resolve() {
         let default_config = Config::default();
 
-        let db_url = Url::from_str("postgres://user:pass@localhost/test").unwrap();
-
         let params = Params {
-            database_url: Some(db_url.clone()),
-            repository_uri: None,
-            #[cfg(feature = "embedded-postgres")]
-            embedded_postgres_port: None,
-            #[cfg(feature = "embedded-postgres")]
-            embedded_postgres_data_dir: None,
-            database_log_level: None,
             #[cfg(target_os = "windows")]
             storage_url: Some(String::from("file:///c:/storage")),
             #[cfg(not(target_os = "windows"))]
@@ -555,7 +477,6 @@ storage:
             access_jwt_expiration: Some(7200),
             request_timeout: Some(120),
             transaction_by: Some(TransactionBy::default()),
-            db_schema: None,
             etc: None,
             msg: None,
             orchestrator: None,
@@ -569,10 +490,6 @@ storage:
         assert_eq!(
             *resolved_config.addresses,
             NonEmptyAddresses::new(nonempty![SocketAddr::from(([127, 0, 0, 1], 2457))])
-        );
-        assert_eq!(
-            resolved_config.database.system().and_then(|db| db.url()),
-            Some(&db_url)
         );
         assert!(resolved_config.clone().storage.is_some());
         #[cfg(target_os = "windows")]
@@ -601,13 +518,6 @@ storage:
 
         // Test with some fields not set in Params
         let partial_params = Params {
-            database_url: Some(db_url.clone()),
-            repository_uri: None,
-            #[cfg(feature = "embedded-postgres")]
-            embedded_postgres_port: None,
-            #[cfg(feature = "embedded-postgres")]
-            embedded_postgres_data_dir: None,
-            database_log_level: None,
             #[cfg(target_os = "windows")]
             storage_url: Some(String::from("file:///c:/storage")),
             #[cfg(not(target_os = "windows"))]
@@ -619,7 +529,6 @@ storage:
             access_jwt_expiration: Some(1800),
             request_timeout: None,
             transaction_by: Some(TransactionBy::default()),
-            db_schema: None,
             etc: None,
             msg: None,
             orchestrator: None,

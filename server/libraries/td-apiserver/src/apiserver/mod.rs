@@ -8,19 +8,18 @@ use crate::config::Config;
 use async_trait::async_trait;
 use std::error::Error;
 use std::sync::Arc;
-use ta_services::extension::ContextExt;
 use ta_services::factory::ServiceFactory;
 use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
 use td_bridge::BridgeProviderHandle;
 use td_common::server_runner::ServerRunnable;
-use td_database::pool::TdPool;
+use td_database::system::{APISERVER_COMPONENT_KEY, ServingPools};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_services::execution::services::runtime_info::RuntimeContext;
-use td_services::{Context, Services, SystemPool};
+use td_services::{Context, Services};
 use td_storage::Storage;
-use te_services::{ExtendedContext, ExtendedServices};
+use te_services::{ContextExt, ExtendedContext, ExtendedServices};
 use tokio::sync::watch;
 
 pub mod internal;
@@ -39,18 +38,16 @@ pub struct ApiServerCtx {
 impl ApiServerCtx {
     pub async fn new(
         config: Config,
-        system_pool: TdPool,
-        db: TdPool,
+        serving_pools: ServingPools,
         storage: Arc<Storage>,
         runtime_context: Arc<RuntimeContext>,
-        scheduler_notify: SchedulerNotify,
+        scheduler_notify: Arc<SchedulerNotify>,
         bridge: Arc<BridgeProviderHandle>,
         authz_registry: Arc<td_authz::rbac::AuthzRegistry>,
     ) -> Result<Self, TdError> {
-        let scheduler_notify = Arc::new(scheduler_notify);
+        let apiserver_pool = serving_pools.get(APISERVER_COMPONENT_KEY)?.clone();
         let context = Context {
-            system_pool: SystemPool(system_pool),
-            apiserver_pool: db.clone(),
+            apiserver_pool,
             database_descriptor: Arc::new(config.database.clone()),
             server_addresses: Arc::new(config.addresses.clone()),
             jwt_config: Arc::new(config.jwt.clone()),
@@ -72,7 +69,10 @@ impl ApiServerCtx {
             bridge,
         };
         let services = Services::build(&context);
-        let extended_context = ExtendedContext::build(&context, &config.extended_config).await?;
+        // Edition extensions extend the base context with the serving pools (each
+        // grabs the component pool it owns) and the edition's resolved config; the
+        // pools are consumed here, not carried in the base context.
+        let extended_context = context.extend(&serving_pools, &config.extended_config).await?;
         let extended_services = ExtendedServices::build(&extended_context);
 
         Ok(Self {

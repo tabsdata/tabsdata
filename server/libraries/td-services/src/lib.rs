@@ -22,7 +22,6 @@ use crate::user::service::UserServices;
 use crate::user_role::services::UserRoleServices;
 use crate::worker::services::WorkerServices;
 use axum::extract::FromRef;
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 use ta_services::factory::{FieldAccessors, ServiceFactory};
@@ -82,20 +81,8 @@ pub struct Services {
     worker: Arc<WorkerServices>,
 }
 
-#[derive(Clone)]
-pub struct SystemPool(pub TdPool);
-
-impl Deref for SystemPool {
-    type Target = TdPool;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 #[derive(FieldAccessors, FromRef, Clone)]
 pub struct Context {
-    pub system_pool: SystemPool,
     pub apiserver_pool: TdPool,
     pub database_descriptor: Arc<DatabaseDescriptor>,
     pub server_addresses: Arc<ApiServerAddresses>,
@@ -115,7 +102,6 @@ pub struct Context {
 impl Context {
     pub fn with_defaults(db: TdPool) -> Self {
         Self {
-            system_pool: SystemPool(db.clone()),
             apiserver_pool: db,
             database_descriptor: Arc::new(DatabaseDescriptor::default()),
             server_addresses: Arc::new(ApiServerAddresses::default()),

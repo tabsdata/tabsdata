@@ -27,16 +27,15 @@ impl SchedulerCtx {
         storage: Arc<Storage>,
         bridge: Arc<BridgeProviderHandle>,
         internal_addresses: Arc<InternalServerAddresses>,
-        scheduler_notify: SchedulerNotify,
+        scheduler_notify: Arc<SchedulerNotify>,
         jwt_config: Arc<JwtConfig>,
     ) -> Self {
-        let scheduler_notify = Arc::new(scheduler_notify);
         let context = SchedulerContext {
             db,
             storage,
             bridge,
             internal_addresses,
-            scheduler_notify: scheduler_notify.clone(),
+            scheduler_notify,
             jwt_config,
         };
 

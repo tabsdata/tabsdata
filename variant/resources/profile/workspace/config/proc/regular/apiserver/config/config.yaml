@@ -21,16 +21,26 @@ orchestrator: supervisor
 database:
   mode: embedded
   system:
-    schema: public
+    data_dir: ${env:TD_URI_REPOSITORY}/database
+    port: 7542
+    persistent: true
     min_connections: 1
-    max_connections: 10
+    max_connections: 2
     acquire_timeout: 30
-    max_lifetime: 3600
-    idle_timeout: 60
+    max_lifetime: 1800
+    idle_timeout: 30
     test_before_acquire: true
     log_level: off
-  apiserver:
-    schema: td_apiserver
+  components:
+    apiserver:
+      schema: td_apiserver
+      min_connections: 1
+      max_connections: 10
+      acquire_timeout: 30
+      max_lifetime: 3600
+      idle_timeout: 60
+      test_before_acquire: true
+      log_level: off
 storage:
   mounts:
     - id: ROOT
