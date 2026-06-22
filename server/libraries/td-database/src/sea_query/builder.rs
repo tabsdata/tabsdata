@@ -10,7 +10,7 @@ use futures_util::future::BoxFuture;
 use futures_util::stream::BoxStream;
 use sea_query::QueryStatementWriter;
 use sea_query_sqlx::SqlxValues;
-use sqlx::{Either, Error};
+use sqlx::Error;
 use std::marker::PhantomData;
 
 /// QueryBuilder trait to convert from SeaQuery to String/Values tuple for sqlx.
@@ -96,14 +96,6 @@ where
         pool: impl SeaExecutor + 'q,
     ) -> BoxStream<'q, Result<DynamicRow, Error>> {
         pool.fetch(self.query)
-    }
-
-    #[allow(deprecated)] // remove when needed
-    pub fn fetch_many<'q>(
-        self,
-        pool: impl SeaExecutor + 'q,
-    ) -> BoxStream<'q, Result<Either<DynamicQueryResult, DynamicRow>, Error>> {
-        pool.fetch_many(self.query)
     }
 
     pub fn fetch_all<'q>(

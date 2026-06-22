@@ -7,8 +7,8 @@
 //! `.live()`/`.current()`/`.seed()` come for free — and runs **each** statement
 //! in its own transaction (begin → `SET LOCAL app.project_id` → run →
 //! commit/rollback). The [`Scoped`] data type itself (and the
-//! [`InProject`](crate::scoped::InProject) constructor) lives in
-//! [`crate::scoped`]; this module only adds the executor impl, next to the
+//! [`InProject`](crate::pool::scoped::InProject) constructor) lives in
+//! [`crate::pool::scoped`]; this module only adds the executor impl, next to the
 //! other [`SeaExecutor`]s.
 //!
 //! Production never uses this: serving requests get an already-scoped
@@ -23,7 +23,7 @@ use crate::dynamic::{
     DynamicConnection, DynamicDecode, DynamicFromRow, DynamicQueryResult, DynamicRow, DynamicType,
 };
 use crate::pool::TdPool;
-use crate::scoped::Scoped;
+use crate::pool::scoped::Scoped;
 use crate::sea_query::builder::SeaQuerySqlxBuild;
 use crate::sea_query::executor::SeaExecutor;
 use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
