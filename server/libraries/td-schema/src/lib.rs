@@ -6,6 +6,8 @@ use sea_query::Iden;
 
 pub mod schema;
 
+pub use schema::{CurrentSource, SchemaSource, tabsdata_system_ddl};
+
 /// Tabsdata system table stucture.
 #[derive(Iden)]
 pub enum TabsdataSystem {
