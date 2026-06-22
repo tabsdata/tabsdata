@@ -62,6 +62,7 @@ members = [
     "server/libraries/td-tower",
     "extensions/rust/te-apiserver",
     "extensions/rust/te-authz",
+    "extensions/rust/te-database",
     "extensions/rust/te-execution",
     "extensions/rust/te-services",
     "extensions/rust/te-system",
@@ -225,6 +226,9 @@ path = "server/libraries/td-kubernetes"
 
 [workspace.dependencies.te-authz]
 path = "extensions/rust/te-authz"
+
+[workspace.dependencies.te-database]
+path = "extensions/rust/te-database"
 
 [workspace.dependencies.te-services]
 path = "extensions/rust/te-services"
@@ -446,6 +450,9 @@ version = "2.13.0"
 [workspace.dependencies.indicatif]
 version = "0.18.4"
 features = ["default", "improved_unicode"]
+
+[workspace.dependencies.inventory]
+version = "0.3"
 
 [workspace.dependencies.itertools]
 version = "0.14.0"
