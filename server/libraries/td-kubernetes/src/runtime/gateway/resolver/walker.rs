@@ -117,6 +117,58 @@ pub fn contains_placeholder(text: &str) -> bool {
     PLACEHOLDER_PATTERN.is_match(text)
 }
 
+fn placeholder_from_captures(captures: &regex::Captures) -> Option<Placeholder> {
+    let kind = captures.get(1)?;
+    let rule = match captures.get(3) {
+        Some(_) => Rule::Optional,
+        None => Rule::Mandatory,
+    };
+    Some(Placeholder {
+        kind: kind.as_str().to_owned(),
+        category: captures.get(2).map(|category| category.as_str().to_owned()),
+        rule,
+    })
+}
+
+pub fn parse_bare_placeholder(text: &str) -> Option<Placeholder> {
+    let captures = PLACEHOLDER_PATTERN.captures(text)?;
+    let matched = captures.get(0)?;
+    if matched.start() != 0 || matched.end() != text.len() {
+        return None;
+    }
+    placeholder_from_captures(&captures)
+}
+
+pub fn placeholder_occurrences(text: &str) -> Vec<Placeholder> {
+    PLACEHOLDER_PATTERN
+        .captures_iter(text)
+        .filter_map(|captures| placeholder_from_captures(&captures))
+        .collect()
+}
+
+pub fn splice_placeholders<F>(text: &str, mut render: F) -> Result<String, ResolverError>
+where
+    F: FnMut(usize, &Placeholder) -> Result<String, ResolverError>,
+{
+    let mut result = String::with_capacity(text.len());
+    let mut last = 0usize;
+    let mut occurrence = 0usize;
+    for captures in PLACEHOLDER_PATTERN.captures_iter(text) {
+        let Some(matched) = captures.get(0) else {
+            continue;
+        };
+        let Some(placeholder) = placeholder_from_captures(&captures) else {
+            continue;
+        };
+        result.push_str(&text[last..matched.start()]);
+        result.push_str(&render(occurrence, &placeholder)?);
+        last = matched.end();
+        occurrence += 1;
+    }
+    result.push_str(&text[last..]);
+    Ok(result)
+}
+
 pub trait PlaceholderVisitor {
     fn visit_placeholder(
         &mut self,

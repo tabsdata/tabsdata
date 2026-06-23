@@ -2,15 +2,24 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+mod resolve;
+
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
 use crate::base::constants::{KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY};
 use crate::base::error::gateway::ResolverError;
+use crate::runtime::gateway::resolver::fusion::resolve::resolve_config_file;
+use crate::runtime::gateway::resolver::placeholder::SystemValues;
 use crate::runtime::instance::profile::{Profile, RenderedConfigmap};
 
-pub fn fuse(profile: &Profile, init: &Path, stage: &Path) -> Result<(), ResolverError> {
+pub fn fuse(
+    profile: &Profile,
+    system: &SystemValues,
+    init: &Path,
+    stage: &Path,
+) -> Result<(), ResolverError> {
     wipe_stage(stage)?;
     compare_family(
         init,
@@ -19,7 +28,55 @@ pub fn fuse(profile: &Profile, init: &Path, stage: &Path) -> Result<(), Resolver
         false,
     )?;
     compare_family(init, KPROFILE_PODS_FAMILY.folder, &profile.pods, true)?;
+    resolve_configs_files(profile, system, init, stage)?;
+    stage_pods_files(profile, stage)?;
     Ok(())
+}
+
+fn resolve_configs_files(
+    profile: &Profile,
+    system: &SystemValues,
+    init: &Path,
+    stage: &Path,
+) -> Result<(), ResolverError> {
+    let init_configs = init.join(KPROFILE_CONFIGS_FAMILY.folder);
+    let stage_configs = stage.join(KPROFILE_CONFIGS_FAMILY.folder);
+    create_folder(&stage_configs)?;
+    for (file, template) in &profile.configs {
+        let init_file = init_configs.join(file);
+        let init_content = fs::read_to_string(&init_file).map_err(|cause| {
+            ResolverError::InitializationReadFailed {
+                path: init_file.display().to_string(),
+                cause: cause.to_string(),
+            }
+        })?;
+        let outcome = resolve_config_file(template, &init_content, system)?;
+        write_staged(&stage_configs.join(file), &outcome.rendered)?;
+    }
+    Ok(())
+}
+
+fn stage_pods_files(profile: &Profile, stage: &Path) -> Result<(), ResolverError> {
+    let stage_pods = stage.join(KPROFILE_PODS_FAMILY.folder);
+    create_folder(&stage_pods)?;
+    for (file, content) in &profile.pods {
+        write_staged(&stage_pods.join(file), content)?;
+    }
+    Ok(())
+}
+
+fn create_folder(folder: &Path) -> Result<(), ResolverError> {
+    fs::create_dir_all(folder).map_err(|cause| ResolverError::StageWriteFailed {
+        path: folder.display().to_string(),
+        cause: cause.to_string(),
+    })
+}
+
+fn write_staged(file: &Path, content: &str) -> Result<(), ResolverError> {
+    fs::write(file, content).map_err(|cause| ResolverError::StageWriteFailed {
+        path: file.display().to_string(),
+        cause: cause.to_string(),
+    })
 }
 
 fn wipe_stage(stage: &Path) -> Result<(), ResolverError> {

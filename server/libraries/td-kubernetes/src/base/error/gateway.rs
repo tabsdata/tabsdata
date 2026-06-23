@@ -95,4 +95,25 @@ pub enum ResolverError {
     } = 5027,
     #[error("Could not encode the secret key at '{path}': {cause}.")]
     SecretKeyEncodingFailed { path: String, cause: String } = 5028,
+    #[error(
+        "The structure at '{path}' differs between the template and the initialization folder."
+    )]
+    StructureMismatch { path: String } = 5029,
+    #[error(
+        "The placeholder '{identity}' at '{path}' resolves to '{second}', but elsewhere it \
+         resolves to '{first}'; every occurrence must resolve to the same value."
+    )]
+    DivergingPlaceholderValue {
+        identity: String,
+        path: String,
+        first: String,
+        second: String,
+    } = 5030,
+    #[error(
+        "The placeholder '{token}' at '{path}' cannot be embedded in surrounding text or share a \
+         value with other placeholders; it must be the whole value."
+    )]
+    EmbeddedRetainedPlaceholder { path: String, token: String } = 5031,
+    #[error("Could not write the staged file '{path}': {cause}.")]
+    StageWriteFailed { path: String, cause: String } = 5032,
 }

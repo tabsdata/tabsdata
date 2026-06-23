@@ -24,6 +24,24 @@ use std::str::FromStr;
 
 use crate::runtime::gateway::resolver::walker::Phase;
 
+/// How a placeholder's value is sourced and what it leaves in the staged file.
+///
+/// * `Fixed`    — the user cannot supply the value: we substitute ours (at
+///   creation, e.g. `system`) or keep the token verbatim for later resolution
+///   (at execution, e.g. `env`, `runtime`). The init side must keep the token
+///   unchanged.
+/// * `Inlined`  — the user supplies the value, kept verbatim: the whole init
+///   scalar becomes the staged value (e.g. `literal`).
+/// * `Retained` — the user supplies the value, but the token is kept in the
+///   staged file and the value is collected elsewhere (a Secret for `secret`, a
+///   ConfigMap for `config`). Cannot be embedded in surrounding text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Substitution {
+    Fixed,
+    Inlined,
+    Retained,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaceholderKind {
     Literal,
@@ -96,6 +114,25 @@ impl PlaceholderKind {
             | Self::RuntimeAuto
             | Self::Env => Phase::Execution,
         }
+    }
+
+    pub const fn behavior(self) -> Substitution {
+        match self {
+            Self::Literal | Self::LiteralAuto => Substitution::Inlined,
+            Self::Config | Self::ConfigAuto | Self::Secret | Self::SecretAuto => {
+                Substitution::Retained
+            }
+            Self::System
+            | Self::SystemAuto
+            | Self::Runtime
+            | Self::RuntimeAuto
+            | Self::Env
+            | Self::Var => Substitution::Fixed,
+        }
+    }
+
+    pub const fn requires_bare_token(self) -> bool {
+        matches!(self.behavior(), Substitution::Retained)
     }
 
     pub const fn is_supported(self) -> bool {
