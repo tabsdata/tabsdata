@@ -8,7 +8,7 @@ metadata:
   name: td-cron-publisher
   namespace: default
   annotations:
-    tabsdata.com/description: "Tabsdata cron-publisher pod"
+    tabsdata.com/description: "Tabsdata cron-publisher worker"
     kubernetes.io/change-cause: ""
   labels:
     app.kubernetes.io/name: tabsdata
