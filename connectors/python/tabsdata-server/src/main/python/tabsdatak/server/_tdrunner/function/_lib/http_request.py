@@ -5,15 +5,14 @@
 """Small HTTP invocation helper for in-pod calls to the apiserver.
 
 Built for the manifest-trigger sidecar (NU7), which needs to POST
-``fn_trigger`` with a query-string overlay (``?skip_if_running=true&
-external_id=<TS>``) and inspect the response without treating 4xx as
-exceptional.
+``fn_trigger`` as a JSON ``ExecutionRequestInternal`` body and inspect
+the response without treating 4xx as exceptional.
 
 Why not :mod:`urllib` directly: the standard library's default
 behaviour raises :class:`urllib.error.HTTPError` on 4xx/5xx, which
 hides the status from callers that want to distinguish (for example)
 ``200 OK`` (triggered) from ``409 Conflict`` (apiserver dedup'd via
-``external_id`` -- a benign skip, not a failure). This wrapper folds
+``external_uid`` -- a benign skip, not a failure). This wrapper folds
 both branches into :class:`HttpResponse` so the caller's code-by-
 status logic stays linear.
 
@@ -41,7 +40,7 @@ class HttpRequest:
     Built once by the sidecar from its ``--trigger-url`` /
     ``--trigger-method`` / ``--trigger-authorization`` args (the
     pattern parallels how commands consume the responder triplet
-    today) and replayed per-manifest with a different query string
+    today) and replayed per-manifest with a different JSON body
     each time.
     """
 
@@ -90,12 +89,11 @@ def invoke(
         request: The reusable request descriptor.
         query: Optional query-string overlay merged onto the URL's
             existing query. Caller-supplied keys win over duplicates
-            already in the URL. Values are stringified. NU7 uses this
-            to attach ``skip_if_running=true&external_id=<TS>`` per
-            manifest without rebuilding the base URL each call.
-        body: Optional request body bytes. Pass ``None`` to send
-            without a body (this is the common case for ``fn_trigger``
-            which carries its args in the query string).
+            already in the URL. Values are stringified. Retained as a
+            general-purpose escape hatch even though the sidecar's
+            ``fn_trigger`` call now carries its args in the JSON body.
+        body: Optional request body bytes. NU7 passes a JSON-encoded
+            ``ExecutionRequestInternal``; ``None`` sends no body.
         timeout_seconds: Socket timeout. ``None`` disables (not
             recommended for the sidecar; the apiserver should respond
             in well under 30s).
