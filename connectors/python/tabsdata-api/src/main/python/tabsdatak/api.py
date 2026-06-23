@@ -27,6 +27,7 @@ per-flow scratch state across invocations.
 
 import importlib
 from abc import ABC, abstractmethod
+from decimal import Decimal
 from typing import Annotated, Callable, TypeAlias, Union
 
 from pydantic import Field, model_validator
@@ -546,10 +547,13 @@ def subscriber[C: Conn](
 ContextKeySpec: TypeAlias = str
 
 # Allowed per-flow scratch-value shapes. Primitives + flat lists /
-# dicts whose values are also primitives. Stays JSON-serialisable
-# end-to-end. Heterogeneous values inside the same dict are fine
-# (e.g. ``{"last_modified": "...", "min_id": 1234}``).
-_PRIM: TypeAlias = Union[str, int, float, bool]
+# dicts whose values are also primitives. Round-trips through the
+# state Parquet (see the initial-values codec). Heterogeneous values
+# inside the same dict are fine (e.g. ``{"last_modified": "...",
+# "min_id": 1234}``). ``Decimal`` is included so connectors can persist
+# exact arbitrary-precision values (e.g. a decimal128 CDC cursor)
+# without lossy promotion to ``float``.
+_PRIM: TypeAlias = Union[str, int, float, bool, Decimal]
 ContextValueSpec: TypeAlias = Union[_PRIM, list[_PRIM], dict[str, _PRIM]]
 
 

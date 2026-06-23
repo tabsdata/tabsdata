@@ -19,8 +19,8 @@ Validation:
 
   * Keys are plain strings (``ContextKeySpec``).
   * Values must match ``ContextValueSpec``: a primitive (``str``,
-    ``int``, ``float``, ``bool``), a ``list[primitive]``, or a
-    flat ``dict[str, primitive]``.
+    ``int``, ``float``, ``bool``, ``Decimal``), a ``list[primitive]``,
+    or a flat ``dict[str, primitive]``.
 
 Bad input is rejected before any I/O: a malformed value never reaches
 disk, and a malformed on-disk file never silently round-trips through.
@@ -58,10 +58,12 @@ logger = logging.getLogger(__name__)
 # between what the SPI says and what we accept.
 #
 # ``strict=True`` disables pydantic's coercion, so ``"1"`` is not
-# silently promoted to ``int`` and ``True`` stays a ``bool`` rather
-# than matching the ``int`` arm (since ``bool`` is an ``int`` subclass
-# in Python). Both matter for the round-trip: the value we accept
-# here is the same value Parquet stores and round-trips back.
+# silently promoted to ``int``, ``True`` stays a ``bool`` rather than
+# matching the ``int`` arm (since ``bool`` is an ``int`` subclass in
+# Python), and a ``Decimal`` stays a ``Decimal`` rather than collapsing
+# into the ``float`` arm (which would silently lose precision). All
+# matter for the round-trip: the value we accept here is the same value
+# Parquet stores and round-trips back.
 _STRICT = ConfigDict(strict=True)
 _KEY_ADAPTER: TypeAdapter[ContextKeySpec] = TypeAdapter(ContextKeySpec, config=_STRICT)
 _VALUE_ADAPTER: TypeAdapter[ContextValueSpec] = TypeAdapter(

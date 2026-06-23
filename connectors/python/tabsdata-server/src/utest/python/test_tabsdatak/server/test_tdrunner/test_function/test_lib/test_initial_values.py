@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 import polars as pl
@@ -63,6 +64,37 @@ def test_roundtrip_dict_of_primitives_value(tmp_path):
     p = tmp_path / "iv.parquet"
     write_initial_values({"labels": {"env": "prod", "team": "data"}}, p)
     assert read_initial_values(p) == {"labels": {"env": "prod", "team": "data"}}
+
+
+def test_roundtrip_decimal_value(tmp_path):
+    """``Decimal`` is a ContextValueSpec arm so connectors can persist
+    exact values (e.g. a decimal128 CDC cursor). It must round-trip as a
+    ``Decimal``, not be promoted to ``float`` -- strict validation keeps
+    it off the ``float`` arm."""
+    p = tmp_path / "iv.parquet"
+    write_initial_values({"cursor": Decimal("42")}, p)
+    back = read_initial_values(p)
+    assert back == {"cursor": Decimal("42")}
+    assert isinstance(back["cursor"], Decimal)
+
+
+def test_roundtrip_list_of_decimal(tmp_path):
+    """The CDC ``(seg, ord)`` cursor shape: a ``list[Decimal]``."""
+    p = tmp_path / "iv.parquet"
+    write_initial_values({"cursor": [Decimal("5"), Decimal("3")]}, p)
+    back = read_initial_values(p)
+    assert back == {"cursor": [Decimal("5"), Decimal("3")]}
+    assert all(isinstance(value, Decimal) for value in back["cursor"])
+
+
+def test_roundtrip_decimal_beyond_int64(tmp_path):
+    """A Decimal past 2**63 - 1 survives losslessly -- the reason the
+    cursor is kept as Decimal rather than down-cast to int (which could
+    overflow Int64 inference at persist time)."""
+    p = tmp_path / "iv.parquet"
+    big = Decimal(2**63 + 7)
+    write_initial_values({"cursor": big}, p)
+    assert read_initial_values(p) == {"cursor": big}
 
 
 def test_roundtrip_empty_dict(tmp_path):

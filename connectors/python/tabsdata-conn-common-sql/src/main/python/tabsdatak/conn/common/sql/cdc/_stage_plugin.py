@@ -104,37 +104,28 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                 continue
 
             lazy_frames = [pl.scan_parquet(path) for path in slot_files]
-            try:
-                deduped = (
-                    pl
-                    .concat(lazy_frames, how="vertical_relaxed")
-                    # Stable sort so rows sharing a (seg, ord) keep their
-                    # input order; combined with unique(keep="first") below
-                    # the earliest-arriving row of any such group is retained.
-                    .sort([CDC_META_SEG, CDC_META_ORD], maintain_order=True)
-                    .unique(
-                        subset=[CDC_META_SEG, CDC_META_ORD],
-                        keep="first",
-                        maintain_order=True,
-                    )
-                    .collect()
+            # Stays lazy end to end: the dedup is a window aggregation rather
+            # than ``unique(keep="first")`` so it does not depend on engine
+            # row order (which the parallel/streaming engine does not
+            # preserve), and the result is streamed to disk by
+            # ``sink_parquet`` below, never materialised whole.
+            #
+            # ``concat`` keeps file order, so a global row index over it is a
+            # true arrival order; within each ``(seg, ord)`` group the row
+            # with the minimum arrival is the earliest-staged one. Selecting
+            # it by ``min().over`` (not ``keep="first"``) makes the surviving
+            # duplicate deterministic regardless of how the engine schedules
+            # the scan.
+            deduped = (
+                pl.concat(lazy_frames, how="vertical_relaxed")
+                .with_row_index("arrival")
+                .filter(
+                    pl.col("arrival")
+                    == pl.col("arrival").min().over([CDC_META_SEG, CDC_META_ORD])
                 )
-            except (pl.exceptions.PolarsError, OSError) as e:
-                raise SqlCdcErrorCode.CDC_15.exception(
-                    cause=e, index=index, reason=str(e)
-                )
-
-            # High-water ``(seg, ord)`` over the de-duplicated batch. The
-            # frame is sorted ascending, so its last row carries the
-            # lexicographic max pair. Computed *before* filtering so
-            # already-seen rows can never lower the stored cursor, and cast
-            # to int because the scratch store is JSON-only while seg/ord
-            # are decimal128.
-            if deduped.height:
-                seg, ordinal = deduped.select([CDC_META_SEG, CDC_META_ORD]).row(-1)
-                batch_max = [int(seg), int(ordinal)]
-            else:
-                batch_max = None
+                .drop("arrival")
+                .sort([CDC_META_SEG, CDC_META_ORD])
+            )
 
             prior = ctx.get_attr(_table_key(index))
             if prior is not None:
@@ -154,12 +145,43 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
             else:
                 emitted = deduped
 
-            if batch_max is not None:
+            out_path = out_dir / f"slot{index:04d}.parquet"
+            try:
+                # High-water ``(seg, ord)`` over the de-duplicated batch.
+                # ``ord`` is scoped within ``seg``, so the cursor is the
+                # largest ``ord`` among the rows at the largest ``seg`` --
+                # computed explicitly rather than read positionally off the
+                # sorted frame, which the engine does not guarantee to leave
+                # in sort order. Streamed into a one-row frame; the batch
+                # itself is never collected. Taken from the pre-filter frame
+                # so an already-seen batch can never lower the stored cursor.
+                high_water = (
+                    deduped.filter(
+                        pl.col(CDC_META_SEG) == pl.col(CDC_META_SEG).max()
+                    )
+                    .select(
+                        pl.col(CDC_META_SEG).max().alias(CDC_META_SEG),
+                        pl.col(CDC_META_ORD).max().alias(CDC_META_ORD),
+                    )
+                    .collect(engine="streaming")
+                )
+                emitted.sink_parquet(out_path)
+            except (pl.exceptions.PolarsError, OSError) as e:
+                raise SqlCdcErrorCode.CDC_15.exception(
+                    cause=e, index=index, reason=str(e)
+                )
+
+            if high_water.height:
+                # seg/ord are decimal128, so ``row`` hands them back as
+                # ``Decimal`` -- stored as-is (the scratch store accepts
+                # ``Decimal``) to keep the cursor exact across the full
+                # decimal128(38, 0) range. ``prior`` was stored the same way,
+                # so ``max`` compares two ``[Decimal, Decimal]`` pairs.
+                seg, ordinal = high_water.row(0)
+                batch_max = [seg, ordinal]
                 new_cursor = batch_max if prior is None else max(prior, batch_max)
                 ctx.store_attr(_table_key(index), new_cursor)
 
-            out_path = out_dir / f"slot{index:04d}.parquet"
-            emitted.write_parquet(out_path)
             results.append([out_path])
 
         logger.info("cdc-stage: processed %d slot(s)", len(results))

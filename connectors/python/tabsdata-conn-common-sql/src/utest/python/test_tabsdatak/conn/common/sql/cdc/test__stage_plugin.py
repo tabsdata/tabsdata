@@ -14,6 +14,7 @@ within its ``seg``, so the cursor is the full ``(seg, ord)`` pair. The
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 import polars as pl
@@ -46,13 +47,25 @@ class FakeCtx:
         self.attrs[attr] = val
 
 
-def _write(path: Path, rows: list[tuple[int, int, str]]) -> Path:
-    """Write a tiny parquet with (seg, ord, payload) rows."""
-    pl.DataFrame({
+def _write(
+    path: Path, rows: list[tuple[int, int, str]], decimal: bool = False
+) -> Path:
+    """Write a tiny parquet with (seg, ord, payload) rows.
+
+    ``decimal=True`` casts seg/ord to ``decimal128(38, 0)``, the dtype the
+    CDC ingester actually emits; the default Int64 keeps the other cases
+    terse."""
+    frame = pl.DataFrame({
         CDC_META_SEG: [r[0] for r in rows],
         CDC_META_ORD: [r[1] for r in rows],
         "payload": [r[2] for r in rows],
-    }).write_parquet(path)
+    })
+    if decimal:
+        frame = frame.with_columns(
+            pl.col(CDC_META_SEG).cast(pl.Decimal(38, 0)),
+            pl.col(CDC_META_ORD).cast(pl.Decimal(38, 0)),
+        )
+    frame.write_parquet(path)
     return path
 
 
@@ -146,6 +159,54 @@ def test_dedup_and_cursor_filter_combine_in_one_run(tmp_path):
     assert kept.to_list() == ["c"]
     # High-water is the deduped batch max (4, 1), not lowered by the filter.
     assert ctx.get_attr(_table_key(0)) == [4, 1]
+
+
+def test_decimal128_seg_ord_dedup_filter_and_cursor(tmp_path):
+    # seg/ord are decimal128(38, 0) in production, not Int64. Exercise the
+    # full path -- cross-file dedup keep-first, cursor filter, and the
+    # high-water store -- on that dtype so a decimal-only regression (the
+    # int() cast, a comparison dtype mismatch) cannot pass unseen.
+    f1 = _write(
+        tmp_path / "a.parquet",
+        [(1, 1, "a"), (3, 1, "c"), (4, 1, "d")],
+        decimal=True,
+    )
+    f2 = _write(
+        tmp_path / "b.parquet", [(2, 1, "b"), (3, 1, "c-dup")], decimal=True
+    )
+    ctx = FakeCtx(tmp_path / "work", {_table_key(0): [2, 1]})
+
+    out = CdcStageSrcPlugin().process_files(ctx, [[f1, f2]])
+
+    assert _read(out[0][0]) == [(3, 1), (4, 1)]
+    df = pl.read_parquet(out[0][0])
+    # decimal128 survives the round trip; the earliest (3,1) wins the dedup.
+    assert df.schema[CDC_META_SEG] == pl.Decimal(38, 0)
+    kept = df.filter(
+        (pl.col(CDC_META_SEG) == 3) & (pl.col(CDC_META_ORD) == 1)
+    ).get_column("payload")
+    assert kept.to_list() == ["c"]
+    # Cursor keeps the decimal dtype -- stored as Decimal, not down-cast to
+    # int -- so the full decimal128(38, 0) range survives (see
+    # ``test_cursor_preserves_decimal_beyond_int64``).
+    cursor = ctx.get_attr(_table_key(0))
+    assert cursor == [4, 1]
+    assert all(isinstance(value, Decimal) for value in cursor)
+
+
+def test_cursor_preserves_decimal_beyond_int64(tmp_path):
+    # A seg past 2**63 - 1: an int down-cast would still be lossless (Python
+    # ints are unbounded) but could overflow Int64 inference when the scratch
+    # store persists. Keeping the Decimal end to end side-steps that ceiling.
+    big_seg = 2**63 + 7
+    f = _write(tmp_path / "a.parquet", [(big_seg, 1, "x")], decimal=True)
+    ctx = FakeCtx(tmp_path / "work")
+
+    CdcStageSrcPlugin().process_files(ctx, [[f]])
+
+    cursor = ctx.get_attr(_table_key(0))
+    assert cursor == [Decimal(big_seg), Decimal(1)]
+    assert all(isinstance(value, Decimal) for value in cursor)
 
 
 def test_empty_slot_yields_empty_list_and_no_state(tmp_path):
