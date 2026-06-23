@@ -101,6 +101,12 @@ pub const POD_YAML_WORKER_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "wor
 pub const TABSDATA_NAME_PREFIX: &str = "td-";
 
 pub const CONFIGMAP_TABSDATA_MANIFEST: &str = "td-sys-tabsdata-manifest-manifest.yaml";
+pub const CONFIGMAP_TABSDATA_SETTINGS: &str = "td-sys-tabsdata-settings-settings.json";
+pub const CONTAINER_ROOT_ENV: &str = "CONTAINER_ROOT";
+pub const CONTAINER_SETTINGS_RELATIVE: &str = "tabsdata/settings/.settings.json";
+
+pub const SECRET_CATEGORY_OPENAI_KEY: &str = "openai-key";
+pub const SECRET_CATEGORY_ANTHROPIC_KEY: &str = "anthropic-key";
 pub const SECRET_TABSDATA_KUBECONFIG: &str = "td-sys-tabsdata-secret-kubeconfig";
 pub const SECRET_KEY_KUBECONFIG: &str = "kubeconfig";
 

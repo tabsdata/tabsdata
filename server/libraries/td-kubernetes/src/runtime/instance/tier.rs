@@ -9,6 +9,8 @@ pub enum Tier {
     Init,
     Regular,
     Ephemeral,
+    Service,
+    Setup,
 }
 
 impl Tier {
@@ -17,6 +19,8 @@ impl Tier {
             Tier::Init => "init",
             Tier::Regular => "regular",
             Tier::Ephemeral => "ephemeral",
+            Tier::Service => "service",
+            Tier::Setup => "setup",
         }
     }
 
@@ -25,6 +29,8 @@ impl Tier {
             "init" => Some(Tier::Init),
             "regular" => Some(Tier::Regular),
             "ephemeral" => Some(Tier::Ephemeral),
+            "service" => Some(Tier::Service),
+            "setup" => Some(Tier::Setup),
             _ => None,
         }
     }

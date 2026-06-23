@@ -9,10 +9,11 @@ use k8s_openapi::api::core::v1::{
     Container, EnvVar, EnvVarSource, Pod, PodSpec, SecretKeySelector,
 };
 
-use crate::base::constants::{SECRET_FAMILY_CONFIG, SECRET_FAMILY_LABEL};
+use crate::base::constants::{KPROFILE_CONFIGS_FAMILY, SECRET_FAMILY_CONFIG, SECRET_FAMILY_LABEL};
 use crate::base::error::kubernetes::KubernetesError;
 use crate::base::error::launcher::LauncherError;
 use crate::base::error::secret::SecretError;
+use crate::base::naming::name_from_kube_resource_name;
 use crate::kube::api::{LabelFilter, list_secrets};
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::profile::Profile;
@@ -68,7 +69,8 @@ pub fn inject_secret_envs(
     spec: &mut PodSpec,
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
-    let entries = collect_env_entries(profile, pod_template_key, available_secrets)?;
+    let mounted = mounted_config_files(spec);
+    let entries = collect_env_entries(profile, pod_template_key, &mounted, available_secrets)?;
     if entries.is_empty() {
         return Ok(());
     }
@@ -76,16 +78,44 @@ pub fn inject_secret_envs(
     Ok(())
 }
 
+fn mounted_config_files(spec: &PodSpec) -> BTreeSet<String> {
+    let mut files = BTreeSet::new();
+    let Some(volumes) = spec.volumes.as_ref() else {
+        return files;
+    };
+    for volume in volumes {
+        let Some(projected) = volume.projected.as_ref() else {
+            continue;
+        };
+        let Some(sources) = projected.sources.as_ref() else {
+            continue;
+        };
+        for source in sources {
+            let Some(configmap) = source.config_map.as_ref() else {
+                continue;
+            };
+            if let Ok(file) = name_from_kube_resource_name(
+                &configmap.name,
+                KPROFILE_CONFIGS_FAMILY.scope,
+                KPROFILE_CONFIGS_FAMILY.kind,
+            ) {
+                files.insert(file.to_owned());
+            }
+        }
+    }
+    files
+}
+
 fn collect_env_entries(
     profile: &Profile,
     pod_template_key: &str,
+    mounted: &BTreeSet<String>,
     available_secrets: &BTreeSet<String>,
 ) -> Result<Vec<EnvVar>, LauncherError> {
-    let worker = worker_stem(pod_template_key);
     let mut env_entries: Vec<EnvVar> = Vec::new();
     let mut missing_secrets: Vec<String> = Vec::new();
     for (config_file, config_yaml) in &profile.configs {
-        if !config_matches_worker(config_file, worker) {
+        if !mounted.contains(config_file) {
             continue;
         }
         let leaves = extract_leaves(config_file, config_yaml)?;
@@ -156,17 +186,6 @@ fn append_env(container: &mut Container, entries: &[EnvVar]) {
         }
         existing.push(entry.clone());
     }
-}
-
-fn worker_stem(pod_template_key: &str) -> &str {
-    pod_template_key
-        .strip_suffix(".yaml")
-        .unwrap_or(pod_template_key)
-}
-
-fn config_matches_worker(config_file: &str, worker: &str) -> bool {
-    let stem = config_file.strip_suffix(".yaml").unwrap_or(config_file);
-    stem == worker || stem.starts_with(&format!("{worker}."))
 }
 
 #[cfg(test)]

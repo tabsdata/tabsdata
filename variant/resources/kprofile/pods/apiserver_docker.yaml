@@ -67,7 +67,7 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: POD_TABSDATA_INSTANCE
-          value: "${sys:tdk_instance_name}"
+          value: "${{system:tdk_instance_name}}"
       volumeMounts:
         - name: config
           mountPath: /tabsdata/config
@@ -105,6 +105,9 @@ spec:
       volumeMounts:
         - name: config
           mountPath: /tabsdata/config
+          readOnly: true
+        - name: settings
+          mountPath: /tabsdata/settings
           readOnly: true
       # livenessProbe:
       #   httpGet:
@@ -146,7 +149,7 @@ spec:
             fieldRef:
               fieldPath: spec.serviceAccountName
         - name: POD_TABSDATA_INSTANCE
-          value: "${sys:tdk_instance_name}"
+          value: "${{system:tdk_instance_name}}"
   volumes:
     - name: config
       projected:
@@ -163,3 +166,6 @@ spec:
               name: td-app-tabsdata-config-tabsdata.log.py.yaml
           - configMap:
               name: td-app-tabsdata-config-tabsdata.yaml
+    - name: settings
+      configMap:
+        name: td-sys-tabsdata-settings-settings.json

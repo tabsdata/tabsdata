@@ -18,7 +18,10 @@ impl LiteralResolver {
     }
 
     fn substitute(&self, context: &ResolveContext) -> Result<Resolution, ResolverError> {
-        let provided = context.init_value.filter(|value| !value.is_empty());
+        let token = context.placeholder.token();
+        let provided = context
+            .init_value
+            .filter(|value| !value.is_empty() && *value != token);
         let value = match provided {
             Some(value) => value.to_owned(),
             None => match context.auto_value.filter(|value| !value.is_empty()) {

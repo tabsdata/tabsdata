@@ -268,23 +268,42 @@ fn pods_for_tier_returns_ephemeral_entries() {
     assert_eq!(ephemeral, vec!["function.yaml"]);
 }
 
-#[test]
-fn deserialize_pod_entry_parses_valid_job() {
+#[tokio::test]
+async fn deserialize_pod_entry_parses_valid_job() {
     let yaml = job_yaml("init-bootstrap", "init");
-    let job: Job = deserialize_pod_entry("bootstrap.yaml", &yaml, Tier::Init).expect("valid Job");
+    let job: Job = deserialize_pod_entry(
+        "bootstrap.yaml",
+        &yaml,
+        Tier::Init,
+        &SystemValues::default(),
+    )
+    .await
+    .expect("valid Job");
     assert_eq!(job.metadata.name.as_deref(), Some("init-bootstrap"));
 }
 
-#[test]
-fn deserialize_pod_entry_aborts_for_invalid_yaml() {
-    let result = deserialize_pod_entry::<Job>("broken.yaml", "::: not yaml :::", Tier::Init);
+#[tokio::test]
+async fn deserialize_pod_entry_aborts_for_invalid_yaml() {
+    let result = deserialize_pod_entry::<Job>(
+        "broken.yaml",
+        "::: not yaml :::",
+        Tier::Init,
+        &SystemValues::default(),
+    )
+    .await;
     assert!(result.is_err());
 }
 
-#[test]
-fn deserialize_pod_entry_parses_valid_pod() {
+#[tokio::test]
+async fn deserialize_pod_entry_parses_valid_pod() {
     let yaml = pod_yaml("apiserver", "regular");
-    let pod: Pod =
-        deserialize_pod_entry("apiserver.yaml", &yaml, Tier::Regular).expect("valid Pod");
+    let pod: Pod = deserialize_pod_entry(
+        "apiserver.yaml",
+        &yaml,
+        Tier::Regular,
+        &SystemValues::default(),
+    )
+    .await
+    .expect("valid Pod");
     assert_eq!(pod.metadata.name.as_deref(), Some("apiserver"));
 }

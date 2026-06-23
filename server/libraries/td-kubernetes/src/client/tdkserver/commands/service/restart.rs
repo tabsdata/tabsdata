@@ -6,21 +6,23 @@ use clap_derive::Args;
 use tracing::info;
 
 use crate::base::reporter::{InteractiveReporter, Reporter};
-use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
+use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::CommandResult;
 use crate::cwarn;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
-use crate::runtime::provider::{Provider, provider_for_or_tdkcontext};
+use crate::runtime::provider::{Provider, provider_for_instance};
 
 #[derive(Debug, Clone, Args)]
 pub struct RestartArguments {
-    #[command(flatten)]
-    pub cluster: ClusterArguments,
-
-    #[command(flatten)]
-    pub instance: InstanceArguments,
+    #[arg(
+        long,
+        name = "instance",
+        required = false,
+        long_help = "Name of the instance to restart. Defaults to 'tabsdata'."
+    )]
+    pub instance: Option<String>,
 
     #[arg(
         long,
@@ -50,13 +52,12 @@ pub async fn command_restart(
     globals: &GlobalArguments,
 ) -> CommandResult {
     let RestartArguments {
-        cluster,
         instance,
         preview,
         yes,
     } = arguments;
 
-    let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
+    let provider = provider_for_instance(instance, globals.verbose).await?;
     provider.ensure_startable_service().await?;
 
     let not_dead = !provider.service_dead().await;

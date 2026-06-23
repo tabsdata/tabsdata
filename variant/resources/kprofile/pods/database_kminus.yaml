@@ -1,0 +1,90 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: td-database
+  namespace: default
+  annotations:
+    tabsdata.com/description: "Tabsdata database service"
+    kubernetes.io/change-cause: ""
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: service
+spec:
+  restartPolicy: Always
+  nodeName: tdknode
+  serviceAccountName: default
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 60
+  dnsPolicy: ClusterFirst
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: database
+    image: /dev/null
+    imagePullPolicy: IfNotPresent
+    command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_dbmanager"]
+    args:
+    - serve
+    - --config-file
+    - $(CONTAINER_ROOT)/tabsdata/config/apiserver.database.yaml
+    ports:
+    - name: postgres
+      containerPort: ${{system:tdk_database_port}}
+      protocol: TCP
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "512Mi"
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+    env:
+    - name: CONTAINER_ROOT
+      value: "$(KM_CONTAINER_ROOT)"
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: POD_TABSDATA_INSTANCE
+      value: "${{system:tdk_instance_name}}"
+    - name: TD_LOG_CONFIG
+      value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+    volumeMounts:
+    - name: config
+      mountPath: /tabsdata/config
+      readOnly: true
+    - name: pyenv
+      mountPath: /tabsdata/pyenv
+      readOnly: true
+    - name: database
+      mountPath: /tabsdata/database
+  volumes:
+  - name: config
+    projected:
+      sources:
+      - configMap:
+          name: td-app-apiserver-config-apiserver.database.yaml
+      - configMap:
+          name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+  - name: pyenv
+    hostPath:
+      path: "${{system:tdk_pyenv_td_root}}"
+  - name: database
+    hostPath:
+      path: "${{system:tdk_database_path}}"

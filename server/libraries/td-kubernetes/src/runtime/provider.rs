@@ -19,12 +19,15 @@ use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 use kube::Config;
 use serde::{Deserialize, Serialize};
+use td_common::settings::DEFAULT_INSTANCE;
 
 use crate::base::constants::KMINUS_MIN_NOFILE;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
+use crate::client::registry::{InstanceSettings, InstanceState};
 use crate::client::session::pin::Session;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
+use crate::runtime::instance::ports::kminus_api_port;
 use std::sync::Arc;
 
 use crate::core::pod::{ValidationError, container as container_pod, process as process_pod};
@@ -478,4 +481,26 @@ pub async fn provider_for_or_tdkcontext(
         return provider_for(cluster, instance, verbose, None).await;
     }
     Err(ProviderError::NoClusterSpecification.into())
+}
+
+pub async fn provider_for_instance(
+    instance: Option<String>,
+    verbose: bool,
+) -> CommandResult<Box<dyn Provider>> {
+    let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
+    let settings = InstanceSettings::load_required(&instance, &[InstanceState::Created])?;
+    let cluster = ClusterArguments {
+        provider: Some(settings.provider),
+        context: None,
+        kubeconfig: None,
+        current: false,
+        namespace: None,
+    };
+    provider_for(
+        cluster,
+        InstanceArguments::new(Some(settings.name.clone())),
+        verbose,
+        kminus_api_port(&settings.ports),
+    )
+    .await
 }

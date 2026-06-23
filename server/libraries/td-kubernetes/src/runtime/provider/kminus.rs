@@ -19,13 +19,13 @@ use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;
 
 use crate::base::constants::{
-    FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_PYENV_AG, FOLDER_PYENV_TD,
-    FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, STAGE_FOLDER,
+    CONFIGMAP_TABSDATA_MANIFEST, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_PYENV_AG,
+    FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, STAGE_FOLDER,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
-use crate::client::registry::instances_root;
+use crate::client::registry::{InstanceSettings, instances_root};
 use crate::client::session::pin::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
@@ -33,16 +33,20 @@ use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::file::copy_tree;
 use crate::core::system::subprocess;
 use crate::core::system::subprocess::apply_detached_flags;
-use crate::kube::api::get_secret;
+use crate::kube::api::{get_secret, require_configmap};
+use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_cluster_url, resolve_current_context,
     resolve_namespace,
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
+use crate::runtime::instance::launcher::{provision_database, start_database, stop_database};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
+use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::{
-    Profile, load_profile, render_for_configmaps, resolve_kprofile_path,
+    Profile, load_profile, parse_from_configmaps, read_family_configmaps, render_for_configmaps,
+    resolve_kprofile_path,
 };
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
@@ -154,8 +158,11 @@ impl KminusProvider {
             verbose,
             portstart,
         );
-        let kminus_instance =
-            KminusInstance::new(kminus_cluster.kubefile(), kminus_cluster.staging_path());
+        let kminus_instance = KminusInstance::new(
+            kminus_cluster.kubefile(),
+            kminus_cluster.staging_path(),
+            folder.clone(),
+        );
 
         Ok(Self {
             name,
@@ -255,63 +262,7 @@ impl Provider for KminusProvider {
     }
 
     fn system_values(&self) -> CommandResult<SystemValues> {
-        let repository_folder = self.folder.join(FOLDER_REPOSITORY);
-        let repository_url = url::Url::from_directory_path(&repository_folder)
-            .ok()
-            .map(|url| url.to_string());
-        let repository_path = Some(repository_folder.to_string_lossy().to_string());
-        let database_folder = repository_folder.join(FOLDER_DATABASE);
-        let database_url = url::Url::from_directory_path(&database_folder)
-            .ok()
-            .map(|url| url.to_string());
-        let database_path = Some(database_folder.to_string_lossy().to_string());
-        let storage_folder = repository_folder.join(FOLDER_STORAGE);
-        let storage_url = url::Url::from_directory_path(&storage_folder)
-            .ok()
-            .map(|url| url.to_string());
-        let storage_path = Some(storage_folder.to_string_lossy().to_string());
-        let runtimes_python = self.folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
-        let pyenv_td_root = Some(
-            runtimes_python
-                .join(FOLDER_PYENV_TD)
-                .to_string_lossy()
-                .to_string(),
-        );
-        let pyenv_ag_root = Some(
-            runtimes_python
-                .join(FOLDER_PYENV_AG)
-                .to_string_lossy()
-                .to_string(),
-        );
-        let scripts_folder = get_python_scripts_folder()
-            .map_err(|error| ProviderError::PythonScriptsFolderResolveFailed(error.to_string()))?;
-        let Some(scripts_name) = scripts_folder.file_name().and_then(|name| name.to_str()) else {
-            return Err(ProviderError::PythonScriptsFolderNameInvalid(
-                scripts_folder.display().to_string(),
-            )
-            .into());
-        };
-        let pyenv_scripts_folder = Some(scripts_name.to_string());
-        let pyenv_libexec_folder = Some(LIBEXEC_TABSDATA.to_owned());
-        let instance_name = self
-            .folder
-            .file_name()
-            .and_then(|name| name.to_str())
-            .map(|name| name.to_owned());
-        Ok(SystemValues {
-            repository_url,
-            repository_path,
-            database_url,
-            database_path,
-            storage_url,
-            storage_path,
-            pyenv_td_root,
-            pyenv_ag_root,
-            pyenv_scripts_folder,
-            pyenv_libexec_folder,
-            instance_name,
-            ..SystemValues::default()
-        })
+        system_values_for(&self.folder)
     }
 
     fn secret_generators(&self, phase: SecretPhase) -> Vec<Box<dyn SecretGenerator>> {
@@ -384,29 +335,23 @@ impl Provider for KminusProvider {
         let step = reporter.step("Preparing kminus cluster");
         let result = self.bootstrap_cluster()?;
         step.done("Kminus cluster prepared");
-        let step = reporter.step("Staging tabsdata configmap");
-        self.stage_configmaps().await?;
-        step.done("Tabsdata configmap staged");
+        let from_stage = self.folder.join(STAGE_FOLDER).is_dir();
+        if !from_stage {
+            let step = reporter.step("Staging tabsdata configmap");
+            self.stage_configmaps().await?;
+            step.done("Tabsdata configmap staged");
+        }
         self.start_cluster_hook(reporter).await?;
+        if from_stage {
+            let step = reporter.step("Loading tabsdata configmaps");
+            self.instance.load_stage_to_kube().await?;
+            step.done("Loaded tabsdata configmaps");
+        }
         Ok(result)
     }
 
     async fn create_database(&self, reporter: &dyn Reporter) -> CommandResult {
-        let (config_files, secret_env) = self.prepare_dbmanager().await?;
-        self.execute_dbmanager(
-            DbManagerCommand::Start,
-            &config_files,
-            &secret_env,
-            reporter,
-        )?;
-        self.execute_dbmanager(
-            DbManagerCommand::Create,
-            &config_files,
-            &secret_env,
-            reporter,
-        )?;
-        self.execute_dbmanager(DbManagerCommand::Stop, &config_files, &secret_env, reporter)?;
-        Ok(())
+        self.create_database_as_pod(reporter).await
     }
 
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult {
@@ -529,14 +474,6 @@ impl Provider for KminusProvider {
 
     async fn start_instance_hook(&self, reporter: &dyn Reporter) -> CommandResult {
         handle_phase_secrets(self, SecretPhase::InstanceStart).await?;
-        if let Ok((config_files, secret_env)) = self.prepare_dbmanager().await {
-            self.execute_dbmanager(
-                DbManagerCommand::Start,
-                &config_files,
-                &secret_env,
-                reporter,
-            )?;
-        }
         let step = reporter.step("Starting tabsdata instance");
         let multi = td_common::logging::multi_progress().unwrap_or_default();
         self.apply_workload(&multi).await?;
@@ -544,18 +481,12 @@ impl Provider for KminusProvider {
         Ok(())
     }
 
-    async fn stop_instance(&self, reporter: &dyn Reporter) -> CommandResult<InstanceStopOutcome> {
-        let step = reporter.step("Stopping tabsdata instance");
+    async fn stop_instance(&self, _reporter: &dyn Reporter) -> CommandResult<InstanceStopOutcome> {
         let multi = td_common::logging::multi_progress().unwrap_or_default();
         let stopped = self.teardown_workload(&multi).await?;
-        if let Ok((config_files, secret_env)) = self.prepare_dbmanager().await {
-            self.execute_dbmanager(DbManagerCommand::Stop, &config_files, &secret_env, reporter)?;
-        }
         if stopped {
-            step.done("Tabsdata instance stopped");
             Ok(InstanceStopOutcome::Stopped)
         } else {
-            step.fail();
             Ok(InstanceStopOutcome::AlreadyStopped)
         }
     }
@@ -684,6 +615,66 @@ impl KminusProvider {
         self.instance.stop(multi).await
     }
 
+    async fn database_context(&self) -> CommandResult<(KubeContext, SystemValues, Profile)> {
+        let context = self.kube_context().await?;
+        let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
+        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
+        let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
+        let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
+            return Err(ProviderError::ConfigmapEntryMissing(
+                CONFIGMAP_TABSDATA_MANIFEST.to_owned(),
+                MANIFEST_FILE.to_owned(),
+            )
+            .into());
+        };
+        let profile = parse_from_configmaps(&pods, &configs, &manifest_yaml)?;
+
+        let mut system = self.system_values()?;
+        let settings = InstanceSettings::load(&self.name)?;
+        apply_ports(&mut system, &settings.ports);
+
+        Ok((context, system, profile))
+    }
+
+    async fn create_database_as_pod(&self, _reporter: &dyn Reporter) -> CommandResult {
+        let (context, system, profile) = self.database_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_database(&context, ClusterProvider::Kminus, &system, &profile, &multi).await
+    }
+
+    #[allow(dead_code)]
+    async fn start_database_as_pod(&self) -> CommandResult {
+        let (context, system, profile) = self.database_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        start_database(&context, ClusterProvider::Kminus, &system, &profile, &multi).await
+    }
+
+    #[allow(dead_code)]
+    async fn stop_database_as_pod(&self) -> CommandResult {
+        let (context, _system, profile) = self.database_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        stop_database(&context, &profile, &multi).await
+    }
+
+    #[allow(dead_code)]
+    async fn create_database_as_proc(&self, reporter: &dyn Reporter) -> CommandResult {
+        let (config_files, secret_env) = self.prepare_dbmanager().await?;
+        self.execute_dbmanager(
+            DbManagerCommand::Start,
+            &config_files,
+            &secret_env,
+            reporter,
+        )?;
+        self.execute_dbmanager(
+            DbManagerCommand::Create,
+            &config_files,
+            &secret_env,
+            reporter,
+        )?;
+        self.execute_dbmanager(DbManagerCommand::Stop, &config_files, &secret_env, reporter)?;
+        Ok(())
+    }
+
     async fn prepare_dbmanager(
         &self,
     ) -> CommandResult<(Vec<tempfile::NamedTempFile>, Vec<(String, String)>)> {
@@ -781,4 +772,63 @@ impl KminusProvider {
         step.done(done_label);
         Ok(())
     }
+}
+
+pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<SystemValues> {
+    let repository_folder = folder.join(FOLDER_REPOSITORY);
+    let repository_url = url::Url::from_directory_path(&repository_folder)
+        .ok()
+        .map(|url| url.to_string());
+    let repository_path = Some(repository_folder.to_string_lossy().to_string());
+    let database_folder = repository_folder.join(FOLDER_DATABASE);
+    let database_url = url::Url::from_directory_path(&database_folder)
+        .ok()
+        .map(|url| url.to_string());
+    let database_path = Some(database_folder.to_string_lossy().to_string());
+    let storage_folder = repository_folder.join(FOLDER_STORAGE);
+    let storage_url = url::Url::from_directory_path(&storage_folder)
+        .ok()
+        .map(|url| url.to_string());
+    let storage_path = Some(storage_folder.to_string_lossy().to_string());
+    let runtimes_python = folder.join(FOLDER_RUNTIMES).join(FOLDER_PYTHON);
+    let pyenv_td_root = Some(
+        runtimes_python
+            .join(FOLDER_PYENV_TD)
+            .to_string_lossy()
+            .to_string(),
+    );
+    let pyenv_ag_root = Some(
+        runtimes_python
+            .join(FOLDER_PYENV_AG)
+            .to_string_lossy()
+            .to_string(),
+    );
+    let scripts_folder = get_python_scripts_folder()
+        .map_err(|error| ProviderError::PythonScriptsFolderResolveFailed(error.to_string()))?;
+    let Some(scripts_name) = scripts_folder.file_name().and_then(|name| name.to_str()) else {
+        return Err(ProviderError::PythonScriptsFolderNameInvalid(
+            scripts_folder.display().to_string(),
+        )
+        .into());
+    };
+    let pyenv_scripts_folder = Some(scripts_name.to_string());
+    let pyenv_libexec_folder = Some(LIBEXEC_TABSDATA.to_owned());
+    let instance_name = folder
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_owned());
+    Ok(SystemValues {
+        repository_url,
+        repository_path,
+        database_url,
+        database_path,
+        storage_url,
+        storage_path,
+        pyenv_td_root,
+        pyenv_ag_root,
+        pyenv_scripts_folder,
+        pyenv_libexec_folder,
+        instance_name,
+        ..SystemValues::default()
+    })
 }

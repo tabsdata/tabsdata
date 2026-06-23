@@ -6,20 +6,22 @@ use clap_derive::Args;
 use td_common::status::ExitStatus::Cancelled;
 
 use crate::base::reporter::InteractiveReporter;
-use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
+use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::cwarn;
-use crate::runtime::provider::provider_for_or_tdkcontext;
+use crate::runtime::provider::provider_for_instance;
 
 #[derive(Debug, Clone, Args)]
 pub struct StartArguments {
-    #[command(flatten)]
-    pub cluster: ClusterArguments,
-
-    #[command(flatten)]
-    pub instance: InstanceArguments,
+    #[arg(
+        long,
+        name = "instance",
+        required = false,
+        long_help = "Name of the instance to start. Defaults to 'tabsdata'."
+    )]
+    pub instance: Option<String>,
 
     #[arg(
         long,
@@ -46,13 +48,12 @@ pub struct StartArguments {
 
 pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments) -> CommandResult {
     let StartArguments {
-        cluster,
         instance,
         preview,
         yes,
     } = arguments;
 
-    let provider = provider_for_or_tdkcontext(cluster, instance, globals.verbose).await?;
+    let provider = provider_for_instance(instance, globals.verbose).await?;
     provider.ensure_startable_service().await?;
 
     if provider.service_alive().await {

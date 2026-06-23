@@ -5,9 +5,12 @@
 use std::collections::BTreeMap;
 
 use chrono::Utc;
-use k8s_openapi::api::core::v1::Container;
+use k8s_openapi::api::core::v1::{
+    ConfigMapProjection, Container, ProjectedVolumeSource, Volume, VolumeProjection,
+};
 
 use super::*;
+use crate::base::naming::to_kube_resource_name;
 use crate::runtime::instance::manifest::Manifest;
 
 fn build_profile(configs: &[(&str, &str)]) -> Profile {
@@ -23,6 +26,30 @@ fn build_profile(configs: &[(&str, &str)]) -> Profile {
 }
 
 fn build_pod_spec_with(container_names: &[&str]) -> PodSpec {
+    build_pod_spec_mounting(container_names, &[])
+}
+
+fn build_pod_spec_mounting(container_names: &[&str], config_files: &[&str]) -> PodSpec {
+    let sources = config_files
+        .iter()
+        .map(|file| {
+            let id = crate::base::naming::id_from_file(file);
+            let name = to_kube_resource_name(
+                KPROFILE_CONFIGS_FAMILY.scope,
+                id,
+                KPROFILE_CONFIGS_FAMILY.kind,
+                file,
+            )
+            .expect("configmap name");
+            VolumeProjection {
+                config_map: Some(ConfigMapProjection {
+                    name,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        })
+        .collect();
     PodSpec {
         containers: container_names
             .iter()
@@ -31,6 +58,14 @@ fn build_pod_spec_with(container_names: &[&str]) -> PodSpec {
                 ..Default::default()
             })
             .collect(),
+        volumes: Some(vec![Volume {
+            name: "config".to_owned(),
+            projected: Some(ProjectedVolumeSource {
+                sources: Some(sources),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }]),
         ..Default::default()
     }
 }
@@ -54,12 +89,12 @@ fn worker_with_no_matching_configs_yields_no_env() {
 }
 
 #[test]
-fn worker_with_matching_config_injects_secret_keys() {
+fn mounted_config_injects_secret_keys() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${secret:postgres_password}\njwt:\n  secret: ${secret:jwt_signing_key}\n",
+        "database:\n  password: ${{secret:postgres_password}}\njwt:\n  secret: ${{secret:jwt_signing_key}}\n",
     )]);
-    let mut spec = build_pod_spec_with(&["apiserver"]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
     secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
@@ -69,12 +104,26 @@ fn worker_with_matching_config_injects_secret_keys() {
 }
 
 #[test]
-fn worker_with_matching_config_targets_all_containers() {
+fn secret_auto_placeholders_are_injected() {
+    let profile = build_profile(&[(
+        "apiserver.database.yaml",
+        "database:\n  system:\n    password: ${{secretAuto:postgres_password}}\n",
+    )]);
+    let mut spec = build_pod_spec_mounting(&["dbcreate"], &["apiserver.database.yaml"]);
+    let mut secrets: BTreeSet<String> = BTreeSet::new();
+    secrets.insert("td-app-apiserver-secret-config-apiserver.database.yaml".to_owned());
+    inject_secret_envs(&profile, "dbmanager.yaml", &mut spec, &secrets).expect("ok");
+    let injected = names(&spec, "dbcreate");
+    assert!(injected.contains(&"DATABASE__SYSTEM__PASSWORD".to_owned()));
+}
+
+#[test]
+fn mounted_config_targets_all_containers() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${secret:postgres_password}\n",
+        "database:\n  password: ${{secret:postgres_password}}\n",
     )]);
-    let mut spec = build_pod_spec_with(&["apiserver", "sidecar"]);
+    let mut spec = build_pod_spec_mounting(&["apiserver", "sidecar"], &["apiserver.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
     secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
@@ -83,16 +132,17 @@ fn worker_with_matching_config_targets_all_containers() {
 }
 
 #[test]
-fn worker_pulls_dotted_sibling_configs() {
+fn only_mounted_configs_are_injected() {
     let profile = build_profile(&[
         (
             "apiserver.yaml",
-            "database:\n  password: ${secret:postgres_password}\n",
+            "database:\n  password: ${{secret:postgres_password}}\n",
         ),
-        ("apiserver.log.yaml", "audit:\n  token: ${secret}\n"),
-        ("tabsdata.yaml", "ignored:\n  secret: ${secret}\n"),
+        ("apiserver.log.yaml", "audit:\n  token: ${{secret}}\n"),
+        ("tabsdata.yaml", "ignored:\n  secret: ${{secret}}\n"),
     ]);
-    let mut spec = build_pod_spec_with(&["apiserver"]);
+    let mut spec =
+        build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml", "apiserver.log.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
     secrets.insert("td-app-apiserver-secret-config-apiserver.yaml".to_owned());
     secrets.insert("td-app-apiserver-secret-config-apiserver.log.yaml".to_owned());
@@ -103,7 +153,7 @@ fn worker_pulls_dotted_sibling_configs() {
     assert!(injected.contains(&"AUDIT__TOKEN".to_owned()));
     assert!(
         !injected.contains(&"IGNORED__SECRET".to_owned()),
-        "tabsdata.yaml leaves should not leak into apiserver pod"
+        "tabsdata.yaml is not mounted, so its leaves should not be injected"
     );
 }
 
@@ -111,9 +161,9 @@ fn worker_pulls_dotted_sibling_configs() {
 fn missing_secret_in_cluster_is_a_hard_failure() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${secret:postgres_password}\n",
+        "database:\n  password: ${{secret:postgres_password}}\n",
     )]);
-    let mut spec = build_pod_spec_with(&["apiserver"]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let secrets: BTreeSet<String> = BTreeSet::new();
     let error =
         inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect_err("missing");
@@ -126,7 +176,7 @@ fn missing_secret_in_cluster_is_a_hard_failure() {
 #[test]
 fn config_without_placeholders_does_not_require_secret() {
     let profile = build_profile(&[("apiserver.yaml", "noseed:\n  value: literal\n")]);
-    let mut spec = build_pod_spec_with(&["apiserver"]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let secrets: BTreeSet<String> = BTreeSet::new();
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
     assert!(names(&spec, "apiserver").is_empty());
@@ -136,9 +186,9 @@ fn config_without_placeholders_does_not_require_secret() {
 fn already_present_env_var_is_not_duplicated() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${secret:postgres_password}\n",
+        "database:\n  password: ${{secret:postgres_password}}\n",
     )]);
-    let mut spec = build_pod_spec_with(&["apiserver"]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     if let Some(container) = spec.containers.first_mut() {
         container.env = Some(vec![EnvVar {
             name: "DATABASE__PASSWORD".to_owned(),
@@ -157,26 +207,4 @@ fn already_present_env_var_is_not_duplicated() {
         .and_then(|c| c.env.as_ref())
         .expect("env");
     assert_eq!(env[0].value.as_deref(), Some("preset"));
-}
-
-#[test]
-fn worker_stem_strips_yaml_suffix() {
-    assert_eq!(worker_stem("apiserver.yaml"), "apiserver");
-    assert_eq!(worker_stem("apiserver"), "apiserver");
-}
-
-#[test]
-fn config_matches_exact_worker_name() {
-    assert!(config_matches_worker("apiserver.yaml", "apiserver"));
-}
-
-#[test]
-fn config_matches_dotted_extension() {
-    assert!(config_matches_worker("apiserver.log.yaml", "apiserver"));
-}
-
-#[test]
-fn config_does_not_match_unrelated_prefix() {
-    assert!(!config_matches_worker("apiserver-extra.yaml", "apiserver"));
-    assert!(!config_matches_worker("tabsdata.yaml", "apiserver"));
 }

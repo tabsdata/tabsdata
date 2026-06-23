@@ -17,7 +17,7 @@ use crate::base::error::secret::SecretError;
 pub const SECRET_KEY_SEPARATOR: &str = "__";
 
 static PLACEHOLDER_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^\$\{secret(?::([A-Za-z][A-Za-z0-9_]*))?\}$")
+    Regex::new(r"^\$\{\{secret(Auto)?(?::([A-Za-z0-9._-]*))?\??\}\}$")
         .expect("invalid secret placeholder pattern")
 });
 
@@ -67,14 +67,19 @@ pub fn parse_placeholder(config: &str, text: &str) -> Result<Option<Placeholder>
     let Some(captures) = PLACEHOLDER_PATTERN.captures(text) else {
         return Ok(None);
     };
-    let Some(name) = captures.get(1) else {
+    let auto = captures.get(1).is_some();
+    let name = captures
+        .get(2)
+        .map(|name| name.as_str())
+        .unwrap_or_default();
+    if !auto {
         return Ok(Some(Placeholder::Bare));
-    };
-    match Generator::from_name(name.as_str()) {
+    }
+    match Generator::from_name(name) {
         Some(generator) => Ok(Some(Placeholder::Generated(generator))),
         None => Err(SecretError::UnknownGeneratorName {
             config: config.to_owned(),
-            name: name.as_str().to_owned(),
+            name: name.to_owned(),
             supported: Generator::supported().join(", "),
         }),
     }

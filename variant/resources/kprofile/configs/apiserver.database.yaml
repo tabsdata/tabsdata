@@ -5,11 +5,11 @@
 database:
   mode: sidecar
   system:
-    data_dir: ${system:tdk_database_path}
-    port: ${system:tdk_database_port}
+    data_dir: ${{system:tdk_database_path}}
+    port: ${{system:tdk_database_port}}
     persistent: true
-    username: ${secretAuto:postgres_system_user}
-    password: ${secretAuto:postgres_password}
+    username: ${{secretAuto:postgres_system_user}}
+    password: ${{secretAuto:postgres_password}}
     min_connections: 1
     max_connections: 2
     acquire_timeout: 30
@@ -20,7 +20,7 @@ database:
   components:
     apiserver:
       schema: td_apiserver
-      password: ${secretAuto:postgres_password}
+      password: ${{secretAuto:postgres_password}}
       min_connections: 1
       max_connections: 10
       acquire_timeout: 30

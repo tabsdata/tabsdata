@@ -349,6 +349,10 @@ version = "4.6.0"
 [workspace.dependencies.colored]
 version = "3.1.1"
 
+[workspace.dependencies.comfy-table]
+version = "7.2.2"
+features = ["custom_styling"]
+
 [workspace.dependencies.config]
 version = "0.15.22"
 features = ["yaml"]
@@ -631,6 +635,7 @@ version = "0.38.4"
 
 [workspace.dependencies.tabled]
 version = "0.20.0"
+features = ["ansi"]
 
 [workspace.dependencies.temp-env]
 version = "0.3.6"

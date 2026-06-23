@@ -98,7 +98,19 @@ impl ResolveSession<'_> {
                 if is_keyed_map_sequence(template_items) {
                     self.resolve_keyed_sequence(template_items, init_items, path)
                 } else {
-                    Ok(init.clone())
+                    if template_items.len() != init_items.len() {
+                        return Err(self.structure_mismatch(path));
+                    }
+                    let mut rendered = Vec::with_capacity(template_items.len());
+                    for (index, (template_item, init_item)) in
+                        template_items.iter().zip(init_items).enumerate()
+                    {
+                        path.push(index.to_string());
+                        let rendered_item = self.resolve_node(template_item, init_item, path)?;
+                        path.pop();
+                        rendered.push(rendered_item);
+                    }
+                    Ok(Value::Sequence(rendered))
                 }
             }
             _ => Ok(init.clone()),
@@ -112,12 +124,13 @@ impl ResolveSession<'_> {
         path: &mut Vec<String>,
     ) -> Result<Value, ResolverError> {
         let displayed_path = path.join(PATH_SEPARATOR);
-        let first_template = template_items.first().ok_or_else(|| {
-            ResolverError::SequenceEmptyItem {
-                path: displayed_path.clone(),
-                item_index: 0,
-            }
-        })?;
+        let first_template =
+            template_items
+                .first()
+                .ok_or_else(|| ResolverError::SequenceEmptyItem {
+                    path: displayed_path.clone(),
+                    item_index: 0,
+                })?;
         let shape_key =
             first_key(first_template).ok_or_else(|| ResolverError::SequenceEmptyItem {
                 path: displayed_path.clone(),
@@ -127,8 +140,7 @@ impl ResolveSession<'_> {
         let mut templates_by_identity: HashMap<String, &Value> =
             HashMap::with_capacity(template_items.len());
         for (item_index, template_item) in template_items.iter().enumerate() {
-            let identity =
-                item_identity(template_item, &shape_key, &displayed_path, item_index)?;
+            let identity = item_identity(template_item, &shape_key, &displayed_path, item_index)?;
             templates_by_identity.insert(identity, template_item);
         }
 
@@ -343,7 +355,9 @@ impl ResolveSession<'_> {
 
 fn is_keyed_map_sequence(template_items: &[Value]) -> bool {
     !template_items.is_empty()
-        && template_items.iter().all(|item| matches!(item, Value::Mapping(_)))
+        && template_items
+            .iter()
+            .all(|item| matches!(item, Value::Mapping(_)))
         && template_items.iter().any(node_contains_placeholder)
 }
 
@@ -359,12 +373,13 @@ fn item_identity(
             item_index,
         });
     };
-    let (key_node, value_node) = map.iter().next().ok_or_else(|| {
-        ResolverError::SequenceEmptyItem {
-            path: path.to_owned(),
-            item_index,
-        }
-    })?;
+    let (key_node, value_node) =
+        map.iter()
+            .next()
+            .ok_or_else(|| ResolverError::SequenceEmptyItem {
+                path: path.to_owned(),
+                item_index,
+            })?;
     let key = scalar_key(key_node);
     if key != shape_key {
         return Err(ResolverError::SequenceFirstKeyMismatch {
@@ -447,5 +462,47 @@ fn scalar_key(key: &Value) -> String {
         Value::Bool(boolean) => boolean.to_string(),
         Value::Number(number) => number.to_string(),
         other => format!("{other:?}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::gateway::resolver::placeholder::SystemValues;
+
+    #[test]
+    fn secret_auto_collects_generated_value_and_retains_token() {
+        let config = "\
+database:
+  system:
+    username: ${{secretAuto:postgres_system_user}}
+    password: ${{secretAuto:postgres_password}}
+";
+        let system = SystemValues::default();
+        let auto = HashMap::new();
+        let outcome = resolve_config_file(config, config, &system, &auto).expect("resolve");
+
+        assert!(
+            outcome
+                .rendered
+                .contains("${{secretAuto:postgres_system_user}}")
+        );
+
+        let by_key: std::collections::BTreeMap<_, _> = outcome
+            .secrets
+            .iter()
+            .map(|entry| (entry.key.as_str(), entry.value.as_str()))
+            .collect();
+        let user = by_key
+            .get("DATABASE__SYSTEM__USERNAME")
+            .expect("username secret collected");
+        assert_eq!(*user, "postgres");
+        let password = by_key
+            .get("DATABASE__SYSTEM__PASSWORD")
+            .expect("password secret collected");
+        assert!(
+            !password.contains("${"),
+            "password must be a generated value, not the token: {password}"
+        );
     }
 }

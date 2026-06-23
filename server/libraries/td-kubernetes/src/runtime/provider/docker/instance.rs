@@ -10,6 +10,7 @@ use kube::Config;
 use crate::core::system::exit::CommandResult;
 use crate::kube::api::pod::list_pods;
 use crate::kube::context::KubeContext;
+use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::profile::{parse_from_configmaps, read_family_configmaps};
 use crate::runtime::provider::{ClusterProvider, Instance};
@@ -53,7 +54,8 @@ impl Instance for DockerInstance {
             .into());
         };
         let profile = parse_from_configmaps(&pods, &configs, &manifest_yaml)?;
-        start_workload(&context, ClusterProvider::Docker, &profile, multi).await
+        let system = SystemValues::default();
+        start_workload(&context, ClusterProvider::Docker, &system, &profile, multi).await
     }
 
     async fn stop(&self, multi: &MultiProgress) -> CommandResult<bool> {

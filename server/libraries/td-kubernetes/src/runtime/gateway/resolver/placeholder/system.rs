@@ -3,7 +3,7 @@
 //
 
 //! System values: the [`SystemKey`] catalog, the caller-supplied [`SystemValues`],
-//! and the [`SystemResolver`] that resolves a `${system:KEY}` placeholder against
+//! and the [`SystemResolver`] that resolves a `${{system:KEY}}` placeholder against
 //! them.
 
 use std::str::FromStr;
@@ -115,27 +115,6 @@ impl SystemValues {
 }
 
 pub(crate) fn resolve(leaf: &str, values: &SystemValues) -> Result<String, TdError> {
-    let mut current = leaf.to_string();
-    while let Some(captures) = PATTERN.captures(&current) {
-        let placeholder = captures.get(0).unwrap().as_str().to_string();
-        let raw_key = captures.get(1).unwrap().as_str();
-        let key =
-            SystemKey::from_str(raw_key).map_err(|_| ResolverError::UnsupportedSystemKey {
-                key: raw_key.to_string(),
-                supported: SystemKey::supported(),
-            })?;
-        let value = values
-            .lookup(key)
-            .ok_or_else(|| ResolverError::MissingSystemValue {
-                key: key.as_ref().to_string(),
-            })?;
-        current = current.replace(&placeholder, value);
-    }
-    Ok(current)
-}
-
-#[allow(dead_code)]
-pub(crate) fn materialize(leaf: &str, values: &SystemValues) -> Result<String, TdError> {
     let mut current = leaf.to_string();
     while let Some(captures) = PATTERN.captures(&current) {
         let placeholder = captures.get(0).unwrap().as_str().to_string();

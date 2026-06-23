@@ -28,6 +28,14 @@ pub enum LauncherError {
         tier: String,
         cause: String,
     } = 4,
+    #[error("Failed to materialize pod manifest 'pods/{key}' for the {tier} tier: {cause}.")]
+    PodMaterializeFailed {
+        key: String,
+        tier: String,
+        cause: String,
+    } = 5008,
+    #[error("No pod found for component '{component}'.")]
+    ComponentPodMissing { component: String } = 5009,
     #[error("Init job '{name}' failed.")]
     JobFailed { name: String } = 5,
     #[error("Regular pod '{name}' failed.")]

@@ -3,7 +3,7 @@
 //
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use td_common::env::TABSDATA_HOME_DIR;
@@ -97,6 +97,22 @@ impl InstanceSettings {
     pub fn load(name: &str) -> CommandResult<Self> {
         let path = instance_settings_file(name)?;
         let data = fs::read_to_string(&path).map_err(|error| {
+            TdError::from(CliError::FileReadFailed {
+                file: path.display().to_string(),
+                cause: error.to_string(),
+            })
+        })?;
+        let settings = serde_json::from_str(&data).map_err(|error| {
+            TdError::from(CliError::FileParseFailed {
+                file: path.display().to_string(),
+                cause: error.to_string(),
+            })
+        })?;
+        Ok(settings)
+    }
+
+    pub fn load_from_path(path: &Path) -> CommandResult<Self> {
+        let data = fs::read_to_string(path).map_err(|error| {
             TdError::from(CliError::FileReadFailed {
                 file: path.display().to_string(),
                 cause: error.to_string(),

@@ -29,7 +29,7 @@ async fn resolves_required_env_placeholder() {
 
     let resolver = resolver();
     let resolved = resolver
-        .materialize("hello ${env:TD_TEST_RESOLVER_REQUIRED}")
+        .materialize("hello ${{env:TD_TEST_RESOLVER_REQUIRED}}")
         .await
         .expect("resolve");
     assert_eq!(resolved.trim(), "hello world");
@@ -43,7 +43,7 @@ async fn missing_required_env_returns_error() {
 
     let resolver = resolver();
     let result = resolver
-        .materialize("${env:TD_TEST_RESOLVER_MISSING}")
+        .materialize("${{env:TD_TEST_RESOLVER_MISSING}}")
         .await;
     assert!(result.is_err(), "expected missing env var to error");
 }
@@ -54,7 +54,7 @@ async fn optional_env_placeholder_falls_back_to_empty_string() {
 
     let resolver = resolver();
     let resolved = resolver
-        .materialize("prefix-${env:TD_TEST_RESOLVER_OPTIONAL?}-suffix")
+        .materialize("prefix-${{env:TD_TEST_RESOLVER_OPTIONAL?}}-suffix")
         .await
         .expect("resolve");
     assert_eq!(resolved.trim(), "prefix--suffix");
@@ -69,7 +69,7 @@ async fn multiple_env_placeholders_resolve_left_to_right() {
 
     let resolver = resolver();
     let resolved = resolver
-        .materialize("${env:TD_TEST_RESOLVER_A}/${env:TD_TEST_RESOLVER_B}")
+        .materialize("${{env:TD_TEST_RESOLVER_A}}/${{env:TD_TEST_RESOLVER_B}}")
         .await
         .expect("resolve");
     assert_eq!(resolved.trim(), "alpha/beta");
@@ -119,7 +119,7 @@ async fn resolve_secret_substitutes_bare_placeholder() {
     unsafe { std::env::set_var(key, "supersecret") };
 
     let resolver = resolver();
-    let yaml = "td_resolve_test_bare:\n  value: ${secret}\n";
+    let yaml = "td_resolve_test_bare:\n  value: ${{secret}}\n";
     let resolved = resolver.materialize(yaml).await.expect("resolve");
     let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
     assert_eq!(
@@ -136,7 +136,7 @@ async fn resolve_secret_substitutes_named_placeholder_using_path_encoding() {
     unsafe { std::env::set_var(key, "jwt-value") };
 
     let resolver = resolver();
-    let yaml = "td_resolve_test_named:\n  value: ${secret:jwt_signing_key}\n";
+    let yaml = "td_resolve_test_named:\n  value: ${{secret:jwt_signing_key}}\n";
     let resolved = resolver.materialize(yaml).await.expect("resolve");
     let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
     assert_eq!(
@@ -152,7 +152,7 @@ async fn resolve_secret_errors_when_env_var_missing() {
     unsafe { std::env::remove_var("TD_RESOLVE_TEST_MISSING__SECRET") };
 
     let resolver = resolver();
-    let yaml = "td_resolve_test_missing:\n  secret: ${secret}\n";
+    let yaml = "td_resolve_test_missing:\n  secret: ${{secret}}\n";
     let result = resolver.materialize(yaml).await;
     assert!(result.is_err(), "missing env var should error");
 }

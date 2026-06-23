@@ -35,7 +35,7 @@ fn no_placeholders_yields_no_leaves() {
 
 #[test]
 fn single_top_level_placeholder() {
-    let leaves = leaves_of(r#"password: ${secret}"#);
+    let leaves = leaves_of(r#"password: ${{secret}}"#);
     assert_eq!(leaves.len(), 1);
     assert_eq!(leaves[0].path, vec!["password".to_owned()]);
     assert_eq!(leaves[0].key, "PASSWORD");
@@ -47,13 +47,13 @@ fn nested_placeholders_collected_in_order() {
         r#"
             database:
               postgres:
-                password: ${secret}
+                password: ${{secret}}
             auth:
-              jwt_signing_key: ${secret}
+              jwt_signing_key: ${{secret}}
             storage:
               s3:
-                access_key: ${secret}
-                secret_key: ${secret}
+                access_key: ${{secret}}
+                secret_key: ${{secret}}
         "#,
     );
     let keys: Vec<&str> = leaves.iter().map(|leaf| leaf.key.as_str()).collect();
@@ -72,8 +72,8 @@ fn nested_placeholders_collected_in_order() {
 fn placeholder_must_match_exactly() {
     let leaves = leaves_of(
         r#"
-            a: " ${secret} "
-            b: ${secret}-suffix
+            a: " ${{secret}} "
+            b: ${{secret}}-suffix
             c: ${SECRET}
         "#,
     );
@@ -87,7 +87,7 @@ fn sequence_without_placeholder_is_ignored() {
             allowed_origins:
               - https://a
               - https://b
-            secret_value: ${secret}
+            secret_value: ${{secret}}
         "#,
     );
     assert_eq!(leaves.len(), 1);
@@ -102,13 +102,13 @@ fn sequence_of_maps_promotes_by_first_key() {
               mounts:
                 - id: ROOT
                   path: /
-                  uri: ${secret}
+                  uri: ${{secret}}
                 - id: BUNDLES
                   path: /bundles
-                  uri: ${secret}
+                  uri: ${{secret}}
                 - id: PREFIX
                   path: /foo
-                  uri: ${secret}
+                  uri: ${{secret}}
         "#,
     );
     let keys: Vec<&str> = leaves.iter().map(|leaf| leaf.key.as_str()).collect();
@@ -128,7 +128,7 @@ fn promoted_sequence_with_mixed_items_is_rejected() {
         r#"
             mounts:
               - id: ROOT
-                uri: ${secret}
+                uri: ${{secret}}
               - "not a map"
         "#,
     );
@@ -144,9 +144,9 @@ fn promoted_sequence_with_mismatched_first_keys_is_rejected() {
         r#"
             mounts:
               - id: ROOT
-                uri: ${secret}
+                uri: ${{secret}}
               - name: BUNDLES
-                uri: ${secret}
+                uri: ${{secret}}
         "#,
     );
     let SecretError::SequenceFirstKeyMismatch {
@@ -169,9 +169,9 @@ fn promoted_sequence_with_duplicate_first_values_is_rejected() {
         r#"
             mounts:
               - id: ROOT
-                uri: ${secret}
+                uri: ${{secret}}
               - id: ROOT
-                uri: ${secret}
+                uri: ${{secret}}
         "#,
     );
     let SecretError::SequenceDuplicateFirstValues {
@@ -193,7 +193,7 @@ fn promoted_sequence_with_secret_as_first_value_is_rejected() {
     let error = error_of(
         r#"
             options:
-              - option_1: ${secret}
+              - option_1: ${{secret}}
                 option_2: value2
         "#,
     );
@@ -209,7 +209,7 @@ fn promoted_sequence_with_non_scalar_first_value_is_rejected() {
         r#"
             mounts:
               - id: {nested: yes}
-                uri: ${secret}
+                uri: ${{secret}}
         "#,
     );
     assert!(matches!(
@@ -225,7 +225,7 @@ fn sequence_without_secret_ignores_promotion_rules() {
             ports:
               - 80
               - 443
-            secret_value: ${secret}
+            secret_value: ${{secret}}
         "#,
     );
     let keys: Vec<&str> = leaves.iter().map(|leaf| leaf.key.as_str()).collect();
@@ -234,19 +234,19 @@ fn sequence_without_secret_ignores_promotion_rules() {
 
 #[test]
 fn key_with_dash_encodes_to_underscore() {
-    let leaves = leaves_of(r#"jwt-key: ${secret}"#);
+    let leaves = leaves_of(r#"jwt-key: ${{secret}}"#);
     assert_eq!(leaves[0].key, "JWT_KEY");
 }
 
 #[test]
 fn key_with_dot_encodes_to_underscore() {
-    let leaves = leaves_of(r#""app.kubernetes.io/component": ${secret}"#);
+    let leaves = leaves_of(r#""app.kubernetes.io/component": ${{secret}}"#);
     assert_eq!(leaves[0].key, "APP_KUBERNETES_IO_COMPONENT");
 }
 
 #[test]
 fn key_starting_with_digit_gets_underscore_prefix() {
-    let leaves = leaves_of(r#""2fa": ${secret}"#);
+    let leaves = leaves_of(r#""2fa": ${{secret}}"#);
     assert_eq!(leaves[0].key, "_2FA");
 }
 
@@ -254,8 +254,8 @@ fn key_starting_with_digit_gets_underscore_prefix() {
 fn collision_after_normalization_is_rejected() {
     let error = error_of(
         r#"
-            jwt-key: ${secret}
-            jwt_key: ${secret}
+            jwt-key: ${{secret}}
+            jwt_key: ${{secret}}
         "#,
     );
     let SecretError::KeyCollision {
@@ -274,7 +274,7 @@ fn empty_yaml_key_is_rejected() {
     let error = error_of(
         r#"
             ? ""
-            : ${secret}
+            : ${{secret}}
         "#,
     );
     let SecretError::EmptySegment { path, .. } = error else {
@@ -303,28 +303,28 @@ fn encode_rejects_empty_segment() {
 
 #[test]
 fn bare_placeholder_has_no_generator() {
-    let leaves = leaves_of(r#"password: ${secret}"#);
+    let leaves = leaves_of(r#"password: ${{secret}}"#);
     assert_eq!(leaves.len(), 1);
     assert_eq!(leaves[0].generator, None);
 }
 
 #[test]
 fn named_placeholder_jwt_signing_key_picks_jwt_signing_key_generator() {
-    let leaves = leaves_of(r#"jwt: ${secret:jwt_signing_key}"#);
+    let leaves = leaves_of(r#"jwt: ${{secretAuto:jwt_signing_key}}"#);
     assert_eq!(leaves.len(), 1);
     assert_eq!(leaves[0].generator, Some(Generator::JwtSigningKey));
 }
 
 #[test]
 fn named_placeholder_postgres_password_picks_postgres_password_generator() {
-    let leaves = leaves_of(r#"password: ${secret:postgres_password}"#);
+    let leaves = leaves_of(r#"password: ${{secretAuto:postgres_password}}"#);
     assert_eq!(leaves.len(), 1);
     assert_eq!(leaves[0].generator, Some(Generator::PostgresPassword));
 }
 
 #[test]
 fn named_placeholder_postgres_system_user_picks_postgres_system_user_generator() {
-    let leaves = leaves_of(r#"username: ${secret:postgres_system_user}"#);
+    let leaves = leaves_of(r#"username: ${{secretAuto:postgres_system_user}}"#);
     assert_eq!(leaves.len(), 1);
     assert_eq!(leaves[0].generator, Some(Generator::PostgresSystemUser));
 }
@@ -333,10 +333,10 @@ fn named_placeholder_postgres_system_user_picks_postgres_system_user_generator()
 fn mixed_placeholders_keep_their_kinds() {
     let leaves = leaves_of(
         r#"
-            external: ${secret}
-            jwt: ${secret:jwt_signing_key}
-            username: ${secret:postgres_system_user}
-            password: ${secret:postgres_password}
+            external: ${{secret}}
+            jwt: ${{secretAuto:jwt_signing_key}}
+            username: ${{secretAuto:postgres_system_user}}
+            password: ${{secretAuto:postgres_password}}
         "#,
     );
     assert_eq!(leaves.len(), 4);
@@ -360,8 +360,24 @@ fn mixed_placeholders_keep_their_kinds() {
 }
 
 #[test]
-fn unknown_generator_name_is_rejected() {
-    let error = error_of(r#"key: ${secret:nope}"#);
+fn named_secret_without_generator_is_a_bare_leaf() {
+    let leaves = leaves_of(r#"key: ${{secret:openai-key}}"#);
+    assert_eq!(leaves.len(), 1);
+    assert_eq!(leaves[0].key, "KEY");
+    assert_eq!(leaves[0].generator, None);
+}
+
+#[test]
+fn optional_named_secret_is_a_bare_leaf() {
+    let leaves = leaves_of(r#"key: ${{secret:openai-key?}}"#);
+    assert_eq!(leaves.len(), 1);
+    assert_eq!(leaves[0].key, "KEY");
+    assert_eq!(leaves[0].generator, None);
+}
+
+#[test]
+fn unknown_auto_generator_name_is_rejected() {
+    let error = error_of(r#"key: ${{secretAuto:nope}}"#);
     match error {
         SecretError::UnknownGeneratorName {
             name, supported, ..
@@ -376,7 +392,9 @@ fn unknown_generator_name_is_rejected() {
 }
 
 #[test]
-fn empty_generator_name_is_not_a_placeholder() {
-    let leaves = leaves_of(r#"key: "${secret:}""#);
-    assert!(leaves.is_empty());
+fn anonymous_secret_with_empty_category_is_a_bare_leaf() {
+    let leaves = leaves_of(r#"key: "${{secret:}}""#);
+    assert_eq!(leaves.len(), 1);
+    assert_eq!(leaves[0].key, "KEY");
+    assert_eq!(leaves[0].generator, None);
 }

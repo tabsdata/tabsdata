@@ -50,7 +50,7 @@ spec:
         - name: 0000-inspect-function
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_inspect_function"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_inspect_function"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -88,7 +88,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -127,7 +127,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
           volumeMounts:
             - name: shared
               mountPath: /tabsdata/shared
@@ -141,6 +141,6 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: pyenv
           hostPath:
-            path: "${sys:tdk_pyenv_td_root}"
+            path: "${{system:tdk_pyenv_td_root}}"
         - name: shared
           emptyDir: {}

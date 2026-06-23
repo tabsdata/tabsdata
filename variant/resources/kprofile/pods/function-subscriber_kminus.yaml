@@ -50,7 +50,7 @@ spec:
         - name: 0000-inspect-function
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_inspect_function"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_inspect_function"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -88,7 +88,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -103,7 +103,7 @@ spec:
         - name: 1000-api-ready
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_apiready"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_apiready"]
           args:
             - --config-file
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.service.yaml
@@ -133,7 +133,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
           volumeMounts:
             - name: config-api-ready
               mountPath: /tabsdata/config
@@ -144,7 +144,7 @@ spec:
         - name: 2000-begin-execution
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_begin_execution"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_begin_execution"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -182,7 +182,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -197,7 +197,7 @@ spec:
         - name: 2010-fetch-request
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_fetch_request"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_fetch_request"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -243,7 +243,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -258,7 +258,7 @@ spec:
         - name: 2020-localize-fn-bundle
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_localize_fn_bundle"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_localize_fn_bundle"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -306,7 +306,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -321,7 +321,7 @@ spec:
         - name: 2030-prep-localize-state
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_prep_localize_state"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_prep_localize_state"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -371,7 +371,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -386,7 +386,7 @@ spec:
         - name: 2040-run-transporter-localize
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_run_transporter"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_transporter"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -428,7 +428,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -443,7 +443,7 @@ spec:
         - name: 2050-run-function
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_run_function"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_function"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -493,7 +493,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -508,7 +508,7 @@ spec:
         - name: 2060-run-destination-plugin
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_run_destination_plugin"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_destination_plugin"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -552,7 +552,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -567,7 +567,7 @@ spec:
         - name: 2070-prep-upload-state
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_prep_upload_state"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_prep_upload_state"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -611,7 +611,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -626,7 +626,7 @@ spec:
         - name: 2080-run-transporter-state-upload
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_run_transporter"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_transporter"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -668,7 +668,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -684,7 +684,7 @@ spec:
         - name: 3000-report-completion
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_report_completion"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_report_completion"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -730,7 +730,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -829,6 +829,6 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
         - name: pyenv
           hostPath:
-            path: "${sys:tdk_pyenv_td_root}"
+            path: "${{system:tdk_pyenv_td_root}}"
         - name: shared
           emptyDir: {}

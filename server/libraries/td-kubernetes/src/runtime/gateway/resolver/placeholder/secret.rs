@@ -4,95 +4,14 @@
 
 use std::env;
 
-use td_error::TdError;
-
 use crate::base::error::gateway::ResolverError;
-use crate::base::error::secret::SecretError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
     ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext, Rule, SecretEntry,
 };
-use crate::runtime::secrets::walker::{
-    Generator, Placeholder, SecretVisitor, encode_secret_key, walk,
-};
+use crate::runtime::secrets::walker::{Generator, encode_secret_key};
 
 const CONSUMER_LABEL: &str = "<consumer config>";
-
-#[allow(dead_code)]
-pub(crate) fn resolve(yaml: &str) -> Result<String, TdError> {
-    let mut value: serde_yaml::Value =
-        serde_yaml::from_str(yaml).map_err(|error| ResolverError::ParseFailed {
-            path: CONSUMER_LABEL.to_owned(),
-            cause: error.to_string(),
-        })?;
-    let mut visitor = EnvSubstitutor;
-    walk(CONSUMER_LABEL, &mut value, &mut visitor)?;
-    serde_yaml::to_string(&value).map_err(|error| {
-        ResolverError::ParseFailed {
-            path: CONSUMER_LABEL.to_owned(),
-            cause: error.to_string(),
-        }
-        .into()
-    })
-}
-
-pub(crate) fn materialize(yaml: &str) -> Result<String, TdError> {
-    let mut value: serde_yaml::Value =
-        serde_yaml::from_str(yaml).map_err(|error| ResolverError::ParseFailed {
-            path: CONSUMER_LABEL.to_owned(),
-            cause: error.to_string(),
-        })?;
-    let mut visitor = EnvSubstitutor;
-    walk(CONSUMER_LABEL, &mut value, &mut visitor)?;
-    serde_yaml::to_string(&value).map_err(|error| {
-        ResolverError::ParseFailed {
-            path: CONSUMER_LABEL.to_owned(),
-            cause: error.to_string(),
-        }
-        .into()
-    })
-}
-
-struct EnvSubstitutor;
-
-enum SubstituteError {
-    Walker(SecretError),
-    Variable(ResolverError),
-}
-
-impl From<SecretError> for SubstituteError {
-    fn from(error: SecretError) -> Self {
-        SubstituteError::Walker(error)
-    }
-}
-
-impl From<SubstituteError> for TdError {
-    fn from(error: SubstituteError) -> Self {
-        match error {
-            SubstituteError::Walker(inner) => inner.into(),
-            SubstituteError::Variable(inner) => inner.into(),
-        }
-    }
-}
-
-impl SecretVisitor for EnvSubstitutor {
-    type Error = SubstituteError;
-
-    fn visit_placeholder(
-        &mut self,
-        config: &str,
-        path: &[String],
-        _placeholder: Placeholder,
-        scalar: &mut String,
-    ) -> Result<(), Self::Error> {
-        let variable = encode_secret_key(config, path)?;
-        let value = env::var(&variable).map_err(|_| {
-            SubstituteError::Variable(ResolverError::EnvironmentVariableNotFound { variable })
-        })?;
-        *scalar = value;
-        Ok(())
-    }
-}
 
 pub(crate) struct SecretResolver {
     auto: bool,
@@ -123,16 +42,16 @@ impl SecretResolver {
                 kind: self.kind().as_str().to_owned(),
             }
         })?;
-        let generator = Generator::from_name(category).ok_or_else(|| {
-            ResolverError::UnknownGenerator {
+        let generator =
+            Generator::from_name(category).ok_or_else(|| ResolverError::UnknownGenerator {
                 path: context.path.join(PATH_SEPARATOR),
                 generator: category.to_owned(),
                 supported: Generator::supported().join(", "),
-            }
-        })?;
+            })?;
         Ok(Some(SecretEntry {
             key,
             value: generator.generate(),
+            category: Some(category.to_owned()),
         }))
     }
 }
@@ -148,14 +67,23 @@ impl ConcreteResolver for SecretResolver {
 
     fn resolve(&self, context: &ResolveContext) -> Result<Resolution, ResolverError> {
         let key = self.secret_key(context)?;
-        let provided = context.init_value.filter(|value| !value.is_empty());
+        let token = context.placeholder.token();
+        let provided = context
+            .init_value
+            .filter(|value| !value.is_empty() && *value != token);
+        let category = context.placeholder.category.clone();
         let secret = match provided {
             Some(value) => Some(SecretEntry {
                 key,
                 value: value.to_owned(),
+                category,
             }),
             None if self.auto => self.generate(context, key)?,
-            None if context.placeholder.rule == Rule::Optional => None,
+            None if context.placeholder.rule == Rule::Optional => Some(SecretEntry {
+                key,
+                value: String::new(),
+                category,
+            }),
             None => {
                 return Err(ResolverError::MissingRequiredValue {
                     path: context.path.join(PATH_SEPARATOR),
@@ -172,8 +100,12 @@ impl ConcreteResolver for SecretResolver {
 
     fn materialize(&self, context: &ResolveContext) -> Result<Resolution, ResolverError> {
         let variable = self.secret_key(context)?;
-        let value = env::var(&variable)
-            .map_err(|_| ResolverError::EnvironmentVariableNotFound { variable })?;
+        let optional = context.placeholder.rule == Rule::Optional;
+        let value = match env::var(&variable) {
+            Ok(value) => value,
+            Err(_) if optional => String::new(),
+            Err(_) => return Err(ResolverError::EnvironmentVariableNotFound { variable }),
+        };
         Ok(Resolution {
             rendered: value,
             secret: None,

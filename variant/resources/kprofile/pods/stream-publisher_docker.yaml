@@ -87,7 +87,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -145,7 +145,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -205,7 +205,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -271,7 +271,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:
@@ -328,7 +328,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:tdk_instance_name}"
+              value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "/tabsdata/config/tabsdata.log.rs.yaml"
           volumeMounts:

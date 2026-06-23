@@ -8,19 +8,23 @@ use k8s_openapi::api::core::v1::Pod;
 use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
 
-use crate::base::constants::{POD_PHASE_FAILED, TIER_LABEL};
+use crate::base::constants::{POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, TIER_LABEL};
 use crate::base::error::launcher::LauncherError;
 use crate::client::tdkserver::widgets::{phase_spinner_in, spinner};
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
 use crate::kube::api::{job as job_api, pod as pod_api};
 use crate::kube::context::KubeContext;
+use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::injection::{
     inject_into_job, inject_into_pod, list_available_secrets,
 };
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::tier::Tier;
 use crate::runtime::provider::ClusterProvider;
+
+const DATABASE_COMPONENT: &str = "database";
+const DBMANAGER_COMPONENT: &str = "dbmanager";
 
 const JOB_CONDITION_COMPLETE: &str = "Complete";
 const JOB_CONDITION_FAILED: &str = "Failed";
@@ -31,13 +35,18 @@ const POD_CONDITION_STATUS_TRUE: &str = "True";
 pub async fn start_workload(
     context: &KubeContext,
     cluster_provider: ClusterProvider,
+    system: &SystemValues,
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult {
     delete_workload(context, multi).await?;
-    let init_jobs = apply_init_phase(context, cluster_provider, profile, multi).await?;
+    let service_pods =
+        apply_service_phase(context, cluster_provider, system, profile, multi).await?;
+    wait_service_phase(context, &service_pods, multi).await?;
+    let init_jobs = apply_init_phase(context, cluster_provider, system, profile, multi).await?;
     wait_init_phase(context, &init_jobs, multi).await?;
-    let regular_pods = apply_regular_phase(context, cluster_provider, profile, multi).await?;
+    let regular_pods =
+        apply_regular_phase(context, cluster_provider, system, profile, multi).await?;
     wait_regular_phase(context, &regular_pods, multi).await?;
     Ok(())
 }
@@ -53,13 +62,14 @@ pub async fn stop_workload(context: &KubeContext, multi: &MultiProgress) -> Comm
 pub async fn apply_init_phase(
     context: &KubeContext,
     cluster_provider: ClusterProvider,
+    system: &SystemValues,
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult<Vec<String>> {
     let available_secrets = list_available_secrets(context).await?;
     let mut prepared: Vec<(String, Job)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Init)? {
-        let mut job = deserialize_pod_entry::<Job>(key, yaml, Tier::Init)?;
+        let mut job = deserialize_pod_entry::<Job>(key, yaml, Tier::Init, system).await?;
         cluster_provider.enrich_init_job(&mut job)?;
         inject_into_job(profile, key, &mut job, &available_secrets)?;
         validate_pod(key, cluster_provider.validate_init_job(&job))?;
@@ -115,6 +125,78 @@ pub async fn wait_init_phase(
         }
         bar.finish_with_message(format!("{name} (completed)"));
     }
+    Ok(())
+}
+
+pub async fn apply_service_phase(
+    context: &KubeContext,
+    cluster_provider: ClusterProvider,
+    system: &SystemValues,
+    profile: &Profile,
+    multi: &MultiProgress,
+) -> CommandResult<Vec<String>> {
+    let available_secrets = list_available_secrets(context).await?;
+    let mut prepared: Vec<(String, Pod)> = Vec::new();
+    for (key, yaml) in pods_for_tier(profile, Tier::Service)? {
+        let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Service, system).await?;
+        cluster_provider.enrich_regular_pod(&mut pod)?;
+        inject_into_pod(profile, key, &mut pod, &available_secrets)?;
+        validate_pod(key, cluster_provider.validate_regular_pod(&pod))?;
+        prepared.push((key.to_owned(), pod));
+    }
+    let phase = phase_spinner_in(
+        multi,
+        &format!("Applying {} service pod(s)", prepared.len()),
+    );
+    let mut applied: Vec<String> = Vec::new();
+    for (key, pod) in prepared {
+        let bar = phase.add_resource(&key);
+        let created = match pod_api::create_pod(context, &pod, Vec::new(), Vec::new(), None).await {
+            Ok(created) => {
+                bar.finish_with_message(format!("{key} (applied)"));
+                created
+            }
+            Err(error) => {
+                bar.finish_with_message(format!("{key} (failed)"));
+                return Err(error.into());
+            }
+        };
+        let name = created
+            .metadata
+            .name
+            .ok_or_else(|| LauncherError::PodMissingName { key: key.clone() })?;
+        applied.push(name);
+    }
+    drop(phase);
+    Ok(applied)
+}
+
+pub async fn wait_service_phase(
+    context: &KubeContext,
+    pods: &[String],
+    multi: &MultiProgress,
+) -> CommandResult {
+    let phase = phase_spinner_in(multi, &format!("Waiting for {} service pod(s)", pods.len()));
+    for name in pods {
+        let bar = phase.add_resource(name);
+        let settled = match pod_api::await_pod_condition(context, name, is_pod_settled()).await {
+            Ok(Some(pod)) => pod,
+            Ok(None) => {
+                bar.finish_with_message(format!("{name} (deleted)"));
+                return Err(LauncherError::PodDeletedBeforeReady { name: name.clone() }.into());
+            }
+            Err(error) => {
+                bar.finish_with_message(format!("{name} (errored)"));
+                return Err(error.into());
+            }
+        };
+        if has_failed_phase(&settled) {
+            bar.finish_with_message(format!("{name} (failed)"));
+            return Err(LauncherError::PodFailed { name: name.clone() }.into());
+        }
+        bar.finish_with_message(format!("{name} (ready)"));
+    }
+    drop(phase);
     Ok(())
 }
 
@@ -193,12 +275,23 @@ fn pods_for_tier(profile: &Profile, tier: Tier) -> Result<Vec<(&str, &str)>, Lau
     Ok(matched)
 }
 
-fn deserialize_pod_entry<T: DeserializeOwned>(
+async fn deserialize_pod_entry<T: DeserializeOwned>(
     key: &str,
     yaml: &str,
     tier: Tier,
+    system: &SystemValues,
 ) -> Result<T, LauncherError> {
-    serde_yaml::from_str(yaml).map_err(|error| LauncherError::PodDeserializeFailed {
+    let resolver = ConfigurationResolver::new(system.clone());
+    let materialized =
+        resolver
+            .materialize(yaml)
+            .await
+            .map_err(|error| LauncherError::PodMaterializeFailed {
+                key: key.to_owned(),
+                tier: tier.to_string(),
+                cause: error.to_string(),
+            })?;
+    serde_yaml::from_str(&materialized).map_err(|error| LauncherError::PodDeserializeFailed {
         key: key.to_owned(),
         tier: tier.to_string(),
         cause: error.to_string(),
@@ -208,13 +301,14 @@ fn deserialize_pod_entry<T: DeserializeOwned>(
 pub async fn apply_regular_phase(
     context: &KubeContext,
     cluster_provider: ClusterProvider,
+    system: &SystemValues,
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult<Vec<String>> {
     let available_secrets = list_available_secrets(context).await?;
     let mut prepared: Vec<(String, Pod)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Regular)? {
-        let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Regular)?;
+        let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Regular, system).await?;
         cluster_provider.enrich_regular_pod(&mut pod)?;
         inject_into_pod(profile, key, &mut pod, &available_secrets)?;
         validate_pod(key, cluster_provider.validate_regular_pod(&pod))?;
@@ -289,6 +383,148 @@ pub async fn wait_regular_phase(
     drop(phase);
     result?;
     Ok(())
+}
+
+pub async fn provision_database(
+    context: &KubeContext,
+    cluster_provider: ClusterProvider,
+    system: &SystemValues,
+    profile: &Profile,
+    multi: &MultiProgress,
+) -> CommandResult {
+    let available_secrets = list_available_secrets(context).await?;
+
+    let (service_key, service_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
+    let mut service =
+        deserialize_pod_entry::<Pod>(service_key, service_yaml, Tier::Service, system).await?;
+    cluster_provider.enrich_regular_pod(&mut service)?;
+    inject_into_pod(profile, service_key, &mut service, &available_secrets)?;
+    let service_name = pod_name(service_key, &service)?;
+
+    let (setup_key, setup_yaml) = pod_for_component(profile, DBMANAGER_COMPONENT)?;
+    let mut setup =
+        deserialize_pod_entry::<Job>(setup_key, setup_yaml, Tier::Setup, system).await?;
+    cluster_provider.enrich_init_job(&mut setup)?;
+    inject_into_job(profile, setup_key, &mut setup, &available_secrets)?;
+    let setup_name = job_name(setup_key, &setup)?;
+
+    let phase = phase_spinner_in(multi, "Provisioning tabsdata database");
+
+    let bar = phase.add_resource(service_key);
+    pod_api::create_pod(context, &service, Vec::new(), Vec::new(), None).await?;
+    pod_api::await_pod_condition(context, &service_name, is_pod_settled()).await?;
+    bar.finish_with_message(format!("{service_key} (started)"));
+
+    let bar = phase.add_resource(setup_key);
+    job_api::create_job(context, &setup, Vec::new(), Vec::new(), None).await?;
+    let settled = job_api::await_job_condition(context, &setup_name, is_job_settled()).await?;
+    if settled.as_ref().is_some_and(has_failed_condition) {
+        bar.finish_with_message(format!("{setup_key} (failed)"));
+        pod_api::delete_pod(context, &service_name).await?;
+        return Err(LauncherError::JobFailed { name: setup_name }.into());
+    }
+    bar.finish_with_message(format!("{setup_key} (completed)"));
+
+    let bar = phase.add_resource(service_key);
+    pod_api::delete_pod(context, &service_name).await?;
+    pod_api::await_pod_condition(context, &service_name, is_pod_absent()).await?;
+    bar.finish_with_message(format!("{service_key} (stopped)"));
+
+    drop(phase);
+    Ok(())
+}
+
+fn is_pod_absent() -> impl Condition<Pod> {
+    |pod: Option<&Pod>| pod.is_none()
+}
+
+pub async fn start_database(
+    context: &KubeContext,
+    cluster_provider: ClusterProvider,
+    system: &SystemValues,
+    profile: &Profile,
+    multi: &MultiProgress,
+) -> CommandResult {
+    let available_secrets = list_available_secrets(context).await?;
+    let (service_key, service_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
+    let mut service =
+        deserialize_pod_entry::<Pod>(service_key, service_yaml, Tier::Service, system).await?;
+    cluster_provider.enrich_regular_pod(&mut service)?;
+    inject_into_pod(profile, service_key, &mut service, &available_secrets)?;
+    let service_name = pod_name(service_key, &service)?;
+
+    let phase = phase_spinner_in(multi, "Starting tabsdata database");
+    let bar = phase.add_resource(service_key);
+    pod_api::create_pod(context, &service, Vec::new(), Vec::new(), None).await?;
+    pod_api::await_pod_condition(context, &service_name, is_pod_settled()).await?;
+    bar.finish_with_message(format!("{service_key} (started)"));
+    drop(phase);
+    Ok(())
+}
+
+pub async fn stop_database(
+    context: &KubeContext,
+    profile: &Profile,
+    multi: &MultiProgress,
+) -> CommandResult {
+    let (service_key, service_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
+    let service: Pod = serde_yaml::from_str(service_yaml).map_err(|error| {
+        LauncherError::PodDeserializeFailed {
+            key: service_key.to_owned(),
+            tier: Tier::Service.to_string(),
+            cause: error.to_string(),
+        }
+    })?;
+    let service_name = pod_name(service_key, &service)?;
+
+    let phase = phase_spinner_in(multi, "Stopping tabsdata database");
+    let bar = phase.add_resource(service_key);
+    pod_api::delete_pod(context, &service_name).await?;
+    bar.finish_with_message(format!("{service_key} (stopped)"));
+    drop(phase);
+    Ok(())
+}
+
+fn pod_for_component<'a>(
+    profile: &'a Profile,
+    component: &str,
+) -> Result<(&'a str, &'a str), LauncherError> {
+    for (key, yaml) in &profile.pods {
+        let value: serde_yaml::Value =
+            serde_yaml::from_str(yaml).map_err(|error| LauncherError::PodYamlParseFailed {
+                key: key.clone(),
+                cause: error.to_string(),
+            })?;
+        let label_value = value
+            .get("metadata")
+            .and_then(|metadata| metadata.get("labels"))
+            .and_then(|labels| labels.get(POD_YAML_COMPONENT_LABEL))
+            .and_then(|value| value.as_str());
+        if label_value == Some(component) {
+            return Ok((key.as_str(), yaml.as_str()));
+        }
+    }
+    Err(LauncherError::ComponentPodMissing {
+        component: component.to_owned(),
+    })
+}
+
+fn pod_name(key: &str, pod: &Pod) -> Result<String, LauncherError> {
+    pod.metadata
+        .name
+        .clone()
+        .ok_or_else(|| LauncherError::PodMissingName {
+            key: key.to_owned(),
+        })
+}
+
+fn job_name(key: &str, job: &Job) -> Result<String, LauncherError> {
+    job.metadata
+        .name
+        .clone()
+        .ok_or_else(|| LauncherError::JobMissingName {
+            key: key.to_owned(),
+        })
 }
 
 fn is_pod_settled() -> impl Condition<Pod> {

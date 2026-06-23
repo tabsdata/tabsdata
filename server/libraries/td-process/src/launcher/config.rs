@@ -5,9 +5,11 @@
 use crate::launcher::cli::{move_to_dir, obtain_config_dir, obtain_current_dir};
 use config::{File, FileFormat};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use td_common::env::{TABSDATA_HOME_DIR, get_current_dir, get_home_dir, get_user_name};
+use td_kubernetes::base::constants::CONTAINER_ROOT_ENV;
 use td_kubernetes::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use tracing::{debug, error, info};
 
@@ -157,12 +159,20 @@ fn read_and_resolve(path: &Path) -> String {
             panic!("Exiting due to configuration read failure.");
         }
     };
+    if env::var(CONTAINER_ROOT_ENV).is_ok() {
+        resolve_kubernetes(path, &raw)
+    } else {
+        resolve_supervisor(&raw)
+    }
+}
+
+fn resolve_kubernetes(path: &Path, raw: &str) -> String {
     let resolver = ConfigurationResolver::new(SystemValues::default());
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .expect("tokio runtime for resolver");
-    match runtime.block_on(resolver.materialize(&raw)) {
+    match runtime.block_on(resolver.materialize(raw)) {
         Ok(resolved) => resolved,
         Err(error) => {
             error!(
@@ -172,6 +182,37 @@ fn read_and_resolve(path: &Path) -> String {
             panic!("Exiting due to configuration placeholder resolution failure.");
         }
     }
+}
+
+fn resolve_supervisor(raw: &str) -> String {
+    const OPENER: &str = "${env:";
+    const CLOSER: char = '}';
+    let mut resolved = String::with_capacity(raw.len());
+    let mut rest = raw;
+    while let Some(start) = rest.find(OPENER) {
+        resolved.push_str(&rest[..start]);
+        let after_opener = &rest[start + OPENER.len()..];
+        match after_opener.find(CLOSER) {
+            Some(end) => {
+                let variable = &after_opener[..end];
+                match env::var(variable) {
+                    Ok(value) => resolved.push_str(&value),
+                    Err(_) => {
+                        resolved.push_str(OPENER);
+                        resolved.push_str(variable);
+                        resolved.push(CLOSER);
+                    }
+                }
+                rest = &after_opener[end + 1..];
+            }
+            None => {
+                resolved.push_str(&rest[start..]);
+                rest = "";
+            }
+        }
+    }
+    resolved.push_str(rest);
+    resolved
 }
 
 #[cfg(test)]
@@ -358,7 +399,7 @@ mod tests {
         let path = get_current_dir().join("explicit-resolved.yaml");
         std::fs::write(
             &path,
-            "name: ${env:TD_PROCESS_TEST_RESOLVE_NAME}\nport: ${env:TD_PROCESS_TEST_RESOLVE_PORT}\n",
+            "name: ${{env:TD_PROCESS_TEST_RESOLVE_NAME}}\nport: ${{env:TD_PROCESS_TEST_RESOLVE_PORT}}\n",
         )
         .expect("write explicit config");
 
@@ -379,7 +420,7 @@ mod tests {
         unsafe { std::env::set_var("NAME", "from-secret") };
 
         let path = get_current_dir().join("explicit-secret.yaml");
-        std::fs::write(&path, "name: ${secret}\nport: 9999\n").expect("write explicit config");
+        std::fs::write(&path, "name: ${{secret}}\nport: 9999\n").expect("write explicit config");
 
         let config = load_config::<MyConfig>("my-config-secret", None, vec![path.clone()], false);
 

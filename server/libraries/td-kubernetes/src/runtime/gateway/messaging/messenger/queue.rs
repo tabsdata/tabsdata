@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use k8s_openapi::api::batch::v1::Job;
@@ -15,7 +15,9 @@ use td_bridge::messaging::{
 use td_common::worker::{Decorator, MessageAction};
 use tracing::error;
 
+use crate::base::constants::{CONTAINER_ROOT_ENV, CONTAINER_SETTINGS_RELATIVE};
 use crate::base::naming::{to_fn_pod_name, worker_pod_stem};
+use crate::client::registry::{InstanceSettings, instance_folder};
 use crate::kube::api::job::{create_job, delete_job};
 use crate::kube::api::pod::{create_pod, delete_pod};
 use crate::kube::context::KubeContext;
@@ -27,6 +29,9 @@ use crate::runtime::gateway::messaging::messenger::kit::{
 use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
 };
+use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
+use crate::runtime::instance::ports::apply_ports;
+use crate::runtime::provider::kminus::system_values_for;
 
 fn unsupported(id: &str, action: &str) -> QueueError {
     error!(id = %id, action = %action, "Action not yet supported in Kubernetes messaging layer.");
@@ -217,15 +222,48 @@ impl KubernetesOrchestratorMessageQueue {
         Self { context, templates }
     }
 
-    fn manifest_pod(&self, template: &PodTemplate, name: &str) -> Result<Pod, QueueError> {
-        let mut pod: Pod = serde_yaml::from_str(&template.manifest)?;
+    fn system_values(&self) -> Result<SystemValues, QueueError> {
+        let container_root =
+            std::env::var(CONTAINER_ROOT_ENV).map_err(|error| QueueError::BackendError {
+                cause: format!("environment variable '{CONTAINER_ROOT_ENV}' is not set: {error}"),
+            })?;
+        let settings_path = Path::new(&container_root).join(CONTAINER_SETTINGS_RELATIVE);
+        let settings = InstanceSettings::load_from_path(&settings_path).map_err(|error| {
+            QueueError::BackendError {
+                cause: format!("{error:?}"),
+            }
+        })?;
+        let folder = instance_folder(&settings.name).map_err(|error| QueueError::BackendError {
+            cause: format!("{error:?}"),
+        })?;
+        let mut system = system_values_for(&folder).map_err(|error| QueueError::BackendError {
+            cause: format!("{error:?}"),
+        })?;
+        apply_ports(&mut system, &settings.ports);
+        Ok(system)
+    }
+
+    async fn materialize(&self, manifest: &str) -> Result<String, QueueError> {
+        let resolver = ConfigurationResolver::new(self.system_values()?);
+        resolver
+            .materialize(manifest)
+            .await
+            .map_err(|error| QueueError::BackendError {
+                cause: error.to_string(),
+            })
+    }
+
+    async fn manifest_pod(&self, template: &PodTemplate, name: &str) -> Result<Pod, QueueError> {
+        let materialized = self.materialize(&template.manifest).await?;
+        let mut pod: Pod = serde_yaml::from_str(&materialized)?;
         pod.metadata.name = Some(name.to_owned());
         pod.metadata.namespace = Some(self.context.namespace().to_owned());
         Ok(pod)
     }
 
-    fn manifest_job(&self, template: &PodTemplate, name: &str) -> Result<Job, QueueError> {
-        let mut job: Job = serde_yaml::from_str(&template.manifest)?;
+    async fn manifest_job(&self, template: &PodTemplate, name: &str) -> Result<Job, QueueError> {
+        let materialized = self.materialize(&template.manifest).await?;
+        let mut job: Job = serde_yaml::from_str(&materialized)?;
         job.metadata.name = Some(name.to_owned());
         job.metadata.namespace = Some(self.context.namespace().to_owned());
         Ok(job)
@@ -247,7 +285,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                 let kit = kit_for_payload(&name, self.context.namespace(), &payload)?;
                 match template.kind {
                     TemplateKind::Pod => {
-                        let mut pod = self.manifest_pod(template, &name)?;
+                        let mut pod = self.manifest_pod(template, &name).await?;
                         let (configmaps, secrets, latch) = match kit {
                             Some(kit) => {
                                 inject_envfrom_into_pod(&mut pod, &kit.envfrom);
@@ -267,7 +305,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             })?;
                     }
                     TemplateKind::Job => {
-                        let mut job = self.manifest_job(template, &name)?;
+                        let mut job = self.manifest_job(template, &name).await?;
                         let (configmaps, secrets, latch) = match kit {
                             Some(kit) => {
                                 inject_envfrom_into_job(&mut job, &kit.envfrom);

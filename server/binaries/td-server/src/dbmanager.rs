@@ -44,7 +44,11 @@ impl td_process::launcher::config::Config for DbManagerConfig {}
 enum Command {
     /// Start the in-process database server (embedded only; no-op otherwise).
     Start,
-    /// Stop the in-process database server (embedded only; no-op otherwise).
+    /// Start the in-process database server and stay in the foreground until a
+    /// shutdown signal is received, then stop it (embedded only).
+    Serve,
+    /// Stop the in-process database server
+    /// (embedded & local sidecar only; no-op otherwise).
     Stop,
     /// Provision and upgrade all configured schemas.
     Create,
@@ -85,6 +89,28 @@ async fn with_system(
     result
 }
 
+async fn wait_for_shutdown() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut terminate = match signal(SignalKind::terminate()) {
+            Ok(terminate) => terminate,
+            Err(_) => {
+                let _ = tokio::signal::ctrl_c().await;
+                return;
+            }
+        };
+        tokio::select! {
+            _ = terminate.recv() => {}
+            _ = tokio::signal::ctrl_c() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
 fn run() {
     Cli::<DbManagerConfig, DbManagerParams>::exec_async(
         td_apiserver::CONFIG_NAME,
@@ -104,6 +130,15 @@ fn run() {
                 // (detached, so it outlives this command) or stop it. No-op for
                 // sidecar/remote, whose server is not ours to run.
                 Command::Start => dbm::start_server(descriptor).await,
+                Command::Serve => match dbm::start_server(descriptor).await {
+                    Ok(()) => {
+                        info!("Database server running; waiting for shutdown signal");
+                        wait_for_shutdown().await;
+                        info!("Shutdown signal received; stopping database server");
+                        dbm::stop_server(descriptor).await
+                    }
+                    Err(e) => Err(e),
+                },
                 Command::Stop => dbm::stop_server(descriptor).await,
                 // App ping: reach each component's serving pool from the
                 // descriptor and ping it — the way the apiserver does — with no

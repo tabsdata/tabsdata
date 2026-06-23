@@ -16,8 +16,8 @@
 //!
 //! `category` is a plain label naming the value (e.g. `db-root-password`,
 //! `secure-port`) — a machine token, not a human-facing sentence. A
-//! placeholder's IDENTITY is the `(kind, category)` pair: `${secret:foo}` and
-//! `${literal:foo}` are distinct. Every occurrence of the same `(kind, category)`
+//! placeholder's IDENTITY is the `(kind, category)` pair: `${{secret:foo}}` and
+//! `${{literal:foo}}` are distinct. Every occurrence of the same `(kind, category)`
 //! across one or many files must resolve to the SAME value.
 //!
 //! ## Placeholder kinds
@@ -64,11 +64,11 @@
 //! ## Two functionalities: resolve (create) vs materialize (runtime)
 //!
 //! * resolve — create/stage time. Substitutes the create-phase kinds inline
-//!   (`literal*`, `system*`, and `var` when supported). `${secret:...}` and
-//!   `${env:...}` are LEFT AS-IS in the staged and cluster-stored config (the
+//!   (`literal*`, `system*`, and `var` when supported). `${{secret:...}}` and
+//!   `${{env:...}}` are LEFT AS-IS in the staged and cluster-stored config (the
 //!   secret value is collected for a kubernetes Secret).
 //! * materialize — runtime, by the worker launcher. Resolves the runtime kinds
-//!   (`${env:...}`, `${secret:...}`) by reading the running process's
+//!   (`${{env:...}}`, `${{secret:...}}`) by reading the running process's
 //!   environment (secrets via the encoded secret-key). It does NOT touch the
 //!   create-phase kinds — those were already substituted at create time.
 //!
@@ -96,6 +96,8 @@ mod walker;
 
 use td_error::TdError;
 
+use crate::base::error::gateway::ResolverError;
+
 pub use placeholder::{SystemKey, SystemValues};
 
 pub struct ConfigurationResolver {
@@ -112,8 +114,48 @@ impl ConfigurationResolver {
     }
 
     pub async fn materialize(&self, content: &str) -> Result<String, TdError> {
-        let content = placeholder::env::materialize(content)?;
-        placeholder::secret::materialize(&content)
+        let mut value: serde_yaml::Value =
+            serde_yaml::from_str(content).map_err(|cause| ResolverError::ParseFailed {
+                path: CONFIG_LABEL.to_owned(),
+                cause: cause.to_string(),
+            })?;
+        let mut visitor = MaterializeVisitor {
+            system: &self.system,
+        };
+        walker::walk(&mut value, &mut visitor)?;
+        let rendered =
+            serde_yaml::to_string(&value).map_err(|cause| ResolverError::ParseFailed {
+                path: CONFIG_LABEL.to_owned(),
+                cause: cause.to_string(),
+            })?;
+        Ok(rendered)
+    }
+}
+
+const CONFIG_LABEL: &str = "<config>";
+
+struct MaterializeVisitor<'a> {
+    system: &'a SystemValues,
+}
+
+impl walker::PlaceholderVisitor for MaterializeVisitor<'_> {
+    fn visit_placeholder(
+        &mut self,
+        path: &[String],
+        occurrence: usize,
+        placeholder: &walker::Placeholder,
+    ) -> Result<String, ResolverError> {
+        let displayed_path = path.join(walker::PATH_SEPARATOR);
+        let resolver = placeholder::resolver_for(&placeholder.kind, &displayed_path)?;
+        let context = walker::ResolveContext {
+            path,
+            occurrence,
+            placeholder,
+            init_value: None,
+            auto_value: None,
+            system: self.system,
+        };
+        Ok(resolver.materialize(&context)?.rendered)
     }
 }
 

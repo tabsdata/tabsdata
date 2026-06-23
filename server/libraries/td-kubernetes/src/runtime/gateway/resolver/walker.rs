@@ -39,14 +39,14 @@ const KIND_PATTERN: &str = r"[A-Za-z][A-Za-z0-9]*";
 const CATEGORY_PATTERN: &str = r"[A-Za-z0-9._-]*";
 const RULE_PATTERN: &str = r"\?";
 
-const PLACEHOLDER_OPENER: &str = "${";
-const PLACEHOLDER_CLOSER: &str = "}";
+const PLACEHOLDER_OPENER: &str = "${{";
+const PLACEHOLDER_CLOSER: &str = "}}";
 const CATEGORY_SEPARATOR: &str = ":";
 const OPTIONAL_RULE_MARKER: &str = "?";
 
 static PLACEHOLDER_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(&format!(
-        r"\$\{{({KIND_PATTERN})(?::({CATEGORY_PATTERN}))?({RULE_PATTERN})?\}}"
+        r"\$\{{\{{({KIND_PATTERN})(?::({CATEGORY_PATTERN}))?({RULE_PATTERN})?\}}\}}"
     ))
     .expect("The placeholder pattern is invalid.")
 });
@@ -85,6 +85,7 @@ impl Placeholder {
 pub struct SecretEntry {
     pub key: String,
     pub value: String,
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,7 +192,13 @@ fn walk_node<V: PlaceholderVisitor>(
 ) -> Result<(), ResolverError> {
     match node {
         Value::String(text) => {
-            *text = substitute_scalar(text, path, visitor)?;
+            let bare = parse_bare_placeholder(text).is_some();
+            let rendered = substitute_scalar(text, path, visitor)?;
+            *node = if bare {
+                coerce_scalar(rendered)
+            } else {
+                Value::String(rendered)
+            };
             Ok(())
         }
         Value::Mapping(map) => {
@@ -357,5 +364,19 @@ fn mapping_key_as_string(key: &Value) -> String {
         Value::Bool(boolean) => boolean.to_string(),
         Value::Number(number) => number.to_string(),
         other => format!("{other:?}"),
+    }
+}
+
+fn coerce_scalar(rendered: String) -> Value {
+    if let Ok(integer) = rendered.parse::<i64>() {
+        return Value::Number(integer.into());
+    }
+    if let Ok(unsigned) = rendered.parse::<u64>() {
+        return Value::Number(unsigned.into());
+    }
+    match rendered.as_str() {
+        "true" => Value::Bool(true),
+        "false" => Value::Bool(false),
+        _ => Value::String(rendered),
     }
 }

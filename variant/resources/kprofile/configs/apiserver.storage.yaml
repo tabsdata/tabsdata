@@ -6,15 +6,15 @@ storage:
   mounts:
   - id: ROOT
     path: /
-    uri: ${system:tdk_storage_url}data/
+    uri: ${{system:tdk_storage_url}}data/
   # IMPORTANT: /bundles must be a local mount.
   - id: BUNDLES
     path: /bundles
-    uri: ${system:tdk_storage_url}bundles/
+    uri: ${{system:tdk_storage_url}}bundles/
 # # Mount configuration sample:
 # - id: PREFIX
 #   path: /foo
-#   uri: ${system:tdk_storage_url}data/
+#   uri: ${{system:tdk_storage_url}}data/
 #   options:
 #   - option_1: value1
 #     option_2: value2

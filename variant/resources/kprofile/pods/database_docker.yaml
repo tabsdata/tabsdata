@@ -1,0 +1,88 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: td-tabsdata-database
+  namespace: tabsdata
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: td-database
+  namespace: tabsdata
+  annotations:
+    tabsdata.com/description: "Tabsdata database service"
+    kubernetes.io/change-cause: ""
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: service
+spec:
+  restartPolicy: Always
+  serviceAccountName: default
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 60
+  dnsPolicy: ClusterFirst
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+    fsGroup: 999
+  containers:
+  - name: database
+    image: postgres:14.8.0
+    imagePullPolicy: IfNotPresent
+    ports:
+    - name: postgres
+      containerPort: ${{system:tdk_database_port}}
+      protocol: TCP
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "512Mi"
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+    env:
+    - name: PGDATA
+      value: /var/lib/postgresql/data/pgdata
+    - name: PGPORT
+      value: "${{system:tdk_database_port}}"
+    - name: POSTGRES_USER
+      valueFrom:
+        secretKeyRef:
+          name: td-app-apiserver-secret-config-apiserver.database.yaml
+          key: DATABASE__SYSTEM__USERNAME
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: td-app-apiserver-secret-config-apiserver.database.yaml
+          key: DATABASE__SYSTEM__PASSWORD
+    volumeMounts:
+    - name: database
+      mountPath: /var/lib/postgresql/data
+  volumes:
+  - name: database
+    persistentVolumeClaim:
+      claimName: td-tabsdata-database

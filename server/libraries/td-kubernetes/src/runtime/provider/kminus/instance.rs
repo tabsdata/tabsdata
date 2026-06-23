@@ -11,11 +11,13 @@ use indicatif::MultiProgress;
 use tracing::info;
 
 use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, CONFIGMAP_TABSDATA_MANIFEST, FOLDER_PROFILE, Family,
-    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, POD_PHASE_FAILED, POD_PHASE_SUCCEEDED,
+    CONFIGMAP_FAMILY_LABEL, CONFIGMAP_TABSDATA_MANIFEST, CONFIGMAP_TABSDATA_SETTINGS,
+    FOLDER_PROFILE, Family, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, POD_PHASE_FAILED,
+    POD_PHASE_SUCCEEDED, SETTINGS_FILE, STAGE_FOLDER,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
+use crate::client::registry::InstanceSettings;
 use crate::core::system::exit::CommandResult;
 use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::pod::list_pods;
@@ -27,22 +29,30 @@ use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::build_kubeconfig;
 use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
+use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::{
     RenderedConfigmap, parse_from_configmaps, read_family_configmaps,
 };
+use crate::runtime::provider::kminus::system_values_for;
 use crate::runtime::provider::{ClusterProvider, Instance};
 use crate::runtime::reporting::build_kube_client;
 
 pub struct KminusInstance {
     kubefile: PathBuf,
     staging_path: PathBuf,
+    folder: PathBuf,
 }
 
 impl KminusInstance {
-    pub fn new(kubefile: impl Into<PathBuf>, staging_path: impl Into<PathBuf>) -> Self {
+    pub fn new(
+        kubefile: impl Into<PathBuf>,
+        staging_path: impl Into<PathBuf>,
+        folder: impl Into<PathBuf>,
+    ) -> Self {
         Self {
             kubefile: kubefile.into(),
             staging_path: staging_path.into(),
+            folder: folder.into(),
         }
     }
 
@@ -91,6 +101,19 @@ impl KminusInstance {
         Ok(())
     }
 
+    pub async fn load_stage_to_kube(&self) -> CommandResult {
+        let stage_folder = self.folder.join(STAGE_FOLDER);
+        let pods = read_staged_family(&stage_folder, &KPROFILE_PODS_FAMILY)?;
+        let configs = read_staged_family(&stage_folder, &KPROFILE_CONFIGS_FAMILY)?;
+        let manifest = read_staged_manifest(&stage_folder)?;
+        self.replace_configmaps(StagedConfigmaps {
+            pods,
+            configs,
+            manifest,
+        })
+        .await
+    }
+
     async fn replace_configmaps(&self, staged: StagedConfigmaps) -> CommandResult {
         let context = self.kube_context().await?;
         for (family, files) in [
@@ -115,6 +138,27 @@ impl KminusInstance {
             )
             .await?;
         }
+        let settings_content =
+            fs::read_to_string(self.folder.join(SETTINGS_FILE)).map_err(|error| {
+                ProviderError::StagingReadFailed(
+                    self.folder.join(SETTINGS_FILE).display().to_string(),
+                    error.to_string(),
+                )
+            })?;
+        if exists_configmap(&context, CONFIGMAP_TABSDATA_SETTINGS).await? {
+            delete_configmap(&context, CONFIGMAP_TABSDATA_SETTINGS).await?;
+        }
+        let mut settings_data = BTreeMap::new();
+        settings_data.insert(SETTINGS_FILE.to_owned(), settings_content);
+        create_configmap(
+            &context,
+            CONFIGMAP_TABSDATA_SETTINGS,
+            settings_data,
+            BTreeMap::new(),
+            None,
+            None,
+        )
+        .await?;
         Ok(())
     }
 }
@@ -233,7 +277,18 @@ impl Instance for KminusInstance {
             .into());
         };
         let profile = parse_from_configmaps(&pods, &configs, &manifest_yaml)?;
-        start_workload(&context, ClusterProvider::Kminus, &profile, multi).await
+
+        let instance_name = self
+            .folder
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.to_owned())
+            .unwrap_or_default();
+        let mut system = system_values_for(&self.folder)?;
+        let settings = InstanceSettings::load(&instance_name)?;
+        apply_ports(&mut system, &settings.ports);
+
+        start_workload(&context, ClusterProvider::Kminus, &system, &profile, multi).await
     }
 
     async fn stop(&self, multi: &MultiProgress) -> CommandResult<bool> {
@@ -249,12 +304,14 @@ impl Instance for KminusInstance {
             return false;
         };
         pods.iter().any(|pod| {
-            !matches!(
+            let terminating = pod.metadata.deletion_timestamp.is_some();
+            let settled = matches!(
                 pod.status
                     .as_ref()
                     .and_then(|status| status.phase.as_deref()),
                 Some(POD_PHASE_SUCCEEDED) | Some(POD_PHASE_FAILED),
-            )
+            );
+            !terminating && !settled
         })
     }
 }

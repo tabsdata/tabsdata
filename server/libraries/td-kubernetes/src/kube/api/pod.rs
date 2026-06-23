@@ -45,7 +45,11 @@ pub async fn create_pod(
 
 pub async fn delete_pod(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    api.delete(name, &DeleteParams::default())
+    let delete_params = DeleteParams {
+        propagation_policy: Some(PropagationPolicy::Foreground),
+        ..DeleteParams::default()
+    };
+    api.delete(name, &delete_params)
         .await
         .map(|_| ())
         .map_err(|error| {

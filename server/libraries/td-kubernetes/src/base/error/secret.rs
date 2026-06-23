@@ -131,7 +131,7 @@ pub enum SecretError {
     #[error("Cannot start the instance: configs and secrets are not in sync.{failures}")]
     ReconciliationBatchFailed { failures: String } = 5014,
     #[error(
-        "Config '{config}' uses unknown secret generator '${{secret:{name}}}'. \
+        "Config '{config}' uses unknown secret generator '${{secretAuto:{name}}}'. \
          Supported generators: {supported}."
     )]
     UnknownGeneratorName {

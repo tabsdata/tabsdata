@@ -38,7 +38,7 @@ fn no_leaves_but_secret_exists_fails() {
 fn leaves_and_no_secret_fails() {
     let input = Reconciliation {
         config: "apiserver.yaml",
-        config_yaml: "database:\n  postgres:\n    password: ${secret}\n",
+        config_yaml: "database:\n  postgres:\n    password: ${{secret}}\n",
         secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: None,
     };
@@ -53,7 +53,7 @@ fn leaves_and_no_secret_fails() {
 fn matching_keys_pass() {
     let input = Reconciliation {
         config: "apiserver.yaml",
-        config_yaml: "database:\n  postgres:\n    password: ${secret}\n",
+        config_yaml: "database:\n  postgres:\n    password: ${{secret}}\n",
         secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: Some(keys(&["DATABASE__POSTGRES__PASSWORD"])),
     };
@@ -64,7 +64,7 @@ fn matching_keys_pass() {
 fn extra_keys_fail() {
     let input = Reconciliation {
         config: "apiserver.yaml",
-        config_yaml: "database:\n  postgres:\n    password: ${secret}\n",
+        config_yaml: "database:\n  postgres:\n    password: ${{secret}}\n",
         secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: Some(keys(&["DATABASE__POSTGRES__PASSWORD", "EXTRA"])),
     };
@@ -82,7 +82,7 @@ fn extra_keys_fail() {
 fn missing_keys_fail() {
     let input = Reconciliation {
         config: "apiserver.yaml",
-        config_yaml: "database:\n  postgres:\n    password: ${secret}\n  user: ${secret}\n",
+        config_yaml: "database:\n  postgres:\n    password: ${{secret}}\n  user: ${{secret}}\n",
         secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: Some(keys(&["DATABASE__POSTGRES__PASSWORD"])),
     };

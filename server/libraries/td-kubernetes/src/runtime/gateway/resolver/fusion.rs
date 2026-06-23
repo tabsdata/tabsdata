@@ -13,6 +13,7 @@ use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::fusion::resolve::resolve_config_file;
 use crate::runtime::gateway::resolver::placeholder::SystemValues;
 use crate::runtime::gateway::resolver::walker::SecretEntry;
+use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{Profile, RenderedConfigmap};
 
 pub struct FusedSecrets {
@@ -36,7 +37,18 @@ pub fn fuse(
     compare_family(init, KPROFILE_PODS_FAMILY.folder, &profile.pods, true)?;
     let secrets = resolve_configs_files(profile, system, auto, init, stage)?;
     stage_pods_files(profile, stage)?;
+    stage_manifest_file(profile, stage)?;
     Ok(secrets)
+}
+
+fn stage_manifest_file(profile: &Profile, stage: &Path) -> Result<(), ResolverError> {
+    let manifest = serde_yaml::to_string(&profile.manifest).map_err(|cause| {
+        ResolverError::StageWriteFailed {
+            path: MANIFEST_FILE.to_owned(),
+            cause: cause.to_string(),
+        }
+    })?;
+    write_staged(&stage.join(MANIFEST_FILE), &manifest)
 }
 
 fn resolve_configs_files(

@@ -4,15 +4,13 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use clap_derive::Args;
-use td_common::settings::DEFAULT_INSTANCE;
-use td_error::TdError;
-use tracing::info;
-
+#[cfg(feature = "enterprise")]
+use crate::base::constants::FOLDER_PYENV_AG;
 use crate::base::constants::SECRET_FAMILY_CONFIG;
+use crate::base::constants::{FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_RUNTIMES};
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::registry::{
-    InstanceSettings, InstanceState, instance_init_folder, instance_stage_folder,
+    InstanceSettings, InstanceState, instance_folder, instance_init_folder, instance_stage_folder,
 };
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::CommandResult;
@@ -26,6 +24,11 @@ use crate::runtime::instance::ports::{
 use crate::runtime::instance::profile::load_profile;
 use crate::runtime::provider::provider_for;
 use crate::runtime::secrets::source::to_secret_name;
+use clap_derive::Args;
+use td_common::settings::DEFAULT_INSTANCE;
+use td_error::TdError;
+use tracing::info;
+use tracing::warn;
 
 #[derive(Debug, Clone, Args)]
 pub struct CreateArguments {
@@ -53,6 +56,15 @@ pub async fn command_create(
     globals: &GlobalArguments,
 ) -> CommandResult {
     let CreateArguments { instance, port } = arguments;
+    create_instance(instance, port, &HashMap::new(), globals).await
+}
+
+pub async fn create_instance(
+    instance: Option<String>,
+    port: u16,
+    secret_overrides: &HashMap<String, String>,
+    globals: &GlobalArguments,
+) -> CommandResult {
     let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
 
     let mut settings = InstanceSettings::load_required(&instance, &[InstanceState::Initialized])?;
@@ -64,6 +76,8 @@ pub async fn command_create(
 
     let assigned = assign_ports(port);
     report_ports(&assigned);
+    settings.ports = assigned.clone();
+    settings.save()?;
 
     let cluster = ClusterArguments {
         provider: Some(settings.provider),
@@ -99,31 +113,47 @@ pub async fn command_create(
     let tx = provider.create_cluster_hook(&reporter).await?;
 
     let context = provider.kube_context().await?;
-    store_secrets(&context, &fused, &reporter).await?;
+    store_secrets(&context, &fused, secret_overrides, &reporter).await?;
 
-    // Temporary: the database is provisioned in-process here, which cannot
-    // resolve the staged secret placeholders. Skipped until it is provisioned
-    // as a pod.
-    let provision_database = false;
-    if provision_database {
-        provider.create_database(&reporter).await?;
-    }
     provider.create_runtimes(&reporter).await?;
     provider.create_images(&reporter).await?;
+    provider.create_database(&reporter).await?;
 
     provider.stop_cluster(&reporter).await?;
     tx.commit();
 
-    settings.ports = assigned;
     settings.state = InstanceState::Created;
     settings.save()?;
 
+    report_venv_activation(&settings.name)?;
+
+    Ok(())
+}
+
+fn report_venv_activation(name: &str) -> CommandResult {
+    let python = instance_folder(name)?
+        .join(FOLDER_RUNTIMES)
+        .join(FOLDER_PYTHON);
+
+    let mut message = String::from("To activate the created environments:");
+
+    let td_activate = python.join(FOLDER_PYENV_TD).join("bin").join("activate");
+    message.push_str(&format!("\n  td: source {}", td_activate.display()));
+
+    #[cfg(feature = "enterprise")]
+    {
+        let ag_activate = python.join(FOLDER_PYENV_AG).join("bin").join("activate");
+        message.push_str(&format!("\n  ai: source {}", ag_activate.display()));
+    }
+
+    warn!("{message}");
     Ok(())
 }
 
 async fn store_secrets(
     context: &KubeContext,
     fused: &FusedSecrets,
+    overrides: &HashMap<String, String>,
     reporter: &InteractiveReporter,
 ) -> CommandResult {
     if fused.by_file.is_empty() {
@@ -134,11 +164,25 @@ async fn store_secrets(
         let name = to_secret_name(file)?;
         let data: BTreeMap<String, String> = entries
             .iter()
-            .map(|entry| (entry.key.clone(), entry.value.clone()))
+            .map(|entry| {
+                let value = entry
+                    .category
+                    .as_ref()
+                    .and_then(|category| overrides.get(category))
+                    .cloned()
+                    .unwrap_or_else(|| entry.value.clone());
+                (entry.key.clone(), value)
+            })
             .collect();
-        if let Err(error) =
-            upsert_secret(context, &name, data, BTreeMap::new(), None, Some(SECRET_FAMILY_CONFIG))
-                .await
+        if let Err(error) = upsert_secret(
+            context,
+            &name,
+            data,
+            BTreeMap::new(),
+            None,
+            Some(SECRET_FAMILY_CONFIG),
+        )
+        .await
         {
             step.fail();
             return Err(TdError::from(error).into());

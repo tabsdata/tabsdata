@@ -233,6 +233,7 @@ console_scripts: list[str] = [
     "td_pyvenv = tabsdatak.common._interpreter.python.pyvenv:main",
     "td_upgrader = tabsdata._tabsserver.server.upgrader.upgrader:main",
     "td_venv = tabsdata._tabsserver.pyenv_creation:main",
+    "tdk_status = tabsdatak.server._tdserver.render.status:main",
     "tdconn = tabsdata._cli.tdconn.cli:cli",
     "tdorachk = tabsdata._tabsserver.tools.x_oracle_check:cli",
 ]
