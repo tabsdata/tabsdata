@@ -117,6 +117,9 @@ normalized_licenses = {
     "ISC AND (Apache-2.0 OR ISC)": "Internet Systems Consortium License, and Apache License Version 2.0 or Internet Systems Consortium License",                                               # noqa: E231,E241,E501
     "ISC LICENSE _ISCL_": "Internet Systems Consortium License",                                                                                                                               # noqa: E231,E241,E501
     "ISC": "Internet Systems Consortium License",                                                                                                                                              # noqa: E231,E241,E501
+    "LICENSEREF-NVIDIA-CUFILE-LICENSE": "NVIDIA Proprietary License",                                                                                                                          # noqa: E231,E241,E501
+    "LICENSEREF-NVIDIA-CUSPARSELT-LICENSE": "NVIDIA Proprietary License",                                                                                                                      # noqa: E231,E241,E501
+    "LICENSEREF-NVIDIA-SOFTWARE-LICENSE": "NVIDIA Proprietary License",                                                                                                                        # noqa: E231,E241,E501
     "MIT AND Apache-2.0": "MIT License, and Apache License Version 2.0",                                                                                                                       # noqa: E231,E241,E501
     "MIT AND BSD-3-Clause": "MIT License, and BSD Revised License (BSD-3-Clause)",                                                                                                             # noqa: E231,E241,E501
     "MIT LICENSE_ APACHE LICENSE_ VERSION 2.0": "MIT License or Apache License Version 2.0",                                                                                                   # noqa: E231,E241,E501
@@ -135,7 +138,8 @@ normalized_licenses = {
     "MOZILLA PUBLIC LICENSE 2.0 _MPL 2.0_": "Mozilla Public License Version 2.0",                                                                                                              # noqa: E231,E241,E501
     "MOZILLA PUBLIC LICENSE 2.0 (MPL 2.0)": "Mozilla Public License Version 2.0",                                                                                                              # noqa: E231,E241,E501
     "MPL-2.0": "Mozilla Public License Version 2.0",                                                                                                                                           # noqa: E231,E241,E501
-    "OTHER_PROPRIETARY LICENSE": "Apache License Version 2.0 or MIT License",                                                                                                                  # noqa: E231,E241,E501
+    "NVIDIA PROPRIETARY SOFTWARE": "NVIDIA Proprietary License",                                                                                                                               # noqa: E231,E241,E501
+    "OTHER_PROPRIETARY LICENSE": "Apache License Version 2.0 or MIT License or NVIDIA Proprietary License",                                                                                    # noqa: E231,E241,E501
     "PSF-2.0": "Python Software Foundation License Version 2.0",                                                                                                                               # noqa: E231,E241,E501
     "PYTHON SOFTWARE FOUNDATION LICENSE": "Python Software Foundation License Version 2.0",                                                                                                    # noqa: E231,E241,E501
     "Python-2.0": "Python Software Foundation License Version 2.0",                                                                                                                            # noqa: E231,E241,E501
