@@ -7,4 +7,3 @@ pytest:
     address: 0.0.0.0:2467
     internal-address: 0.0.0.0:2468
     access-jwt-expiration: 36288000
-    database-log-level: trace
