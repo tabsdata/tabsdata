@@ -81,8 +81,28 @@ def build(setup_file: str) -> None:
             for path in namespace_root.rglob("*.yaml")
         ]
 
+    def collect_root_modules(root: str) -> list[str]:
+        namespace_root = python_source_root / root
+        if not namespace_root.is_dir():
+            return []
+        return [
+            f"{root}.{path.stem}"
+            for path in namespace_root.glob("*.py")
+            if path.name != "__init__.py"
+        ]
+
+    def collect_root_yaml(root: str) -> list[str]:
+        namespace_root = python_source_root / root
+        if not namespace_root.is_dir():
+            return []
+        return [path.name for path in namespace_root.glob("*.yaml")]
+
     yaml_files_tabsdata = collect_yaml_files(descriptor.namespace("tabsdata"))
     yaml_files_tabsdatak = collect_yaml_files(descriptor.namespace("tabsdatak"))
+
+    root_modules = collect_root_modules("tabsdata") + collect_root_modules("tabsdatak")
+    root_yaml_tabsdata = collect_root_yaml("tabsdata")
+    root_yaml_tabsdatak = collect_root_yaml("tabsdatak")
 
     # noinspection PyBroadException
     try:
@@ -134,10 +154,13 @@ def build(setup_file: str) -> None:
                     "python",
                 ),
                 include=[
+                    "tabsdata",
+                    "tabsdatak",
                     f"{descriptor.namespace('tabsdata')}*",
                     f"{descriptor.namespace('tabsdatak')}*",
                 ],
             ),
+            py_modules=root_modules,
             package_dir={
                 "": os.path.join(
                     "src",
@@ -146,6 +169,8 @@ def build(setup_file: str) -> None:
                 )
             },
             package_data={
+                "tabsdata": root_yaml_tabsdata,
+                "tabsdatak": root_yaml_tabsdatak,
                 descriptor.namespace("tabsdata"): [
                     "py.typed",
                     os.path.join(
