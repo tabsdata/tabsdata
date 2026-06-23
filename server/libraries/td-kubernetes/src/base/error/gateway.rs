@@ -54,4 +54,26 @@ pub enum ResolverError {
     PlaceholderAsIdentity { path: String } = 5018,
     #[error("Could not wipe the stage folder '{path}': {cause}.")]
     StageWipeFailed { path: String, cause: String } = 5019,
+    #[error("Could not read the initialization folder '{path}': {cause}.")]
+    InitializationReadFailed { path: String, cause: String } = 5020,
+    #[error(
+        "The initialization folder '{family}' contains the subfolder '{subfolder}', but it must \
+         be flat; the initialization folder has been tampered with."
+    )]
+    InitializationNotFlat { family: String, subfolder: String } = 5021,
+    #[error(
+        "The initialization folder '{family}' has an unexpected file '{file}' that is not part of \
+         the templates; the initialization folder has been tampered with."
+    )]
+    InitializationExtraFile { family: String, file: String } = 5022,
+    #[error(
+        "The initialization folder '{family}' is missing the template file '{file}'; the \
+         initialization folder has been tampered with."
+    )]
+    InitializationMissingFile { family: String, file: String } = 5023,
+    #[error(
+        "The pod template '{file}' was modified, but pod templates cannot be customized; the \
+         initialization folder has been tampered with."
+    )]
+    InitializationPodModified { file: String } = 5024,
 }
