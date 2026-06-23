@@ -121,6 +121,11 @@ pub enum ProviderError {
         expected: String,
     } = 6003,
     #[error(
+        "The instance '{name}' is not properly initialized ({reason}). \
+         Run 'tdkserver init --instance {name} ...' first."
+    )]
+    InstanceNotInitialized { name: String, reason: String } = 6004,
+    #[error(
         "The cluster is not running. \
          Start it with `tdkserver cluster start ...` and try again."
     )]

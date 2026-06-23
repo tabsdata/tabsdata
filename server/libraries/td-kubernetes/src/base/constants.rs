@@ -68,6 +68,7 @@ pub const SINGLETON_ID_TABSDATA: &str = "tabsdata";
 pub const SINGLETON_NAME_MANIFEST: &str = "manifest.yaml";
 
 pub const INIT_FOLDER: &str = "init";
+pub const STAGE_FOLDER: &str = "stage";
 pub const SETTINGS_FILE: &str = ".settings.json";
 pub const CLUSTER_FOLDER: &str = "cluster";
 pub const KUBE_FOLDER: &str = "kube";

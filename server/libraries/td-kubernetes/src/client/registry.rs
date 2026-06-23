@@ -11,7 +11,8 @@ use td_common::settings::INSTANCES_FOLDER;
 use td_error::TdError;
 
 use crate::base::constants::{
-    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, INIT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE, SETTINGS_FILE,
+    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, INIT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE,
+    SETTINGS_FILE, STAGE_FOLDER,
 };
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
@@ -34,6 +35,10 @@ pub fn instance_folder(name: &str) -> CommandResult<PathBuf> {
 
 pub fn instance_init_folder(name: &str) -> CommandResult<PathBuf> {
     Ok(instance_folder(name)?.join(INIT_FOLDER))
+}
+
+pub fn instance_stage_folder(name: &str) -> CommandResult<PathBuf> {
+    Ok(instance_folder(name)?.join(STAGE_FOLDER))
 }
 
 pub fn instance_settings_file(name: &str) -> CommandResult<PathBuf> {
@@ -118,6 +123,26 @@ impl InstanceSettings {
             })
         })?;
         Ok(())
+    }
+
+    pub fn load_required(name: &str, expected: &[InstanceState]) -> CommandResult<Self> {
+        let settings_file = instance_settings_file(name)?;
+        if !settings_file.exists() {
+            return Err(ProviderError::InstanceNotInitialized {
+                name: name.to_owned(),
+                reason: format!("its settings file '{}' is missing", settings_file.display()),
+            }
+            .into());
+        }
+        let settings = Self::load(name).map_err(|_| ProviderError::InstanceNotInitialized {
+            name: name.to_owned(),
+            reason: format!(
+                "its settings file '{}' could not be read",
+                settings_file.display()
+            ),
+        })?;
+        settings.require_one_of(expected)?;
+        Ok(settings)
     }
 
     pub fn require_one_of(&self, expected: &[InstanceState]) -> CommandResult {

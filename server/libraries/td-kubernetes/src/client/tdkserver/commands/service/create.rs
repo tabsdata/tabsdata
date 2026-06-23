@@ -3,10 +3,15 @@
 //
 
 use clap_derive::Args;
+use td_error::TdError;
 
-use crate::base::error::provider::ProviderError;
-use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments};
-use crate::core::system::exit::{CommandError, CommandResult};
+use crate::base::reporter::{InteractiveReporter, Reporter};
+use crate::client::registry::{
+    InstanceSettings, InstanceState, instance_init_folder, instance_stage_folder,
+};
+use crate::client::tdkserver::arguments::GlobalArguments;
+use crate::core::system::exit::CommandResult;
+use crate::runtime::gateway::resolver::fusion;
 
 #[derive(Debug, Clone, Args)]
 pub struct CreateArguments {
@@ -17,26 +22,27 @@ pub struct CreateArguments {
         long_help = "Name of the instance to create."
     )]
     pub instance: String,
-
-    #[command(flatten)]
-    pub cluster: ClusterArguments,
-
-    #[arg(
-        long,
-        name = "save",
-        required = false,
-        default_value_t = false,
-        long_help = "Copy the cluster settings files (kubeconfig, etc.) into the instance \
-                     folder so the instance is self-contained."
-    )]
-    pub save: bool,
 }
 
 pub async fn command_create(
-    _arguments: CreateArguments,
+    arguments: CreateArguments,
     _globals: &GlobalArguments,
 ) -> CommandResult {
-    Err(CommandError::from(ProviderError::CommandNotImplemented(
-        "create".to_owned(),
-    )))
+    let CreateArguments { instance } = arguments;
+
+    let settings = InstanceSettings::load_required(&instance, &[InstanceState::Initialized])?;
+
+    let init = instance_init_folder(&settings.name)?;
+    let stage = instance_stage_folder(&settings.name)?;
+
+    let reporter = InteractiveReporter::new();
+
+    let step = reporter.step("Fusing tabsdata instance configuration");
+    if let Err(error) = fusion::fuse(&init, &stage) {
+        step.fail();
+        return Err(TdError::from(error).into());
+    }
+    step.done("Fused tabsdata instance configuration");
+
+    Ok(())
 }

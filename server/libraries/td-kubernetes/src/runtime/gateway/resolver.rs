@@ -89,14 +89,13 @@
 //! scalar list element; a list of maps whose entries' first key differs; a list
 //! of maps with a duplicated first key/value.
 
-mod env;
-mod secret;
-mod sys;
+pub mod fusion;
+mod placeholder;
 mod walker;
 
 use td_error::TdError;
 
-pub use sys::{SystemKey, SystemValues};
+pub use placeholder::{SystemKey, SystemValues};
 
 pub struct ConfigurationResolver {
     system: SystemValues,
@@ -108,12 +107,12 @@ impl ConfigurationResolver {
     }
 
     pub async fn resolve(&self, content: &str) -> Result<String, TdError> {
-        sys::resolve(content, &self.system)
+        placeholder::sys::resolve(content, &self.system)
     }
 
     pub async fn materialize(&self, content: &str) -> Result<String, TdError> {
-        let content = env::materialize(content)?;
-        secret::materialize(&content)
+        let content = placeholder::env::materialize(content)?;
+        placeholder::secret::materialize(&content)
     }
 }
 

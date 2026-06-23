@@ -14,8 +14,9 @@ use td_error::TdError;
 
 use crate::base::error::gateway::ResolverError;
 
-static PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\$\{sys:(\w+)}").expect("The system-value placeholder pattern is invalid."));
+static PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\$\{sys:(\w+)}").expect("The system-value placeholder pattern is invalid.")
+});
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, EnumString, AsRefStr, EnumIter)]
 pub enum SystemKey {
@@ -85,7 +86,7 @@ impl SystemValues {
     }
 }
 
-pub(super) fn resolve(leaf: &str, values: &SystemValues) -> Result<String, TdError> {
+pub(crate) fn resolve(leaf: &str, values: &SystemValues) -> Result<String, TdError> {
     let mut current = leaf.to_string();
     while let Some(captures) = PATTERN.captures(&current) {
         let placeholder = captures.get(0).unwrap().as_str().to_string();
@@ -106,7 +107,7 @@ pub(super) fn resolve(leaf: &str, values: &SystemValues) -> Result<String, TdErr
 }
 
 #[allow(dead_code)]
-pub(super) fn materialize(leaf: &str, values: &SystemValues) -> Result<String, TdError> {
+pub(crate) fn materialize(leaf: &str, values: &SystemValues) -> Result<String, TdError> {
     let mut current = leaf.to_string();
     while let Some(captures) = PATTERN.captures(&current) {
         let placeholder = captures.get(0).unwrap().as_str().to_string();

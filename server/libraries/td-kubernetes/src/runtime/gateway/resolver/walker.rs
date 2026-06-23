@@ -96,10 +96,7 @@ pub trait PlaceholderVisitor {
     ) -> Result<String, ResolverError>;
 }
 
-pub fn walk<V: PlaceholderVisitor>(
-    node: &mut Value,
-    visitor: &mut V,
-) -> Result<(), ResolverError> {
+pub fn walk<V: PlaceholderVisitor>(node: &mut Value, visitor: &mut V) -> Result<(), ResolverError> {
     let mut path: Vec<String> = Vec::new();
     walk_node(node, &mut path, visitor)
 }

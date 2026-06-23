@@ -25,7 +25,7 @@ static PATTERN: Lazy<Regex> = Lazy::new(|| {
 });
 
 #[allow(dead_code)]
-pub(super) fn resolve(text: &str) -> Result<String, TdError> {
+pub(crate) fn resolve(text: &str) -> Result<String, TdError> {
     let mut current = text.to_string();
     while let Some(captures) = PATTERN.captures(&current) {
         let placeholder = captures.get(0).unwrap().as_str().to_string();
@@ -43,7 +43,7 @@ pub(super) fn resolve(text: &str) -> Result<String, TdError> {
     Ok(current.trim().to_string())
 }
 
-pub(super) fn materialize(text: &str) -> Result<String, TdError> {
+pub(crate) fn materialize(text: &str) -> Result<String, TdError> {
     let mut current = text.to_string();
     while let Some(captures) = PATTERN.captures(&current) {
         let placeholder = captures.get(0).unwrap().as_str().to_string();

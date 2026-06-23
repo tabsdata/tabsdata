@@ -390,8 +390,18 @@ impl Provider for KminusProvider {
 
     async fn create_database(&self, reporter: &dyn Reporter) -> CommandResult {
         let (config_files, secret_env) = self.prepare_dbmanager().await?;
-        self.execute_dbmanager(DbManagerCommand::Start, &config_files, &secret_env, reporter)?;
-        self.execute_dbmanager(DbManagerCommand::Create, &config_files, &secret_env, reporter)?;
+        self.execute_dbmanager(
+            DbManagerCommand::Start,
+            &config_files,
+            &secret_env,
+            reporter,
+        )?;
+        self.execute_dbmanager(
+            DbManagerCommand::Create,
+            &config_files,
+            &secret_env,
+            reporter,
+        )?;
         self.execute_dbmanager(DbManagerCommand::Stop, &config_files, &secret_env, reporter)?;
         Ok(())
     }
@@ -517,7 +527,12 @@ impl Provider for KminusProvider {
     async fn start_instance_hook(&self, reporter: &dyn Reporter) -> CommandResult {
         handle_phase_secrets(self, SecretPhase::InstanceStart).await?;
         if let Ok((config_files, secret_env)) = self.prepare_dbmanager().await {
-            self.execute_dbmanager(DbManagerCommand::Start, &config_files, &secret_env, reporter)?;
+            self.execute_dbmanager(
+                DbManagerCommand::Start,
+                &config_files,
+                &secret_env,
+                reporter,
+            )?;
         }
         let step = reporter.step("Starting tabsdata instance");
         let multi = td_common::logging::multi_progress().unwrap_or_default();
