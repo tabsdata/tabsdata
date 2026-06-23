@@ -25,8 +25,17 @@ def _trace(self: logging.Logger, msg: object, *args: object, **kwargs: Any) -> N
 logging.Logger.trace = _trace  # type: ignore[attr-defined]
 
 
-class CriFormatter(logging.Formatter):
+class NoFormatFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
+        if getattr(record, "noformat", False):
+            return record.getMessage()
+        return super().format(record)
+
+
+class CriFormatter(NoFormatFormatter):
+    def format(self, record: logging.LogRecord) -> str:
+        if getattr(record, "noformat", False):
+            return record.getMessage()
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f000Z")
         stream = "stderr" if record.levelno >= logging.WARNING else "stdout"
         message = super().format(record)

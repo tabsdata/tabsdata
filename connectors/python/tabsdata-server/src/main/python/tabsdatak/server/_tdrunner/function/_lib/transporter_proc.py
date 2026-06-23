@@ -8,7 +8,8 @@ Per Q8 of the migration plan, ``td_transporter`` is a black box that
 ships inside the function-runner's venv (installed via the same pip
 flow as the rest of the runner). This module exec's it with
 ``--request <PATH>`` and ``--report <PATH>`` and forwards every
-stdout/stderr line through the ``tabsdatak`` logger as it streams.
+stdout/stderr line through the ``tabsdatak`` logger as it streams,
+unformatted so the binary's output keeps its own format.
 
 Binary resolution: we resolve the binary against the active
 interpreter's scripts dir (``sysconfig.get_path('scripts')``) rather
@@ -65,9 +66,9 @@ def run_transporter(request_yaml: Path, report: Path) -> int:
     report to ``report``; that file must not already exist.
 
     Every stdout/stderr line the binary emits is forwarded through the
-    module logger (stdout at INFO, stderr at WARNING) — which both
-    captures it for diagnostics and ticks any installed liveness
-    handler.
+    module logger unformatted — which both captures it for diagnostics,
+    preserving the binary's own output format, and ticks any installed
+    liveness handler.
 
     Raises:
         TransporterNotFoundError: if ``td_transporter`` is not in the
@@ -92,9 +93,9 @@ def run_transporter(request_yaml: Path, report: Path) -> int:
     return _run(cmd)
 
 
-def _stream_reader(stream: IO[str], level: int) -> threading.Thread:
+def _stream_reader(stream: IO[str]) -> threading.Thread:
     """Spawn a daemon thread that forwards each line of ``stream``
-    through the module logger at ``level``.
+    through the module logger, preserving the binary's own format.
 
     Each stream needs its own reader thread because without one, the
     subprocess could block writing to a full pipe and hang. Daemon =
@@ -104,7 +105,7 @@ def _stream_reader(stream: IO[str], level: int) -> threading.Thread:
     def _loop() -> None:
         try:
             for line in stream:
-                logger.log(level, "td_transporter: %s", line.rstrip())
+                logger.info(line.rstrip(), extra={"noformat": True})
         finally:
             stream.close()
 
@@ -124,8 +125,8 @@ def _run(cmd: Sequence[str]) -> int:
 
     assert proc.stdout is not None
     assert proc.stderr is not None
-    stdout_reader = _stream_reader(proc.stdout, logging.INFO)
-    stderr_reader = _stream_reader(proc.stderr, logging.WARNING)
+    stdout_reader = _stream_reader(proc.stdout)
+    stderr_reader = _stream_reader(proc.stderr)
 
     rc = proc.wait()
     stdout_reader.join()
