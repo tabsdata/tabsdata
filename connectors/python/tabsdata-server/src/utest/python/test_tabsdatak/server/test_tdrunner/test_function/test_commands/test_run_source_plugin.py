@@ -20,7 +20,6 @@ import importlib
 import json
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -28,6 +27,11 @@ import pytest
 import yaml
 
 from tabsdatak._info import PublisherInfo
+
+# Imported at module level so that string-form type annotations (under
+# ``from __future__ import annotations``) on locally-defined
+# @stream_publisher fixtures resolve via ``get_type_hints``.
+from tabsdatak.api import TableFrameSpec, TableFramesSpec  # noqa: F401
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
@@ -44,10 +48,11 @@ from tabsdatak.server._tdrunner.function._lib.request import (
     Request,
 )
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
+    _build_manifest_stage_conn,
     _invoke_read_in,
     _load_function_def,
     _normalise_table_file,
-    _resolve_plugin,
+    _resolve_plugin_and_io,
     _SrcContext,
     _write_inputs_manifest,
     main,
@@ -62,6 +67,7 @@ from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import
     NoPluginError,
     PluginFailedError,
     RunSourcePluginErrorCode,
+    UnsupportedStageSchemeError,
 )
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
     info_payload as _info_payload,
@@ -71,6 +77,30 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
 _MOD = "tabsdatak.server._tdrunner.function.commands.run_source_plugin"
+
+
+# --- module-level stream-publisher fixture --------------------------------
+#
+# Defined at module top level (not inside a test) because the bundle
+# serialiser stores ``func`` as ``"module:qualname"`` and rejects
+# locally-defined callables (those have ``<locals>`` in their qualname).
+# Used by ``test_load_function_def_accepts_stream_publisher_kind``.
+
+from tabsdatak.api import stream_publisher as _stream_publisher_decorator  # noqa: E402
+from tabsdatak.conn.kafka import (  # noqa: E402
+    KafkaStreamSrc as _KafkaStreamSrc,
+    KafkaStreamSrcConn as _KafkaStreamSrcConn,
+)
+
+
+@_stream_publisher_decorator(
+    conn=_KafkaStreamSrcConn(servers="x:9092", group_id="g"),
+    source=_KafkaStreamSrc(data_format="json", schema="{}", topic="t"),
+    flush_interval_mins=1,
+    output_tables=["t"],
+)
+def _module_level_stream_pub(t: TableFramesSpec) -> tuple[TableFrameSpec]:
+    return (None,)
 
 
 # --- fixtures and helpers --------------------------------------------------
@@ -400,14 +430,25 @@ def test_load_function_def_unresolvable_func_raises_bad_user_code(
 # --- unit: _resolve_plugin -----------------------------------------------
 
 
-def test_resolve_plugin_happy(fixture_publisher):
+def test_resolve_plugin_and_io_publisher_passthrough(fixture_publisher):
+    """For a regular ``@publisher``, ``_resolve_plugin_and_io`` returns
+    the plugin + the user-declared conn/source verbatim."""
     from tabsdatak.spi import SrcPlugin
 
-    plugin = _resolve_plugin(fixture_publisher)
+    # function_stage is unused on the PublisherInfo path; pass a stub.
+    stub_stage = Location(uri="file:///unused")
+    plugin, conn, src, cardinality = _resolve_plugin_and_io(
+        fixture_publisher, stub_stage
+    )
     assert isinstance(plugin, SrcPlugin)
+    assert conn is fixture_publisher.conn
+    assert src is fixture_publisher.source
+    assert cardinality == 1  # LocalFileSrc with one path
 
 
-def test_resolve_plugin_unknown_source_raises_no_plugin(fixture_publisher, monkeypatch):
+def test_resolve_plugin_and_io_unknown_source_raises_no_plugin(
+    fixture_publisher, monkeypatch
+):
     """When `get_src` raises `KeyError`, the runner surfaces
     `NoPluginError`."""
 
@@ -416,7 +457,108 @@ def test_resolve_plugin_unknown_source_raises_no_plugin(fixture_publisher, monke
 
     monkeypatch.setattr(f"{_MOD}.get_src", _raise)
     with pytest.raises(NoPluginError):
-        _resolve_plugin(fixture_publisher)
+        _resolve_plugin_and_io(fixture_publisher, Location(uri="file:///unused"))
+
+
+# --- unit: _build_manifest_stage_conn (stream-publisher substitution) --
+
+
+def test_build_manifest_stage_conn_file_scheme_resolves_localfile():
+    """Returns a duck-typed namespace -- the canonical ManifestStageConn
+    is a marker class (no __init__); ManifestStageSrcPlugin reads the
+    `local`/`s3`/`az`/`gcs` attributes directly. The integration tests
+    for ManifestStageSrcPlugin use the same SimpleNamespace idiom."""
+    from tabsdatak.conn.localfile import LocalFileSrcConn
+
+    conn = _build_manifest_stage_conn(Location(uri="file:///tmp/stage"))
+    assert isinstance(conn.local, LocalFileSrcConn)
+    assert str(conn.local.base_path) == "/tmp/stage"
+    assert conn.s3 is None
+    assert conn.az is None
+    assert conn.gcs is None
+
+
+def test_build_manifest_stage_conn_rejects_s3():
+    """Cloud schemes will land later; today only file:// is supported.
+    The rejection surfaces as RSP_11 with a clear exit code instead of
+    a TypeError at conn construction time."""
+    with pytest.raises(UnsupportedStageSchemeError):
+        _build_manifest_stage_conn(Location(uri="s3://bucket/stage"))
+
+
+def test_build_manifest_stage_conn_rejects_az():
+    with pytest.raises(UnsupportedStageSchemeError):
+        _build_manifest_stage_conn(Location(uri="az://account/container/stage"))
+
+
+def test_build_manifest_stage_conn_rejects_gcs():
+    with pytest.raises(UnsupportedStageSchemeError):
+        _build_manifest_stage_conn(Location(uri="gcs://bucket/stage"))
+
+
+def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage():
+    """For a ``@stream_publisher``, ``_resolve_plugin_and_io`` swaps
+    the user-declared Kafka source/conn for the publisher-side
+    StreamStageSrc + a SimpleNamespace duck-type of ManifestStageConn
+    that ``ManifestStageSrcPlugin`` knows how to read. Cardinality
+    drops to ``-1`` because the manifest decides slot count at read
+    time."""
+    from tabsdatak.api import stream_publisher
+    from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
+    from tabsdatak.conn.localfile import LocalFileSrcConn
+    from tabsdatak.spi import StreamStageSrc, StreamStageSrcPlugin
+
+    @stream_publisher(
+        conn=KafkaStreamSrcConn(servers="example:9092", group_id="g"),
+        source=KafkaStreamSrc(data_format="json", schema="{}", topic="t"),
+        flush_interval_mins=1,
+        output_tables=["t"],
+    )
+    def _my_stream_pub(t: TableFramesSpec) -> tuple[TableFrameSpec]:
+        return (None,)
+
+    plugin, conn, src, cardinality = _resolve_plugin_and_io(
+        _my_stream_pub, Location(uri="file:///stage/dir")
+    )
+    # Plugin substituted to StreamStageSrcPlugin (which delegates to
+    # ManifestStageSrcPlugin internally on read_in).
+    assert isinstance(plugin, StreamStageSrcPlugin)
+    # Conn substituted to a duck-typed namespace with file:// backend.
+    assert isinstance(conn.local, LocalFileSrcConn)
+    assert str(conn.local.base_path) == "/stage/dir"
+    assert conn.s3 is None
+    assert conn.az is None
+    assert conn.gcs is None
+    # Source substituted to a StreamStageSrc instance.
+    assert isinstance(src, StreamStageSrc)
+    # Cardinality is -1 (dynamic, from the StreamStageSrc registration).
+    assert cardinality == -1
+
+
+def test_load_function_def_accepts_stream_publisher_kind(tmp_path):
+    """`_load_function_def`'s allowed_kinds now includes
+    ``streamPublisherDef``. Synthesise a minimal function_def.json by
+    hand (no full bundle build) and verify the loader returns a
+    StreamPublisherInfo.
+
+    Uses the module-level ``_module_level_stream_pub`` fixture below
+    so the bundle serialiser can resolve ``module:qualname`` for the
+    ``func`` field (locally-defined callables would fail the
+    "must be importable at module top level" check)."""
+    import json
+
+    from tabsdatak._info import KIND_STREAM_PUBLISHER_DEF, StreamPublisherInfo
+    from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME
+
+    bundle_dir = tmp_path / "extracted"
+    bundle_dir.mkdir()
+    (bundle_dir / BUNDLE_MANIFEST_FILENAME).write_text(
+        json.dumps(_module_level_stream_pub.to_dict())
+    )
+
+    info = _load_function_def(bundle_dir)
+    assert isinstance(info, StreamPublisherInfo)
+    assert info.__kind__ == KIND_STREAM_PUBLISHER_DEF
 
 
 # --- unit: _invoke_read_in ----------------------------------------------
@@ -446,7 +588,7 @@ def test_invoke_read_in_wraps_exceptions_as_plugin_failed():
 def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
     out = tmp_path / "manifest.yaml"
     produced = [[Path("/tmp/a.parquet"), Path("/tmp/b.parquet")]]
-    _write_inputs_manifest(fixture_publisher, produced, out)
+    _write_inputs_manifest(fixture_publisher, produced, out, cardinality=1)
     data = yaml.safe_load(out.read_text())
 
     def _record(file):
@@ -481,7 +623,7 @@ def test_write_inputs_manifest_normalises_file_uris(tmp_path, fixture_publisher)
     absolute filesystem paths."""
     out = tmp_path / "manifest.yaml"
     produced = [[Path("file:///tmp/uri-shaped.parquet")]]
-    _write_inputs_manifest(fixture_publisher, produced, out)
+    _write_inputs_manifest(fixture_publisher, produced, out, cardinality=1)
     data = yaml.safe_load(out.read_text())
     assert [t["file"] for t in data["inputs"][0]["tables"]] == [
         "/tmp/uri-shaped.parquet"
@@ -494,26 +636,63 @@ def test_write_inputs_manifest_cardinality_mismatch_raises(tmp_path, fixture_pub
     out = tmp_path / "manifest.yaml"
     produced = [[Path("/x.parquet")], [Path("/y.parquet")]]
     with pytest.raises(PluginFailedError):
-        _write_inputs_manifest(fixture_publisher, produced, out)
+        _write_inputs_manifest(fixture_publisher, produced, out, cardinality=1)
 
 
-def test_write_inputs_manifest_negative_cardinality_skips_check(
-    tmp_path, fixture_publisher, monkeypatch
+def test_write_inputs_manifest_negative_cardinality_pads_to_param_count(
+    tmp_path, fixture_publisher
 ):
-    """A source whose `cardinality` returns -1 (dynamic slot count --
-    e.g. a stream-stage manifest source) bypasses the
-    produced-vs-declared slot-count check: a fixed cardinality of 1
-    would reject the 0 slots produced here, but -1 accepts it and the
-    plugin's output is trusted verbatim."""
-    monkeypatch.setattr(
-        f"{_MOD}.get_src",
-        lambda _cls: SimpleNamespace(cardinality=lambda _src: -1),
-    )
+    """``cardinality=-1`` (dynamic slot count -- e.g. a stream-stage
+    manifest source) pads the manifest up to the function-declared
+    input-slot count with empty entries when the plugin returned
+    fewer slots. This is what makes a ``td fn trigger`` against a
+    ``@stream_publisher`` work when no manifest has been staged: the
+    user function is invoked with ``t=[]`` (one empty slot per
+    declared parameter) instead of bailing on the input-count
+    mismatch in ``run-function``.
+
+    ``fixture_publisher`` has one input parameter (``in_1``), so 0
+    produced slots → 1 padded entry whose ``tables`` is empty."""
     out = tmp_path / "manifest.yaml"
-    # Zero slots: a contract violation under a fixed cardinality of 1,
-    # but accepted here because the source declared -1.
-    _write_inputs_manifest(fixture_publisher, [], out)
-    assert yaml.safe_load(out.read_text()) == {"inputs": []}
+    _write_inputs_manifest(fixture_publisher, [], out, cardinality=-1)
+    data = yaml.safe_load(out.read_text())
+    assert len(data["inputs"]) == 1
+    assert data["inputs"][0]["name"] == "in_1"
+    assert data["inputs"][0]["tables"] == []
+
+
+def test_write_inputs_manifest_negative_cardinality_does_not_pad_when_matched(
+    tmp_path, fixture_publisher
+):
+    """When the dynamic source produced exactly the right number of
+    slots, the manifest writes them verbatim — no padding needed."""
+    out = tmp_path / "manifest.yaml"
+    _write_inputs_manifest(
+        fixture_publisher,
+        [[Path("/tmp/a.parquet")]],
+        out,
+        cardinality=-1,
+    )
+    data = yaml.safe_load(out.read_text())
+    assert len(data["inputs"]) == 1
+    assert data["inputs"][0]["name"] == "in_1"
+    assert [t["file"] for t in data["inputs"][0]["tables"]] == ["/tmp/a.parquet"]
+
+
+def test_write_inputs_manifest_negative_cardinality_overproduction_raises(
+    tmp_path, fixture_publisher
+):
+    """Over-production (source returned more slots than the function
+    declares) is still a contract violation even under dynamic
+    cardinality — we can't index past ``parameters[i]``."""
+    out = tmp_path / "manifest.yaml"
+    with pytest.raises(PluginFailedError):
+        _write_inputs_manifest(
+            fixture_publisher,
+            [[Path("/x.parquet")], [Path("/y.parquet")]],
+            out,
+            cardinality=-1,
+        )
 
 
 def test_write_inputs_manifest_oserror_raises_manifest_write_failed(
@@ -525,7 +704,7 @@ def test_write_inputs_manifest_oserror_raises_manifest_write_failed(
     a_dir.mkdir()
     produced = [[Path("/x.parquet")]]
     with pytest.raises(ManifestWriteFailedError):
-        _write_inputs_manifest(fixture_publisher, produced, a_dir)
+        _write_inputs_manifest(fixture_publisher, produced, a_dir, cardinality=1)
 
 
 # --- main: error paths via argparse ---------------------------------------

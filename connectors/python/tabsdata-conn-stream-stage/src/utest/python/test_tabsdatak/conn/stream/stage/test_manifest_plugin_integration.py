@@ -33,10 +33,9 @@ from tabsdatak.conn.localfile import LocalFileSrcConn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.stream.stage import (
-    ManifestStageSrcPlugin,
     _STREAM_MANIFEST_FILE_WILDCARD,
+    ManifestStageSrcPlugin,
 )
-
 
 _TRANSPORTER_BIN = os.environ.get("TD_TRANSPORTER_BIN")
 
@@ -88,9 +87,15 @@ def _make_scenario(tmp_path: Path) -> tuple[Path, Path]:
     _write_parquet(data / "t0_a.parquet", [{"id": 1}, {"id": 2}])
     _write_parquet(data / "t1_a.parquet", [{"id": 3}])
     _write_parquet(data / "t1_b.parquet", [{"id": 4}])
+    # The new layout (per NU1's ``stage_layout`` module): manifests live
+    # under ``<base>/manifests/`` so the plugin's wildcard can target
+    # exactly that subdir. File paths inside each manifest stay
+    # relative to ``<base>``.
+    manifests_dir = data / "manifests"
+    manifests_dir.mkdir()
     # One slot with one file, one slot with two; paths relative to base_path.
     manifest = [["t0_a.parquet"], ["t1_a.parquet", "t1_b.parquet"]]
-    (data / "stream-manifest-0001.json").write_text(json.dumps(manifest))
+    (manifests_dir / "stream-manifest-0001.json").write_text(json.dumps(manifest))
     return data, work
 
 
@@ -137,7 +142,9 @@ def test_read_in_picks_up_next_manifest(tmp_path: Path):
 
     # A newer manifest shows up; the next trigger consumes it.
     _write_parquet(data / "t2.parquet", [{"id": 5}])
-    (data / "stream-manifest-0002.json").write_text(json.dumps([["t2.parquet"]]))
+    (data / "manifests" / "stream-manifest-0002.json").write_text(
+        json.dumps([["t2.parquet"]])
+    )
 
     third = plugin.read_in(ctx, _local_conn(data), SimpleNamespace())
     assert [len(slot) for slot in third] == [1]
@@ -155,7 +162,9 @@ def test_read_in_requires_exactly_one_backend(tmp_path: Path):
 def test_read_in_rejects_malformed_manifest(tmp_path: Path):
     data, work = _make_scenario(tmp_path)
     # Overwrite with a non-list-of-lists payload.
-    (data / "stream-manifest-0001.json").write_text(json.dumps({"not": "a list"}))
+    (data / "manifests" / "stream-manifest-0001.json").write_text(
+        json.dumps({"not": "a list"})
+    )
     plugin = ManifestStageSrcPlugin()
     with pytest.raises(Exception) as exc_info:
         plugin.read_in(_Ctx(work), _local_conn(data), SimpleNamespace())

@@ -42,7 +42,15 @@ class ManifestStageSrc(Src):
     pass
 
 
-_STREAM_MANIFEST_FILE_WILDCARD = "stream-manifest-*.json"
+# Manifests live under the conn's ``manifests/`` subdir (the layout
+# the streamer pod writes; see
+# ``tabsdata-server/_lib/stage_layout.py`` and
+# ``_lib/stage_manifest.py``). The wildcard is relative to
+# ``conn.base_path``, which by convention is the stage root, so this
+# globs ``<stage_root>/manifests/stream-manifest-*.json``. The file
+# paths inside each manifest stay relative to the same
+# ``conn.base_path`` (typically ``files/<name>.parquet``).
+_STREAM_MANIFEST_FILE_WILDCARD = "manifests/stream-manifest-*.json"
 
 # Per-flow cursor for the manifest wildcard. Dot-separated, hyphenated
 # segments only (no underscores) so it matches the context-key regex, and

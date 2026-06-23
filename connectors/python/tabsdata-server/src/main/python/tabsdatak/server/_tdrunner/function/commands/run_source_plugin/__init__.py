@@ -8,6 +8,26 @@ Reads the function definition from the extracted bundle, imports the
 user's code, instantiates the matching SrcPlugin via the connector
 registry exposed by `tabsdatak._connectors`, and invokes read_in() to
 materialise parquet files in --out-dir.
+
+Supports two function-definition kinds:
+
+* ``publisherDef`` -- a regular ``@publisher``. The user-declared
+  ``conn`` and ``source`` go to ``plugin.read_in(...)`` verbatim.
+* ``streamPublisherDef`` -- a ``@stream_publisher``. The user-declared
+  ``conn`` (e.g. ``KafkaStreamSrcConn``) and ``source`` (e.g.
+  ``KafkaStreamSrc``) are for the long-running streamer pod only;
+  on the publisher side we read from the manifests the streamer
+  wrote into ``info.function_stage``. We substitute:
+    - source -> ``StreamSrcDef.publisher_src()`` (default
+      ``StreamStageSrc()``)
+    - conn -> a duck-typed ``ManifestStageConn`` whose populated
+      backend matches the ``function_stage`` URI's scheme (today:
+      ``file://``)
+  Then we invoke the substituted plugin's ``read_in`` exactly like a
+  regular publisher would. The publisher-side plugin's wildcard is
+  ``manifests/stream-manifest-*.json`` (relative to the conn's
+  ``base_path``, which we set to the stage root), matching the
+  layout the streamer pod's :class:`StreamerPluginCtx` writes.
 """
 
 from __future__ import annotations
@@ -16,11 +36,18 @@ import argparse
 import inspect
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
-from tabsdatak._connectors import get_src
-from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo, _unwrap_info
+from tabsdatak._connectors import get_src, get_stream_src
+from tabsdatak._info import (
+    KIND_PUBLISHER_DEF,
+    KIND_STREAM_PUBLISHER_DEF,
+    PublisherInfo,
+    StreamPublisherInfo,
+    _unwrap_info,
+)
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
@@ -34,7 +61,10 @@ from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     build_table_record,
     write_inputs_manifest,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
+from tabsdatak.server._tdrunner.function._lib.request import (
+    Location,
+    load_request_or_raise,
+)
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
     RunSourcePluginErrorCode,
@@ -43,8 +73,6 @@ from tabsdatak.spi import SrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
-# TODO: After all commands are done, version will be unified in a single source of
-#  truth file.
 VERSION = "0.1.0"
 INFO = (
     "run-source-plugin — invoke the publisher's source plugin to produce parquet files"
@@ -103,13 +131,22 @@ def _build_parser():
     return parser
 
 
-def _load_function_def(bundle_dir: Path) -> PublisherInfo:
-    """Load the publisher's ``function_def.json`` -- thin wrapper over
-    :func:`load_function_def_or_raise` pinning the accepted kind set
-    and the command's per-site error codes."""
+def _load_function_def(bundle_dir: Path) -> PublisherInfo | StreamPublisherInfo:
+    """Load the function definition from the bundle -- thin wrapper
+    over :func:`load_function_def_or_raise` pinning the accepted
+    kind set and the command's per-site error codes.
+
+    Accepts both ``publisherDef`` (regular ``@publisher``) and
+    ``streamPublisherDef`` (``@stream_publisher`` -- runs the
+    substituted manifest-stage source on the publisher side; see
+    module docstring).
+    """
     return load_function_def_or_raise(
         bundle_dir,
-        allowed_kinds={KIND_PUBLISHER_DEF: PublisherInfo},
+        allowed_kinds={
+            KIND_PUBLISHER_DEF: PublisherInfo,
+            KIND_STREAM_PUBLISHER_DEF: StreamPublisherInfo,
+        },
         bad_bundle_code=RunSourcePluginErrorCode.RSP_2,
         bad_user_code_code=RunSourcePluginErrorCode.RSP_3,
         wrong_kind_code=RunSourcePluginErrorCode.RSP_4,
@@ -125,14 +162,113 @@ class _SrcContext(FromRequestCtx, SrcPluginCtx):
     """
 
 
-def _resolve_plugin(info: PublisherInfo):
+def _build_manifest_stage_conn(function_stage: Location) -> SimpleNamespace:
+    """Build a duck-typed ``ManifestStageConn`` whose populated backend
+    matches the ``function_stage`` URI's scheme.
+
+    The streamer pod wrote its manifests + parquets into
+    ``function_stage`` (under ``manifests/`` and ``files/`` subdirs
+    respectively; see :mod:`stage_layout`). The publisher pod needs a
+    conn pointing at the *stage root* so the substituted
+    ``ManifestStageSrcPlugin`` can glob
+    ``manifests/stream-manifest-*.json`` and resolve each manifest's
+    inner ``files/<name>.parquet`` entries.
+
+    Returns a :class:`SimpleNamespace` with the four expected backend
+    attributes (``local`` / ``s3`` / ``az`` / ``gcs``) -- exactly the
+    duck-typed shape ``ManifestStageSrcPlugin._active_backend`` reads.
+    The canonical :class:`~tabsdatak.conn.stream.stage.ManifestStageConn`
+    class is a type marker (no ``__init__``); the integration tests for
+    ``ManifestStageSrcPlugin`` already use the same SimpleNamespace
+    idiom.
+
+    Today only ``file://`` is supported; cloud schemes (``s3://`` /
+    ``az://`` / ``gcs://``) will land once the streamer pod runtime
+    handles them. Surfaces the typed
+    :class:`UnsupportedStageSchemeError` (RSP_11) otherwise so callers
+    get a clean exit code rather than an AttributeError downstream.
+    """
+    parsed = urlparse(function_stage.uri)
+    if parsed.scheme == "file":
+        from tabsdatak.conn.localfile import LocalFileSrcConn
+
+        base_path = url2pathname(parsed.path)
+        return SimpleNamespace(
+            local=LocalFileSrcConn(base_path=base_path),
+            s3=None,
+            az=None,
+            gcs=None,
+        )
+    raise RunSourcePluginErrorCode.RSP_11.exception(
+        uri=function_stage.uri, scheme=parsed.scheme
+    )
+
+
+def _resolve_plugin_and_io(
+    info: PublisherInfo | StreamPublisherInfo,
+    function_stage: Location,
+) -> tuple[object, object, object, int]:
+    """Pick the right (plugin, conn, src, cardinality) tuple for ``info``.
+
+    For ``PublisherInfo`` this is a straight pass-through of the
+    user-declared values, with the plugin instantiated from the
+    registered ``SrcDef``.
+
+    For ``StreamPublisherInfo`` we substitute (see module docstring):
+      * source ← ``StreamSrcDef.publisher_src()`` (an empty marker
+        instance, typically ``StreamStageSrc``)
+      * conn ← :func:`_build_manifest_stage_conn` against
+        ``info.function_stage``
+      * plugin ← ``SrcDef.plugin()`` registered for the substituted
+        source class
+
+    ``cardinality`` is the slot count for the source the plugin will
+    actually run against (the substituted ``StreamStageSrc`` has
+    dynamic ``-1`` cardinality; the publisher will pad to the
+    user-function-declared count in :func:`_write_inputs_manifest`).
+
+    Raises:
+        NoPluginError (RSP_5): the (stream) source class has no
+            registered SrcDef / StreamSrcDef.
+        UnsupportedStageSchemeError (RSP_11): the stream-publisher's
+            ``function_stage`` URI uses a scheme the runtime does not
+            yet support.
+    """
+    if isinstance(info, StreamPublisherInfo):
+        try:
+            stream_src_def = get_stream_src(type(info.source))
+        except KeyError as exc:
+            raise RunSourcePluginErrorCode.RSP_5.exception(
+                cause=exc,
+                src_type=type(info.source).__name__,
+                detail=str(exc),
+            )
+        publisher_src_class = stream_src_def.publisher_src
+        try:
+            src_def = get_src(publisher_src_class)
+        except KeyError as exc:
+            raise RunSourcePluginErrorCode.RSP_5.exception(
+                cause=exc,
+                src_type=publisher_src_class.__name__,
+                detail=str(exc),
+            )
+        substituted_conn = _build_manifest_stage_conn(function_stage)
+        substituted_src = publisher_src_class()
+        return (
+            src_def.plugin(),
+            substituted_conn,
+            substituted_src,
+            src_def.cardinality(substituted_src),
+        )
+
+    # Regular @publisher: passthrough.
     try:
         src_def = get_src(type(info.source))
     except KeyError as exc:
         raise RunSourcePluginErrorCode.RSP_5.exception(
             cause=exc, src_type=type(info.source).__name__, detail=str(exc)
         )
-    return src_def.plugin()
+    return src_def.plugin(), info.conn, info.source, src_def.cardinality(info.source)
 
 
 def _invoke_read_in(plugin, ctx: SrcPluginCtx, conn, src) -> list[list[Path]]:
@@ -161,21 +297,16 @@ def _normalise_table_file(p) -> str:
     """
     s = str(p)
     if s[:5].lower().startswith("file:"):
-        # `urlparse` tolerates both `file:///foo` and the
-        # `Path`-collapsed `file:/foo` form. `url2pathname` then
-        # converts the URI path to an OS-native filesystem path: on
-        # POSIX it passes `/foo/bar` through; on Windows it turns
-        # `/C:/Users/x` into `C:\Users\x`. URL-encoded characters
-        # (`%20` etc.) are decoded by `url2pathname`. Same pair of
-        # primitives the legacy `convert_uri_to_path` uses.
         return url2pathname(urlparse(s).path)
     return str(Path(s).absolute())
 
 
 def _write_inputs_manifest(
-    info: PublisherInfo,
+    info: PublisherInfo | StreamPublisherInfo,
     produced: list[list[Path]],
     path: Path,
+    *,
+    cardinality: int,
 ) -> None:
     """Write the YAML inputs-manifest to `path`.
 
@@ -185,36 +316,42 @@ def _write_inputs_manifest(
     output-tables list describes what the function *returns*, not what
     feeds in to it.
 
-    Schema:
+    ``cardinality`` is the *resolved* slot count for the source the
+    plugin actually ran against (the user-declared source for
+    ``PublisherInfo``, or the substituted ``publisher_src`` for
+    ``StreamPublisherInfo``) -- :func:`_resolve_plugin_and_io` is the
+    single source of truth for this value.
 
-        inputs:
-          - name: <function param name>          # e.g. "in_1"
-            files:
-              - <absolute path>
-              - ...
-
-    Plugin-contract check (→ `PluginFailedError`): the plugin must
-    have produced exactly `cardinality(source)` outer slots. The
-    function-signature side (function must declare at least that many
-    parameters) is owned by `PublisherInfo._check_func_signature` and
-    is already guaranteed by the time this code runs; not re-checked
-    here.
-
-    A negative `cardinality` (the `-1` sentinel) means the source's
+    A negative ``cardinality`` (the ``-1`` sentinel) means the source's
     slot count is decided dynamically at read time -- e.g. a
     stream-stage manifest source, whose slot count comes from the
-    manifest, not from static config -- so the produced-vs-declared
-    check is skipped and the plugin's output is trusted as-is.
+    manifest, not from static config. In that case the manifest is
+    padded up to the user function's declared input-slot count with
+    empty entries: the function is *always* invoked with exactly its
+    declared signature, and a stream-publisher that fired against no
+    staged manifest reaches the user function with one empty slot per
+    declared parameter (e.g. ``stream_people(t)`` receives ``t=[]`` --
+    the downstream ``_materialize_input_slot`` materialises empty
+    slots as ``[]`` for ARRAY mode / ``None`` for SINGLE mode).
+    Over-production (more slots than declared) is still a contract
+    violation.
     """
-    src_def = get_src(type(info.source))
-    cardinality = src_def.cardinality(info.source)
     func = _unwrap_info(info.func)
     parameters = list(inspect.signature(func).parameters)
 
     if cardinality < 0:
-        # Dynamic slot count (-1 sentinel): trust whatever the plugin
-        # produced rather than validating against a declared count.
-        cardinality = len(produced)
+        # Dynamic source: pad up to the function-declared slot count
+        # with empty inner lists when the plugin returned fewer slots.
+        # Over-production is still a violation (we can't index past
+        # parameters[i]).
+        expected = len(parameters)
+        if len(produced) > expected:
+            raise RunSourcePluginErrorCode.RSP_7.exception(
+                returned=len(produced), expected=expected
+            )
+        if len(produced) < expected:
+            produced = list(produced) + [[] for _ in range(expected - len(produced))]
+        cardinality = expected
     elif len(produced) != cardinality:
         raise RunSourcePluginErrorCode.RSP_7.exception(
             returned=len(produced), expected=cardinality
@@ -255,11 +392,15 @@ def main(args: argparse.Namespace) -> int:
     logger.info("Running source plugin")
     request = load_request_or_raise(request_path, RunSourcePluginErrorCode.RSP_1)
     info = _load_function_def(bundle_dir)
-    plugin = _resolve_plugin(info)
+    plugin, conn, src, cardinality = _resolve_plugin_and_io(
+        info, request.info.function_stage
+    )
     logger.debug(
-        "Resolved Src plugin %s for connector %s",
+        "Resolved Src plugin %s for connector %s (kind=%s, cardinality=%d)",
         type(plugin).__name__,
-        type(info.conn).__name__,
+        type(conn).__name__,
+        type(info).__name__,
+        cardinality,
     )
     ctx = _SrcContext(
         work_dir=out_dir,
@@ -277,7 +418,7 @@ def main(args: argparse.Namespace) -> int:
     logger.debug("Hydrated SrcPluginCtx from %s; work_dir=%s", state_dir, out_dir)
 
     logger.info("Invoking source plugin's read_in")
-    produced = _invoke_read_in(plugin, ctx, info.conn, info.source)
+    produced = _invoke_read_in(plugin, ctx, conn, src)
     logger.info("Source plugin produced %d slot(s)", len(produced))
 
     drain_ctx_to_state_or_raise(
@@ -285,7 +426,7 @@ def main(args: argparse.Namespace) -> int:
     )
     logger.debug("Drained ctx scratch to %s", state_dir)
 
-    _write_inputs_manifest(info, produced, inputs_manifest)
+    _write_inputs_manifest(info, produced, inputs_manifest, cardinality=cardinality)
     logger.info("Wrote raw inputs manifest to %s", inputs_manifest)
     return 0
 

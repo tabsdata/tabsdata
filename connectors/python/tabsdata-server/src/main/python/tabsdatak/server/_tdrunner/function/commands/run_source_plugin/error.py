@@ -13,6 +13,7 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
     BadStateInError as _BadStateInError,
     BadStateOutError as _BadStateOutError,
     BadUserCodeError as _BadUserCodeError,
+    CommandRuntimeException,
     ManifestWriteFailedError as _ManifestWriteFailedError,
     NoPluginError as _NoPluginError,
     PluginFailedError as _PluginFailedError,
@@ -69,6 +70,18 @@ class BadStateOutError(_BadStateOutError):
     """``drain_ctx_to_state_or_raise`` failure -- write side."""
 
     exit_code = 17
+
+
+class UnsupportedStageSchemeError(CommandRuntimeException):
+    """``info.function_stage.uri`` uses a scheme the stream-publisher
+    substitution does not yet support (today: only ``file://``).
+
+    Only relevant on the stream-publisher path -- a regular
+    ``@publisher`` uses the user-declared ``conn`` directly and never
+    looks at ``function_stage``.
+    """
+
+    exit_code = 18
 
 
 class RunSourcePluginErrorCode(ErrorCode):
@@ -135,3 +148,13 @@ class RunSourcePluginErrorCode(ErrorCode):
     # ``drain_ctx_to_state_or_raise`` -- ctx scratch couldn't be
     # persisted (typically a bad value injected past the
     # ``store_attr`` validator).
+
+    RSP_11 = ErrorDef(
+        UnsupportedStageSchemeError,
+        "stream-publisher function_stage URI {uri} uses scheme {scheme!r} "
+        "which is not yet supported by run-source-plugin "
+        "(only file:// is supported today)",
+    )
+    # Raised on the stream-publisher path when ``info.function_stage.uri``
+    # is not a ``file://`` URI. Cloud schemes (``s3://`` / ``az://`` /
+    # ``gcs://``) will land once the streamer pod runtime handles them.
