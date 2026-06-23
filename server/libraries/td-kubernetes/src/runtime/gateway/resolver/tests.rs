@@ -87,7 +87,7 @@ async fn resolves_system_repository_url() {
         ..SystemValues::default()
     });
     let resolved = resolver
-        .resolve("uri: ${sys:TDK_REPOSITORY_URL}/database/tabsdata.db")
+        .resolve("uri: ${sys:tdk_repository_url}/database/tabsdata.db")
         .await
         .expect("resolve");
     assert_eq!(
@@ -102,7 +102,7 @@ async fn missing_system_value_returns_error() {
         repository_url: None,
         ..SystemValues::default()
     });
-    let result = resolver.resolve("${sys:TDK_REPOSITORY_URL}").await;
+    let result = resolver.resolve("${sys:tdk_repository_url}").await;
     assert!(result.is_err(), "missing system value should error");
 }
 

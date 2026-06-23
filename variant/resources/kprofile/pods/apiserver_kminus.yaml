@@ -36,7 +36,7 @@ spec:
     - name: dbready
       image: /dev/null
       imagePullPolicy: IfNotPresent
-      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_dbready"]
+      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_dbready"]
       args:
         - --config-file
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.database.yaml
@@ -68,7 +68,7 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: POD_TABSDATA_INSTANCE
-          value: "${sys:TDK_INSTANCE_NAME}"
+          value: "${sys:tdk_instance_name}"
       volumeMounts:
         - name: config
           mountPath: /tabsdata/config
@@ -80,7 +80,7 @@ spec:
     - name: apiserver
       image: /dev/null
       imagePullPolicy: IfNotPresent
-      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:TDK_PYENV_SCRIPTS_FOLDER}/td_apiserver"]
+      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${sys:tdk_pyenv_scripts_folder}/td_apiserver"]
       args:
         - --config-file
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.service.yaml
@@ -153,7 +153,7 @@ spec:
             fieldRef:
               fieldPath: spec.serviceAccountName
         - name: POD_TABSDATA_INSTANCE
-          value: "${sys:TDK_INSTANCE_NAME}"
+          value: "${sys:tdk_instance_name}"
         - name: TDK_KUBECONFIG
           valueFrom:
             secretKeyRef:
@@ -177,4 +177,4 @@ spec:
               name: td-app-tabsdata-config-tabsdata.yaml
     - name: pyenv
       hostPath:
-        path: "${sys:TDK_PYENV_TD_ROOT}"
+        path: "${sys:tdk_pyenv_td_root}"

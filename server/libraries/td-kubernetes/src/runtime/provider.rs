@@ -421,6 +421,7 @@ pub async fn provider_for(
     cluster: ClusterArguments,
     instance: InstanceArguments,
     verbose: bool,
+    portstart: Option<u16>,
 ) -> CommandResult<Box<dyn Provider>> {
     let provider = cluster
         .provider
@@ -428,7 +429,7 @@ pub async fn provider_for(
     match provider {
         ClusterProvider::Kminus => {
             check_kminus_ulimit()?;
-            let provider = KminusProvider::build(cluster, instance, verbose)?;
+            let provider = KminusProvider::build(cluster, instance, verbose, portstart)?;
             Ok(Box::new(provider))
         }
         ClusterProvider::Docker => {
@@ -474,7 +475,7 @@ pub async fn provider_for_or_tdkcontext(
     verbose: bool,
 ) -> CommandResult<Box<dyn Provider>> {
     if cluster.provider.is_some() {
-        return provider_for(cluster, instance, verbose).await;
+        return provider_for(cluster, instance, verbose, None).await;
     }
     Err(ProviderError::NoClusterSpecification.into())
 }

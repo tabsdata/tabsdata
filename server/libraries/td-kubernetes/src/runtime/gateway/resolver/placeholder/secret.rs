@@ -12,7 +12,9 @@ use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
     ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext, Rule, SecretEntry,
 };
-use crate::runtime::secrets::walker::{Placeholder, SecretVisitor, encode_secret_key, walk};
+use crate::runtime::secrets::walker::{
+    Generator, Placeholder, SecretVisitor, encode_secret_key, walk,
+};
 
 const CONSUMER_LABEL: &str = "<consumer config>";
 
@@ -109,6 +111,30 @@ impl SecretResolver {
             }
         })
     }
+
+    fn generate(
+        &self,
+        context: &ResolveContext,
+        key: String,
+    ) -> Result<Option<SecretEntry>, ResolverError> {
+        let category = context.placeholder.category.as_deref().ok_or_else(|| {
+            ResolverError::MissingPlaceholderCategory {
+                path: context.path.join(PATH_SEPARATOR),
+                kind: self.kind().as_str().to_owned(),
+            }
+        })?;
+        let generator = Generator::from_name(category).ok_or_else(|| {
+            ResolverError::UnknownGenerator {
+                path: context.path.join(PATH_SEPARATOR),
+                generator: category.to_owned(),
+                supported: Generator::supported().join(", "),
+            }
+        })?;
+        Ok(Some(SecretEntry {
+            key,
+            value: generator.generate(),
+        }))
+    }
 }
 
 impl ConcreteResolver for SecretResolver {
@@ -128,7 +154,8 @@ impl ConcreteResolver for SecretResolver {
                 key,
                 value: value.to_owned(),
             }),
-            None if self.auto || context.placeholder.rule == Rule::Optional => None,
+            None if self.auto => self.generate(context, key)?,
+            None if context.placeholder.rule == Rule::Optional => None,
             None => {
                 return Err(ResolverError::MissingRequiredValue {
                     path: context.path.join(PATH_SEPARATOR),

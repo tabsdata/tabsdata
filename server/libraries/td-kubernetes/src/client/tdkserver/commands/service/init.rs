@@ -123,6 +123,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         cluster,
         InstanceArguments::new(Some(instance.clone())),
         globals.verbose,
+        None,
     )
     .await?;
 
@@ -168,6 +169,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
             adjusted,
             resolved,
         },
+        ports: Vec::new(),
     };
     if let Err(error) = settings.save() {
         step.fail();

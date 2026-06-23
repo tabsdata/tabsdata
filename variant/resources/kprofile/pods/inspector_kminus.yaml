@@ -116,4 +116,4 @@ spec:
                   name: td-sys-stream-publisher-pod-stream-publisher.yaml
         - name: pyenv
           hostPath:
-            path: "${sys:TDK_PYENV_TD_ROOT}"
+            path: "${sys:tdk_pyenv_td_root}"

@@ -4,17 +4,17 @@
 
 storage:
   mounts:
-    - id: ROOT
-      path: /
-      uri: ${sys:TDK_STORAGE_URL}data/
-    # IMPORTANT: /bundles must be a local mount.
-    - id: BUNDLES
-      path: /bundles
-      uri: ${sys:TDK_STORAGE_URL}bundles/
-#    # Mount configuration sample:
-#    - id: PREFIX
-#      path: /foo
-#      uri: ${sys:TDK_STORAGE_URL}data/
-#      options:
-#        - option_1: value1
-#          option_2: value2
+  - id: ROOT
+    path: /
+    uri: ${system:tdk_storage_url}data/
+  # IMPORTANT: /bundles must be a local mount.
+  - id: BUNDLES
+    path: /bundles
+    uri: ${system:tdk_storage_url}bundles/
+# # Mount configuration sample:
+# - id: PREFIX
+#   path: /foo
+#   uri: ${system:tdk_storage_url}data/
+#   options:
+#   - option_1: value1
+#     option_2: value2

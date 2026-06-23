@@ -21,7 +21,7 @@ use tracing::info;
 use crate::base::constants::{
     FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_PYENV_AG, FOLDER_PYENV_TD,
     FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA,
+    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, STAGE_FOLDER,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -42,7 +42,7 @@ use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{
-    Profile, load_profile, render_for_configmaps, resolve_kprofile_path, resolve_profile_entry,
+    Profile, load_profile, render_for_configmaps, resolve_kprofile_path,
 };
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
@@ -117,6 +117,7 @@ impl KminusProvider {
         cluster: ClusterArguments,
         instance: InstanceArguments,
         verbose: bool,
+        portstart: Option<u16>,
     ) -> CommandResult<Self> {
         if cluster.context.is_some()
             || cluster.kubeconfig.is_some()
@@ -151,6 +152,7 @@ impl KminusProvider {
             folder.join(FOLDER_CLUSTER),
             folder.join(FOLDER_IMAGES),
             verbose,
+            portstart,
         );
         let kminus_instance =
             KminusInstance::new(kminus_cluster.kubefile(), kminus_cluster.staging_path());
@@ -308,6 +310,7 @@ impl Provider for KminusProvider {
             pyenv_scripts_folder,
             pyenv_libexec_folder,
             instance_name,
+            ..SystemValues::default()
         })
     }
 
@@ -684,17 +687,23 @@ impl KminusProvider {
     async fn prepare_dbmanager(
         &self,
     ) -> CommandResult<(Vec<tempfile::NamedTempFile>, Vec<(String, String)>)> {
-        let loaded = self.profile()?;
-        let resolver = ConfigurationResolver::new(self.system_values()?);
+        let stage_configs = self
+            .folder
+            .join(STAGE_FOLDER)
+            .join(KPROFILE_CONFIGS_FAMILY.folder);
         let context = self.kube_context().await?;
         auto_fill_generated_secrets(&context).await?;
 
         let mut config_files: Vec<tempfile::NamedTempFile> = Vec::new();
         let mut secret_env: Vec<(String, String)> = Vec::new();
         for config_key in APISERVER_CONFIG_KEYS {
-            let config =
-                resolve_profile_entry(loaded, &resolver, &KPROFILE_CONFIGS_FAMILY, config_key)
-                    .await?;
+            let stage_file = stage_configs.join(config_key);
+            let config = fs::read_to_string(&stage_file).map_err(|error| {
+                ProviderError::StagingReadFailed(
+                    stage_file.display().to_string(),
+                    error.to_string(),
+                )
+            })?;
             let mut config_file = tempfile::Builder::new()
                 .prefix("td-apiserver-")
                 .suffix(".yaml")

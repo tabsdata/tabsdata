@@ -3,13 +3,13 @@
 #
 
 version: 1
-disable_existing_loggers: False
+disable_existing_loggers: false
 
 formatters:
   plain:
     (): tabsdatak._logging.NoFormatFormatter
-    format: "%(asctime)s.%(msecs)03dZ %(levelname)s %(name)s: %(message)s"
-    datefmt: "%Y-%m-%dT%H:%M:%S"
+    format: '%(asctime)s.%(msecs)03dZ %(levelname)s %(name)s: %(message)s'
+    datefmt: '%Y-%m-%dT%H:%M:%S'
 
 filters:
   stdout_only:
@@ -22,20 +22,24 @@ handlers:
     class: logging.StreamHandler
     level: DEBUG
     formatter: plain
-    filters: [stdout_only]
+    filters:
+    - stdout_only
     stream: ext://sys.stdout
   stderr:
     class: logging.StreamHandler
     level: WARNING
     formatter: plain
-    filters: [stderr_only]
+    filters:
+    - stderr_only
     stream: ext://sys.stderr
 
 loggers:
   filelock:
     level: WARNING
-    propagate: False
+    propagate: false
 
 root:
   level: INFO
-  handlers: [stdout, stderr]
+  handlers:
+  - stdout
+  - stderr

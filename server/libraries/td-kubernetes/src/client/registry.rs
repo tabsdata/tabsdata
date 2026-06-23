@@ -18,6 +18,7 @@ use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
 use crate::core::system::exit::CommandResult;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
+use crate::runtime::instance::ports::AssignedPort;
 use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::axes::Locality;
 
@@ -88,6 +89,8 @@ pub struct InstanceSettings {
     pub provider: ClusterProvider,
     pub locality: Locality,
     pub cluster: ClusterViews,
+    #[serde(default)]
+    pub ports: Vec<AssignedPort>,
 }
 
 impl InstanceSettings {

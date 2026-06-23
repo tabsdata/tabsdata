@@ -67,7 +67,7 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         - name: POD_TABSDATA_INSTANCE
-          value: "${sys:TDK_INSTANCE_NAME}"
+          value: "${sys:tdk_instance_name}"
       volumeMounts:
         - name: config
           mountPath: /tabsdata/config
@@ -146,7 +146,7 @@ spec:
             fieldRef:
               fieldPath: spec.serviceAccountName
         - name: POD_TABSDATA_INSTANCE
-          value: "${sys:TDK_INSTANCE_NAME}"
+          value: "${sys:tdk_instance_name}"
   volumes:
     - name: config
       projected:

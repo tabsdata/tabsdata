@@ -116,4 +116,13 @@ pub enum ResolverError {
     EmbeddedRetainedPlaceholder { path: String, token: String } = 5031,
     #[error("Could not write the staged file '{path}': {cause}.")]
     StageWriteFailed { path: String, cause: String } = 5032,
+    #[error(
+        "Unknown generator '{generator}' for the auto-secret at '{path}'. \
+         Supported generators: {supported}."
+    )]
+    UnknownGenerator {
+        path: String,
+        generator: String,
+        supported: String,
+    } = 5033,
 }

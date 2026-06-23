@@ -26,6 +26,7 @@ const KM_CREATE_SUBCOMMAND: &str = "create";
 const KM_START_SUBCOMMAND: &str = "start";
 const KM_WORKDIR_ARGUMENT: &str = "--workdir";
 const KM_IMAGESDIR_ARGUMENT: &str = "--imagesdir";
+const KM_PORTSTART_ARGUMENT: &str = "--portstart";
 
 const KM_CONFIG_FOLDER: &str = "config";
 const KM_DATA_FOLDER: &str = "data";
@@ -42,14 +43,21 @@ pub struct KminusCluster {
     path: PathBuf,
     images_path: PathBuf,
     verbose: bool,
+    portstart: Option<u16>,
 }
 
 impl KminusCluster {
-    pub fn new(path: impl Into<PathBuf>, images_path: impl Into<PathBuf>, verbose: bool) -> Self {
+    pub fn new(
+        path: impl Into<PathBuf>,
+        images_path: impl Into<PathBuf>,
+        verbose: bool,
+        portstart: Option<u16>,
+    ) -> Self {
         Self {
             path: path.into(),
             images_path: images_path.into(),
             verbose,
+            portstart,
         }
     }
 
@@ -155,6 +163,11 @@ impl Cluster for KminusCluster {
             .arg(KM_WORKDIR_ARGUMENT)
             .arg(self.path())
             .stdin(Stdio::null());
+        if let Some(portstart) = self.portstart {
+            command
+                .arg(KM_PORTSTART_ARGUMENT)
+                .arg(portstart.to_string());
+        }
         apply_detached_flags(&mut command);
         let output = subprocess::run(&mut command, KM_BINARY, self.verbose).map_err(|error| {
             ProviderError::KminusStartFailed(format!(
@@ -253,7 +266,8 @@ impl Transaction for InstanceFolderGuard {
 impl Drop for InstanceFolderGuard {
     fn drop(&mut self) {
         if let Some(folder) = self.folder.take() {
-            fs::remove_dir_all(&folder).ok();
+            let _ = folder;
+            // fs::remove_dir_all(&folder).ok();
         }
     }
 }

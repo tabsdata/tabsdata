@@ -73,4 +73,4 @@ spec:
                 fieldRef:
                   fieldPath: spec.serviceAccountName
             - name: POD_TABSDATA_INSTANCE
-              value: "${sys:TDK_INSTANCE_NAME}"
+              value: "${sys:tdk_instance_name}"

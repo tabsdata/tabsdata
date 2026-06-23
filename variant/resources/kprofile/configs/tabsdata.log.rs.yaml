@@ -9,14 +9,14 @@ profiles:
     output: stdout
     level: debug
     directives:
-      - tower::buffer::worker=info
+    - tower::buffer::worker=info
   development:
     output: stdout
     level: debug
     directives:
-      - tower::buffer::worker=info
+    - tower::buffer::worker=info
   production:
     output: stdout
     level: info
     directives:
-      - tower::buffer::worker=info
+    - tower::buffer::worker=info

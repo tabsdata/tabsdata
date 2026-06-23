@@ -6,6 +6,7 @@ pub mod cluster;
 pub mod injection;
 pub mod launcher;
 pub mod manifest;
+pub mod ports;
 pub mod profile;
 pub mod tier;
 

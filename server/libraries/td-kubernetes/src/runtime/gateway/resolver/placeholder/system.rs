@@ -25,28 +25,39 @@ static PATTERN: Lazy<Regex> = Lazy::new(|| {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, EnumString, AsRefStr, EnumIter)]
 pub enum SystemKey {
-    #[strum(serialize = "TDK_REPOSITORY_URL")]
+    #[strum(serialize = "tdk_repository_url")]
     RepositoryUrl,
-    #[strum(serialize = "TDK_REPOSITORY_PATH")]
+    #[strum(serialize = "tdk_repository_path")]
     RepositoryPath,
-    #[strum(serialize = "TDK_DATABASE_URL")]
+    #[strum(serialize = "tdk_database_url")]
     DatabaseUrl,
-    #[strum(serialize = "TDK_DATABASE_PATH")]
+    #[strum(serialize = "tdk_database_path")]
     DatabasePath,
-    #[strum(serialize = "TDK_STORAGE_URL")]
+    #[strum(serialize = "tdk_storage_url")]
     StorageUrl,
-    #[strum(serialize = "TDK_STORAGE_PATH")]
+    #[strum(serialize = "tdk_storage_path")]
     StoragePath,
-    #[strum(serialize = "TDK_PYENV_TD_ROOT")]
+    #[strum(serialize = "tdk_pyenv_td_root")]
     PyenvTdRoot,
-    #[strum(serialize = "TDK_PYENV_AG_ROOT")]
+    #[strum(serialize = "tdk_pyenv_ag_root")]
     PyenvAgRoot,
-    #[strum(serialize = "TDK_PYENV_SCRIPTS_FOLDER")]
+    #[strum(serialize = "tdk_pyenv_scripts_folder")]
     PyenvScriptsFolder,
-    #[strum(serialize = "TDK_PYENV_LIBEXEC_FOLDER")]
+    #[strum(serialize = "tdk_pyenv_libexec_folder")]
     PyenvLibexecFolder,
-    #[strum(serialize = "TDK_INSTANCE_NAME")]
+    #[strum(serialize = "tdk_instance_name")]
     InstanceName,
+    #[strum(serialize = "tdk_apiserver_public_port")]
+    ApiserverPublicPort,
+    #[strum(serialize = "tdk_apiserver_private_port")]
+    ApiserverPrivatePort,
+    #[cfg(feature = "enterprise")]
+    #[strum(serialize = "tdk_aiagent_public_port")]
+    AiagentPublicPort,
+    #[strum(serialize = "tdk_database_port")]
+    DatabasePort,
+    #[strum(serialize = "tdk_kminus_api_port")]
+    KminusApiPort,
 }
 
 impl SystemKey {
@@ -71,6 +82,12 @@ pub struct SystemValues {
     pub pyenv_scripts_folder: Option<String>,
     pub pyenv_libexec_folder: Option<String>,
     pub instance_name: Option<String>,
+    pub apiserver_public_port: Option<String>,
+    pub apiserver_private_port: Option<String>,
+    #[cfg(feature = "enterprise")]
+    pub aiagent_public_port: Option<String>,
+    pub database_port: Option<String>,
+    pub kminus_api_port: Option<String>,
 }
 
 impl SystemValues {
@@ -87,6 +104,12 @@ impl SystemValues {
             SystemKey::PyenvScriptsFolder => self.pyenv_scripts_folder.as_deref(),
             SystemKey::PyenvLibexecFolder => self.pyenv_libexec_folder.as_deref(),
             SystemKey::InstanceName => self.instance_name.as_deref(),
+            SystemKey::ApiserverPublicPort => self.apiserver_public_port.as_deref(),
+            SystemKey::ApiserverPrivatePort => self.apiserver_private_port.as_deref(),
+            #[cfg(feature = "enterprise")]
+            SystemKey::AiagentPublicPort => self.aiagent_public_port.as_deref(),
+            SystemKey::DatabasePort => self.database_port.as_deref(),
+            SystemKey::KminusApiPort => self.kminus_api_port.as_deref(),
         }
     }
 }

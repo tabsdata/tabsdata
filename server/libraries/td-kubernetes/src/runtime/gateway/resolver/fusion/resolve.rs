@@ -95,54 +95,47 @@ impl ResolveSession<'_> {
                 let Value::Sequence(init_items) = init else {
                     return Err(self.structure_mismatch(path));
                 };
-                match shape_item(template_items) {
-                    Some(shape) => self.resolve_shaped_sequence(shape, init_items, path),
-                    None => Ok(init.clone()),
+                if is_keyed_map_sequence(template_items) {
+                    self.resolve_keyed_sequence(template_items, init_items, path)
+                } else {
+                    Ok(init.clone())
                 }
             }
             _ => Ok(init.clone()),
         }
     }
 
-    fn resolve_shaped_sequence(
+    fn resolve_keyed_sequence(
         &mut self,
-        shape: &Value,
+        template_items: &[Value],
         init_items: &[Value],
         path: &mut Vec<String>,
     ) -> Result<Value, ResolverError> {
         let displayed_path = path.join(PATH_SEPARATOR);
-        let shape_key = first_key(shape).ok_or_else(|| ResolverError::SequenceEmptyItem {
-            path: displayed_path.clone(),
-            item_index: 0,
+        let first_template = template_items.first().ok_or_else(|| {
+            ResolverError::SequenceEmptyItem {
+                path: displayed_path.clone(),
+                item_index: 0,
+            }
         })?;
+        let shape_key =
+            first_key(first_template).ok_or_else(|| ResolverError::SequenceEmptyItem {
+                path: displayed_path.clone(),
+                item_index: 0,
+            })?;
+
+        let mut templates_by_identity: HashMap<String, &Value> =
+            HashMap::with_capacity(template_items.len());
+        for (item_index, template_item) in template_items.iter().enumerate() {
+            let identity =
+                item_identity(template_item, &shape_key, &displayed_path, item_index)?;
+            templates_by_identity.insert(identity, template_item);
+        }
 
         let mut seen: HashMap<String, usize> = HashMap::with_capacity(init_items.len());
         let mut rendered = Vec::with_capacity(init_items.len());
         for (item_index, init_item) in init_items.iter().enumerate() {
-            let Value::Mapping(init_map) = init_item else {
-                return Err(ResolverError::SequenceMixedItems {
-                    path: displayed_path.clone(),
-                    item_index,
-                });
-            };
-            let (init_key_node, init_value_node) =
-                init_map
-                    .iter()
-                    .next()
-                    .ok_or_else(|| ResolverError::SequenceEmptyItem {
-                        path: displayed_path.clone(),
-                        item_index,
-                    })?;
-            let init_key = scalar_key(init_key_node);
-            if init_key != shape_key {
-                return Err(ResolverError::SequenceFirstKeyMismatch {
-                    path: displayed_path.clone(),
-                    first_key: shape_key.clone(),
-                    item_index,
-                    other_key: init_key,
-                });
-            }
-            let identity = identity_value(init_value_node, &displayed_path, item_index)?;
+            let identity = item_identity(init_item, &shape_key, &displayed_path, item_index)?;
             if let Some(prior_index) = seen.get(&identity) {
                 return Err(ResolverError::SequenceDuplicateFirstValues {
                     path: displayed_path.clone(),
@@ -153,8 +146,13 @@ impl ResolveSession<'_> {
             }
             seen.insert(identity.clone(), item_index);
 
+            let template_item = templates_by_identity
+                .get(&identity)
+                .copied()
+                .unwrap_or(first_template);
+
             path.push(identity);
-            let rendered_item = self.resolve_node(shape, init_item, path)?;
+            let rendered_item = self.resolve_node(template_item, init_item, path)?;
             path.pop();
             rendered.push(rendered_item);
         }
@@ -192,13 +190,13 @@ impl ResolveSession<'_> {
                 self.expect_verbatim(placeholder, init_text, &displayed_path)?;
                 let rendered = self.fixed_value(placeholder, kind, path, &displayed_path)?;
                 self.record_value(placeholder, &displayed_path, &rendered)?;
-                Ok(Value::String(rendered))
+                Ok(scalar_value(rendered))
             }
             Substitution::Inlined => {
                 let context = self.context(placeholder, init_text, path);
                 let resolution = resolver.resolve(&context)?;
                 self.record_value(placeholder, &displayed_path, &resolution.rendered)?;
-                Ok(Value::String(resolution.rendered))
+                Ok(scalar_value(resolution.rendered))
             }
             Substitution::Retained => {
                 let context = self.context(placeholder, init_text, path);
@@ -343,13 +341,40 @@ impl ResolveSession<'_> {
     }
 }
 
-fn shape_item(template_items: &[Value]) -> Option<&Value> {
-    match template_items {
-        [only] if matches!(only, Value::Mapping(_)) && node_contains_placeholder(only) => {
-            Some(only)
+fn is_keyed_map_sequence(template_items: &[Value]) -> bool {
+    !template_items.is_empty()
+        && template_items.iter().all(|item| matches!(item, Value::Mapping(_)))
+        && template_items.iter().any(node_contains_placeholder)
+}
+
+fn item_identity(
+    item: &Value,
+    shape_key: &str,
+    path: &str,
+    item_index: usize,
+) -> Result<String, ResolverError> {
+    let Value::Mapping(map) = item else {
+        return Err(ResolverError::SequenceMixedItems {
+            path: path.to_owned(),
+            item_index,
+        });
+    };
+    let (key_node, value_node) = map.iter().next().ok_or_else(|| {
+        ResolverError::SequenceEmptyItem {
+            path: path.to_owned(),
+            item_index,
         }
-        _ => None,
+    })?;
+    let key = scalar_key(key_node);
+    if key != shape_key {
+        return Err(ResolverError::SequenceFirstKeyMismatch {
+            path: path.to_owned(),
+            first_key: shape_key.to_owned(),
+            item_index,
+            other_key: key,
+        });
     }
+    identity_value(value_node, path, item_index)
 }
 
 fn first_key(item: &Value) -> Option<String> {
@@ -399,6 +424,20 @@ fn scalar_text<'a>(value: &'a Value, path: &str) -> Result<Option<&'a str>, Reso
         _ => Err(ResolverError::StructureMismatch {
             path: path.to_owned(),
         }),
+    }
+}
+
+fn scalar_value(rendered: String) -> Value {
+    if let Ok(integer) = rendered.parse::<i64>() {
+        return Value::Number(integer.into());
+    }
+    if let Ok(unsigned) = rendered.parse::<u64>() {
+        return Value::Number(unsigned.into());
+    }
+    match rendered.as_str() {
+        "true" => Value::Bool(true),
+        "false" => Value::Bool(false),
+        _ => Value::String(rendered),
     }
 }
 
