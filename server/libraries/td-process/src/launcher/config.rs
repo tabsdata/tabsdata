@@ -399,7 +399,7 @@ mod tests {
         let path = get_current_dir().join("explicit-resolved.yaml");
         std::fs::write(
             &path,
-            "name: ${{env:TD_PROCESS_TEST_RESOLVE_NAME}}\nport: ${{env:TD_PROCESS_TEST_RESOLVE_PORT}}\n",
+            "name: ${env:TD_PROCESS_TEST_RESOLVE_NAME}\nport: ${env:TD_PROCESS_TEST_RESOLVE_PORT}\n",
         )
         .expect("write explicit config");
 
@@ -416,19 +416,16 @@ mod tests {
     }
 
     #[test]
-    fn test_load_config_resolves_secret_placeholders_in_explicit_file() {
-        unsafe { std::env::set_var("NAME", "from-secret") };
-
+    fn test_supervisor_leaves_secret_placeholders_unresolved() {
         let path = get_current_dir().join("explicit-secret.yaml");
         std::fs::write(&path, "name: ${{secret}}\nport: 9999\n").expect("write explicit config");
 
         let config = load_config::<MyConfig>("my-config-secret", None, vec![path.clone()], false);
 
-        assert_eq!(config.name, "from-secret");
+        assert_eq!(config.name, "${{secret}}");
         assert_eq!(config.port(), &9999u16);
 
         std::fs::remove_file(&path).ok();
-        unsafe { std::env::remove_var("NAME") };
     }
 
     #[test]
