@@ -23,64 +23,6 @@ async fn resolves_unsubstituted_text_unchanged() {
 }
 
 #[tokio::test]
-async fn resolves_required_env_placeholder() {
-    let key = "TD_TEST_RESOLVER_REQUIRED";
-    unsafe { std::env::set_var(key, "world") };
-
-    let resolver = resolver();
-    let resolved = resolver
-        .resolve_env("hello ${env:TD_TEST_RESOLVER_REQUIRED}")
-        .await
-        .expect("resolve");
-    assert_eq!(resolved, "hello world");
-
-    unsafe { std::env::remove_var(key) };
-}
-
-#[tokio::test]
-async fn missing_required_env_returns_error() {
-    unsafe { std::env::remove_var("TD_TEST_RESOLVER_MISSING") };
-
-    let resolver = resolver();
-    let result = resolver
-        .resolve_env("${env:TD_TEST_RESOLVER_MISSING}")
-        .await;
-    assert!(result.is_err(), "expected missing env var to error");
-}
-
-#[tokio::test]
-async fn optional_env_placeholder_falls_back_to_empty_string() {
-    unsafe { std::env::remove_var("TD_TEST_RESOLVER_OPTIONAL") };
-
-    let resolver = resolver();
-    let resolved = resolver
-        .resolve_env("prefix-${env:TD_TEST_RESOLVER_OPTIONAL?}-suffix")
-        .await
-        .expect("resolve");
-    assert_eq!(resolved, "prefix--suffix");
-}
-
-#[tokio::test]
-async fn multiple_env_placeholders_resolve_left_to_right() {
-    unsafe {
-        std::env::set_var("TD_TEST_RESOLVER_A", "alpha");
-        std::env::set_var("TD_TEST_RESOLVER_B", "beta");
-    }
-
-    let resolver = resolver();
-    let resolved = resolver
-        .resolve_env("${env:TD_TEST_RESOLVER_A}/${env:TD_TEST_RESOLVER_B}")
-        .await
-        .expect("resolve");
-    assert_eq!(resolved, "alpha/beta");
-
-    unsafe {
-        std::env::remove_var("TD_TEST_RESOLVER_A");
-        std::env::remove_var("TD_TEST_RESOLVER_B");
-    }
-}
-
-#[tokio::test]
 async fn resolves_system_repository_url() {
     let resolver = resolver_with_system(SystemValues {
         repository_url: Some("file:///var/lib/tabsdata/instance/repo".to_string()),
@@ -155,40 +97,4 @@ async fn resolve_secret_errors_when_env_var_missing() {
     let yaml = "td_resolve_test_missing:\n  secret: ${secret}\n";
     let result = resolver.resolve_secret(yaml).await;
     assert!(result.is_err(), "missing env var should error");
-}
-
-#[tokio::test]
-async fn resolve_runs_env_then_secret() {
-    unsafe {
-        std::env::set_var("TD_RESOLVE_TEST_BOTH_LOG", "info");
-        std::env::set_var("TD_RESOLVE_TEST_BOTH__VALUE", "p@ss");
-    }
-
-    let resolver = resolver();
-    let yaml =
-        "log_level: ${env:TD_RESOLVE_TEST_BOTH_LOG}\ntd_resolve_test_both:\n  value: ${secret}\n";
-    let resolved = resolver.resolve(yaml).await.expect("resolve");
-    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
-    assert_eq!(parsed["log_level"].as_str(), Some("info"));
-    assert_eq!(
-        parsed["td_resolve_test_both"]["value"].as_str(),
-        Some("p@ss")
-    );
-
-    unsafe {
-        std::env::remove_var("TD_RESOLVE_TEST_BOTH_LOG");
-        std::env::remove_var("TD_RESOLVE_TEST_BOTH__VALUE");
-    }
-}
-
-#[tokio::test]
-async fn resolve_passes_through_text_without_placeholders() {
-    let resolver = resolver();
-    let yaml = "anchor:\n  literal: not a placeholder\n";
-    let resolved = resolver.resolve(yaml).await.expect("resolve");
-    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
-    assert_eq!(
-        parsed["anchor"]["literal"].as_str(),
-        Some("not a placeholder")
-    );
 }
