@@ -23,11 +23,12 @@ pub(super) fn resolver_for(
     kind: &str,
     path: &str,
 ) -> Result<Box<dyn ConcreteResolver>, ResolverError> {
-    let kind = PlaceholderKind::from_str(kind).map_err(|_| ResolverError::UnknownPlaceholderKind {
-        path: path.to_owned(),
-        kind: kind.to_owned(),
-        supported: PlaceholderKind::supported(),
-    })?;
+    let kind =
+        PlaceholderKind::from_str(kind).map_err(|_| ResolverError::UnknownPlaceholderKind {
+            path: path.to_owned(),
+            kind: kind.to_owned(),
+            supported: PlaceholderKind::supported(),
+        })?;
     if !kind.is_supported() {
         return Err(ResolverError::UnsupportedPlaceholderKind {
             path: path.to_owned(),

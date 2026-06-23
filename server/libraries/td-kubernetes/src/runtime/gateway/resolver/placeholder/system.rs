@@ -16,7 +16,7 @@ use td_error::TdError;
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
-    ConcreteResolver, PATH_SEPARATOR, ResolveContext, Resolution,
+    ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext,
 };
 
 static PATTERN: Lazy<Regex> = Lazy::new(|| {
@@ -143,24 +143,24 @@ impl SystemResolver {
 
     fn lookup_value(&self, context: &ResolveContext) -> Result<Resolution, ResolverError> {
         let path = context.path.join(PATH_SEPARATOR);
-        let category = context
-            .placeholder
-            .category
-            .as_deref()
-            .ok_or_else(|| ResolverError::MissingPlaceholderCategory {
+        let category = context.placeholder.category.as_deref().ok_or_else(|| {
+            ResolverError::MissingPlaceholderCategory {
                 path: path.clone(),
                 kind: self.kind().as_str().to_owned(),
-            })?;
-        let key = SystemKey::from_str(category).map_err(|_| ResolverError::UnsupportedSystemKey {
-            key: category.to_owned(),
-            supported: SystemKey::supported(),
+            }
         })?;
-        let value = context
-            .system
-            .lookup(key)
-            .ok_or_else(|| ResolverError::MissingSystemValue {
+        let key =
+            SystemKey::from_str(category).map_err(|_| ResolverError::UnsupportedSystemKey {
                 key: category.to_owned(),
+                supported: SystemKey::supported(),
             })?;
+        let value =
+            context
+                .system
+                .lookup(key)
+                .ok_or_else(|| ResolverError::MissingSystemValue {
+                    key: category.to_owned(),
+                })?;
         Ok(Resolution {
             rendered: value.to_owned(),
             secret: None,

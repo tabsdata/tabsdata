@@ -118,11 +118,12 @@ fn compare_family(
     if strict_content {
         for (file, content) in canonical {
             let path = family_folder.join(file);
-            let present_content =
-                fs::read_to_string(&path).map_err(|cause| ResolverError::InitializationReadFailed {
+            let present_content = fs::read_to_string(&path).map_err(|cause| {
+                ResolverError::InitializationReadFailed {
                     path: path.display().to_string(),
                     cause: cause.to_string(),
-                })?;
+                }
+            })?;
             if &present_content != content {
                 return Err(ResolverError::InitializationPodModified { file: file.clone() });
             }
@@ -144,12 +145,13 @@ fn read_flat_family(family_folder: &Path, family: &str) -> Result<BTreeSet<Strin
             path: family_folder.display().to_string(),
             cause: cause.to_string(),
         })?;
-        let file_type = entry
-            .file_type()
-            .map_err(|cause| ResolverError::InitializationReadFailed {
-                path: entry.path().display().to_string(),
-                cause: cause.to_string(),
-            })?;
+        let file_type =
+            entry
+                .file_type()
+                .map_err(|cause| ResolverError::InitializationReadFailed {
+                    path: entry.path().display().to_string(),
+                    cause: cause.to_string(),
+                })?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if file_type.is_dir() {
             return Err(ResolverError::InitializationNotFlat {

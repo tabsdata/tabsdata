@@ -20,7 +20,7 @@ use td_error::TdError;
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
-    ConcreteResolver, PATH_SEPARATOR, ResolveContext, Resolution, Rule,
+    ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext, Rule,
 };
 
 static PATTERN: Lazy<Regex> = Lazy::new(|| {
@@ -55,14 +55,12 @@ impl EnvResolver {
     }
 
     fn variable(&self, context: &ResolveContext) -> Result<String, ResolverError> {
-        context
-            .placeholder
-            .category
-            .clone()
-            .ok_or_else(|| ResolverError::MissingPlaceholderCategory {
+        context.placeholder.category.clone().ok_or_else(|| {
+            ResolverError::MissingPlaceholderCategory {
                 path: context.path.join(PATH_SEPARATOR),
                 kind: self.kind().as_str().to_owned(),
-            })
+            }
+        })
     }
 }
 

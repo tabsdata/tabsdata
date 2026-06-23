@@ -18,6 +18,7 @@ const CONFIG_LABEL: &str = "<config>";
 
 pub(super) struct ResolveOutcome {
     pub rendered: String,
+    #[allow(dead_code)]
     pub secrets: Vec<SecretEntry>,
 }
 
@@ -88,8 +89,74 @@ impl ResolveSession<'_> {
                 }
                 Ok(Value::Mapping(rendered))
             }
+            Value::Sequence(template_items) => {
+                let Value::Sequence(init_items) = init else {
+                    return Err(self.structure_mismatch(path));
+                };
+                match shape_item(template_items) {
+                    Some(shape) => self.resolve_shaped_sequence(shape, init_items, path),
+                    None => Ok(init.clone()),
+                }
+            }
             _ => Ok(init.clone()),
         }
+    }
+
+    fn resolve_shaped_sequence(
+        &mut self,
+        shape: &Value,
+        init_items: &[Value],
+        path: &mut Vec<String>,
+    ) -> Result<Value, ResolverError> {
+        let displayed_path = path.join(PATH_SEPARATOR);
+        let shape_key = first_key(shape).ok_or_else(|| ResolverError::SequenceEmptyItem {
+            path: displayed_path.clone(),
+            item_index: 0,
+        })?;
+
+        let mut seen: HashMap<String, usize> = HashMap::with_capacity(init_items.len());
+        let mut rendered = Vec::with_capacity(init_items.len());
+        for (item_index, init_item) in init_items.iter().enumerate() {
+            let Value::Mapping(init_map) = init_item else {
+                return Err(ResolverError::SequenceMixedItems {
+                    path: displayed_path.clone(),
+                    item_index,
+                });
+            };
+            let (init_key_node, init_value_node) =
+                init_map
+                    .iter()
+                    .next()
+                    .ok_or_else(|| ResolverError::SequenceEmptyItem {
+                        path: displayed_path.clone(),
+                        item_index,
+                    })?;
+            let init_key = scalar_key(init_key_node);
+            if init_key != shape_key {
+                return Err(ResolverError::SequenceFirstKeyMismatch {
+                    path: displayed_path.clone(),
+                    first_key: shape_key.clone(),
+                    item_index,
+                    other_key: init_key,
+                });
+            }
+            let identity = identity_value(init_value_node, &displayed_path, item_index)?;
+            if let Some(prior_index) = seen.get(&identity) {
+                return Err(ResolverError::SequenceDuplicateFirstValues {
+                    path: displayed_path.clone(),
+                    value: identity,
+                    first_index: *prior_index,
+                    second_index: item_index,
+                });
+            }
+            seen.insert(identity.clone(), item_index);
+
+            path.push(identity);
+            let rendered_item = self.resolve_node(shape, init_item, path)?;
+            path.pop();
+            rendered.push(rendered_item);
+        }
+        Ok(Value::Sequence(rendered))
     }
 
     fn resolve_scalar(
@@ -173,7 +240,7 @@ impl ResolveSession<'_> {
         &mut self,
         placeholder: &Placeholder,
         kind: PlaceholderKind,
-        path: &mut Vec<String>,
+        path: &[String],
         displayed_path: &str,
     ) -> Result<String, ResolverError> {
         match kind.phase() {
@@ -265,6 +332,48 @@ impl ResolveSession<'_> {
         ResolverError::StructureMismatch {
             path: full.join(PATH_SEPARATOR),
         }
+    }
+}
+
+fn shape_item(template_items: &[Value]) -> Option<&Value> {
+    match template_items {
+        [only] if matches!(only, Value::Mapping(_)) && node_contains_placeholder(only) => {
+            Some(only)
+        }
+        _ => None,
+    }
+}
+
+fn first_key(item: &Value) -> Option<String> {
+    match item {
+        Value::Mapping(map) => map.iter().next().map(|(key, _)| scalar_key(key)),
+        _ => None,
+    }
+}
+
+fn identity_value(value: &Value, path: &str, item_index: usize) -> Result<String, ResolverError> {
+    match value {
+        Value::String(text) if contains_placeholder(text) => {
+            Err(ResolverError::PlaceholderAsIdentity {
+                path: path.to_owned(),
+            })
+        }
+        Value::String(text) => Ok(text.clone()),
+        Value::Number(number) => Ok(number.to_string()),
+        Value::Bool(boolean) => Ok(boolean.to_string()),
+        _ => Err(ResolverError::SequenceFirstValueNonScalar {
+            path: path.to_owned(),
+            item_index,
+        }),
+    }
+}
+
+fn node_contains_placeholder(node: &Value) -> bool {
+    match node {
+        Value::String(text) => contains_placeholder(text),
+        Value::Mapping(map) => map.values().any(node_contains_placeholder),
+        Value::Sequence(items) => items.iter().any(node_contains_placeholder),
+        _ => false,
     }
 }
 

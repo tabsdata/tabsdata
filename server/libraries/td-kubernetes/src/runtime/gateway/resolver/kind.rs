@@ -101,11 +101,9 @@ impl PlaceholderKind {
 
     pub const fn phase(self) -> Phase {
         match self {
-            Self::Literal
-            | Self::LiteralAuto
-            | Self::System
-            | Self::SystemAuto
-            | Self::Var => Phase::Creation,
+            Self::Literal | Self::LiteralAuto | Self::System | Self::SystemAuto | Self::Var => {
+                Phase::Creation
+            }
             Self::Config
             | Self::ConfigAuto
             | Self::Secret

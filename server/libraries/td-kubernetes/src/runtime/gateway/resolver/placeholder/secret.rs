@@ -10,11 +10,9 @@ use crate::base::error::gateway::ResolverError;
 use crate::base::error::secret::SecretError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
-    ConcreteResolver, PATH_SEPARATOR, ResolveContext, Resolution, SecretEntry,
+    ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext, SecretEntry,
 };
-use crate::runtime::secrets::walker::{
-    Placeholder, SecretVisitor, encode_secret_key, walk,
-};
+use crate::runtime::secrets::walker::{Placeholder, SecretVisitor, encode_secret_key, walk};
 
 const CONSUMER_LABEL: &str = "<consumer config>";
 
