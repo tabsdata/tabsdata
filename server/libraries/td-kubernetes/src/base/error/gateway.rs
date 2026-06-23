@@ -76,4 +76,23 @@ pub enum ResolverError {
          initialization folder has been tampered with."
     )]
     InitializationPodModified { file: String } = 5024,
+    #[error("The placeholder kind '{kind}' at '{path}' requires a category ('${{{kind}:...}}').")]
+    MissingPlaceholderCategory { path: String, kind: String } = 5025,
+    #[error("A value is required for placeholder '${{{kind}:{category}}}' at '{path}'.")]
+    MissingRequiredValue {
+        path: String,
+        kind: String,
+        category: String,
+    } = 5026,
+    #[error(
+        "The value at '{path}' must keep the system-controlled placeholder '{expected}' \
+         unchanged, but it was set to '{found}'; the initialization folder has been tampered with."
+    )]
+    NonEditablePlaceholderModified {
+        path: String,
+        expected: String,
+        found: String,
+    } = 5027,
+    #[error("Could not encode the secret key at '{path}': {cause}.")]
+    SecretKeyEncodingFailed { path: String, cause: String } = 5028,
 }

@@ -18,6 +18,10 @@ use regex::Regex;
 use td_error::TdError;
 
 use crate::base::error::gateway::ResolverError;
+use crate::runtime::gateway::resolver::kind::PlaceholderKind;
+use crate::runtime::gateway::resolver::walker::{
+    ConcreteResolver, PATH_SEPARATOR, ResolveContext, Resolution, Rule,
+};
 
 static PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\$\{env:(\w+)(\?)?}")
@@ -41,6 +45,52 @@ pub(crate) fn resolve(text: &str) -> Result<String, TdError> {
         current = current.replace(&placeholder, &value);
     }
     Ok(current.trim().to_string())
+}
+
+pub(crate) struct EnvResolver;
+
+impl EnvResolver {
+    pub(crate) fn new() -> Self {
+        Self
+    }
+
+    fn variable(&self, context: &ResolveContext) -> Result<String, ResolverError> {
+        context
+            .placeholder
+            .category
+            .clone()
+            .ok_or_else(|| ResolverError::MissingPlaceholderCategory {
+                path: context.path.join(PATH_SEPARATOR),
+                kind: self.kind().as_str().to_owned(),
+            })
+    }
+}
+
+impl ConcreteResolver for EnvResolver {
+    fn kind(&self) -> PlaceholderKind {
+        PlaceholderKind::Env
+    }
+
+    fn resolve(&self, context: &ResolveContext) -> Result<Resolution, ResolverError> {
+        Ok(Resolution {
+            rendered: context.placeholder.token(),
+            secret: None,
+        })
+    }
+
+    fn materialize(&self, context: &ResolveContext) -> Result<Resolution, ResolverError> {
+        let variable = self.variable(context)?;
+        let optional = context.placeholder.rule == Rule::Optional;
+        let value = match env::var(&variable) {
+            Ok(value) => value.trim().to_string(),
+            Err(_) if optional => String::new(),
+            Err(_) => return Err(ResolverError::EnvironmentVariableNotFound { variable }),
+        };
+        Ok(Resolution {
+            rendered: value,
+            secret: None,
+        })
+    }
 }
 
 pub(crate) fn materialize(text: &str) -> Result<String, TdError> {

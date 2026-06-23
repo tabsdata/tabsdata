@@ -90,6 +90,7 @@
 //! of maps with a duplicated first key/value.
 
 pub mod fusion;
+mod kind;
 mod placeholder;
 mod walker;
 
@@ -107,7 +108,7 @@ impl ConfigurationResolver {
     }
 
     pub async fn resolve(&self, content: &str) -> Result<String, TdError> {
-        placeholder::sys::resolve(content, &self.system)
+        placeholder::system::resolve(content, &self.system)
     }
 
     pub async fn materialize(&self, content: &str) -> Result<String, TdError> {

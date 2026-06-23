@@ -33,9 +33,16 @@ use serde_yaml::Value;
 
 use crate::base::error::gateway::ResolverError;
 
+pub(super) const PATH_SEPARATOR: &str = ".";
+
 const KIND_PATTERN: &str = r"[A-Za-z][A-Za-z0-9]*";
 const CATEGORY_PATTERN: &str = r"[A-Za-z0-9._-]*";
 const RULE_PATTERN: &str = r"\?";
+
+const PLACEHOLDER_OPENER: &str = "${";
+const PLACEHOLDER_CLOSER: &str = "}";
+const CATEGORY_SEPARATOR: &str = ":";
+const OPTIONAL_RULE_MARKER: &str = "?";
 
 static PLACEHOLDER_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(&format!(
@@ -58,6 +65,22 @@ pub struct Placeholder {
     pub rule: Rule,
 }
 
+impl Placeholder {
+    pub fn token(&self) -> String {
+        let mut token = String::from(PLACEHOLDER_OPENER);
+        token.push_str(&self.kind);
+        if let Some(category) = &self.category {
+            token.push_str(CATEGORY_SEPARATOR);
+            token.push_str(category);
+        }
+        if self.rule == Rule::Optional {
+            token.push_str(OPTIONAL_RULE_MARKER);
+        }
+        token.push_str(PLACEHOLDER_CLOSER);
+        token
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SecretEntry {
     pub key: String,
@@ -70,15 +93,22 @@ pub struct Resolution {
     pub secret: Option<SecretEntry>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    Creation,
+    Execution,
+}
+
 pub struct ResolveContext<'a> {
     pub path: &'a [String],
     pub occurrence: usize,
     pub placeholder: &'a Placeholder,
+    pub init_value: Option<&'a str>,
     pub system: &'a super::SystemValues,
 }
 
 pub trait ConcreteResolver {
-    fn kind(&self) -> &'static str;
+    fn kind(&self) -> super::kind::PlaceholderKind;
     fn resolve(&self, context: &ResolveContext) -> Result<Resolution, ResolverError>;
     fn materialize(&self, context: &ResolveContext) -> Result<Resolution, ResolverError>;
 }
@@ -167,7 +197,7 @@ fn walk_sequence<V: PlaceholderVisitor>(
         return Ok(());
     }
 
-    let displayed_path = path.join(".");
+    let displayed_path = path.join(PATH_SEPARATOR);
 
     if items.iter().all(|item| matches!(item, Value::String(_))) {
         for (index, item) in items.iter_mut().enumerate() {
