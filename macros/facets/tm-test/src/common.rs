@@ -23,10 +23,7 @@ pub(crate) struct EmitCtx<'a> {
 /// Collect every function parameter whose type path contains `kind` as a
 /// segment, in declaration order, as `(param_name, param_type)`. Used by the db
 /// flavor, where the test takes one pool per requested component.
-pub(crate) fn get_all_fn_args(
-    func_sig: &Signature,
-    kind: &Ident,
-) -> Vec<(Ident, TypePath)> {
+pub(crate) fn get_all_fn_args(func_sig: &Signature, kind: &Ident) -> Vec<(Ident, TypePath)> {
     func_sig
         .inputs
         .iter()

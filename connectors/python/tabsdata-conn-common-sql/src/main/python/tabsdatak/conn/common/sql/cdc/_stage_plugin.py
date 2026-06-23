@@ -117,7 +117,8 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
             # duplicate deterministic regardless of how the engine schedules
             # the scan.
             deduped = (
-                pl.concat(lazy_frames, how="vertical_relaxed")
+                pl
+                .concat(lazy_frames, how="vertical_relaxed")
                 .with_row_index("arrival")
                 .filter(
                     pl.col("arrival")
@@ -156,9 +157,8 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                 # itself is never collected. Taken from the pre-filter frame
                 # so an already-seen batch can never lower the stored cursor.
                 high_water = (
-                    deduped.filter(
-                        pl.col(CDC_META_SEG) == pl.col(CDC_META_SEG).max()
-                    )
+                    deduped
+                    .filter(pl.col(CDC_META_SEG) == pl.col(CDC_META_SEG).max())
                     .select(
                         pl.col(CDC_META_SEG).max().alias(CDC_META_SEG),
                         pl.col(CDC_META_ORD).max().alias(CDC_META_ORD),

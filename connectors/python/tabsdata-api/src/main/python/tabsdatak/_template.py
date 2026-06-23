@@ -114,8 +114,7 @@ def resolve_conn(type_: str, direction: Optional[str]) -> ConnectorInfo:
     ambiguous type, or a direction the type does not offer."""
     if direction is not None and direction not in _DIRECTIONS:
         raise TemplateError(
-            f"unknown direction {direction!r}; expected one of "
-            f"{', '.join(_DIRECTIONS)}"
+            f"unknown direction {direction!r}; expected one of {', '.join(_DIRECTIONS)}"
         )
     rows = list_connectors()
     matches = [r for r in rows if r.type == type_]
@@ -128,8 +127,7 @@ def resolve_conn(type_: str, direction: Optional[str]) -> ConnectorInfo:
                 return r
         offered = ", ".join(sorted(r.direction for r in matches))
         raise TemplateError(
-            f"connector {type_!r} has no {direction!r} direction; "
-            f"it offers: {offered}"
+            f"connector {type_!r} has no {direction!r} direction; it offers: {offered}"
         )
     if len(matches) == 1:
         return matches[0]
@@ -371,8 +369,7 @@ def validate(document: Any) -> str:
     missing = _ENVELOPE_KEYS - document.keys()
     if missing:
         raise TemplateError(
-            f"connection document missing envelope key(s): "
-            f"{', '.join(sorted(missing))}"
+            f"connection document missing envelope key(s): {', '.join(sorted(missing))}"
         )
     kind = document["kind"]
     if not isinstance(kind, str):
