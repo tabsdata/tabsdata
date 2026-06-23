@@ -154,6 +154,6 @@ uuid6==2025.0.1
 uv==0.10.12
 wcwidth==0.8.1
 wheel==0.47.0
-zeep==4.3.2
+zeep==4.3.3
 zipp==4.1.0
 zstandard==0.25.0
