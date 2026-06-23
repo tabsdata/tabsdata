@@ -46,12 +46,20 @@ pub fn run() {
                 ExitStatus::GeneralError
             })?;
 
-            // Connect the database, app-only, in every mode: one step builds a serving
-            // pool for each registered component so each context grabs the one it needs.
-            // The apiserver never boots or manages the database — the in-process embedded
-            // server is brought up by `td_dbmanager start` and schemas are
-            // provisioned/upgraded by `td_dbmanager create`/`upgrade`, out of band — so it
-            // holds no privileged system access.
+            // In embedded mode the apiserver owns its in-process database server: boot
+            // it (detached, idempotent) before connecting and stop it on shutdown.
+            // Sidecar/remote servers are external — the apiserver is app-only there and
+            // `td_dbmanager` manages their lifecycle out of band. Schemas are always
+            // provisioned/upgraded by `td_dbmanager create`/`upgrade`, never here.
+            if database_descriptor.mode().is_embedded() {
+                dbm::start_server(database_descriptor).await.map_err(|e| {
+                    error!("Error starting embedded database server: {e:#?}");
+                    ExitStatus::GeneralError
+                })?;
+            }
+
+            // Connect the database, app-only: one serving pool per registered component
+            // so each context grabs the one it needs.
             let serving_pools = dbm::connect_app_all(database_descriptor)
                 .await
                 .map_err(|e| {
@@ -242,10 +250,16 @@ pub fn run() {
                 .await;
 
             // Close every serving pool's connections explicitly, rather than at the
-            // mercy of Drop ordering during tokio runtime teardown. The apiserver owns
-            // no database server in any mode — the embedded server's lifecycle belongs
-            // to `td_dbmanager start`/`stop` — so there is nothing else to tear down here.
+            // mercy of Drop ordering during tokio runtime teardown.
             serving_pools.shutdown().await;
+
+            // In embedded mode the apiserver owns the in-process server it booted
+            // above: stop it once the pools are closed. No-op for sidecar/remote.
+            if database_descriptor.mode().is_embedded()
+                && let Err(e) = dbm::stop_server(database_descriptor).await
+            {
+                error!("Error stopping embedded database server: {e:#?}");
+            }
 
             outcome
         },

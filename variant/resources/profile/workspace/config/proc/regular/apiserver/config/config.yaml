@@ -22,7 +22,6 @@ database:
   mode: embedded
   system:
     data_dir: ${env:TD_URI_REPOSITORY}/database
-    port: 7542
     persistent: true
     min_connections: 1
     max_connections: 2

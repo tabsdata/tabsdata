@@ -1259,21 +1259,26 @@ fn command_start(arguments: StartArguments) {
                 create_instance(arguments.instance(), &None);
             }
 
-            // Bring the (embedded) database server up once before launching the worker
-            // tree: the apiserver connects to it app-only and never boots it. A fresh
-            // instance provisions its schema against this same running server (no
-            // stop/restart). The detached server outlives this command and any
-            // apiserver restart; `command_stop` brings it down. Idempotent, and a
-            // no-op for sidecar/remote.
+            // The (embedded) apiserver owns its in-process database server, booting it
+            // when it starts to serve — so the supervisor starts no persistent server
+            // here. A fresh instance still needs its schema provisioned first: do that
+            // against a transient server (bring it up, provision, bring it down), then
+            // let the apiserver boot and own it.
             let apiserver_config = apiserver_config_file(&supervisor_instance_absolute);
-            run_dbmanager(
-                DBMANAGER_COMMAND_START,
-                &supervisor_repository_absolute,
-                &apiserver_config,
-                &supervisor_instance_absolute,
-            );
             if fresh_instance {
+                run_dbmanager(
+                    DBMANAGER_COMMAND_START,
+                    &supervisor_repository_absolute,
+                    &apiserver_config,
+                    &supervisor_instance_absolute,
+                );
                 provision_database(
+                    &supervisor_repository_absolute,
+                    &apiserver_config,
+                    &supervisor_instance_absolute,
+                );
+                run_dbmanager(
+                    DBMANAGER_COMMAND_STOP,
                     &supervisor_repository_absolute,
                     &apiserver_config,
                     &supervisor_instance_absolute,
@@ -1348,10 +1353,6 @@ fn command_restart(arguments: RestartArguments) {
 fn command_stop(arguments: StopArguments) {
     let supervisor_instance = get_instance_path_for_instance(arguments.control.instance());
     let supervisor_instance_absolute = to_absolute(&supervisor_instance.clone()).unwrap();
-
-    let supervisor_repository =
-        get_repository_path_for_instance(&Some(supervisor_instance_absolute.clone()));
-    let supervisor_repository_absolute = to_absolute(&supervisor_repository.clone()).unwrap();
 
     let supervisor_workspace =
         get_workspace_path_for_instance(&arguments.control.instance().clone());
@@ -1446,18 +1447,8 @@ fn command_stop(arguments: StopArguments) {
         }
     }
 
-    // The worker tree (and the apiserver with it) is down; now bring the
-    // (embedded) database server down too. Guarded on the config file so a
-    // never-created instance is skipped; idempotent and a no-op for sidecar/remote.
-    let config_file = apiserver_config_file(&supervisor_instance_absolute);
-    if config_file.exists() {
-        run_dbmanager(
-            DBMANAGER_COMMAND_STOP,
-            &supervisor_repository_absolute,
-            &config_file,
-            &supervisor_instance_absolute,
-        );
-    }
+    // The (embedded) apiserver owns and stops its in-process database server on its
+    // own shutdown, so there is nothing for the supervisor to stop here.
 }
 
 fn command_status(arguments: StatusArguments) {

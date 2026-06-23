@@ -57,6 +57,40 @@ use crate::runtime::secrets::reconciliation::auto_fill_generated_secrets;
 use crate::runtime::secrets::source::to_secret_name;
 use crate::runtime::secrets::{KubeconfigSecretGenerator, SecretGenerator, SecretPhase};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DbManagerCommand {
+    Start,
+    Create,
+    Stop,
+}
+
+impl DbManagerCommand {
+    fn as_str(self) -> &'static str {
+        match self {
+            DbManagerCommand::Start => "start",
+            DbManagerCommand::Create => "create",
+            DbManagerCommand::Stop => "stop",
+        }
+    }
+
+    fn step_labels(self) -> (&'static str, &'static str) {
+        match self {
+            DbManagerCommand::Start => (
+                "Starting tabsdata database server",
+                "Tabsdata database server started",
+            ),
+            DbManagerCommand::Create => (
+                "Creating tabsdata database schema",
+                "Tabsdata database schema created",
+            ),
+            DbManagerCommand::Stop => (
+                "Stopping tabsdata database server",
+                "Tabsdata database server stopped",
+            ),
+        }
+    }
+}
+
 const DBMANAGER_BINARY: &str = "td_dbmanager";
 const PYVENV_BINARY: &str = "td_pyvenv";
 const APISERVER_SERVICE_CONFIG_KEY: &str = "apiserver.service.yaml";
@@ -355,82 +389,10 @@ impl Provider for KminusProvider {
     }
 
     async fn create_database(&self, reporter: &dyn Reporter) -> CommandResult {
-        let loaded = self.profile()?;
-        let resolver = ConfigurationResolver::new(self.system_values()?);
-        let context = self.kube_context().await?;
-        auto_fill_generated_secrets(&context).await?;
-
-        let mut config_files: Vec<tempfile::NamedTempFile> = Vec::new();
-        let mut secret_env: Vec<(String, String)> = Vec::new();
-        for config_key in APISERVER_CONFIG_KEYS {
-            let config =
-                resolve_profile_entry(loaded, &resolver, &KPROFILE_CONFIGS_FAMILY, config_key)
-                    .await?;
-            let mut config_file = tempfile::Builder::new()
-                .prefix("td-apiserver-")
-                .suffix(".yaml")
-                .tempfile()
-                .map_err(|error| {
-                    ProviderError::ApiserverTempConfigCreateFailed(error.to_string())
-                })?;
-            config_file.write_all(config.as_bytes()).map_err(|error| {
-                ProviderError::ApiserverTempConfigWriteFailed(
-                    config_file.path().display().to_string(),
-                    error.to_string(),
-                )
-            })?;
-            config_file.flush().map_err(|error| {
-                ProviderError::ApiserverTempConfigFlushFailed(
-                    config_file.path().display().to_string(),
-                    error.to_string(),
-                )
-            })?;
-            config_files.push(config_file);
-
-            let secret_name = to_secret_name(config_key)?;
-            if let Some(data) = get_secret(&context, &secret_name).await? {
-                for (key, value) in data {
-                    if let Ok(text) = String::from_utf8(value) {
-                        secret_env.push((key, text));
-                    }
-                }
-            }
-        }
-
-        let dbmanager = name_program(&PathBuf::from(DBMANAGER_BINARY));
-        let command_label = format!("{} create", dbmanager.display());
-        let step = reporter.step("Creating tabsdata database schema");
-        let mut command = std::process::Command::new(&dbmanager);
-        command.arg("create");
-        for config_file in &config_files {
-            command.arg("--config-file").arg(config_file.path());
-        }
-        for (key, value) in &secret_env {
-            command.env(key, value);
-        }
-        apply_detached_flags(&mut command);
-        let output = match subprocess::run(&mut command, DBMANAGER_BINARY, self.verbose) {
-            Ok(output) => output,
-            Err(error) => {
-                step.fail();
-                return Err(ProviderError::ApiserverInvocationFailed {
-                    command: command_label,
-                    cause: error.to_string(),
-                }
-                .into());
-            }
-        };
-        if !output.status.success() {
-            step.fail();
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-            return Err(ProviderError::ApiserverFailedStatus {
-                command: command_label,
-                status: output.status.to_string(),
-                stderr,
-            }
-            .into());
-        }
-        step.done("Tabsdata database schema created");
+        let (config_files, secret_env) = self.prepare_dbmanager().await?;
+        self.execute_dbmanager(DbManagerCommand::Start, &config_files, &secret_env, reporter)?;
+        self.execute_dbmanager(DbManagerCommand::Create, &config_files, &secret_env, reporter)?;
+        self.execute_dbmanager(DbManagerCommand::Stop, &config_files, &secret_env, reporter)?;
         Ok(())
     }
 
@@ -532,13 +494,12 @@ impl Provider for KminusProvider {
     async fn stop_cluster(&self, reporter: &dyn Reporter) -> CommandResult<ClusterStopOutcome> {
         let step = reporter.step("Stopping kminus cluster");
         let stopped = self.cluster.stop().await?;
-        if stopped {
-            step.done("Kminus cluster stopped");
-            Ok(ClusterStopOutcome::Stopped)
-        } else {
+        if !stopped {
             step.fail();
-            Ok(ClusterStopOutcome::AlreadyStopped)
+            return Ok(ClusterStopOutcome::AlreadyStopped);
         }
+        step.done("Kminus cluster stopped");
+        Ok(ClusterStopOutcome::Stopped)
     }
 
     async fn ensure_startable_cluster(&self) -> CommandResult {
@@ -555,6 +516,9 @@ impl Provider for KminusProvider {
 
     async fn start_instance_hook(&self, reporter: &dyn Reporter) -> CommandResult {
         handle_phase_secrets(self, SecretPhase::InstanceStart).await?;
+        if let Ok((config_files, secret_env)) = self.prepare_dbmanager().await {
+            self.execute_dbmanager(DbManagerCommand::Start, &config_files, &secret_env, reporter)?;
+        }
         let step = reporter.step("Starting tabsdata instance");
         let multi = td_common::logging::multi_progress().unwrap_or_default();
         self.apply_workload(&multi).await?;
@@ -566,6 +530,9 @@ impl Provider for KminusProvider {
         let step = reporter.step("Stopping tabsdata instance");
         let multi = td_common::logging::multi_progress().unwrap_or_default();
         let stopped = self.teardown_workload(&multi).await?;
+        if let Ok((config_files, secret_env)) = self.prepare_dbmanager().await {
+            self.execute_dbmanager(DbManagerCommand::Stop, &config_files, &secret_env, reporter)?;
+        }
         if stopped {
             step.done("Tabsdata instance stopped");
             Ok(InstanceStopOutcome::Stopped)
@@ -697,5 +664,97 @@ impl KminusProvider {
 
     async fn teardown_workload(&self, multi: &MultiProgress) -> CommandResult<bool> {
         self.instance.stop(multi).await
+    }
+
+    async fn prepare_dbmanager(
+        &self,
+    ) -> CommandResult<(Vec<tempfile::NamedTempFile>, Vec<(String, String)>)> {
+        let loaded = self.profile()?;
+        let resolver = ConfigurationResolver::new(self.system_values()?);
+        let context = self.kube_context().await?;
+        auto_fill_generated_secrets(&context).await?;
+
+        let mut config_files: Vec<tempfile::NamedTempFile> = Vec::new();
+        let mut secret_env: Vec<(String, String)> = Vec::new();
+        for config_key in APISERVER_CONFIG_KEYS {
+            let config =
+                resolve_profile_entry(loaded, &resolver, &KPROFILE_CONFIGS_FAMILY, config_key)
+                    .await?;
+            let mut config_file = tempfile::Builder::new()
+                .prefix("td-apiserver-")
+                .suffix(".yaml")
+                .tempfile()
+                .map_err(|error| {
+                    ProviderError::ApiserverTempConfigCreateFailed(error.to_string())
+                })?;
+            config_file.write_all(config.as_bytes()).map_err(|error| {
+                ProviderError::ApiserverTempConfigWriteFailed(
+                    config_file.path().display().to_string(),
+                    error.to_string(),
+                )
+            })?;
+            config_file.flush().map_err(|error| {
+                ProviderError::ApiserverTempConfigFlushFailed(
+                    config_file.path().display().to_string(),
+                    error.to_string(),
+                )
+            })?;
+            config_files.push(config_file);
+
+            let secret_name = to_secret_name(config_key)?;
+            if let Some(data) = get_secret(&context, &secret_name).await? {
+                for (key, value) in data {
+                    if let Ok(text) = String::from_utf8(value) {
+                        secret_env.push((key, text));
+                    }
+                }
+            }
+        }
+        Ok((config_files, secret_env))
+    }
+
+    fn execute_dbmanager(
+        &self,
+        subcommand: DbManagerCommand,
+        config_files: &[tempfile::NamedTempFile],
+        secret_env: &[(String, String)],
+        reporter: &dyn Reporter,
+    ) -> CommandResult {
+        let (step_label, done_label) = subcommand.step_labels();
+        let dbmanager = name_program(&PathBuf::from(DBMANAGER_BINARY));
+        let command_label = format!("{} {}", dbmanager.display(), subcommand.as_str());
+        let step = reporter.step(step_label);
+        let mut command = std::process::Command::new(&dbmanager);
+        command.arg(subcommand.as_str());
+        for config_file in config_files {
+            command.arg("--config-file").arg(config_file.path());
+        }
+        for (key, value) in secret_env {
+            command.env(key, value);
+        }
+        apply_detached_flags(&mut command);
+        let output = match subprocess::run(&mut command, DBMANAGER_BINARY, self.verbose) {
+            Ok(output) => output,
+            Err(error) => {
+                step.fail();
+                return Err(ProviderError::ApiserverInvocationFailed {
+                    command: command_label,
+                    cause: error.to_string(),
+                }
+                .into());
+            }
+        };
+        if !output.status.success() {
+            step.fail();
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            return Err(ProviderError::ApiserverFailedStatus {
+                command: command_label,
+                status: output.status.to_string(),
+                stderr,
+            }
+            .into());
+        }
+        step.done(done_label);
+        Ok(())
     }
 }
