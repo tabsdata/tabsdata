@@ -93,9 +93,10 @@ def run_transporter(request_yaml: Path, report: Path) -> int:
     return _run(cmd)
 
 
-def _stream_reader(stream: IO[str]) -> threading.Thread:
+def _stream_reader(stream: IO[str], level: int) -> threading.Thread:
     """Spawn a daemon thread that forwards each line of ``stream``
-    through the module logger, preserving the binary's own format.
+    through the module logger at ``level``, preserving the binary's own
+    format. stdout is forwarded at INFO, stderr at WARNING.
 
     Each stream needs its own reader thread because without one, the
     subprocess could block writing to a full pipe and hang. Daemon =
@@ -105,7 +106,7 @@ def _stream_reader(stream: IO[str]) -> threading.Thread:
     def _loop() -> None:
         try:
             for line in stream:
-                logger.info(line.rstrip(), extra={"noformat": True})
+                logger.log(level, line.rstrip(), extra={"noformat": True})
         finally:
             stream.close()
 
@@ -125,8 +126,8 @@ def _run(cmd: Sequence[str]) -> int:
 
     assert proc.stdout is not None
     assert proc.stderr is not None
-    stdout_reader = _stream_reader(proc.stdout)
-    stderr_reader = _stream_reader(proc.stderr)
+    stdout_reader = _stream_reader(proc.stdout, logging.INFO)
+    stderr_reader = _stream_reader(proc.stderr, logging.WARNING)
 
     rc = proc.wait()
     stdout_reader.join()
