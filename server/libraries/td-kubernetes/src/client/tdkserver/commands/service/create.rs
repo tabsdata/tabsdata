@@ -2,6 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::collections::HashMap;
+
 use clap_derive::Args;
 use td_error::TdError;
 
@@ -53,15 +55,20 @@ pub async fn command_create(
     )
     .await?;
     let system = provider.system_values()?;
+    let auto: HashMap<String, String> = HashMap::new();
 
     let reporter = InteractiveReporter::new();
 
     let step = reporter.step("Fusing tabsdata instance configuration");
-    if let Err(error) = fusion::fuse(&profile, &system, &init, &stage) {
-        step.fail();
-        return Err(TdError::from(error).into());
-    }
+    let fused = match fusion::fuse(&profile, &system, &auto, &init, &stage) {
+        Ok(fused) => fused,
+        Err(error) => {
+            step.fail();
+            return Err(TdError::from(error).into());
+        }
+    };
     step.done("Fused tabsdata instance configuration");
+    let _ = fused;
 
     Ok(())
 }

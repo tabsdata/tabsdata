@@ -18,7 +18,6 @@ const CONFIG_LABEL: &str = "<config>";
 
 pub(super) struct ResolveOutcome {
     pub rendered: String,
-    #[allow(dead_code)]
     pub secrets: Vec<SecretEntry>,
 }
 
@@ -26,6 +25,7 @@ pub(super) fn resolve_config_file(
     template: &str,
     init: &str,
     system: &SystemValues,
+    auto: &HashMap<String, String>,
 ) -> Result<ResolveOutcome, ResolverError> {
     let template_value: Value =
         serde_yaml::from_str(template).map_err(|cause| ResolverError::ParseFailed {
@@ -40,6 +40,7 @@ pub(super) fn resolve_config_file(
 
     let mut session = ResolveSession {
         system,
+        auto,
         secrets: Vec::new(),
         values: HashMap::new(),
     };
@@ -59,6 +60,7 @@ pub(super) fn resolve_config_file(
 
 struct ResolveSession<'a> {
     system: &'a SystemValues,
+    auto: &'a HashMap<String, String>,
     secrets: Vec<SecretEntry>,
     values: HashMap<String, String>,
 }
@@ -178,7 +180,7 @@ impl ResolveSession<'_> {
         &mut self,
         placeholder: &Placeholder,
         init: &Value,
-        path: &mut Vec<String>,
+        path: &[String],
     ) -> Result<Value, ResolverError> {
         let displayed_path = path.join(PATH_SEPARATOR);
         let resolver = resolver_for(&placeholder.kind, &displayed_path)?;
@@ -213,7 +215,7 @@ impl ResolveSession<'_> {
         &mut self,
         template_text: &str,
         init: &Value,
-        path: &mut Vec<String>,
+        path: &[String],
     ) -> Result<Value, ResolverError> {
         let displayed_path = path.join(PATH_SEPARATOR);
         for placeholder in placeholder_occurrences(template_text) {
@@ -259,11 +261,17 @@ impl ResolveSession<'_> {
         init_text: Option<&'b str>,
         path: &'b [String],
     ) -> ResolveContext<'b> {
+        let auto_value = placeholder
+            .category
+            .as_deref()
+            .and_then(|category| self.auto.get(category))
+            .map(String::as_str);
         ResolveContext {
             path,
             occurrence: 0,
             placeholder,
             init_value: init_text,
+            auto_value,
             system: self.system,
         }
     }

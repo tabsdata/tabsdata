@@ -10,7 +10,7 @@ use crate::base::error::gateway::ResolverError;
 use crate::base::error::secret::SecretError;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
-    ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext, SecretEntry,
+    ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext, Rule, SecretEntry,
 };
 use crate::runtime::secrets::walker::{Placeholder, SecretVisitor, encode_secret_key, walk};
 
@@ -122,10 +122,21 @@ impl ConcreteResolver for SecretResolver {
 
     fn resolve(&self, context: &ResolveContext) -> Result<Resolution, ResolverError> {
         let key = self.secret_key(context)?;
-        let secret = context.init_value.map(|value| SecretEntry {
-            key,
-            value: value.to_owned(),
-        });
+        let provided = context.init_value.filter(|value| !value.is_empty());
+        let secret = match provided {
+            Some(value) => Some(SecretEntry {
+                key,
+                value: value.to_owned(),
+            }),
+            None if self.auto || context.placeholder.rule == Rule::Optional => None,
+            None => {
+                return Err(ResolverError::MissingRequiredValue {
+                    path: context.path.join(PATH_SEPARATOR),
+                    kind: self.kind().as_str().to_owned(),
+                    category: context.placeholder.category.clone().unwrap_or_default(),
+                });
+            }
+        };
         Ok(Resolution {
             rendered: context.placeholder.token(),
             secret,

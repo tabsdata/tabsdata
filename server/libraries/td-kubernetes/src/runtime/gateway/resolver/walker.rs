@@ -104,6 +104,7 @@ pub struct ResolveContext<'a> {
     pub occurrence: usize,
     pub placeholder: &'a Placeholder,
     pub init_value: Option<&'a str>,
+    pub auto_value: Option<&'a str>,
     pub system: &'a super::SystemValues,
 }
 

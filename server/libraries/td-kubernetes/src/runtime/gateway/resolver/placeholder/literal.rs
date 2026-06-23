@@ -18,18 +18,22 @@ impl LiteralResolver {
     }
 
     fn substitute(&self, context: &ResolveContext) -> Result<Resolution, ResolverError> {
-        let value = match context.init_value {
+        let provided = context.init_value.filter(|value| !value.is_empty());
+        let value = match provided {
             Some(value) => value.to_owned(),
-            None if self.auto || context.placeholder.rule == Rule::Optional => String::new(),
-            None => {
-                let path = context.path.join(PATH_SEPARATOR);
-                let category = context.placeholder.category.clone().unwrap_or_default();
-                return Err(ResolverError::MissingRequiredValue {
-                    path,
-                    kind: self.kind().as_str().to_owned(),
-                    category,
-                });
-            }
+            None => match context.auto_value.filter(|value| !value.is_empty()) {
+                Some(value) => value.to_owned(),
+                None if self.auto || context.placeholder.rule == Rule::Optional => String::new(),
+                None => {
+                    let path = context.path.join(PATH_SEPARATOR);
+                    let category = context.placeholder.category.clone().unwrap_or_default();
+                    return Err(ResolverError::MissingRequiredValue {
+                        path,
+                        kind: self.kind().as_str().to_owned(),
+                        category,
+                    });
+                }
+            },
         };
         Ok(Resolution {
             rendered: value,

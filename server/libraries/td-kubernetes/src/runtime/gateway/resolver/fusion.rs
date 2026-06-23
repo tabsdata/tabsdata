@@ -4,7 +4,7 @@
 
 mod resolve;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::Path;
 
@@ -12,14 +12,20 @@ use crate::base::constants::{KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY};
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::fusion::resolve::resolve_config_file;
 use crate::runtime::gateway::resolver::placeholder::SystemValues;
+use crate::runtime::gateway::resolver::walker::SecretEntry;
 use crate::runtime::instance::profile::{Profile, RenderedConfigmap};
+
+pub struct FusedSecrets {
+    pub by_file: Vec<(String, Vec<SecretEntry>)>,
+}
 
 pub fn fuse(
     profile: &Profile,
     system: &SystemValues,
+    auto: &HashMap<String, String>,
     init: &Path,
     stage: &Path,
-) -> Result<(), ResolverError> {
+) -> Result<FusedSecrets, ResolverError> {
     wipe_stage(stage)?;
     compare_family(
         init,
@@ -28,20 +34,22 @@ pub fn fuse(
         false,
     )?;
     compare_family(init, KPROFILE_PODS_FAMILY.folder, &profile.pods, true)?;
-    resolve_configs_files(profile, system, init, stage)?;
+    let secrets = resolve_configs_files(profile, system, auto, init, stage)?;
     stage_pods_files(profile, stage)?;
-    Ok(())
+    Ok(secrets)
 }
 
 fn resolve_configs_files(
     profile: &Profile,
     system: &SystemValues,
+    auto: &HashMap<String, String>,
     init: &Path,
     stage: &Path,
-) -> Result<(), ResolverError> {
+) -> Result<FusedSecrets, ResolverError> {
     let init_configs = init.join(KPROFILE_CONFIGS_FAMILY.folder);
     let stage_configs = stage.join(KPROFILE_CONFIGS_FAMILY.folder);
     create_folder(&stage_configs)?;
+    let mut by_file = Vec::new();
     for (file, template) in &profile.configs {
         let init_file = init_configs.join(file);
         let init_content = fs::read_to_string(&init_file).map_err(|cause| {
@@ -50,10 +58,13 @@ fn resolve_configs_files(
                 cause: cause.to_string(),
             }
         })?;
-        let outcome = resolve_config_file(template, &init_content, system)?;
+        let outcome = resolve_config_file(template, &init_content, system, auto)?;
         write_staged(&stage_configs.join(file), &outcome.rendered)?;
+        if !outcome.secrets.is_empty() {
+            by_file.push((file.clone(), outcome.secrets));
+        }
     }
-    Ok(())
+    Ok(FusedSecrets { by_file })
 }
 
 fn stage_pods_files(profile: &Profile, stage: &Path) -> Result<(), ResolverError> {
