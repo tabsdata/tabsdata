@@ -112,6 +112,7 @@ url = { workspace = true }
 
 [dev-dependencies]
 td-services = { workspace = true, features = ["td-test"] }
+td-database = { workspace = true, features = ["test-utils"] }
 td-test = { workspace = true }
 
 temp-env = { workspace = true, features = ["async_closure"] }

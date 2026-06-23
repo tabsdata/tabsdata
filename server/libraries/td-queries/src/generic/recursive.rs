@@ -574,7 +574,7 @@ mod tests {
         reference_id: TestRecursion,
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::Recursive)]
+    #[td_test::test(db(crate::fixtures::Recursive))]
     async fn test_basic_fetch_all_recursive_downstream(db: TdPool) -> Result<(), TdError> {
         let id = TestId::try_from("R0")?;
         let result: Vec<BasicTestDao> = db
@@ -592,7 +592,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::Recursive)]
+    #[td_test::test(db(crate::fixtures::Recursive))]
     async fn test_basic_fetch_all_recursive_upstream(db: TdPool) -> Result<(), TdError> {
         let id = TestId::try_from("R2")?;
         let result: Vec<BasicTestDao> = db
@@ -610,7 +610,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::Recursive)]
+    #[td_test::test(db(crate::fixtures::Recursive))]
     async fn test_basic_fetch_all_recursive_both_disabled(db: TdPool) -> Result<(), TdError> {
         let id = TestId::try_from("R0")?;
         let result: Vec<BasicTestDao> = db
@@ -625,7 +625,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::Recursive)]
+    #[td_test::test(db(crate::fixtures::Recursive))]
     async fn test_basic_fetch_all_recursive_depth_limit(db: TdPool) -> Result<(), TdError> {
         // Chain has 2 hops: R0(ref_0) → N0(ref_0→ref_1) → N1(ref_1→ref_2)
         // Depth limit of 1 should only return the immediate neighbor
@@ -647,7 +647,7 @@ mod tests {
     // Versioned — direction control
     // ===================================================================
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_both_directions_disabled(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
@@ -663,7 +663,7 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_both_directions_unlimited(db: TdPool) {
         let id = TestId::try_from("RRR").unwrap();
         let result: Vec<TestDao> = db
@@ -681,7 +681,7 @@ mod tests {
         assert_eq!(result[2], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_select_active_versions_none_fetch_all(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
@@ -705,7 +705,7 @@ mod tests {
         assert_eq!(result[4], FIXTURE_TEST_DAOS[0]);
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_select_active_versions_none_fetch_all_upstream(db: TdPool) {
         let id = TestId::try_from("SSS").unwrap();
         let result: Vec<TestDao> = db
@@ -726,7 +726,7 @@ mod tests {
         assert_eq!(result[2], FIXTURE_TEST_DAOS[0]);
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_upstream_only_downstream_disabled(db: TdPool) {
         let id = TestId::try_from("RRR").unwrap();
         let result: Vec<TestDao> = db
@@ -745,7 +745,7 @@ mod tests {
         assert_eq!(result[1], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_downstream_only_upstream_disabled(db: TdPool) {
         let id = TestId::try_from("NNN").unwrap();
         let result: Vec<TestDao> = db
@@ -771,7 +771,7 @@ mod tests {
     // Versioned — depth limits
     // ===================================================================
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_downstream_depth_limit_1(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
@@ -789,7 +789,7 @@ mod tests {
         assert_eq!(result[0], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_downstream_depth_limit_2(db: TdPool) {
         let id = TestId::try_from("MMM").unwrap();
         let result: Vec<TestDao> = db
@@ -810,7 +810,7 @@ mod tests {
         assert_eq!(result[3], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_upstream_depth_limit_2(db: TdPool) {
         let id = TestId::try_from("SSS").unwrap();
         let result: Vec<TestDao> = db
@@ -829,7 +829,7 @@ mod tests {
         assert_eq!(result[1], FIXTURE_TEST_DAOS[3]); // DDD
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_select_active_versions_none_last_in_stream(db: TdPool) {
         let id = TestId::try_from("SSS").unwrap();
         let result: Vec<TestDao> = db
@@ -847,7 +847,7 @@ mod tests {
         assert_eq!(result[0], FIXTURE_TEST_DAOS[4]);
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_both_directions_with_depth_limits(db: TdPool) {
         let id = TestId::try_from("NNN").unwrap();
         let result: Vec<TestDao> = db
@@ -869,7 +869,7 @@ mod tests {
         assert_eq!(result[3], FIXTURE_TEST_DAOS[0]); // AAA
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_asymmetric_depth_limits(db: TdPool) {
         // NNN is at ref_1 in the middle. Use upstream=1, downstream=2
         let id = TestId::try_from("NNN").unwrap();
@@ -898,7 +898,7 @@ mod tests {
     // Versioned — state & time filtering
     // ===================================================================
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_select_active_versions_at_time_fetch_all(db: TdPool) {
         let at = time(1);
         let id = TestId::try_from("MMM").unwrap();
@@ -920,7 +920,7 @@ mod tests {
         assert_eq!(result[2], FIXTURE_TEST_DAOS[0]);
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_at_time_before_any_data(db: TdPool) {
         // Use a time before all fixture data was inserted
         let early = AtTime::try_from(
@@ -940,7 +940,7 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_select_active_versions_break_downstream_by_status_ref(db: TdPool) {
         let at = time(2);
         let id = TestId::try_from("MMM").unwrap();
@@ -964,7 +964,7 @@ mod tests {
         assert_eq!(result[1], FIXTURE_TEST_DAOS[0]);
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_select_active_versions_none_deleted(db: TdPool) {
         // OOO is active, but PPP has the same partition_id and is deleted
         let id = TestId::try_from("OOO").unwrap();
@@ -981,7 +981,7 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_direct_reference_state_relaxes_only_entry_point(
         db: TdPool,
     ) -> Result<(), TdError> {
@@ -1042,7 +1042,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_deleted_dao_excluded_from_recursion(db: TdPool) -> Result<(), TdError> {
         // Insert a deleted DAO in the middle of a chain to verify the
         // recursion_versions CTE filters on D-side state, not just R-side.
@@ -1096,7 +1096,7 @@ mod tests {
     // Graph topology edge cases
     // ===================================================================
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_nonexistent_reference(db: TdPool) {
         let id = TestId::try_from("XXX").unwrap();
         let result: Vec<TestDao> = db
@@ -1110,7 +1110,7 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_downstream_from_leaf_node(db: TdPool) {
         let id = TestId::try_from("QQQ").unwrap();
         let result: Vec<TestDao> = db
@@ -1127,7 +1127,7 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_single_node_no_recursion_neighbors(db: TdPool) -> Result<(), TdError> {
         // Create an isolated node with no edges leading anywhere
         let reference = RecursionReference {
@@ -1159,7 +1159,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_cycle_detection(db: TdPool) -> Result<(), TdError> {
         // Create a 4-node cycle: CF0→CF1→CF2→CF3→(back to ref_c0)
         for i in 0..4u32 {
@@ -1200,7 +1200,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_upstream_cycle_detection(db: TdPool) -> Result<(), TdError> {
         // Create 3-node cycle for upstream traversal
         for i in 0..3u32 {
@@ -1238,7 +1238,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_bidirectional_cycle_detection(db: TdPool) -> Result<(), TdError> {
         // 4-node cycle, query with both directions enabled
         for i in 0..4u32 {
@@ -1276,7 +1276,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_diamond_deduplication(db: TdPool) -> Result<(), TdError> {
         // Create diamond: ref_d0 → ref_d1, ref_d0 → ref_d2, ref_d1 → ref_d3, ref_d2 → ref_d3, ref_d3 → ref_d4
         for i in 0..5u32 {
@@ -1397,7 +1397,7 @@ mod tests {
         Ok(())
     }
 
-    #[td_test::test(db, fixture = crate::fixtures::RecursiveVersions)]
+    #[td_test::test(db(crate::fixtures::RecursiveVersions))]
     async fn test_select_active_versions_heavy(db: TdPool) -> Result<(), TdError> {
         let size: usize = 1000;
 

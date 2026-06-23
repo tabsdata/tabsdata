@@ -45,8 +45,9 @@ test_logging = []
 test_tower_metadata = []
 # `test-utils` exposes the per-backend test pool factories in
 # `td_database::test_utils`. Pulls in embedded postgres for the postgres
-# factory; sqlite-only test builds can re-enable it via `--features sqlite`.
-test-utils = ["embedded-postgres"]
+# factory (and `fslock` to serialize the shared server's first boot across
+# processes); sqlite-only test builds can re-enable it via `--features sqlite`.
+test-utils = ["embedded-postgres", "dep:fslock"]
 # `embedded-postgres` enables the in-process Postgres server used by the
 # apiserver's default-when-no-URL path and by test_utils::postgres. Implies
 # the postgres backend (we need its sqlx driver to talk to the server).
@@ -90,6 +91,7 @@ te-system = { workspace = true }
 
 async-stream = { workspace = true }
 async-trait = { workspace = true }
+fslock = { workspace = true, optional = true }
 futures-util = { workspace = true }
 inventory = { workspace = true }
 postgresql_embedded = { workspace = true, features = ["bundled", "tokio"], optional = true }

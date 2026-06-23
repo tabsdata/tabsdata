@@ -2,76 +2,218 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Postgres test pool factory. Hands back a `TdPool` that owns its own
-//! in-process embedded postgres via [`BackendConfig::EmbeddedPostgres`].
+//! Postgres test database factories.
 //!
-//! # Concurrency cap
+//! Every test isolates on its **own uniquely-named schema of the shared server**
+//! ([`super::server`]). The schema is **superuser-owned** and the only role is the
+//! cluster-global `td_app` (created once); the per-test path therefore touches no
+//! cluster-global catalog (`pg_database`/`pg_authid`) — it is all schema-local DDL,
+//! which PostgreSQL runs concurrently — so tests provision in parallel. Serving
+//! pools connect as the superuser and `SET ROLE td_app`. Each test's schema is
+//! dropped on teardown ([`TestDbCleanup`]). A test that needs an extra role creates
+//! (and drops) its own.
 //!
-//! Each call boots a fresh embedded server — its own port, data dir,
-//! postmaster + auxiliary process tree (bgwriter, walwriter, autovacuum,
-//! checkpointer, stats), and **its own System V IPC resources** (one shared
-//! memory segment for the buffer pool / lock tables, plus a semaphore
-//! array). These are scarce, kernel-wide limits, not per-process: on macOS
-//! `kern.sysv.shmmni` defaults to ~32 segments and `kern.sysv.semmni` is
-//! similarly tight; on Linux they're higher but still finite. Run
-//! `ipcs -a` to inspect what's allocated and `ipcs -l` (Linux) / `sysctl
-//! kern.sysv` (macOS) to see the limits. Once they're exhausted, new
-//! instances fail to start with cryptic "could not create shared memory
-//! segment" errors that look like disk-full but aren't. Unbounded
-//! parallelism also multiplies fd usage, RAM (each instance allocates its
-//! own `shared_buffers`), and disk churn from the temp data dirs.
+//! - [`pools`] — the `#[td_test::test(db)]` macro path: one schema + serving pool
+//!   per requested component, brought to its current version.
+//! - [`pool`] — td-database's own `system`/RLS tests: one schema (left un-upgraded;
+//!   the caller applies it via [`TestDb::upgrade`]) plus the privileged handle and
+//!   superuser URL those white-box tests need.
 //!
-//! To keep usage bounded, `#[td_test::test(db)]` file-locks postgres tests
-//! across processes using `serial_test::file_serial` with round-robin lock
-//! names (`postgres_0..postgres_{N-1}`). The default cap is `N = 8`;
-//! override via the `TD_TEST_POSTGRES_PARALLELISM` env var at compile time
-//! of the test crate (changes require a rebuild — it's `std::env::var`,
-//! not `tracked_env`). The lock is OS-enforced so it releases on panic,
-//! abort, or `kill -9`; if a run does crash with IPC resources still
-//! lingering, `ipcrm` removes the orphaned segments.
+//! # Project scope in tests
+//!
+//! In test builds the `td-test` feature is on, so the serving pool's
+//! `after_connect` runs `SET app.bypass_rls = on`: RLS is **disabled by default**
+//! in tests. Use `db.scoped(p)` (or a service) to re-enforce RLS for a query.
 
-use crate::config::common::TEST_SCHEMA;
-use crate::config::{BackendConfig, DatabaseConfig, EmbeddedConfig, Schema};
+use crate::system::{SchemaComponent, SystemPool};
+#[cfg(test)]
+use crate::test_utils::TestDb;
+use crate::test_utils::{MultiTestDb, TestDbCleanup};
+use crate::test_utils::{server, test_pool_config};
+use crate::config::{ConnectableBackend, DatabaseConfig, Schema};
 use crate::pool::TdPool;
 
-/// Boot a fresh embedded postgres and connect a `TdPool` to it. The server
-/// is wiped and stopped automatically when the returned `TdPool` (and any
-/// of its clones) drops — `EmbeddedConfig::persistent = false` makes the
-/// underlying `postgresql_embedded` handle treat the data dir as temporary,
-/// so `pg_ctl stop` runs and the data dir is removed on `Drop`.
-///
-/// # Project scope in tests
-///
-/// The production connection path is fail-closed (no session GUC). In test
-/// builds the `td-test` feature is on, so `connect_postgres`'s `after_connect`
-/// runs `SET app.bypass_rls = on` on every serving connection (the statement is
-/// `#[cfg(feature = "td-test")]`, compiled out in production). Thus RLS is
-/// **disabled by default** in tests: a plain `db.live()` reads across all
-/// projects, the same as a `scope = Global` request. To scope a query — for a
-/// field-less insert whose `project_id` comes from the GUC, or to exercise true
-/// cross-project isolation — use `db.scoped(p)` (or go through a service, whose
-/// `ProjectScopeProvider` sets `SET LOCAL app.project_id` from the request's
-/// project); either clears the bypass and re-enforces RLS for that transaction.
-pub async fn pool() -> TdPool {
-    let config = DatabaseConfig {
-        conn: Some(BackendConfig::embedded_postgres(EmbeddedConfig {
-            data_dir: None,
-            port: None,
-            persistent: false,
-            username: None,
-            password: None,
-        })),
-        schema: Some(Schema::new(TEST_SCHEMA)),
-        username: None,
-        password: None,
-        pool: Default::default(),
-    };
-    let pool = TdPool::connect(&config).await.expect("postgres test pool");
-    pool.provision_schema(TEST_SCHEMA, TEST_SCHEMA, &td_common::random::password())
+/// A schema name unique across all concurrent tests, processes and runs: a fresh
+/// UUIDv7 ([`td_common::id::id`]) per provisioned component. Globally unique ⇒ no
+/// collision even with leftovers from a crashed test. Well under PostgreSQL's
+/// 63-char identifier cap.
+fn unique_schema(index: usize) -> String {
+    format!("tdt_{}_{index}", td_common::id::id())
+}
+
+/// A superuser connectable to the shared server, pinned to `schema`. Used for both
+/// the privileged ([`SystemPool`]) and serving ([`TdPool`]) connects — the schema is
+/// superuser-owned, so there is no per-test owner role; serving `SET ROLE`s the
+/// shared `td_app`. Credentials live in explicit fields (URL credentials rejected).
+fn schema_connectable(schema: &str) -> DatabaseConfig {
+    let (base, su_user, su_pass) = server::admin_base();
+    DatabaseConfig {
+        conn: ConnectableBackend::from_url(base).expect("schema url"),
+        schema: Some(Schema::new(schema)),
+        username: Some(su_user),
+        password: Some(su_pass),
+        app_role: None,
+        pool: test_pool_config(),
+    }
+}
+
+/// A superuser connectable with no schema pin — for dropping a test's schemas on
+/// teardown.
+fn admin_connectable() -> DatabaseConfig {
+    let (base, su_user, su_pass) = server::admin_base();
+    DatabaseConfig {
+        conn: ConnectableBackend::from_url(base).expect("admin url"),
+        schema: None,
+        username: Some(su_user),
+        password: Some(su_pass),
+        app_role: None,
+        pool: test_pool_config(),
+    }
+}
+
+/// Create this test's own unique, superuser-owned schema on the shared server and
+/// open the privileged [`SystemPool`] for it. The privileged connect also ensures
+/// the cluster-global `td_app`. Shared by [`pool`] and [`pools`]; both then connect
+/// their serving pool(s) to the same `config` (returned to avoid rebuilding it).
+async fn provision_schema(index: usize) -> (String, DatabaseConfig, SystemPool) {
+    let schema = unique_schema(index);
+    let config = schema_connectable(&schema);
+    let system = SystemPool::connect(&config).await.expect("privileged pool");
+    system
+        .create_schema(&schema)
         .await
-        .expect("provision test schema");
-    pool.ensure_app_role()
-        .await
-        .expect("grant app role on test schema");
-    pool
+        .expect("create test schema");
+    (schema, config, system)
+}
+
+/// A [`TestDb`] on its **own unique schema** of the shared server, for td-database's
+/// own `system`/RLS tests — which connect their own pools as arbitrary roles via
+/// [`TestDb::url`] (superuser credentials) and create their own roles when they need
+/// to mutate role-level state. The schema is superuser-owned and left un-upgraded;
+/// the caller applies it via [`TestDb::upgrade`]. Serving `SET ROLE`s the shared
+/// `td_app`. [`TestDb::drop`] drops the schema.
+#[cfg(test)]
+pub(crate) async fn pool() -> TestDb {
+    server::ensure_started().await;
+    // Keep the privileged pool open in the `TestDb` — the caller drives `upgrade`.
+    let (schema, config, system) = provision_schema(0).await;
+    let serving = TdPool::connect(&config).await.expect("postgres test pool");
+
+    // Superuser URL with credentials inline, for tests that connect raw pools as
+    // specific roles (the RLS tests).
+    let (mut url, su_user, su_pass) = server::admin_base();
+    url.set_username(&su_user).ok();
+    url.set_password(Some(&su_pass)).ok();
+
+    TestDb {
+        serving,
+        system,
+        schema: Schema::new(&schema),
+        url,
+        cleanup: TestDbCleanup::PostgresSchemas {
+            admin: Box::new(admin_connectable()),
+            schemas: vec![schema],
+        },
+    }
+}
+
+/// Provision a test on its **own unique schema(s)** of the shared server and return
+/// a serving pool per component (in request order), each brought to its current
+/// version. The schema is created superuser-owned and the build runs as the
+/// superuser; serving pools `SET ROLE td_app`. Everything is schema-local, so
+/// concurrent tests provision in parallel. [`TestDbCleanup`] drops the schemas.
+pub async fn pools(components: &[&'static dyn SchemaComponent]) -> MultiTestDb {
+    server::ensure_started().await;
+
+    let mut serving = Vec::with_capacity(components.len());
+    let mut schemas = Vec::with_capacity(components.len());
+    for (index, component) in components.iter().enumerate() {
+        // Build the schema to its current version (tables + grant `td_app`) on the
+        // privileged pool, then drop it and connect the serving pool. All
+        // schema-local ⇒ runs concurrently with other tests.
+        let (schema, config, system) = provision_schema(index).await;
+        component.upgrade(&system).await.expect("upgrade component");
+        system.close().await;
+
+        serving.push(
+            TdPool::connect(&config)
+                .await
+                .expect("postgres serving pool"),
+        );
+        schemas.push(schema);
+    }
+
+    MultiTestDb {
+        serving,
+        cleanup: TestDbCleanup::PostgresSchemas {
+            admin: Box::new(admin_connectable()),
+            schemas,
+        },
+    }
+}
+
+#[cfg(all(test, postgres))]
+mod tests {
+    use super::*;
+    use crate::dynamic::DynamicConnection;
+    use crate::system::{ApiserverComponent, SchemaSource};
+    use td_schema::schema::backend::Backend;
+
+    struct DummySource;
+    impl SchemaSource for DummySource {
+        fn current_version(&self) -> usize {
+            1
+        }
+        fn build(&self, _backend: Backend) -> Vec<String> {
+            vec!["CREATE TABLE IF NOT EXISTS dummy_kv (k TEXT PRIMARY KEY)".to_string()]
+        }
+    }
+
+    struct DummyComponent;
+    impl SchemaComponent for DummyComponent {
+        fn key(&self) -> &'static str {
+            "dummy"
+        }
+        fn default_schema(&self) -> &'static str {
+            "td_dummy"
+        }
+        fn schema_source(&self) -> &'static dyn SchemaSource {
+            &DummySource
+        }
+    }
+
+    async fn count(pool: &TdPool, sql: &str) -> i64 {
+        let mut conn = pool.acquire().await.unwrap();
+        #[allow(unreachable_patterns)]
+        match &mut conn {
+            DynamicConnection::Postgres(h) => {
+                sqlx::query_scalar(sql).fetch_one(&mut **h).await.unwrap()
+            }
+            _ => unreachable!("postgres-only test"),
+        }
+    }
+
+    #[tokio::test]
+    async fn pools_provisions_each_component_on_its_own_schema() {
+        let db = pools(&[&ApiserverComponent, &DummyComponent]).await;
+        assert_eq!(db.serving.len(), 2);
+
+        // apiserver pool: its schema is fully provisioned (seeded admin present).
+        let admins = count(
+            &db.serving[0],
+            "SELECT count(*) FROM users WHERE name = 'admin'",
+        )
+        .await;
+        assert_eq!(admins, 1, "apiserver schema provisioned + seeded");
+
+        // dummy pool: its placeholder table exists in its own schema and the app
+        // role (the serving pool's SET ROLE target) can read it.
+        let rows = count(&db.serving[1], "SELECT count(*) FROM dummy_kv").await;
+        assert_eq!(rows, 0, "dummy schema provisioned with its table");
+
+        // Drop this test's schemas, as the harness does.
+        let MultiTestDb { serving, cleanup } = db;
+        drop(serving);
+        cleanup.run().await;
+    }
 }

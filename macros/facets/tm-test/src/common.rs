@@ -20,6 +20,33 @@ pub(crate) struct EmitCtx<'a> {
     pub tokio_attr: &'a TokenStream2,
 }
 
+/// Collect every function parameter whose type path contains `kind` as a
+/// segment, in declaration order, as `(param_name, param_type)`. Used by the db
+/// flavor, where the test takes one pool per requested component.
+pub(crate) fn get_all_fn_args(
+    func_sig: &Signature,
+    kind: &Ident,
+) -> Vec<(Ident, TypePath)> {
+    func_sig
+        .inputs
+        .iter()
+        .filter_map(|arg| {
+            if let FnArg::Typed(pat_type) = arg
+                && let Type::Path(type_path) = &*pat_type.ty
+                && type_path
+                    .path
+                    .segments
+                    .iter()
+                    .any(|segment| segment.ident == *kind)
+                && let syn::Pat::Ident(pat_ident) = &*pat_type.pat
+            {
+                return Some((pat_ident.ident.clone(), type_path.clone()));
+            }
+            None
+        })
+        .collect()
+}
+
 /// Find the first function parameter whose type path contains `kind` as a
 /// segment and return `(param_name, param_type)`.
 pub(crate) fn get_fn_args(
@@ -49,11 +76,10 @@ pub(crate) fn get_fn_args(
         })
 }
 
-/// Build the return-type signature and skip-path expression for an emitted
-/// test wrapper. Unit-returning tests use the default (no `->`) signature so
-/// `#[file_serial(...)]` introspects them as unit-typed; writing `-> ()`
-/// explicitly trips file_serial into picking its Result-typed helper, which
-/// then fails to type-check.
+/// Build the return-type signature and the skip-path return expression for an
+/// emitted test wrapper, which must echo the inner fn's return type: a
+/// unit-returning test gets no `->` and an empty skip expression; a fallible
+/// test keeps its `-> Result<...>` and skips with `Ok(())`.
 pub(crate) fn ret_sig_and_skip(ret_ty: &syn::ReturnType) -> (TokenStream2, TokenStream2) {
     match ret_ty {
         syn::ReturnType::Default => (quote! {}, quote! {}),

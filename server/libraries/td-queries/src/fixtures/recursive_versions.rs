@@ -3,7 +3,7 @@
 //
 
 use sea_query::{ColumnDef, Iden, Query, Table};
-use td_schema::schema::Fixture;
+use td_database::system::{SchemaComponent, SchemaSource};
 use td_schema::schema::backend::Backend;
 
 #[derive(Iden)]
@@ -25,10 +25,17 @@ enum TestTableReference {
     DefinedOn,
 }
 
+/// Test-only component: a self-contained versioned reference graph on its own
+/// schema, requested via `#[td_test::test(db(crate::fixtures::RecursiveVersions))]`.
 pub struct RecursiveVersions;
 
-impl Fixture for RecursiveVersions {
-    fn build(b: Backend) -> Vec<String> {
+struct RecursiveVersionsSource;
+
+impl SchemaSource for RecursiveVersionsSource {
+    fn current_version(&self) -> usize {
+        1
+    }
+    fn build(&self, b: Backend) -> Vec<String> {
         let mut stmts = Vec::new();
 
         // CREATE TABLE test_table
@@ -168,5 +175,17 @@ impl Fixture for RecursiveVersions {
         }
 
         stmts
+    }
+}
+
+impl SchemaComponent for RecursiveVersions {
+    fn key(&self) -> &'static str {
+        "test_recursive_versions"
+    }
+    fn default_schema(&self) -> &'static str {
+        "td_test_recursive_versions"
+    }
+    fn schema_source(&self) -> &'static dyn SchemaSource {
+        &RecursiveVersionsSource
     }
 }

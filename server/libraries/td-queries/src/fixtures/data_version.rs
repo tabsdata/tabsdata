@@ -3,7 +3,7 @@
 //
 
 use sea_query::{ColumnDef, Iden, Query, Table};
-use td_schema::schema::Fixture;
+use td_database::system::{SchemaComponent, SchemaSource};
 use td_schema::schema::backend::Backend;
 
 #[derive(Iden)]
@@ -15,10 +15,17 @@ enum TestDvTable {
     DefinedOn,
 }
 
+/// Test-only component: a self-contained `data_version` timeline on its own
+/// schema, requested via `#[td_test::test(db(crate::fixtures::DataVersion))]`.
 pub struct DataVersion;
 
-impl Fixture for DataVersion {
-    fn build(b: Backend) -> Vec<String> {
+struct DataVersionSource;
+
+impl SchemaSource for DataVersionSource {
+    fn current_version(&self) -> usize {
+        1
+    }
+    fn build(&self, b: Backend) -> Vec<String> {
         let mut stmts = Vec::new();
 
         // CREATE TABLE test_dv_table
@@ -101,5 +108,17 @@ impl Fixture for DataVersion {
         }
 
         stmts
+    }
+}
+
+impl SchemaComponent for DataVersion {
+    fn key(&self) -> &'static str {
+        "test_data_version"
+    }
+    fn default_schema(&self) -> &'static str {
+        "td_test_data_version"
+    }
+    fn schema_source(&self) -> &'static dyn SchemaSource {
+        &DataVersionSource
     }
 }

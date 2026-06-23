@@ -55,8 +55,10 @@ pub(crate) fn emit_requires(
                     eprintln!("[td-test] SKIP: {}", stringify!(#original_name));
                     #ret_if_skip
                 },
-                ::td_test::__private::TestSetupExecution::Run(t) => {
-                    inner(t).await
+                ::td_test::__private::TestSetupExecution::Run(t, __td_teardown) => {
+                    let __td_result = inner(t).await;
+                    __td_teardown.await;
+                    __td_result
                 }
             }
         }

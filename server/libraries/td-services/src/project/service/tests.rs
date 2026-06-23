@@ -368,20 +368,19 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
 mod sqlite_single_project {
     use super::*;
     use crate::project::ProjectError;
-    use td_database::schema::{ApiserverSchemaManager, SchemaManager};
     use td_error::TdDomainError;
 
     /// SQLite is single-project: creating new projects is rejected.
     #[tokio::test]
     async fn test_create_rejected_on_sqlite() {
         let db = td_database::test_utils::sqlite::pool().await;
-        ApiserverSchemaManager.upgrade(&db).await.unwrap();
+        db.upgrade().await.unwrap();
         let create = ProjectCreate::builder()
             .name(ProjectName::try_from("anything").unwrap())
             .description(Description::try_from("nope").unwrap())
             .build()
             .unwrap();
-        let err = CreateProjectService::with_defaults(db)
+        let err = CreateProjectService::with_defaults(db.serving.clone())
             .service()
             .raw_oneshot(admin_ctx().create((), create))
             .await
@@ -398,8 +397,8 @@ mod sqlite_single_project {
     #[tokio::test]
     async fn test_delete_sandbox_rejected_on_sqlite() {
         let db = td_database::test_utils::sqlite::pool().await;
-        ApiserverSchemaManager.upgrade(&db).await.unwrap();
-        let err = DeleteProjectService::with_defaults(db)
+        db.upgrade().await.unwrap();
+        let err = DeleteProjectService::with_defaults(db.serving.clone())
             .service()
             .raw_oneshot(admin_ctx().delete(project_param("sandbox")))
             .await
@@ -416,13 +415,13 @@ mod sqlite_single_project {
     #[tokio::test]
     async fn test_update_sandbox_allowed_on_sqlite() {
         let db = td_database::test_utils::sqlite::pool().await;
-        ApiserverSchemaManager.upgrade(&db).await.unwrap();
+        db.upgrade().await.unwrap();
         let upd = ProjectUpdate::builder()
             .name(Some(ProjectName::try_from("primary").unwrap()))
             .description(None)
             .build()
             .unwrap();
-        UpdateProjectService::with_defaults(db)
+        UpdateProjectService::with_defaults(db.serving.clone())
             .service()
             .raw_oneshot(admin_ctx().update(project_param("sandbox"), upd))
             .await
@@ -440,7 +439,7 @@ mod postgres_delete_guards {
     use crate::collection::service::CollectionServices;
     use crate::project::ProjectError;
     use ta_services::factory::ServiceFactory;
-    use td_database::scoped::InProject;
+    use td_database::pool::scoped::InProject;
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_error::TdDomainError;
     use td_objects::dxo::collection::CollectionCreate;

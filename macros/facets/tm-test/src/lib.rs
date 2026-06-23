@@ -4,17 +4,17 @@
 
 //! `#[td_test::test(...)]` — exactly one flavor must be set:
 //!
-//! * `db` — runs the test against a freshly provisioned `TdPool`. The
-//!   function must take `db: TdPool`. By default the full schema is installed;
-//!   pass `fixture = some::Type` (one or more times) to install fixtures
-//!   instead.
+//! * `db` — runs the test against freshly provisioned component schema(s). Bare
+//!   `db` provisions the apiserver component and the function must take
+//!   `db: TdPool`; `db(Type, ...)` provisions each listed component on its own
+//!   schema and injects one `TdPool` per type, in declaration order.
 //! * `requires = SomeReqs` + `env_prefix = "ns"` — runs only when the
 //!   provider's env vars are present; otherwise skipped (with
 //!   `TD_TEST_SKIP_IF_NO_REQS=true`) or panics. The function must take an arg
 //!   of type `SomeReqs`.
 //!
 //! Any attribute key not handled by this macro (everything except `db`,
-//! `fixture`, `requires`, `env_prefix`) is forwarded verbatim to the
+//! `requires`, `env_prefix`) is forwarded verbatim to the
 //! auto-emitted `#[::tokio::test(...)]`, so `flavor`, `worker_threads`,
 //! `start_paused`, etc. work without changes here. Call sites never need to
 //! write the `#[tokio::test]` attribute themselves.
@@ -25,7 +25,7 @@
 //! #[td_test::test(db)]
 //! async fn smoke(db: TdPool) { /* ... */ }
 //!
-//! #[td_test::test(db, fixture = crate::fixtures::Foo)]
+//! #[td_test::test(db(crate::fixtures::Foo))]
 //! async fn with_fixture(db: TdPool) { /* ... */ }
 //!
 //! #[td_test::test(db, flavor = "multi_thread")]

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::__private::{TestSetup, TestSetupExecution};
+use crate::__private::{TestSetup, TestSetupExecution, no_teardown};
 use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use std::any::type_name;
@@ -122,7 +122,7 @@ where
             self.do_not_fail,
         ) {
             None => TestSetupExecution::Skip,
-            Some(t) => TestSetupExecution::Run(t),
+            Some(t) => TestSetupExecution::Run(t, no_teardown()),
         }
     }
 }

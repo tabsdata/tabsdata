@@ -402,6 +402,9 @@ version = "1.0.5"
 [workspace.dependencies.filetime]
 version = "0.2.27"
 
+[workspace.dependencies.fslock]
+version = "0.2.1"
+
 [workspace.dependencies.futures]
 version = "0.3.32"
 
