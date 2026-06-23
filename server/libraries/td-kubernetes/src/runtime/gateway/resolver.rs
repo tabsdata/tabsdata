@@ -34,8 +34,8 @@
 //! | `systemAuto`  | inline in the file   | forbidden  | resolved by us  | create   | yes     |
 //! | `runtime`     | inline in the file   | forbidden  | resolved by us  | runtime  | NOT YET |
 //! | `runtimeAuto` | inline in the file   | forbidden  | resolved by us  | runtime  | NOT YET |
-//! | `env`         | inline in the file   | forbidden  | (see `?`)       | create   | NOT YET |
-//! | `var`         | inline in the file   | forbidden  | (see `?`)       | runtime  | NOT YET |
+//! | `env`         | inline in the file   | forbidden  | (see `?`)       | runtime  | yes     |
+//! | `var`         | inline in the file   | forbidden  | (see `?`)       | create   | NOT YET |
 //!
 //! `Auto` = if the user did not supply a value one is generated/resolved (the
 //! user may leave it empty); non-`Auto` = mandatory user input. The `system`,
@@ -47,27 +47,30 @@
 //! GENERATED, so they may differ across consecutive runs, even for the same
 //! instance created twice.
 //!
+//! `env` — an environment variable in the REMOTE (server / runtime) system. It
+//! is left AS-IS at create time and resolved at RUNTIME from the running
+//! process's environment. Supports the `?` suffix (optional, empty when absent)
+//! and the other features of the env resolver. SUPPORTED.
+//!
 //! Not-yet-supported kinds are recognized (so resolution errors clearly) but
 //! resolving one raises an unsupported error:
 //! * `config` / `configAuto` — value stored in a kubernetes ConfigMap.
 //! * `runtime` / `runtimeAuto` — like `system`/`systemAuto`, but resolved at
 //!   RUNTIME (left as-is at create, resolved when the pod runs).
-//! * `env` — an environment variable in the CLIENT (creator) system, read and
-//!   replaced with its value at CREATE time. Supports the `?` suffix (optional,
-//!   empty when absent) and the other features the former env resolver had.
-//! * `var` — an environment variable in the SERVER (runtime) system, left AS-IS
-//!   at create and resolved at RUNTIME from the running process's environment.
-//!   (`env` is the create-time/client twin of the runtime/server-side `var`.)
+//! * `var` — an environment variable in the LOCAL (client / creator) system,
+//!   read and replaced with its value at CREATE time. (`var` is the create-time
+//!   local twin of the runtime/remote-side `env`.)
 //!
 //! ## Two functionalities: resolve (create) vs materialize (runtime)
 //!
 //! * resolve — create/stage time. Substitutes the create-phase kinds inline
-//!   (`literal*`, `system*`, `env`). `${secret:...}` is LEFT AS-IS in the staged
-//!   and cluster-stored config (its value is collected for a kubernetes Secret).
-//! * materialize — runtime, by the worker launcher. Resolves ONLY `${secret:...}`
-//!   (and, when supported, the other runtime kinds) by looking up the encoded
-//!   env variable per our secret-key encoding. It does NOT touch the create-phase
-//!   kinds — those were already substituted at create time.
+//!   (`literal*`, `system*`, and `var` when supported). `${secret:...}` and
+//!   `${env:...}` are LEFT AS-IS in the staged and cluster-stored config (the
+//!   secret value is collected for a kubernetes Secret).
+//! * materialize — runtime, by the worker launcher. Resolves the runtime kinds
+//!   (`${env:...}`, `${secret:...}`) by reading the running process's
+//!   environment (secrets via the encoded secret-key). It does NOT touch the
+//!   create-phase kinds — those were already substituted at create time.
 //!
 //! ## Deterministic positions
 //!
@@ -86,12 +89,12 @@
 //! scalar list element; a list of maps whose entries' first key differs; a list
 //! of maps with a duplicated first key/value.
 
+mod env;
 mod secret;
 mod sys;
 
 use td_error::TdError;
 
-use crate::base::error::gateway::ResolverError;
 pub use sys::{SystemKey, SystemValues};
 
 pub struct ConfigurationResolver {
@@ -103,25 +106,15 @@ impl ConfigurationResolver {
         Self { system }
     }
 
-    pub async fn resolve_sys(&self, content: &str) -> Result<String, TdError> {
+    pub async fn resolve(&self, content: &str) -> Result<String, TdError> {
         sys::resolve(content, &self.system)
     }
 
-    pub async fn resolve(&self, content: &str) -> Result<String, TdError> {
-        let _ = content;
-        Err(ResolverError::ResolveNotYetImplemented.into())
-    }
-
     pub async fn materialize(&self, content: &str) -> Result<String, TdError> {
-        self.materialize_secrets(content).await
-    }
-
-    pub async fn materialize_secrets(&self, content: &str) -> Result<String, TdError> {
-        secret::resolve(content)
+        let content = env::materialize(content)?;
+        secret::materialize(&content)
     }
 }
 
 #[cfg(test)]
-mod tests {
-    mod resolver;
-}
+mod tests;

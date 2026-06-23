@@ -231,7 +231,7 @@ async fn resolve_map(
 ) -> Result<RenderedConfigmap, ProfileError> {
     let mut data = BTreeMap::new();
     for (key, value) in source {
-        let resolved = resolver.resolve_sys(value).await.map_err(|error| {
+        let resolved = resolver.resolve(value).await.map_err(|error| {
             ProfileError::PlaceholderResolutionFailed(
                 family.folder.to_owned(),
                 key.clone(),
@@ -257,7 +257,7 @@ pub async fn resolve_profile_entry(
     let content = source
         .get(key)
         .ok_or_else(|| ProfileError::EntryMissing(family.folder.to_owned(), key.to_owned()))?;
-    resolver.resolve_sys(content).await.map_err(|error| {
+    resolver.resolve(content).await.map_err(|error| {
         ProfileError::PlaceholderResolutionFailed(
             family.folder.to_owned(),
             key.to_owned(),

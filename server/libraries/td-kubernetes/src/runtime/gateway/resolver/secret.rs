@@ -12,7 +12,25 @@ use crate::runtime::secrets::walker::{Placeholder, SecretVisitor, encode_secret_
 
 const CONSUMER_LABEL: &str = "<consumer config>";
 
+#[allow(dead_code)]
 pub(super) fn resolve(yaml: &str) -> Result<String, TdError> {
+    let mut value: serde_yaml::Value =
+        serde_yaml::from_str(yaml).map_err(|error| ResolverError::ParseFailed {
+            path: CONSUMER_LABEL.to_owned(),
+            cause: error.to_string(),
+        })?;
+    let mut visitor = EnvSubstitutor;
+    walk(CONSUMER_LABEL, &mut value, &mut visitor)?;
+    serde_yaml::to_string(&value).map_err(|error| {
+        ResolverError::ParseFailed {
+            path: CONSUMER_LABEL.to_owned(),
+            cause: error.to_string(),
+        }
+        .into()
+    })
+}
+
+pub(super) fn materialize(yaml: &str) -> Result<String, TdError> {
     let mut value: serde_yaml::Value =
         serde_yaml::from_str(yaml).map_err(|error| ResolverError::ParseFailed {
             path: CONSUMER_LABEL.to_owned(),

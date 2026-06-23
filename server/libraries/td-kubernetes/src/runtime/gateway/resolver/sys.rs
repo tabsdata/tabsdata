@@ -104,3 +104,24 @@ pub(super) fn resolve(leaf: &str, values: &SystemValues) -> Result<String, TdErr
     }
     Ok(current)
 }
+
+#[allow(dead_code)]
+pub(super) fn materialize(leaf: &str, values: &SystemValues) -> Result<String, TdError> {
+    let mut current = leaf.to_string();
+    while let Some(captures) = PATTERN.captures(&current) {
+        let placeholder = captures.get(0).unwrap().as_str().to_string();
+        let raw_key = captures.get(1).unwrap().as_str();
+        let key =
+            SystemKey::from_str(raw_key).map_err(|_| ResolverError::UnsupportedSystemKey {
+                key: raw_key.to_string(),
+                supported: SystemKey::supported(),
+            })?;
+        let value = values
+            .lookup(key)
+            .ok_or_else(|| ResolverError::MissingSystemValue {
+                key: key.as_ref().to_string(),
+            })?;
+        current = current.replace(&placeholder, value);
+    }
+    Ok(current)
+}
