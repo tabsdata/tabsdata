@@ -251,7 +251,7 @@ def _wait_for_container_port(container) -> int | None:
 
 def _wait_for_db(host: str, port: int, user: str, password: str, db: str) -> None:
     from sqlalchemy import create_engine, text
-    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import InterfaceError, OperationalError
 
     u = urllib.parse.quote(user, safe="")
     p = urllib.parse.quote(password, safe="")
@@ -282,7 +282,7 @@ def _wait_for_db(host: str, port: int, user: str, password: str, db: str) -> Non
                 return
             finally:
                 engine.dispose()
-        except OperationalError as e:
+        except (OperationalError, InterfaceError) as e:
             last_error = e
             time.sleep(min(_READY_BACKOFF_S * attempt, 10))
     _fail_or_skip(
