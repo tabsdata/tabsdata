@@ -15,7 +15,7 @@ use td_error::TdError;
 use crate::base::error::gateway::ResolverError;
 
 static PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\$\{sys:(\w+)}").expect("invalid sys regex"));
+    Lazy::new(|| Regex::new(r"\$\{sys:(\w+)}").expect("The system-value placeholder pattern is invalid."));
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, EnumString, AsRefStr, EnumIter)]
 pub enum SystemKey {

@@ -19,8 +19,10 @@ use td_error::TdError;
 
 use crate::base::error::gateway::ResolverError;
 
-static PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\$\{env:(\w+)(\?)?}").expect("invalid env regex"));
+static PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\$\{env:(\w+)(\?)?}")
+        .expect("The environment-variable placeholder pattern is invalid.")
+});
 
 #[allow(dead_code)]
 pub(super) fn resolve(text: &str) -> Result<String, TdError> {

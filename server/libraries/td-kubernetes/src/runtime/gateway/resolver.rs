@@ -92,6 +92,7 @@
 mod env;
 mod secret;
 mod sys;
+mod walker;
 
 use td_error::TdError;
 
