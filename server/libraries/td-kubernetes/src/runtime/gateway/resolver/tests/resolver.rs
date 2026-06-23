@@ -62,7 +62,7 @@ async fn resolve_secret_substitutes_bare_placeholder() {
 
     let resolver = resolver();
     let yaml = "td_resolve_test_bare:\n  value: ${secret}\n";
-    let resolved = resolver.resolve_secret(yaml).await.expect("resolve");
+    let resolved = resolver.materialize_secrets(yaml).await.expect("resolve");
     let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
     assert_eq!(
         parsed["td_resolve_test_bare"]["value"].as_str(),
@@ -79,7 +79,7 @@ async fn resolve_secret_substitutes_named_placeholder_using_path_encoding() {
 
     let resolver = resolver();
     let yaml = "td_resolve_test_named:\n  value: ${secret:jwt_signing_key}\n";
-    let resolved = resolver.resolve_secret(yaml).await.expect("resolve");
+    let resolved = resolver.materialize_secrets(yaml).await.expect("resolve");
     let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
     assert_eq!(
         parsed["td_resolve_test_named"]["value"].as_str(),
@@ -95,6 +95,6 @@ async fn resolve_secret_errors_when_env_var_missing() {
 
     let resolver = resolver();
     let yaml = "td_resolve_test_missing:\n  secret: ${secret}\n";
-    let result = resolver.resolve_secret(yaml).await;
+    let result = resolver.materialize_secrets(yaml).await;
     assert!(result.is_err(), "missing env var should error");
 }

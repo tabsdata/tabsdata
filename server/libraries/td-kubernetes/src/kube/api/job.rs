@@ -42,7 +42,11 @@ pub async fn create_job(
 
 pub async fn delete_job(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
-    api.delete(name, &DeleteParams::default())
+    let delete_params = DeleteParams {
+        propagation_policy: Some(PropagationPolicy::Foreground),
+        ..DeleteParams::default()
+    };
+    api.delete(name, &delete_params)
         .await
         .map(|_| ())
         .map_err(|error| {

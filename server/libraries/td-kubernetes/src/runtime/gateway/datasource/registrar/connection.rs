@@ -2,10 +2,6 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! [`ConnectionStore`] of the kubernetes bridge. Unimplemented — this is the
-//! contract the apiserver assumes, to be filled in when the cluster-side
-//! bridge lands.
-
 use async_trait::async_trait;
 use td_bridge::connection::ConnectionStore;
 use td_error::TdError;

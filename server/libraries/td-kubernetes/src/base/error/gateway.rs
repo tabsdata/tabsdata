@@ -16,4 +16,6 @@ pub enum ResolverError {
     UnsupportedSystemKey { key: String, supported: String } = 5008,
     #[error("System value '{key}' was not provided to the resolver.")]
     MissingSystemValue { key: String } = 5010,
+    #[error("The create-time resolver is not yet implemented.")]
+    ResolveNotYetImplemented = 5011,
 }

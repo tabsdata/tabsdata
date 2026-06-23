@@ -162,7 +162,7 @@ fn read_and_resolve(path: &Path) -> String {
         .enable_all()
         .build()
         .expect("tokio runtime for resolver");
-    match runtime.block_on(resolver.resolve(&raw)) {
+    match runtime.block_on(resolver.materialize(&raw)) {
         Ok(resolved) => resolved,
         Err(error) => {
             error!(

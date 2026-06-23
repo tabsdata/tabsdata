@@ -83,7 +83,7 @@ spec:
               - configMap:
                   name: td-sys-apiserver-pod-apiserver.yaml
               - configMap:
-                  name: td-sys-crontrigger-pod-crontrigger.yaml
+                  name: td-sys-cron-publisher-pod-cron-publisher.yaml
               - configMap:
                   name: td-sys-function-publisher-pod-function-publisher.yaml
               - configMap:
@@ -93,7 +93,7 @@ spec:
               - configMap:
                   name: td-sys-inspector-pod-inspector.yaml
               - configMap:
-                  name: td-sys-stagetrigger-pod-stagetrigger.yaml
+                  name: td-sys-stream-publisher-pod-stream-publisher.yaml
         - name: configs
           projected:
             sources:

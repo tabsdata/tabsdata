@@ -5,7 +5,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: td-function-stream-publisher
+  name: td-stream-publisher
   namespace: default
   annotations:
     tabsdata.com/description: "Tabsdata stream-publisher pod (long-running streamer + manifest-trigger sidecar)"
@@ -14,7 +14,7 @@ metadata:
     app.kubernetes.io/name: tabsdata
     app.kubernetes.io/instance: tabsdata
     app.kubernetes.io/version: "2.0.0"
-    app.kubernetes.io/component: function-stream-publisher
+    app.kubernetes.io/component: stream-publisher
     app.kubernetes.io/part-of: tabsdata
     app.kubernetes.io/managed-by: tdkserver
     tabsdata.com/tier: ephemeral
@@ -29,7 +29,7 @@ spec:
         app.kubernetes.io/name: tabsdata
         app.kubernetes.io/instance: tabsdata
         app.kubernetes.io/version: "2.0.0"
-        app.kubernetes.io/component: function-stream-publisher
+        app.kubernetes.io/component: stream-publisher
         app.kubernetes.io/part-of: tabsdata
         app.kubernetes.io/managed-by: tdkserver
         tabsdata.com/tier: ephemeral
@@ -254,11 +254,11 @@ spec:
             - --request
             - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
             - --trigger-url
-            - env:SECRET__TD_FN_TRIGGER_URL
+            - env:SECRET__TD_TRIGGER_URL
             - --trigger-method
-            - env:SECRET__TD_FN_TRIGGER_METHOD
+            - env:SECRET__TD_TRIGGER_METHOD
             - --trigger-authorization
-            - env:SECRET__TD_FN_TRIGGER_AUTHORIZATION
+            - env:SECRET__TD_TRIGGER_AUTHORIZATION
             - --back-off-secs
             - "30"
           resources:

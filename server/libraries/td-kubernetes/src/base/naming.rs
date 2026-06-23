@@ -4,9 +4,18 @@
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+use td_common::worker::WorkerName;
 
 use crate::base::constants::{KUBE_NAME_SEPARATOR, Scope, TABSDATA_NAME_PREFIX};
 use crate::base::error::naming::{NameSegment, NamingError};
+
+pub fn worker_pod_stem(worker: &WorkerName) -> &'static str {
+    match worker {
+        WorkerName::Function => "function",
+        WorkerName::StageTrigger => "stream",
+        WorkerName::CronTrigger => "cron",
+    }
+}
 
 const KUBE_IDENTIFIER_MAX_LENGTH: usize = 253;
 

@@ -18,7 +18,7 @@ persisting the envelope at ``<stage>/stream-state.json`` -- is the
 ctx's job (see :mod:`stage_layout` for the layout convention and
 :class:`StreamerPluginCtx` for the IO).
 
-Pod chain (see ``function-stream-publisher_kminus.yaml``):
+Pod chain (see ``stream-publisher_kminus.yaml``):
 
   * ``0010-begin-execution`` -- initialise journal + notify_running
   * ``0020-fetch-request`` -- pull request.yaml from apiserver
