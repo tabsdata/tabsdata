@@ -14,14 +14,14 @@ use crate::error::DbError;
 use sqlx::any::AnyConnectOptions;
 use sqlx::pool::PoolOptions;
 use sqlx::{ConnectOptions, Database};
+#[cfg(sqlite)]
+use std::fs;
 use std::time::Duration;
 use tracing::debug;
 use tracing::log::LevelFilter;
 #[cfg(sqlite)]
 use tracing::warn;
 use url::Url;
-#[cfg(sqlite)]
-use std::fs;
 
 const SLOW_QUERIES_THRESHOLD: u64 = 5000;
 
@@ -338,7 +338,10 @@ impl DatabaseConfig {
     ) -> Result<sqlx::MySqlPool, sqlx::Error> {
         let conn_options = sqlx::mysql::MySqlConnectOptions::try_from(conn_options)?;
         // Never log the full connect options — they carry the username and password.
-        debug!(read_only, "Connecting mysql pool (connection options redacted)");
+        debug!(
+            read_only,
+            "Connecting mysql pool (connection options redacted)"
+        );
 
         let pool_options = self
             .pool_options(read_only)
@@ -365,7 +368,11 @@ impl DatabaseConfig {
 /// Infallible: stripping only fails on cannot-be-a-base URLs, which database URLs
 /// are not. Only the test server's `admin_base` consumes it, so it is gated to the
 /// same builds as `test_utils`.
-#[cfg(all(postgres, feature = "embedded-postgres", any(test, feature = "test-utils")))]
+#[cfg(all(
+    postgres,
+    feature = "embedded-postgres",
+    any(test, feature = "test-utils")
+))]
 pub(crate) fn redacted_url(url: &Url) -> Url {
     let mut url = url.clone();
     url.set_username("").ok();

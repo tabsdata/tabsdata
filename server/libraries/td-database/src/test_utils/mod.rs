@@ -11,13 +11,13 @@
 //! so it stops when the test ends). Returned databases are freshly connected but
 //! **un-upgraded**; callers that need the schema applied call [`TestDb::upgrade`].
 
-use crate::system::ApiserverComponent;
-use crate::system::SchemaComponent;
-use crate::system::SystemPool;
 use crate::config::{DatabaseConfig, PoolConfig, Schema};
 use crate::dynamic::DynamicPool;
 use crate::error::DbError;
 use crate::pool::TdPool;
+use crate::system::ApiserverComponent;
+use crate::system::SchemaComponent;
+use crate::system::SystemPool;
 use std::ops::Deref;
 use std::time::Duration;
 use tracing::warn;

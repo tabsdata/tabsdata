@@ -72,7 +72,9 @@ impl ApiServerCtx {
         // Edition extensions extend the base context with the serving pools (each
         // grabs the component pool it owns) and the edition's resolved config; the
         // pools are consumed here, not carried in the base context.
-        let extended_context = context.extend(&serving_pools, &config.extended_config).await?;
+        let extended_context = context
+            .extend(&serving_pools, &config.extended_config)
+            .await?;
         let extended_services = ExtendedServices::build(&extended_context);
 
         Ok(Self {

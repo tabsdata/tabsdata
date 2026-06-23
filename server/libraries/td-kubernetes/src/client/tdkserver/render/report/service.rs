@@ -46,7 +46,10 @@ pub fn stopped_service(summary: &Summary) {
 pub fn restarted_service(summary: &Summary) {
     if let Some(name) = &summary.instance_name {
         if let Some(path) = &summary.instance_path {
-            info!("Restarted tabsdata instance '{name}' at {}.", path.display());
+            info!(
+                "Restarted tabsdata instance '{name}' at {}.",
+                path.display()
+            );
         } else {
             info!("Restarted tabsdata instance '{name}'.");
         }

@@ -219,6 +219,7 @@ known-first-party = [
     "test_tabsdata_sql_common",
     "test_tabsdata_toolkit",
     "test_tabsdatak",
+    "test_tabsdatax",
     "test_ta_features",
     "test_ta_tableframe",
     "test_te_examples",

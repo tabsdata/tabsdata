@@ -11,7 +11,7 @@ use td_common::settings::INSTANCES_FOLDER;
 use td_error::TdError;
 
 use crate::base::constants::{
-    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, INIT_FOLDER, KUBECONFIG_FILE, KUBE_FOLDER, SETTINGS_FILE,
+    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, INIT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE, SETTINGS_FILE,
 };
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;

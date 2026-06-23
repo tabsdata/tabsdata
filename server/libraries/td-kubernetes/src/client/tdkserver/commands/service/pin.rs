@@ -13,5 +13,11 @@ pub async fn command_pin(
     arguments: InstanceNameArguments,
     globals: &GlobalArguments,
 ) -> CommandResult {
-    command_session_pin(PinArguments { instance: arguments }, globals).await
+    command_session_pin(
+        PinArguments {
+            instance: arguments,
+        },
+        globals,
+    )
+    .await
 }

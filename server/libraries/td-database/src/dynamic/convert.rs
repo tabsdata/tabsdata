@@ -15,13 +15,13 @@ use sqlx::MySql;
 use sqlx::Postgres;
 #[cfg(sqlite)]
 use sqlx::Sqlite;
-use sqlx::{Decode, FromRow, Type};
 #[cfg(mysql)]
 use sqlx::mysql::MySqlRow;
 #[cfg(postgres)]
 use sqlx::postgres::PgRow;
 #[cfg(sqlite)]
 use sqlx::sqlite::SqliteRow;
+use sqlx::{Decode, FromRow, Type};
 
 // FromRow
 

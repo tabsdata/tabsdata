@@ -58,9 +58,9 @@ use td_common::settings::INSTANCES_FOLDER;
 use td_common::status::ExitStatus::{GeneralError, NoAction, Success};
 use td_common::worker::WorkerClass::Regular;
 use td_common::worker::{PROC_FOLDER, REGULAR_FOLDER, WORK_FOLDER};
+use td_process::launcher::arg::ENVIRONMENTS_FOLDER;
 use td_process::launcher::arg::InheritedArgumentKey;
 use td_process::launcher::arg::InheritedArgumentKey::*;
-use td_process::launcher::arg::ENVIRONMENTS_FOLDER;
 use td_process::launcher::cli::{
     ARGUMENT_PREFIX, TRAILING_ARGUMENTS_PREFIX, parse_extra_arguments,
 };
@@ -1075,9 +1075,12 @@ fn command_upgrade(arguments: UpgradeArguments) {
                 &config_file,
                 &supervisor_instance_absolute,
             );
-            let result =
-                dbmanager_command(DBMANAGER_COMMAND_UPGRADE, &supervisor_repository_absolute, &config_file)
-                    .output();
+            let result = dbmanager_command(
+                DBMANAGER_COMMAND_UPGRADE,
+                &supervisor_repository_absolute,
+                &config_file,
+            )
+            .output();
             run_dbmanager(
                 DBMANAGER_COMMAND_STOP,
                 &supervisor_repository_absolute,

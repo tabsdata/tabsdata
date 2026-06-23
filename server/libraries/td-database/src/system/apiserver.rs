@@ -4,11 +4,11 @@
 
 //! The built-in apiserver schema component.
 
+use crate::error::DbError;
+use crate::pool::TdPool;
 use crate::system::SystemPool;
 use crate::system::{ComponentRegistration, SchemaComponent, SchemaSource};
 use async_trait::async_trait;
-use crate::error::DbError;
-use crate::pool::TdPool;
 use tracing::{debug, info};
 
 /// Registry/override key identifying the apiserver component.

@@ -903,11 +903,21 @@ mod tests {
         collection_name: &str,
         worker_type: WorkerType,
         worker_status: WorkerStatus,
-    ) -> Result<(OrchestratorMessagePayload<serde_yaml::Value>, String, WorkerDB), TdError> {
+    ) -> Result<
+        (
+            OrchestratorMessagePayload<serde_yaml::Value>,
+            String,
+            WorkerDB,
+        ),
+        TdError,
+    > {
         let collection = db
             .scoped(ProjectId::sandbox())
             .seed()
-            .collection(&CollectionName::try_from(collection_name)?, &UserId::admin())
+            .collection(
+                &CollectionName::try_from(collection_name)?,
+                &UserId::admin(),
+            )
             .await?;
         let create = FunctionRegister::builder()
             .try_name("function_1")?

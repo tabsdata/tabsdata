@@ -14,12 +14,12 @@ use crate::dynamic::DynamicPool;
 use crate::error::DbError;
 use crate::sea_query::builder::SeaQueryExt;
 use crate::sea_query::kind::DatabaseKind;
-use td_schema::schema::backend::Backend;
 use crate::system::sql::is_undefined_table_error;
 use sea_query::{Expr, ExprTrait, Iden, Query};
 use sqlx::Error;
 use std::cmp::Ordering;
 use td_schema::SchemaSource;
+use td_schema::schema::backend::Backend;
 use td_schema::{
     CURRENT_TABSDATA_VERSION, DB_EDITION_NAME, DB_VERSION_NAME, TABSDATA_VERSION_NAME,
     TabsdataSystem,
@@ -70,7 +70,9 @@ pub(crate) async fn db_version(pool: &DynamicPool) -> Result<Option<usize>, DbEr
     };
     match raw {
         Some(value) => value.parse::<usize>().map(Some).map_err(|_| {
-            DbError::DatabaseCorrupted(format!("'{DB_VERSION_NAME}' value '{value}' must be an integer"))
+            DbError::DatabaseCorrupted(format!(
+                "'{DB_VERSION_NAME}' value '{value}' must be an integer"
+            ))
         }),
         None => Ok(None),
     }
@@ -169,8 +171,14 @@ pub(crate) async fn check_pg_min_version(pool: &DynamicPool) -> Result<(), DbErr
         .map_err(DbError::SqlError)?;
     let version = version.unwrap_or(0);
     if version < MIN_PG_VERSION_NUM {
-        return Err(DbError::UnsupportedPostgresVersion(version, MIN_PG_VERSION_NUM));
+        return Err(DbError::UnsupportedPostgresVersion(
+            version,
+            MIN_PG_VERSION_NUM,
+        ));
     }
-    debug!(server_version_num = version, "db.check: postgres version OK");
+    debug!(
+        server_version_num = version,
+        "db.check: postgres version OK"
+    );
     Ok(())
 }

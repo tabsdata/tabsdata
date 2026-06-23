@@ -22,7 +22,7 @@
 //! ```
 //!
 
-use td_authz::rbac::{AuthzRegistry};
+use td_authz::rbac::AuthzRegistry;
 
 /// Augment `registry`
 pub fn register_ext(registry: AuthzRegistry) -> AuthzRegistry {

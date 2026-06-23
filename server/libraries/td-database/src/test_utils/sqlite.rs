@@ -5,11 +5,11 @@
 //! SQLite test database factory. Builds a fresh per-test database file under
 //! `tdtestdir!()` with relaxed pool settings.
 
-use crate::system::{ProvisionSpec, SchemaComponent, SystemPool};
-use crate::test_utils::{MultiTestDb, TestDb, TestDbCleanup};
 use crate::config::schema::TEST_SCHEMA;
 use crate::config::{DatabaseConfig, Schema};
 use crate::pool::TdPool;
+use crate::system::{ProvisionSpec, SchemaComponent, SystemPool};
+use crate::test_utils::{MultiTestDb, TestDb, TestDbCleanup};
 use std::time::Duration;
 use url::Url;
 

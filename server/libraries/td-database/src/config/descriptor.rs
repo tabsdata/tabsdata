@@ -149,7 +149,9 @@ impl DatabaseResolver<'_> {
     /// database, which has none. For url-based system backends only — embedded goes
     /// through [`Self::system_connectable_running`] (it needs the persisted creds).
     pub fn system_connectable(&self) -> Result<DatabaseConfig, DbError> {
-        self.system.ok_or(DbError::MissingSystemEntry)?.connectable()
+        self.system
+            .ok_or(DbError::MissingSystemEntry)?
+            .connectable()
     }
 
     // (system_connectable_running below handles the embedded case.)

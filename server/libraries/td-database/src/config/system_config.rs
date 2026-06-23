@@ -69,7 +69,10 @@ max_connections: 1
 ";
         let sys: SystemConfig = serde_yaml::from_str(yaml).unwrap();
         let connectable = sys.connectable().unwrap();
-        assert_eq!(connectable.pool.max_connections, 1, "system pool reads its own value");
+        assert_eq!(
+            connectable.pool.max_connections, 1,
+            "system pool reads its own value"
+        );
         assert_eq!(
             connectable.pool.min_connections,
             PoolConfig::default().min_connections,

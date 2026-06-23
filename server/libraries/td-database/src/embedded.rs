@@ -201,17 +201,19 @@ pub fn live_admin(cfg: &EmbeddedConfig) -> Result<(Url, String, String), DbError
 pub fn live_url(cfg: &EmbeddedConfig) -> Result<Url, DbError> {
     let port = match cfg.port {
         Some(port) => port,
-        None => read_postmaster(&data_dir_of(cfg))
-            .filter(|pm| pm.pid > 0)
-            .ok_or_else(|| DbError::EmbeddedPostgres("no running embedded server".to_string()))?
-            .port,
+        None => {
+            read_postmaster(&data_dir_of(cfg))
+                .filter(|pm| pm.pid > 0)
+                .ok_or_else(|| DbError::EmbeddedPostgres("no running embedded server".to_string()))?
+                .port
+        }
     };
     let settings = Settings {
         port,
         ..Settings::default()
     };
-    let mut url =
-        Url::parse(&settings.url("postgres")).map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
+    let mut url = Url::parse(&settings.url("postgres"))
+        .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
     url.set_username("").ok();
     url.set_password(None).ok();
     Ok(url)
@@ -243,7 +245,9 @@ fn read_postmaster(data_dir: &Path) -> Option<Postmaster> {
     let lines: Vec<&str> = content.lines().collect();
     let pid = lines.first()?.trim().parse::<i64>().ok()?;
     let port = lines.get(3)?.trim().parse::<u16>().ok()?;
-    let ready = lines.get(7).is_some_and(|s| s.trim() == POSTMASTER_STATUS_READY);
+    let ready = lines
+        .get(7)
+        .is_some_and(|s| s.trim() == POSTMASTER_STATUS_READY);
     Some(Postmaster { pid, port, ready })
 }
 

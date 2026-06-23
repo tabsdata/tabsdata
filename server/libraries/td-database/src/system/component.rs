@@ -7,11 +7,11 @@
 //! this crate and implements [`SchemaComponent`]; the edition extension
 //! (`te-database`) registers it via `inventory::submit!`.
 
-use crate::system::SystemPool;
-use async_trait::async_trait;
 use crate::config::DatabaseDescriptor;
 use crate::error::DbError;
 use crate::pool::TdPool;
+use crate::system::SystemPool;
+use async_trait::async_trait;
 
 pub use td_schema::SchemaSource;
 pub use td_schema::schema::backend::{BACKEND_COUNT, Backend};
@@ -51,7 +51,11 @@ pub trait SchemaComponent: Send + Sync + 'static {
     fn schema_source(&self) -> &'static dyn SchemaSource;
 
     /// Create the schema and its owner role on the privileged system pool.
-    async fn provision(&self, system: &SystemPool, spec: &ProvisionSpec<'_>) -> Result<(), DbError> {
+    async fn provision(
+        &self,
+        system: &SystemPool,
+        spec: &ProvisionSpec<'_>,
+    ) -> Result<(), DbError> {
         system
             .provision_schema(spec.schema, spec.owner, spec.password)
             .await

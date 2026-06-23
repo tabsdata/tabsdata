@@ -39,7 +39,7 @@ test_tower_metadata = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "td-test", "toml"]
+ignored = ["openssl", "td-build", "td-schema", "td-test", "toml"]
 
 # Build dependencies
 

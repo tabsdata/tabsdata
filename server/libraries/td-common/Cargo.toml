@@ -73,10 +73,7 @@ chrono = { workspace = true, features = ["serde"] }
 colored = { workspace = true }
 const_format = { workspace = true }
 data-encoding = { workspace = true }
-derive-new = { workspace = true }
 dirs = { workspace = true }
-futures = { workspace = true }
-glob = { workspace = true }
 homedir = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
@@ -112,8 +109,6 @@ whoami = { workspace = true }
 
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }
-filetime = { workspace = true }
-temp-env = { workspace = true, features = ["async_closure"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }

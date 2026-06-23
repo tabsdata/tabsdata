@@ -56,7 +56,11 @@ impl SchemaSource for WidgetSource {
         WidgetV1::build(backend)
     }
     fn delta(&self, target: usize, backend: Backend) -> Vec<String> {
-        assert_eq!(target, WidgetV1ToV2::TO_VERSION, "only the v2 delta is defined");
+        assert_eq!(
+            target,
+            WidgetV1ToV2::TO_VERSION,
+            "only the v2 delta is defined"
+        );
         WidgetV1ToV2::up(backend)
     }
 }
@@ -83,12 +87,19 @@ async fn ledger_and_version_created_by_shared_logic() {
 
     let db = pool().await;
     let system = &db.system;
-    system.upgrade_db_version(&WidgetSource { version: 1 }).await.unwrap();
+    system
+        .upgrade_db_version(&WidgetSource { version: 1 })
+        .await
+        .unwrap();
 
     // The pool created the ledger and wrote the version row...
     assert_eq!(system.db_version().await.unwrap(), Some(1));
     assert_eq!(
-        scalar(&db, "SELECT count(*) FROM tabsdata_system WHERE name = 'db_version'").await,
+        scalar(
+            &db,
+            "SELECT count(*) FROM tabsdata_system WHERE name = 'db_version'"
+        )
+        .await,
         1,
         "the pool created the shared ledger and seeded db_version"
     );
@@ -103,21 +114,34 @@ async fn upgrade_advances_version_via_delta() {
     let db = pool().await;
     let system = &db.system;
 
-    system.upgrade_db_version(&WidgetSource { version: 1 }).await.unwrap();
+    system
+        .upgrade_db_version(&WidgetSource { version: 1 })
+        .await
+        .unwrap();
     assert_eq!(system.db_version().await.unwrap(), Some(1));
 
     // v1 → v2: shared logic runs the delta and bumps db_version.
-    system.upgrade_db_version(&WidgetSource { version: 2 }).await.unwrap();
+    system
+        .upgrade_db_version(&WidgetSource { version: 2 })
+        .await
+        .unwrap();
     assert_eq!(system.db_version().await.unwrap(), Some(2));
 
     // The delta actually ran: the column it adds now exists.
     assert_eq!(
-        scalar(&db, "SELECT count(*) FROM pragma_table_info('widget') WHERE name = 'note'").await,
+        scalar(
+            &db,
+            "SELECT count(*) FROM pragma_table_info('widget') WHERE name = 'note'"
+        )
+        .await,
         1,
         "the v1->v2 delta added the `note` column"
     );
 
     // Idempotent: re-running at the current version is a no-op.
-    system.upgrade_db_version(&WidgetSource { version: 2 }).await.unwrap();
+    system
+        .upgrade_db_version(&WidgetSource { version: 2 })
+        .await
+        .unwrap();
     assert_eq!(system.db_version().await.unwrap(), Some(2));
 }

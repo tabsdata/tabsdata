@@ -323,9 +323,7 @@ impl Prompt for ShellPrompt {
     fn render_prompt_left(&self) -> Cow<'_, str> {
         let tool = format!("{} ❯", self.tool_name).bold().green().to_string();
         let label = match PinContext::pinned_instance() {
-            Some(name) => format!("[{name}]")
-                .truecolor(0xCC, 0xB2, 0x33)
-                .to_string(),
+            Some(name) => format!("[{name}]").truecolor(0xCC, 0xB2, 0x33).to_string(),
             None => "[no tabsdata instance]".dimmed().to_string(),
         };
         Cow::Owned(format!("{label} {tool} "))

@@ -406,7 +406,11 @@ storage:
         assert_eq!(config.database.mode(), DatabaseMode::Sidecar);
         let resolver = config.database.resolve().unwrap();
         assert_eq!(
-            resolver.assemble("td_apiserver", None).unwrap().schema.as_deref(),
+            resolver
+                .assemble("td_apiserver", None)
+                .unwrap()
+                .schema
+                .as_deref(),
             Some("td_apiserver")
         );
         assert_eq!(config.storage_mounts().unwrap().len(), 1);

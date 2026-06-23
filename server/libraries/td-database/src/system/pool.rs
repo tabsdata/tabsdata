@@ -4,19 +4,19 @@
 
 //! [`SystemPool`] — the privileged system/upgrader pool used by the `system` module.
 
+use crate::config::{DatabaseConfig, Schema};
+use crate::dynamic::DynamicPool;
+use crate::error::DbError;
+use crate::pool::connect::ConnectRole;
+use crate::sea_query::builder::SeaQueryExt;
+use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
+use crate::system::sql::execute_batch_tx;
 #[cfg(postgres)]
 use crate::system::sql::{
     create_owner_role_sql, create_schema_sql, grant_app_role_membership_sql,
     grant_app_role_privileges_sql,
 };
-use crate::system::sql::execute_batch_tx;
 use sea_query::{Expr, ExprTrait, OnConflict, Query};
-use crate::config::{DatabaseConfig, Schema};
-use crate::pool::connect::ConnectRole;
-use crate::dynamic::DynamicPool;
-use crate::error::DbError;
-use crate::sea_query::builder::SeaQueryExt;
-use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
 use td_schema::SchemaSource;
 use td_schema::schema::backend::Backend;
 use td_schema::{DB_EDITION_NAME, DB_VERSION_NAME, TabsdataSystem, tabsdata_system_ddl};
@@ -122,7 +122,11 @@ impl SystemPool {
         if !matches!(self.kind().into(), Backend::Postgres) {
             return Ok(());
         }
-        execute_batch_tx(&self.pool, &[format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\"")]).await
+        execute_batch_tx(
+            &self.pool,
+            &[format!("CREATE SCHEMA IF NOT EXISTS \"{schema}\"")],
+        )
+        .await
     }
 
     /// Drop a schema and everything in it, leaving roles untouched. Best-effort
@@ -131,7 +135,11 @@ impl SystemPool {
         if !matches!(self.kind().into(), Backend::Postgres) {
             return Ok(());
         }
-        execute_batch_tx(&self.pool, &[format!("DROP SCHEMA IF EXISTS \"{schema}\" CASCADE")]).await
+        execute_batch_tx(
+            &self.pool,
+            &[format!("DROP SCHEMA IF EXISTS \"{schema}\" CASCADE")],
+        )
+        .await
     }
 
     /// Drop a component's schema and its owner role. The shared app role is left

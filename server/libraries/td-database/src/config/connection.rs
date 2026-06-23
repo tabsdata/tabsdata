@@ -160,7 +160,10 @@ max_connections: 20
         assert_eq!(cfg.pool.max_connections, 10);
 
         assert_eq!(parse("log_level: off").pool.log_level, LevelFilter::Off);
-        assert_eq!(parse(r#"log_level: "off""#).pool.log_level, LevelFilter::Off);
+        assert_eq!(
+            parse(r#"log_level: "off""#).pool.log_level,
+            LevelFilter::Off
+        );
         assert_eq!(parse("log_level: trace").pool.log_level, LevelFilter::Trace);
         assert_eq!(parse("log_level: dEbuG").pool.log_level, LevelFilter::Debug);
     }

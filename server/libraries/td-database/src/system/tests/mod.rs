@@ -15,12 +15,12 @@
 //! This module holds the shared query helpers; the submodules reach them via
 //! `super::`.
 
+#[cfg(postgres)]
+mod rls;
 mod seeded;
 #[cfg(sqlite)]
 mod shared_schema;
 mod structure;
-#[cfg(postgres)]
-mod rls;
 
 use crate::dynamic::DynamicConnection;
 use crate::pool::TdPool;
@@ -43,7 +43,9 @@ async fn scalars(db: &TdPool, sql: &str) -> Vec<String> {
         #[cfg(sqlite)]
         DynamicConnection::Sqlite(h) => sqlx::query_scalar(sql).fetch_all(&mut **h).await.unwrap(),
         #[cfg(postgres)]
-        DynamicConnection::Postgres(h) => sqlx::query_scalar(sql).fetch_all(&mut **h).await.unwrap(),
+        DynamicConnection::Postgres(h) => {
+            sqlx::query_scalar(sql).fetch_all(&mut **h).await.unwrap()
+        }
         #[cfg(mysql)]
         DynamicConnection::MySql(h) => sqlx::query_scalar(sql).fetch_all(&mut **h).await.unwrap(),
     }
@@ -57,7 +59,9 @@ async fn fetch_id(db: &TdPool, sql: &str) -> String {
         #[cfg(sqlite)]
         DynamicConnection::Sqlite(h) => sqlx::query_scalar(sql).fetch_one(&mut **h).await.unwrap(),
         #[cfg(postgres)]
-        DynamicConnection::Postgres(h) => sqlx::query_scalar(sql).fetch_one(&mut **h).await.unwrap(),
+        DynamicConnection::Postgres(h) => {
+            sqlx::query_scalar(sql).fetch_one(&mut **h).await.unwrap()
+        }
         #[cfg(mysql)]
         DynamicConnection::MySql(h) => sqlx::query_scalar(sql).fetch_one(&mut **h).await.unwrap(),
     }

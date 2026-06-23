@@ -48,8 +48,12 @@ async fn test_rls_project_isolation() {
         // Collections FK groups(project_id, id); the schema seeds only the sandbox
         // project, so seed a group per test project. `su` bypasses RLS, so set
         // project_id explicitly.
-        format!("INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) VALUES ('g', 'A', 'g', 'd', now(), 'u', now(), 'u', false)"),
-        format!("INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) VALUES ('g', 'B', 'g', 'd', now(), 'u', now(), 'u', false)"),
+        format!(
+            "INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) VALUES ('g', 'A', 'g', 'd', now(), 'u', now(), 'u', false)"
+        ),
+        format!(
+            "INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) VALUES ('g', 'B', 'g', 'd', now(), 'u', now(), 'u', false)"
+        ),
     ] {
         sqlx::query(&stmt).execute(&su).await.unwrap();
     }
@@ -66,8 +70,17 @@ async fn test_rls_project_isolation() {
     // Project A inserts a collection, omitting project_id — the column default
     // reads app.project_id, so the row is tagged 'A'.
     let mut t = app.begin().await.unwrap();
-    sqlx::query(SET_PROJECT).bind("A").execute(&mut *t).await.unwrap();
-    sqlx::query(INSERT).bind("c_a").bind("ca").execute(&mut *t).await.unwrap();
+    sqlx::query(SET_PROJECT)
+        .bind("A")
+        .execute(&mut *t)
+        .await
+        .unwrap();
+    sqlx::query(INSERT)
+        .bind("c_a")
+        .bind("ca")
+        .execute(&mut *t)
+        .await
+        .unwrap();
     let pid: String = sqlx::query_scalar("SELECT project_id FROM collections WHERE id = 'c_a'")
         .fetch_one(&mut *t)
         .await
@@ -77,14 +90,22 @@ async fn test_rls_project_isolation() {
 
     // Project B cannot see A's row.
     let mut t = app.begin().await.unwrap();
-    sqlx::query(SET_PROJECT).bind("B").execute(&mut *t).await.unwrap();
+    sqlx::query(SET_PROJECT)
+        .bind("B")
+        .execute(&mut *t)
+        .await
+        .unwrap();
     let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
     assert_eq!(n, 0, "project B must not see project A rows");
     t.rollback().await.unwrap();
 
     // WITH CHECK rejects an insert tagged for another project.
     let mut t = app.begin().await.unwrap();
-    sqlx::query(SET_PROJECT).bind("B").execute(&mut *t).await.unwrap();
+    sqlx::query(SET_PROJECT)
+        .bind("B")
+        .execute(&mut *t)
+        .await
+        .unwrap();
     let bad = sqlx::query(
         "INSERT INTO collections \
          (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type, project_id) \
@@ -92,18 +113,34 @@ async fn test_rls_project_isolation() {
     )
     .execute(&mut *t)
     .await;
-    assert!(bad.is_err(), "WITH CHECK must reject a cross-project insert");
+    assert!(
+        bad.is_err(),
+        "WITH CHECK must reject a cross-project insert"
+    );
     t.rollback().await.unwrap();
 
     // Project B inserts its own collection.
     let mut t = app.begin().await.unwrap();
-    sqlx::query(SET_PROJECT).bind("B").execute(&mut *t).await.unwrap();
-    sqlx::query(INSERT).bind("c_b").bind("cb").execute(&mut *t).await.unwrap();
+    sqlx::query(SET_PROJECT)
+        .bind("B")
+        .execute(&mut *t)
+        .await
+        .unwrap();
+    sqlx::query(INSERT)
+        .bind("c_b")
+        .bind("cb")
+        .execute(&mut *t)
+        .await
+        .unwrap();
     t.commit().await.unwrap();
 
     // Project A sees only its own row.
     let mut t = app.begin().await.unwrap();
-    sqlx::query(SET_PROJECT).bind("A").execute(&mut *t).await.unwrap();
+    sqlx::query(SET_PROJECT)
+        .bind("A")
+        .execute(&mut *t)
+        .await
+        .unwrap();
     let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
     assert_eq!(n, 1, "project A should see exactly its own collection");
     t.rollback().await.unwrap();
@@ -111,7 +148,10 @@ async fn test_rls_project_isolation() {
     // Unset GUC fails closed: zero rows, no error.
     let mut t = app.begin().await.unwrap();
     let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&mut *t).await.unwrap();
-    assert_eq!(n, 0, "an unset app.project_id must see no rows (fail-closed)");
+    assert_eq!(
+        n, 0,
+        "an unset app.project_id must see no rows (fail-closed)"
+    );
     t.rollback().await.unwrap();
 
     // Bypass spans projects.
@@ -241,12 +281,16 @@ async fn test_rls_maintain_current_trigger_under_role() {
             .fetch_one(&mut **h)
             .await
             .unwrap();
-        assert_eq!(cur, 1, "maintain-current trigger wrote functions_current under RLS");
-        let pid: String =
-            sqlx::query_scalar("SELECT project_id FROM functions_current WHERE function_id = 'fid'")
-                .fetch_one(&mut **h)
-                .await
-                .unwrap();
+        assert_eq!(
+            cur, 1,
+            "maintain-current trigger wrote functions_current under RLS"
+        );
+        let pid: String = sqlx::query_scalar(
+            "SELECT project_id FROM functions_current WHERE function_id = 'fid'",
+        )
+        .fetch_one(&mut **h)
+        .await
+        .unwrap();
         assert_eq!(pid, "A", "trigger copied the source project_id");
     }
     tx.commit().await.unwrap();
@@ -266,7 +310,11 @@ async fn test_rls_maintain_current_trigger_under_role() {
             .fetch_one(&mut **h)
             .await
             .unwrap();
-        assert_eq!((f, fc), (0, 0), "project B sees neither functions nor functions_current rows");
+        assert_eq!(
+            (f, fc),
+            (0, 0),
+            "project B sees neither functions nor functions_current rows"
+        );
     }
     tx.rollback().await.unwrap();
 }
@@ -287,11 +335,10 @@ async fn test_set_rls_guc_primitive() {
         let DynamicConnection::Postgres(h) = &mut conn else {
             unreachable!()
         };
-        let project: String =
-            sqlx::query_scalar("SELECT current_setting('app.project_id', true)")
-                .fetch_one(&mut **h)
-                .await
-                .unwrap();
+        let project: String = sqlx::query_scalar("SELECT current_setting('app.project_id', true)")
+            .fetch_one(&mut **h)
+            .await
+            .unwrap();
         let bypass: String = sqlx::query_scalar("SELECT current_setting('app.bypass_rls', true)")
             .fetch_one(&mut **h)
             .await

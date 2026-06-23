@@ -115,7 +115,6 @@ tm-workspace = { workspace = true }
 ## Libraries
 
 td-apiserver = { workspace = true }
-td-bridge = { workspace = true }
 td-common = { workspace = true }
 td-database = { workspace = true }
 td-crontrigger = { workspace = true }
@@ -131,13 +130,11 @@ te-system = { workspace = true }
 
 # External dependencies
 
-async-trait = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 path-slash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
-url = { workspace = true }
 
 [dev-dependencies]
 td-server = { workspace = true, features = ["td-test"] }

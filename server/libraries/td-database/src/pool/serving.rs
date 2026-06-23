@@ -80,7 +80,10 @@ impl TdPool {
     /// Verify the schema's recorded `db_version` matches `source`'s current
     /// version. A plain read, so the serving pool can run it at startup without
     /// privileged access. See [`crate::pool::state`].
-    pub async fn check_db_version(&self, source: &dyn td_schema::SchemaSource) -> Result<(), DbError> {
+    pub async fn check_db_version(
+        &self,
+        source: &dyn td_schema::SchemaSource,
+    ) -> Result<(), DbError> {
         crate::pool::state::check_db_version(&self.pool, source).await
     }
 

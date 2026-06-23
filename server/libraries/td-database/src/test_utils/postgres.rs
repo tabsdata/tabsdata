@@ -25,13 +25,13 @@
 //! `after_connect` runs `SET app.bypass_rls = on`: RLS is **disabled by default**
 //! in tests. Use `db.scoped(p)` (or a service) to re-enforce RLS for a query.
 
+use crate::config::{ConnectableBackend, DatabaseConfig, Schema};
+use crate::pool::TdPool;
 use crate::system::{SchemaComponent, SystemPool};
 #[cfg(test)]
 use crate::test_utils::TestDb;
 use crate::test_utils::{MultiTestDb, TestDbCleanup};
 use crate::test_utils::{server, test_pool_config};
-use crate::config::{ConnectableBackend, DatabaseConfig, Schema};
-use crate::pool::TdPool;
 
 /// A schema name unique across all concurrent tests, processes and runs: a fresh
 /// UUIDv7 ([`td_common::id::id`]) per provisioned component. Globally unique ⇒ no

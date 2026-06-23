@@ -53,7 +53,6 @@ tm-services = { workspace = true }
 
 ## Libraries
 
-td-error = { workspace = true }
 td-tower = { workspace = true }
 
 ## Extensions

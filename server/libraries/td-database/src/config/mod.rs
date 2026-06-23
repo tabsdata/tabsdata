@@ -41,17 +41,17 @@ mod connection;
 mod descriptor;
 mod pool;
 
-pub use mode::DatabaseMode;
-pub use schema::Schema;
-pub use system_config::SystemConfig;
 #[cfg(all(postgres, feature = "embedded-postgres"))]
 pub use embedded::EmbeddedConfig;
+pub use mode::DatabaseMode;
 #[cfg(mysql)]
 pub use mysql::{MySqlConfig, MySqlUrl};
 #[cfg(postgres)]
 pub use postgres::{PostgresConfig, PostgresUrl};
+pub use schema::Schema;
 #[cfg(sqlite)]
 pub use sqlite::{SqliteConfig, SqliteUrl};
+pub use system_config::SystemConfig;
 
 pub use backend::{BackendConfig, ConnectableBackend};
 pub use connection::DatabaseConfig;

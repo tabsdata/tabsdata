@@ -22,10 +22,7 @@ use crate::sea_query::builder::SeaQueryExt;
 async fn test_tabsdata_db_schema_creation() {
     let db = crate::test_utils::sqlite::pool().await;
     db.upgrade().await.unwrap();
-    ApiserverComponent
-        .check(&db.serving)
-        .await
-        .unwrap();
+    ApiserverComponent.check(&db.serving).await.unwrap();
 }
 
 #[cfg(sqlite)]
@@ -255,7 +252,10 @@ async fn assert_indices(db: &TdPool) {
 async fn test_schema_version_sqlite() {
     let db = crate::test_utils::sqlite::pool().await;
     db.upgrade().await.unwrap();
-    assert_eq!(schema_db_version(&db).await, td_schema::CURRENT_VERSION.to_string());
+    assert_eq!(
+        schema_db_version(&db).await,
+        td_schema::CURRENT_VERSION.to_string()
+    );
 }
 
 #[cfg(postgres)]
@@ -263,7 +263,10 @@ async fn test_schema_version_sqlite() {
 async fn test_schema_version_postgres() {
     let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
-    assert_eq!(schema_db_version(&db).await, td_schema::CURRENT_VERSION.to_string());
+    assert_eq!(
+        schema_db_version(&db).await,
+        td_schema::CURRENT_VERSION.to_string()
+    );
 }
 
 #[cfg(sqlite)]

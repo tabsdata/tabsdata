@@ -104,7 +104,9 @@ impl BackendConfig {
             #[cfg(postgres)]
             Self::Postgres(c) => Ok(ConnectableBackend::Postgres(c)),
             #[cfg(all(postgres, feature = "embedded-postgres"))]
-            Self::EmbeddedPostgres(cfg) => ConnectableBackend::from_url(crate::embedded::live_url(&cfg)?),
+            Self::EmbeddedPostgres(cfg) => {
+                ConnectableBackend::from_url(crate::embedded::live_url(&cfg)?)
+            }
             #[cfg(mysql)]
             Self::MySql(c) => Ok(ConnectableBackend::MySql(c)),
         }

@@ -159,12 +159,48 @@ async fn test_default_permissions_body(db: &TestDb) {
     const ROOT: &str = "00000000000000000000000204";
     // (role_id, permission_type, entity_type, entity_id, expected permission id)
     let cases: [(&str, &str, &str, &str, &str); 6] = [
-        (ENCODED_ID_ROLE_SYS_ADMIN, "manage_access", "system", ROOT, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS),
-        (ENCODED_ID_ROLE_SYS_ADMIN, "create_projects", "system", ROOT, ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS),
-        (ENCODED_ID_ROLE_SYS_ADMIN, "manage_roles", "system", ROOT, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ROLES),
-        (ENCODED_ID_ROLE_SYS_ADMIN, "manage_project", "project", ROOT, ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT),
-        (ENCODED_ID_ROLE_DEFAULT, "create_projects", "system", ROOT, ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS),
-        (ENCODED_ID_ROLE_PROJECT_CREATOR, "create_projects", "system", ROOT, ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS),
+        (
+            ENCODED_ID_ROLE_SYS_ADMIN,
+            "manage_access",
+            "system",
+            ROOT,
+            ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ACCESS,
+        ),
+        (
+            ENCODED_ID_ROLE_SYS_ADMIN,
+            "create_projects",
+            "system",
+            ROOT,
+            ENCODED_ID_PERM_SYS_ADMIN_CREATE_PROJECTS,
+        ),
+        (
+            ENCODED_ID_ROLE_SYS_ADMIN,
+            "manage_roles",
+            "system",
+            ROOT,
+            ENCODED_ID_PERM_SYS_ADMIN_MANAGE_ROLES,
+        ),
+        (
+            ENCODED_ID_ROLE_SYS_ADMIN,
+            "manage_project",
+            "project",
+            ROOT,
+            ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT,
+        ),
+        (
+            ENCODED_ID_ROLE_DEFAULT,
+            "create_projects",
+            "system",
+            ROOT,
+            ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS,
+        ),
+        (
+            ENCODED_ID_ROLE_PROJECT_CREATOR,
+            "create_projects",
+            "system",
+            ROOT,
+            ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
+        ),
     ];
     for (role_id, permission_type, entity_type, entity_id, expected) in cases {
         // Built at runtime (the case values are locals), so query directly via
