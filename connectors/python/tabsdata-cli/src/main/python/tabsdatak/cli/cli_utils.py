@@ -507,6 +507,23 @@ def _dynamic_import_function_from_path(path: str) -> Any:  # noqa: C901
         underlying.__module__ = folder_name
     elif hasattr(symbol, "__module__"):
         symbol.__module__ = folder_name
+
+    # Same rewrite for every top-level class the user file defines.
+    # ``info.to_json`` serialises ``conn`` / ``source`` / etc. via
+    # ``qualified_class(type(obj))`` (= ``f"{cls.__module__}:{cls.__qualname__}"``),
+    # so a user-defined ``Conn`` / ``Src`` subclass inline in the user
+    # file would otherwise be stamped as
+    # ``td_usr_pkg_<sha>.<file>:RandomStreamSrcConn`` and the runner's
+    # ``_load_function_def`` would fail to import the synthetic
+    # package. Rewriting ``cls.__module__`` to the bare ``<file>``
+    # leaf lets the runner resolve those classes from
+    # ``user_code/<file>.py`` the same way it resolves ``func``.
+    for value in vars(module).values():
+        if (
+            isinstance(value, type)
+            and getattr(value, "__module__", None) == module_name
+        ):
+            value.__module__ = folder_name
     return symbol
 
 

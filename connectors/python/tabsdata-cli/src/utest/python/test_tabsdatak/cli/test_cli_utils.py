@@ -212,6 +212,45 @@ def test_dynamic_import_synthetic_prefix_not_observable(tmp_path):
     assert "td_usr_pkg_" not in fn.__module__
 
 
+def test_dynamic_import_rewrites_module_on_user_defined_classes(tmp_path):
+    """Top-level user-defined classes in the same file get their
+    ``__module__`` rewritten too. ``info.to_json`` serialises ``conn``
+    / ``source`` via ``qualified_class(type(obj))`` (= ``f"{cls.__module__}:{cls.__qualname__}"``),
+    so a user-defined ``Conn`` / ``Src`` subclass would otherwise be
+    stamped with the synthetic prefix and the runner's
+    ``_load_function_def`` would fail to import it from
+    ``user_code/<file>.py``."""
+    user_file = tmp_path / "stream_publisher.py"
+    user_file.write_text(
+        "class RandomStreamSrcConn:\n"
+        "    pass\n"
+        "\n"
+        "class RandomStreamSrc:\n"
+        "    pass\n"
+        "\n"
+        "class _Info:\n"
+        "    def __init__(self):\n"
+        "        self.conn = RandomStreamSrcConn()\n"
+        "        self.source = RandomStreamSrc()\n"
+        "        self.func = lambda: None\n"
+        "\n"
+        "info = _Info()\n",
+        encoding="utf-8",
+    )
+
+    info, _ = cli_utils.load_info_and_project_root(
+        f"{user_file}::info", dir_to_bundle=None
+    )
+
+    # type(info.conn).__module__ is what ``qualified_class`` uses to
+    # write ``conn`` into ``function_def.json``; the runner imports
+    # this module string at deserialise time.
+    assert type(info.conn).__module__ == "stream_publisher"
+    assert type(info.source).__module__ == "stream_publisher"
+    # And of course the function rewrite still works.
+    assert info.func.__module__ == "stream_publisher"
+
+
 # ---------------------------------------------------------------------------
 # CurrentPlatform
 # ---------------------------------------------------------------------------
