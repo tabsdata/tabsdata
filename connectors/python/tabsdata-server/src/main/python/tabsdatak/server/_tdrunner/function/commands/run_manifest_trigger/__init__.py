@@ -67,6 +67,7 @@ import logging
 import signal
 import time
 from collections import deque
+from enum import Enum, auto
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import url2pathname
@@ -251,28 +252,48 @@ def _enqueue_for_deletion(
 _DEDUP_REJECT_STATUS = 409
 
 
+class _TriggerOutcome(Enum):
+    """Result of triggering one manifest, used by :func:`_trigger_pending`
+    to decide whether to advance to the next manifest this poll.
+
+    ``DEDUP_DELETED`` and ``SKIPPED`` mean "this manifest needs no
+    execution slot" -- the scan may advance to the next candidate.
+    ``TRIGGERED`` and ``TRANSIENT`` both mean an execution slot is now
+    occupied or unavailable (the function runs one execution at a time),
+    so every newer manifest would just get the same ``425 too_early`` --
+    the scan should stop and let the next poll re-read from the oldest.
+    """
+
+    DEDUP_DELETED = auto()  # 409: consumed; files + manifest queued for deletion
+    SKIPPED = auto()  # unusable (malformed filename); nothing to trigger
+    TRIGGERED = auto()  # 2xx: execution scheduled
+    TRANSIENT = auto()  # other 4xx / 5xx / connection error; retry next poll
+
+
 def _trigger_one(
     manifest_path: Path,
     stage_root: Path,
     trigger_request: HttpRequest,
     deletion_queue: deque[Path],
-) -> None:
+) -> _TriggerOutcome:
     """POST fn_trigger for one manifest; classify the response.
 
-    Outcomes:
-      * 2xx -- triggered; manifest stays in place (next iteration's
+    Outcomes (see :class:`_TriggerOutcome`):
+      * 2xx -- ``TRIGGERED``; manifest stays in place (next iteration's
         dedup-reject is the cue to delete; see module docstring).
-      * 409 Conflict -- apiserver's ``external_uid`` dedup gate fired
+      * 409 Conflict -- ``DEDUP_DELETED``; apiserver's ``external_uid``
+        dedup gate fired
         (``td-services/.../execution/layers/execution_version.rs:121``):
         the previous iteration's POST was accepted, the execution was
         scheduled, and the function-publisher pod will consume (or has
         consumed) this manifest. Safe to delete the manifest + its
         files.
-      * Any other 4xx, 5xx, or connection error -- anomalous (bad
-        request shape, auth failure, server error, network blip).
-        DO NOT delete: the publisher may never have seen the manifest
-        and deleting destroys evidence + data. Leave in place; the
-        next iteration retries.
+      * Any other 4xx, 5xx, or connection error -- ``TRANSIENT``;
+        anomalous (bad request shape, auth failure, server error,
+        network blip). DO NOT delete: the publisher may never have seen
+        the manifest and deleting destroys evidence + data. Leave in
+        place; the next iteration retries.
+      * Malformed filename -- ``SKIPPED``; can't build the external_uid.
 
     The narrow 409-only delete fixes a prior bug where any 4xx
     silently deleted the manifest -- in particular, a 403 from a
@@ -287,7 +308,7 @@ def _trigger_one(
             manifest_path.name,
             exc,
         )
-        return
+        return _TriggerOutcome.SKIPPED
 
     # ExecutionRequestInternal body shape. Mirrors the cron-trigger
     # caller at td-crontrigger/src/cli.rs:81-91, which is the only
@@ -317,7 +338,7 @@ def _trigger_one(
             manifest_path.name,
             exc,
         )
-        return
+        return _TriggerOutcome.TRANSIENT
 
     if response.ok:
         logger.info(
@@ -326,7 +347,7 @@ def _trigger_one(
             manifest_path.name,
             response.status_code,
         )
-        return
+        return _TriggerOutcome.TRIGGERED
     if response.status_code == _DEDUP_REJECT_STATUS:
         logger.info(
             "run-manifest-trigger: manifest %s dedup-rejected (status=%d); "
@@ -335,7 +356,7 @@ def _trigger_one(
             response.status_code,
         )
         _enqueue_for_deletion(manifest_path, stage_root, deletion_queue)
-        return
+        return _TriggerOutcome.DEDUP_DELETED
     # Anything else (other 4xx, 5xx, etc.) is anomalous -- leave the
     # manifest in place so the next iteration retries, and log loudly
     # at warning so the operator notices. Body snippet helps debug.
@@ -347,6 +368,42 @@ def _trigger_one(
         response.status_code,
         body_preview,
     )
+    return _TriggerOutcome.TRANSIENT
+
+
+def _trigger_pending(
+    manifests: list[Path],
+    stage_root: Path,
+    trigger_request: HttpRequest,
+    deletion_queue: deque[Path],
+    is_active: callable,
+) -> None:
+    """Trigger ``manifests`` (oldest-first) until one occupies the
+    execution slot, then stop.
+
+    The function runs one execution at a time. Once a manifest is
+    accepted (``TRIGGERED``) or the apiserver reports busy / errors
+    (``TRANSIENT`` -- the common case is ``425 too_early`` while a prior
+    execution runs), every newer manifest behind it would get the same
+    transient response, so re-POSTing them is wasted work -- the next
+    poll re-scans from the oldest anyway. Only ``DEDUP_DELETED`` (the
+    manifest was consumed and queued for deletion) or ``SKIPPED``
+    (unusable) frees us to advance to the next candidate this poll.
+
+    This is what keeps per-poll triggers O(1) instead of O(backlog)
+    (avoiding the quadratic ``425`` churn) while still pipelining one
+    execution per poll -- triggering *only* the oldest would idle the
+    executor between a manifest's accept and its dedup-delete and halve
+    throughput.
+    """
+    for manifest_path in manifests:
+        if not is_active():
+            return
+        outcome = _trigger_one(
+            manifest_path, stage_root, trigger_request, deletion_queue
+        )
+        if outcome not in (_TriggerOutcome.DEDUP_DELETED, _TriggerOutcome.SKIPPED):
+            return
 
 
 def _drain_until(
@@ -437,10 +494,9 @@ def main(args: argparse.Namespace) -> int:
                 "run-manifest-trigger: scan found %d pending manifest(s)",
                 len(manifests),
             )
-        for manifest_path in manifests:
-            if not is_active():
-                break
-            _trigger_one(manifest_path, stage_root, trigger_request, deletion_queue)
+        _trigger_pending(
+            manifests, stage_root, trigger_request, deletion_queue, is_active
+        )
         if not is_active():
             break
         deadline = time.monotonic() + back_off_secs
