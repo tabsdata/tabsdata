@@ -19,6 +19,7 @@ exercises the full IBM SQL Replication stack end-to-end.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -44,7 +45,7 @@ from tabsdatak.conn.db2 import (
     Db2CdcStreamSrc,
 )
 from tabsdatak.conn.db2._cdc_plugin import Db2CdcStreamSrcPlugin
-from tabsdatak.spi import StoreStreamState, StreamSrcPluginCtx
+from tabsdatak.spi import StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
@@ -149,12 +150,12 @@ class _CdcCtx(StreamSrcPluginCtx):
             # ``stream_state``); a plain callable (external system owns the
             # offset) leaves ``stream_state`` None and is invoked for its
             # side effect.
-            if isinstance(new_state, StoreStreamState):
-                self._state = dict(new_state.state)
+            if isinstance(new_state, dict):
+                self._state = dict(new_state)
                 self._tabsdata_owns_state = True
             else:
                 self._tabsdata_owns_state = False
-        new_state()
+                new_state()
 
 
 # ---------------------------------------------------------------------------
@@ -590,9 +591,9 @@ def test_cdc_persists_offset_to_ctx_state(fresh_db2_cdc_asncap, tmp_path):
     if "cdc.offset" not in ctx._state:
         pytest.skip("no offset persisted (no events captured)")
 
-    offset = ctx._state["cdc.offset"]
+    # ``CommitSeqOffset.write()`` persists the JSON string ``{cd_qualified: hex}``.
+    offset = json.loads(ctx._state["cdc.offset"])
     assert isinstance(offset, dict)
-    # ``CommitSeqOffset.write()`` returns ``{cd_qualified: hex}``.
     cd_qualified = _cd_qualified(source_table)
     assert cd_qualified in offset
     # The persisted mark should be a real asncap-assigned commitseq

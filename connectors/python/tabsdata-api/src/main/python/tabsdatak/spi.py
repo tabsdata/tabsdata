@@ -20,9 +20,9 @@ The plugin abstracts (:class:`SrcPlugin`, :class:`StreamSrcPlugin`,
 (:class:`SrcPluginCtx`, :class:`StreamSrcPluginCtx`,
 :class:`DestContext`) are what plugin code consumes. The remaining
 pieces -- :data:`TableFileSpec`, :class:`TableMode`,
-:data:`CommitStateSpec` / :class:`StoreStreamState` -- are the
-data-shape contracts that travel between framework and plugin during a
-trx.
+:data:`StreamStateSpec` (:data:`StreamStateDict` | :data:`CommitStateFn`)
+-- are the data-shape contracts that travel between framework and plugin
+during a trx.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from typing import (
     Type,
     TypeAlias,
     cast,
-    get_type_hints,
+    get_type_hints, Union,
 )
 
 from pydantic import ConfigDict, model_validator
@@ -142,38 +142,25 @@ FilesSpec: TypeAlias = Annotated[list[TableFileSpec], _api.NON_EMPTY_LIST_CONSTR
 # that pydantic validates via issubclass / isinstance.
 _ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
 
+# Per-flow resume state that *Tabsdata* owns: hand it to
+# :meth:`StreamSrcPluginCtx.stage` and the runtime persists it
+# (atomically with the staged batch) and replays it on the next run via
+# :attr:`StreamSrcPluginCtx.stream_state`. Values stay JSON scalars so
+# the dict round-trips through the on-disk state envelope.
+StreamStateDict: TypeAlias = dict[str, str]
 
-# Callback the runtime invokes when it commits a staged batch, to
-# commit the matching new resume offset. Where the offset lives is the
-# plugin's choice: use :class:`StoreStreamState` to have *Tabsdata* keep
-# it, or pass a plain callable that commits it on the *external* system
-# (e.g. ``lambda: external.commit()``).
-CommitStateSpec: TypeAlias = Callable[[], None]
+# Commit callback for the case where the *external* system owns the
+# resume offset. Hand it to :meth:`StreamSrcPluginCtx.stage` and the
+# runtime invokes it when it commits the staged batch, so the plugin can
+# advance/ack the source (e.g. ``lambda: external.commit()``). Tabsdata
+# keeps no state in this case, so :attr:`StreamSrcPluginCtx.stream_state`
+# reads back ``None``.
+CommitStateFn: TypeAlias = Callable[[], None]
 
-
-class StoreStreamState:
-    """A :data:`CommitStateSpec` for the case where *Tabsdata* owns the
-    stream's resume offset.
-
-    Wrap the new per-flow state dict and hand it to
-    :meth:`StreamSrcPluginCtx.stage`; when the runtime commits the staged
-    batch it persists this state (atomically with the batch) and exposes
-    it on the next run via :attr:`StreamSrcPluginCtx.stream_state`::
-
-        ctx.stage(tables_files, StoreStreamState(new_state))
-
-    Subclasses may override :meth:`__call__` to also run a side effect at
-    commit time (e.g. ack/advance the source); the runtime persists
-    :attr:`state` *and* invokes :meth:`__call__`.
-    """
-
-    def __init__(self, state: dict):
-        self.state = state
-
-    def __call__(self) -> None:
-        """Commit side effect, run by the runtime when the staged batch
-        commits. The base implementation is a no-op -- persisting
-        :attr:`state` to the per-flow store is the runtime's job."""
+# What :meth:`StreamSrcPluginCtx.stage` accepts as a batch's new resume
+# state: either a :data:`StreamStateDict` (Tabsdata persists it) or a
+# :data:`CommitStateFn` (the external system owns the offset).
+StreamStateSpec: TypeAlias = Union[StreamStateDict, CommitStateFn]
 
 
 class StreamSrcPluginCtx(PluginCtx, ABC):
@@ -184,7 +171,7 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
     * :attr:`first_stage` -- whether nothing has been staged yet, so the
       plugin seeds from config rather than from :attr:`stream_state`.
     * :attr:`stream_state` -- the per-flow resume state persisted by the
-      last :class:`StoreStreamState` commit.
+      last :data:`StreamStateDict` handed to :meth:`stage`.
     * :attr:`flush_interval_mins` -- max minutes the plugin may buffer
       before it must :meth:`stage`.
     * :meth:`stage` -- publish a batch and commit its new resume state.
@@ -209,13 +196,13 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
 
     @property
     @abstractmethod
-    def stream_state(self) -> dict | None:
+    def stream_state(self) -> StreamStateDict | None:
         """The per-flow resume state persisted by the most recent
-        :class:`StoreStreamState` commit.
+        :data:`StreamStateDict` handed to :meth:`stage`.
 
-        ``None`` when the last commit handed :meth:`stage` a plain
-        :data:`CommitStateSpec` callable (a ``lambda``) instead of a
-        :class:`StoreStreamState` -- i.e. the *external* system owns the
+        ``None`` when the last commit handed :meth:`stage` a
+        :data:`CommitStateFn` callable (a ``lambda``) instead of a
+        :data:`StreamStateDict` -- i.e. the *external* system owns the
         offset and Tabsdata keeps no state. Distinguish "first run"
         (nothing staged yet) via :attr:`first_stage`, not by this being
         ``None``."""
@@ -230,16 +217,16 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
     def stage(
         self,
         tables_files: list[list[Path]],
-        new_state: CommitStateSpec,
+        new_state: StreamStateSpec,
     ) -> None:
         """Publish a batch and commit its new resume state in one step.
 
         ``tables_files`` is positional by output-table index (entry
         ``i`` -> table ``i``; an empty inner list means no files for that
         table this batch); files must live under :attr:`work_dir`. The
-        runtime stages + commits the files, then commits ``new_state``
-        (persisting it when ``new_state`` is a :class:`StoreStreamState`,
-        and/or invoking it for its side effect)."""
+        runtime stages + commits the files, then commits ``new_state``:
+        persisting it when ``new_state`` is a :data:`StreamStateDict`, or
+        invoking it for its side effect when it is a :data:`CommitStateFn`."""
 
 
 class _StreamStageSrcConn(Conn):

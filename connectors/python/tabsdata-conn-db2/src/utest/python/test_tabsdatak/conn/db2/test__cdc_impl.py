@@ -7,6 +7,7 @@ Catalog / engine calls (``server_timezone``,
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -26,7 +27,6 @@ from tabsdatak.conn.db2._cdc_impl import (
 )
 from tabsdatak.conn.db2.error import Db2ErrorCode
 from tabsdatak.error import TabsdataException
-from tabsdatak.spi import StoreStreamState
 
 
 # =====================================================================
@@ -190,13 +190,16 @@ def test_commitseq_offset_round_trip():
     raw = {"CDSCHEMA.T1": b"\x01" * 16}
     off = CommitSeqOffset(commits=raw)
     serialised = off.write()
-    assert serialised == {"CDSCHEMA.T1": ("01" * 16)}
+    assert isinstance(serialised, str)
+    # Binary commitseqs serialise as hex inside the JSON string.
+    assert json.loads(serialised) == {"CDSCHEMA.T1": ("01" * 16)}
     back = CommitSeqOffset.read(serialised)
     assert back.commits == raw
 
 
-def test_commitseq_offset_read_empty_dict():
-    assert CommitSeqOffset.read({}).commits == {}
+def test_commitseq_offset_read_empty_string():
+    assert CommitSeqOffset.read("{}").commits == {}
+    assert CommitSeqOffset.read("").commits == {}
 
 
 def test_commitseq_offset_read_none_is_safe():
@@ -314,7 +317,9 @@ def test_commitseq_origin_is_16_zero_bytes():
 
 def test_offset_from_state_reconstructs_commitseq_offset():
     bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
-    offset = bi.offset_from_state({"CDSCHEMA.USERS_CD": "01" * 16})
+    offset = bi.offset_from_state(
+        CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x01" * 16}).write()
+    )
     assert isinstance(offset, CommitSeqOffset)
     assert offset.commits == {"CDSCHEMA.USERS_CD": b"\x01" * 16}
 
@@ -323,14 +328,14 @@ def test_commit_state_persists_commitseqs_in_stream_state():
     bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
     offset = CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x01" * 16})
     spec = bi.commit_state(offset)
-    assert isinstance(spec, StoreStreamState)
-    assert spec.state == {CDC_OFFSET_STATE_KEY: {"CDSCHEMA.USERS_CD": "01" * 16}}
+    assert isinstance(spec, dict)
+    assert spec == {CDC_OFFSET_STATE_KEY: offset.write()}
 
 
 def test_resume_offset_round_trips_persisted_commitseqs():
     bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
     offset = CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x07" * 16})
-    persisted = bi.commit_state(offset).state
+    persisted = bi.commit_state(offset)
     resumed = bi.resume_offset(first_stage=False, stream_state=persisted)
     assert isinstance(resumed, CommitSeqOffset)
     assert resumed.commits == {"CDSCHEMA.USERS_CD": b"\x07" * 16}

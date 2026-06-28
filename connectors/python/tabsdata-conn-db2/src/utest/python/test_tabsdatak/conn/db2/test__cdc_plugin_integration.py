@@ -17,6 +17,7 @@ offset machinery lives in ``test__cdc_impl.py``; plugin wiring
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -38,7 +39,7 @@ from tabsdatak.conn.db2 import (
     Db2CdcStreamSrc,
 )
 from tabsdatak.conn.db2._cdc_plugin import Db2CdcStreamSrcPlugin
-from tabsdatak.spi import StoreStreamState, StreamSrcPluginCtx
+from tabsdatak.spi import StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
@@ -156,12 +157,12 @@ class _CdcCtx(StreamSrcPluginCtx):
             # ``stream_state``); a plain callable (external system owns the
             # offset) leaves ``stream_state`` None and is invoked for its
             # side effect.
-            if isinstance(new_state, StoreStreamState):
-                self._state = dict(new_state.state)
+            if isinstance(new_state, dict):
+                self._state = dict(new_state)
                 self._tabsdata_owns_state = True
             else:
                 self._tabsdata_owns_state = False
-        new_state()
+                new_state()
 
 
 # ---------------------------------------------------------------------------
@@ -553,9 +554,9 @@ def test_cdc_persists_offset_to_ctx_state(fresh_db2_cdc, tmp_path):
     if "cdc.offset" not in ctx._state:
         pytest.skip("no offset persisted (no events captured)")
 
-    offset = ctx._state["cdc.offset"]
+    # ``CommitSeqOffset.write()`` persists the JSON string ``{cd_qualified: hex}``.
+    offset = json.loads(ctx._state["cdc.offset"])
     assert isinstance(offset, dict)
-    # ``CommitSeqOffset.write()`` returns ``{cd_qualified: hex}``.
     qualified = f"{_CD_SCHEMA}.{_CD_TABLE}"
     assert qualified in offset
     # The advanced mark should be at or past commitseq 42.
@@ -614,7 +615,7 @@ def test_cdc_resumes_from_persisted_stream_state(fresh_db2_cdc, tmp_path):
     persisted = ctx1.stream_state
     assert persisted is not None and "cdc.offset" in persisted
     # ``CommitSeqOffset.write()`` advanced to at least commitseq 6.
-    assert int(persisted["cdc.offset"][qualified], 16) >= 6
+    assert int(json.loads(persisted["cdc.offset"])[qualified], 16) >= 6
 
     # --- A new CD row past run 1's commit-seq ---
     _insert_cd_row(

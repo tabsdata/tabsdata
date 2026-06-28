@@ -19,6 +19,7 @@ Two pieces:
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Generator
@@ -361,12 +362,13 @@ class GtidOffset(CdcOffset):
             )
         self.gtid = other.gtid
 
-    def write(self) -> dict:
-        return {"gtid": self.gtid}
+    def write(self) -> str:
+        return json.dumps({"gtid": self.gtid})
 
     @classmethod
-    def read(cls, data: dict) -> "GtidOffset":
-        return cls(gtid=data.get("gtid", ""))
+    def read(cls, data: str) -> "GtidOffset":
+        payload = json.loads(data) if data else {}
+        return cls(gtid=payload.get("gtid", ""))
 
     def copy(self) -> "GtidOffset":
         return GtidOffset(gtid=self.gtid)
@@ -641,7 +643,7 @@ class BinlogIngester(CdcIngester):
                 actual=type(offset).__name__,
             )
 
-    def offset_from_state(self, offset_state: dict) -> CdcOffset:
+    def offset_from_state(self, offset_state: str) -> CdcOffset:
         # MySQL keeps no server-side consumer cursor: Tabsdata owns the
         # offset, so resume from the persisted GTID set.
         return GtidOffset.read(offset_state)

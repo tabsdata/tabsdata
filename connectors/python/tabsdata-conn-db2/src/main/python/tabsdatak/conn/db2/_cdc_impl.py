@@ -26,6 +26,7 @@ Three pieces:
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Generator, Iterable
@@ -378,14 +379,17 @@ class CommitSeqOffset(CdcOffset):
             )
         self.commits.update(other.commits)
 
-    def write(self) -> dict:
-        # Serialise binary commitseqs as hex strings.
-        return {table: commitseq.hex() for table, commitseq in self.commits.items()}
+    def write(self) -> str:
+        # Serialise the per-table map with binary commitseqs as hex strings.
+        return json.dumps(
+            {table: commitseq.hex() for table, commitseq in self.commits.items()}
+        )
 
     @classmethod
-    def read(cls, data: dict) -> "CommitSeqOffset":
+    def read(cls, data: str) -> "CommitSeqOffset":
+        payload = json.loads(data) if data else {}
         return cls(
-            commits={table: bytes.fromhex(seq) for table, seq in (data or {}).items()}
+            commits={table: bytes.fromhex(seq) for table, seq in payload.items()}
         )
 
     def copy(self) -> "CommitSeqOffset":
@@ -668,7 +672,7 @@ class SqlReplicaIngester(CdcIngester):
         # capture program advances independently. The mark stays
         # local to the runner -- no-op here, just type-check.
 
-    def offset_from_state(self, offset_state: dict) -> CdcOffset:
+    def offset_from_state(self, offset_state: str) -> CdcOffset:
         # SQL Replication keeps no server-side consumer cursor: Tabsdata
         # owns the offset, so resume from the persisted commit-seq map.
         return CommitSeqOffset.read(offset_state)

@@ -56,7 +56,7 @@ from tabsdatak.conn.kafka._serdes import (
     ProtobufSrKafkaSerde,
 )
 from tabsdatak.conn.kafka._stream_plugin import KafkaStreamSrcPlugin
-from tabsdatak.spi import StoreStreamState, StreamSrcPluginCtx
+from tabsdatak.spi import StreamSrcPluginCtx
 
 
 logger = logging.getLogger(__name__)
@@ -170,12 +170,12 @@ class _KafkaCtx(StreamSrcPluginCtx):
             # ``stream_state``); a plain callable (external system owns the
             # offset) leaves ``stream_state`` None and is invoked for its
             # side effect.
-            if isinstance(new_state, StoreStreamState):
-                self._state = dict(new_state.state)
+            if isinstance(new_state, dict):
+                self._state = dict(new_state)
                 self._tabsdata_owns_state = True
             else:
                 self._tabsdata_owns_state = False
-        new_state()
+                new_state()
 
 
 # ---------------------------------------------------------------------------

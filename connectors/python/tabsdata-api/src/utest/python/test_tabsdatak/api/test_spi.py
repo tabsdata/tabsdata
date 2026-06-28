@@ -11,13 +11,13 @@ from tabsdatak.api import StreamSrc, Conn, Dest, Src
 from tabsdatak.error import ApiErrorCode, ApiException
 from tabsdatak.api import TrxCtx
 from tabsdatak.spi import (
-    CommitStateSpec,
     FilesSpec,
-    StoreStreamState,
     StreamSrcPluginCtx,
     StreamSrcDef,
     StreamSrcPlugin,
     StreamStageSrc,
+    StreamStateDict,
+    StreamStateSpec,
     DestContext,
     DestDef,
     DestPlugin,
@@ -478,47 +478,6 @@ def test_function_ctx_concrete_subclass_must_implement_abstracts():
         _Half()  # type: ignore[abstract]
 
 
-# --- StoreStreamState / CommitStateSpec ---------------------------------
-
-
-def test_store_stream_state_exposes_state_verbatim():
-    """The wrapped per-flow state dict is exposed verbatim on
-    :attr:`StoreStreamState.state` (the runtime persists it)."""
-    state = {"cdc.offset": {"lsn": 42}}
-    store = StoreStreamState(state)
-    assert store.state is state
-
-
-def test_store_stream_state_call_is_a_noop():
-    """The base :meth:`__call__` is a no-op: persisting ``state`` is the
-    runtime's job, not the callback's. It returns ``None`` and must not
-    mutate the wrapped state."""
-    store = StoreStreamState({"k": 1})
-    assert store() is None
-    assert store.state == {"k": 1}
-
-
-def test_store_stream_state_is_a_commit_state_spec():
-    """A :class:`StoreStreamState` is callable, so it satisfies the
-    :data:`CommitStateSpec` (``Callable[[], None]``) contract that
-    :meth:`StreamSrcPluginCtx.stage` accepts."""
-    assert callable(StoreStreamState({}))
-
-
-def test_store_stream_state_subclass_call_side_effect_runs():
-    """A subclass may override :meth:`__call__` for a commit-time side
-    effect; the runtime invokes it in addition to persisting ``state``."""
-    ran = []
-
-    class _Acking(StoreStreamState):
-        def __call__(self) -> None:
-            ran.append(self.state)
-
-    store = _Acking({"o": 7})
-    store()
-    assert ran == [{"o": 7}]
-
-
 # --- FilesSpec ----------------------------------------------------------
 
 
@@ -554,8 +513,8 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
     signature drift would break."""
 
     def __init__(self) -> None:
-        self.staged: list[tuple[list[list[Path]], CommitStateSpec]] = []
-        self._stream_state: dict | None = None
+        self.staged: list[tuple[list[list[Path]], StreamStateSpec]] = []
+        self._stream_state: StreamStateDict | None = None
 
     # PluginCtx surface (unused by these tests, stubbed).
     @property
@@ -588,7 +547,7 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
         return not self.staged
 
     @property
-    def stream_state(self) -> dict | None:
+    def stream_state(self) -> StreamStateDict | None:
         return self._stream_state
 
     @property
@@ -598,15 +557,17 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
     def stage(
         self,
         tables_files: list[list[Path]],
-        new_state: CommitStateSpec,
+        new_state: StreamStateSpec,
     ) -> None:
         self.staged.append((tables_files, new_state))
-        # Persist the state for a StoreStreamState; a plain callable means
-        # the external system owns the offset, so Tabsdata keeps none.
-        self._stream_state = (
-            new_state.state if isinstance(new_state, StoreStreamState) else None
-        )
-        new_state()
+        # A dict is Tabsdata-owned state we persist; a plain callable means
+        # the external system owns the offset, so Tabsdata keeps none and we
+        # invoke the callable for its commit side effect.
+        if isinstance(new_state, dict):
+            self._stream_state = dict(new_state)
+        else:
+            self._stream_state = None
+            new_state()
 
 
 def test_stream_src_plugin_ctx_is_abstract():
@@ -634,15 +595,15 @@ def test_stream_src_plugin_ctx_partial_subclass_stays_abstract():
 def test_first_stage_flips_after_first_stage_call():
     ctx = _RecordingStreamCtx()
     assert ctx.first_stage is True
-    ctx.stage([[Path("a.parquet")]], StoreStreamState({"cdc.offset": 1}))
+    ctx.stage([[Path("a.parquet")]], {"cdc.offset": 1})
     assert ctx.first_stage is False
 
 
-def test_stage_with_store_stream_state_exposes_stream_state():
-    """A :class:`StoreStreamState` commit makes its state readable on the
+def test_stage_with_dict_state_exposes_stream_state():
+    """A :data:`StreamStateDict` commit makes its state readable on the
     next run via :attr:`stream_state`."""
     ctx = _RecordingStreamCtx()
-    ctx.stage([[Path("a.parquet")]], StoreStreamState({"cdc.offset": {"lsn": 9}}))
+    ctx.stage([[Path("a.parquet")]], {"cdc.offset": {"lsn": 9}})
     assert ctx.stream_state == {"cdc.offset": {"lsn": 9}}
 
 
@@ -663,5 +624,5 @@ def test_stage_receives_positional_per_table_manifest():
     inner list means 'no files for that table this batch'."""
     ctx = _RecordingStreamCtx()
     manifest = [[Path("t0.parquet")], [], [Path("t2.parquet")]]
-    ctx.stage(manifest, StoreStreamState({}))
+    ctx.stage(manifest, {})
     assert ctx.staged[0][0] == manifest

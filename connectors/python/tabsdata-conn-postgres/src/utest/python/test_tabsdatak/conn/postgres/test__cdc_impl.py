@@ -23,7 +23,6 @@ from tabsdatak.conn.postgres._cdc_impl import (
 )
 from tabsdatak.conn.postgres.error import PostgresErrorCode
 from tabsdatak.error import TabsdataException
-from tabsdatak.spi import StoreStreamState
 
 
 # =====================================================================
@@ -162,13 +161,14 @@ def test_wal2json_jsonb_and_json(d):
 
 def test_lsn_offset_round_trip():
     a = LsnOffset(lsn=12345)
-    assert a.write() == {"lsn": 12345}
-    back = LsnOffset.read(a.write())
-    assert back.lsn == 12345
+    serialised = a.write()
+    assert isinstance(serialised, str)
+    assert LsnOffset.read(serialised).lsn == 12345
 
 
 def test_lsn_offset_read_missing_lsn_defaults_to_zero():
-    assert LsnOffset.read({}).lsn == 0
+    assert LsnOffset.read("{}").lsn == 0
+    assert LsnOffset.read("").lsn == 0
 
 
 def test_lsn_offset_update_with_another_lsn_offset():
@@ -420,13 +420,13 @@ def test_ingester_default_format_version_is_v2():
 # =====================================================================
 
 
-def test_commit_state_is_a_plain_callable_not_store_stream_state():
+def test_commit_state_is_a_plain_callable_not_a_dict():
     """The slot owns the offset, so the commit callback runs a source
     side effect rather than persisting Tabsdata stream state."""
     bi = _ingester_with_tables(["public.users"])
     spec = bi.commit_state(LsnOffset(lsn=5))
     assert callable(spec)
-    assert not isinstance(spec, StoreStreamState)
+    assert not isinstance(spec, dict)
 
 
 def test_commit_state_callable_commits_the_offset_to_the_source():

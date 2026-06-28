@@ -18,6 +18,7 @@ MySQL) in ``test__cdc_plugin.py``.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -37,7 +38,7 @@ from tabsdatak.conn.mysql import (
     MySQLCdcStreamSrc,
 )
 from tabsdatak.conn.mysql._cdc_plugin import MySQLCdcStreamSrcPlugin
-from tabsdatak.spi import StoreStreamState, StreamSrcPluginCtx
+from tabsdatak.spi import StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
@@ -159,12 +160,12 @@ class _CdcCtx(StreamSrcPluginCtx):
             # ``stream_state``); a plain callable (external system owns the
             # offset) leaves ``stream_state`` None and is invoked for its
             # side effect.
-            if isinstance(new_state, StoreStreamState):
-                self._state = dict(new_state.state)
+            if isinstance(new_state, dict):
+                self._state = dict(new_state)
                 self._tabsdata_owns_state = True
             else:
                 self._tabsdata_owns_state = False
-        new_state()
+                new_state()
 
 
 # ---------------------------------------------------------------------------
@@ -499,9 +500,9 @@ def test_cdc_persists_offset_to_ctx_state(fresh_mysql_cdc, tmp_path):
     if "cdc.offset" not in ctx._state:
         pytest.skip("no offset persisted (no events captured)")
 
-    offset = ctx._state["cdc.offset"]
+    # ``GtidOffset.write()`` persists the JSON string ``{"gtid": "..."}``.
+    offset = json.loads(ctx._state["cdc.offset"])
     assert isinstance(offset, dict)
-    # ``GtidOffset.write()`` returns ``{"gtid": "..."}``.
     assert "gtid" in offset
 
 

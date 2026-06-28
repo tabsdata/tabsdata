@@ -31,18 +31,17 @@ Responsibilities on each :meth:`StreamerPluginCtx.stage` call:
   3. Persist the new resume state, via two branches that match the
      two consumption-loop shapes in the TED:
 
-     * :class:`tabsdatak.spi.StoreStreamState` -- Tabsdata owns the
-       external-system offset. We persist its ``state`` dict into the
-       envelope at ``<stage_root>/stream-state.json``, then invoke the
-       (typically no-op) callable.
+     * a :class:`tabsdatak.spi.StreamStateDict` (a plain ``dict``) --
+       Tabsdata owns the external-system offset. We persist the dict
+       into the envelope at ``<stage_root>/stream-state.json``.
 
-     * any other callable -- the external system owns the offset.
-       We invoke the callable *first* (so a failure in committing to
-       the external system leaves us with no Tabsdata-side state, and
-       the plugin's ``ctx.state is None`` branch on next start replays
-       from ``config.initial_values`` -- at-least-once semantics by
-       design). Once the callable returns, we persist an empty-dict
-       envelope as the first-invocation marker.
+     * a :class:`tabsdatak.spi.CommitStateFn` (any callable) -- the
+       external system owns the offset. We invoke the callable *first*
+       (so a failure in committing to the external system leaves us with
+       no Tabsdata-side state, and the plugin's ``ctx.stream_state is
+       None`` branch on next start replays from ``config.initial_values``
+       -- at-least-once semantics by design). Once the callable returns,
+       we persist an empty-dict envelope as the first-invocation marker.
 
   4. Flip :attr:`first_stage` to ``False``.
 
@@ -79,7 +78,7 @@ from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     format_manifest_filename,
     write_stage_manifest,
 )
-from tabsdatak.spi import CommitStateSpec, StoreStreamState, StreamSrcPluginCtx
+from tabsdatak.spi import StreamSrcPluginCtx, StreamStateDict, StreamStateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +212,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         return self._first_stage
 
     @property
-    def stream_state(self) -> dict | None:
+    def stream_state(self) -> StreamStateDict | None:
         """The inner state dict, or ``None`` if no state file exists.
 
         Note ``{}`` is a meaningful, non-``None`` value: it's the
@@ -234,7 +233,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
     def stage(
         self,
         tables_files: list[list[Path]],
-        new_state: CommitStateSpec,
+        new_state: StreamStateSpec,
     ) -> None:
         """Publish a batch and commit its new resume state.
 
@@ -290,11 +289,11 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         )
 
         # 3. Persist new state. Two branches per the TED.
-        if isinstance(new_state, StoreStreamState):
-            # Tabsdata owns the offset. Persist + then invoke the
-            # callable (StoreStreamState.__call__ is typically a no-op
-            # since persistence is what counts).
-            inner_state = dict(new_state.state)
+        if isinstance(new_state, dict):
+            # Tabsdata owns the offset: ``new_state`` is the resume-state
+            # dict, which we persist into the envelope (persistence is
+            # what counts -- there is no side-effect callable here).
+            inner_state = dict(new_state)
             self._write_state(inner_state, external_id=external_id)
             self._state_view = StreamStateView(
                 state=inner_state,
@@ -304,10 +303,9 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
                 api_version=1,
             )
             logger.debug(
-                "stream_src_ctx.stage: persisted StoreStreamState; %d key(s)",
+                "stream_src_ctx.stage: persisted stream state; %d key(s)",
                 len(inner_state),
             )
-            new_state()
         else:
             # External system owns the offset. Invoke the callable
             # *first* -- if it raises, the marker is not written and

@@ -11,8 +11,9 @@ Covers:
     happy round-trip
   * `StreamerPluginCtx` construction: scheme rejection, initial state
   * `StreamerPluginCtx.stage`:
-    - StoreStreamState branch: files moved to `files/`, manifest in `manifests/`,
-      state envelope persisted with the manifest's TS as external_id
+    - dict branch (Tabsdata-owned state): files moved to `files/`, manifest
+      in `manifests/`, state envelope persisted with the manifest's TS as
+      external_id
     - lambda branch: callback invoked first, then empty-dict marker persisted
     - missing input file raises FileNotFoundError
     - `first_stage` flips after first call
@@ -24,7 +25,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -44,7 +44,6 @@ from tabsdatak.server._tdrunner.function._lib.stream_src_ctx import (
     _load_state,
     _resolve_local_path,
 )
-from tabsdatak.spi import StoreStreamState
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -249,10 +248,10 @@ def test_ctx_construction_loads_existing_state(tmp_path):
     assert ctx.stream_state == {"offset": 100}
 
 
-# --- stage(): StoreStreamState branch -------------------------------------
+# --- stage(): dict (Tabsdata-owned state) branch --------------------------
 
 
-def test_stage_store_stream_state_moves_files_to_per_manifest_files_subdir(tmp_path):
+def test_stage_dict_state_moves_files_to_per_manifest_files_subdir(tmp_path):
     """The parquets the plugin produced in work_dir must end up under
     `<stage>/files/<TS>/` -- a per-batch subdir named for the manifest's
     timestamp, where the publisher's ManifestStageSrcPlugin (via NU5's
@@ -261,7 +260,7 @@ def test_stage_store_stream_state_moves_files_to_per_manifest_files_subdir(tmp_p
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "people-1.parquet")
     f2 = _write_parquet_stub(work_dir / "people-2.parquet")
-    ctx.stage([[f1, f2]], StoreStreamState(state={"offset": 1}))
+    ctx.stage([[f1, f2]], {"offset": 1})
     manifest_path = next(
         (tmp_path / "stage" / MANIFESTS_SUBDIR).glob("stream-manifest-*.json")
     )
@@ -276,11 +275,11 @@ def test_stage_store_stream_state_moves_files_to_per_manifest_files_subdir(tmp_p
     assert not f2.exists()
 
 
-def test_stage_store_stream_state_writes_manifest_under_manifests_subdir(tmp_path):
+def test_stage_dict_state_writes_manifest_under_manifests_subdir(tmp_path):
     ctx = _make_ctx(tmp_path=tmp_path)
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "data.parquet")
-    ctx.stage([[f1]], StoreStreamState(state={}))
+    ctx.stage([[f1]], {})
     manifests_dir = tmp_path / "stage" / MANIFESTS_SUBDIR
     manifests = list(manifests_dir.glob("stream-manifest-*.json"))
     assert len(manifests) == 1
@@ -291,13 +290,13 @@ def test_stage_store_stream_state_writes_manifest_under_manifests_subdir(tmp_pat
     assert content == [[f"files/{external_id}/data.parquet"]]
 
 
-def test_stage_store_stream_state_persists_state_envelope(tmp_path):
+def test_stage_dict_state_persists_state_envelope(tmp_path):
     """The state file gets the full envelope with the inner state,
     the externalId derived from the manifest's TS, and tabsdataVersion."""
     ctx = _make_ctx(tmp_path=tmp_path)
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "data.parquet")
-    ctx.stage([[f1]], StoreStreamState(state={"offset": 42, "topic": "people"}))
+    ctx.stage([[f1]], {"offset": 42, "topic": "people"})
 
     state_path = tmp_path / "stage" / STREAM_STATE_FILENAME
     assert state_path.is_file()
@@ -314,26 +313,12 @@ def test_stage_store_stream_state_persists_state_envelope(tmp_path):
     assert envelope["externalId"] == expected_id
 
 
-def test_stage_store_stream_state_updates_stream_state_property(tmp_path):
+def test_stage_dict_state_updates_stream_state_property(tmp_path):
     ctx = _make_ctx(tmp_path=tmp_path)
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "data.parquet")
-    ctx.stage([[f1]], StoreStreamState(state={"offset": 99}))
+    ctx.stage([[f1]], {"offset": 99})
     assert ctx.stream_state == {"offset": 99}
-
-
-def test_stage_store_stream_state_invokes_callable(tmp_path):
-    """``StoreStreamState.__call__`` runs after persistence -- a no-op
-    in the canonical impl but verify the contract."""
-    ctx = _make_ctx(tmp_path=tmp_path)
-    work_dir = tmp_path / "work"
-    f1 = _write_parquet_stub(work_dir / "data.parquet")
-    sss = StoreStreamState(state={"offset": 1})
-    # StoreStreamState is callable; track invocations by wrapping
-    sss_wrapped = MagicMock(wraps=sss, spec=StoreStreamState)
-    sss_wrapped.state = sss.state
-    ctx.stage([[f1]], sss_wrapped)
-    sss_wrapped.assert_called_once()
 
 
 # --- stage(): lambda branch -----------------------------------------------
@@ -409,7 +394,7 @@ def test_stage_missing_input_file_raises(tmp_path):
     ctx = _make_ctx(tmp_path=tmp_path)
     missing = tmp_path / "work" / "does-not-exist.parquet"
     with pytest.raises(FileNotFoundError, match="does-not-exist"):
-        ctx.stage([[missing]], StoreStreamState(state={}))
+        ctx.stage([[missing]], {})
 
 
 def test_stage_flips_first_stage_flag(tmp_path):
@@ -417,7 +402,7 @@ def test_stage_flips_first_stage_flag(tmp_path):
     assert ctx.first_stage is True
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "data.parquet")
-    ctx.stage([[f1]], StoreStreamState(state={}))
+    ctx.stage([[f1]], {})
     assert ctx.first_stage is False
 
 
@@ -428,9 +413,9 @@ def test_stage_multiple_batches_produce_distinct_manifests(tmp_path):
     ctx = _make_ctx(tmp_path=tmp_path)
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "batch-1.parquet")
-    ctx.stage([[f1]], StoreStreamState(state={"n": 1}))
+    ctx.stage([[f1]], {"n": 1})
     f2 = _write_parquet_stub(work_dir / "batch-2.parquet")
-    ctx.stage([[f2]], StoreStreamState(state={"n": 2}))
+    ctx.stage([[f2]], {"n": 2})
     manifests = sorted(
         (tmp_path / "stage" / MANIFESTS_SUBDIR).glob("stream-manifest-*.json")
     )
@@ -445,9 +430,9 @@ def test_stage_multiple_batches_use_distinct_files_subdirs(tmp_path):
     ctx = _make_ctx(tmp_path=tmp_path)
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "batch-1.parquet")
-    ctx.stage([[f1]], StoreStreamState(state={"n": 1}))
+    ctx.stage([[f1]], {"n": 1})
     f2 = _write_parquet_stub(work_dir / "batch-2.parquet")
-    ctx.stage([[f2]], StoreStreamState(state={"n": 2}))
+    ctx.stage([[f2]], {"n": 2})
     manifests = sorted(
         (tmp_path / "stage" / MANIFESTS_SUBDIR).glob("stream-manifest-*.json")
     )
@@ -466,7 +451,7 @@ def test_stage_handles_empty_slots(tmp_path):
     ctx = _make_ctx(tmp_path=tmp_path)
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "data.parquet")
-    ctx.stage([[f1], []], StoreStreamState(state={}))
+    ctx.stage([[f1], []], {})
     manifests = list((tmp_path / "stage" / MANIFESTS_SUBDIR).glob("*.json"))
     assert len(manifests) == 1
     content = json.loads(manifests[0].read_text())

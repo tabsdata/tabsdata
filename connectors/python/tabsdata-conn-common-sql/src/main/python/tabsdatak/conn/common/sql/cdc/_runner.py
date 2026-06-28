@@ -129,9 +129,9 @@ def _publish(
     if not any(tables_files):
         return False
     # The ingester decides how the new offset is committed: Tabsdata-owned
-    # ingesters persist it (``StoreStreamState``); external-owned ones
-    # (e.g. a Postgres slot) commit on the source. ``ctx.stage`` runs that
-    # commit when it publishes the batch.
+    # ingesters persist it (a ``StreamStateDict``); external-owned ones
+    # (e.g. a Postgres slot) commit on the source (a ``CommitStateFn``).
+    # ``ctx.stage`` runs that commit when it publishes the batch.
     ctx.stage(tables_files, ingester.commit_state(buffer_sentinel.offset))
     disk_sentinel.clear()
     return True

@@ -31,7 +31,6 @@ from tabsdatak.conn.mysql._cdc_impl import (
 )
 from tabsdatak.conn.mysql.error import MysqlErrorCode
 from tabsdatak.error import TabsdataException
-from tabsdatak.spi import StoreStreamState
 
 
 # =====================================================================
@@ -173,13 +172,14 @@ def test_binlog_unknown_field_type_raises(d):
 
 def test_gtid_offset_round_trip():
     a = GtidOffset(gtid="uuid:42")
-    assert a.write() == {"gtid": "uuid:42"}
-    back = GtidOffset.read(a.write())
-    assert back.gtid == "uuid:42"
+    serialised = a.write()
+    assert isinstance(serialised, str)
+    assert GtidOffset.read(serialised).gtid == "uuid:42"
 
 
 def test_gtid_offset_read_missing_gtid_defaults_to_empty():
-    assert GtidOffset.read({}).gtid == ""
+    assert GtidOffset.read("{}").gtid == ""
+    assert GtidOffset.read("").gtid == ""
 
 
 def test_gtid_offset_update_with_another_gtid_offset():
@@ -361,7 +361,7 @@ def test_commit_offset_rejects_foreign_offset():
 
 def test_offset_from_state_reconstructs_gtid_offset():
     bi = _ingester_with_tables(["app.users"])
-    offset = bi.offset_from_state({"gtid": "uuid:42"})
+    offset = bi.offset_from_state(GtidOffset(gtid="uuid:42").write())
     assert isinstance(offset, GtidOffset)
     assert offset.gtid == "uuid:42"
 
@@ -369,13 +369,13 @@ def test_offset_from_state_reconstructs_gtid_offset():
 def test_commit_state_persists_gtid_in_stream_state():
     bi = _ingester_with_tables(["app.users"])
     spec = bi.commit_state(GtidOffset(gtid="uuid:7"))
-    assert isinstance(spec, StoreStreamState)
-    assert spec.state == {CDC_OFFSET_STATE_KEY: {"gtid": "uuid:7"}}
+    assert isinstance(spec, dict)
+    assert spec == {CDC_OFFSET_STATE_KEY: GtidOffset(gtid="uuid:7").write()}
 
 
 def test_resume_offset_round_trips_persisted_gtid():
     bi = _ingester_with_tables(["app.users"])
-    persisted = bi.commit_state(GtidOffset(gtid="uuid:7")).state
+    persisted = bi.commit_state(GtidOffset(gtid="uuid:7"))
     resumed = bi.resume_offset(first_stage=False, stream_state=persisted)
     assert isinstance(resumed, GtidOffset)
     assert resumed.gtid == "uuid:7"

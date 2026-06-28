@@ -10,6 +10,7 @@ without a database; per-connector subclasses are exercised separately."""
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -19,7 +20,6 @@ from tabsdatak.conn.common.sql.cdc._ingester import (
     CdcIngester,
 )
 from tabsdatak.conn.common.sql.cdc._model import CdcOffset
-from tabsdatak.spi import StoreStreamState
 
 
 class FakeOffset(CdcOffset):
@@ -32,12 +32,12 @@ class FakeOffset(CdcOffset):
     def update(self, other: CdcOffset) -> None:  # pragma: no cover - unused here
         self.value = other.value
 
-    def write(self) -> dict:
-        return {"v": self.value}
+    def write(self) -> str:
+        return json.dumps({"v": self.value})
 
     @classmethod
-    def read(cls, data: dict) -> "FakeOffset":
-        return cls(data["v"])
+    def read(cls, data: str) -> "FakeOffset":
+        return cls(json.loads(data)["v"])
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, FakeOffset) and other.value == self.value
@@ -71,7 +71,7 @@ class _BaseIngester(CdcIngester):
 class StateIngester(_BaseIngester):
     """Tabsdata-owned-offset ingester: implements ``offset_from_state``."""
 
-    def offset_from_state(self, offset_state: dict) -> CdcOffset:
+    def offset_from_state(self, offset_state: str) -> CdcOffset:
         return FakeOffset.read(offset_state)
 
 
@@ -82,11 +82,13 @@ def _make(cls=StateIngester) -> CdcIngester:
 # --- commit_state (default, Tabsdata-owned) -----------------------------
 
 
-def test_commit_state_wraps_written_offset_under_state_key():
+def test_commit_state_returns_written_offset_under_state_key():
     ingester = _make()
     spec = ingester.commit_state(FakeOffset(7))
-    assert isinstance(spec, StoreStreamState)
-    assert spec.state == {CDC_OFFSET_STATE_KEY: {"v": 7}}
+    # Tabsdata-owned offset: commit_state returns the resume-state dict
+    # whose value is the offset's serialized string (``offset.write()``).
+    assert isinstance(spec, dict)
+    assert spec == {CDC_OFFSET_STATE_KEY: FakeOffset(7).write()}
 
 
 # --- resume_offset (default, Tabsdata-owned) ----------------------------
@@ -99,7 +101,7 @@ def test_resume_offset_first_stage_returns_none():
     assert (
         ingester.resume_offset(
             first_stage=True,
-            stream_state={CDC_OFFSET_STATE_KEY: {"v": 1}},
+            stream_state={CDC_OFFSET_STATE_KEY: FakeOffset(1).write()},
         )
         is None
     )
@@ -115,7 +117,7 @@ def test_resume_offset_reconstructs_from_persisted_state():
     ingester = _make()
     resumed = ingester.resume_offset(
         first_stage=False,
-        stream_state={CDC_OFFSET_STATE_KEY: {"v": 9}},
+        stream_state={CDC_OFFSET_STATE_KEY: FakeOffset(9).write()},
     )
     assert resumed == FakeOffset(9)
 
@@ -124,7 +126,7 @@ def test_resume_offset_round_trips_commit_state():
     """The dict ``commit_state`` persisted is exactly what
     ``resume_offset`` reconstructs from."""
     ingester = _make()
-    persisted = ingester.commit_state(FakeOffset(13)).state
+    persisted = ingester.commit_state(FakeOffset(13))
     resumed = ingester.resume_offset(first_stage=False, stream_state=persisted)
     assert resumed == FakeOffset(13)
 
@@ -140,7 +142,7 @@ def test_base_offset_from_state_raises_not_implemented():
     with pytest.raises(NotImplementedError):
         ingester.resume_offset(
             first_stage=False,
-            stream_state={CDC_OFFSET_STATE_KEY: {"v": 1}},
+            stream_state={CDC_OFFSET_STATE_KEY: FakeOffset(1).write()},
         )
 
 

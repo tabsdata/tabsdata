@@ -40,7 +40,7 @@ from tabsdatak.conn.postgres import (
     PostgresCdcStreamSrc,
 )
 from tabsdatak.conn.postgres._cdc_plugin import PostgresCdcStreamSrcPlugin
-from tabsdatak.spi import StoreStreamState, StreamSrcPluginCtx
+from tabsdatak.spi import StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 
@@ -168,12 +168,12 @@ class _CdcCtx(StreamSrcPluginCtx):
             # ``stream_state``); a plain callable (external system owns the
             # offset) leaves ``stream_state`` None and is invoked for its
             # side effect.
-            if isinstance(new_state, StoreStreamState):
-                self._state = dict(new_state.state)
+            if isinstance(new_state, dict):
+                self._state = dict(new_state)
                 self._tabsdata_owns_state = True
             else:
                 self._tabsdata_owns_state = False
-        new_state()
+                new_state()
 
 
 # ---------------------------------------------------------------------------
@@ -538,7 +538,7 @@ def test_cdc_keeps_offset_in_slot_not_ctx_state(
     _run_plugin_in_thread(ctx, conn, src, timeout_s=60.0)
 
     # External offset: nothing is persisted to Tabsdata stream state
-    # (the staged commits used a plain callable, not StoreStreamState).
+    # (the staged commits used a plain callable, not a state dict).
     assert ctx.stream_state is None
     assert "cdc.offset" not in ctx._state
 

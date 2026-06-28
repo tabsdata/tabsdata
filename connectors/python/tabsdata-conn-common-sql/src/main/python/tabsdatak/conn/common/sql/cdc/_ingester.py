@@ -29,7 +29,7 @@ from tabsdatak.conn.common.sql.cdc.dialect import (
 )
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat, QualifiedTablesSpec
-from tabsdatak.spi import CommitStateSpec, StoreStreamState
+from tabsdatak.spi import StreamStateSpec
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -308,11 +308,14 @@ class CdcIngester(ABC):
     # :meth:`resume_offset` to let the source resume itself.
     # ------------------------------------------------------------------
 
-    def commit_state(self, offset: CdcOffset) -> CommitStateSpec:
-        """The :data:`~tabsdatak.spi.CommitStateSpec` to hand
-        ``ctx.stage`` for this batch. Default: Tabsdata persists the
-        offset under :data:`CDC_OFFSET_STATE_KEY`."""
-        return StoreStreamState({CDC_OFFSET_STATE_KEY: offset.write()})
+    def commit_state(self, offset: CdcOffset) -> StreamStateSpec:
+        """The :data:`~tabsdatak.spi.StreamStateSpec` to hand
+        ``ctx.stage`` for this batch. Default: a
+        :data:`~tabsdatak.spi.StreamStateDict` that Tabsdata persists,
+        keyed under :data:`CDC_OFFSET_STATE_KEY`. External-owned
+        ingesters override this to return a
+        :data:`~tabsdatak.spi.CommitStateFn` instead."""
+        return {CDC_OFFSET_STATE_KEY: offset.write()}
 
     def resume_offset(
         self,
@@ -332,9 +335,10 @@ class CdcIngester(ABC):
             return None
         return self.offset_from_state(stream_state[CDC_OFFSET_STATE_KEY])
 
-    def offset_from_state(self, offset_state: dict) -> CdcOffset:
+    def offset_from_state(self, offset_state: str) -> CdcOffset:
         """Reconstruct the resume offset from the Tabsdata-persisted
-        ``offset_state`` dict (the value :meth:`commit_state` stored).
+        ``offset_state`` string (the value :meth:`commit_state` stored,
+        i.e. ``offset.write()``) -- typically ``<Offset>.read(offset_state)``.
         Tabsdata-owned ingesters implement this; external-owned ones
         override :meth:`resume_offset` and need not."""
         raise NotImplementedError(

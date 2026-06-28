@@ -245,8 +245,8 @@ Wal2JsonFormatVersionSpec: TypeAlias = Literal[1, 2]
 class LsnPosition:
     """Start logical replication at a specific WAL Log Sequence
     Number. Resuming from a persisted offset uses this shape too --
-    the runner serialises ``LsnOffset.write()`` to
-    ``{"lsn": int}`` on the trx state.
+    the runner persists ``LsnOffset.write()`` (the JSON string
+    ``{"lsn": int}``) on the trx state.
 
     :param lsn: 64-bit integer LSN -- the form
         ``pg_current_wal_lsn() - '0/0'::pg_lsn`` returns. Use ``0``

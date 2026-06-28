@@ -105,9 +105,10 @@ def test_format_state_envelope_has_exact_schema_shape():
 
 
 def test_format_state_envelope_accepts_empty_state_marker():
-    """The first-invocation marker case (TED: when the user callback is
-    not a StoreStreamState, the runtime persists an empty-dict state to
-    signal 'we ran once' without claiming an offset)."""
+    """The first-invocation marker case (TED: when the user hands stage a
+    CommitStateFn callable rather than a StreamStateDict, the runtime
+    persists an empty-dict state to signal 'we ran once' without claiming
+    an offset)."""
     env = format_state_envelope(
         {},
         external_id="2026-01-15T12:00:00.000",

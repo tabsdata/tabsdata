@@ -24,6 +24,7 @@ Two pieces:
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Generator, Iterable
@@ -60,7 +61,7 @@ from tabsdatak.conn.common.sql.cdc.typing import QualifiedTablesSpec
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.postgres import LsnPosition
 from tabsdatak.conn.postgres.error import PostgresErrorCode
-from tabsdatak.spi import CommitStateSpec
+from tabsdatak.spi import CommitStateFn
 
 logger = logging.getLogger(__name__)
 
@@ -334,12 +335,13 @@ class LsnOffset(CdcOffset):
             )
         self.lsn = other.lsn
 
-    def write(self) -> dict:
-        return {"lsn": self.lsn}
+    def write(self) -> str:
+        return json.dumps({"lsn": self.lsn})
 
     @classmethod
-    def read(cls, data: dict) -> "LsnOffset":
-        return cls(lsn=int(data.get("lsn", 0)))
+    def read(cls, data: str) -> "LsnOffset":
+        payload = json.loads(data) if data else {}
+        return cls(lsn=int(payload.get("lsn", 0)))
 
     def copy(self) -> "LsnOffset":
         return LsnOffset(lsn=self.lsn)
@@ -583,7 +585,7 @@ class Wal2JsonIngester(CdcIngester):
     # slot, and let the slot resume itself rather than reading Tabsdata
     # ``stream_state``.
 
-    def commit_state(self, offset: CdcOffset) -> CommitStateSpec:
+    def commit_state(self, offset: CdcOffset) -> CommitStateFn:
         return lambda: self.commit_offset(offset)
 
     def resume_offset(

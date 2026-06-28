@@ -22,11 +22,17 @@ class CdcOffset(ABC):
     def update(self, other: CdcOffset) -> None: ...
 
     @abstractmethod
-    def write(self) -> dict: ...
+    def write(self) -> str:
+        """Serialize this offset to an opaque string. Each impl owns its
+        own encoding; the runner persists the string verbatim and hands
+        it back to :meth:`read` on resume."""
+        ...
 
     @classmethod
     @abstractmethod
-    def read(cls, data: dict) -> CdcOffset: ...
+    def read(cls, data: str) -> CdcOffset:
+        """Reconstruct an offset from a string produced by :meth:`write`."""
+        ...
 
 
 @dataclass
