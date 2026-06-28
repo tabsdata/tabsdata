@@ -12,6 +12,7 @@ extraction, which is what the v2 migration rewrote."""
 
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -182,7 +183,7 @@ def test_source_or_destination_name_for_transformer_is_none():
 
 def test_cron_workers_returns_ct_payload_for_cron_trigger():
     info = _publisher_info(trigger_by=CronTrigger(mask="0 * * * *"))
-    workers = ts._cron_workers(info)
+    workers = ts._workers(info)
     assert workers is not None
     assert "CT" in workers
     assert "0 * * * *" in workers["CT"]
@@ -190,11 +191,42 @@ def test_cron_workers_returns_ct_payload_for_cron_trigger():
 
 def test_cron_workers_returns_none_for_non_cron_trigger():
     info = _transformer_info(trigger_by=TablesTrigger(tables=["c/a"]))
-    assert ts._cron_workers(info) is None
+    assert ts._workers(info) is None
 
 
 def test_cron_workers_returns_none_for_none_trigger():
-    assert ts._cron_workers(_publisher_info(trigger_by=None)) is None
+    assert ts._workers(_publisher_info(trigger_by=None)) is None
+
+
+def test_workers_returns_st_payload_for_stream_publisher():
+    """``@stream_publisher`` registers must emit ``{"ST": ...}``;
+    without it the apiserver never enqueues the long-running
+    stream-publisher worker (TD-2569)."""
+    from tabsdatak._info import KIND_STREAM_PUBLISHER_DEF
+
+    info = _InfoStub(
+        kind=KIND_STREAM_PUBLISHER_DEF,
+        func=_decorated("stream_fn"),
+        source=_FakeSrc(),
+        output_tables=["streamed"],
+        # @stream_publisher does not support a `trigger_by` arg; the
+        # streamer pod IS the trigger source for downstream functions.
+        trigger_by=None,
+    )
+
+    workers = ts._workers(info)
+    assert workers is not None
+    assert list(workers) == ["ST"]
+    # StageTriggerConfig fields all carry serde defaults Rust-side
+    # (TimeoutThresholdMin / SizeThreshold typed-int wrappers,
+    # Option<DateTime> start/end); the SDK sends an empty body.
+    assert json.loads(workers["ST"]) == {}
+
+
+def test_workers_backcompat_alias_preserved():
+    """The old name ``_cron_workers`` is kept as an alias for any
+    out-of-tree caller -- both names resolve to the same function."""
+    assert ts._cron_workers is ts._workers
 
 
 def test_trigger_string_list_returns_table_list_for_tables_trigger():

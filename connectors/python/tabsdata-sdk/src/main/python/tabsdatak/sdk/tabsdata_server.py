@@ -5306,14 +5306,45 @@ _KIND_TO_API_TYPE: dict[str, str] = {
 }
 
 
-def _cron_workers(info: FunctionInfo) -> dict[str, str] | None:
-    """If the info has a :class:`CronTrigger`, return the legacy
-    ``{"CT": <json>}`` workers payload the server expects.
-    ``None`` for any other trigger type."""
+def _workers(info: FunctionInfo) -> dict[str, str] | None:
+    """Return the workers payload the server's ``function_register``
+    endpoint stores on the function (later materialized into a row in
+    ``workers`` by ``build_workers`` in
+    ``td-services/.../function/layers/register.rs``):
+
+    * ``CronTrigger`` → ``{"CT": json.dumps({"mask": ...})}``. Matches
+      the ``CronTriggerConfig`` Rust struct in
+      ``td-objects/.../dxo/worker.rs``; ``start``/``end`` are
+      ``Option<DateTime>`` and omitted.
+    * ``@stream_publisher`` (any) → ``{"ST": json.dumps({})}``. The
+      ``StageTriggerConfig`` struct's fields all carry serde defaults
+      (``TimeoutThresholdMin``/``SizeThreshold`` are typed-int wrappers
+      with built-in defaults; ``start``/``end`` are ``Option``); an
+      empty JSON object is enough to enqueue the long-running
+      stream-publisher worker. The function-level
+      ``fallback_rollover_mins`` lives in the bundle's
+      ``function_def.json`` and is consumed by ``run_streamer`` in
+      the pod, not via this worker config.
+    * Anything else → ``None`` (no orchestrator-managed worker).
+
+    Stream-publisher MUST emit ``"ST"``; otherwise the apiserver never
+    enqueues a ``WorkerType::StageTrigger`` row, the orchestrator's
+    ``StageTriggersToSchedule`` filter finds nothing, and the
+    long-running stream-publisher pod never gets scheduled (the
+    per-trigger function-publisher pod still runs, but with an empty
+    stage and the user function gets no rows).
+    """
     trigger_by = getattr(info, "trigger_by", None)
     if isinstance(trigger_by, CronTrigger):
         return {"CT": json.dumps({"mask": trigger_by.mask})}
+    if getattr(info, "__kind__", None) == KIND_STREAM_PUBLISHER_DEF:
+        return {"ST": json.dumps({})}
     return None
+
+
+# Kept under the old name so any out-of-tree caller (and the
+# follow-on test file) keeps importing without a breaking rename.
+_cron_workers = _workers
 
 
 def _trigger_string_list(info: FunctionInfo) -> list[str] | None:
@@ -5433,12 +5464,13 @@ def _create_archive(
         function_name=function_name,
         function_type=function_type,
         source_or_destination=_source_or_destination_name(info),
-        # TODO(tabsdatak-migration): ``_cron_workers`` only emits
-        # the ``CT`` (cron-trigger) payload. The legacy SDK also
-        # emitted ``ST`` for ``StageTrigger`` instances. Stage
-        # triggers register as ``workers=None`` until the v2 stage
-        # trigger story exists.
-        workers=_cron_workers(info),
+        # ``_workers`` emits ``CT`` for ``CronTrigger`` and ``ST`` for
+        # ``@stream_publisher``; ``None`` otherwise. The ``ST`` branch
+        # is what makes the apiserver enqueue the long-running
+        # stream-publisher worker on register (TD-2569). Without it
+        # the orchestrator's ``StageTriggersToSchedule`` filter found
+        # nothing and the stream-publisher pod never spawned.
+        workers=_workers(info),
     )
 
 
