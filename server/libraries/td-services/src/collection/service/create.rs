@@ -28,7 +28,7 @@ use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_bridge::BridgeProviderHandle;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::{InProject, Scoped};
-use td_error::TdError;
+use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::collection::{CollectionCreate, CollectionRead};
 use td_objects::dxo::connection::ConnectionUpsert;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
@@ -158,7 +158,7 @@ impl TdService for CreateCollectionService {
                 let store = bridge.connection_store();
                 let connection_id = plan.connection_row.as_ref().map(|row| row.id);
                 if let Some(connection_id) = &connection_id {
-                    let payload = connection_payload(&plan);
+                    let payload = connection_payload(&plan)?;
                     store
                         .upsert(
                             &project,
@@ -195,12 +195,32 @@ impl TdService for CreateCollectionService {
 }
 
 /// The connection triple of the create payload, as the store consumes it.
-fn connection_payload(plan: &CollectionCreatePlan) -> ConnectionUpsert {
-    ConnectionUpsert {
-        connection: plan.create.connection.clone(),
+///
+/// The store keys the connection (and its worker artifact) by the document's
+/// top-level `name`. The connection is 1:1 with its collection and named by
+/// it, so stamp the collection name onto the dehydrated document the client
+/// sent (which carries none) — mirroring [`rename_stored_connection`].
+///
+/// [`rename_stored_connection`]: crate::collection::service::connection::rename_stored_connection
+fn connection_payload(plan: &CollectionCreatePlan) -> Result<ConnectionUpsert, TdError> {
+    let mut connection = plan.create.connection.clone();
+    if let Some(document) = connection.as_mut() {
+        let object = document.as_object_mut().ok_or_else(|| {
+            api_error!(
+                ApiError::InternalError,
+                "the connection document is not a JSON object"
+            )
+        })?;
+        object.insert(
+            "name".to_string(),
+            serde_json::Value::String(plan.create.name.to_string()),
+        );
+    }
+    Ok(ConnectionUpsert {
+        connection,
         secrets: plan.create.secrets.clone(),
         vars: plan.create.vars.clone(),
-    }
+    })
 }
 
 #[cfg(test)]
@@ -403,6 +423,41 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "dup");
+    }
+
+    #[td_test::test(db)]
+    async fn test_create_stamps_collection_name_onto_nameless_connection(db: TdPool) {
+        // The client sends a dehydrated connection that carries NO name (it is
+        // 1:1 with its collection and named by it). The create flow must stamp
+        // the collection name onto the document so the store can key the worker
+        // artifact — mirroring the rename flow.
+        let bridge = bridge(InMemoryConnectionStore::default());
+        let authz = Arc::new(AuthzContext::default());
+        let create = CreateCollectionService::new(db.clone(), authz, bridge.clone());
+
+        let payload = CollectionCreate::builder()
+            .name(CollectionName::try_from("nameless").unwrap())
+            .description(Description::try_from("d").unwrap())
+            .group(GroupName::source())
+            .connection(Some(serde_json::json!({"kind": "mysqlSrcConn"})))
+            .secrets(Some(vec![]))
+            .vars(Some(vec![]))
+            .build()
+            .unwrap();
+
+        create
+            .service()
+            .raw_oneshot(request(payload))
+            .await
+            .unwrap();
+
+        let connection = linked_connection(&db, "nameless").await.unwrap();
+        let stored = bridge
+            .connection_store()
+            .fetch(&ProjectId::sandbox(), &connection.id)
+            .await
+            .unwrap();
+        assert_eq!(stored.connection["name"], "nameless");
     }
 
     #[td_test::test(db)]
