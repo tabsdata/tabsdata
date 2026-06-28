@@ -625,6 +625,10 @@ def get_input_yaml_loader():
     # When more versions are added, they will be listed here, and each will have its
     # own constructor.
     InputYamlLoader.add_constructor(
+        "!Function",
+        v2_function_constructor,
+    )
+    InputYamlLoader.add_constructor(
         "!FunctionV2",
         v2_function_constructor,
     )
@@ -666,6 +670,7 @@ def get_response_yaml_loader():
     class ResponseYamlLoader(yaml.SafeLoader):
         pass
 
+    ResponseYamlLoader.add_constructor("!Function", v2_response_function_constructor)
     ResponseYamlLoader.add_constructor("!FunctionV2", v2_response_function_constructor)
     # Legacy support for old !V2 tag
     ResponseYamlLoader.add_constructor("!V2", v2_response_function_constructor)
@@ -688,6 +693,7 @@ def get_exception_yaml_loader():
     class ExceptionYamlLoader(yaml.SafeLoader):
         pass
 
+    ExceptionYamlLoader.add_constructor("!Function", v2_exception_function_constructor)
     ExceptionYamlLoader.add_constructor(
         "!FunctionV2", v2_exception_function_constructor
     )
@@ -803,7 +809,7 @@ def v2_function_response_format_representer(
     """Represent a V2_yaml instance as a YAML mapping node."""
     dumper.add_representer(Data, v2_data_representer)
     dumper.add_representer(NoData, v2_no_data_representer)
-    return dumper.represent_mapping("!FunctionV2", v2_function_response_format.content)
+    return dumper.represent_mapping("!Function", v2_function_response_format.content)
 
 
 def v1_stage_trigger_response_format_representer(

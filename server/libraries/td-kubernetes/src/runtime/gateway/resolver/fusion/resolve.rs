@@ -175,7 +175,7 @@ impl ResolveSession<'_> {
         &mut self,
         template_text: &str,
         init: &Value,
-        path: &mut Vec<String>,
+        path: &mut [String],
     ) -> Result<Value, ResolverError> {
         if !contains_placeholder(template_text) {
             return Ok(init.clone());
