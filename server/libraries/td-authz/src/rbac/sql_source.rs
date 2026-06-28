@@ -10,6 +10,16 @@
 //! cache is invalidated via [`RbacSource::refresh`] whenever role assignments
 //! or role permissions change.
 //!
+//! NOTE (multi-instance): invalidation is **in-process only** — every mutating
+//! service calls [`RbacSource::refresh`] to purge *its own* node's cache. With
+//! a single apiserver instance that is sufficient. Once the apiserver runs as
+//! multiple instances, a write on one node will not invalidate the other
+//! nodes' caches, so a stale node can wrongly allow/deny until its next local
+//! purge. Before going multi-instance, replace this purge-on-write scheme with
+//! a shared epoch/version check: stamp an authz version (bumped on any
+//! role/permission/membership write) and have `get` compare it and rebuild
+//! only when it has advanced.
+//!
 //! The async/database boundary lives entirely here; the enforcement decision
 //! ([`crate::rbac::model::Grants::allows`]) stays pure.
 

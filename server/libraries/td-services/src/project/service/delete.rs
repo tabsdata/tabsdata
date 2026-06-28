@@ -7,8 +7,8 @@ use crate::project::service::layer::guards::{
     reject_delete_non_empty_project, reject_delete_sandbox_on_single_project_backend,
 };
 use ta_services::factory::service_factory;
-use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project, Rbac, Scope};
+use td_authz::{AuthzContext, refresh_authz_context};
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::project::{ProjectDB, ProjectDeleteDB, ProjectDeleteDBBuilder};
@@ -51,6 +51,9 @@ fn service() {
         // with their permission + membership rows (bypasses the `fixed` guard;
         // see `delete_project_roles`).
         from_fn(delete_project_roles),
+        // `delete_project_roles` dropped the project's roles, permissions, and
+        // memberships; invalidate the cached authz grants.
+        from_fn(refresh_authz_context),
     )
 }
 
@@ -82,6 +85,7 @@ mod tests {
                 type_of_val(&With::<ProjectDeleteDBBuilder>::build::<ProjectDeleteDB>),
                 type_of_val(&By::<ProjectId>::update::<ProjectDeleteDB, ProjectDB>),
                 type_of_val(&delete_project_roles),
+                type_of_val(&refresh_authz_context),
             ]);
     }
 }

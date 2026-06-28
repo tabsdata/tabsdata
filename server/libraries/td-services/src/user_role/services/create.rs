@@ -3,8 +3,8 @@
 //
 
 use ta_services::factory::service_factory;
-use td_authz::AuthzContext;
 use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
+use td_authz::{AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user::UserDB;
@@ -51,6 +51,8 @@ fn service() {
         from_fn(By::<UserRoleId>::fetch_one::<UserRoleDBWithNames>),
         from_fn(With::<UserRoleDBWithNames>::try_convert_to::<UserRoleBuilder, _>),
         from_fn(With::<UserRoleBuilder>::build::<UserRole>),
+        // Added a role membership; invalidate the cached authz grants.
+        from_fn(refresh_authz_context),
     )
 }
 
@@ -104,6 +106,7 @@ mod tests {
             type_of_val(&By::<UserRoleId>::fetch_one::<UserRoleDBWithNames>),
             type_of_val(&With::<UserRoleDBWithNames>::try_convert_to::<UserRoleBuilder, _>),
             type_of_val(&With::<UserRoleBuilder>::build::<UserRole>),
+            type_of_val(&refresh_authz_context),
         ]);
     }
 

@@ -4,8 +4,8 @@
 
 use crate::user_role::layers::assert_not_fixed;
 use ta_services::factory::service_factory;
-use td_authz::AuthzContext;
 use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
+use td_authz::{AuthzContext, refresh_authz_context};
 use td_objects::And;
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::role::RoleDB;
@@ -42,6 +42,8 @@ fn service() {
         from_fn(By::<And![RoleId, UserId]>::fetch_one::<UserRoleDBWithNames>),
         from_fn(assert_not_fixed),
         from_fn(By::<And![RoleId, UserId]>::delete::<UserRoleDB>),
+        // Removed a role membership; invalidate the cached authz grants.
+        from_fn(refresh_authz_context),
     )
 }
 
@@ -82,6 +84,7 @@ mod tests {
                 type_of_val(&By::<And![RoleId, UserId]>::fetch_one::<UserRoleDBWithNames>),
                 type_of_val(&assert_not_fixed),
                 type_of_val(&By::<And![RoleId, UserId]>::delete::<UserRoleDB>),
+                type_of_val(&refresh_authz_context),
             ]);
     }
 

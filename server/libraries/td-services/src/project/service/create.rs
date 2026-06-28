@@ -7,8 +7,8 @@ use crate::project::service::layer::seed_groups::seed_default_groups;
 use crate::project::service::layer::seed_project_roles::seed_project_roles;
 use crate::project::service::layer::single_project::reject_create_on_single_project_backend;
 use ta_services::factory::service_factory;
-use td_authz::AuthzContext;
 use td_authz::rbac::{CreateProjects, Rbac, Scope, System};
+use td_authz::{AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::project::{
     ProjectCreate, ProjectCreateDB, ProjectCreateDBBuilder, ProjectDBWithNames, ProjectRead,
@@ -53,6 +53,11 @@ fn service() {
         from_fn(By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
         from_fn(With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
         from_fn(With::<ProjectReadBuilder>::build::<ProjectRead>),
+        // `seed_project_roles` inserted the new per-project roles, their
+        // permissions, and the creator's `<name>_admin` membership directly
+        // into the DB; invalidate the cached authz grants so the creator's
+        // `manage_project` is visible on the next request.
+        from_fn(refresh_authz_context),
     )
 }
 
@@ -87,6 +92,7 @@ mod tests {
                 type_of_val(&By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
                 type_of_val(&With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
                 type_of_val(&With::<ProjectReadBuilder>::build::<ProjectRead>),
+                type_of_val(&refresh_authz_context),
             ]);
     }
 }
