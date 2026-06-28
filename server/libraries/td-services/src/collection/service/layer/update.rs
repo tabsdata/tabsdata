@@ -79,18 +79,23 @@ pub async fn plan_collection_update(
     update: Ref<CollectionUpdate>,
     update_db: Ref<CollectionUpdateDB>,
 ) -> Result<CollectionUpdatePlan, TdError> {
+    // A rename to a name already taken is rejected up front with a clean
+    // "already exists" error for every collection flavour (not just connected),
+    // instead of the raw unique-constraint violation from the update write.
+    // Connected collections additionally need this before the store rename:
+    // otherwise the existing owner's worker artifact would be overwritten (and
+    // deleted by the revert). Renaming to the current name is a no-op.
+    if let Some(name) = &update.name
+        && *name != collection.name
+    {
+        ensure_collection_name_free(&mut conn, name).await?;
+    }
     let rename = match (&update.name, collection.connection_id) {
-        (Some(name), Some(connection_id)) if *name != collection.name => {
-            // The store rename happens BEFORE the TX, so the target name must
-            // be known free up front — otherwise the existing owner's worker
-            // artifact would be overwritten (and deleted by the revert).
-            ensure_collection_name_free(&mut conn, name).await?;
-            Some(ConnectionRename {
-                connection_id,
-                old_name: collection.name.to_string(),
-                new_name: name.to_string(),
-            })
-        }
+        (Some(name), Some(connection_id)) if *name != collection.name => Some(ConnectionRename {
+            connection_id,
+            old_name: collection.name.to_string(),
+            new_name: name.to_string(),
+        }),
         _ => None,
     };
     Ok(CollectionUpdatePlan {

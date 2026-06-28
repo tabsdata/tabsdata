@@ -22,10 +22,11 @@ use td_objects::dxo::collection::{
 };
 use td_objects::dxo::connection::{ConnectionDB, ConnectionUpsert, KeyValue};
 use td_objects::dxo::crudl::RequestContext;
+use td_objects::errors::SqlError;
 use td_objects::types::basic::{
     CollectionName, CollectionType, ConnectionId, ConnectionKind, GroupId,
 };
-use td_objects::{Buildable, TryUpdater};
+use td_objects::{Buildable, DaoCore, TryUpdater};
 use td_queries::LiveEntry;
 use td_tower::extractors::{MutRef, Ref};
 
@@ -274,6 +275,11 @@ pub async fn plan_collection_create(
     group_id: Ref<GroupId>,
     collection_type: Ref<CollectionType>,
 ) -> Result<CollectionCreatePlan, TdError> {
+    // A duplicate name is rejected up front for every collection flavour (not
+    // just connected ones) with a clean "already exists" error instead of the
+    // raw unique-constraint violation from the insert. Connected collections
+    // additionally need this before the store write (see the helper's note).
+    ensure_collection_name_free(&mut conn, &create.name).await?;
     let connection_row = match collection_type.deref() {
         CollectionType::DataFactory => {
             if create.connection.is_some() || create.secrets.is_some() || create.vars.is_some() {
@@ -307,7 +313,6 @@ pub async fn plan_collection_create(
                      nothing is stored yet for a new collection"
                 ));
             }
-            ensure_collection_name_free(&mut conn, &create.name).await?;
             Some(
                 ConnectionDB::builder()
                     .try_update_from(request_context.deref())?
@@ -338,10 +343,12 @@ pub(crate) async fn ensure_collection_name_free(
     if existing.is_empty() {
         Ok(())
     } else {
-        Err(api_error!(
-            ApiError::InputError,
-            "a collection named '{name}' already exists"
-        ))
+        // Clean "already exists" (input-error/400), matching the
+        // `By::<Name>::assert_not_exists` errors used for the other entities.
+        Err(SqlError::EntityAlreadyExists(
+            CollectionDB::display_name().to_string(),
+            format!(" for 'name' = '{name}'"),
+        ))?
     }
 }
 

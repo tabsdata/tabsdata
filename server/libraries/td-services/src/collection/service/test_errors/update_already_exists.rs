@@ -51,9 +51,12 @@ async fn test_update_already_existing(db: TdPool) {
         )
         .in_project(ProjectId::sandbox());
 
+    // The `ensure_collection_name_free` pre-check rejects the rename collision
+    // up front with a clean `EntityAlreadyExists` rather than the raw
+    // `UniqueViolation` from the update write.
     assert_service_error(service, request, |err| match err {
-        SqlError::UniqueViolation(_, _, _) => {}
-        other => panic!("Expected 'UniqueViolation', got {other:?}"),
+        SqlError::EntityAlreadyExists(_, _) => {}
+        other => panic!("Expected 'EntityAlreadyExists', got {other:?}"),
     })
     .await;
 }

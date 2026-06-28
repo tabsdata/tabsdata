@@ -35,9 +35,12 @@ async fn test_create_already_existing(db: TdPool) {
         .create((), create)
         .in_project(ProjectId::sandbox());
 
+    // The `ensure_collection_name_free` pre-check rejects the duplicate up front
+    // with a clean `EntityAlreadyExists` rather than the raw `UniqueViolation`
+    // from the insert.
     assert_service_error(service, request, |err| match err {
-        SqlError::UniqueViolation(_, _, _) => {}
-        other => panic!("Expected 'UniqueViolation', got {other:?}"),
+        SqlError::EntityAlreadyExists(_, _) => {}
+        other => panic!("Expected 'EntityAlreadyExists', got {other:?}"),
     })
     .await;
 }
