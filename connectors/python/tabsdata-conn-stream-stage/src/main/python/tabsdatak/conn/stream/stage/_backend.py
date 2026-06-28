@@ -100,12 +100,18 @@ class _CloudStageBackend(StageBackend):
 
 
 def backend_for_conn(conn) -> StageBackend:
-    """Resolve the single populated slot of a ``ManifestStageConn``
-    (``local`` / ``s3`` / ``az`` / ``gcs``) into a :class:`StageBackend`.
+    """Resolve a stage conn into a :class:`StageBackend`.
 
-    Exactly one slot must be populated; zero or more than one raises
-    ``MANIFEST_STAGE_1``.
+    If ``conn`` carries a pre-built backend on a ``stage_backend``
+    attribute (how the runner passes a backend it resolved from the
+    ``function_stage`` ``Location`` -- e.g. a cloud stage built via
+    ``_lib.stage_backend``), it is returned as-is. Otherwise the single
+    populated connector slot (``local`` / ``s3`` / ``az`` / ``gcs``) is
+    wrapped; exactly one slot must be populated, else ``MANIFEST_STAGE_1``.
     """
+    prebuilt = getattr(conn, "stage_backend", None)
+    if prebuilt is not None:
+        return prebuilt
     slots = [
         (conn.local, _localfile_plugin, False),
         (conn.s3, _s3_plugin, True),

@@ -464,13 +464,14 @@ def test_resolve_plugin_and_io_unknown_source_raises_no_plugin(
 
 
 def test_build_manifest_stage_conn_file_scheme_resolves_localfile():
-    """Returns a duck-typed namespace -- the canonical ManifestStageConn
-    is a marker class (no __init__); ManifestStageSrcPlugin reads the
-    `local`/`s3`/`az`/`gcs` attributes directly. The integration tests
-    for ManifestStageSrcPlugin use the same SimpleNamespace idiom."""
+    """file:// keeps the connector-conn form: a LocalFileSrcConn in the
+    `local` slot and no prebuilt `stage_backend`. ManifestStageSrcPlugin's
+    backend_for_conn reads the slot. The integration tests use the same
+    SimpleNamespace idiom."""
     from tabsdatak.conn.localfile import LocalFileSrcConn
 
     conn = _build_manifest_stage_conn(Location(uri="file:///tmp/stage"))
+    assert conn.stage_backend is None
     assert isinstance(conn.local, LocalFileSrcConn)
     assert str(conn.local.base_path) == "/tmp/stage"
     assert conn.s3 is None
@@ -478,20 +479,36 @@ def test_build_manifest_stage_conn_file_scheme_resolves_localfile():
     assert conn.gcs is None
 
 
-def test_build_manifest_stage_conn_rejects_s3():
-    """Cloud schemes will land later; today only file:// is supported.
-    The rejection surfaces as RSP_11 with a clear exit code instead of
-    a TypeError at conn construction time."""
-    with pytest.raises(UnsupportedStageSchemeError):
-        _build_manifest_stage_conn(Location(uri="s3://bucket/stage"))
+def test_build_manifest_stage_conn_s3_resolves_to_object_store_backend():
+    """Cloud schemes resolve (via endpoint.py) to a prebuilt StageBackend
+    carried on `stage_backend`; backend_for_conn returns it as-is. The
+    stage-relative path is appended to the stage-root URL."""
+    conn = _build_manifest_stage_conn(Location(uri="s3://bucket/stage"))
+    assert conn.local is None
+    backend = conn.stage_backend
+    assert backend is not None
+    assert backend.is_object_store is True
+    loc = backend.build_location("manifests/stream-manifest-*.json")
+    assert loc.url == "s3://bucket/stage/manifests/stream-manifest-*.json"
 
 
-def test_build_manifest_stage_conn_rejects_az():
-    with pytest.raises(UnsupportedStageSchemeError):
-        _build_manifest_stage_conn(Location(uri="az://account/container/stage"))
+def test_build_manifest_stage_conn_az_resolves():
+    conn = _build_manifest_stage_conn(Location(uri="az://account/container/stage"))
+    assert conn.stage_backend is not None
+    assert conn.stage_backend.is_object_store is True
 
 
-def test_build_manifest_stage_conn_rejects_gcs():
+def test_build_manifest_stage_conn_gs_resolves():
+    """GCS uses the ``gs://`` scheme -- endpoint.py's registered builder."""
+    conn = _build_manifest_stage_conn(Location(uri="gs://bucket/stage"))
+    assert conn.stage_backend is not None
+    assert conn.stage_backend.is_object_store is True
+
+
+def test_build_manifest_stage_conn_rejects_unsupported_scheme():
+    """An unknown scheme still surfaces RSP_11 with a clean exit code.
+    Note: GCS stages must use ``gs://`` -- ``gcs://`` has no endpoint
+    builder and is rejected here."""
     with pytest.raises(UnsupportedStageSchemeError):
         _build_manifest_stage_conn(Location(uri="gcs://bucket/stage"))
 

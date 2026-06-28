@@ -55,6 +55,15 @@ def test_backend_for_conn_cloud_slot_returns_object_store_backend():
     assert backend.is_object_store is True
 
 
+def test_backend_for_conn_returns_prebuilt_stage_backend():
+    # The runner resolves a cloud stage's backend from the function_stage
+    # Location and carries it on `stage_backend`; backend_for_conn returns
+    # it as-is (no slot resolution).
+    sentinel = _LocalStageBackend(LocalFileSrcConn(base_path="/x"))
+    conn = _conn(stage_backend=sentinel)
+    assert backend_for_conn(conn) is sentinel
+
+
 def test_backend_for_conn_zero_slots_raises():
     with pytest.raises(ConnInitException):
         backend_for_conn(_conn())

@@ -49,6 +49,7 @@ from tabsdatak._info import (
     _unwrap_info,
 )
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
@@ -66,6 +67,9 @@ from tabsdatak.server._tdrunner.function._lib.request import (
     load_request_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
+from tabsdatak.server._tdrunner.function._lib.stage_backend import (
+    stage_backend_from_location,
+)
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
     RunSourcePluginErrorCode,
 )
@@ -163,31 +167,25 @@ class _SrcContext(FromRequestCtx, SrcPluginCtx):
 
 
 def _build_manifest_stage_conn(function_stage: Location) -> SimpleNamespace:
-    """Build a duck-typed ``ManifestStageConn`` whose populated backend
-    matches the ``function_stage`` URI's scheme.
+    """Build the duck-typed ``ManifestStageConn`` the substituted
+    ``ManifestStageSrcPlugin`` reads via ``backend_for_conn``.
 
     The streamer pod wrote its manifests + parquets into
     ``function_stage`` (under ``manifests/`` and ``files/`` subdirs
     respectively; see :mod:`stage_layout`). The publisher pod needs a
-    conn pointing at the *stage root* so the substituted
-    ``ManifestStageSrcPlugin`` can glob
+    conn pointing at the *stage root* so the plugin can glob
     ``manifests/stream-manifest-*.json`` and resolve each manifest's
     inner ``files/<TS>/<name>.parquet`` entries (one files subdir per
     manifest).
 
-    Returns a :class:`SimpleNamespace` with the four expected backend
-    attributes (``local`` / ``s3`` / ``az`` / ``gcs``) -- exactly the
-    duck-typed shape ``ManifestStageSrcPlugin._active_backend`` reads.
-    The canonical :class:`~tabsdatak.conn.stream.stage.ManifestStageConn`
-    class is a type marker (no ``__init__``); the integration tests for
-    ``ManifestStageSrcPlugin`` already use the same SimpleNamespace
-    idiom.
-
-    Today only ``file://`` is supported; cloud schemes (``s3://`` /
-    ``az://`` / ``gcs://``) will land once the streamer pod runtime
-    handles them. Surfaces the typed
-    :class:`UnsupportedStageSchemeError` (RSP_11) otherwise so callers
-    get a clean exit code rather than an AttributeError downstream.
+    ``file://`` keeps the connector-conn form (a ``LocalFileSrcConn`` in
+    the ``local`` slot). Cloud schemes (``s3://`` / ``az://`` / ``gs://``)
+    are resolved to a :class:`StageBackend` via
+    :func:`stage_backend_from_location` -- which reuses :mod:`endpoint`'s
+    ``env_prefix``-derived credential mapping -- and carried on the
+    ``stage_backend`` attribute, which ``backend_for_conn`` returns as-is.
+    An unknown scheme surfaces the typed ``RSP_11`` so callers get a clean
+    exit code rather than an ``AttributeError`` downstream.
     """
     parsed = urlparse(function_stage.uri)
     if parsed.scheme == "file":
@@ -195,13 +193,24 @@ def _build_manifest_stage_conn(function_stage: Location) -> SimpleNamespace:
 
         base_path = url2pathname(parsed.path)
         return SimpleNamespace(
+            stage_backend=None,
             local=LocalFileSrcConn(base_path=base_path),
             s3=None,
             az=None,
             gcs=None,
         )
-    raise RunSourcePluginErrorCode.RSP_11.exception(
-        uri=function_stage.uri, scheme=parsed.scheme
+    try:
+        backend = stage_backend_from_location(function_stage)
+    except UnsupportedSchemeError as exc:
+        raise RunSourcePluginErrorCode.RSP_11.exception(
+            uri=function_stage.uri, scheme=parsed.scheme
+        ) from exc
+    return SimpleNamespace(
+        stage_backend=backend,
+        local=None,
+        s3=None,
+        az=None,
+        gcs=None,
     )
 
 
