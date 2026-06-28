@@ -4,3 +4,4 @@
 
 pydantic==2.12.5
 croniter==6.2.2
+ruamel.yaml==0.19.1

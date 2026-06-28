@@ -6,17 +6,18 @@
 
 Introspects the connectors registered through the SPI registry
 (:func:`tabsdatak._connectors.avail_srcs` / ``avail_stream_srcs`` /
-``avail_dests``) and emits the connectors' own envelope dialect::
+``avail_dests``) and emits the connectors' own envelope dialect as YAML::
 
-    {
-        "kind": "mysqlSrcConn",
-        "apiVersion": "1.0",
-        "type": "tabsdatak.conn.mysql:MySQLSrcConn",
-        "spec": {
-            "uri": "secret:",
-            "credentials": { ... nested userPasswordCredentials envelope ... }
-        }
-    }
+    # Connection template for: mysql (src)
+    # Secret values must be prefixed with 'secret:', variables with 'var:'.
+    kind: mysqlSrcConn
+    apiVersion: '1.0'
+    type: tabsdatak.conn.mysql:MySQLSrcConn
+    spec:
+      # accepts: <value> | var:<value> | secret:<value>
+      uri: <FILL: uri>
+      credentials:           # ... nested userPasswordCredentials envelope ...
+        ...
 
 The ``spec`` mirrors the connection :class:`~tabsdatak.api.Conn` dataclass's
 pydantic fields. Each field's sample is generated from the **first** member of
@@ -24,13 +25,21 @@ its type union:
 
 - a :class:`~tabsdatak.api.Secret` / :class:`~tabsdatak.api.Var` first member
   renders as a bare runtime-resolved reference -- the ``"secret:"`` / ``"var:"``
-  string; no value ever lands in the file (the runtime store resolves it). For
-  an identifier that *also* accepts a literal (``Union[Secret, Var, str]`` --
-  uri, bucket, region) the reference form is emitted, but the field still
-  accepts a plain string or a ``var:`` ref;
+  string; no value ever lands in the file (the runtime store resolves it);
 - a nested-object first member recurses into its own envelope;
 - any other first member renders a typed sample value, or a ``<FILL: ...>``
   placeholder when none can be derived.
+
+A field that accepts more than one form -- a Secret/Var reference plus a plain
+literal (uri, bucket, region) -- carries a ``# accepts: ...`` comment listing
+those forms in the union's declaration order, regardless of which one the sample
+shows. A field with a single accepted form (a plain scalar, or a lone ``Secret``
+credential) carries no comment.
+
+[`build_template`][build_template] / [`build_template_interactive`] return a
+YAML-ready :class:`~ruamel.yaml.comments.CommentedMap`; [`to_yaml`] renders it
+(comments included) and [`from_yaml`] parses a document back (YAML is a superset
+of JSON, so JSON parses too).
 
 No Click, no terminal I/O: the interactive builder takes the prompt function as a
 callback. ``validate`` constructs the concrete connection via the connector's own
@@ -41,10 +50,14 @@ field-pattern enforcement.
 from __future__ import annotations
 
 import enum as _enum
+import io
 import types as _types
 import typing
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
+
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 
 # noinspection PyProtectedMember
 from tabsdatak._api import DescriptorBase, qualified_class, resolve_class
@@ -174,6 +187,28 @@ def _ref_class(first: Any) -> Optional[type]:
     return None
 
 
+def _type_comment(members: list[Any]) -> Optional[str]:
+    """A one-line note listing the forms a field accepts, in the union's
+    declaration order -- e.g. ``Union[str, Var, Secret]`` (uri, bucket, region)
+    -> ``accepts: <value> | var:<value> | secret:<value>``. ``None`` for a field
+    that accepts a single form (a plain scalar, a lone ``Secret`` credential, or
+    a nested object carries no such note)."""
+    has_ref = any(isinstance(m, type) and issubclass(m, (Secret, Var)) for m in members)
+    if not has_ref:
+        return None
+    forms: list[str] = []
+    for m in members:
+        if isinstance(m, type) and issubclass(m, Secret):
+            forms.append("secret:<value>")
+        elif isinstance(m, type) and issubclass(m, Var):
+            forms.append("var:<value>")
+        else:
+            forms.append("<value>")
+    if len(forms) <= 1:
+        return None
+    return "accepts: " + " | ".join(forms)
+
+
 def _concrete_subs(cls: type) -> list[type]:
     """Introspectable concrete descendants of a nested field type -- those
     carrying their own pydantic fields (an abstract base like ``CloudLocation``
@@ -213,13 +248,13 @@ def _pattern_of(ann: Any) -> Optional[str]:
     return None
 
 
-def _envelope(cls: type, spec: dict) -> dict:
-    return {
-        "kind": cls.__kind__,
-        "apiVersion": cls.__api_version__,
-        "type": qualified_class(cls),
-        "spec": spec,
-    }
+def _envelope(cls: type, spec: dict) -> CommentedMap:
+    env = CommentedMap()
+    env["kind"] = cls.__kind__
+    env["apiVersion"] = cls.__api_version__
+    env["type"] = qualified_class(cls)
+    env["spec"] = spec
+    return env
 
 
 def _scalar_placeholder(members: list[Any], default: Any, path: str) -> Any:
@@ -252,32 +287,62 @@ def _scalar_placeholder(members: list[Any], default: Any, path: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def build_template(conn_cls: type, *, all_fields: bool = False) -> dict:
-    """A fill-in connection envelope. Required fields by default; optional
-    fields too under ``all_fields``. Placeholders (``<FILL: ...>``) are not
-    guaranteed to satisfy field regexes -- see the module / wizard split."""
-    return _envelope(conn_cls, _build_spec(conn_cls, "", all_fields))
+# A spec's keys sit two columns in from its ``spec:`` header; each nested
+# envelope (``kind``/``apiVersion``/``type``/``spec``) adds another four.
+_SPEC_INDENT = 2
+_NEST_INDENT = 4
 
 
-def _build_spec(cls: type, prefix: str, all_fields: bool) -> dict:
-    out: dict[str, Any] = {}
+def _set_template_header(env: CommentedMap, conn_cls: type) -> None:
+    """Prepend a header naming the connector / direction the template targets and
+    reminding that secret / var values carry the ``secret:`` / ``var:`` prefix."""
+    label = conn_cls.__kind__
+    for r in list_connectors():
+        if r.conn_cls is conn_cls:
+            label = f"{r.type} ({r.direction})"
+            break
+    env.yaml_set_start_comment(
+        f"Connection template for: {label}\n"
+        "Secret values must be prefixed with 'secret:', variables with 'var:'."
+    )
+
+
+def build_template(conn_cls: type, *, all_fields: bool = False) -> CommentedMap:
+    """A fill-in connection envelope (a YAML-ready :class:`CommentedMap`).
+    Required fields by default; optional fields too under ``all_fields``.
+    Placeholders (``<FILL: ...>``) are not guaranteed to satisfy field regexes
+    -- see the module / wizard split."""
+    env = _envelope(conn_cls, _build_spec(conn_cls, "", all_fields, _SPEC_INDENT))
+    _set_template_header(env, conn_cls)
+    return env
+
+
+def _build_spec(cls: type, prefix: str, all_fields: bool, indent: int) -> CommentedMap:
+    out = CommentedMap()
     for name, fi in cls.__pydantic_fields__.items():
         if not fi.is_required() and not all_fields:
             continue
         path = f"{prefix}{name}"
+        members = _members(fi.annotation)
         # The sample is generated from the FIRST member of the field's union.
-        first = _members(fi.annotation)[0]
+        first = members[0]
         default = None if fi.default is _UNSET else fi.default
         ref = _ref_class(first)
         if isinstance(first, type) and issubclass(first, DescriptorBase):
             obj = _first_concrete(first)
-            out[name] = _envelope(obj, _build_spec(obj, f"{path}.", all_fields))
+            out[name] = _envelope(
+                obj, _build_spec(obj, f"{path}.", all_fields, indent + _NEST_INDENT)
+            )
         elif ref is not None:
             # Secret/Var first member -> bare runtime-resolved ref ("secret:" /
             # "var:"); no value ever lands in the file.
             out[name] = ref().to_dict()
         else:
             out[name] = _scalar_placeholder([first], default, path)
+        # For a secret/var(/str) union, note the accepted forms above the key.
+        comment = _type_comment(members)
+        if comment is not None:
+            out.yaml_set_comment_before_after_key(name, before=comment, indent=indent)
     return out
 
 
@@ -294,7 +359,9 @@ def build_template_interactive(conn_cls: type, prompt: PromptFn) -> dict:
     Secret leaves capture an inline value only if the user supplies one (else a
     bare runtime-resolved :class:`~tabsdatak.api.Secret` ref); no value is ever
     required to be written to disk."""
-    return _envelope(conn_cls, _prompt_spec(conn_cls, "", prompt))
+    env = _envelope(conn_cls, _prompt_spec(conn_cls, "", prompt))
+    _set_template_header(env, conn_cls)
+    return env
 
 
 def _prompt_spec(cls: type, prefix: str, prompt: PromptFn) -> dict:
@@ -355,6 +422,32 @@ def _choose_concrete(cls: type, path: str, prompt: PromptFn) -> type:
         if s.__name__ == chosen:
             return s
     return subs[0]
+
+
+# ---------------------------------------------------------------------------
+# YAML serialization.
+# ---------------------------------------------------------------------------
+
+
+def _yaml() -> YAML:
+    y = YAML()
+    y.default_flow_style = False
+    return y
+
+
+def to_yaml(document: Any) -> str:
+    """Render a connection document (the :class:`CommentedMap` from
+    :func:`build_template` / :func:`build_template_interactive`, or any dict) as
+    YAML text, including the field comments attached by the template engine."""
+    buf = io.StringIO()
+    _yaml().dump(document, buf)
+    return buf.getvalue()
+
+
+def from_yaml(text: str) -> Any:
+    """Parse a YAML connection document into a plain Python structure. YAML is a
+    superset of JSON, so a JSON document parses too."""
+    return _yaml().load(text)
 
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,6 @@ emit the connectors' own envelope dialect (``{kind, apiVersion, type, spec}``).
 They do not talk to a server.
 """
 
-import json
 import sys
 from pathlib import Path
 
@@ -74,13 +73,13 @@ def _resolve(ctx, type_, direction):
         raise click.ClickException(str(e))
 
 
-def _emit(document: dict, output):
-    text = json.dumps(document, indent=2)
+def _emit(document, output):
+    text = template.to_yaml(document)
     if output:
-        Path(output).write_text(text + "\n")
+        Path(output).write_text(text)
         click.echo(f"Wrote connection document to {output}")
     else:
-        click.echo(text)
+        click.echo(text, nl=False)
 
 
 # Named "template" explicitly: the function can't be called ``template`` without
@@ -149,15 +148,15 @@ def init(ctx, type_, direction, output):
     "-f",
     "file",
     required=True,
-    help="Connection JSON file to validate, or '-' to read from stdin.",
+    help="Connection YAML file to validate, or '-' to read from stdin.",
 )
 def validate(file):
-    """Validate a connection JSON document against its connector schema"""
+    """Validate a connection YAML document against its connector schema"""
     raw = sys.stdin.read() if file == "-" else Path(file).read_text()
     try:
-        document = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise click.ClickException(f"not valid JSON: {e}")
+        document = template.from_yaml(raw)
+    except Exception as e:  # noqa: BLE001 -- any YAML parse failure
+        raise click.ClickException(f"not valid YAML: {e}")
     try:
         kind = template.validate(document)
     except template.TemplateError as e:

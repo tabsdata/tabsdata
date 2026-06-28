@@ -164,6 +164,68 @@ def test_scalar_placeholder_by_type():
     assert template._scalar_placeholder([typing.Literal["a", "b"]], None, "p") == "a"
 
 
+def test_type_comment_lists_accepted_forms():
+    # Forms are listed in the union's declaration order.
+    assert (
+        template._type_comment(template._members(typing.Union[str, Var, Secret]))
+        == "accepts: <value> | var:<value> | secret:<value>"
+    )
+    assert (
+        template._type_comment(template._members(typing.Union[Var, Secret]))
+        == "accepts: var:<value> | secret:<value>"
+    )
+    # A single accepted form -- a plain scalar, or a lone Secret credential --
+    # gets no comment.
+    assert template._type_comment([str]) is None
+    assert template._type_comment([int]) is None
+    assert template._type_comment([Secret]) is None
+
+
+# --- YAML serialization -----------------------------------------------------
+
+
+def test_yaml_round_trips_through_from_yaml():
+    info = template.resolve_conn("localfile", "src")
+    doc = template.build_template(info.conn_cls, all_fields=True)
+    text = template.to_yaml(doc)
+    assert "kind: localFileSrcConn" in text
+    # YAML parses back to an equivalent structure that still validates.
+    parsed = template.from_yaml(text)
+    assert parsed["kind"] == "localFileSrcConn"
+    assert template.validate(parsed) == "localFileSrcConn"
+
+
+def test_yaml_template_has_header():
+    info = template.resolve_conn("localfile", "src")
+    text = template.to_yaml(template.build_template(info.conn_cls))
+    lines = text.splitlines()
+    # Names the connector/direction the template targets.
+    assert lines[0] == "# Connection template for: localfile (src)"
+    # Reminds that secret/var values carry the 'secret:' / 'var:' prefix.
+    assert "secret:" in lines[1] and "var:" in lines[1]
+    # The header is a comment, so the document still parses + validates.
+    assert template.validate(template.from_yaml(text)) == "localFileSrcConn"
+
+
+@pytest.mark.skipif(
+    not _installed("mysql", "src"), reason="mysql connector not installed"
+)
+def test_yaml_template_carries_accepts_comments():
+    info = template.resolve_conn("mysql", "src")
+    text = template.to_yaml(template.build_template(info.conn_cls))
+    # uri (str|Var|Secret) lists its forms in the union's declaration order.
+    assert "# accepts: <value> | var:<value> | secret:<value>" in text  # uri
+    # Single-form fields (the Secret-only credentials) carry no comment, so uri
+    # is the only "# accepts:" note.
+    assert text.count("# accepts:") == 1
+    # The YAML parses back; comments are dropped from the parsed structure (the
+    # raw template carries a "<FILL: uri>" placeholder, so it is not yet a valid
+    # connection -- the user fills it in).
+    parsed = template.from_yaml(text)
+    assert parsed["kind"] == "mysqlSrcConn"
+    assert parsed["spec"]["uri"] == "<FILL: uri>"
+
+
 # --- wizard -----------------------------------------------------------------
 
 
