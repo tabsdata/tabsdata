@@ -7,14 +7,15 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 from tabsdatak.api import Conn, Src
-from tabsdatak.conn.azureblob import AzureBlobSrcConn, _plugin as _azureblob_plugin
+from tabsdatak.conn.azureblob import AzureBlobSrcConn
 from tabsdatak.conn.common.file import _input, _output, _transporter
-from tabsdatak.conn.gcs import GCSSrcConn, _plugin as _gcs_plugin
-from tabsdatak.conn.localfile import LocalFileSrcConn, _plugin as _localfile_plugin
-from tabsdatak.conn.s3 import S3SrcConn, _plugin as _s3_plugin
+from tabsdatak.conn.gcs import GCSSrcConn
+from tabsdatak.conn.localfile import LocalFileSrcConn
+from tabsdatak.conn.s3 import S3SrcConn
+from tabsdatak.conn.stream.stage._backend import StageBackend, backend_for_conn
 from tabsdatak.conn.stream.stage.error import ManifestStageErrorCode
 from tabsdatak.error import ApiException
 from tabsdatak.spi import (
@@ -64,49 +65,6 @@ _MANIFEST_LASTMOD_KEY = "stream-manifest.lastmod"
 _MANIFEST_INITIAL_LASTMOD = "1970-01-01T00:00:00.000000+00:00"
 
 
-# A backend builds a transporter source location from a path relative to the
-# conn's ``base_path``, and (optionally) the credential env for the binary.
-_LocationBuilder = Callable[[str], _transporter.TransporterLocation]
-_EnvBuilder = Callable[[], dict[str, str]]
-
-
-def _active_backend(
-    conn: ManifestStageConn,
-) -> tuple[_LocationBuilder, _EnvBuilder | None]:
-    """Resolve the single populated backend on ``conn`` into a
-    location builder + (optional) credential-env builder.
-
-    The cloud connectors' ``build_location`` does not itself apply
-    ``base_path``, so we resolve paths through ``conn.full_path`` here;
-    the local connector's ``build_location`` applies it internally, so
-    its paths are passed through verbatim.
-    """
-    candidates = [
-        (conn.local, _localfile_plugin, True),
-        (conn.s3, _s3_plugin, False),
-        (conn.az, _azureblob_plugin, False),
-        (conn.gcs, _gcs_plugin, False),
-    ]
-    populated = [(c, mod, is_local) for c, mod, is_local in candidates if c is not None]
-    if len(populated) != 1:
-        raise ManifestStageErrorCode.MANIFEST_STAGE_1.exception(count=len(populated))
-    backend_conn, mod, is_local = populated[0]
-
-    def build_location(rel: str) -> _transporter.TransporterLocation:
-        if is_local:
-            return mod.build_location(backend_conn, rel)
-        return mod.build_location(backend_conn, backend_conn.full_path(rel))
-
-    run_env = getattr(mod, "run_env", None)
-    env_builder: _EnvBuilder | None = None
-    if run_env is not None:
-
-        def env_builder() -> dict[str, str]:
-            return run_env(backend_conn)
-
-    return build_location, env_builder
-
-
 class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
     def read_in(
         self,
@@ -114,37 +72,35 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
         conn: ManifestStageConn,
         src: ManifestStageSrc,
     ) -> list[list[TableFileSpec]]:
-        build_location, env_builder = _active_backend(conn)
+        backend = backend_for_conn(conn)
 
-        env: dict[str, str] | None = None
-        if env_builder is not None:
-            try:
-                env = env_builder()
-            except (ApiException, TypeError, ValueError) as e:
-                raise ManifestStageErrorCode.MANIFEST_STAGE_2.exception(
-                    cause=e, reason=str(e)
-                )
+        try:
+            env = backend.credential_env()
+        except (ApiException, TypeError, ValueError) as e:
+            raise ManifestStageErrorCode.MANIFEST_STAGE_2.exception(
+                cause=e, reason=str(e)
+            )
 
-        manifest_path = self._fetch_manifest(ctx, build_location, env)
+        manifest_path = self._fetch_manifest(ctx, backend, env)
         if manifest_path is None:
             # No new manifest matched this trigger; nothing to materialise.
             logger.info("manifest-stage: no new manifest matched; producing 0 slots")
             return []
 
         slots = self._parse_manifest(manifest_path)
-        return self._fetch_data_files(ctx, build_location, env, manifest_path, slots)
+        return self._fetch_data_files(ctx, backend, env, manifest_path, slots)
 
     # -- steps ------------------------------------------------------
 
     def _fetch_manifest(
         self,
         ctx: SrcPluginCtx,
-        build_location: _LocationBuilder,
+        backend: StageBackend,
         env: dict[str, str] | None,
     ) -> Path | None:
         manifest_dir = ctx.work_dir / "_manifest"
         manifest_dir.mkdir(parents=True, exist_ok=True)
-        source = build_location(_STREAM_MANIFEST_FILE_WILDCARD)
+        source = backend.build_location(_STREAM_MANIFEST_FILE_WILDCARD)
 
         prior = cast(str | None, ctx.get_attr(_MANIFEST_LASTMOD_KEY))
         try:
@@ -198,7 +154,7 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
     def _fetch_data_files(
         self,
         ctx: SrcPluginCtx,
-        build_location: _LocationBuilder,
+        backend: StageBackend,
         env: dict[str, str] | None,
         manifest_path: Path,
         slots: list[list[str]],
@@ -212,7 +168,7 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
             slot_dir.mkdir(parents=True, exist_ok=True)
             slot_targets: list[TableFileSpec] = []
             for file_idx, rel in enumerate(slot):
-                source = build_location(rel)
+                source = backend.build_location(rel)
                 name = Path(rel).name or f"file{file_idx}"
                 target_path = slot_dir / f"{file_idx:04d}-{name}"
                 target = _transporter.TransporterLocalFile(
