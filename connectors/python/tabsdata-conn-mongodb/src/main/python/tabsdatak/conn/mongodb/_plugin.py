@@ -83,8 +83,8 @@ def _uri_with_credentials(conn: MongoDBDestConn) -> str:
     (``@``, ``:``, ``/``, ...) round-trip safely.
     """
     uri = _convert(conn.uri, str)
-    user = quote_plus(conn.credentials.user.value())
-    password = quote_plus(conn.credentials.password.value())
+    user = quote_plus(_convert(conn.credentials.user, str))
+    password = quote_plus(_convert(conn.credentials.password, str))
     return uri.replace("://", f"://{user}:{password}@", 1)
 
 

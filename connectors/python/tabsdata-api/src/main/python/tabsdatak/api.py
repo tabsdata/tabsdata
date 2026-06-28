@@ -307,7 +307,7 @@ class _LiteralSecret(Secret):
         return self
 
 
-SecretOrVarSpec: TypeAlias = Union[Secret, Var]
+VarOrSecretSpec: TypeAlias = Union[Var, Secret]
 
 
 class _Conn(ABC, _api.DescriptorBase):

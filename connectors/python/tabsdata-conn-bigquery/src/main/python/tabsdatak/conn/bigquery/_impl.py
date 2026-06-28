@@ -14,7 +14,7 @@ from tabsdatak.conn.bigquery import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery._validation import _BIGQUERY_FQN_DEF
-from tabsdatak.conn.common.types import CfgSpec, GCPJson
+from tabsdatak.conn.common.types import CfgSpec, GCPJson, _convert
 
 # --- Client builders -------------------------------------------------
 #
@@ -33,7 +33,7 @@ def _gcp_json_to_dict(credentials: GCPJson) -> dict[str, Any]:
     through the connector as a ``Secret`` / ``Var``-backed string, and
     the underlying SDK takes a ``dict``.
     """
-    raw = credentials.json.value()
+    raw = _convert(credentials.json, str)
     return json.loads(raw)
 
 

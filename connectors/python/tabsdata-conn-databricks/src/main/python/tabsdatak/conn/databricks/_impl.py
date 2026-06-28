@@ -34,6 +34,7 @@ from tenacity import (
 )
 
 from tabsdatak.conn.common._validation import fqn, unfqn
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn
 from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
 
@@ -96,11 +97,11 @@ class DatabricksWriteCfg:
 
 def _host_value(conn: _AnyDatabricksConn) -> str:
     """Resolve ``conn.host_url`` to a plain string."""
-    return conn.host_url.value()
+    return _convert(conn.host_url, str)
 
 
 def _token_value(conn: _AnyDatabricksConn) -> str:
-    return conn.token.value()
+    return _convert(conn.token, str)
 
 
 def _build_workspace_client(conn: _AnyDatabricksConn):
@@ -130,13 +131,13 @@ def _resolve_warehouse_id(
     one is set.
     """
     if conn.warehouse_id is not None:
-        return conn.warehouse_id.value()
+        return _convert(conn.warehouse_id, str)
     if conn.warehouse is None:
         raise ValueError(
             "_AnyDatabricksConn requires either ``warehouse`` (name) or"
             " ``warehouse_id`` for runtime operations"
         )
-    target_name = conn.warehouse.value()
+    target_name = _convert(conn.warehouse, str)
     for w in ws_client.warehouses.list():
         if w.name == target_name:
             return w.id
@@ -427,8 +428,8 @@ def _fully_qualify_table(conn: _AnyDatabricksConn, table: str) -> str:
     Raises a :class:`DatabricksValidateException` (DATABRICKS_10) if
     the result is not 3-part.
     """
-    catalog = conn.catalog.value() if conn.catalog is not None else None
-    schema = conn.schema.value() if conn.schema is not None else None
+    catalog = _convert(conn.catalog, str) if conn.catalog is not None else None
+    schema = _convert(conn.schema, str) if conn.schema is not None else None
     parts = unfqn(table, _DATABRICKS_FQN_DEF, total_parts=3)
     if parts[0] is None and catalog:
         parts[0] = catalog
@@ -455,7 +456,7 @@ def _volume_path(conn: _AnyDatabricksConn, fq_table: str) -> str:
     """
     parts = fq_table.split(".", maxsplit=2)
     t_catalog, t_schema, _t_name = parts
-    volume_raw = conn.volume.value()
+    volume_raw = _convert(conn.volume, str)
     vol_parts = volume_raw.split(".")
     if len(vol_parts) == 3:
         v_catalog, v_schema, v_name = vol_parts

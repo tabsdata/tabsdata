@@ -18,13 +18,13 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Secret, SecretOrVarSpec, Src, Var
+from tabsdatak.api import Conn, Secret, Src, Var, VarOrSecretSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -62,9 +62,9 @@ class SalesforceTokenCredentials(SalesforceCredentials):
     """
 
     __kind__ = "salesforceTokenCredentials"
-    username: SecretOrVarSpec
-    password: SecretOrVarSpec
-    security_token: SecretOrVarSpec
+    username: VarOrSecretSpec
+    password: VarOrSecretSpec
+    security_token: VarOrSecretSpec
 
 
 # --- Type aliases ----------------------------------------------------
@@ -77,10 +77,11 @@ ObjectsNameSpec: TypeAlias = Annotated[
 ]
 
 InstanceUrlSpec: TypeAlias = Union[
+    Annotated[str, StringConstraints(pattern=_validation.INSTANCE_URL_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.INSTANCE_URL_PATTERN)],
     Annotated[
         Secret, _api.SecretValueConstraints(pattern=_validation.INSTANCE_URL_PATTERN)
     ],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.INSTANCE_URL_PATTERN)],
 ]
 # Salesforce SOQL query list. Today exactly one query (one input
 # slot) -- the list shape leaves room for future multi-query

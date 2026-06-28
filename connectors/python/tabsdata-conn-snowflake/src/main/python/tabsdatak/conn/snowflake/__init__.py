@@ -21,6 +21,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
+from pydantic import StringConstraints
+
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
@@ -43,8 +45,9 @@ from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
 CredentialsSpec: TypeAlias = UserPassword
 
 AccountSpec: TypeAlias = Union[
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
+    Annotated[str, StringConstraints(pattern=_validation.ACCOUNT_PATTERN)],
     Annotated[Var, _api.VarValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
 ]
 
 
@@ -54,10 +57,11 @@ AccountSpec: TypeAlias = Union[
 # follow the same identifier rules.
 
 IdentifierSpec: TypeAlias = Union[
+    Annotated[str, StringConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
     Annotated[
         Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
     ],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
 ]
 
 NameSpec: TypeAlias = IdentifierSpec

@@ -19,6 +19,8 @@ from abc import ABC
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
+from pydantic import StringConstraints
+
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
@@ -58,8 +60,9 @@ CredentialsSpec: TypeAlias = UserPassword
 # Host: no regex shape; permissive ``.+`` enables the bare-string
 # shortcut at the field site.
 HostSpec: TypeAlias = Union[
-    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
+    Annotated[str, StringConstraints(pattern=r".+")],
     Annotated[Var, _api.VarValueConstraints(pattern=r".+")],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
 ]
 
 # Port: plain int, or an Var / Secret whose resolved value parses as an
@@ -76,8 +79,9 @@ PortSpec: TypeAlias = Union[
 _IDENTIFIER_PATTERN = r"[A-Za-z_][A-Za-z0-9_]*"
 
 DatabaseSpec: TypeAlias = Union[
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_IDENTIFIER_PATTERN)],
+    Annotated[str, StringConstraints(pattern=_IDENTIFIER_PATTERN)],
     Annotated[Var, _api.VarValueConstraints(pattern=_IDENTIFIER_PATTERN)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_IDENTIFIER_PATTERN)],
 ]
 StarRocksTableNameSpec: TypeAlias = Annotated[
     str,

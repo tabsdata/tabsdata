@@ -142,10 +142,10 @@ CredentialsSpec: TypeAlias = UserPassword
 
 UriSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.MSYQL_URI_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.MSYQL_URI_PATTERN)],
     Annotated[
         Secret, _api.SecretValueConstraints(pattern=_validation.MSYQL_URI_PATTERN)
     ],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.MSYQL_URI_PATTERN)],
 ]
 QueriesSpec: TypeAlias = list[str]
 MySQLTableNameSpec: TypeAlias = Annotated[str, _validation.MYSQL_TABLE_FQN_VALIDATOR]

@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from tabsdatak.conn.common._validation import fqn, unfqn
-from tabsdatak.conn.common.types import UserPassword
+from tabsdatak.conn.common.types import UserPassword, _convert
 from tabsdatak.conn.snowflake import SnowflakeDestConn
 from tabsdatak.conn.snowflake._validation import _SNOWFLAKE_FQN_DEF
 
@@ -78,18 +78,18 @@ def _connection_parameters(conn: SnowflakeDestConn) -> dict[str, str]:
     the driver accepts both at the same slot."""
     creds = _credentials(conn)
     params: dict[str, str] = {
-        "account": conn.account.value(),
-        "user": creds.user.value(),
-        "password": creds.password.value(),
+        "account": _convert(conn.account, str),
+        "user": _convert(creds.user, str),
+        "password": _convert(creds.password, str),
     }
     if conn.role is not None:
-        params["role"] = conn.role.value()
+        params["role"] = _convert(conn.role, str)
     if conn.database is not None:
-        params["database"] = conn.database.value()
+        params["database"] = _convert(conn.database, str)
     if conn.schema is not None:
-        params["schema"] = conn.schema.value()
+        params["schema"] = _convert(conn.schema, str)
     if conn.warehouse is not None:
-        params["warehouse"] = conn.warehouse.value()
+        params["warehouse"] = _convert(conn.warehouse, str)
     return params
 
 
@@ -133,7 +133,7 @@ def _stage(conn: SnowflakeDestConn) -> tuple[str, bool]:
     owns its lifecycle); otherwise a session-scoped TEMPORARY stage
     is used."""
     if conn.stage is not None:
-        return conn.stage.value(), False
+        return _convert(conn.stage, str), False
     return _DEFAULT_TEMP_STAGE, True
 
 
@@ -203,12 +203,12 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
     per call and re-uses it across every (file, table) pair."""
     logger.debug(
         "snowflake: establishing connection to account %r",
-        cfg.conn.account.value(),
+        _convert(cfg.conn.account, str),
     )
     sf_conn = build_snowflake_connection(cfg.conn)
     try:
         if cfg.conn.warehouse is not None:
-            warehouse = cfg.conn.warehouse.value()
+            warehouse = _convert(cfg.conn.warehouse, str)
             logger.debug("Using warehouse %r", warehouse)
             with sf_conn.cursor() as cur:
                 cur.execute(f"USE WAREHOUSE {warehouse}")

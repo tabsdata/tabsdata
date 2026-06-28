@@ -467,8 +467,8 @@ class SqlReplicaIngester(CdcIngester):
         url = make_url(_convert(self._conn.uri, str))
         creds = self._conn.credentials
         return url.set(
-            username=creds.user.value(),
-            password=creds.password.value(),
+            username=_convert(creds.user, str),
+            password=_convert(creds.password, str),
         )
 
     def _build_engine(self) -> Any:

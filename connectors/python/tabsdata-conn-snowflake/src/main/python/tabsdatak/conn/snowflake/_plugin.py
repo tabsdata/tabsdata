@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.snowflake import (
     DestCfgKey,
     DestCfgSpec,
@@ -118,7 +119,7 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDestConn, SnowflakeDest]):
                 # noinspection PyProtectedMember
                 raise SnowflakeErrorCode.SNOWFLAKE_5.exception(
                     cause=e,
-                    account=conn.account.value(),
+                    account=_convert(conn.account, str),
                 )
             # noinspection PyProtectedMember
             raise SnowflakeErrorCode.SNOWFLAKE_6.exception(

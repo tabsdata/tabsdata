@@ -19,6 +19,8 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
+from pydantic import StringConstraints
+
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.api import (
@@ -65,8 +67,9 @@ CredentialsSpec: TypeAlias = GCPJson
 # GCP project id: no regex shape; permissive ``.+`` enables the
 # bare-string shortcut at the field site.
 ProjectSpec: TypeAlias = Union[
-    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
+    Annotated[str, StringConstraints(pattern=r".+")],
     Annotated[Var, _api.VarValueConstraints(pattern=r".+")],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
 ]
 
 

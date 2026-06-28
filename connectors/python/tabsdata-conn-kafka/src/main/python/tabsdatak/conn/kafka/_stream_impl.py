@@ -311,7 +311,7 @@ def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:
     if conn.credentials is not None:
         cfg[_SECURITY_PROTOCOL_KEY] = "sasl_plaintext"
         cfg[_SASL_MECHANISM_KEY] = "SCRAM-SHA-256"
-        cfg[_SASL_USERNAME_KEY] = conn.credentials.user.value()
-        cfg[_SASL_PASSWORD_KEY] = conn.credentials.password.value()
+        cfg[_SASL_USERNAME_KEY] = _convert(conn.credentials.user, str)
+        cfg[_SASL_PASSWORD_KEY] = _convert(conn.credentials.password, str)
     cfg[_GROUP_ID_KEY] = _convert(conn.group_id, str)
     return cfg

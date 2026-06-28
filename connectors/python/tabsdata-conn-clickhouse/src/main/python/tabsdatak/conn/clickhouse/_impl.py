@@ -35,8 +35,8 @@ def _build_clickhouse_config(conn: ClickHouseDestConn):
         host=_convert(conn.host, str),
         port=_convert(conn.port, int),
         database=_convert(conn.database, str),
-        username=conn.credentials.user.value(),
-        password=conn.credentials.password.value(),
+        username=_convert(conn.credentials.user, str),
+        password=_convert(conn.credentials.password, str),
         secure=_convert(conn.secure, bool),
     )
 
@@ -60,30 +60,30 @@ def build_cloud_storage(staging: CloudLocation):
 
     if isinstance(staging, S3Location):
         cfg = S3Config(
-            bucket=staging.bucket.value(),
-            region=staging.region.value(),
+            bucket=_convert(staging.bucket, str),
+            region=_convert(staging.region, str),
             base_path=staging.base_path or "",
-            access_key_id=staging.credentials.access_key_id.value(),
-            secret_access_key=(staging.credentials.secret_access_key.value()),
+            access_key_id=_convert(staging.credentials.access_key_id, str),
+            secret_access_key=(_convert(staging.credentials.secret_access_key, str)),
         )
         return S3ClickHouseStorage(cfg)
 
     if isinstance(staging, AzBlobLocation):
         cfg = AzureConfig(
-            container=staging.container.value(),
+            container=_convert(staging.container, str),
             base_path=staging.base_path or "",
-            account_name=staging.credentials.account_name.value(),
-            account_key=staging.credentials.account_key.value(),
+            account_name=_convert(staging.credentials.account_name, str),
+            account_key=_convert(staging.credentials.account_key, str),
         )
         return AzureClickHouseStorage(cfg)
 
     if isinstance(staging, GCSLocation):
         cfg = GCSConfig(
-            bucket=staging.bucket.value(),
+            bucket=_convert(staging.bucket, str),
             base_path=staging.base_path or "",
-            service_account_json=staging.credentials.json.value(),
-            hmac_access_key=staging.hmac_credentials.access_key.value(),
-            hmac_secret_key=staging.hmac_credentials.secret_key.value(),
+            service_account_json=_convert(staging.credentials.json, str),
+            hmac_access_key=_convert(staging.hmac_credentials.access_key, str),
+            hmac_secret_key=_convert(staging.hmac_credentials.secret_key, str),
         )
         return GCSClickHouseStorage(cfg)
 

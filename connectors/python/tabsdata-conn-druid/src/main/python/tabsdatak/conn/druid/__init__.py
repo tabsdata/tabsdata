@@ -17,6 +17,8 @@ from abc import ABC
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
+from pydantic import StringConstraints
+
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
@@ -53,8 +55,9 @@ from tabsdatak.conn.druid.error import DruidErrorCode
 CredentialsSpec: TypeAlias = UserPassword
 
 UrlSpec: TypeAlias = Union[
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URL_PATTERN)],
+    Annotated[str, StringConstraints(pattern=_validation.URL_PATTERN)],
     Annotated[Var, _api.VarValueConstraints(pattern=_validation.URL_PATTERN)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URL_PATTERN)],
 ]
 DatasourceSpec: TypeAlias = Annotated[str, _validation.DATASOURCE_VALIDATOR]
 DruidTableNameSpec: TypeAlias = DatasourceSpec

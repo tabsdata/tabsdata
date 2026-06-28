@@ -148,12 +148,12 @@ def test_members_unwraps_union_and_annotated():
 
 
 def test_is_secret_ref_distinguishes_identifier_from_secret():
-    # str|Secret|Var (uri-style) is an identifier, not a secret leaf.
+    # str|Var|Secret (uri-style) is an identifier, not a secret leaf.
     assert not template._is_secret_ref(
-        template._members(typing.Union[str, Secret, Var])
+        template._members(typing.Union[str, Var, Secret])
     )
-    # Secret|Var (SecretOrVarSpec) is a secret leaf.
-    assert template._is_secret_ref(template._members(typing.Union[Secret, Var]))
+    # Var|Secret (VarOrSecretSpec) is a secret leaf.
+    assert template._is_secret_ref(template._members(typing.Union[Var, Secret]))
 
 
 def test_scalar_placeholder_by_type():

@@ -95,9 +95,9 @@ def login(conn: SalesforceSrcConn, api_version: str | None = None) -> Any:
     version = api_version or sf_api.DEFAULT_API_VERSION
     try:
         return Salesforce(
-            username=credentials.username.value(),
-            password=credentials.password.value(),
-            security_token=credentials.security_token.value(),
+            username=_convert(credentials.username, str),
+            password=_convert(credentials.password, str),
+            security_token=_convert(credentials.security_token, str),
             instance_url=instance_url,
             version=version,
         )

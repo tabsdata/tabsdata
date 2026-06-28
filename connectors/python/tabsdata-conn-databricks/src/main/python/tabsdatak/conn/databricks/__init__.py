@@ -16,6 +16,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
+from pydantic import StringConstraints
+
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
@@ -25,9 +27,9 @@ from tabsdatak.api import (
     ContextValueSpec,
     Dest,
     Secret,
-    SecretOrVarSpec,
     Src,
     Var,
+    VarOrSecretSpec,
 )
 
 # noinspection PyProtectedMember
@@ -43,40 +45,44 @@ from tabsdatak.conn.databricks.error import DatabricksErrorCode
 # --- Type aliases ----------------------------------------------------
 
 
-HostUrlSpec: TypeAlias = SecretOrVarSpec
-DatabricksTokenSpec: TypeAlias = SecretOrVarSpec
+HostUrlSpec: TypeAlias = VarOrSecretSpec
+DatabricksTokenSpec: TypeAlias = VarOrSecretSpec
 CredentialsSpec: TypeAlias = DatabricksTokenSpec
 
 
 IdentifierSpec: TypeAlias = Union[
+    Annotated[str, StringConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
     Annotated[
         Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
     ],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
 ]
 
 WarehouseSpec: TypeAlias = Union[
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
-    ],
+    Annotated[str, StringConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)],
     Annotated[
         Var, _api.VarValueConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
+    ],
+    Annotated[
+        Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
     ],
 ]
 
 WarehouseIdSpec: TypeAlias = Union[
+    Annotated[str, StringConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)],
+    Annotated[Var, _api.VarValueConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)],
     Annotated[
         Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)
     ],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)],
 ]
 
 VolumeSpec: TypeAlias = Union[
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
-    ],
+    Annotated[str, StringConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)],
     Annotated[
         Var, _api.VarValueConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
+    ],
+    Annotated[
+        Secret, _api.SecretValueConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
     ],
 ]
 QueriesSpec: TypeAlias = list[str]

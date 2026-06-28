@@ -25,7 +25,7 @@ import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.common._validation as _validation
-from tabsdatak.api import Secret, SecretOrVarSpec, Var
+from tabsdatak.api import Secret, Var, VarOrSecretSpec
 from tabsdatak.conn.common.error import ConnErrorCode
 
 # --- Credentials -----------------------------------------------------
@@ -41,8 +41,8 @@ class Credentials(ABC, _api.DescriptorBase):
 @_api.dataclass(ConnErrorCode.CONN_1, kw_only=True)
 class UserPassword(Credentials):
     __kind__ = "userPasswordCredentials"
-    user: SecretOrVarSpec
-    password: SecretOrVarSpec
+    user: VarOrSecretSpec
+    password: VarOrSecretSpec
 
 
 # --- GCP -------------------------------------------------------------
@@ -55,7 +55,7 @@ class GCPCredentials(Credentials, ABC):
 @_api.dataclass(ConnErrorCode.CONN_2, kw_only=True)
 class GCPJson(GCPCredentials):
     __kind__ = "gcpJsonCredentials"
-    json: SecretOrVarSpec
+    json: VarOrSecretSpec
 
 
 @_api.dataclass(ConnErrorCode.CONN_10)
@@ -68,8 +68,8 @@ class GCPHmac(GCPCredentials):
     """
 
     __kind__ = "gcpHmacCredentials"
-    access_key: SecretOrVarSpec
-    secret_key: SecretOrVarSpec
+    access_key: VarOrSecretSpec
+    secret_key: VarOrSecretSpec
 
 
 # --- AWS -------------------------------------------------------------
@@ -78,8 +78,8 @@ class GCPHmac(GCPCredentials):
 @_api.dataclass(ConnErrorCode.CONN_3, kw_only=True)
 class AwsAccessSecretKey(Credentials):
     __kind__ = "awsAccessSecretKeyCredentials"
-    access_key_id: SecretOrVarSpec
-    secret_access_key: SecretOrVarSpec
+    access_key_id: VarOrSecretSpec
+    secret_access_key: VarOrSecretSpec
 
 
 # --- Azure -----------------------------------------------------------
@@ -92,8 +92,8 @@ class AzureCredentials(Credentials, ABC):
 @_api.dataclass(ConnErrorCode.CONN_4, kw_only=True)
 class AzureAccountKey(AzureCredentials):
     __kind__ = "azureAccountKeyCredentials"
-    account_name: SecretOrVarSpec
-    account_key: SecretOrVarSpec
+    account_name: VarOrSecretSpec
+    account_key: VarOrSecretSpec
 
 
 # --- Data types (placeholder) ----------------------------------------

@@ -65,7 +65,7 @@ def test_polymorphic_load_via_credentials_base():
     c = UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
     back = Credentials.from_json(c.to_json())
     assert isinstance(back, UserPassword)
-    # Credential fields are typed `SecretOrVarSpec`; bare strings coerce
+    # Credential fields are typed `VarOrSecretSpec`; bare strings coerce
     # to a `_LiteralSecret`. The literal payload is reachable via `value()`.
     assert back.user.value() == "u"
 

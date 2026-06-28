@@ -17,6 +17,8 @@ from abc import ABC
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
+from pydantic import StringConstraints
+
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
@@ -47,13 +49,15 @@ CredentialsSpec: TypeAlias = GCPJson
 
 
 ProjectSpec: TypeAlias = Union[
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.PROJECT_PATTERN)],
+    Annotated[str, StringConstraints(pattern=_validation.PROJECT_PATTERN)],
     Annotated[Var, _api.VarValueConstraints(pattern=_validation.PROJECT_PATTERN)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.PROJECT_PATTERN)],
 ]
 
 DatasetSpec: TypeAlias = Union[
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.DATASET_PATTERN)],
+    Annotated[str, StringConstraints(pattern=_validation.DATASET_PATTERN)],
     Annotated[Var, _api.VarValueConstraints(pattern=_validation.DATASET_PATTERN)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.DATASET_PATTERN)],
 ]
 
 BigQueryTableNameSpec: TypeAlias = Annotated[

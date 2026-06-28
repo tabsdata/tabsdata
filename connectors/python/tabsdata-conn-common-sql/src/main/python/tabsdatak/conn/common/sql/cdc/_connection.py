@@ -52,8 +52,8 @@ class CdcConn(Conn, ABC):
         url = make_url(_convert(conn.uri, str))
         if conn.credentials is not None:
             url = url.set(
-                username=conn.credentials.user.value(),
-                password=conn.credentials.password.value(),
+                username=_convert(conn.credentials.user, str),
+                password=_convert(conn.credentials.password, str),
             )
         connect_args = dict(getattr(conn, "conn_cfg", None) or {})
         return create_engine(url, connect_args=connect_args)
@@ -71,8 +71,8 @@ class CdcConn(Conn, ABC):
     def _settings(self) -> CdcConnectionSettings:
         parsed = urlparse(_convert(self.uri, str))
         if self.credentials:
-            user = self.credentials.user.value()
-            password = self.credentials.password.value()
+            user = _convert(self.credentials.user, str)
+            password = _convert(self.credentials.password, str)
         else:
             user = parsed.username
             password = parsed.password

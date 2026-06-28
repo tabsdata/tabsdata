@@ -56,9 +56,9 @@ def credentials(conn: _AnyGCSConn) -> GCPJson:
 
 def run_env(conn: _AnyGCSConn) -> dict[str, str]:
     return {
-        _transporter.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: credentials(
-            conn
-        ).json.value(),
+        _transporter.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: _convert(
+            credentials(conn).json, str
+        ),
     }
 
 

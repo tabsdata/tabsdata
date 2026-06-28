@@ -53,8 +53,8 @@ def build_mssql_engine(
 ) -> Engine:
     uri = _convert(uri, str)
 
-    user = credentials.user.value()
-    password = credentials.password.value()
+    user = _convert(credentials.user, str)
+    password = _convert(credentials.password, str)
     args: dict[str, Any] = dict(connect_args or {})
 
     if _is_odbc_connection_string(uri):

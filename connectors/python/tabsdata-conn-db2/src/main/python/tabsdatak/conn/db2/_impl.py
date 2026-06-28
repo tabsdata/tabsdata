@@ -48,8 +48,8 @@ def build_db2_engine(
     uri = _engine.sqlalchemy_utils.add_driver_to_uri(uri, drivers=_DRIVERS)
     url = make_url(uri)
 
-    user = credentials.user.value()
-    password = credentials.password.value()
+    user = _convert(credentials.user, str)
+    password = _convert(credentials.password, str)
     url = url.set(username=user, password=password)
 
     return create_engine(url, connect_args=dict(connect_args or {}))

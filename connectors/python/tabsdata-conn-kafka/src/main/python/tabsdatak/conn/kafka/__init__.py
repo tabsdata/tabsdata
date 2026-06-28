@@ -163,8 +163,8 @@ SchemaRegistrySpec: TypeAlias = Union[
 _SERVERS_VALUE_PATTERN = r".+"
 KafkaServersSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_SERVERS_VALUE_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_SERVERS_VALUE_PATTERN)],
     Annotated[Var, _api.VarValueConstraints(pattern=_SERVERS_VALUE_PATTERN)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_SERVERS_VALUE_PATTERN)],
 ]
 
 # Topic name -- Kafka topics permit a wide alphabet, validation is
@@ -172,8 +172,8 @@ KafkaServersSpec: TypeAlias = Union[
 _GROUP_VALUE_PATTERN = r".+"
 KafkaGroupSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_GROUP_VALUE_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_GROUP_VALUE_PATTERN)],
     Annotated[Var, _api.VarValueConstraints(pattern=_GROUP_VALUE_PATTERN)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_GROUP_VALUE_PATTERN)],
 ]
 
 # Schema

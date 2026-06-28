@@ -19,7 +19,7 @@ Introspects the connectors registered through the SPI registry
     }
 
 The ``spec`` mirrors the connection :class:`~tabsdatak.api.Conn` dataclass's
-pydantic fields. Secret/var-bearing fields (``SecretOrVarSpec``) render as bare
+pydantic fields. Secret/var-bearing fields (``VarOrSecretSpec``) render as bare
 :class:`~tabsdatak.api.Secret` references -- no secret value ever lands in the
 file; the runtime secret store resolves it. Plain identifier fields that merely
 *accept* a secret (``Union[str, Secret, Var]`` -- uri, bucket, region) render as
@@ -169,7 +169,7 @@ def _descriptor_member(members: list[Any]) -> Optional[type]:
 
 def _is_secret_ref(members: list[Any]) -> bool:
     """A secret/var-bearing leaf that carries no plain value member -- i.e.
-    ``SecretOrVarSpec`` (``Union[Secret, Var]``). Identifier fields that merely
+    ``VarOrSecretSpec`` (``Union[Var, Secret]``). Identifier fields that merely
     accept a secret alongside ``str`` are handled as plain scalars instead."""
     has_ref = any(isinstance(b, type) and issubclass(b, (Secret, Var)) for b in members)
     has_plain = any(

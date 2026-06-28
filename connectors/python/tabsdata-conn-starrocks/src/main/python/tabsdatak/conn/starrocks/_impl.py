@@ -49,8 +49,8 @@ def build_starrocks_engine(
     """
     from sqlalchemy import create_engine
 
-    user = credentials.user.value()
-    password = credentials.password.value()
+    user = _convert(credentials.user, str)
+    password = _convert(credentials.password, str)
     url = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}"
     return create_engine(url, connect_args=dict(connect_args or {}))
 
@@ -103,8 +103,8 @@ def build_files_function(staging: CloudLocation, staged_uris: list[str]) -> str:
             + _kv({
                 "path": _path_expr(staged_uris),
                 "format": "parquet",
-                "aws.s3.access_key": creds.access_key_id.value(),
-                "aws.s3.secret_key": creds.secret_access_key.value(),
+                "aws.s3.access_key": _convert(creds.access_key_id, str),
+                "aws.s3.secret_key": _convert(creds.secret_access_key, str),
                 "aws.s3.region": region,
             })
             + ")"
@@ -116,7 +116,7 @@ def build_files_function(staging: CloudLocation, staged_uris: list[str]) -> str:
             + _kv({
                 "path": _path_expr(staged_uris),
                 "format": "parquet",
-                "azure.blob.shared_key": creds.account_key.value(),
+                "azure.blob.shared_key": _convert(creds.account_key, str),
             })
             + ")"
         )
@@ -156,7 +156,7 @@ def staged_uri(staging: CloudLocation, key: str) -> str:
     if isinstance(staging, AzBlobLocation):
         creds = staging.credentials
         container = _convert(staging.container, str)
-        account = creds.account_name.value()
+        account = _convert(creds.account_name, str)
         return f"wasbs://{container}@{account}.blob.core.windows.net/{rel}"
     if isinstance(staging, GCSLocation):
         bucket = _convert(staging.bucket, str)
@@ -219,20 +219,20 @@ def transporter_env(staging: CloudLocation) -> dict[str, str]:
     if isinstance(staging, S3Location):
         creds = staging.credentials
         return {
-            t.SERVER_SIDE_AWS_ACCESS_KEY_ID: creds.access_key_id.value(),
-            t.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: creds.secret_access_key.value(),
+            t.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(creds.access_key_id, str),
+            t.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(creds.secret_access_key, str),
             t.SERVER_SIDE_AWS_REGION: _convert(staging.region, str),
         }
     if isinstance(staging, AzBlobLocation):
         creds = staging.credentials
         return {
-            t.SERVER_SIDE_AZURE_ACCOUNT_NAME: creds.account_name.value(),
-            t.SERVER_SIDE_AZURE_ACCOUNT_KEY: creds.account_key.value(),
+            t.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(creds.account_name, str),
+            t.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(creds.account_key, str),
         }
     if isinstance(staging, GCSLocation):
         creds = staging.credentials
         return {
-            t.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: creds.json.value(),
+            t.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: _convert(creds.json, str),
         }
     from tabsdatak.conn.starrocks.error import StarRocksErrorCode
 

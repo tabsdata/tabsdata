@@ -182,8 +182,8 @@ def build_schema_registry_client(
         configs: dict[str, Any] = dict(schema_registry.configs or {})
         configs["url"] = _convert(schema_registry.url, str)
         if schema_registry.credentials is not None:
-            user = schema_registry.credentials.user.value()
-            password = schema_registry.credentials.password.value()
+            user = _convert(schema_registry.credentials.user, str)
+            password = _convert(schema_registry.credentials.password, str)
             configs["basic.auth.user.info"] = f"{user}:{password}"
         return SchemaRegistryClient(configs)
 
@@ -192,11 +192,11 @@ def build_schema_registry_client(
 
         # Glue boto3 client picks credentials off the environment.
         # We populate the standard envvars from the config.
-        os.environ["AWS_ACCESS_KEY_ID"] = (
-            schema_registry.credentials.access_key_id.value()
+        os.environ["AWS_ACCESS_KEY_ID"] = _convert(
+            schema_registry.credentials.access_key_id, str
         )
-        os.environ["AWS_SECRET_ACCESS_KEY"] = (
-            schema_registry.credentials.secret_access_key.value()
+        os.environ["AWS_SECRET_ACCESS_KEY"] = _convert(
+            schema_registry.credentials.secret_access_key, str
         )
         boto_kwargs: dict[str, Any] = {
             "region_name": _convert(schema_registry.region_name, str),

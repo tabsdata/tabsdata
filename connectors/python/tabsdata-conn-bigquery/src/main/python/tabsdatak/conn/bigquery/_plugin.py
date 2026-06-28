@@ -97,7 +97,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                 slots=len(tables),
             )
 
-        project_str = conn.project.value() if conn.project is not None else None
+        project_str = _convert(conn.project, str) if conn.project is not None else None
 
         logger.debug("bigquery: establishing BigQuery client (project=%r)", project_str)
         try:

@@ -67,8 +67,8 @@ def credentials(conn: _AnyAzureBlobConn) -> AzureAccountKey:
 def run_env(conn: _AnyAzureBlobConn) -> dict[str, str]:
     c = credentials(conn)
     return {
-        _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME: c.account_name.value(),
-        _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY: c.account_key.value(),
+        _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(c.account_name, str),
+        _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(c.account_key, str),
     }
 
 

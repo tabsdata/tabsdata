@@ -1711,16 +1711,16 @@ def test_secret_secret_key_round_trips_through_json():
 
 
 # ---------------------------------------------------------------------------
-# ``SecretOrVarSpec`` Union alias
+# ``VarOrSecretSpec`` Union alias
 # ---------------------------------------------------------------------------
 
 
-from tabsdatak.api import SecretOrVarSpec  # noqa: E402
+from tabsdatak.api import VarOrSecretSpec  # noqa: E402
 
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _SrcWithSecretOrEnv(Src):
-    v: SecretOrVarSpec
+    v: VarOrSecretSpec
 
 
 def test_secret_or_env_accepts_env_ref():
