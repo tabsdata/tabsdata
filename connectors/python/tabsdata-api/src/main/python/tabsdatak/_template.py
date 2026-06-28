@@ -13,17 +13,24 @@ Introspects the connectors registered through the SPI registry
         "apiVersion": "1.0",
         "type": "tabsdatak.conn.mysql:MySQLSrcConn",
         "spec": {
-            "uri": "<FILL: uri>",
+            "uri": "secret:",
             "credentials": { ... nested userPasswordCredentials envelope ... }
         }
     }
 
 The ``spec`` mirrors the connection :class:`~tabsdatak.api.Conn` dataclass's
-pydantic fields. Secret/var-bearing fields (``VarOrSecretSpec``) render as bare
-:class:`~tabsdatak.api.Secret` references -- no secret value ever lands in the
-file; the runtime secret store resolves it. Plain identifier fields that merely
-*accept* a secret (``Union[str, Secret, Var]`` -- uri, bucket, region) render as
-a ``<FILL: ...>`` string placeholder.
+pydantic fields. Each field's sample is generated from the **first** member of
+its type union:
+
+- a :class:`~tabsdatak.api.Secret` / :class:`~tabsdatak.api.Var` first member
+  renders as a bare runtime-resolved reference -- the ``"secret:"`` / ``"var:"``
+  string; no value ever lands in the file (the runtime store resolves it). For
+  an identifier that *also* accepts a literal (``Union[Secret, Var, str]`` --
+  uri, bucket, region) the reference form is emitted, but the field still
+  accepts a plain string or a ``var:`` ref;
+- a nested-object first member recurses into its own envelope;
+- any other first member renders a typed sample value, or a ``<FILL: ...>``
+  placeholder when none can be derived.
 
 No Click, no terminal I/O: the interactive builder takes the prompt function as a
 callback. ``validate`` constructs the concrete connection via the connector's own
@@ -158,24 +165,13 @@ def _members(ann: Any) -> list[Any]:
     return out
 
 
-def _descriptor_member(members: list[Any]) -> Optional[type]:
-    """The nested-object (``DescriptorBase``) member, if any -- a credentials or
-    sub-config envelope. Excludes ``Secret``/``Var`` (those are refs)."""
-    for b in members:
-        if isinstance(b, type) and issubclass(b, DescriptorBase):
-            return b
+def _ref_class(first: Any) -> Optional[type]:
+    """If the union's first member is a :class:`~tabsdatak.api.Secret` /
+    :class:`~tabsdatak.api.Var` reference type, return it (else ``None``).
+    Drives both the static sample and the wizard's secret-style prompt."""
+    if isinstance(first, type) and issubclass(first, (Secret, Var)):
+        return first
     return None
-
-
-def _is_secret_ref(members: list[Any]) -> bool:
-    """A secret/var-bearing leaf that carries no plain value member -- i.e.
-    ``VarOrSecretSpec`` (``Union[Var, Secret]``). Identifier fields that merely
-    accept a secret alongside ``str`` are handled as plain scalars instead."""
-    has_ref = any(isinstance(b, type) and issubclass(b, (Secret, Var)) for b in members)
-    has_plain = any(
-        isinstance(b, type) and not issubclass(b, (Secret, Var)) for b in members
-    )
-    return has_ref and not has_plain
 
 
 def _concrete_subs(cls: type) -> list[type]:
@@ -269,16 +265,19 @@ def _build_spec(cls: type, prefix: str, all_fields: bool) -> dict:
         if not fi.is_required() and not all_fields:
             continue
         path = f"{prefix}{name}"
-        members = _members(fi.annotation)
-        nested = _descriptor_member(members)
+        # The sample is generated from the FIRST member of the field's union.
+        first = _members(fi.annotation)[0]
         default = None if fi.default is _UNSET else fi.default
-        if nested is not None:
-            obj = _first_concrete(nested)
+        ref = _ref_class(first)
+        if isinstance(first, type) and issubclass(first, DescriptorBase):
+            obj = _first_concrete(first)
             out[name] = _envelope(obj, _build_spec(obj, f"{path}.", all_fields))
-        elif _is_secret_ref(members):
-            out[name] = Secret().to_dict()
+        elif ref is not None:
+            # Secret/Var first member -> bare runtime-resolved ref ("secret:" /
+            # "var:"); no value ever lands in the file.
+            out[name] = ref().to_dict()
         else:
-            out[name] = _scalar_placeholder(members, default, path)
+            out[name] = _scalar_placeholder([first], default, path)
     return out
 
 
@@ -303,12 +302,14 @@ def _prompt_spec(cls: type, prefix: str, prompt: PromptFn) -> dict:
     for name, fi in cls.__pydantic_fields__.items():
         path = f"{prefix}{name}"
         optional = not fi.is_required()
-        members = _members(fi.annotation)
-        nested = _descriptor_member(members)
-        if nested is not None:
-            obj = _choose_concrete(nested, path, prompt)
+        # Classify by the FIRST member of the field's union (mirrors the static
+        # template).
+        first = _members(fi.annotation)[0]
+        ref = _ref_class(first)
+        if isinstance(first, type) and issubclass(first, DescriptorBase):
+            obj = _choose_concrete(first, path, prompt)
             out[name] = _envelope(obj, _prompt_spec(obj, f"{path}.", prompt))
-        elif _is_secret_ref(members):
+        elif ref is not None:
             value = prompt(
                 path,
                 secret=True,
@@ -317,7 +318,8 @@ def _prompt_spec(cls: type, prefix: str, prompt: PromptFn) -> dict:
                 pattern=None,
                 choices=None,
             )
-            out[name] = Secret(value).to_dict() if value else Secret().to_dict()
+            # A secret-first field captures a Secret; a var-first field a Var.
+            out[name] = ref(value).to_dict() if value else ref().to_dict()
         else:
             value = prompt(
                 path,

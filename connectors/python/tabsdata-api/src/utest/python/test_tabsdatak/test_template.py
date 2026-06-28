@@ -147,13 +147,12 @@ def test_members_unwraps_union_and_annotated():
     assert template._members(typing.Optional[int]) == [int]
 
 
-def test_is_secret_ref_distinguishes_identifier_from_secret():
-    # str|Var|Secret (uri-style) is an identifier, not a secret leaf.
-    assert not template._is_secret_ref(
-        template._members(typing.Union[str, Var, Secret])
-    )
-    # Var|Secret (VarOrSecretSpec) is a secret leaf.
-    assert template._is_secret_ref(template._members(typing.Union[Var, Secret]))
+def test_ref_class_picks_first_union_member():
+    # First member Secret/Var -> that ref class drives the sample.
+    assert template._ref_class(template._members(typing.Union[Secret, Var, str])[0]) is Secret
+    assert template._ref_class(template._members(typing.Union[Var, str])[0]) is Var
+    # First member a plain type -> not a ref (rendered as a scalar/placeholder).
+    assert template._ref_class(template._members(typing.Union[str, Secret, Var])[0]) is None
 
 
 def test_scalar_placeholder_by_type():
@@ -179,18 +178,22 @@ def test_localfile_wizard_validates():
 )
 def test_mysql_secrets_render_as_refs_and_wizard_validates():
     info = template.resolve_conn("mysql", "src")
-    # Static template: credentials are secret refs (the simplified Secret serde
-    # renders a bare, unhydrated ref as the string "secret:"), uri is a fill-in.
+    # Each field renders from its union's FIRST member. credentials.user/password
+    # are Union[Secret, Var] -> the bare unhydrated ref string "secret:". uri is
+    # Union[str, Secret, Var] (str-first, so plain strings parse as strings) ->
+    # a fill-in placeholder; it still accepts a "secret:"/"var:" ref if edited.
     doc = template.build_template(info.conn_cls)
     creds = doc["spec"]["credentials"]["spec"]
     assert creds["user"] == "secret:"
     assert creds["password"] == "secret:"
     assert doc["spec"]["uri"] == "<FILL: uri>"
-    # Wizard: secret leaves are prompted; a valid uri makes the result validate.
+    # Wizard: secret/var-first leaves are prompted as refs; the str-first uri is
+    # a plain prompt. A valid uri makes the result validate.
     record: list = []
     out = template.build_template_interactive(
         info.conn_cls, _scripted({"uri": "mysql://h:3306/db"}, record)
     )
     secret_paths = {p for p, s, o, c in record if s}
     assert {"credentials.user", "credentials.password"} <= secret_paths
+    assert "uri" not in secret_paths
     assert template.validate(out) == "mysqlSrcConn"
