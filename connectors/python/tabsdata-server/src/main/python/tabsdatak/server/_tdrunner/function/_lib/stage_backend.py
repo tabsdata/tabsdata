@@ -27,10 +27,10 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
-from tabsdatak.conn.common.file import _output, _transporter
+from tabsdatak.conn.common.file import _input, _output, _transporter
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
@@ -46,6 +46,18 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
 from tabsdatak.server._tdrunner.function._lib.request import Location
 
 _TransporterCred = _transporter.TransporterEnv | _transporter.TransporterLiteral
+
+# Baseline handed to the transporter so last-modified tracking activates on the
+# first fetch (no cursor yet): epoch means every object is a candidate.
+_EPOCH_LASTMOD = "1970-01-01T00:00:00.000000+00:00"
+
+
+def _local_path(file_uri: str) -> Path:
+    """A transporter ``file://`` report target back to a local Path."""
+    parsed = urlparse(file_uri)
+    if parsed.scheme == "file":
+        return Path(unquote(parsed.path))
+    return Path(file_uri)
 
 
 def _cred(ref: CredRef | None) -> _TransporterCred | None:
@@ -146,6 +158,35 @@ class _EndpointStageBackend(StageBackend):
                 # the local "file does not exist" path.
                 return None
             return dst_path.read_text(encoding="utf-8") if dst_path.is_file() else None
+
+    def next_after(
+        self, glob: str, cursor: str | None, scratch_dir: Path
+    ) -> tuple[Path, str] | None:
+        # The transporter returns the single oldest-by-last-modified object
+        # matching the glob whose last-modified is after the cursor, downloaded
+        # into scratch_dir (basename preserved). The report's lastmod_info is
+        # the watermark to pass back as the next cursor.
+        report = _input.wildcard_copy_one(
+            source=self.build_location(glob),
+            target_dir=scratch_dir,
+            initial_lastmod=_EPOCH_LASTMOD,
+            lastmod_info=cursor,
+            max_files=1,
+            env=self.credential_env(),
+        )
+        targets = [f["to"] for f in report.files if isinstance(f, dict) and f.get("to")]
+        if not targets:
+            return None
+        return (_local_path(targets[0]), report.lastmod_info)
+
+    def delete(self, rels: list[str]) -> None:
+        # Cloud-stage delete needs the transporter's delete op (not yet
+        # available). Typed seam until that prereq lands; the sidecar's drain
+        # logs + swallows this so the pod keeps running (manifests accumulate
+        # on the stage until cleanup is wired).
+        raise NotImplementedError(
+            "cloud stage delete requires the transporter delete op (pending)"
+        )
 
 
 def stage_backend_from_location(location: Location) -> StageBackend:

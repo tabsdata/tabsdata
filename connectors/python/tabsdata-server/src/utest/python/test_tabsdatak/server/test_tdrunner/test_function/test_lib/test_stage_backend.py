@@ -118,3 +118,13 @@ def test_stage_backend_from_file_location_is_not_object_store():
 def test_stage_backend_from_unknown_scheme_raises():
     with pytest.raises(UnsupportedSchemeError):
         stage_backend_from_location(Location(uri="ftp://nope/x"))
+
+
+def test_cloud_backend_delete_is_a_typed_seam_until_prereq():
+    """Cloud-stage delete needs the transporter delete op (pending); it is a
+    typed NotImplementedError seam the sidecar drain logs + swallows."""
+    backend = stage_backend_from_location(
+        Location(uri="s3://bkt/stage", env_prefix="PFX")
+    )
+    with pytest.raises(NotImplementedError):
+        backend.delete(["manifests/x.json"])

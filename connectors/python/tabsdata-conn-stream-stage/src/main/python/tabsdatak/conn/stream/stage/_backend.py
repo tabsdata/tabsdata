@@ -76,6 +76,24 @@ class StageBackend(ABC):
         ``None`` if it does not exist."""
         raise NotImplementedError(f"{type(self).__name__} does not support read_text")
 
+    def next_after(
+        self, glob: str, cursor: str | None, scratch_dir: Path
+    ) -> tuple[Path, str] | None:
+        """Fetch the oldest stage entry matching ``glob`` whose ordering
+        key is strictly greater than ``cursor`` (``None`` = from the
+        start). Returns ``(local_path, next_cursor)`` -- ``local_path`` is
+        the entry on disk (downloaded into ``scratch_dir`` for a remote
+        backend, preserving its basename), ``next_cursor`` the opaque
+        token to pass back to advance past it -- or ``None`` if none
+        remain. The cursor is backend-internal (filename for local,
+        last-modified for cloud) and must not be interpreted by callers."""
+        raise NotImplementedError(f"{type(self).__name__} does not support next_after")
+
+    def delete(self, rels: list[str]) -> None:
+        """Delete the given stage-relative paths (files, and -- on a
+        local filesystem -- empty directories)."""
+        raise NotImplementedError(f"{type(self).__name__} does not support delete")
+
 
 class _LocalStageBackend(StageBackend):
     """Local-filesystem stage. The localfile connector's
@@ -105,6 +123,27 @@ class _LocalStageBackend(StageBackend):
     def read_text(self, rel: str) -> str | None:
         src = Path(self._conn.base_path) / rel
         return src.read_text(encoding="utf-8") if src.is_file() else None
+
+    def next_after(
+        self, glob: str, cursor: str | None, scratch_dir: Path
+    ) -> tuple[Path, str] | None:
+        # Filenames sort chronologically by construction, so the name is a
+        # natural, exact cursor (no last-modified coarseness). scratch_dir
+        # is unused -- the local file is returned in place.
+        base = Path(self._conn.base_path)
+        for p in sorted(base.glob(glob), key=lambda p: p.name):
+            if cursor is None or p.name > cursor:
+                return (p, p.name)
+        return None
+
+    def delete(self, rels: list[str]) -> None:
+        base = Path(self._conn.base_path)
+        for rel in rels:
+            p = base / rel
+            if p.is_dir():
+                p.rmdir()  # empty-only; raises if non-empty (caller logs)
+            else:
+                p.unlink(missing_ok=True)
 
 
 class _CloudStageBackend(StageBackend):

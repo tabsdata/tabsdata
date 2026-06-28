@@ -4,53 +4,41 @@
 
 """run-manifest-trigger command.
 
-Long-running sidecar entrypoint of the streamer pod. Scans
-``<stage>/manifests/`` continuously and POSTs ``fn_trigger`` per
-manifest, then drains a deletion queue between polls.
+Long-running sidecar entrypoint of the streamer pod. Walks
+``<stage>/manifests/`` oldest-first with an in-memory cursor, POSTs
+``fn_trigger`` per manifest, and drains a deletion queue between polls.
+Works against a local *or* cloud stage via the resolved ``StageBackend``.
 
-Per the TED's Manifest Trigger Runner section:
+apiserver response semantics (`skip_if_running=true`, gates run in order):
 
-  Main Loop -- Do the following in loop:
+  * ``2xx``  -- newly scheduled.
+  * ``425``  -- the function's execution is still running (gate 1,
+    ``reject_if_running``). Not done yet; leave it, retry.
+  * ``409``  -- the function is idle *and* this ``external_uid`` is held by
+    an ended run (gate 2, ``reject_if_external_uid_in_use``). Because
+    ``425`` gates first on "running", a ``409`` is a **completion** signal:
+    the execution (and its file read) has ended, so the manifest + files
+    are safe to delete.
 
-    * Fetch all manifests under <stage>/manifests/
-    * Order chronologically (alphabetical == chronological by filename
-      construction; see :func:`stage_manifest.enumerate_pending`)
-    * For each manifest:
-        * POST the apiserver's function-version /execute route with a
-          JSON body ``{"skip_if_running": true, "external_uid": <TS>,
-          "trigger_type": "ST", ...}``. This matches the
-          ``ExecutionRequestInternal`` shape the supervisor's cron
-          trigger already sends, so the apiserver handler accepts
-          both orchestrators uniformly.
-        * if accepted (2xx): run back-off-and-delete (do NOT queue
-          this manifest yet -- the function-publisher is still reading;
-          wait for the next iteration to see the apiserver's 409
-          external_uid dedup-reject, then delete)
-        * if 409 Conflict (apiserver's external_uid dedup fired):
-          queue this manifest + its files for deletion, then run
-          back-off-and-delete
-        * any other 4xx, 5xx, or connection error: log warning,
-          leave manifest in place; next iteration retries.
-          (Important: do NOT delete on other 4xx -- a misconfigured
-          trigger callback returning 403 would otherwise silently
-          burn through every batch the streamer produces.)
+Main loop (per poll), driven by ``next_after(cursor)``:
 
-  Back-Off-And-Delete -- while within the back-off period:
+  * Fetch the oldest manifest after the cursor; POST ``fn_trigger`` with
+    ``{"skip_if_running": true, "external_uid": <TS>, "trigger_type":
+    "ST", ...}`` (the ``ExecutionRequestInternal`` shape the cron trigger
+    also sends).
+  * On ``409`` (completed) -> queue the manifest + its files for deletion
+    and **advance the cursor past it**, then fetch the next.
+  * On ``2xx`` / ``425`` / other transient -> **stop**, leaving the cursor
+    parked *before* this manifest so the next poll re-fetches it and waits
+    for its ``409``. (Never delete on a non-409: a misconfigured ``403``
+    must not burn through batches.)
+  * Then drain the deletion queue for one back-off period.
 
-    * Pop one path from the deletion queue and delete it; log
-      warnings on failure and continue.
-
-Why deletion is gated on dedup-reject instead of 200 OK:
-  When the apiserver returns 200 OK it has *scheduled* the
-  function-publisher pod; the pod hasn't read the manifest yet. If
-  the sidecar deleted the files immediately, the publisher could
-  race against the delete. By waiting for the next sidecar iteration
-  to see a dedup-reject (apiserver remembers the external_id), we
-  know the trigger was already processed and it's safe to clean up.
-
-Deletion queue is in-memory only (Q3 decision): a pod restart loses
-queued deletions, but the next loop iteration rediscovers any
-already-triggered manifests via dedup-reject and re-queues them.
+The cursor advances only on completion, so each manifest is re-triggered
+across its ``200 -> 425… -> 409`` lifetime; that parking is what gives the
+publisher time to consume, and keeps per-poll triggers O(1) (no ``425``
+storm). The cursor is in-memory and resets to epoch on restart -- the
+already-completed front just re-``409``s and is re-deleted (idempotent).
 
 Lifecycle (Q5 decision): the sidecar exits when the streamer's main
 container exits. K8s native sidecar semantics (init container with
@@ -65,39 +53,49 @@ import argparse
 import json
 import logging
 import signal
+import tempfile
 import time
 from collections import deque
 from enum import Enum, auto
 from pathlib import Path
 from urllib.parse import urlparse
-from urllib.request import url2pathname
 
+from tabsdatak.conn.stream.stage._backend import StageBackend
 from tabsdatak.server._tdrunner.function._lib.command import (
     build_parser,
     command,
     resolve_value,
 )
+from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.http_request import (
     HttpRequest,
     HttpRequestError,
     invoke,
 )
 from tabsdatak.server._tdrunner.function._lib.request import (
-    Location,
     load_any_request_or_raise,
 )
+from tabsdatak.server._tdrunner.function._lib.stage_backend import (
+    stage_backend_from_location,
+)
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
-    manifest_files_dir,
+    FILES_SUBDIR,
+    MANIFESTS_SUBDIR,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
+    MANIFEST_PREFIX,
+    MANIFEST_SUFFIX,
     InvalidStageManifestError,
-    enumerate_pending,
     external_uid_from_filename,
     load_stage_manifest,
 )
 from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.error import (
     RunManifestTriggerErrorCode,
 )
+
+# Glob (relative to the stage root) for the streamer's manifests. The cursor-
+# based scan fetches the oldest match after the cursor each step.
+_MANIFEST_GLOB = f"{MANIFESTS_SUBDIR}/{MANIFEST_PREFIX}*{MANIFEST_SUFFIX}"
 
 logger = logging.getLogger(__name__)
 
@@ -177,20 +175,6 @@ def _build_parser():
 # --- helpers --------------------------------------------------------------
 
 
-def _resolve_local_stage_path(function_stage: Location) -> Path:
-    """``file://`` → local Path. Other schemes raise MT_2.
-
-    The sidecar lives in the same pod as the streamer; we currently
-    require both to share a local volume.
-    """
-    parsed = urlparse(function_stage.uri)
-    if parsed.scheme != "file":
-        raise RunManifestTriggerErrorCode.MT_2.exception(
-            uri=function_stage.uri, scheme=parsed.scheme
-        )
-    return Path(url2pathname(parsed.path))
-
-
 def _build_trigger_request(args: argparse.Namespace) -> HttpRequest:
     """Resolve the env:/val: trigger triplet and bake it into a
     reusable :class:`HttpRequest`."""
@@ -206,47 +190,43 @@ def _build_trigger_request(args: argparse.Namespace) -> HttpRequest:
 
 def _enqueue_for_deletion(
     manifest_path: Path,
-    stage_root: Path,
-    queue: deque[Path],
+    external_id: str,
+    backend: StageBackend,
+    queue: deque[str],
 ) -> None:
-    """Queue every file referenced by the manifest, the manifest file
-    itself, and the batch's now-empty ``files/<TS>/`` subdir for deletion.
+    """Queue the stage-relative paths to delete for a consumed batch: every
+    file the manifest references, the manifest itself, and -- on a local
+    filesystem only -- the now-empty ``files/<TS>/`` subdir.
 
-    Files first, manifest, then the per-batch files subdir last -- if the
-    sidecar crashes mid-drain, the next iteration's dedup-reject re-enqueues
-    whatever's still on disk, so order is for tidiness rather than
-    correctness. The trailing ``rmdir`` only succeeds once the subdir's
-    files have drained (see :func:`_drain_until`), which the ordering
-    guarantees on a clean pass. A missing or malformed manifest is logged
-    and silently skipped (the manifest gets queued anyway; the publisher
-    already saw it).
+    The queue holds stage-relative rels (not absolute paths); the drain
+    routes each through ``backend.delete`` (local unlink/rmdir, cloud object
+    delete). Files first, manifest, then the per-batch subdir last so the
+    ``rmdir`` only fires once its files have drained. A missing/malformed
+    manifest is logged and the manifest rel queued anyway (the publisher
+    already consumed it; we just can't enumerate its inner files).
+
+    The ``files/<TS>/`` subdir is enqueued only when the backend is *not* an
+    object store: object stores have no directories (the prefix vanishes
+    with its last key), so there is nothing to rmdir.
     """
+    manifest_rel = f"{MANIFESTS_SUBDIR}/{manifest_path.name}"
     try:
         slots = load_stage_manifest(manifest_path)
     except (FileNotFoundError, InvalidStageManifestError) as exc:
-        # Malformed / vanished -- can't enumerate inner files, but
-        # the manifest file itself still needs to go.
         logger.warning(
             "run-manifest-trigger: could not read %s for deletion enqueue "
             "(%s); queuing manifest only",
             manifest_path,
             exc,
         )
-        queue.append(manifest_path)
+        queue.append(manifest_rel)
         return
     for slot in slots:
-        for rel_path in slot:
-            queue.append(stage_root / rel_path)
-    queue.append(manifest_path)
-    # The batch's parquets all live under files/<external_id>/; enqueue
-    # that subdir last so it's empty by the time the drain rmdir's it,
-    # leaving no orphan directory behind.
-    try:
-        external_id = external_uid_from_filename(manifest_path.name)
-    except InvalidStageManifestError:
-        pass
-    else:
-        queue.append(manifest_files_dir(stage_root, external_id))
+        for rel in slot:
+            queue.append(rel)
+    queue.append(manifest_rel)
+    if not backend.is_object_store:
+        queue.append(f"{FILES_SUBDIR}/{external_id}")
 
 
 _DEDUP_REJECT_STATUS = 409
@@ -272,9 +252,9 @@ class _TriggerOutcome(Enum):
 
 def _trigger_one(
     manifest_path: Path,
-    stage_root: Path,
+    backend: StageBackend,
     trigger_request: HttpRequest,
-    deletion_queue: deque[Path],
+    deletion_queue: deque[str],
 ) -> _TriggerOutcome:
     """POST fn_trigger for one manifest; classify the response.
 
@@ -355,7 +335,7 @@ def _trigger_one(
             manifest_path.name,
             response.status_code,
         )
-        _enqueue_for_deletion(manifest_path, stage_root, deletion_queue)
+        _enqueue_for_deletion(manifest_path, external_uid, backend, deletion_queue)
         return _TriggerOutcome.DEDUP_DELETED
     # Anything else (other 4xx, 5xx, etc.) is anomalous -- leave the
     # manifest in place so the next iteration retries, and log loudly
@@ -372,71 +352,77 @@ def _trigger_one(
 
 
 def _trigger_pending(
-    manifests: list[Path],
-    stage_root: Path,
+    backend: StageBackend,
+    cursor: str | None,
     trigger_request: HttpRequest,
-    deletion_queue: deque[Path],
+    deletion_queue: deque[str],
     is_active: callable,
-) -> None:
-    """Trigger ``manifests`` (oldest-first) until one occupies the
-    execution slot, then stop.
+) -> str | None:
+    """Scan manifests oldest-first from ``cursor``, advancing only past
+    *completed* (``409``) or unusable (``SKIPPED``) ones, and stop at the
+    first manifest still occupying the execution slot.
 
-    The function runs one execution at a time. Once a manifest is
-    accepted (``TRIGGERED``) or the apiserver reports busy / errors
-    (``TRANSIENT`` -- the common case is ``425 too_early`` while a prior
-    execution runs), every newer manifest behind it would get the same
-    transient response, so re-POSTing them is wasted work -- the next
-    poll re-scans from the oldest anyway. Only ``DEDUP_DELETED`` (the
-    manifest was consumed and queued for deletion) or ``SKIPPED``
-    (unusable) frees us to advance to the next candidate this poll.
+    The apiserver gates triggers in order: ``425`` while the function's
+    execution is still running, then ``409`` once it has ended (see the
+    module docstring). So ``409`` is a *completion* signal -- only then is
+    a manifest safe to delete, and only then does the cursor advance past
+    it. A ``2xx`` (just scheduled) or ``425``/transient (still running /
+    busy) leaves the cursor **parked** before that manifest, so the next
+    poll re-fetches it and re-checks for its ``409``. This pipelines one
+    execution per poll (drain the completed front, schedule one new)
+    without re-scanning the whole backlog -- per-poll triggers are O(1),
+    not O(backlog), so no ``425`` storm.
 
-    This is what keeps per-poll triggers O(1) instead of O(backlog)
-    (avoiding the quadratic ``425`` churn) while still pipelining one
-    execution per poll -- triggering *only* the oldest would idle the
-    executor between a manifest's accept and its dedup-delete and halve
-    throughput.
+    Returns the advanced cursor. The cursor is in-memory and backend-
+    internal (filename for local, last-modified for cloud); on a sidecar
+    restart it resets to ``None`` (epoch) and the already-completed front
+    just re-``409``s and is re-deleted -- idempotent, crash-safe.
     """
-    for manifest_path in manifests:
-        if not is_active():
-            return
-        outcome = _trigger_one(
-            manifest_path, stage_root, trigger_request, deletion_queue
-        )
-        if outcome not in (_TriggerOutcome.DEDUP_DELETED, _TriggerOutcome.SKIPPED):
-            return
+    with tempfile.TemporaryDirectory() as scratch:
+        scratch_dir = Path(scratch)
+        while is_active():
+            found = backend.next_after(_MANIFEST_GLOB, cursor, scratch_dir)
+            if found is None:
+                return cursor  # nothing newer than the cursor
+            manifest_path, next_cursor = found
+            outcome = _trigger_one(
+                manifest_path, backend, trigger_request, deletion_queue
+            )
+            if outcome in (_TriggerOutcome.DEDUP_DELETED, _TriggerOutcome.SKIPPED):
+                cursor = next_cursor  # completed / unusable -> advance past it
+                continue
+            return cursor  # TRIGGERED (200) or TRANSIENT (425/...) -> park
+    return cursor
 
 
 def _drain_until(
     deadline_monotonic: float,
-    deletion_queue: deque[Path],
+    backend: StageBackend,
+    deletion_queue: deque[str],
     is_active: callable,
 ) -> None:
-    """Pop and delete paths from ``deletion_queue`` until the deadline
-    or shutdown signal arrives.
+    """Pop stage-relative rels from ``deletion_queue`` and delete them via
+    ``backend.delete`` until the deadline or shutdown signal arrives.
 
-    Each pop removes one path: a file via ``unlink``, or a per-batch
-    ``files/<TS>/`` directory via ``rmdir`` (which only succeeds once the
-    directory is empty -- its files are enqueued ahead of it, so a clean
-    drain empties it first). Failures are logged + swallowed (the path may
-    have been removed by a parallel actor, or a directory may still hold
-    files when a prior drain was cut short; the goal is best-effort
-    cleanup and the next iteration re-enqueues anything left). When the
-    queue is empty we sleep ``_IDLE_SLEEP_SECS`` so the loop doesn't
-    busy-spin.
+    Each pop deletes one rel: a file, or (local only) the per-batch
+    ``files/<TS>/`` directory via ``rmdir`` once its files have drained
+    ahead of it. Failures are logged + swallowed -- the path may already be
+    gone, a directory may still hold files when a prior drain was cut short,
+    or the backend's delete may be unavailable (cloud, pending the
+    transporter delete op); the next iteration re-enqueues anything still
+    consumed. When the queue is empty we sleep ``_IDLE_SLEEP_SECS`` so the
+    loop doesn't busy-spin.
     """
     while is_active() and time.monotonic() < deadline_monotonic:
         if deletion_queue:
-            path = deletion_queue.popleft()
+            rel = deletion_queue.popleft()
             try:
-                if path.is_dir():
-                    path.rmdir()
-                else:
-                    path.unlink(missing_ok=True)
-                logger.debug("run-manifest-trigger: deleted %s", path)
-            except OSError as exc:
+                backend.delete([rel])
+                logger.debug("run-manifest-trigger: deleted %s", rel)
+            except (OSError, NotImplementedError) as exc:
                 logger.warning(
                     "run-manifest-trigger: could not delete %s: %s",
-                    path,
+                    rel,
                     exc,
                 )
         else:
@@ -455,16 +441,23 @@ def main(args: argparse.Namespace) -> int:
 
     logger.info("Starting manifest-trigger sidecar (back_off_secs=%d)", back_off_secs)
     request = load_any_request_or_raise(request_path, RunManifestTriggerErrorCode.MT_1)
-    stage_root = _resolve_local_stage_path(request.info.function_stage)
+    function_stage = request.info.function_stage
+    try:
+        backend = stage_backend_from_location(function_stage)
+    except UnsupportedSchemeError as exc:
+        raise RunManifestTriggerErrorCode.MT_2.exception(
+            uri=function_stage.uri, scheme=urlparse(function_stage.uri).scheme
+        ) from exc
     trigger_request = _build_trigger_request(args)
     logger.info(
         "run-manifest-trigger: scanning %s; trigger=%s %s",
-        stage_root,
+        function_stage.uri,
         trigger_request.method,
         trigger_request.url,
     )
 
-    deletion_queue: deque[Path] = deque()
+    deletion_queue: deque[str] = deque()
+    cursor: str | None = None
     active_flag = {"on": True}
 
     def _shutdown(signum, _frame):
@@ -488,19 +481,13 @@ def main(args: argparse.Namespace) -> int:
     is_active = lambda: active_flag["on"]  # noqa: E731
 
     while is_active():
-        manifests = enumerate_pending(stage_root)
-        if manifests:
-            logger.info(
-                "run-manifest-trigger: scan found %d pending manifest(s)",
-                len(manifests),
-            )
-        _trigger_pending(
-            manifests, stage_root, trigger_request, deletion_queue, is_active
+        cursor = _trigger_pending(
+            backend, cursor, trigger_request, deletion_queue, is_active
         )
         if not is_active():
             break
         deadline = time.monotonic() + back_off_secs
-        _drain_until(deadline, deletion_queue, is_active)
+        _drain_until(deadline, backend, deletion_queue, is_active)
 
     logger.info(
         "run-manifest-trigger: shutting down; %d item(s) left in deletion queue",
