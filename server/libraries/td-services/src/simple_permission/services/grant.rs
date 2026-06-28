@@ -209,9 +209,7 @@ mod tests {
     /// "already exists" error rather than the opaque `user_role`
     /// unique-constraint SQL error from the insert.
     #[td_test::test(db)]
-    async fn test_grant_already_granted_reports_already_exists(
-        db: TdPool,
-    ) -> Result<(), TdError> {
+    async fn test_grant_already_granted_reports_already_exists(db: TdPool) -> Result<(), TdError> {
         db.seed()
             .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
             .await?;

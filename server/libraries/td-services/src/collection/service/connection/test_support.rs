@@ -26,8 +26,8 @@ use td_objects::dxo::connection::{ConnectionDB, ConnectionRead, ConnectionUpsert
 use td_objects::dxo::crudl::{CreateRequest, ReadRequest, RequestContext, UpdateRequest};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::types::basic::{
-    AccessTokenId, CollectionIdName, CollectionName, ConnectionId, Description, EntityId,
-    GroupName, PermissionType, ProjectId, RoleName, UserEnabled, UserId, UserName,
+    AccessTokenId, CollectionId, CollectionIdName, CollectionName, ConnectionId, Description,
+    EntityId, GroupName, PermissionType, ProjectId, RoleName, UserEnabled, UserId, UserName,
 };
 use td_queries::LiveEntry;
 use td_queries::test_utils::SeedEntry;
@@ -46,6 +46,8 @@ impl ConnectionStore for MockStore {
         &self,
         project_id: &ProjectId,
         connection_id: &ConnectionId,
+        _collection: &CollectionName,
+        _collection_id: &CollectionId,
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         self.upserts
@@ -73,6 +75,8 @@ impl ConnectionStore for FailingStore {
         &self,
         _: &ProjectId,
         _: &ConnectionId,
+        _: &CollectionName,
+        _: &CollectionId,
         _: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         Err(api_error!(
@@ -100,6 +104,8 @@ impl ConnectionStore for KeepStore {
         &self,
         _: &ProjectId,
         _: &ConnectionId,
+        _: &CollectionName,
+        _: &CollectionId,
         _: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         Ok(stored_read())

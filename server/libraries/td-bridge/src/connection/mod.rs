@@ -13,7 +13,7 @@
 use async_trait::async_trait;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert, KeyValue};
-use td_objects::types::basic::{ConnectionId, ProjectId};
+use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 
 /// Writes are IDEMPOTENT — that is contract, not detail: the server calls the
 /// store FIRST and persists the connection row only after the write succeeds,
@@ -39,6 +39,8 @@ pub trait ConnectionStore: Send + Sync {
         &self,
         project_id: &ProjectId,
         connection_id: &ConnectionId,
+        collection: &CollectionName,
+        collection_id: &CollectionId,
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError>;
 
@@ -64,7 +66,7 @@ pub mod memory;
 pub mod noop;
 
 /// Names-only view of a stored triple (values never leave the store).
-pub(crate) fn read_of(upsert: &ConnectionUpsert) -> ConnectionRead {
+pub fn read_of(upsert: &ConnectionUpsert) -> ConnectionRead {
     ConnectionRead {
         id: None,
         connection: upsert.connection.clone().unwrap_or(serde_json::Value::Null),
@@ -84,7 +86,7 @@ fn keys(entries: Option<&[KeyValue]>) -> Vec<String> {
 /// Resolve `value: None` entries ("keep the stored value") against the
 /// previously stored triple. The server verifies this before calling; the
 /// store re-checks because the kept value must actually be substituted here.
-pub(crate) fn merge_kept(
+pub fn merge_kept(
     connection: &ConnectionUpsert,
     previous: Option<&ConnectionUpsert>,
 ) -> Result<ConnectionUpsert, TdError> {

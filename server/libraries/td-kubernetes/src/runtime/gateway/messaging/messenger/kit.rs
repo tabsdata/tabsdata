@@ -13,19 +13,9 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use td_bridge::messaging::{CronStartRequest, FunctionStartRequest, StageTriggerStartRequest};
 use td_common::worker::{Callback, HttpCallback};
 
-use crate::base::constants::TABSDATA_LABEL_NAMESPACE;
 use crate::base::error::kubernetes::messaging::KubeMessagingError;
+use crate::base::labels::LABEL_WORKER_ID;
 use crate::runtime::gateway::messaging::messenger::request::WorkerStartRequest;
-
-use const_format::concatcp;
-
-pub(crate) const LABEL_COLLECTION_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "collection-id");
-pub(crate) const LABEL_COLLECTION: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "collection");
-pub(crate) const LABEL_FUNCTION_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "function-id");
-pub(crate) const LABEL_FUNCTION: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "function");
-pub(crate) const LABEL_FUNCTION_VERSION_ID: &str =
-    concatcp!(TABSDATA_LABEL_NAMESPACE, "function-version-id");
-pub(crate) const LABEL_WORKER_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "worker-id");
 
 const ENV_TD_WORKER: &str = "TD_WORKER";
 const ENV_TD_WORKER_ID: &str = "TD_WORKER_ID";

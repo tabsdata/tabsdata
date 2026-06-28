@@ -179,6 +179,7 @@ impl TdService for UpdateCollectionService {
                         store,
                         &project,
                         &rename.connection_id,
+                        &rename.collection_id,
                         &rename.new_name,
                     )
                     .await?;
@@ -197,6 +198,7 @@ impl TdService for UpdateCollectionService {
                                 store,
                                 &project,
                                 &rename.connection_id,
+                                &rename.collection_id,
                                 &rename.old_name,
                             )
                             .await

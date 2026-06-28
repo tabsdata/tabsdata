@@ -12,7 +12,7 @@ use td_objects::dxo::collection::{
     CollectionUpdateDB, CollectionUpdateDBBuilder,
 };
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{CollectionId, ConnectionId};
+use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId};
 use td_queries::LiveEntry;
 use td_tower::extractors::{MutRef, Ref};
 
@@ -69,8 +69,9 @@ pub struct CollectionUpdatePlan {
 #[derive(Debug, Clone)]
 pub struct ConnectionRename {
     pub connection_id: ConnectionId,
-    pub old_name: String,
-    pub new_name: String,
+    pub collection_id: CollectionId,
+    pub old_name: CollectionName,
+    pub new_name: CollectionName,
 }
 
 pub async fn plan_collection_update(
@@ -93,8 +94,9 @@ pub async fn plan_collection_update(
     let rename = match (&update.name, collection.connection_id) {
         (Some(name), Some(connection_id)) if *name != collection.name => Some(ConnectionRename {
             connection_id,
-            old_name: collection.name.to_string(),
-            new_name: name.to_string(),
+            collection_id: collection.id,
+            old_name: collection.name.clone(),
+            new_name: name.clone(),
         }),
         _ => None,
     };

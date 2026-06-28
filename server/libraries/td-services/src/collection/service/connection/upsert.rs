@@ -134,7 +134,15 @@ impl TdService for ConnectionUpsertService {
                 let resolution = resolve.raw_oneshot(request).await?;
                 let store = bridge.connection_store();
                 verify_kept_keys(store, &project, &resolution).await?;
-                let mut read = store.upsert(&project, &resolution.row.id, &payload).await?;
+                let mut read = store
+                    .upsert(
+                        &project,
+                        &resolution.row.id,
+                        &resolution.collection,
+                        &resolution.collection_id,
+                        &payload,
+                    )
+                    .await?;
                 read.id = Some(resolution.row.id);
                 Ok(CtxResponse::new(read, ReqCtx::default()))
             }

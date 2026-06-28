@@ -5,7 +5,7 @@
 use td_bridge::messaging::{CronStartRequest, FunctionStartRequest, StageTriggerStartRequest};
 use td_common::worker::Callback;
 
-use crate::runtime::gateway::messaging::messenger::kit::{
+use crate::base::labels::{
     LABEL_COLLECTION, LABEL_COLLECTION_ID, LABEL_FUNCTION, LABEL_FUNCTION_ID,
     LABEL_FUNCTION_VERSION_ID,
 };

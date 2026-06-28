@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use td_common::env::{REPOSITORY_URI_ENV, get_current_dir};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
-use td_objects::types::basic::{ConnectionId, ProjectId};
+use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 use tokio::fs;
 
 pub const CONNECTIONS_FOLDER: &str = "connections";
@@ -146,6 +146,8 @@ impl ConnectionStore for FileConnectionStore {
         &self,
         project_id: &ProjectId,
         connection_id: &ConnectionId,
+        _collection: &CollectionName,
+        _collection_id: &CollectionId,
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         let document = connection.connection.as_ref().ok_or_else(|| {
@@ -308,6 +310,19 @@ mod tests {
         FileConnectionStore::with_location(td_common::tdtestdir!())
     }
 
+    async fn upsert_conn(
+        store: &FileConnectionStore,
+        project: &ProjectId,
+        connection_id: &ConnectionId,
+        payload: &ConnectionUpsert,
+    ) -> Result<ConnectionRead, TdError> {
+        let collection = CollectionName::try_from("col").unwrap();
+        let collection_id = CollectionId::default();
+        store
+            .upsert(project, connection_id, &collection, &collection_id, payload)
+            .await
+    }
+
     fn upsert(name: &str, secret_value: Option<&str>) -> ConnectionUpsert {
         ConnectionUpsert::builder()
             .connection(Some(json!({
@@ -330,8 +345,7 @@ mod tests {
         let project = ProjectId::default();
         let id = ConnectionId::default();
 
-        let read = store
-            .upsert(&project, &id, &upsert("Finance", Some("hunter2")))
+        let read = upsert_conn(&store, &project, &id, &upsert("Finance", Some("hunter2")))
             .await
             .unwrap();
         assert_eq!(read.secret_names, vec!["CREDENTIALS_PASSWORD"]);
@@ -350,7 +364,7 @@ mod tests {
         let id = ConnectionId::default();
         let payload = upsert("Finance", Some("hunter2"));
 
-        store.upsert(&project, &id, &payload).await.unwrap();
+        upsert_conn(&store, &project, &id, &payload).await.unwrap();
 
         // The exact path + content `NamedConn("Finance")` resolution reads —
         // project-namespaced, so same-named collections in other projects
@@ -370,13 +384,11 @@ mod tests {
         let project = ProjectId::default();
         let id = ConnectionId::default();
 
-        store
-            .upsert(&project, &id, &upsert("fin", Some("hunter2")))
+        upsert_conn(&store, &project, &id, &upsert("fin", Some("hunter2")))
             .await
             .unwrap();
         // Rotation-style upsert: keep the stored secret value.
-        store
-            .upsert(&project, &id, &upsert("fin", None))
+        upsert_conn(&store, &project, &id, &upsert("fin", None))
             .await
             .unwrap();
 
@@ -390,12 +402,10 @@ mod tests {
         let (p1, p2) = (ProjectId::default(), ProjectId::default());
         let (id1, id2) = (ConnectionId::default(), ConnectionId::default());
 
-        store
-            .upsert(&p1, &id1, &upsert("fin", Some("one")))
+        upsert_conn(&store, &p1, &id1, &upsert("fin", Some("one")))
             .await
             .unwrap();
-        store
-            .upsert(&p2, &id2, &upsert("fin", Some("two")))
+        upsert_conn(&store, &p2, &id2, &upsert("fin", Some("two")))
             .await
             .unwrap();
         assert!(store.worker_path(&p1, "fin").exists());
@@ -413,25 +423,21 @@ mod tests {
         let project = ProjectId::default();
         let (id1, id2) = (ConnectionId::default(), ConnectionId::default());
 
-        store
-            .upsert(&project, &id1, &upsert("fin", Some("hunter2")))
+        upsert_conn(&store, &project, &id1, &upsert("fin", Some("hunter2")))
             .await
             .unwrap();
         // A different connection taking the name would hijack id1's artifact.
-        let err = store
-            .upsert(&project, &id2, &upsert("fin", Some("x")))
+        let err = upsert_conn(&store, &project, &id2, &upsert("fin", Some("x")))
             .await
             .expect_err("name is taken");
         assert!(err.to_string().contains("another collection"), "got: {err}");
         assert!(store.worker_path(&project, "fin").exists());
 
         // The owner itself can re-upsert and rename; a released name is free.
-        store
-            .upsert(&project, &id1, &upsert("fin2", None))
+        upsert_conn(&store, &project, &id1, &upsert("fin2", None))
             .await
             .unwrap();
-        store
-            .upsert(&project, &id2, &upsert("fin", Some("x")))
+        upsert_conn(&store, &project, &id2, &upsert("fin", Some("x")))
             .await
             .unwrap();
     }
@@ -442,13 +448,11 @@ mod tests {
         let project = ProjectId::default();
         let id = ConnectionId::default();
 
-        store
-            .upsert(&project, &id, &upsert("fin", Some("hunter2")))
+        upsert_conn(&store, &project, &id, &upsert("fin", Some("hunter2")))
             .await
             .unwrap();
         // Same id, new document name — the collection was renamed.
-        store
-            .upsert(&project, &id, &upsert("fin2", None))
+        upsert_conn(&store, &project, &id, &upsert("fin2", None))
             .await
             .unwrap();
 
@@ -467,8 +471,7 @@ mod tests {
         let project = ProjectId::default();
         let id = ConnectionId::default();
 
-        let err = store
-            .upsert(&project, &id, &upsert("fin", None))
+        let err = upsert_conn(&store, &project, &id, &upsert("fin", None))
             .await
             .expect_err("keeping a never-stored value must fail");
         assert!(err.to_string().contains("not stored"));
@@ -480,8 +483,7 @@ mod tests {
         let project = ProjectId::default();
         let id = ConnectionId::default();
 
-        store
-            .upsert(&project, &id, &upsert("fin", Some("hunter2")))
+        upsert_conn(&store, &project, &id, &upsert("fin", Some("hunter2")))
             .await
             .unwrap();
         store.delete(&project, &id).await.unwrap();
@@ -502,8 +504,7 @@ mod tests {
         let project = ProjectId::default();
         let id = ConnectionId::default();
 
-        store
-            .upsert(&project, &id, &upsert("fin", Some("hunter2")))
+        upsert_conn(&store, &project, &id, &upsert("fin", Some("hunter2")))
             .await
             .unwrap();
         let mode = std::fs::metadata(store.record_path(&project, &id))

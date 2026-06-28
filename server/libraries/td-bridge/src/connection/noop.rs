@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use http::StatusCode;
 use td_error::{TdError, api_error};
 use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
-use td_objects::types::basic::{ConnectionId, ProjectId};
+use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 
 /// No backend configured — every operation fails as unconfigured.
 pub struct NoopConnectionStore;
@@ -18,6 +18,8 @@ impl ConnectionStore for NoopConnectionStore {
         &self,
         _: &ProjectId,
         _: &ConnectionId,
+        _: &CollectionName,
+        _: &CollectionId,
         _: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         Err(unconfigured())

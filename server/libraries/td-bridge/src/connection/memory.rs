@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
-use td_objects::types::basic::{ConnectionId, ProjectId};
+use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 
 #[derive(Default)]
 pub struct InMemoryConnectionStore {
@@ -27,6 +27,8 @@ impl ConnectionStore for InMemoryConnectionStore {
         &self,
         project_id: &ProjectId,
         connection_id: &ConnectionId,
+        _collection: &CollectionName,
+        _collection_id: &CollectionId,
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         let mut entries = self.entries.lock().unwrap();

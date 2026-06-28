@@ -26,6 +26,13 @@ static DNS_SUBDOMAIN_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$").expect("invalid dns subdomain pattern")
 });
 
+pub fn id_from_file(file: &str) -> &str {
+    match file.find('.') {
+        Some(index) => &file[..index],
+        None => file,
+    }
+}
+
 pub fn to_kube_resource_name(
     scope: Scope,
     id: &str,
@@ -63,29 +70,36 @@ pub fn to_kube_resource_name(
     Ok(assembled)
 }
 
-pub fn id_from_file(file: &str) -> &str {
-    match file.find('.') {
-        Some(index) => &file[..index],
-        None => file,
+pub fn to_connection_object_name(connection_id: &str) -> Result<String, NamingError> {
+    let assembled = format!(
+        "{TABSDATA_NAME_PREFIX}{}{KUBE_NAME_SEPARATOR}{}",
+        Scope::Connection.as_str(),
+        normalize_segment(NameSegment::Component, connection_id)?,
+    );
+    if !DNS_SUBDOMAIN_PATTERN.is_match(&assembled) {
+        return Err(NamingError::InvalidConfigmapName { name: assembled });
     }
+    if assembled.len() > KUBE_IDENTIFIER_MAX_LENGTH {
+        return Err(NamingError::AssembledIdentifierTooLong {
+            identifier: assembled,
+            limit: KUBE_IDENTIFIER_MAX_LENGTH,
+        });
+    }
+    Ok(assembled)
 }
 
 pub fn to_fn_pod_name(worker: &str, worker_id: &str) -> Result<String, NamingError> {
-    let scope_str = Scope::Fn.as_str();
-    let mut assembled = String::with_capacity(
-        TABSDATA_NAME_PREFIX.len()
-            + scope_str.len()
-            + KUBE_NAME_SEPARATOR.len()
-            + worker.len()
-            + KUBE_NAME_SEPARATOR.len()
-            + worker_id.len(),
+    let assembled = format!(
+        "{TABSDATA_NAME_PREFIX}{}{KUBE_NAME_SEPARATOR}{}{KUBE_NAME_SEPARATOR}{}",
+        Scope::Function.as_str(),
+        normalize_segment(NameSegment::Component, worker)?,
+        normalize_segment(NameSegment::WorkerId, worker_id)?,
     );
-    assembled.push_str(TABSDATA_NAME_PREFIX);
-    assembled.push_str(scope_str);
-    assembled.push_str(KUBE_NAME_SEPARATOR);
-    assembled.push_str(&normalize_segment(NameSegment::Component, worker)?);
-    assembled.push_str(KUBE_NAME_SEPARATOR);
-    assembled.push_str(&normalize_segment(NameSegment::WorkerId, worker_id)?);
+    if !DNS_SUBDOMAIN_PATTERN.is_match(&assembled) {
+        return Err(NamingError::AssembledIdentifierInvalid {
+            identifier: assembled,
+        });
+    }
     if assembled.len() > KUBE_IDENTIFIER_MAX_LENGTH {
         return Err(NamingError::AssembledIdentifierTooLong {
             identifier: assembled,

@@ -22,7 +22,7 @@ pub use upsert::ConnectionUpsertService;
 use td_bridge::connection::ConnectionStore;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::connection::{ConnectionUpsert, KeyValue};
-use td_objects::types::basic::{ConnectionId, ProjectId};
+use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 use tracing::warn;
 
 /// Best-effort removal of a connection's store content (create rollback,
@@ -47,7 +47,8 @@ pub(crate) async fn rename_stored_connection(
     store: &dyn ConnectionStore,
     project: &ProjectId,
     connection_id: &ConnectionId,
-    new_name: &str,
+    collection_id: &CollectionId,
+    new_name: &CollectionName,
 ) -> Result<(), TdError> {
     let stored = store.fetch(project, connection_id).await?;
     let mut document = stored.connection;
@@ -66,7 +67,9 @@ pub(crate) async fn rename_stored_connection(
         secrets: Some(kept(stored.secret_names)),
         vars: Some(kept(stored.var_names)),
     };
-    store.upsert(project, connection_id, &payload).await?;
+    store
+        .upsert(project, connection_id, new_name, collection_id, &payload)
+        .await?;
     Ok(())
 }
 

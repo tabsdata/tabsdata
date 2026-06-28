@@ -35,9 +35,9 @@ impl KubernetesBridgeProvider {
     pub async fn new(context: KubeContext) -> Result<Self, KubernetesError> {
         let server_catalog = KubernetesServerCatalog::new();
         let worker_handler = KubernetesWorkerHandler::new(context.clone());
-        let connection_store = KubernetesConnectionStore::new();
-        let templates = PodTemplateIndex::load(&context).await?;
-        let message_queue = KubernetesOrchestratorMessageQueue::new(context.clone(), templates);
+        let connection_store = KubernetesConnectionStore::new(context.clone());
+        let pod_templates = PodTemplateIndex::load(&context).await?;
+        let message_queue = KubernetesOrchestratorMessageQueue::new(context.clone(), pod_templates);
         Ok(Self {
             context,
             server_catalog,

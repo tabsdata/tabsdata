@@ -18,10 +18,10 @@ use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::crudl::{ListParams, RequestContext};
 use td_objects::dxo::permission::PermissionDB;
-use td_objects::errors::SqlError;
 use td_objects::dxo::project::{ProjectCreate, ProjectUpdate};
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user_role::UserRoleDB;
+use td_objects::errors::SqlError;
 use td_objects::rest_urls::ProjectParam;
 use td_objects::types::basic::{
     AccessTokenId, BasePath, Description, EntityId, PermissionEntityType, PermissionType,
@@ -193,9 +193,12 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
         .service()
         .raw_oneshot(admin_ctx().create((), create()))
         .await;
-    let err = second.err().expect("duplicate project name must be rejected");
+    let err = second.expect_err("duplicate project name must be rejected");
     assert!(
-        matches!(err.domain_err::<SqlError>(), SqlError::EntityAlreadyExists(_, _)),
+        matches!(
+            err.domain_err::<SqlError>(),
+            SqlError::EntityAlreadyExists(_, _)
+        ),
         "expected EntityAlreadyExists, got {err:?}"
     );
 
@@ -241,9 +244,12 @@ async fn test_rename_to_existing_name_rejected(db: TdPool) -> Result<(), TdError
         .service()
         .raw_oneshot(admin_ctx().update(project_param("sandbox"), upd))
         .await;
-    let err = res.err().expect("rename to an existing name must be rejected");
+    let err = res.expect_err("rename to an existing name must be rejected");
     assert!(
-        matches!(err.domain_err::<SqlError>(), SqlError::EntityAlreadyExists(_, _)),
+        matches!(
+            err.domain_err::<SqlError>(),
+            SqlError::EntityAlreadyExists(_, _)
+        ),
         "expected EntityAlreadyExists, got {err:?}"
     );
     Ok(())

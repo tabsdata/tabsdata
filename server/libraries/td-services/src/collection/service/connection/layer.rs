@@ -24,7 +24,7 @@ use td_objects::dxo::connection::{ConnectionDB, ConnectionUpsert, KeyValue};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::errors::SqlError;
 use td_objects::types::basic::{
-    CollectionName, CollectionType, ConnectionId, ConnectionKind, GroupId,
+    CollectionId, CollectionName, CollectionType, ConnectionId, ConnectionKind, GroupId,
 };
 use td_objects::{Buildable, DaoCore, TryUpdater};
 use td_queries::LiveEntry;
@@ -194,6 +194,8 @@ fn ensure_kind_matches_type(
 pub struct ConnectionResolution {
     pub row: ConnectionDB,
     pub document: ConnectionDocument,
+    pub collection: CollectionName,
+    pub collection_id: CollectionId,
 }
 
 /// Resolves the collection's connection ROW for an update. The connection
@@ -215,6 +217,8 @@ pub async fn resolve_connection(
     Ok(ConnectionResolution {
         row: existing,
         document: document.deref().clone(),
+        collection: collection.name.clone(),
+        collection_id: collection.id,
     })
 }
 
@@ -299,6 +303,7 @@ pub async fn plan_collection_create(
     };
     Ok(CollectionCreatePlan {
         create: create.deref().clone(),
+        collection_id: CollectionId::default(),
         group_id: *group_id,
         collection_type: collection_type.deref().clone(),
         connection_row,
@@ -334,6 +339,7 @@ pub(crate) async fn ensure_collection_name_free(
 #[derive(Debug, Clone)]
 pub struct CollectionCreatePlan {
     pub create: CollectionCreate,
+    pub collection_id: CollectionId,
     pub group_id: GroupId,
     pub collection_type: CollectionType,
     pub connection_row: Option<ConnectionDB>,
@@ -352,6 +358,7 @@ pub async fn insert_collection_with_connection(
     let mut builder = CollectionCreateDBBuilder::try_from(&plan.create)?;
     let collection = builder
         .try_update_from(request_context.deref())?
+        .id(plan.collection_id)
         .group_id(plan.group_id)
         .collection_type(plan.collection_type.clone())
         .connection_id(plan.connection_row.as_ref().map(|row| row.id))

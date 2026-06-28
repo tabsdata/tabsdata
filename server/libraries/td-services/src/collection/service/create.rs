@@ -159,7 +159,15 @@ impl TdService for CreateCollectionService {
                 let connection_id = plan.connection_row.as_ref().map(|row| row.id);
                 if let Some(connection_id) = &connection_id {
                     let payload = connection_payload(&plan);
-                    store.upsert(&project, connection_id, &payload).await?;
+                    store
+                        .upsert(
+                            &project,
+                            connection_id,
+                            &plan.create.name,
+                            &plan.collection_id,
+                            &payload,
+                        )
+                        .await?;
                 }
                 let created = create
                     .raw_oneshot(context.create((), plan).in_project(project))

@@ -28,17 +28,19 @@ pub const RESOURCE_KPROFILE: &str = "resources/kprofile";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
-    Sys,
-    App,
-    Fn,
+    System,
+    Application,
+    Function,
+    Connection,
 }
 
 impl Scope {
     pub const fn as_str(&self) -> &'static str {
         match self {
-            Scope::Sys => "sys",
-            Scope::App => "app",
-            Scope::Fn => "fn",
+            Scope::System => "sys",
+            Scope::Application => "app",
+            Scope::Function => "fn",
+            Scope::Connection => "conn",
         }
     }
 }
@@ -51,12 +53,12 @@ pub struct Family {
 
 pub const KPROFILE_PODS_FAMILY: Family = Family {
     folder: "pods",
-    scope: Scope::Sys,
+    scope: Scope::System,
     kind: "pod",
 };
 pub const KPROFILE_CONFIGS_FAMILY: Family = Family {
     folder: "configs",
-    scope: Scope::App,
+    scope: Scope::Application,
     kind: "config",
 };
 
