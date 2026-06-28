@@ -172,7 +172,7 @@ def _required_args(
 
 def test_main_extracts_data_field_and_writes_yaml(monkeypatch, tmp_path):
     captured: dict = {}
-    payload = {"FunctionV2": {"info": {"function": "publish_people"}}}
+    payload = {"Function": {"info": {"function": "publish_people"}}}
     _stub_urlopen(monkeypatch, body=_envelope_bytes(payload), capture=captured)
     request_file = tmp_path / "request.yaml"
     liveness = tmp_path / "live"

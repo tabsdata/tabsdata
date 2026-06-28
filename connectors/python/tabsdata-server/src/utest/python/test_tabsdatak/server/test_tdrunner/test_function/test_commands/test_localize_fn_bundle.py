@@ -87,7 +87,7 @@ def paths(tmp_path):
 
 
 def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
-    path.write_text(yaml.safe_dump({"FunctionV2": {"info": info_payload(bundle_uri)}}))
+    path.write_text(yaml.safe_dump({"Function": {"info": info_payload(bundle_uri)}}))
     return path
 
 

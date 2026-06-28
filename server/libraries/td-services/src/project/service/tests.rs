@@ -23,8 +23,8 @@ use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::rest_urls::ProjectParam;
 use td_objects::types::basic::{
-    AccessTokenId, BasePath, Description, EntityId, PermissionEntityType, PermissionType, ProjectId,
-    ProjectIdName, ProjectName, RoleKind, RoleName, UserEnabled, UserId, UserName,
+    AccessTokenId, BasePath, Description, EntityId, PermissionEntityType, PermissionType,
+    ProjectId, ProjectIdName, ProjectName, RoleKind, RoleName, UserEnabled, UserId, UserName,
 };
 use td_queries::LiveEntry;
 use td_queries::test_utils::SeedEntry;
@@ -69,7 +69,10 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
         .raw_oneshot(admin_ctx().read(project_param("payments")))
         .await?;
     assert_eq!(read.id, created.id);
-    assert_eq!(read.base_path, base_path, "base_path round-trips through read");
+    assert_eq!(
+        read.base_path, base_path,
+        "base_path round-trips through read"
+    );
 
     // Update.
     let upd = ProjectUpdate::builder()

@@ -2,13 +2,13 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-pub mod cron_trigger;
+pub mod cron;
 pub mod function;
-pub mod stage_trigger;
+pub mod stream;
 
-use crate::messaging::message::cron_trigger::CronRequest;
+use crate::messaging::message::cron::CronRequest;
 use crate::messaging::message::function::FunctionRequest;
-use crate::messaging::message::stage_trigger::StageTriggerRequest;
+use crate::messaging::message::stream::StageTriggerRequest;
 use derive_new::new;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;

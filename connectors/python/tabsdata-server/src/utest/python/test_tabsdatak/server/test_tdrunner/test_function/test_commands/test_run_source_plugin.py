@@ -219,7 +219,7 @@ def _output_table_payload(name: str, *, location: dict) -> dict:
 def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
     path.write_text(
         yaml.safe_dump({
-            "FunctionV2": {
+            "Function": {
                 "info": _info_payload(bundle_uri=bundle_uri),
                 "output": [
                     _output_table_payload(
@@ -1056,7 +1056,7 @@ def test_main_hydrates_and_drains_initial_values(
     req_path = tmp_path / "request.yaml"
     req_path.write_text(
         yaml.safe_dump({
-            "FunctionV2": {
+            "Function": {
                 "info": _info_payload(),
                 "output": [
                     _output_table_payload(

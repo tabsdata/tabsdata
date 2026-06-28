@@ -239,13 +239,19 @@ mod tests {
             .service()
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
-                    UserParam::builder().user(UserIdName::from_str("u0").unwrap()).build().unwrap(),
+                    UserParam::builder()
+                        .user(UserIdName::from_str("u0").unwrap())
+                        .build()
+                        .unwrap(),
                     set,
                 ),
             )
             .await
             .unwrap();
-        assert_eq!(updated.email.unwrap(), Email::try_from("u0@foo.com").unwrap());
+        assert_eq!(
+            updated.email.unwrap(),
+            Email::try_from("u0@foo.com").unwrap()
+        );
 
         // Clear it (Some(None) = the JSON `null` state).
         let clear = UserUpdate::builder()
@@ -259,7 +265,10 @@ mod tests {
             .service()
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
-                    UserParam::builder().user(UserIdName::from_str("u0").unwrap()).build().unwrap(),
+                    UserParam::builder()
+                        .user(UserIdName::from_str("u0").unwrap())
+                        .build()
+                        .unwrap(),
                     clear,
                 ),
             )

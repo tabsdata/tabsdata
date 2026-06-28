@@ -93,7 +93,7 @@ def test_write_produces_plain_yaml(tmp_path):
     text = out.read_text()
     assert "!Data" not in text
     assert "!NoData" not in text
-    assert "!FunctionV2" not in text
+    assert "!Function" not in text
     # safe_load (no custom constructors) must accept it
     parsed = yaml.safe_load(text)
     assert parsed == {

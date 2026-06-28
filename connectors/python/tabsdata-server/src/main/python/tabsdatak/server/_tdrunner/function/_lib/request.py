@@ -23,7 +23,7 @@ For each envelope we track two sets:
   with a "recognized but not yet supported" message; a tag in neither
   is rejected with "unknown variant; expected one of: ...".
 
-Today the supported sets are ``FunctionV2``, and per-table ``Table``
+Today the supported sets are ``Function``, and per-table ``Table``
 everywhere plus ``TableVersions`` on ``input`` (a multi-version
 dependency: one entry per positional argument whose ``versions`` list
 carries one Table-shaped member per resolved version, ordered by
@@ -40,7 +40,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from tabsdatak.error import ErrorCode
 
-REQUEST_ENVELOPE_SUPPORTED = ("FunctionV2", "StreamerV1")
+REQUEST_ENVELOPE_SUPPORTED = ("Function", "Streamer")
 REQUEST_ENVELOPE_KNOWN = REQUEST_ENVELOPE_SUPPORTED
 
 TABLE_VARIANT_SUPPORTED = ("Table",)
@@ -169,11 +169,11 @@ class StreamerInfo(BaseModel):
     ``triggered_on``) on :class:`Info` do not represent real entities
     at the streamer's lifecycle. They are intentionally absent here.
 
-    The k8s gateway builds this envelope from the lean
-    :class:`StageTriggerStartRequest` at job-create time and writes it
-    into the per-pod configmap; the pod mounts it as ``request.yaml``.
-    No apiserver fetch round-trip — streamer state is static across
-    its lifetime (no late binding to defer).
+    The apiserver's resolve endpoint builds this payload from DB state;
+    the stream-publisher pod fetches it (like the function pod) and
+    writes it to ``request.yaml``. Callbacks (``fn_trigger`` etc.) are
+    not part of this payload — the streamer gets them via env from the
+    pod Secret.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -191,7 +191,7 @@ class StreamerInfo(BaseModel):
 
 
 class StreamerRequest(BaseModel):
-    """Resolved request.yaml for a streamer pod (``StreamerV1`` envelope)."""
+    """Resolved request.yaml for a streamer pod (``Streamer`` envelope)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -265,7 +265,7 @@ def load_request(path: Path) -> Request:
     try:
         payload = _strip_variant(
             raw,
-            ("FunctionV2",),
+            ("Function",),
             REQUEST_ENVELOPE_KNOWN,
             "request",
         )
@@ -292,11 +292,11 @@ def load_request(path: Path) -> Request:
 
 
 def load_streamer_request(path: Path) -> StreamerRequest:
-    """Load and validate a streamer-pod request.yaml (``StreamerV1``
+    """Load and validate a streamer-pod request.yaml (``Streamer``
     envelope).
 
     Sibling of :func:`load_request` for the streamer pod: a different
-    top-level envelope (``StreamerV1`` instead of ``FunctionV2``) and a
+    top-level envelope (``Streamer`` instead of ``Function``) and a
     leaner :class:`StreamerInfo` payload (no input/output tables, no
     per-execution identifiers).
 
@@ -313,7 +313,7 @@ def load_streamer_request(path: Path) -> StreamerRequest:
     try:
         payload = _strip_variant(
             raw,
-            ("StreamerV1",),
+            ("Streamer",),
             REQUEST_ENVELOPE_KNOWN,
             "request",
         )
@@ -345,8 +345,8 @@ class _AnyRequestInfo(BaseModel):
     """Just-enough-fields view of either request envelope's ``info``.
 
     Used by tdrunner commands that are shared between the
-    function-publisher pod (``FunctionV2`` envelope) and the
-    stream-publisher pod (``StreamerV1`` envelope) and only need the
+    function-publisher pod (``Function`` envelope) and the
+    stream-publisher pod (``Streamer`` envelope) and only need the
     handful of fields both shapes expose -- e.g.
 
     * ``localize_fn_bundle`` reads ``info.function_bundle.uri``;
@@ -375,7 +375,7 @@ class AnyRequest(BaseModel):
 
 
 def load_any_request(path: Path) -> AnyRequest:
-    """Load either a ``FunctionV2`` or a ``StreamerV1`` envelope and
+    """Load either a ``Function`` or a ``Streamer`` envelope and
     return the envelope-agnostic slim view :class:`AnyRequest`.
 
     For tdrunner commands that participate in both pod profiles and
@@ -390,7 +390,7 @@ def load_any_request(path: Path) -> AnyRequest:
     try:
         payload = _strip_variant(
             raw,
-            ("FunctionV2", "StreamerV1"),
+            ("Function", "Streamer"),
             REQUEST_ENVELOPE_KNOWN,
             "request",
         )

@@ -92,7 +92,7 @@ def _write_request(
     bundle_uri: str = "file:///bundle.tgz",
 ) -> Path:
     body = {
-        "FunctionV2": {
+        "Function": {
             "info": _info(bundle_uri),
             "system_input": [
                 _table(entry, index) for index, entry in enumerate(system_input or [])

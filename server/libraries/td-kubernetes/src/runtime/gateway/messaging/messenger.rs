@@ -4,4 +4,5 @@
 
 pub mod kit;
 pub mod queue;
+pub mod request;
 pub mod template;

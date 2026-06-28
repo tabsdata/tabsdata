@@ -15,7 +15,7 @@ use td_objects::dxo::physical_table_data_version::{
 };
 use td_objects::dxo::worker::{CallbackRequest, UpdateWorkerDB, WorkerDB};
 use td_objects::dxo::yaml::WorkerOutput;
-use td_objects::dxo::yaml::function_runner::v2::WrittenTable;
+use td_objects::dxo::yaml::function::WrittenTable;
 use td_objects::types::basic::{
     ExecutionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
     SchemaChanged, WorkerId,
@@ -315,9 +315,7 @@ pub async fn update_table_data_version_status(
     physical_function_run_id: Ref<PhysicalFunctionRunId>,
     callback: Ref<CallbackRequest>,
 ) -> Result<(), TdError> {
-    if let Some(context) = &callback.context
-        && let WorkerOutput::V2(output) | WorkerOutput::FunctionV2(output) = context
-    {
+    if let Some(WorkerOutput::Function(output)) = &callback.context {
         for written in &output.output {
             let (table_name, table_info) = match written {
                 WrittenTable::NoData { table } => (table, None),

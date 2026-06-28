@@ -19,7 +19,7 @@ use td_objects::and;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
-use td_objects::dxo::yaml::function_runner::v2::FunctionInput;
+use td_objects::dxo::yaml::function::FunctionInput;
 use td_objects::types::basic::{
     LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId, WorkerId,
 };

@@ -12,9 +12,9 @@ pub mod file_queue;
 pub mod memory;
 pub mod message;
 
-pub use crate::messaging::message::cron_trigger::{CronRequest, CronStartRequest, CronStopRequest};
+pub use crate::messaging::message::cron::{CronRequest, CronStartRequest, CronStopRequest};
 pub use crate::messaging::message::function::{FunctionRequest, FunctionStartRequest};
-pub use crate::messaging::message::stage_trigger::{
+pub use crate::messaging::message::stream::{
     StageTriggerRequest, StageTriggerStartRequest, StageTriggerStopRequest,
 };
 pub use crate::messaging::message::{OrchestratorMessage, OrchestratorMessagePayload};

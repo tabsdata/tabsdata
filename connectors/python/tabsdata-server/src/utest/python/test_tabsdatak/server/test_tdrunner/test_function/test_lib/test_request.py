@@ -106,7 +106,7 @@ def _output_table_payload(**overrides: Any) -> dict:
 
 
 def _envelope(payload: dict) -> dict:
-    return {"FunctionV2": payload}
+    return {"Function": payload}
 
 
 def _write(tmp_path: Path, body: Any, name: str = "request.yaml") -> Path:
@@ -266,13 +266,13 @@ def test_load_unknown_top_level_variant(tmp_path):
     p = _write(tmp_path, {"FunctionV3": {"info": _info_payload()}})
     with pytest.raises(
         InvalidRequestError,
-        match=r"unknown variant 'FunctionV3'; expected one of: FunctionV2",
+        match=r"unknown variant 'FunctionV3'; expected one of: Function",
     ):
         load_request(p)
 
 
 def test_load_top_level_multi_key_envelope(tmp_path):
-    p = _write(tmp_path, {"FunctionV2": {}, "extra": 1})
+    p = _write(tmp_path, {"Function": {}, "extra": 1})
     with pytest.raises(InvalidRequestError, match="single-key variant envelope"):
         load_request(p)
 

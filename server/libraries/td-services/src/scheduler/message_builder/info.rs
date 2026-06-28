@@ -6,7 +6,7 @@ use super::build_external_location;
 use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
-use td_objects::dxo::yaml::function_runner::v2::FunctionInfo;
+use td_objects::dxo::yaml::function::FunctionInfo;
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 

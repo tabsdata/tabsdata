@@ -123,7 +123,7 @@ def built_bundle(tmp_path, user_project, fixture_subscriber) -> Path:
 def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
     path.write_text(
         yaml.safe_dump({
-            "FunctionV2": {
+            "Function": {
                 "info": info_payload(
                     bundle_uri,
                     function_run_id=7,

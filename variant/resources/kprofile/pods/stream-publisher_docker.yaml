@@ -96,12 +96,69 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        # 0020-fetch-request intentionally absent here -- see the
-        # kminus sibling profile for the rationale. The k8s gateway's
-        # `build_stream_run_kit` writes the StreamerV1 request.yaml
-        # into a per-pod ConfigMap and `inject_request_volume_into_job`
-        # mounts it at `/tabsdata/request/request.yaml` on every
-        # container in this pod (TD-2570).
+        # The streamer fetches its resolved request.yaml from the
+        # apiserver resolve endpoint (worker-scoped), like the function
+        # pod -- the gateway provides the resolver via the Secret-backed
+        # `SECRET__TD_RESOLVER_*` env. Downstream containers read it from
+        # the shared dir.
+        - name: 0020-fetch-request
+          image: tabsdata/kube/tabsdata:2.0.0
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/bin/td_fetch_request"]
+          args:
+            - --shared-dir
+            - /tabsdata/shared
+            - --work-dir
+            - /tabsdata/work
+            - --log-config
+            - /tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - /tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - /tabsdata/shared/journal/journal.yaml
+            - --resolver-url
+            - env:SECRET__TD_RESOLVER_URL
+            - --resolver-method
+            - env:SECRET__TD_RESOLVER_METHOD
+            - --resolver-authorization
+            - env:SECRET__TD_RESOLVER_AUTHORIZATION
+            - --request-file
+            - /tabsdata/shared/request/request.yaml
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: ""
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "/tabsdata/config/tabsdata.log.rs.yaml"
+          volumeMounts:
+            - name: config-fetch-request
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
         - name: 0030-localize-fn-bundle
           image: tabsdata/kube/tabsdata:2.0.0
           imagePullPolicy: IfNotPresent
@@ -124,7 +181,7 @@ spec:
             - --journal-file
             - /tabsdata/shared/journal/journal.yaml
             - --request
-            - /tabsdata/request/request.yaml
+            - /tabsdata/shared/request/request.yaml
             - --bundle-dir
             - /tabsdata/shared/bundle/folder
             - --bundle-archive
@@ -190,7 +247,7 @@ spec:
             - --journal-file
             - /tabsdata/shared/journal/journal.yaml
             - --request
-            - /tabsdata/request/request.yaml
+            - /tabsdata/shared/request/request.yaml
             - --trigger-url
             - env:SECRET__TD_TRIGGER_URL
             - --trigger-method
@@ -251,7 +308,7 @@ spec:
             - --journal-file
             - /tabsdata/shared/journal/journal.yaml
             - --request
-            - /tabsdata/request/request.yaml
+            - /tabsdata/shared/request/request.yaml
             - --bundle-dir
             - /tabsdata/shared/bundle/folder
             - --out-dir
@@ -287,6 +344,13 @@ spec:
               mountPath: /tabsdata/shared
       volumes:
         - name: config-begin-execution
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-fetch-request
           projected:
             sources:
               - configMap:

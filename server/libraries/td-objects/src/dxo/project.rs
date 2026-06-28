@@ -9,7 +9,9 @@
 #[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::types::basic::{AtTime, BasePath, Description, ProjectId, ProjectName, UserId, UserName};
+    use crate::types::basic::{
+        AtTime, BasePath, Description, ProjectId, ProjectName, UserId, UserName,
+    };
     use td_common::id::Id;
 
     #[ta_objects::Dao]

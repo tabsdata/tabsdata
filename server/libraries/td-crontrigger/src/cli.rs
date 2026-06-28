@@ -51,7 +51,7 @@ pub fn run() {
 
             // extract cron trigger input
             let cron_trigger = match request {
-                WorkerInput::CronTriggerV1(cron_trigger) => cron_trigger,
+                WorkerInput::CronTrigger(cron_trigger) => cron_trigger,
                 input => {
                     error!("Unsupported WorkerInput type. Request is {input:?}.");
                     Err(ExitStatus::GeneralError)?

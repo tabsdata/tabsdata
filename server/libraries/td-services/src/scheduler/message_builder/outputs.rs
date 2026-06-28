@@ -8,7 +8,7 @@ use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
-use td_objects::dxo::yaml::function_runner::v2::{OutputTable, OutputTableVersion};
+use td_objects::dxo::yaml::function::{OutputTable, OutputTableVersion};
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 

@@ -76,6 +76,11 @@ pub mod internal {
 
     pub const UPDATE_WORKER: &str = url!(INTERNAL_PREFIX, WORKER);
 
+    /// GET: any worker (kubernetes pod) resolves its worker message on
+    /// demand. Worker-scoped so it serves every worker type — the handler
+    /// dispatches on `WorkerType` and returns the matching `WorkerInput`.
+    pub const RESOLVE_WORKER: &str = url!(INTERNAL_PREFIX, WORKER, "/message");
+
     pub const FUNCTION_RUNS: &str = url!("/function-runs");
     pub const FUNCTION_RUN: &str = url!(FUNCTION_RUNS, "/{function_run_id}");
     pub const FUNCTION_RUN_WORKER: &str = url!(FUNCTION_RUN, WORKER);

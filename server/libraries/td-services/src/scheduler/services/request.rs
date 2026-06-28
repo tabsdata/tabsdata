@@ -266,7 +266,7 @@ mod tests {
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
     use td_objects::dxo::yaml::WorkerInput;
-    use td_objects::dxo::yaml::function_runner::v2::{InputTable, OutputTable};
+    use td_objects::dxo::yaml::function::{InputTable, OutputTable};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, EnvPrefix,
@@ -470,7 +470,7 @@ mod tests {
         let created_message: Option<WorkerInput> = created_message
             .as_ref()
             .map(|value| serde_yaml::from_value(value.clone()).expect("WorkerInput"));
-        let Some(WorkerInput::FunctionV2(message)) = created_message else {
+        let Some(WorkerInput::Function(message)) = created_message else {
             panic!("Unexpected WorkerInput version")
         };
 
@@ -718,7 +718,7 @@ mod tests {
         let context_yaml: Option<WorkerInput> = context_yaml
             .as_ref()
             .map(|value| serde_yaml::from_value(value.clone()).expect("WorkerInput"));
-        let Some(WorkerInput::FunctionV2(msg)) = context_yaml else {
+        let Some(WorkerInput::Function(msg)) = context_yaml else {
             panic!("unexpected WorkerInput version");
         };
         assert_eq!(
@@ -852,10 +852,10 @@ mod tests {
         let worker_id = WorkerId::try_from(created[0].id.as_str())?;
         let worker: WorkerDB = db.live().fetch_one::<WorkerDB>(&worker_id).await?;
         assert_eq!(worker.message_status, WorkerMessageStatus::Locked);
-        let function_run_id = worker.physical_function_run_id.clone().unwrap();
 
         // The resolver carries a valid internal token bound to this exact
-        // request: GET, the /message scope, and the worker's resource ids.
+        // request: GET, the /message scope, and the worker-scoped ids
+        // (worker_id + project; function_run_id is fetched from the worker row).
         let bearer = resolver
             .headers
             .get("authorization")
@@ -868,10 +868,7 @@ mod tests {
             claims.bindings.get("worker_id").unwrap(),
             &worker_id.to_string()
         );
-        assert_eq!(
-            claims.bindings.get("function_run_id").unwrap(),
-            &function_run_id.to_string()
-        );
+        assert!(claims.bindings.contains_key("project"));
 
         Ok(())
     }
@@ -961,8 +958,8 @@ mod tests {
     }
 
     /// Kubernetes stage-trigger start: lean `StageTriggerRequest::Start`
-    /// carrying the decorator, POST trigger + responder, and the three resolved
-    /// external locations — all built from the worker + function rows.
+    /// carrying the decorator, the resolver it fetches its `request.yaml`
+    /// from, and the POST trigger + responder callbacks.
     #[td_test::test(db)]
     async fn test_schedule_stage_trigger_start_kubernetes(db: TdPool) -> Result<(), TdError> {
         let (payload, _id, worker) = schedule_trigger_kubernetes(
@@ -987,10 +984,10 @@ mod tests {
         assert_http_post(&start.trigger);
         assert_http_post(&start.responder);
 
-        // The three external locations are distinct (bundle vs stage vs
-        // checkpoint use different path builders).
-        assert_ne!(start.function_bundle.uri, start.function_stage.uri);
-        assert_ne!(start.function_stage.uri, start.function_checkpoint.uri);
+        // The lean k8s message no longer embeds external locations; the pod
+        // fetches its request.yaml from the resolver (a tokenized HTTP GET).
+        let Callback::Http(resolver) = &start.resolver;
+        assert_eq!(resolver.method, Method::GET);
 
         Ok(())
     }

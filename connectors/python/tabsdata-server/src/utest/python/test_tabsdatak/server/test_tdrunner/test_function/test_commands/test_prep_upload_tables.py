@@ -79,7 +79,7 @@ def _write_request(
 ) -> Path:
     wrapped = [_output_table(entry, index) for index, entry in enumerate(output or [])]
     body = {
-        "FunctionV2": {
+        "Function": {
             "info": _info(bundle_uri),
             "output": [table for table in wrapped if table is not None],
         }

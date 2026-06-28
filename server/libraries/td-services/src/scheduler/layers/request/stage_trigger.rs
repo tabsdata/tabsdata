@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use super::shared::{internal_post_callback, internal_request};
+use super::shared::{internal_get_callback, internal_post_callback, internal_request};
 use crate::scheduler::message_builder::build_external_location;
 use http::Method;
 use std::collections::HashMap;
@@ -19,11 +19,11 @@ use td_error::{ApiError, TdError, api_error};
 use td_objects::TaggedExt;
 use td_objects::dxo::function::FunctionDBWithBundleBasePath;
 use td_objects::dxo::worker::WorkerDBWithNames;
-use td_objects::dxo::yaml::stage_trigger::v1::StageTriggerInput;
+use td_objects::dxo::yaml::stage_trigger::StageTriggerInput;
 use td_objects::dxo::yaml::{WorkerInput, stage_trigger};
 use td_objects::rest_urls::internal::{
     DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
-    UPDATE_WORKER,
+    RESOLVE_WORKER, UPDATE_WORKER,
 };
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{AtTime, FunctionVersionId, ProjectIdName, WorkerConfig};
@@ -112,43 +112,22 @@ pub async fn create_locked_stage_trigger_workers_start_request(
                 )
             })?;
 
-        let storage_location = StorageLocation::from(&f.storage_version);
-        // Bundle: stamped base_path on the durable bundle row, joined onto the
-        // function row in `with_bundle_base_path`.
-        let bundle_base_path = f.bundle_base_path.clone();
-
-        // Function bundle
-        let (path, _) = storage_location
-            .builder(&bundle_base_path)
-            .collection(&f.collection_id)
-            .function(&f.bundle_id)
-            .build()?;
-        let (function_bundle, _) = build_external_location(&storage, &path)?;
-
-        // Function stage (stamped stage_base_path + stage_id)
-        let (path, _) = storage_location
-            .builder(&f.stage_base_path)
-            .collection(&f.collection_id)
-            .stage(&f.stage_id)
-            .build()?;
-        let (function_stage, _) = build_external_location(&storage, &path)?;
-
-        // Function checkpoint (stamped stage_base_path + stage_id)
-        let (path, _) = storage_location
-            .builder(&f.stage_base_path)
-            .collection(&f.collection_id)
-            .checkpoint(&f.stage_id)
-            .build()?;
-        let (function_checkpoint, _) = build_external_location(&storage, &path)?;
-
         let payload = if kubernetes {
-            // Kubernetes: lean request carrying the callbacks, the resolved
-            // locations, and the worker-row identity.
+            // Kubernetes: lean request carrying the worker-lifecycle
+            // callbacks + worker-row identity. The pod fetches its
+            // request.yaml from the worker-scoped resolver endpoint.
+            let resolver = internal_get_callback(
+                &jwt,
+                server_address,
+                RESOLVE_WORKER,
+                &[("project", proj.as_str()), ("worker_id", &worker_id)],
+            )?;
             OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
                 StageTriggerRequest::Start(StageTriggerStartRequest {
                     worker: WorkerName::StageTrigger,
                     worker_id: stage_trigger_worker.id,
                     decorator: f.decorator.to_message(),
+                    resolver,
                     trigger: Callback::Http(fn_trigger),
                     responder: callback,
                     project_id: stage_trigger_worker.project_id,
@@ -157,16 +136,42 @@ pub async fn create_locked_stage_trigger_workers_start_request(
                     connection_id: stage_trigger_worker.connection_id,
                     function_version_id: stage_trigger_worker.function_version_id.clone(),
                     function: stage_trigger_worker.function.clone(),
-                    function_bundle,
-                    function_stage,
-                    function_checkpoint,
-                    scheduled_on: AtTime::now(),
-                    config: WorkerConfig::serialize(&stage_trigger_worker.worker_config)?,
                 }),
             )
         } else {
-            // Supervisor: resolve the full message here. fn_state / fn_status are
-            // only embedded in the eagerly-resolved message.
+            // Supervisor: resolve the full message here -- including the
+            // external locations the k8s path leaves to the resolve endpoint.
+            // fn_state / fn_status are only embedded in the eagerly-resolved
+            // message.
+            let storage_location = StorageLocation::from(&f.storage_version);
+            // Bundle: stamped base_path on the durable bundle row, joined onto
+            // the function row in `with_bundle_base_path`.
+            let bundle_base_path = f.bundle_base_path.clone();
+
+            // Function bundle
+            let (path, _) = storage_location
+                .builder(&bundle_base_path)
+                .collection(&f.collection_id)
+                .function(&f.bundle_id)
+                .build()?;
+            let (function_bundle, _) = build_external_location(&storage, &path)?;
+
+            // Function stage (stamped stage_base_path + stage_id)
+            let (path, _) = storage_location
+                .builder(&f.stage_base_path)
+                .collection(&f.collection_id)
+                .stage(&f.stage_id)
+                .build()?;
+            let (function_stage, _) = build_external_location(&storage, &path)?;
+
+            // Function checkpoint (stamped stage_base_path + stage_id)
+            let (path, _) = storage_location
+                .builder(&f.stage_base_path)
+                .collection(&f.collection_id)
+                .checkpoint(&f.stage_id)
+                .build()?;
+            let (function_checkpoint, _) = build_external_location(&storage, &path)?;
+
             let fn_state = internal_request(
                 &jwt,
                 server_address,
@@ -188,7 +193,7 @@ pub async fn create_locked_stage_trigger_workers_start_request(
 
             // Build info
             // TODO Urls are wrong as of now
-            let info = stage_trigger::v1::Info {
+            let info = stage_trigger::Info {
                 worker_id: stage_trigger_worker.id,
                 project_id: stage_trigger_worker.project_id,
                 collection_id: stage_trigger_worker.collection_id,
@@ -207,7 +212,7 @@ pub async fn create_locked_stage_trigger_workers_start_request(
             };
             // Build message context
             let stage_trigger_input = StageTriggerInput { info };
-            let context = WorkerInput::StageTriggerV1(Box::new(stage_trigger_input));
+            let context = WorkerInput::StageTrigger(Box::new(stage_trigger_input));
 
             // Build message payload
             // TODO ADD get_states to states

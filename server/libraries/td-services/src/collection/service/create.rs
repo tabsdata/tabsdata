@@ -212,8 +212,8 @@ mod tests {
     use td_objects::dxo::collection::CollectionCreateDB;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, CollectionName, CollectionType, Description, GroupName,
-        ProjectId, ProjectName, UserId, UserName,
+        AccessTokenId, AtTime, CollectionName, CollectionType, Description, GroupName, ProjectId,
+        ProjectName, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;

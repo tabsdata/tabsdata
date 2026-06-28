@@ -148,7 +148,7 @@ class Response(BaseModel):
     def to_worker_output(self) -> dict:
         """Render as the apiserver callback ``WorkerOutput`` context.
 
-        Mirrors the Rust ``WorkerOutput::FunctionV2`` wrapping a
+        Mirrors the Rust ``WorkerOutput::Function`` wrapping a
         ``FunctionOutput`` of externally-tagged ``WrittenTable`` entries:
         a modified table (``info`` present) becomes ``Data``, a
         not-modified table becomes ``NoData``. The flat on-disk
@@ -166,7 +166,7 @@ class Response(BaseModel):
                         "info": entry.info.model_dump(mode="json", exclude_none=True),
                     }
                 })
-        return {"FunctionV2": {"output": written}}
+        return {"Function": {"output": written}}
 
 
 def write_response(resp: Response, path: Path) -> None:

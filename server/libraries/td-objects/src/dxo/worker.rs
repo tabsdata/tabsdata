@@ -7,7 +7,7 @@ mod definitions {
     use crate::dxo::function::FunctionDB;
     use crate::dxo::run_metrics::RunMetrics;
     use crate::dxo::yaml::WorkerOutput;
-    use crate::dxo::yaml::function_runner::v2::WrittenTable;
+    use crate::dxo::yaml::function::WrittenTable;
     use crate::types::basic::{
         AtTime, ByteCount, CollectionId, CollectionName, ConnectionId, CronMask, Enabled, EpochMs,
         ExecutionId, ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId,
@@ -147,7 +147,7 @@ mod definitions {
         #[builder(default)]
         pub ended_on_month_ms: Option<EpochMs>,
         // Per-attempt metrics aggregated from the worker callback's
-        // FunctionV2 output. `metric_data_bytes` stays None when the
+        // Function output. `metric_data_bytes` stays None when the
         // worker yaml omits `data_bytes` on every written table.
         #[builder(default)]
         pub metric_table_versions: Option<TableVersionCount>,
@@ -177,12 +177,12 @@ mod definitions {
                 BucketFloors::from_utc(dt)
             });
 
-            // Aggregate per-attempt metrics from the worker's FunctionV2
+            // Aggregate per-attempt metrics from the worker's Function
             // output into a single RunMetrics. `None` = no output payload
             // (E/F/X/Y/U); `Some(_)` = output, with `data_bytes` itself
             // optional for the older-worker-yaml case.
             let metrics: Option<RunMetrics> = match &value.context {
-                Some(WorkerOutput::V2(o) | WorkerOutput::FunctionV2(o)) => {
+                Some(WorkerOutput::Function(o)) => {
                     let mut tables: i64 = 0;
                     let mut rows: i64 = 0;
                     let mut bytes: Option<i64> = None;

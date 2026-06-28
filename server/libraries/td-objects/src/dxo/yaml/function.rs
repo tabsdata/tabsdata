@@ -264,7 +264,7 @@ mod tests {
         let defined_on = AtTime::default();
 
         let project_id = ProjectId::default();
-        let input = WorkerInput::FunctionV2(Box::new(FunctionInput {
+        let input = WorkerInput::Function(Box::new(FunctionInput {
             info: FunctionInfo {
                 project_id,
                 collection_id,
@@ -367,7 +367,7 @@ mod tests {
         assert_eq!(
             serialized.as_str(),
             format!(
-                r#"!FunctionV2
+                r#"!Function
 info:
   project_id: {project_id}
   collection_id: {collection_id}
@@ -652,7 +652,7 @@ output:
                 },
             ])
             .build()?;
-        let function_output = WorkerOutput::FunctionV2(function_output);
+        let function_output = WorkerOutput::Function(function_output);
 
         println!("{}", serde_json::to_string(&function_output).unwrap());
         println!("{}", serde_yaml::to_string(&function_output).unwrap());
@@ -824,7 +824,7 @@ output:
             .system_output(vec![ot3])
             .output(vec![ot4, ot5])
             .build()?;
-        let function_input = WorkerInput::FunctionV2(Box::new(function_input));
+        let function_input = WorkerInput::Function(Box::new(function_input));
         assert_eq!(
             function_input
                 .locations()

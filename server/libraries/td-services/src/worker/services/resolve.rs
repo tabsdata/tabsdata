@@ -2,16 +2,18 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::scheduler::message_builder::{build_function_v2, prefetch_dispatch};
+use crate::scheduler::message_builder::{
+    build_cron_input, build_function_v2, build_streamer_input, prefetch_dispatch,
+};
 use ta_services::factory::service_factory;
 use td_database::dynamic::DynamicConnection;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB};
+use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames};
 use td_objects::dxo::yaml::WorkerInput;
-use td_objects::rest_urls::internal::PhysicalFunctionRunWorkerIdParam;
+use td_objects::rest_urls::internal::WorkerIdParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, PhysicalFunctionRunId, WorkerId};
+use td_objects::types::basic::{AtTime, WorkerId, WorkerType};
 use td_queries::{LfrEntry, LiveEntry};
 use td_storage::Storage;
 use td_tower::default_services::TransactionProvider;
@@ -22,7 +24,7 @@ use tracing::instrument;
 
 #[service_factory(
     name = ResolveWorkerMessageService,
-    request = ReadRequest<PhysicalFunctionRunWorkerIdParam>,
+    request = ReadRequest<WorkerIdParam>,
     response = WorkerInput,
     connection = TransactionProvider,
     // Internal worker-callback handler; the apiserver's project_resolver sets
@@ -33,28 +35,19 @@ use tracing::instrument;
 )]
 fn service() {
     layers!(
-        from_fn(
-            With::<ReadRequest<PhysicalFunctionRunWorkerIdParam>>::extract_name::<
-                PhysicalFunctionRunWorkerIdParam,
-            >
-        ),
-        from_fn(With::<PhysicalFunctionRunWorkerIdParam>::extract::<PhysicalFunctionRunId>),
-        from_fn(With::<PhysicalFunctionRunWorkerIdParam>::extract::<WorkerId>),
-        from_fn(With::<ReadRequest<PhysicalFunctionRunWorkerIdParam>>::extract::<RequestContext>),
+        from_fn(With::<ReadRequest<WorkerIdParam>>::extract_name::<WorkerIdParam>),
+        from_fn(With::<WorkerIdParam>::extract::<WorkerId>),
+        from_fn(With::<ReadRequest<WorkerIdParam>>::extract::<RequestContext>),
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(resolve_worker_message),
     )
 }
 
-/// Resolve a function-run worker's message on demand: rebuild the fully
-/// resolved `FunctionV2` from DB state as of the request time (late
-/// binding at `RequestContext.time`, the request boundary — the same
-/// role the dispatch tick's captured `AtTime` plays for the supervisor)
-/// and flip the worker message status `Locked → Unlocked`. This is the
-/// kubernetes path's replacement for the supervisor dispatch tick — the
-/// pod pulls its message here instead of the scheduler renaming a queue
-/// file. Resolution reuses the same `build_function_v2` the supervisor
-/// request layer uses, so the two paths can't drift.
+/// Resolve any worker's message on demand: the single yaml generator the
+/// kubernetes pull path uses (the replacement for the supervisor dispatch
+/// tick — the pod pulls its message here instead of the scheduler renaming
+/// a queue file). Dispatches on the worker's type to build the matching
+/// `WorkerInput`, then flips the worker message status `Locked → Unlocked`.
 #[instrument(
     name = "scheduler.resolve_worker_message",
     skip_all,
@@ -64,33 +57,55 @@ fn service() {
 pub async fn resolve_worker_message(
     mut conn: MutRef<DynamicConnection<'static>>,
     storage: Ref<Storage>,
-    function_run_id: Ref<PhysicalFunctionRunId>,
     worker_id: Ref<WorkerId>,
     at: Ref<AtTime>,
 ) -> Result<WorkerInput, TdError> {
     let worker_id = &*worker_id;
-    let function_run_id = &*function_run_id;
 
-    // 404 guard: a rolled-back request leaves no WorkerDB row, so an
-    // orphan pod resolving its message gets a clean not-found.
-    let _worker: WorkerDB = conn.live().fetch_one::<WorkerDB>(worker_id).await?;
+    // 404 guard + type dispatch: a rolled-back request leaves no worker
+    // row, so an orphan pod resolving its message gets a clean not-found.
+    let worker: WorkerDBWithNames = conn
+        .live()
+        .fetch_one::<WorkerDBWithNames>(worker_id)
+        .await?;
 
-    // Dispatch projection for this FR (patch-aware fvid COALESCE).
-    let fr_ids = [function_run_id.clone()];
-    let frs = conn.lfr().for_dispatch(&fr_ids).await?;
-    let f = frs.into_iter().next().ok_or_else(|| {
-        api_error!(
-            ApiError::NotFound,
-            "no dispatchable function run [{}] for worker [{}]",
-            function_run_id,
-            worker_id,
-        )
-    })?;
+    let input = match worker.worker_type {
+        WorkerType::FunctionRunner => {
+            let function_run_id = worker.physical_function_run_id.clone().ok_or_else(|| {
+                api_error!(
+                    ApiError::InternalError,
+                    "function-runner worker [{}] has no physical_function_run_id",
+                    worker_id,
+                )
+            })?;
 
-    // Resolve the message as of the request time — late binding against
-    // the upstream versions committed by the time the pod asked for it.
-    let prefetch = prefetch_dispatch(&mut conn, std::slice::from_ref(&f), &at).await?;
-    let function_input = build_function_v2(&mut conn, &storage, &f, &prefetch).await?;
+            // Dispatch projection for this FR (patch-aware fvid COALESCE).
+            let fr_ids = [function_run_id.clone()];
+            let frs = conn.lfr().for_dispatch(&fr_ids).await?;
+            let f = frs.into_iter().next().ok_or_else(|| {
+                api_error!(
+                    ApiError::NotFound,
+                    "no dispatchable function run [{}] for worker [{}]",
+                    function_run_id,
+                    worker_id,
+                )
+            })?;
+
+            // Resolve as of the request time — late binding against the
+            // upstream versions committed by the time the pod asked.
+            let prefetch = prefetch_dispatch(&mut conn, std::slice::from_ref(&f), &at).await?;
+            let function_input = build_function_v2(&mut conn, &storage, &f, &prefetch).await?;
+            WorkerInput::Function(Box::new(function_input))
+        }
+        WorkerType::StageTrigger => {
+            let streamer_input = build_streamer_input(&mut conn, &storage, &worker).await?;
+            WorkerInput::Streamer(Box::new(streamer_input))
+        }
+        WorkerType::CronTrigger => {
+            let cron_input = build_cron_input(&worker)?;
+            WorkerInput::Cron(Box::new(cron_input))
+        }
+    };
 
     // Flip Locked → Unlocked — the "make ready" the dispatch tick did for
     // the supervisor path. Idempotent: a pod restart can re-pull.
@@ -99,7 +114,7 @@ pub async fn resolve_worker_message(
         .update::<_, WorkerDB>(&update, worker_id)
         .await?;
 
-    Ok(WorkerInput::FunctionV2(Box::new(function_input)))
+    Ok(input)
 }
 
 #[cfg(test)]
@@ -121,7 +136,7 @@ mod tests {
     use td_tower::ctx_service::RawOneshot;
 
     /// Seed a publisher + a Locked function-runner worker, then resolve its
-    /// message via the endpoint service: it returns a resolved FunctionV2
+    /// message via the endpoint service: it returns a resolved Function
     /// for the FR and flips the worker status Locked -> Unlocked.
     #[td_test::test(db)]
     async fn test_resolve_worker_message(db: TdPool) -> Result<(), TdError> {
@@ -174,9 +189,8 @@ mod tests {
             .function_runner_worker(&execution, &transaction, &pfr, &WorkerMessageStatus::Locked)
             .await?;
 
-        // Resolve the message via the endpoint service.
-        let param = PhysicalFunctionRunWorkerIdParam {
-            function_run_id: pfr.id.clone(),
+        // Resolve the message via the endpoint service (worker-scoped).
+        let param = WorkerIdParam {
             worker_id: worker.id,
         };
         let read = RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -187,9 +201,9 @@ mod tests {
             .raw_oneshot(read)
             .await?;
 
-        // Returns a resolved FunctionV2 for this FR.
-        let WorkerInput::FunctionV2(message) = response else {
-            panic!("expected FunctionV2");
+        // Returns a resolved Function for this FR.
+        let WorkerInput::Function(message) = response else {
+            panic!("expected Function");
         };
         assert_eq!(message.info.function_run_id, pfr.id);
 

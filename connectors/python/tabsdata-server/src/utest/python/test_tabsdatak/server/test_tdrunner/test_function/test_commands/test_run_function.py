@@ -454,7 +454,7 @@ def _output_table(entry: dict, index: int) -> dict:
 
 
 def _write_request(path: Path) -> Path:
-    path.write_text(yaml.safe_dump({"FunctionV2": {"info": _info()}}))
+    path.write_text(yaml.safe_dump({"Function": {"info": _info()}}))
     return path
 
 
@@ -1259,7 +1259,7 @@ def _request_with_state_slots(
     info["function_run_id"] = 4
     path.write_text(
         yaml.safe_dump({
-            "FunctionV2": {
+            "Function": {
                 "info": info,
                 "output": [_output_table({"name": "my_table"}, 0)],
                 "system_input": [

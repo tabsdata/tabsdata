@@ -12,7 +12,7 @@ import pytest
 
 # --- Shared synthetic Request.info builder --------------------------------
 #
-# Single source of truth for the ``FunctionV2.info`` payload used by
+# Single source of truth for the ``Function.info`` payload used by
 # tests that need a request.yaml on disk. Each command's ``test_*.py``
 # previously defined its own near-identical ``_info`` (or inlined the
 # dict in ``_write_request``) -- eight copies in total, each missing
@@ -32,7 +32,7 @@ def info_payload(
     bundle_uri: str = "file:///bundle.tgz",
     **overrides: Any,
 ) -> dict[str, Any]:
-    """Build a synthetic ``FunctionV2.info`` dict.
+    """Build a synthetic ``Function.info`` dict.
 
     ``bundle_uri`` is the most-commonly-overridden field, so it's a
     positional shortcut; everything else goes through ``**overrides``.

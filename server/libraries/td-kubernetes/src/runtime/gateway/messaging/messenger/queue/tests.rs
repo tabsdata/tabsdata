@@ -12,10 +12,8 @@ use td_bridge::messaging::{
     StageTriggerStopRequest,
 };
 use td_common::worker::{Callback, Decorator, HttpRequest, MessageAction, WorkerName};
-use td_objects::dxo::yaml::location::Location;
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, ProjectId,
-    WorkerConfig, WorkerId,
+    CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, ProjectId, WorkerId,
 };
 use url::Url;
 
@@ -46,13 +44,6 @@ fn responder() -> Callback {
         headers: HashMap::new(),
         body: true,
     })
-}
-
-fn location() -> Location {
-    Location {
-        uri: Url::parse("file:///x").unwrap(),
-        env_prefix: None,
-    }
 }
 
 fn publisher_key(worker: &WorkerName) -> String {
@@ -117,6 +108,7 @@ fn stream_publisher_start_routes_by_worker_name() {
                 worker: WorkerName::StageTrigger,
                 worker_id: WorkerId::default(),
                 decorator: Decorator::Publisher,
+                resolver: resolver(),
                 trigger: trigger(),
                 responder: responder(),
                 project_id: ProjectId::default(),
@@ -125,11 +117,6 @@ fn stream_publisher_start_routes_by_worker_name() {
                 connection_id: None,
                 function_version_id: FunctionVersionId::try_from("FV20260101.0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
-                function_bundle: location(),
-                function_stage: location(),
-                function_checkpoint: location(),
-                scheduled_on: AtTime::default(),
-                config: WorkerConfig::default(),
             }),
         );
     let routing = derive_routing("work", &payload).unwrap();
@@ -178,6 +165,7 @@ fn cron_publisher_start_routes_by_worker_name() {
             CronStartRequest {
                 worker: WorkerName::CronTrigger,
                 worker_id: WorkerId::default(),
+                resolver: resolver(),
                 trigger: trigger(),
                 responder: responder(),
                 project_id: ProjectId::default(),
@@ -186,8 +174,6 @@ fn cron_publisher_start_routes_by_worker_name() {
                 connection_id: None,
                 function_version_id: FunctionVersionId::try_from("FV20260101.0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
-                scheduled_on: AtTime::default(),
-                config: WorkerConfig::default(),
             },
         ));
     let routing = derive_routing("task", &payload).unwrap();

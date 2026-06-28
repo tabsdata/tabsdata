@@ -22,7 +22,7 @@ use td_objects::dxo::logical::{
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
 use td_objects::dxo::table::TableDB;
-use td_objects::dxo::yaml::function_runner::v2::{InputTable, InputTableVersion};
+use td_objects::dxo::yaml::function::{InputTable, InputTableVersion};
 use td_objects::types::basic::{
     AtTime, CollectionId, DependencyPos, ExecutionId, FunctionId, HasData, LogicalFunctionRunId,
     LogicalPointerStatus, LogicalTableDataVersionId, PhysicalFunctionRunId,

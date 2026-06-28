@@ -59,7 +59,7 @@ def _write_request(path: Path) -> Path:
     overrides instead of letting the helper's defaults through."""
     path.write_text(
         yaml.safe_dump({
-            "FunctionV2": {
+            "Function": {
                 "info": info_payload(
                     function_run_id=7,
                     transaction_id="tx-42",

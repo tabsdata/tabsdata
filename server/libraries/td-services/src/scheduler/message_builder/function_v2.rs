@@ -9,10 +9,10 @@ use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
-use td_objects::dxo::yaml::function_runner::v2::FunctionInput;
+use td_objects::dxo::yaml::function::FunctionInput;
 use td_storage::Storage;
 
-/// Assemble the resolved `FunctionV2` worker input for one FR: identity
+/// Assemble the resolved `Function` worker input for one FR: identity
 /// info + input tables resolved to physical versions/locations + output
 /// tables. The single assembler shared by the supervisor request layer
 /// (at = dispatch tick) and the kubernetes resolve endpoint (at = now()),

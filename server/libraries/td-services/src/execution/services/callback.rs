@@ -174,7 +174,7 @@ mod tests {
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBWithNames;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
     use td_objects::dxo::yaml::WorkerOutput;
-    use td_objects::dxo::yaml::function_runner::v2::{FunctionOutput, TableInfo, WrittenTable};
+    use td_objects::dxo::yaml::function::{FunctionOutput, TableInfo, WrittenTable};
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName, HasData,
         LogicalFunctionRunStatus, ProjectId, RowCount, SchemaChanged, SchemaHash, TableName,
@@ -599,7 +599,7 @@ mod tests {
             }],
             "f_0",
             WorkerCallbackStatus::Done,
-            Some(WorkerOutput::FunctionV2(
+            Some(WorkerOutput::Function(
                 FunctionOutput::builder()
                     .output(vec![
                         WrittenTable::NoData {
@@ -714,7 +714,7 @@ mod tests {
             }],
             "f_0",
             WorkerCallbackStatus::Done,
-            Some(WorkerOutput::FunctionV2(
+            Some(WorkerOutput::Function(
                 FunctionOutput::builder()
                     .output(vec![
                         WrittenTable::NoData {
@@ -756,7 +756,7 @@ mod tests {
             }],
             "f_0",
             WorkerCallbackStatus::Done,
-            Some(WorkerOutput::FunctionV2(
+            Some(WorkerOutput::Function(
                 FunctionOutput::builder()
                     .output(vec![
                         WrittenTable::Data {

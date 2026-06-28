@@ -26,7 +26,7 @@ mod routes {
     use td_objects::rest_urls::internal::{
         DOWNLOAD_FUNCTION_STATE, FUNCTION_VERSION_EXECUTE, FUNCTION_VERSION_EXECUTION_STATUS,
         FunctionVersionAtId, FunctionVersionExecution, PhysicalFunctionRunWorkerIdParam,
-        RESOLVE_FUNCTION_RUN_WORKER, UPDATE_FUNCTION_RUN_WORKER, UPDATE_WORKER, WorkerIdParam,
+        RESOLVE_WORKER, UPDATE_FUNCTION_RUN_WORKER, UPDATE_WORKER, WorkerIdParam,
     };
     use td_objects::rest_urls::{ExecutionParam, FunctionVersionIdParam};
     use td_objects::types::basic::ProjectId;
@@ -67,13 +67,13 @@ mod routes {
         Ok(UpdateStatus::OK(response))
     }
 
-    #[apiserver_path(method = get, path = RESOLVE_FUNCTION_RUN_WORKER, tag = INTERNAL_TAG)]
-    #[doc = "Resolve and return a function-run worker's message (kubernetes pull path)"]
-    pub async fn function_run_message(
+    #[apiserver_path(method = get, path = RESOLVE_WORKER, tag = INTERNAL_TAG)]
+    #[doc = "Resolve and return a worker's message (kubernetes pull path)"]
+    pub async fn worker_message(
         State(state): State<Arc<WorkerServices>>,
         Extension(context): Extension<RequestContext>,
         Extension(project_id): Extension<ProjectId>,
-        Path(param): Path<PhysicalFunctionRunWorkerIdParam>,
+        Path(param): Path<WorkerIdParam>,
     ) -> Result<GetStatus<WorkerInput>, ErrorStatus> {
         let request = context.read(param).in_project(project_id);
         let response = state.resolve_message.service().oneshot(request).await?;

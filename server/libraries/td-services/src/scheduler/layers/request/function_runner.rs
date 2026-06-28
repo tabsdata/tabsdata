@@ -20,7 +20,7 @@ use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunc
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::dxo::yaml::WorkerInput;
-use td_objects::rest_urls::internal::{RESOLVE_FUNCTION_RUN_WORKER, UPDATE_FUNCTION_RUN_WORKER};
+use td_objects::rest_urls::internal::{RESOLVE_WORKER, UPDATE_FUNCTION_RUN_WORKER};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{
     AtTime, Enabled, ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId, ProjectIdName,
@@ -250,13 +250,13 @@ pub async fn create_locked_function_runner_workers_start_request(
             internal_post_callback(&jwt, server_address, UPDATE_FUNCTION_RUN_WORKER, &bindings)?;
 
         // The message kind differs by orchestrator: supervisor ships a flat
-        // request carrying the fully-resolved FunctionV2 context; kubernetes
+        // request carrying the fully-resolved Function context; kubernetes
         // ships a per-action FunctionRequest carrying the decorator + resolver,
         // resolved later via the endpoint.
         let payload = match prefetch.as_ref() {
             Some(prefetch) => {
                 let function_input_v2 = build_function_v2(&mut conn, &storage, f, prefetch).await?;
-                let function_input = WorkerInput::FunctionV2(Box::new(function_input_v2));
+                let function_input = WorkerInput::Function(Box::new(function_input_v2));
                 let context = serde_yaml::to_value(&function_input).map_err(|e| {
                     api_error!(
                         ApiError::InternalError,
@@ -279,8 +279,8 @@ pub async fn create_locked_function_runner_workers_start_request(
                 let resolver = internal_get_callback(
                     &jwt,
                     server_address,
-                    RESOLVE_FUNCTION_RUN_WORKER,
-                    &bindings,
+                    RESOLVE_WORKER,
+                    &[("project", proj.as_str()), ("worker_id", w_id.as_str())],
                 )?;
                 OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
                     FunctionRequest::Start(FunctionStartRequest {

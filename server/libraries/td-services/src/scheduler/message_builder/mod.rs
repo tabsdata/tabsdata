@@ -2,21 +2,25 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Builder for the function-runner worker message (`FunctionV2`).
+//! Builder for the function-runner worker message (`Function`).
 //!
 //! The version-resolution + message-assembly logic shared by the
 //! supervisor request layer (batch, at = dispatch tick) and the
 //! kubernetes resolve endpoint (single FR, at = now()).
 
+mod cron;
 mod function_v2;
 mod info;
 mod inputs;
 mod locations;
 mod outputs;
+mod streamer;
 
+pub(crate) use cron::build_cron_input;
 pub(crate) use function_v2::build_function_v2;
 pub(crate) use inputs::prefetch_dispatch;
 pub(crate) use locations::build_external_location;
+pub(crate) use streamer::build_streamer_input;
 
 use std::collections::HashMap;
 

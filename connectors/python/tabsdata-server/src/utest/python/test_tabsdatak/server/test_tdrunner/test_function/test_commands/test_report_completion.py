@@ -111,7 +111,7 @@ def _output_table(entry, index):
 
 def _write_request(path, *, output=None, system_output=None):
     body = {
-        "FunctionV2": {
+        "Function": {
             "info": _info(),
             "output": [
                 _output_table(entry, index) for index, entry in enumerate(output or [])
@@ -235,7 +235,7 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
     assert posted["headers"]["Content-Type"] == "application/json"
     payload = json.loads(posted["body"])
     assert payload["status"] == "Done"
-    written = payload["context"]["FunctionV2"]["output"]
+    written = payload["context"]["Function"]["output"]
     posted_by_name = {next(iter(entry.values()))["table"]: entry for entry in written}
     assert "Data" in posted_by_name["customers"]
     assert (
@@ -272,7 +272,7 @@ def test_main_no_info_when_manifest_file_is_null(monkeypatch, tmp_path, responde
     assert parsed["output"][0] == {"table": "missing"}
     # NoData on the wire too.
     payload = json.loads(request_log[0]["body"])
-    written = payload["context"]["FunctionV2"]["output"]
+    written = payload["context"]["Function"]["output"]
     assert written[0] == {"NoData": {"table": "missing"}}
 
 

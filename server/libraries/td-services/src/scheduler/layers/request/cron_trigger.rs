@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use super::shared::{internal_post_callback, internal_request};
+use super::shared::{internal_get_callback, internal_post_callback, internal_request};
 use http::Method;
 use std::collections::HashMap;
 use td_authz::jwt::JwtConfig;
@@ -15,9 +15,9 @@ use td_common::worker::{Callback, MessageAction, RequestMessagePayload, WorkerCl
 use td_error::{ApiError, TdError, api_error};
 use td_objects::TaggedExt;
 use td_objects::dxo::worker::WorkerDBWithNames;
-use td_objects::dxo::yaml::cron_trigger::v1::CronTriggerInput;
+use td_objects::dxo::yaml::cron_trigger::CronTriggerInput;
 use td_objects::dxo::yaml::{WorkerInput, cron_trigger};
-use td_objects::rest_urls::internal::{FUNCTION_VERSION_EXECUTE, UPDATE_WORKER};
+use td_objects::rest_urls::internal::{FUNCTION_VERSION_EXECUTE, RESOLVE_WORKER, UPDATE_WORKER};
 use td_objects::types::addresses::InternalServerAddresses;
 use td_objects::types::basic::{AtTime, ProjectIdName, WorkerConfig};
 use td_tower::extractors::Ref;
@@ -75,11 +75,19 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                 )?;
 
                 let payload = if kubernetes {
-                    // Kubernetes: lean request built entirely from the worker row.
+                    // Kubernetes: lean request built entirely from the worker
+                    // row. The pod resolves its message from the resolver.
+                    let resolver = internal_get_callback(
+                        &jwt,
+                        server_address,
+                        RESOLVE_WORKER,
+                        &[("project", proj.as_str()), ("worker_id", &worker_id)],
+                    )?;
                     OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(
                         CronRequest::Start(CronStartRequest {
                             worker: WorkerName::CronTrigger,
                             worker_id: cron_trigger_worker.id,
+                            resolver,
                             trigger: Callback::Http(task),
                             responder: callback,
                             project_id: cron_trigger_worker.project_id,
@@ -88,14 +96,12 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                             connection_id: cron_trigger_worker.connection_id,
                             function_version_id: cron_trigger_worker.function_version_id.clone(),
                             function: cron_trigger_worker.function.clone(),
-                            scheduled_on: AtTime::now(),
-                            config: WorkerConfig::serialize(&cron_trigger_worker.worker_config)?,
                         }),
                     )
                 } else {
                     // Supervisor: resolve the full message here.
                     // TODO ADD get_states to states
-                    let info = cron_trigger::v1::Info {
+                    let info = cron_trigger::Info {
                         worker_id: cron_trigger_worker.id,
                         collection_id: cron_trigger_worker.collection_id,
                         collection: cron_trigger_worker.collection.clone(),
@@ -106,7 +112,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                         config: WorkerConfig::serialize(&cron_trigger_worker.worker_config)?,
                     };
                     let cron_trigger_input = CronTriggerInput { info };
-                    let context = WorkerInput::CronTriggerV1(Box::new(cron_trigger_input));
+                    let context = WorkerInput::CronTrigger(Box::new(cron_trigger_input));
 
                     let message_payload = RequestMessagePayload::<serde_yaml::Value> {
                         class: WorkerClass::Ephemeral,

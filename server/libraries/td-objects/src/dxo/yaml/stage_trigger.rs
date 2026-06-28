@@ -74,7 +74,7 @@ mod tests {
             end: Some(end),
         };
         let project_id = ProjectId::default();
-        let input = WorkerInput::StageTriggerV1(Box::new(StageTriggerInput {
+        let input = WorkerInput::StageTrigger(Box::new(StageTriggerInput {
             info: Info {
                 worker_id,
                 project_id,
@@ -134,7 +134,7 @@ mod tests {
         assert_eq!(
             serialized.as_str(),
             format!(
-                r#"!StageTriggerV1
+                r#"!StageTrigger
 info:
   worker_id: {worker_id}
   project_id: {project_id}

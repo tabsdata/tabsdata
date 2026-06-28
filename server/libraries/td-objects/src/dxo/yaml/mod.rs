@@ -7,38 +7,45 @@ use crate::types::basic::{CollectionName, FunctionName};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+pub mod cron;
 pub mod cron_trigger;
-pub mod function_runner;
+pub mod function;
 pub mod location;
 pub mod stage_trigger;
+pub mod stream;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum WorkerInput {
-    FunctionV2(Box<function_runner::v2::FunctionInput>),
-    /// Logical-only input format. Worker resolves
-    /// `logical_table_data_version_id` to a concrete TDV at execution
-    /// start. Output side stays pre-resolved (same as v2).
-    FunctionV3(Box<function_runner::v3::FunctionInput>),
-    CronTriggerV1(Box<cron_trigger::v1::CronTriggerInput>),
-    StageTriggerV1(Box<stage_trigger::v1::StageTriggerInput>),
+    Function(Box<function::FunctionInput>),
+    CronTrigger(Box<cron_trigger::CronTriggerInput>),
+    StageTrigger(Box<stage_trigger::StageTriggerInput>),
+    /// Lean k8s streamer input (callback-free; the streamer reads its
+    /// callbacks from env). Built by the resolve endpoint, fetched by
+    /// the stream-publisher pod.
+    Streamer(Box<stream::StreamerInput>),
+    /// Lean k8s cron input (callback-free; the cron-publisher reads its
+    /// trigger from env). Built by the resolve endpoint.
+    Cron(Box<cron::CronInput>),
 }
 
 impl WorkerInput {
     pub fn collection(&self) -> &CollectionName {
         match self {
-            WorkerInput::FunctionV2(i) => &i.info.collection,
-            WorkerInput::FunctionV3(i) => &i.info.collection,
-            WorkerInput::CronTriggerV1(i) => &i.info.collection,
-            WorkerInput::StageTriggerV1(i) => &i.info.collection,
+            WorkerInput::Function(i) => &i.info.collection,
+            WorkerInput::CronTrigger(i) => &i.info.collection,
+            WorkerInput::StageTrigger(i) => &i.info.collection,
+            WorkerInput::Streamer(i) => &i.info.collection,
+            WorkerInput::Cron(i) => &i.info.collection,
         }
     }
 
     pub fn function(&self) -> &FunctionName {
         match self {
-            WorkerInput::FunctionV2(i) => &i.info.function,
-            WorkerInput::FunctionV3(i) => &i.info.function,
-            WorkerInput::CronTriggerV1(i) => &i.info.function,
-            WorkerInput::StageTriggerV1(i) => &i.info.function,
+            WorkerInput::Function(i) => &i.info.function,
+            WorkerInput::CronTrigger(i) => &i.info.function,
+            WorkerInput::StageTrigger(i) => &i.info.function,
+            WorkerInput::Streamer(i) => &i.info.function,
+            WorkerInput::Cron(i) => &i.info.function,
         }
     }
 }
@@ -54,23 +61,16 @@ impl TryFrom<serde_yaml::Value> for WorkerInput {
 impl Locations for WorkerInput {
     fn locations(&self) -> Vec<&Location> {
         match self {
-            WorkerInput::FunctionV2(i) => i.locations(),
-            // v3 ships only logical refs for the function and its
-            // inputs/outputs; the worker resolves them at execution time.
-            // Server-visible locations are limited to `function_data`
-            // (collection-scoped storage; pointer-independent).
-            WorkerInput::FunctionV3(i) => vec![&i.info.function_data],
-            WorkerInput::CronTriggerV1(i) => i.locations(),
-            WorkerInput::StageTriggerV1(i) => i.locations(),
+            WorkerInput::Function(i) => i.locations(),
+            WorkerInput::CronTrigger(i) => i.locations(),
+            WorkerInput::StageTrigger(i) => i.locations(),
+            WorkerInput::Streamer(i) => i.locations(),
+            WorkerInput::Cron(i) => i.locations(),
         }
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub enum WorkerOutput {
-    // V2 kept for backwards compatibility (in case one worker response was left before upgrading)
-    V2(function_runner::v2::FunctionOutput),
-    FunctionV2(function_runner::v2::FunctionOutput),
-    CronTriggerV1(Box<cron_trigger::v1::CronTriggerOutput>),
-    StageTriggerV1(Box<stage_trigger::v1::StageTriggerOutput>),
+    Function(function::FunctionOutput),
 }

@@ -133,9 +133,9 @@ def build_bundle_fetch_request(
 
     Used by the `localize-fn-bundle` command to download the bundle
     tarball via `td_transporter` before extracting it. Accepts either
-    the full :class:`Request` (function-publisher pod, ``FunctionV2``
+    the full :class:`Request` (function-publisher pod, ``Function``
     envelope) or the slim envelope-agnostic :class:`AnyRequest`
-    (stream-publisher pod, ``StreamerV1`` envelope) -- both expose
+    (stream-publisher pod, ``Streamer`` envelope) -- both expose
     ``info.function_bundle`` the same way.
     """
     return TransporterCopyRequest(

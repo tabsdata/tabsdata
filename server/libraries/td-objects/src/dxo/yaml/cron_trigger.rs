@@ -59,7 +59,7 @@ mod tests {
             end: Some(end),
             mask: CronMask::try_from("* * * * *").unwrap(),
         };
-        let input = WorkerInput::CronTriggerV1(Box::new(CronTriggerInput {
+        let input = WorkerInput::CronTrigger(Box::new(CronTriggerInput {
             info: Info {
                 worker_id,
                 collection_id,
@@ -86,7 +86,7 @@ mod tests {
         assert_eq!(
             serialized.as_str(),
             format!(
-                r#"!CronTriggerV1
+                r#"!CronTrigger
 info:
   worker_id: {worker_id}
   collection_id: {collection_id}
