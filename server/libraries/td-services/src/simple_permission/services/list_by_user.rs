@@ -22,11 +22,13 @@
 use crate::simple_permission::layers::flatten_user_permissions;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{ManageAccess, ManageProject, OnAnyProject, Rbac, Scope, System};
+use td_authz::rbac::{ManageAccess, Rbac, Scope, SelfUser, User};
 use td_objects::dxo::crudl::{ListResponse, RequestContext};
 use td_objects::dxo::simple_permission::{ListByUserRequest, SimplePermission};
+use td_objects::dxo::user::UserDB;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::UserIdName;
+use td_objects::types::basic::{UserId, UserIdName};
+use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -42,11 +44,14 @@ use td_tower::layers;
 fn service() {
     layers!(
         from_fn(With::<ListByUserRequest>::extract::<RequestContext>),
-        // listing access is gated like the RBAC user-role listing surface:
-        // manage_access on the system, or manage_project on any project.
-        from_fn(Scope::<System>::system),
-        from_fn(Rbac::<System, (ManageAccess, OnAnyProject<ManageProject>)>::check),
         from_fn(With::<ListByUserRequest>::extract::<UserIdName>),
+        // resolve the target user (errors NotFound for an unknown user) so the
+        // listing can be scoped to it.
+        from_fn(By::<UserIdName>::fetch_one::<UserDB>),
+        from_fn(With::<UserDB>::extract::<UserId>),
+        // accessible to a manage_access holder, or the target user themselves.
+        from_fn(Scope::<User>::set),
+        from_fn(Rbac::<User, (SelfUser, ManageAccess)>::check),
         from_fn(flatten_user_permissions),
     )
 }
@@ -55,8 +60,9 @@ fn service() {
 mod tests {
     use super::*;
     use ta_services::service::TdService;
+    use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
-    use td_error::TdError;
+    use td_error::{TdError, assert_service_error};
     use td_objects::Buildable;
     use td_objects::rest_urls::PermissionGrantUserQuery;
     use td_objects::types::basic::{
@@ -67,14 +73,19 @@ mod tests {
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
-    fn req(target: UserName) -> ListByUserRequest {
+    fn req_as(requester: UserId, target: UserName) -> ListByUserRequest {
         ListByUserRequest::new(
-            RequestContext::with(AccessTokenId::default(), UserId::admin()),
+            RequestContext::with(AccessTokenId::default(), requester),
             PermissionGrantUserQuery::builder()
                 .user(UserIdName::Name(target))
                 .build()
                 .unwrap(),
         )
+    }
+
+    /// Requester is `admin` (holds `manage_access`).
+    fn req(target: UserName) -> ListByUserRequest {
+        req_as(UserId::admin(), target)
     }
 
     /// Create a project through the real create service so the per-project
@@ -161,6 +172,53 @@ mod tests {
             p,
             SimplePermissionType::ViewAllProjects | SimplePermissionType::DevelopAllProjects
         )));
+        Ok(())
+    }
+
+    /// The target user themselves can list their own permissions even without
+    /// `manage_access`.
+    #[td_test::test(db)]
+    async fn test_list_by_user_self_access(db: TdPool) -> Result<(), TdError> {
+        create_project(&db, "p0").await?;
+        let user = db
+            .seed()
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .await?;
+        let dev_role = db
+            .live()
+            .fetch_one::<td_objects::dxo::role::RoleDB>(&RoleName::try_from("p0_dev")?)
+            .await?;
+        db.seed().user_role(&user.id, &dev_role.id).await?;
+
+        // requester == target (joaquin), who holds no manage_access.
+        let service = ListSimplePermissionByUserService::with_defaults(db.clone()).service();
+        let response = service
+            .raw_oneshot(req_as(user.id, UserName::try_from("joaquin")?))
+            .await?;
+
+        let perms: Vec<_> = response.data.iter().map(|p| p.permission.clone()).collect();
+        assert!(perms.contains(&SimplePermissionType::DevelopProject));
+        Ok(())
+    }
+
+    /// A requester who is neither a `manage_access` holder nor the target user
+    /// is forbidden from listing the target's permissions.
+    #[td_test::test(db)]
+    async fn test_list_by_user_forbidden_for_other_non_admin(db: TdPool) -> Result<(), TdError> {
+        db.seed()
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .await?;
+        let other = db
+            .seed()
+            .user(&UserName::try_from("other")?, &UserEnabled::from(true))
+            .await?;
+
+        let service = ListSimplePermissionByUserService::with_defaults(db.clone()).service();
+        let request = req_as(other.id, UserName::try_from("joaquin")?);
+        assert_service_error(service, request, |err| match err {
+            RbacError::Forbidden(_, _) => {}
+        })
+        .await;
         Ok(())
     }
 }

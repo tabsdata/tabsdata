@@ -135,6 +135,27 @@ where
         }
     }
 
+    pub async fn assert_not_exists<D>(
+        mut conn: MutRef<DynamicConnection<'static>>,
+        by: SqlRef<E>,
+    ) -> Result<(), TdError>
+    where
+        D: LiveDao,
+    {
+        let result: Option<D> = conn.live().fetch_optional(&by).await?;
+        match result {
+            Some(_) => {
+                let vals = by.display_values::<D>();
+                let cols: Vec<String> = vals.iter().map(|(k, _)| k.clone()).collect();
+                Err(SqlError::EntityAlreadyExists(
+                    D::display_name().to_string(),
+                    format_hint(&cols, &vals),
+                ))?
+            }
+            None => Ok(()),
+        }
+    }
+
     pub async fn assert_version_not_exists<const S: u8, D>(
         mut conn: MutRef<DynamicConnection<'static>>,
         on: Ref<D::VersionOrder>,

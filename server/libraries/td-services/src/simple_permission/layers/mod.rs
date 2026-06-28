@@ -24,7 +24,7 @@ use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::{
     PermissionEntityType, PermissionType, ProjectId, ProjectIdName, ProjectName, RoleId, RoleName,
-    SimplePermissionType, UserId, UserIdName, UserName,
+    SimplePermissionType, UserId, UserName,
 };
 use td_objects::{Buildable, and, not};
 use td_queries::LiveEntry;
@@ -202,19 +202,17 @@ fn list_response<T: Clone>(data: Vec<T>) -> Result<ListResponse<T>, TdError> {
 /// memberships with `role_permission` and mapping each row to a Simple
 /// permission (de-duplicated). `manage_roles` and the org-wide view/develop
 /// wildcards are skipped (no Simple-surface name).
+///
+/// The target user is taken as an already-resolved `UserId` (the service
+/// resolves it up front for the scope/authz check).
 pub async fn flatten_user_permissions(
     mut conn: MutRef<DynamicConnection<'static>>,
-    user_id_name: Ref<UserIdName>,
+    user_id: Ref<UserId>,
 ) -> Result<ListResponse<SimplePermission>, TdError> {
-    let user = conn
-        .live()
-        .fetch_one::<UserDB>(user_id_name.deref())
-        .await?;
-
     let user_roles = conn.live().fetch_all::<UserRoleDB>(()).await?;
     let role_ids: HashSet<RoleId> = user_roles
         .into_iter()
-        .filter(|ur| ur.user_id == user.id)
+        .filter(|ur| ur.user_id == *user_id)
         .map(|ur| ur.role_id)
         .collect();
 

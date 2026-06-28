@@ -51,6 +51,10 @@ fn service() {
         // membership remove, reusing the user_role delete fixed-row guard.
         from_fn(resolved_role_id),
         from_fn(resolved_user_id),
+        // revoking a permission the user does not hold reports a clear
+        // "not found" error instead of the opaque user_role row-not-found
+        // SQL error from the fetch.
+        from_fn(By::<And![RoleId, UserId]>::assert_exists::<UserRoleDB>),
         from_fn(By::<And![RoleId, UserId]>::fetch_one::<UserRoleDBWithNames>),
         from_fn(assert_not_fixed),
         from_fn(By::<And![RoleId, UserId]>::delete::<UserRoleDB>),
@@ -69,6 +73,7 @@ mod tests {
     use td_error::{TdError, assert_service_error};
     use td_objects::Buildable;
     use td_objects::dxo::user_role::UserRoleDB;
+    use td_objects::errors::SqlError;
     use td_objects::types::basic::{
         AccessTokenId, ProjectIdName, ProjectName, RoleId, RoleName, SimplePermissionType,
         UserEnabled, UserId, UserName,
@@ -131,6 +136,31 @@ mod tests {
         service.raw_oneshot(request).await?;
 
         assert_eq!(user_role_count(&db, &user.id, &dev_role.id).await, 0);
+        Ok(())
+    }
+
+    /// Revoking a permission the user does not hold reports a clear "not
+    /// found" error rather than the opaque `user_role` row-not-found SQL error.
+    #[td_test::test(db)]
+    async fn test_revoke_not_granted_reports_not_found(db: TdPool) -> Result<(), TdError> {
+        db.seed()
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .await?;
+
+        let grant = SimplePermissionGrant::builder()
+            .user(UserName::try_from("joaquin")?)
+            .permission(SimplePermissionType::CreateProjects)
+            .project(None)
+            .build()?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).delete(grant);
+
+        let service = RevokeSimplePermissionService::with_defaults(db.clone()).service();
+        assert_service_error(service, request, |err| match err {
+            SqlError::CouldNotFindEntity(_, _) => {}
+            other => panic!("Expected 'CouldNotFindEntity', got {other:?}"),
+        })
+        .await;
         Ok(())
     }
 

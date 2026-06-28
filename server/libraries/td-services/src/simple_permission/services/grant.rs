@@ -22,12 +22,13 @@ use crate::simple_permission::layers::{
 };
 use ta_services::factory::service_factory;
 use td_authz::{AuthzContext, refresh_authz_context};
+use td_objects::And;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
 use td_objects::dxo::user_role::{UserRoleDB, UserRoleDBBuilder};
 use td_objects::tower_service::with::{With, builder};
 use td_objects::types::basic::{RoleId, UserId};
-use td_queries::insert;
+use td_queries::{By, insert};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -53,12 +54,16 @@ fn service() {
         // authz by target: project perm -> manage_access | manage_project on P;
         // system perm -> manage_access on the system (shared with the raw API).
         from_fn(authorize_permission_target::<ResolvedGrant>),
-        // membership add (same as user_role create; a duplicate surfaces the
-        // user_role create unique-constraint error).
-        from_fn(builder::<UserRoleDB>),
+        // resolve the membership identity (role + user) for the existence
+        // check and the insert.
         from_fn(resolved_role_id),
-        from_fn(With::<RoleId>::set::<UserRoleDBBuilder>),
         from_fn(resolved_user_id),
+        // a duplicate grant reports the membership already exists instead of
+        // surfacing the raw user_role unique-constraint SQL error.
+        from_fn(By::<And![RoleId, UserId]>::assert_not_exists::<UserRoleDB>),
+        // membership add (same as user_role create).
+        from_fn(builder::<UserRoleDB>),
+        from_fn(With::<RoleId>::set::<UserRoleDBBuilder>),
         from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
         from_fn(With::<RequestContext>::update::<UserRoleDBBuilder, _>),
         from_fn(With::<UserRoleDBBuilder>::build::<UserRoleDB>),
@@ -197,6 +202,41 @@ mod tests {
             user_role_count(&db, &user.id, &RoleId::sys_admin()).await,
             1
         );
+        Ok(())
+    }
+
+    /// Granting a permission the user already holds reports a clear
+    /// "already exists" error rather than the opaque `user_role`
+    /// unique-constraint SQL error from the insert.
+    #[td_test::test(db)]
+    async fn test_grant_already_granted_reports_already_exists(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        db.seed()
+            .user(&UserName::try_from("joaquin")?, &UserEnabled::from(true))
+            .await?;
+
+        let grant = || -> Result<SimplePermissionGrant, TdError> {
+            Ok(SimplePermissionGrant::builder()
+                .user(UserName::try_from("joaquin")?)
+                .permission(SimplePermissionType::CreateProjects)
+                .project(None)
+                .build()?)
+        };
+
+        // first grant succeeds
+        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant()?);
+        service.raw_oneshot(request).await?;
+
+        // second grant of the same permission errors EntityAlreadyExists
+        let service = GrantSimplePermissionService::with_defaults(db.clone()).service();
+        let request = grant_request(UserId::admin(), RoleId::sys_admin(), grant()?);
+        assert_service_error(service, request, |err| match err {
+            SqlError::EntityAlreadyExists(_, _) => {}
+            other => panic!("Expected 'EntityAlreadyExists', got {other:?}"),
+        })
+        .await;
         Ok(())
     }
 
