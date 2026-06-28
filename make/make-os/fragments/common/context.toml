@@ -32,8 +32,8 @@ script = [
 
     cd ${PROJECT_TABSDATA_ROOT_FOLDER}
 
-    deploy = get_env TD_DEPLOY
-    if eq ${deploy} "true"
+    with_deploy = get_env TD_WITH_DEPLOY
+    if eq ${with_deploy} "true"
         on_ga = get_env TD_ON_GA
         on_ga_true = eq ${on_ga} "true"
         if ${on_ga_true}
@@ -49,7 +49,7 @@ script = [
         end
         cm_run_task __os__check_hydrate_py
     else
-        debug "🔷 _____ Skipping packages deployment (TD_DEPLOY=false)."
+        debug "🔷 _____ Skipping packages deployment (TD_WITH_DEPLOY=false)."
     end
 
     debug "🔷 _____ Setting up tabsdata pytest python path..."
@@ -128,8 +128,8 @@ script = [
         debug "🔅 tabsdata agent development python package location set to: ${set_td_tabsdata_agent_dev_pkg}"
     end
 
-    deploy = get_env TD_DEPLOY
-    if eq ${deploy} "true"
+    with_deploy = get_env TD_WITH_DEPLOY
+    if eq ${with_deploy} "true"
         cm_run_task __os__check_hydrate_py
     end
     ''']

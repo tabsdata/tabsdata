@@ -311,9 +311,9 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    deploy = get_env TD_DEPLOY
-    if eq ${deploy} "false"
-        debug "🔷 🔷 _____ Skipping hydration check (TD_DEPLOY=false)."
+    with_deploy = get_env TD_WITH_DEPLOY
+    if eq ${with_deploy} "false"
+        debug "🔷 🔷 _____ Skipping hydration check (TD_WITH_DEPLOY=false)."
     else
 
     set_env PYTHONWARNINGS ignore

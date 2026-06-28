@@ -53,9 +53,9 @@ script = [
         ok = touch ${ppid_marker}
     end
 
-    make_banners = get_env TD_MAKE_BANNERS
-    make_banners_true = eq ${make_banners} "true"
-    if ${make_banners_true}
+    make_with_banners = get_env TD_MAKE_WITH_BANNERS
+    make_with_banners_true = eq ${make_with_banners} "true"
+    if ${make_with_banners_true}
         cm_run_task banner
     end
 
@@ -101,14 +101,50 @@ script = [
     PATH = get_env PATH
     debug "✅ Real PATH: ${PATH}"
 
-    no_permit = set false
+    with_permit = get_env TD_WITH_PERMIT
+    with_permit_false = eq ${with_permit} "false"
+    if ${with_permit_false}
+        with_permit = set false
+    else
+        with_permit = set true
+    end
+    at_fast = get_env TD_AT_FAST
+    at_fast = eq ${at_fast} "true"
+    at_warp = get_env TD_AT_WARP
+    at_warp = eq ${at_warp} "true"
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         argument = trim ${argument}
         is_no_permit = eq ${argument} "--no-permit"
         if ${is_no_permit}
-            no_permit = set true
+            with_permit = set false
         end
+        if eq ${argument} "--fast"
+            at_fast = set true
+        end
+        if eq ${argument} "--warp"
+            at_warp = set true
+        end
+    end
+    if ${at_warp}
+        at_fast = set true
+    end
+    if ${at_fast}
+        with_permit = set false
+        set_env TD_AT_FAST "true"
+        set_env TD_MAKE_WITH_BANNERS "false"
+        set_env TD_MAKE_WITH_RESPONSIVE "false"
+    end
+    if ${at_warp}
+        with_permit = set false
+        set_env TD_AT_WARP "true"
+        set_env TD_MAKE_WITH_BANNERS "false"
+        set_env TD_MAKE_WITH_RESPONSIVE "false"
+    end
+    if ${with_permit}
+        set_env TD_WITH_PERMIT "true"
+    else
+        set_env TD_WITH_PERMIT "false"
     end
 
     make_task = get_env CARGO_MAKE_TASK
@@ -119,20 +155,12 @@ script = [
         noop
     elseif ${is_permit_task}
         debug "✈️ Skipping proactive permit; '${make_task}' is itself a permit task."
-    elseif ${no_permit}
-        warn "✈️ Skipping permit (--no-permit)"
+    elseif ${with_permit}
+        cm_run_task permit
+    else
+        warn "✈️ Skipping permit"
         if is_warn
             echo ""
-        end
-    else
-        td_run_permit = get_env TD_RUN_PERMIT
-        if eq ${td_run_permit} "false"
-            warn "✈️ Skipping permit"
-            if is_warn
-                echo ""
-            end
-        else
-            cm_run_task permit
         end
     end
 

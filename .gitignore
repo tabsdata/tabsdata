@@ -10,6 +10,7 @@ __pypackages__/
 .cache/
 .coverage
 .coverage.*
+.coveragex/
 .dmypy.json
 .dot
 .DS_Store

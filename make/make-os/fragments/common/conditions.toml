@@ -11,8 +11,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    compile = get_env TD_COMPILE
-    if eq ${compile} "true"
+    with_compile = get_env TD_WITH_COMPILE
+    if eq ${with_compile} "true"
         cm_run_task build
     end
 

@@ -139,10 +139,10 @@ on_ga = get_env TD_ON_GA
 on_ga_true = eq ${on_ga} "true"
 
 if not ${on_ga_true}
-    responsive_make = get_env TD_RESPONSIVE_MAKE
-    responsive_make_true = eq ${responsive_make} "true"
+    make_with_responsive = get_env TD_MAKE_WITH_RESPONSIVE
+    make_with_responsive_true = eq ${make_with_responsive} "true"
 
-    if ${responsive_make_true}
+    if ${make_with_responsive_true}
         td_root = get_env PROJECT_TABSDATA_ROOT_FOLDER
         debug "📐 Root from environment: '${td_root}'"
 

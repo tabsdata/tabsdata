@@ -151,7 +151,7 @@ run_task = [
 plugin = "td-task-tracker"
 category = "80 - Verify"
 description = "Setup Python environment with latest pip and editable toolkit"
-env = { "TD_RUN_PERMIT" = "false" }
+env = { "TD_WITH_PERMIT" = "false" }
 run_task = [
     { name = [
         "setup_py",
@@ -626,6 +626,14 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/skipe.ds
 
+    fn normalize
+        normalized = set ${1}
+        normalized = replace ${normalized} "\\" "/"
+        normalized = replace ${normalized} "//" "/"
+        normalized = replace ${normalized} "//" "/"
+        return ${normalized}
+    end
+
     verbose = get_env TD_VERBOSE
 
     cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
@@ -638,29 +646,175 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    tests_folders = array
+    packages_prefix = set "--packages="
+    modules_prefix = set "--modules="
+    packages_filter = set ""
+    modules_filter = set ""
+    preview = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        is_package = starts_with ${argument} ${packages_prefix}
+        if ${is_package}
+            packages_filter = replace ${argument} ${packages_prefix} ""
+        end
+        is_module = starts_with ${argument} ${modules_prefix}
+        if ${is_module}
+            modules_filter = replace ${argument} ${modules_prefix} ""
+        end
+        if eq ${argument} "--preview"
+            preview = set true
+        end
+    end
+    packages_filter_list = split ${packages_filter} ,
+    modules_filter_list = split ${modules_filter} ,
 
-    array_push ${tests_folders} ${PROJECT_PY_TA_FEATURES_FOLDER}/${TESTS_PY_TA_FEATURES_FOLDER}
-    array_push ${tests_folders} ${PROJECT_PY_TA_TABLEFRAME_FOLDER}/${TESTS_PY_TA_TABLEFRAME_FOLDER}
-    array_push ${tests_folders} ${PROJECT_PY_TE_EXAMPLES_FOLDER}/${TESTS_PY_TE_EXAMPLES_FOLDER}
-    array_push ${tests_folders} ${PROJECT_PY_TE_TABLEFRAME_FOLDER}/${TESTS_PY_TE_TABLEFRAME_FOLDER}
-    array_push ${tests_folders} ${PROJECT_PY_TE_VARIANT_FOLDER}/${TESTS_PY_TE_VARIANT_FOLDER}
-    array_push ${tests_folders} ${PROJECT_PY_TO_FOUNDATION_FOLDER}/${TESTS_PY_TO_FOUNDATION_FOLDER}
-    array_push ${tests_folders} ${PROJECT_PY_TY_TABLEFRAME_FOLDER}/${TESTS_PY_TY_TABLEFRAME_FOLDER}
-    array_push ${tests_folders} ${PROJECT_PY_TZ_TABLEFRAME_FOLDER}/${TESTS_PY_TZ_TABLEFRAME_FOLDER}
-    array_push ${tests_folders} ${PROJECT_PY_TD_TABSDATA_FOLDER}/${TESTS_PY_TD_TABSDATA_FOLDER}
-    array_push ${tests_folders} ${PROJECT_PY_TD_TABSDATA_FOLDER}/${TESTS_PY_TD_TABSDATAK_FOLDER}
+    tests_folders = array
+    packages = array
+
+    array_push ${tests_folders} ${PROJECT_PY_TA_FEATURES_FOLDER}/src/utest/python
+    array_push ${packages} ta_features
+    array_push ${tests_folders} ${PROJECT_PY_TA_TABLEFRAME_FOLDER}/src/utest/python
+    array_push ${packages} ta_tableframe
+    array_push ${tests_folders} ${PROJECT_PY_TE_EXAMPLES_FOLDER}/src/utest/python
+    array_push ${packages} te_examples
+    array_push ${tests_folders} ${PROJECT_PY_TE_TABLEFRAME_FOLDER}/src/utest/python
+    array_push ${packages} te_tableframe
+    array_push ${tests_folders} ${PROJECT_PY_TE_VARIANT_FOLDER}/src/utest/python
+    array_push ${packages} te_variant
+    array_push ${tests_folders} ${PROJECT_PY_TO_FOUNDATION_FOLDER}/src/utest/python
+    array_push ${packages} to_foundation
+    array_push ${tests_folders} ${PROJECT_PY_TY_TABLEFRAME_FOLDER}/src/utest/python
+    array_push ${packages} ty_tableframe
+    array_push ${tests_folders} ${PROJECT_PY_TZ_TABLEFRAME_FOLDER}/src/utest/python
+    array_push ${packages} tz_tableframe
+    array_push ${tests_folders} ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python
+    array_push ${packages} tabsdata
 
     connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata-*
     for connector in ${connectors}
         is_connector = is_dir ${connector}
         if ${is_connector}
             connector_test_folder_path = join_path ${connector} src utest python
+            connector_name = basename ${connector}
             array_push ${tests_folders} ${connector_test_folder_path}
+            array_push ${packages} ${connector_name}
         end
     end
 
-    pytest_tests_folders = array_join ${tests_folders} " "
+    selected_paths = map
+    if not is_empty ${packages_filter}
+        for package_filter in ${packages_filter_list}
+            package_filter_tabsdata = concat "tabsdata-" ${package_filter}
+            matched = array
+            glob_standard = glob_array ${PROJECT_TABSDATA_ROOT_FOLDER}/**/${package_filter}/src/utest/python
+            glob_standard_tabsdata = glob_array ${PROJECT_TABSDATA_ROOT_FOLDER}/**/${package_filter_tabsdata}/src/utest/python
+            glob_special = glob_array ${PROJECT_TABSDATA_ROOT_FOLDER}/**/${package_filter}/python/src/utest/python
+            glob_special_tabsdata = glob_array ${PROJECT_TABSDATA_ROOT_FOLDER}/**/${package_filter_tabsdata}/python/src/utest/python
+            matched = array_concat ${matched} ${glob_standard} ${glob_standard_tabsdata} ${glob_special} ${glob_special_tabsdata}
+            for matched_path in ${matched}
+                normalized = normalize ${matched_path}
+                map_put ${selected_paths} ${normalized} true
+            end
+            is_tabsdata = eq ${package_filter} "tabsdata"
+            if ${is_tabsdata}
+                tabsdata_path = normalize ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python
+                map_put ${selected_paths} ${tabsdata_path} true
+            end
+            release ${glob_standard}
+            release ${glob_standard_tabsdata}
+            release ${glob_special}
+            release ${glob_special_tabsdata}
+            release ${matched}
+        end
+    end
+
+    selected_tests_folders = array
+    ignore_args = set ""
+    package_known = set false
+    folders_count = array_length ${tests_folders}
+    index = set 0
+    while less_than ${index} ${folders_count}
+        folder = array_get ${tests_folders} ${index}
+        folder = normalize ${folder}
+        package = array_get ${packages} ${index}
+
+        keep = set false
+        if is_empty ${packages_filter}
+            keep = set true
+        else
+            in_selected = map_contains_key ${selected_paths} ${folder}
+            if ${in_selected}
+                keep = set true
+                package_known = set true
+            end
+        end
+
+        if ${keep}
+            array_push ${selected_tests_folders} ${folder}
+            debug "➕ Adding test folder (${package}): ${folder}"
+        else
+            ignore_args = concat ${ignore_args} " --ignore=" ${folder}
+            debug "➖ Skipping test folder (${package}): ${folder}"
+        end
+
+        index = calc ${index} + 1
+    end
+
+    release ${selected_paths}
+
+    if not is_empty ${packages_filter}
+        if not ${package_known}
+            error ""
+            error "🧨 Unknown --packages '${packages_filter}'. No test folders matched."
+            error ""
+            error "🛟 Valid packages:"
+            for valid_package in ${packages}
+                error "   - 📦️ ${valid_package}"
+            end
+            error ""
+            assert ${package_known}
+        end
+        info "📦 Running tests for package(s): ${packages_filter}"
+    end
+
+    if not is_empty ${modules_filter}
+        module_narrowed_folders = array
+        for selected_tests_folder in ${selected_tests_folders}
+            for module_filter in ${modules_filter_list}
+                module_subpath = replace ${module_filter} "." "/"
+                module_has_prefix = starts_with ${module_subpath} "test_"
+                if ${module_has_prefix}
+                    module_relative = set ${module_subpath}
+                else
+                    module_relative = concat "test_" ${module_subpath}
+                end
+                module_folder = concat ${selected_tests_folder} "/" ${module_relative}
+                module_folder = normalize ${module_folder}
+                module_exists = is_path_exists ${module_folder}
+                if ${module_exists}
+                    array_push ${module_narrowed_folders} ${module_folder}
+                end
+            end
+        end
+        selected_tests_folders = set ${module_narrowed_folders}
+        info "🧩 Running tests for module(s): ${modules_filter}"
+    end
+
+    pytest_tests_folders = array_join ${selected_tests_folders} " "
+
+    if not is_empty ${packages_filter}
+        selected_count = array_length ${selected_tests_folders}
+        warn ""
+        warn "👁️ Selected ${selected_count} test folder(s):"
+        for selected_test_folder in ${selected_tests_folders}
+            warn "   - 📦️ ${selected_test_folder}"
+        end
+        warn ""
+    end
+
+    if ${preview}
+        exit 0
+    end
 
     td_tb = set ""
     td_fail = set ""
@@ -683,13 +837,21 @@ script = [
     end
     set_env MARKERS ${markers}
 
-    if eq ${verbose} "false"
-        debug "🚀 pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -n 16 --dist=loadgroup %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${markers}\""
-        exit_code = exec --get-exit-code pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -n 16 --dist=loadgroup %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${markers}"
+    if is_empty ${packages_filter}
+        cov_args = set "--cov-config=.coveragerc --cov --cov-report=html:.coveragex/html --cov-report=json:.coveragex/json/coverage.json --cov-report=lcov:.coveragex/lcov/coverage.lcov"
     else
-        debug "🚀 pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -v --full-trace --log-level=DEBUG -n 16 --dist=loadgroup %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m \"${markers}\""
-        exit_code = exec --get-exit-code pytest ${td_tb} ${td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -v --full-trace --log-level=DEBUG -n 16 --dist=loadgroup %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 --cov-config=.coveragerc --cov --cov-report=html:.coverage/html --cov-report=json:.coverage/json/coverage.json --cov-report=lcov:.coverage/lcov/coverage.lcov -m "${markers}"
+        cov_args = set ""
+        info "🚀 Coverage disabled for package(s) run"
     end
+
+    if eq ${verbose} "false"
+        debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
+        exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"
+    else
+        debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -v --full-trace --log-level=DEBUG --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
+        exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -v --full-trace --log-level=DEBUG --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"
+    end
+
     is_zero = eq ${exit_code} "0"
     is_five = eq ${exit_code} "5"
     if ${is_zero} or ${is_five}
@@ -753,7 +915,9 @@ script = [
         end
     end
 
-    exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coverage/json/coverage.json .
+    if is_empty ${packages_filter}
+        exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coveragex/json/coverage.json .
+    end
 
     info "📊 Pytest report generated at: 👉 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/reports/pytest/tabsdata/pytest.html\n"
     ''']
@@ -833,8 +997,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    license = get_env TD_LICENSE
-    if eq ${license} "true"
+    with_license = get_env TD_WITH_LICENSE
+    if eq ${with_license} "true"
         cm_run_task license_rs
         cm_run_task license_py
     end

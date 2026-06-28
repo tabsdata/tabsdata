@@ -21,6 +21,26 @@ import pytest
 import yaml
 from xdist.workermanage import WorkerController
 
+try:
+    from docutils import nodes
+    from docutils.parsers.rst import roles
+
+    def _sphinx_role_stub(  # noqa: PLR0913
+        name,
+        rawtext,
+        text,
+        lineno,
+        inliner,
+        options=None,
+        content=None,
+    ):
+        return [nodes.literal(rawtext, text)], []
+
+    for _role in ("func", "class", "meth", "mod", "attr", "data", "exc", "obj"):
+        roles.register_local_role(_role, _sphinx_role_stub)
+except ImportError:
+    pass
+
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
 from tabsdata._tdfunction import TableInput, TableOutput, TabsdataFunction

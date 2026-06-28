@@ -35,79 +35,136 @@ script = [
     end
     debug "🔅 Using td verbose: '${TD_VERBOSE}'"
 
+    at_fast = get_env TD_AT_FAST
+    at_fast = eq ${at_fast} "true"
+    at_warp = get_env TD_AT_WARP
+    at_warp = eq ${at_warp} "true"
+
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         if eq ${argument} "--no-license"
-            set_env TD_LICENSE "false"
+            set_env TD_WITH_LICENSE "false"
         end
         if eq ${argument} "--no-compile"
-            set_env TD_COMPILE "false"
+            set_env TD_WITH_COMPILE "false"
         end
         if eq ${argument} "--no-deploy"
-            set_env TD_DEPLOY "false"
+            set_env TD_WITH_DEPLOY "false"
         end
         if eq ${argument} "--no-server"
-            set_env TD_SERVER "false"
+            set_env TD_WITH_SERVER "false"
+        end
+        if eq ${argument} "--with-banners"
+            set_env TD_MAKE_WITH_BANNERS "true"
+        end
+        if eq ${argument} "--with-responsive"
+            set_env TD_MAKE_WITH_RESPONSIVE "true"
+        end
+        if eq ${argument} "--fast"
+            at_fast = set true
+        end
+        if eq ${argument} "--warp"
+            at_warp = set true
         end
     end
 
-    license = get_env TD_LICENSE
-    license_empty = is_empty ${license}
-    license_true = eq ${license} "true"
-    license = set ${license_empty} or ${license_true}
-    if ${license}
-        set_env TD_LICENSE "true"
-    else
-        set_env TD_LICENSE "false"
+    if ${at_warp}
+        at_fast = set true
     end
-    TD_LICENSE = get_env TD_LICENSE
-    debug "🔅 Using td license: '${TD_LICENSE}'"
 
-    compile = get_env TD_COMPILE
-    compile_empty = is_empty ${compile}
-    compile_true = eq ${compile} "true"
+    if ${at_fast}
+        set_env TD_AT_FAST "true"
+        set_env TD_WITH_PERMIT "false"
+        set_env TD_WITH_LICENSE "false"
+        set_env TD_WITH_COMPILE "false"
+        set_env TD_WITH_DEPLOY "false"
+        set_env TD_MAKE_WITH_BANNERS "false"
+        set_env TD_MAKE_WITH_RESPONSIVE "false"
+        debug "✈️ Fast mode: skipping permit, license, compile, deploy, banners and responsive."
+    end
+    if ${at_warp}
+        set_env TD_AT_WARP "true"
+        set_env TD_WITH_SERVER "false"
+        debug "🛸 Warp mode: also skipping server."
+    end
+
+    with_license = get_env TD_WITH_LICENSE
+    with_license_empty = is_empty ${with_license}
+    with_license_true = eq ${with_license} "true"
+    with_license = set ${with_license_empty} or ${with_license_true}
+    if ${with_license}
+        set_env TD_WITH_LICENSE "true"
+    else
+        set_env TD_WITH_LICENSE "false"
+    end
+    TD_WITH_LICENSE = get_env TD_WITH_LICENSE
+    debug "🔅 Using td license: '${TD_WITH_LICENSE}'"
+
+    with_compile = get_env TD_WITH_COMPILE
+    with_compile_empty = is_empty ${with_compile}
+    with_compile_true = eq ${with_compile} "true"
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
-    compile = set ${compile_empty} or ${compile_true}
+    with_compile = set ${with_compile_empty} or ${with_compile_true}
     if ${on_ga_true}
-        set_env TD_COMPILE "true"
+        set_env TD_WITH_COMPILE "true"
     else
-        if ${compile}
-            set_env TD_COMPILE "true"
+        if ${with_compile}
+            set_env TD_WITH_COMPILE "true"
         else
-            set_env TD_COMPILE "false"
+            set_env TD_WITH_COMPILE "false"
         end
     end
-    TD_COMPILE = get_env TD_COMPILE
-    debug "🔅 Using td compile: '${TD_COMPILE}'"
+    TD_WITH_COMPILE = get_env TD_WITH_COMPILE
+    debug "🔅 Using td compile: '${TD_WITH_COMPILE}'"
 
-    deploy = get_env TD_DEPLOY
-    deploy_empty = is_empty ${deploy}
-    deploy_true = eq ${deploy} "true"
-    deploy = set ${deploy_empty} or ${deploy_true}
+    with_deploy = get_env TD_WITH_DEPLOY
+    with_deploy_empty = is_empty ${with_deploy}
+    with_deploy_true = eq ${with_deploy} "true"
+    with_deploy = set ${with_deploy_empty} or ${with_deploy_true}
     if ${on_ga_true}
-        set_env TD_DEPLOY "true"
+        set_env TD_WITH_DEPLOY "true"
     else
-        if ${deploy}
-            set_env TD_DEPLOY "true"
+        if ${with_deploy}
+            set_env TD_WITH_DEPLOY "true"
         else
-            set_env TD_DEPLOY "false"
+            set_env TD_WITH_DEPLOY "false"
         end
     end
-    TD_DEPLOY = get_env TD_DEPLOY
-    debug "🔅 Using td deploy: '${TD_DEPLOY}'"
+    TD_WITH_DEPLOY = get_env TD_WITH_DEPLOY
+    debug "🔅 Using td deploy: '${TD_WITH_DEPLOY}'"
 
-    server = get_env TD_SERVER
-    server_empty = is_empty ${server}
-    server_true = eq ${server} "true"
-    server = set ${server_empty} or ${server_true}
-    if ${server}
-        set_env TD_SERVER "true"
+    with_server = get_env TD_WITH_SERVER
+    with_server_empty = is_empty ${with_server}
+    with_server_true = eq ${with_server} "true"
+    with_server = set ${with_server_empty} or ${with_server_true}
+    if ${with_server}
+        set_env TD_WITH_SERVER "true"
     else
-        set_env TD_SERVER "false"
+        set_env TD_WITH_SERVER "false"
     end
-    TD_SERVER = get_env TD_SERVER
-    debug "🔅 Using td server: '${TD_SERVER}'"
+    TD_WITH_SERVER = get_env TD_WITH_SERVER
+    debug "🔅 Using td with server: '${TD_WITH_SERVER}'"
+
+    make_with_banners = get_env TD_MAKE_WITH_BANNERS
+    make_with_banners_true = eq ${make_with_banners} "true"
+    if ${make_with_banners_true}
+        set_env TD_MAKE_WITH_BANNERS "true"
+    else
+        set_env TD_MAKE_WITH_BANNERS "false"
+    end
+    TD_MAKE_WITH_BANNERS = get_env TD_MAKE_WITH_BANNERS
+    debug "🔅 Using td make with banners: '${TD_MAKE_WITH_BANNERS}'"
+
+    make_with_responsive = get_env TD_MAKE_WITH_RESPONSIVE
+    make_with_responsive_true = eq ${make_with_responsive} "true"
+    if ${make_with_responsive_true}
+        set_env TD_MAKE_WITH_RESPONSIVE "true"
+    else
+        set_env TD_MAKE_WITH_RESPONSIVE "false"
+    end
+    TD_MAKE_WITH_RESPONSIVE = get_env TD_MAKE_WITH_RESPONSIVE
+    debug "🔅 Using td make with responsive: '${TD_MAKE_WITH_RESPONSIVE}'"
 
     test_py_parallel = get_env TD_TEST_PY_PARALLEL
     if eq ${test_py_parallel} "false"
@@ -128,17 +185,49 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    license = get_env TD_LICENSE
-    license_empty = is_empty ${license}
-    license_true = eq ${license} "true"
-    license = set ${license_empty} or ${license_true}
-    if ${license}
-        set_env TD_LICENSE "true"
-    else
-        set_env TD_LICENSE "false"
+    at_fast = get_env TD_AT_FAST
+    at_fast = eq ${at_fast} "true"
+    at_warp = get_env TD_AT_WARP
+    at_warp = eq ${at_warp} "true"
+
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--fast"
+            at_fast = set true
+        end
+        if eq ${argument} "--warp"
+            at_warp = set true
+        end
     end
-    TD_LICENSE = get_env TD_LICENSE
-    debug "🔅 Using td license: '${TD_LICENSE}'"
+
+    if ${at_warp}
+        at_fast = set true
+    end
+    if ${at_fast}
+        set_env TD_AT_FAST "true"
+        set_env TD_WITH_PERMIT "false"
+        set_env TD_WITH_LICENSE "false"
+        set_env TD_WITH_COMPILE "false"
+        set_env TD_WITH_DEPLOY "false"
+        debug "🚀 Fast mode: skipping permit, license, compile and deploy."
+    end
+    if ${at_warp}
+        set_env TD_AT_WARP "true"
+        set_env TD_WITH_SERVER "false"
+        debug "🛸 Warp mode: also skipping server."
+    end
+
+    with_license = get_env TD_WITH_LICENSE
+    with_license_empty = is_empty ${with_license}
+    with_license_true = eq ${with_license} "true"
+    with_license = set ${with_license_empty} or ${with_license_true}
+    if ${with_license}
+        set_env TD_WITH_LICENSE "true"
+    else
+        set_env TD_WITH_LICENSE "false"
+    end
+    TD_WITH_LICENSE = get_env TD_WITH_LICENSE
+    debug "🔅 Using td license: '${TD_WITH_LICENSE}'"
     ''']
 
 [tasks.__os__set_mode_assembly]
@@ -150,45 +239,73 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    at_fast = get_env TD_AT_FAST
+    at_fast = eq ${at_fast} "true"
+    at_warp = get_env TD_AT_WARP
+    at_warp = eq ${at_warp} "true"
+
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         if eq ${argument} "--no-license"
-            set_env TD_LICENSE "false"
+            set_env TD_WITH_LICENSE "false"
         end
         if eq ${argument} "--no-compile"
-            set_env TD_COMPILE "false"
+            set_env TD_WITH_COMPILE "false"
+        end
+        if eq ${argument} "--fast"
+            at_fast = set true
+        end
+        if eq ${argument} "--warp"
+            at_warp = set true
         end
     end
 
-    license = get_env TD_LICENSE
-    license_empty = is_empty ${license}
-    license_true = eq ${license} "true"
-    license = set ${license_empty} or ${license_true}
-    if ${license}
-        set_env TD_LICENSE "true"
-    else
-        set_env TD_LICENSE "false"
+    if ${at_warp}
+        at_fast = set true
     end
-    TD_LICENSE = get_env TD_LICENSE
-    debug "🔅 Using td license: '${TD_LICENSE}'"
+    if ${at_fast}
+        set_env TD_AT_FAST "true"
+        set_env TD_WITH_PERMIT "false"
+        set_env TD_WITH_LICENSE "false"
+        set_env TD_WITH_COMPILE "false"
+        set_env TD_WITH_DEPLOY "false"
+        debug "🚀 Fast mode: skipping permit, license, compile and deploy."
+    end
+    if ${at_warp}
+        set_env TD_AT_WARP "true"
+        set_env TD_WITH_SERVER "false"
+        debug "🛸 Warp mode: also skipping server."
+    end
 
-    compile = get_env TD_COMPILE
-    compile_empty = is_empty ${compile}
-    compile_true = eq ${compile} "true"
+    with_license = get_env TD_WITH_LICENSE
+    with_license_empty = is_empty ${with_license}
+    with_license_true = eq ${with_license} "true"
+    with_license = set ${with_license_empty} or ${with_license_true}
+    if ${with_license}
+        set_env TD_WITH_LICENSE "true"
+    else
+        set_env TD_WITH_LICENSE "false"
+    end
+    TD_WITH_LICENSE = get_env TD_WITH_LICENSE
+    debug "🔅 Using td license: '${TD_WITH_LICENSE}'"
+
+    with_compile = get_env TD_WITH_COMPILE
+    with_compile_empty = is_empty ${with_compile}
+    with_compile_true = eq ${with_compile} "true"
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
-    compile = set ${compile_empty} or ${compile_true}
+    with_compile = set ${with_compile_empty} or ${with_compile_true}
     if ${on_ga_true}
-        set_env TD_COMPILE "true"
+        set_env TD_WITH_COMPILE "true"
     else
-        if ${compile}
-            set_env TD_COMPILE "true"
+        if ${with_compile}
+            set_env TD_WITH_COMPILE "true"
         else
-            set_env TD_COMPILE "false"
+            set_env TD_WITH_COMPILE "false"
         end
     end
-    TD_COMPILE = get_env TD_COMPILE
-    debug "🔅 Using td compile: '${TD_COMPILE}'"
+    TD_WITH_COMPILE = get_env TD_WITH_COMPILE
+    debug "🔅 Using td compile: '${TD_WITH_COMPILE}'"
 
     set_env TD_SYMLINK_POLARS_LIBS "false"
     TD_SYMLINK_POLARS_LIBS = get_env TD_SYMLINK_POLARS_LIBS
@@ -204,21 +321,53 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    compile = get_env TD_COMPILE
-    compile_empty = is_empty ${compile}
-    compile_true = eq ${compile} "true"
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    compile = set ${compile_empty} or ${compile_true}
-    if ${on_ga_true}
-        set_env TD_COMPILE "true"
-    else
-        if ${compile}
-            set_env TD_COMPILE "true"
-        else
-            set_env TD_COMPILE "false"
+    at_fast = get_env TD_AT_FAST
+    at_fast = eq ${at_fast} "true"
+    at_warp = get_env TD_AT_WARP
+    at_warp = eq ${at_warp} "true"
+
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--fast"
+            at_fast = set true
+        end
+        if eq ${argument} "--warp"
+            at_warp = set true
         end
     end
-    TD_COMPILE = get_env TD_COMPILE
-    debug "🔅 Using td compile: '${TD_COMPILE}'"
+
+    if ${at_warp}
+        at_fast = set true
+    end
+    if ${at_fast}
+        set_env TD_AT_FAST "true"
+        set_env TD_WITH_PERMIT "false"
+        set_env TD_WITH_LICENSE "false"
+        set_env TD_WITH_COMPILE "false"
+        set_env TD_WITH_DEPLOY "false"
+        debug "🚀 Fast mode: skipping permit, license, compile and deploy."
+    end
+    if ${at_warp}
+        set_env TD_AT_WARP "true"
+        set_env TD_WITH_SERVER "false"
+        debug "🛸 Warp mode: also skipping server."
+    end
+
+    with_compile = get_env TD_WITH_COMPILE
+    with_compile_empty = is_empty ${with_compile}
+    with_compile_true = eq ${with_compile} "true"
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    with_compile = set ${with_compile_empty} or ${with_compile_true}
+    if ${on_ga_true}
+        set_env TD_WITH_COMPILE "true"
+    else
+        if ${with_compile}
+            set_env TD_WITH_COMPILE "true"
+        else
+            set_env TD_WITH_COMPILE "false"
+        end
+    end
+    TD_WITH_COMPILE = get_env TD_WITH_COMPILE
+    debug "🔅 Using td compile: '${TD_WITH_COMPILE}'"
     ''']

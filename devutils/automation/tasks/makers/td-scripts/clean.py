@@ -86,6 +86,7 @@ def clean(project_folder, inclusion_patterns, exclusion_patterns):
                 first_component.startswith(".")
                 and first_component != ".pytest_cache"
                 and first_component != ".coverage"
+                and first_component != ".coveragex"
                 and first_component != ".ruff_cache"
                 and first_component != ".mypy_cache"
                 and first_component != ".grimp_cache"

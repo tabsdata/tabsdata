@@ -185,10 +185,10 @@ script = [
             should_run_assembly = eq ${run_assembly} "true"
             if ${should_run_assembly}
                 info "🧱 Running km assembly..."
-                td_run_permit_saved = get_env TD_RUN_PERMIT
+                with_permit_saved = get_env TD_WITH_PERMIT
                 duckscript_log_level_saved = get_env DUCKSCRIPT_LOG_LEVEL
                 python_log_level_saved = get_env PYTHON_LOG_LEVEL
-                set_env TD_RUN_PERMIT "false"
+                set_env TD_WITH_PERMIT "false"
                 set_env DUCKSCRIPT_LOG_LEVEL "error"
                 set_env PYTHON_LOG_LEVEL "ERROR"
                 cd ${km_root}
@@ -208,11 +208,11 @@ script = [
                     tdcommit_after_id = trim ${tdcommit_after.stdout}
                     writefile ${tdcommit_path} ${tdcommit_after_id}
                 end
-                td_run_permit_saved_empty = is_empty ${td_run_permit_saved}
-                if ${td_run_permit_saved_empty}
-                    unset_env TD_RUN_PERMIT
+                with_permit_saved_empty = is_empty ${with_permit_saved}
+                if ${with_permit_saved_empty}
+                    unset_env TD_WITH_PERMIT
                 else
-                    set_env TD_RUN_PERMIT ${td_run_permit_saved}
+                    set_env TD_WITH_PERMIT ${with_permit_saved}
                 end
                 duckscript_log_level_saved_empty = is_empty ${duckscript_log_level_saved}
                 if ${duckscript_log_level_saved_empty}
