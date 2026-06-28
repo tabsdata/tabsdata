@@ -136,9 +136,14 @@ mod definitions {
         pub base_path: Option<BasePath>,
         /// The connection triple — REQUIRED for source/destination collections
         /// (they are 1:1 with their connection and cannot exist without it),
-        /// forbidden for a DataFactory.
-        #[schema(value_type = Object)]
-        #[serde(default)]
+        /// forbidden for a DataFactory. On the wire it is a YAML string (the
+        /// dehydrated connection document); it is parsed into the connection
+        /// object here, so the rest of the pipeline keeps working on a value.
+        #[schema(value_type = String)]
+        #[serde(
+            default,
+            deserialize_with = "crate::dxo::collection::deserialize_yaml_connection"
+        )]
         #[builder(default)]
         pub connection: Option<serde_json::Value>,
         #[serde(default)]
@@ -196,5 +201,51 @@ mod definitions {
         #[dto(list(filter, order_by))]
         pub collection_type: CollectionType,
         pub connection_id: Option<ConnectionId>,
+    }
+}
+
+/// Parse the `connection` field, which arrives on the wire as a YAML string
+/// (the dehydrated connection document the client built with `Conn` + dehydrate)
+/// into the `serde_json::Value` the rest of the create pipeline consumes. YAML
+/// is a superset of JSON, so a JSON string parses too. `null`/absent -> `None`.
+pub(crate) fn deserialize_yaml_connection<'de, D>(
+    deserializer: D,
+) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let raw: Option<String> = Option::deserialize(deserializer)?;
+    match raw {
+        None => Ok(None),
+        Some(text) => serde_yaml::from_str(&text)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CollectionCreate;
+
+    #[test]
+    fn connection_field_parses_a_yaml_string_into_a_value() {
+        // On the wire `connection` is a YAML string inside the JSON body.
+        let body = r#"{
+            "name": "c",
+            "description": "d",
+            "connection": "kind: mysqlSrcConn\nspec:\n  uri: mysql://h/db\n"
+        }"#;
+        let create: CollectionCreate = serde_json::from_str(body).unwrap();
+        let conn = create.connection.expect("connection parsed");
+        assert_eq!(conn["kind"], "mysqlSrcConn");
+        assert_eq!(conn["spec"]["uri"], "mysql://h/db");
+    }
+
+    #[test]
+    fn connection_absent_is_none() {
+        let create: CollectionCreate =
+            serde_json::from_str(r#"{"name": "c", "description": "d"}"#).unwrap();
+        assert!(create.connection.is_none());
     }
 }

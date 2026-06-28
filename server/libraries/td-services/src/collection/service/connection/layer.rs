@@ -82,9 +82,6 @@ pub async fn validate_upsert(connection: Ref<ConnectionUpsert>) -> Result<(), Td
 /// of the JSON stays opaque) plus what the usability check derived from it.
 #[derive(Debug, Clone)]
 pub struct ConnectionDocument {
-    /// The document's `name` — must equal the collection's name (functions
-    /// reference connections by it, and it is the collection's).
-    pub name: String,
     pub kind: ConnectionKind,
     /// Secret keys carried with `value: None` ("keep the stored value") — the
     /// orchestrator must verify the store actually holds them.
@@ -110,20 +107,15 @@ pub async fn validate_document(
     )
 }
 
-/// The fields the server reads off a dehydrated document; the rest of the JSON
-/// stays opaque (no `deny_unknown_fields`). `kind`/`name` are required — a
-/// missing one fails deserialization (serde names the field in the error).
-/// `name` must equal the collection's name; that equality is enforced by
-/// [`ensure_document_name`], functions reference the connection by it.
+/// The only field the server reads off a dehydrated document; the rest stays
+/// opaque (no `deny_unknown_fields`) — forwarded to the store and resolved by
+/// the worker. `kind` is required — a missing one fails deserialization. The
+/// connection carries no name: it is 1:1 with its collection and named by it
+/// (the server already has the collection name).
 #[derive(Deserialize)]
-#[serde(expecting = "a dehydrated connection object with a 'kind' and 'name'")]
+#[serde(expecting = "a dehydrated connection object with a 'kind'")]
 struct RawConnectionDocument {
     kind: String,
-    name: String,
-    /// Opaque to the server — forwarded to the store, resolved by the worker.
-    #[serde(default)]
-    #[allow(dead_code)]
-    conn_configs: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Validates a dehydrated document and the payload's internal consistency:
@@ -142,7 +134,6 @@ pub fn validate_connection_document(
     let raw = RawConnectionDocument::deserialize(document)
         .map_err(|e| api_error!(ApiError::InputError, "invalid dehydrated connection: {e}"))?;
     let kind = ConnectionKind::try_from(raw.kind.as_str())?;
-    let name = raw.name;
 
     let mut seen: HashSet<&str> = HashSet::new();
     let mut duplicated: Vec<&str> = Vec::new();
@@ -161,7 +152,6 @@ pub fn validate_connection_document(
     }
 
     Ok(ConnectionDocument {
-        name,
         kind,
         kept_secrets: kept_keys(secrets),
         kept_vars: kept_keys(vars),
@@ -197,18 +187,6 @@ fn ensure_kind_matches_type(
     Ok(())
 }
 
-fn ensure_document_name(document_name: &str, collection_name: &str) -> Result<(), TdError> {
-    if document_name != collection_name {
-        return Err(api_error!(
-            ApiError::InputError,
-            "the dehydrated connection's name '{document_name}' must equal the \
-             collection's name '{collection_name}' — they are 1:1 and functions \
-             reference the connection by the collection's name"
-        ));
-    }
-    Ok(())
-}
-
 /// What the read-only resolution hands the upsert orchestrator: the existing
 /// connection row (upserts only UPDATE — the connection is created with its
 /// collection) and the validated document.
@@ -226,7 +204,6 @@ pub async fn resolve_connection(
     collection: Ref<CollectionDB>,
     document: Ref<ConnectionDocument>,
 ) -> Result<ConnectionResolution, TdError> {
-    ensure_document_name(&document.name, &collection.name.to_string())?;
     let connection_id = collection.connection_id.ok_or_else(|| {
         api_error!(
             ApiError::NotFound,
@@ -304,7 +281,6 @@ pub async fn plan_collection_create(
                 ));
             };
             let document = validate_connection_document(document, secrets, vars)?;
-            ensure_document_name(&document.name, &create.name.to_string())?;
             ensure_kind_matches_type(&document.kind, collection_type.deref())?;
             if !document.kept_secrets.is_empty() || !document.kept_vars.is_empty() {
                 return Err(api_error!(

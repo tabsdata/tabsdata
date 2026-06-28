@@ -364,11 +364,10 @@ mod tests {
             body["group"] = json!(group);
             if group == "source" || group == "destination" {
                 let suffix = if group == "source" { "Src" } else { "Dst" };
-                body["connection"] = json!({
-                    "kind": format!("mysql{suffix}Conn"),
-                    "name": name,
-                    "conn_configs": {"env:password": "CREDENTIALS_PASSWORD"},
-                });
+                // The create endpoint takes the connection as a dehydrated YAML
+                // string; the server reads only `kind` off it (the rest is opaque
+                // and forwarded to the store/worker).
+                body["connection"] = json!(format!("kind: mysql{suffix}Conn\n"));
                 body["secrets"] = json!([{"key": "CREDENTIALS_PASSWORD", "value": "hunter2"}]);
                 body["vars"] = json!([]);
             }

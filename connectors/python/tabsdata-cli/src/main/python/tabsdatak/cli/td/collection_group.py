@@ -3,8 +3,6 @@
 #
 
 
-import json
-import os
 import sys
 from pathlib import Path
 
@@ -12,12 +10,17 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+# noinspection PyProtectedMember
+from tabsdatak import _template as template
 from tabsdatak.cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
     verify_login_or_prompt,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.common._json_serde import dehydrate
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
@@ -46,9 +49,10 @@ def collection():
 @click.option(
     "--conn-file",
     help=(
-        "Connection JSON document ('-' to read from stdin). Required for a "
+        "Connection YAML document ('-' to read from stdin). Required for a "
         "source/destination collection — it is created WITH its connection. "
-        "'env:' references are resolved from this shell's environment."
+        "The connection is validated and dehydrated client-side; secret/var "
+        "values are stripped into the secret/var payloads."
     ),
 )
 @click.pass_context
@@ -68,10 +72,13 @@ def create(
         or logical_prompt(ctx, "Name of the collection to create")
     )
     description = description or ""
-    document = None
+    connection = None
     secrets = None
+    variables = None
     if conn_file:
-        document, group, secrets = _load_connection_document(conn_file, name, group)
+        connection, group, secrets, variables = _load_connection_document(
+            conn_file, group
+        )
     elif group in ("source", "destination"):
         raise click.ClickException(
             f"a {group} collection is created WITH its connection; pass --conn-file"
@@ -85,8 +92,9 @@ def create(
             description,
             group=group,
             base_path=base_path,
-            connection=document,
+            connection=connection,
             secrets=secrets,
+            variables=variables,
         )
         click.echo("Collection created successfully")
     except Exception as e:
@@ -94,56 +102,37 @@ def create(
         raise click.ClickException(f"Failed to create collection: {e}")
 
 
-_ENV_PREFIX = "env:"
-_KIND_SUFFIX_TO_GROUP = {"Src": "source", "Dst": "destination"}
+_KIND_SUFFIX_TO_GROUP = {"Src": "source", "Dest": "destination"}
 
 
 def _group_for_kind(kind) -> str:
     """The collection group a connection kind implies (``...SrcConn`` ->
-    source, ``...DstConn`` -> destination)."""
+    source, ``...DestConn`` -> destination)."""
     if isinstance(kind, str) and kind.endswith("Conn"):
         stem = kind[: -len("Conn")]
         for suffix, group in _KIND_SUFFIX_TO_GROUP.items():
             if stem.endswith(suffix) and len(stem) > len(suffix):
                 return group
     raise click.ClickException(
-        f"invalid connection kind {kind!r}; expected '<connector><Src|Dst>Conn'"
+        f"invalid connection kind {kind!r}; expected '<connector><Src|Dest>Conn'"
         " (e.g. 'mysqlSrcConn')"
     )
 
 
-def _collect_env_refs(configs) -> list:
-    """Env keys referenced via ``env:`` entries, recursively — the set the
-    server checks coverage for."""
-    refs = []
-    if isinstance(configs, dict):
-        for key, value in configs.items():
-            if key.startswith(_ENV_PREFIX) and isinstance(value, str):
-                refs.append(value)
-            elif isinstance(value, dict):
-                refs.extend(_collect_env_refs(value))
-    return refs
+def _kv_list(kvs) -> list:
+    """The ``[{key, value}]`` payload the server expects from a `KeyValue` list."""
+    return [{"key": kv.key, "value": kv.value} for kv in kvs]
 
 
-def _secrets_from_env(document: dict) -> list:
-    """The ``secrets`` payload for a dehydrated document: every referenced
-    env key resolved from THIS process's environment."""
-    secrets = []
-    for env_key in sorted(set(_collect_env_refs(document.get("conn_configs")))):
-        value = os.environ.get(env_key)
-        if value is None:
-            raise click.ClickException(
-                f"Environment variable '{env_key}' is referenced by the "
-                "connection but not set; export it before sending the"
-                " connection"
-            )
-        secrets.append({"key": env_key, "value": value})
-    return secrets
+def _load_connection_document(conn_file, group):
+    """Read the connection YAML, validate it as a `Conn`, and dehydrate it.
 
-
-def _load_connection_document(conn_file, name, group):
-    """The dehydrated document, the group its kind implies, and the secrets
-    payload resolved from this shell's environment."""
+    Returns ``(connection_yaml, group, secrets, variables)``: the dehydrated
+    connection re-serialized as YAML (secret/var leaves reduced to ``secret:`` /
+    ``var:``), the group its kind implies, and the harvested secret/var values.
+    No secret value is sent inside the connection document — they ride in the
+    secret/var payloads.
+    """
     try:
         raw = (
             sys.stdin.read()
@@ -153,25 +142,21 @@ def _load_connection_document(conn_file, name, group):
     except OSError as e:
         raise click.ClickException(f"cannot read connection file: {e}")
     try:
-        document = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise click.ClickException(f"invalid connection JSON: {e}")
-    doc_name = document.get("name")
-    if doc_name is None:
-        document["name"] = name
-    elif doc_name != name:
-        raise click.ClickException(
-            f"the connection document is named '{doc_name}' but the collection "
-            f"is '{name}' — a connection is named by its collection (1:1)"
-        )
-    implied = _group_for_kind(document.get("kind", ""))
+        document = template.from_yaml(raw)
+    except Exception as e:  # noqa: BLE001 -- any YAML parse failure
+        raise click.ClickException(f"invalid connection YAML: {e}")
+    try:
+        kind = template.validate(document)
+    except template.TemplateError as e:
+        raise click.ClickException(str(e))
+    implied = _group_for_kind(kind)
     if group is not None and group != implied:
         raise click.ClickException(
-            f"kind '{document['kind']}' makes this a {implied} collection, "
+            f"kind '{kind}' makes this a {implied} collection, "
             f"but --group says '{group}'"
         )
-    secrets = _secrets_from_env(document)
-    return document, implied, secrets
+    dehydrated, secrets, variables = dehydrate(document)
+    return template.to_yaml(dehydrated), implied, _kv_list(secrets), _kv_list(variables)
 
 
 @collection.command()

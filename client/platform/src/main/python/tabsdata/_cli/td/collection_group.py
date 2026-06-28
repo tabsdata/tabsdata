@@ -3,7 +3,6 @@
 #
 
 
-import json
 import sys
 from pathlib import Path
 
@@ -17,11 +16,13 @@ from tabsdata._cli.cli_utils import (
     logical_prompt,
     verify_login_or_prompt,
 )
-from tabsdata._io.connections.named_connection.kind_registry import split_kind
-from tabsdata._io.connections.named_connection.named_connection import (
-    secrets_from_env,
-)
 from tabsdata.api.tabsdata_server import TabsdataServer
+
+# noinspection PyProtectedMember
+from tabsdatak import _template as template
+
+# noinspection PyProtectedMember
+from tabsdatak.common._json_serde import dehydrate
 
 
 @click.group()
@@ -49,9 +50,10 @@ def collection():
 @click.option(
     "--conn-file",
     help=(
-        "Connection JSON document ('-' to read from stdin). Required for a "
+        "Connection YAML document ('-' to read from stdin). Required for a "
         "source/destination collection — it is created WITH its connection. "
-        "'env:' references are resolved from this shell's environment."
+        "The connection is validated and dehydrated client-side; secret/var "
+        "values are stripped into the secret/var payloads."
     ),
 )
 @click.pass_context
@@ -71,10 +73,13 @@ def create(
         or logical_prompt(ctx, "Name of the collection to create")
     )
     description = description or ""
-    document = None
+    connection = None
     secrets = None
+    variables = None
     if conn_file:
-        document, group, secrets = _load_connection_document(conn_file, name, group)
+        connection, group, secrets, variables = _load_connection_document(
+            conn_file, group
+        )
     elif group in ("source", "destination"):
         raise click.ClickException(
             f"a {group} collection is created WITH its connection; pass --conn-file"
@@ -88,8 +93,9 @@ def create(
             description,
             group=group,
             base_path=base_path,
-            connection=document,
+            connection=connection,
             secrets=secrets,
+            variables=variables,
         )
         click.echo("Collection created successfully")
     except Exception as e:
@@ -97,11 +103,37 @@ def create(
         raise click.ClickException(f"Failed to create collection: {e}")
 
 
-def _load_connection_document(
-    conn_file: str, name: str, group: str | None
-) -> tuple[dict, str, list]:
-    """The dehydrated document, the group its kind implies, and the secrets
-    payload resolved from this shell's environment."""
+_KIND_SUFFIX_TO_GROUP = {"Src": "source", "Dest": "destination"}
+
+
+def _group_for_kind(kind) -> str:
+    """The collection group a connection kind implies (``...SrcConn`` ->
+    source, ``...DestConn`` -> destination)."""
+    if isinstance(kind, str) and kind.endswith("Conn"):
+        stem = kind[: -len("Conn")]
+        for suffix, group in _KIND_SUFFIX_TO_GROUP.items():
+            if stem.endswith(suffix) and len(stem) > len(suffix):
+                return group
+    raise click.ClickException(
+        f"invalid connection kind {kind!r}; expected '<connector><Src|Dest>Conn'"
+        " (e.g. 'mysqlSrcConn')"
+    )
+
+
+def _kv_list(kvs) -> list:
+    """The ``[{key, value}]`` payload the server expects from a `KeyValue` list."""
+    return [{"key": kv.key, "value": kv.value} for kv in kvs]
+
+
+def _load_connection_document(conn_file: str, group: str | None):
+    """Read the connection YAML, validate it as a `Conn`, and dehydrate it.
+
+    Returns ``(connection_yaml, group, secrets, variables)``: the dehydrated
+    connection re-serialized as YAML (secret/var leaves reduced to ``secret:`` /
+    ``var:``), the group its kind implies, and the harvested secret/var values.
+    No secret value is sent inside the connection document — they ride in the
+    secret/var payloads.
+    """
     try:
         raw = (
             sys.stdin.read()
@@ -111,32 +143,21 @@ def _load_connection_document(
     except OSError as e:
         raise click.ClickException(f"cannot read connection file: {e}")
     try:
-        document = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise click.ClickException(f"invalid connection JSON: {e}")
-    doc_name = document.get("name")
-    if doc_name is None:
-        document["name"] = name
-    elif doc_name != name:
-        raise click.ClickException(
-            f"the connection document is named '{doc_name}' but the collection "
-            f"is '{name}' — a connection is named by its collection (1:1)"
-        )
+        document = template.from_yaml(raw)
+    except Exception as e:  # noqa: BLE001 -- any YAML parse failure
+        raise click.ClickException(f"invalid connection YAML: {e}")
     try:
-        _, mode = split_kind(document.get("kind", ""))
-    except ValueError as e:
+        kind = template.validate(document)
+    except template.TemplateError as e:
         raise click.ClickException(str(e))
-    implied = "source" if mode == "src" else "destination"
+    implied = _group_for_kind(kind)
     if group is not None and group != implied:
         raise click.ClickException(
-            f"kind '{document['kind']}' makes this a {implied} collection, "
+            f"kind '{kind}' makes this a {implied} collection, "
             f"but --group says '{group}'"
         )
-    try:
-        secrets = secrets_from_env(document)
-    except ValueError as e:
-        raise click.ClickException(str(e))
-    return document, implied, secrets
+    dehydrated, secrets, variables = dehydrate(document)
+    return template.to_yaml(dehydrated), implied, _kv_list(secrets), _kv_list(variables)
 
 
 @collection.command()

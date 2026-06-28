@@ -2,12 +2,12 @@
 # Copyright 2024 Tabs Data Inc.
 #
 
-import json
 import logging
 
 import pytest
 from click.testing import CliRunner
 
+from tabsdata._cli.td import collection_group
 from tabsdata._cli.td.cli import cli
 
 # noinspection PyUnresolvedReferences
@@ -408,18 +408,20 @@ def test_collection_info_error(login):
 @pytest.mark.integration
 @pytest.mark.requires_internet
 def test_collection_create_source_with_conn_file(login, tmp_path):
-    conn_file = tmp_path / "conn.json"
+    conn_file = tmp_path / "conn.yaml"
     conn_file.write_text(
-        json.dumps(
-            {
-                "kind": "mysqlSrcConn",
-                "apiVersion": "1.0",
-                "conn_configs": {
-                    "uri": "mysql://127.0.0.1:3306/db",
-                    "credentials": {"user": "u", "password": "p"},
-                },
-            }
-        )
+        "kind: mysqlSrcConn\n"
+        "apiVersion: '1.0'\n"
+        "type: tabsdatak.conn.mysql:MySQLSrcConn\n"
+        "spec:\n"
+        "  uri: mysql://127.0.0.1:3306/db\n"
+        "  credentials:\n"
+        "    kind: userPasswordCredentials\n"
+        "    apiVersion: '1.0'\n"
+        "    type: tabsdatak.conn.common.types:UserPassword\n"
+        "    spec:\n"
+        "      user: secret:u\n"
+        "      password: secret:p\n"
     )
     runner = CliRunner()
     try:
@@ -450,6 +452,64 @@ def test_collection_create_source_with_conn_file(login, tmp_path):
                 "delete",
             ],
         )
+
+
+def _installed(type_: str, direction: str) -> bool:
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+
+    try:
+        template.resolve_conn(type_, direction)
+        return True
+    except template.TemplateError:
+        return False
+
+
+_MYSQL_SRC_YAML = """\
+kind: mysqlSrcConn
+apiVersion: '1.0'
+type: tabsdatak.conn.mysql:MySQLSrcConn
+spec:
+  uri: mysql://h:3306/db
+  credentials:
+    kind: userPasswordCredentials
+    apiVersion: '1.0'
+    type: tabsdatak.conn.common.types:UserPassword
+    spec:
+      user: secret:etl
+      password: secret:hunter2
+"""
+
+
+def test_group_for_kind():
+    assert collection_group._group_for_kind("mysqlSrcConn") == "source"
+    assert collection_group._group_for_kind("mysqlDestConn") == "destination"
+    import click
+
+    with pytest.raises(click.ClickException):
+        collection_group._group_for_kind("notAConn")
+
+
+@pytest.mark.skipif(
+    not _installed("mysql", "src"), reason="mysql connector not installed"
+)
+def test_load_connection_document_dehydrates(tmp_path):
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+
+    path = tmp_path / "conn.yaml"
+    path.write_text(_MYSQL_SRC_YAML)
+    connection, group, secrets, variables = collection_group._load_connection_document(
+        str(path), None
+    )
+    assert group == "source"
+    assert {kv["value"] for kv in secrets} == {"etl", "hunter2"}
+    assert variables == []
+    sent = template.from_yaml(connection)
+    creds = sent["spec"]["credentials"]["spec"]
+    assert creds["user"] == "secret:"
+    assert creds["password"] == "secret:"
+    assert sent["spec"]["uri"] == "mysql://h:3306/db"
 
 
 @pytest.mark.integration

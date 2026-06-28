@@ -377,23 +377,6 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_upsert_rejects_document_name_mismatch(db: TdPool) {
-        create_collection(&db, "srcn", Some(GroupName::source())).await;
-        let body = ConnectionUpsert::builder()
-            .connection(Some(document("renamed", "mysqlSrcConn")))
-            .secrets(Some(secrets()))
-            .vars(Some(vec![]))
-            .build()
-            .unwrap();
-        let err = upsert_service(&db, MockStore::default())
-            .service()
-            .raw_oneshot(upsert_request_body("srcn", body))
-            .await
-            .expect_err("the document name must equal the collection's");
-        assert!(err.to_string().contains("must equal"), "got: {err}");
-    }
-
-    #[td_test::test(db)]
     async fn test_upsert_rejects_duplicate_keys(db: TdPool) {
         create_collection(&db, "srcd", Some(GroupName::source())).await;
         // Same key twice (here once in secrets, once in vars) — which value
