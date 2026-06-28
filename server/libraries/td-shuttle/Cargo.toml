@@ -72,6 +72,8 @@ td-test = { workspace = true }
 
 # External dependencies
 
+arrow = { workspace = true }
+arrow-avro = { workspace = true }
 async-compression = { workspace = true, features = ["tokio", "all-algorithms"] }
 async-trait = { workspace = true }
 liblzma-sys = { workspace = true }
@@ -87,6 +89,7 @@ futures-util = { workspace = true }
 getset = { workspace = true }
 itertools = { workspace = true }
 object_store = { workspace = true, features = ["aws", "azure", "gcp", "http"] }
+parquet = { workspace = true }
 pin-project-lite = { workspace = true }
 polars = { workspace = true, features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"] }
 polars-io = { workspace = true, features = ["cloud"] }

@@ -53,6 +53,10 @@ path = "src/supervisor.rs"
 name = "td_transporter"
 path = "src/transporter.rs"
 
+[[bin]]
+name = "td_transporter2"
+path = "src/transporter2.rs"
+
 # tdk dummy workers (lifecycle simulators for K Pop -- internal testing only)
 
 [[bin]]

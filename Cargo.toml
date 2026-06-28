@@ -302,6 +302,17 @@ version = "0.6.0"
 version = "0.5.3"
 features = ["std"]
 
+[workspace.dependencies.arrow]
+version = "59"
+features = ["csv", "json"]
+
+[workspace.dependencies.arrow-avro]
+version = "59"
+
+[workspace.dependencies.parquet]
+version = "59"
+features = ["async"]
+
 [workspace.dependencies.async-compression]
 version = "0.4.41"
 features = ["tokio", "all-algorithms"]
