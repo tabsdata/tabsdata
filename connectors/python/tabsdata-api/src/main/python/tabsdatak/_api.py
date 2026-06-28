@@ -16,15 +16,8 @@ packages import as ``tabsdatak._api`` are:
   for polymorphic loading.
 * :class:`DescriptorBase` -- :class:`JsonSerde` plus the tagging
   the runtime relies on.
-* :class:`BaseRef` -- shared base for
-  :class:`~tabsdatak.api.Var` / :class:`~tabsdatak.api.Secret`
-  (the two leaves are structurally identical: a single optional
-  ``_raw`` string plus a field-site ``_value_pattern`` regex, both
-  serialized to one ``"<prefix><raw>"`` string).
-* :class:`VarValueConstraints` / :class:`SecretValueConstraints` --
-  field-site value-pattern constraints.
 * ``*_CONSTRAINTS`` validators -- per-domain name patterns
-  (table, var, cron mask, ...).
+  (table, cron mask, ...).
 * :func:`callable_to_str` / :func:`callable_from_str` /
   :func:`qualified_class` / :func:`resolve_class` --
   ``*Info``-side helpers for JSON round-trip of functions /
@@ -39,9 +32,8 @@ import importlib
 import inspect
 import re
 import typing
-from abc import ABC
 from datetime import datetime
-from typing import Any, Callable, ClassVar, Type, TypeVar, Union, dataclass_transform
+from typing import Any, Callable, ClassVar, TypeVar, Union, dataclass_transform
 
 from croniter import croniter
 from pydantic import (
@@ -59,7 +51,7 @@ from pydantic_core import core_schema
 
 # Error codes and exceptions live in `tabsdatak.api_error` so callers
 # only depend on that module when they want to react to errors.
-from tabsdatak.error import ApiErrorCode, ErrorCode
+from tabsdatak.error import ErrorCode
 
 _C = TypeVar("_C", bound=type)
 
@@ -274,66 +266,6 @@ def _validate_named_connection(value: str) -> str:
     return value
 
 
-# --- Environment variable name. POSIX-style: must start with a letter or
-# --- underscore, followed by letters / digits / underscores. Empty rejected.
-_VAR_NAME_RE_STR = r"^[A-Za-z_][A-Za-z0-9_]*$"
-_VAR_NAME_RE = re.compile(_VAR_NAME_RE_STR)
-
-
-def _validate_var_name(value: str) -> str:
-    if not _VAR_NAME_RE.fullmatch(value):
-        raise ValueError(
-            f"not a valid environment variable name (must start with a letter "
-            f"or underscore, then letters/digits/underscores): {value!r}"
-        )
-    return value
-
-
-# --- Kubernetes secret reference: `<secret>#<key>`.
-#
-# `<secret>` follows the K8s object-name rules for Secret resources --
-# RFC 1123 DNS subdomain, up to 253 chars: lowercase alphanumeric, '-',
-# '.', must start and end with an alphanumeric. Each dot-separated label
-# is itself a DNS-1123 label.
-#
-# `<key>` follows the K8s data-key rules for Secret entries: any
-# combination of alphanumeric (case-insensitive), '-', '_', '.'. This is
-# why a typical reference looks like `db-password#DB_PASSWORD` -- the
-# secret name is lowercase-DNS, but the key inside it is conventionally
-# uppercase to match shell var conventions.
-_SECRET_REF_SEP = "#"
-_DNS_1123_LABEL_RE_STR = r"[a-z0-9]([-a-z0-9]*[a-z0-9])?"
-_DNS_1123_SUBDOMAIN_RE = re.compile(
-    rf"^{_DNS_1123_LABEL_RE_STR}(\.{_DNS_1123_LABEL_RE_STR})*$"
-)
-_SECRET_DATA_KEY_RE_STR = r"^[-._a-zA-Z0-9]+$"
-_SECRET_DATA_KEY_RE = re.compile(_SECRET_DATA_KEY_RE_STR)
-_DNS_1123_SUBDOMAIN_MAX = 253
-
-
-def _validate_secret_name(value: str) -> str:
-    if _SECRET_REF_SEP not in value:
-        raise ValueError(
-            f"not a valid secret reference "
-            f"(expected '<secret>{_SECRET_REF_SEP}<key>'): {value!r}"
-        )
-    secret, _, key = value.partition(_SECRET_REF_SEP)
-    if not (1 <= len(secret) <= _DNS_1123_SUBDOMAIN_MAX):
-        raise ValueError(
-            f"secret name must be 1-{_DNS_1123_SUBDOMAIN_MAX} chars "
-            f"(got {len(secret)}): {value!r}"
-        )
-    if not _DNS_1123_SUBDOMAIN_RE.fullmatch(secret):
-        raise ValueError(
-            f"secret name {secret!r} is not a valid RFC 1123 DNS "
-            f"subdomain (lowercase alphanumeric, '-', '.', must start "
-            f"and end with alphanumeric)"
-        )
-    if not _SECRET_DATA_KEY_RE.fullmatch(key):
-        raise ValueError(f"secret key {key!r} must match '[-._a-zA-Z0-9]+'")
-    return value
-
-
 def _validate_cron_mask(value: str) -> str:
     if value in _K8S_CRON_DESCRIPTORS:
         return value
@@ -351,123 +283,8 @@ COLL_TABLE_VERSIONS_NAME_CONSTRAINTS = AfterValidator(
 )
 CRON_MASK_CONSTRAINTS = AfterValidator(_validate_cron_mask)
 NAMED_CONN_CONSTRAINTS = AfterValidator(_validate_named_connection)
-VAR_NAME_CONSTRAINTS = AfterValidator(_validate_var_name)
-SECRET_NAME_CONSTRAINTS = AfterValidator(_validate_secret_name)
 
 NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
-
-
-# ---------------------------------------------------------------------------
-# Pattern annotation marker for Var / Secret fields.
-#
-# Use as ``Annotated[Secret, pattern(USER_PATTERN)]`` (or with Var). The
-# regex string is attached to the validated instance's ``_value_pattern``
-# and enforced when the value is read (``Secret.value``). For inline
-# literal values the pattern is also enforced eagerly at construction and
-# on deserialization, so a value that does not match the pattern is
-# rejected at the boundary rather than at first-use.
-#
-# The pattern is a *field-site* constraint: it is not serialized (the
-# wire form is just the ``"secret:..."`` / ``"var:..."`` string) and is
-# re-attached from the field annotation on load.
-#
-# A bare ``str`` at the field site is promoted to the matching ref with
-# the pattern injected -- so callers can write ``MyConn(user="alice")``
-# instead of ``MyConn(user=Secret("alice"))``.
-# ---------------------------------------------------------------------------
-
-
-class _ValuePattern:
-    """Base for the field-site adapters that pin a regex to the
-    *resolved* value of an :class:`Var` / :class:`Secret` field.
-
-    Subclasses (:class:`VarValueConstraints`,
-    :class:`SecretValueConstraints`) override :meth:`_on_class` to
-    declare which value-reference family they cover. The validator
-    runs at pydantic schema time -- when a bare string is passed
-    where the field expects an Var / Secret, it is wrapped as the
-    matching ref with the pattern injected.
-    """
-
-    def __init__(self, *, pattern: str):
-        if not isinstance(pattern, str):
-            raise TypeError(f"pattern() expects a regex string, got {type(pattern)!r}")
-        self._pattern = pattern
-
-    def __repr__(self) -> str:
-        return f"pattern({self._pattern!r})"
-
-    def _on_class(self) -> Type:
-        # Subclass hook -- defers `tabsdatak.api` import until the field
-        # schema is built (well after module load), so a module-level
-        # ``EnvValuePattern(...)`` literal in this module does not race
-        # the api <-> _api import cycle.
-        raise NotImplementedError
-
-    def __get_pydantic_core_schema__(
-        self,
-        source_type: Any,
-        handler: GetCoreSchemaHandler,
-    ) -> core_schema.CoreSchema:
-
-        if not (
-            isinstance(source_type, type) and issubclass(source_type, self._on_class())
-        ):
-            raise TypeError(
-                f"pattern() can only annotate Var or Secret subclasses "
-                f"(got {source_type!r})"
-            )
-
-        regex = self._pattern
-        base = handler(source_type)
-
-        def wrap(value: Any, h: Callable[[Any], Any]) -> Any:
-            # Bare/serialized string: build the ref with the field's
-            # pattern injected. ``_parse`` strips the ``secret:`` /
-            # ``var:`` prefix when present (the serialized form) and
-            # takes a bare string verbatim (the user-literal form).
-            if isinstance(value, str):
-                instance = source_type(source_type._parse(value), _value_pattern=regex)
-            else:
-                instance = h(value)
-                # Skip reconstruction when the instance already carries
-                # the field's regex (round-trip through the *same* field,
-                # or a caller that built it with the matching regex).
-                if getattr(instance, "_value_pattern", None) == regex:
-                    return instance
-                # Otherwise rebuild so the field's pattern wins.
-                instance = source_type(instance._raw, _value_pattern=regex)
-            # Inline literal: enforce the pattern eagerly so a bad value
-            # is rejected at the boundary, not at first read.
-            if instance._raw is not None:
-                instance._validate(instance._raw)
-            return instance
-
-        return core_schema.no_info_wrap_validator_function(wrap, base)
-
-
-class VarValueConstraints(_ValuePattern):
-    """Field-site value-pattern check for
-    :class:`~tabsdatak.api.Var` references. Use as
-    ``Annotated[Var, VarValueConstraints(pattern=...)]`` on a
-    per-connector ``UriSpec`` / credential alias."""
-
-    def _on_class(self) -> Type:
-        from tabsdatak.api import Var
-
-        return Var
-
-
-class SecretValueConstraints(_ValuePattern):
-    """Field-site value-pattern check for
-    :class:`~tabsdatak.api.Secret` references. Use as
-    ``Annotated[Secret, SecretValueConstraints(pattern=...)]``
-    on a per-connector ``UriSpec`` / credential alias."""
-
-    def _on_class(self) -> Type:
-        from tabsdatak.api import Secret
-
-        return Secret
 
 
 # ---------------------------------------------------------------------------
@@ -977,7 +794,7 @@ class JsonSerde:
             # If the instance is a subclass / different concrete type than
             # the declared field type, pydantic's default chain runs through
             # the *declared* type's schema and silently drops fields the
-            # subclass added (e.g. LiteralEnv.val at an Var field). Re-route
+            # subclass added (a field declared only on the subclass). Re-route
             # through the actual class's TypeAdapter so its full schema fires
             # and the result includes every subclass-declared field.
             if actual_cls is not cls:
@@ -1016,150 +833,6 @@ class DescriptorBase(JsonSerde):
         check_tz_aware_datetime(self)
         self.validate()
         return self
-
-
-# ---------------------------------------------------------------------------
-# Base shared by `tabsdatak.api.Var` and `tabsdatak.api.Secret`.
-#
-# Both leaves are structurally identical: a single optional string
-# (``_raw``) plus an optional field-site ``_value_pattern`` regex. They
-# are plain (non-dataclass) classes with a custom pydantic core schema
-# that serializes each to one string -- ``"<prefix><raw or ''>"`` (e.g.
-# ``"secret:hunter2"`` / ``"var:"``) -- and validates the same string
-# (and bare strings / pre-built instances) back. The shared behaviour
-# (``value`` / ``_validate`` / ``_parse`` / the core schema) lives here
-# once. Public surface stays split: ``Var`` and ``Secret`` are
-# first-class classes in ``api.py`` and remain distinct user-facing
-# concepts.
-# ---------------------------------------------------------------------------
-
-
-class BaseRef(JsonSerde, ABC):
-    """Shared base for :class:`~tabsdatak.api.Var` and
-    :class:`~tabsdatak.api.Secret`.
-
-    A ref carries a single optional string ``_raw``:
-
-    * ``None``  -- an *unhydrated* reference. The value is resolved
-      later by the framework's hydration pipeline (see
-      :mod:`tabsdatak.common._json_serde`); reading :attr:`value`
-      raises ``_not_hydrated_error``.
-    * a string  -- an inline *literal*; :attr:`value` returns it
-      (after the optional ``_value_pattern`` check).
-
-    Leaves customise two class attributes:
-
-    * ``_prefix`` -- the serialized string prefix (``"secret:"`` /
-      ``"var:"``).
-    * ``_not_hydrated_error`` -- :class:`ErrorCode` raised by
-      :attr:`value` on an unhydrated ref. ``API_8`` for ``Var``
-      (runtime), ``API_11`` for ``Secret`` (internal).
-    """
-
-    # Set by leaf. Declared without field annotations -- BaseRef is a
-    # plain class, not a pydantic dataclass.
-    _prefix: ClassVar[str] = ""
-    _not_hydrated_error: ClassVar[Any] = None
-
-    def __init__(self, value: str | None = None, *, _value_pattern: str | None = None):
-        # ``Secret("x")`` / ``Var("x")`` -> inline literal;
-        # ``Secret()`` / ``Var()`` -> unhydrated ref (value is None).
-        self._raw = value
-        self._value_pattern = _value_pattern
-
-    @property
-    def value(self) -> str:
-        """The resolved value -- raises if this ref was never hydrated."""
-        if self._raw is None:
-            raise type(self)._not_hydrated_error.exception(name=type(self).__name__)
-        return self._validate(self._raw)
-
-    def _validate(self, val: str) -> str:
-        pattern = self._value_pattern
-        if pattern is not None and re.fullmatch(pattern, val) is None:
-            raise ApiErrorCode.API_6.exception(
-                name=type(self).__name__,
-                pattern=pattern,
-                value=val,
-            )
-        return val
-
-    @classmethod
-    def _sibling_prefixes(cls) -> set[str]:
-        # Prefixes owned by the *other* ref leaves (e.g. ``"var:"`` from
-        # ``Secret``'s view). Derived from the leaf classes so it stays in
-        # sync without a hand-maintained list.
-        return {
-            sub._prefix
-            for sub in BaseRef.__subclasses__()
-            if sub._prefix and sub._prefix != cls._prefix
-        }
-
-    @classmethod
-    def _parse(cls, s: str) -> str | None:
-        # Strip the leaf prefix from a serialized string; a bare string
-        # (no prefix) is taken verbatim. ``"<prefix>"`` (and ``""``) ->
-        # ``None`` (an unhydrated ref).
-        if s.startswith(cls._prefix):
-            rest = s[len(cls._prefix) :]
-            return rest if rest != "" else None
-        # A string carrying a *different* leaf's prefix belongs to that
-        # type, not this one -- reject so a ``Union[Secret, Var]`` field
-        # round-trips each serialized value back to its own type.
-        for sibling in cls._sibling_prefixes():
-            if s.startswith(sibling):
-                raise ValueError(
-                    f"{cls.__name__} cannot parse {s!r}: it carries the "
-                    f"{sibling!r} prefix of a different reference type"
-                )
-        return s if s != "" else None
-
-    def __eq__(self, other: Any) -> bool:
-        return (
-            type(self) is type(other)
-            and self._raw == other._raw
-            and self._value_pattern == other._value_pattern
-        )
-
-    def __hash__(self) -> int:
-        return hash((type(self), self._raw, self._value_pattern))
-
-    def __repr__(self) -> str:
-        # Secrets redact their inline value; vars show it.
-        return f"{type(self).__name__}({self._repr_raw()})"
-
-    def _repr_raw(self) -> str:
-        return repr(self._raw)
-
-    @classmethod
-    def __get_pydantic_core_schema__(
-        cls,
-        source_type: Any,
-        handler: GetCoreSchemaHandler,
-    ) -> core_schema.CoreSchema:
-        def validate(value: Any) -> Any:
-            if isinstance(value, cls):
-                return value
-            if isinstance(value, str):
-                return cls(cls._parse(value))
-            raise ValueError(
-                f"{cls.__name__} expects a string or {cls.__name__} "
-                f"instance (got {type(value).__name__})"
-            )
-
-        def serialize(instance: Any) -> str:
-            # Key off the instance's own class, not ``cls``: in a
-            # ``Union[Secret, Var]`` field pydantic may invoke the
-            # left member's serializer on the other member's instance.
-            prefix = type(instance)._prefix
-            return prefix + (instance._raw if instance._raw is not None else "")
-
-        return core_schema.no_info_plain_validator_function(
-            validate,
-            serialization=core_schema.plain_serializer_function_ser_schema(
-                serialize, return_schema=core_schema.str_schema()
-            ),
-        )
 
 
 # ---------------------------------------------------------------------------

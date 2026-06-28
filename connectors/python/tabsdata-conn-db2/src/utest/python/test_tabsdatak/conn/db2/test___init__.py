@@ -75,7 +75,9 @@ def test_db2_conn_round_trip(cls):
         conn_cfg={"db2.timeout": 30},
     )
     loaded = cls.from_json(c.to_json())
-    assert loaded == c
+    # Serializing always dehydrates, so secret values do not survive the
+    # round-trip -- the credentials come back dehydrated.
+    assert loaded.credentials == UserPassword(user=Secret(), password=Secret())
     assert loaded.uri == "db2://db2.example.com:50000/SAMPLE"
     assert loaded.conn_cfg == {"db2.timeout": 30}
 

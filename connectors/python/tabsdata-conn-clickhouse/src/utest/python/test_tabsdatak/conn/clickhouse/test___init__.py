@@ -4,7 +4,7 @@ import typing
 
 import pytest
 
-from tabsdatak.api import Var, Secret
+from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     CfgSpec,
@@ -125,7 +125,7 @@ def test_port_unhydrated_ref_rejected_at_value():
     from tabsdatak.conn.common.types import _convert
 
     # An unhydrated port ref carries no value yet; converting it raises.
-    conn = _bare_conn(port=Var())
+    conn = _bare_conn(port=Secret())
     with pytest.raises(Exception):
         _convert(conn.port, int)
 
@@ -202,7 +202,14 @@ def test_gcs_location_round_trips_json():
         base_path="staging/clickhouse",
     )
     loaded = GCSLocation.from_json(original.to_json())
-    assert loaded == original
+    # Serializing always dehydrates, so secret values do not survive the
+    # round-trip -- both credential blocks come back dehydrated.
+    assert loaded == GCSLocation(
+        bucket="my-bucket",
+        credentials=GCPJson(json=Secret()),
+        hmac_credentials=GCPHmac(access_key=Secret(), secret_key=Secret()),
+        base_path="staging/clickhouse",
+    )
 
 
 def test_gcs_location_rejects_missing_service_account():

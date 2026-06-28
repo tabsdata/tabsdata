@@ -179,9 +179,9 @@ def _ch_client(fresh_clickhouse):
     import clickhouse_connect
 
     host = fresh_clickhouse.host
-    host = host.value if hasattr(host, "value") else host
-    user = fresh_clickhouse.credentials.user.value
-    password = fresh_clickhouse.credentials.password.value
+    host = host.value() if hasattr(host, "value") else host
+    user = fresh_clickhouse.credentials.user.value()
+    password = fresh_clickhouse.credentials.password.value()
     return clickhouse_connect.get_client(
         host=host,
         port=fresh_clickhouse.port,

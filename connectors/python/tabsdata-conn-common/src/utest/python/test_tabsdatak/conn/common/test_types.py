@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from tabsdatak.api import Var, Secret
+from tabsdatak.api import Secret
 from tabsdatak.conn.common.error import ConnErrorCode, ConnInitException
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
@@ -24,10 +24,12 @@ from tabsdatak.conn.common.types import _convert
 # ---------------------------------------------------------------------------
 
 
-def test_user_password_round_trip_with_inline_strings():
+def test_user_password_round_trip_drops_inline_values():
+    # Serializing always dehydrates, so inline values do not survive a
+    # serialize/deserialize round-trip -- the secrets come back dehydrated.
     c = UserPassword(user=Secret("etl"), password=Secret("pw"))
     back = UserPassword.from_json(c.to_json())
-    assert back == c
+    assert back == UserPassword(user=Secret(), password=Secret())
 
 
 def test_user_password_round_trip_with_unhydrated_refs():
@@ -37,10 +39,10 @@ def test_user_password_round_trip_with_unhydrated_refs():
     assert isinstance(back.password, Secret)
 
 
-def test_user_password_credentials_reject_var():
-    # Credentials are Secret-only; a Var ref is rejected.
+def test_user_password_credentials_reject_non_secret():
+    # Credentials are Secret-only; a non-string, non-Secret value is rejected.
     with pytest.raises(ConnInitException):
-        UserPassword(user=Var(), password=Secret())  # type: ignore[arg-type]
+        UserPassword(user=123, password=Secret())  # type: ignore[arg-type]
 
 
 def test_aws_access_secret_key_round_trips():
@@ -64,16 +66,18 @@ def test_azure_account_key_round_trips():
         account_key=Secret(),
     )
     back = AzureAccountKey.from_json(c.to_json())
-    assert back == c
+    # Values never serialize, so both fields come back dehydrated.
+    assert back == AzureAccountKey(account_name=Secret(), account_key=Secret())
 
 
 def test_polymorphic_load_via_credentials_base():
     c = UserPassword(user=Secret("u"), password=Secret("p"))
     back = Credentials.from_json(c.to_json())
     assert isinstance(back, UserPassword)
-    # Credential fields are typed `Secret`; bare strings coerce to a
-    # `Secret` literal. The literal payload is reachable via `value`.
-    assert back.user.value == "u"
+    # Credential fields are typed `Secret`; values never serialize, so the
+    # round-tripped secrets come back dehydrated.
+    assert isinstance(back.user, Secret)
+    assert back.user == Secret()
 
 
 # ---------------------------------------------------------------------------
@@ -191,10 +195,6 @@ def test_convert_passes_through_datetime():
 
 def test_convert_resolves_secret_literal_to_str():
     assert _convert(Secret("hello"), str) == "hello"
-
-
-def test_convert_resolves_env_literal_to_str():
-    assert _convert(Var("hello"), str) == "hello"
 
 
 

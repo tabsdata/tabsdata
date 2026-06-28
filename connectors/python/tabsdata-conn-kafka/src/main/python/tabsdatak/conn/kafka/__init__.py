@@ -16,7 +16,7 @@ connectors (mysql / postgres / db2):
   carrying the protobuf message type name.
 
 Bootstrap servers, SASL credentials, schema-registry URL /
-region / names accept ``Var`` / ``Secret`` references. CDC-style
+region / names accept ``Secret`` references. CDC-style
 cfg keys live in ``KafkaStreamSrc.src_cfg`` (rollover thresholds,
 logging level).
 """
@@ -30,7 +30,7 @@ from pydantic import StringConstraints
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
-from tabsdatak.api import Conn, Secret, StreamSrc, Var
+from tabsdatak.api import Conn, Secret, StreamSrc
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -83,14 +83,7 @@ ConfluentSchemaRegistryUrlNameSpec: TypeAlias = Union[
     Annotated[
         str, StringConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR)
     ],
-    Annotated[
-        Var,
-        _api.VarValueConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR),
-    ],
-    Annotated[
-        Secret,
-        _api.SecretValueConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR),
-    ],
+    Secret,
 ]
 
 
@@ -115,15 +108,13 @@ class ConfluentSchemaRegistry:
 _REGISTRY_NAME_RE_STR = r".*"
 RegistryNameSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_REGISTRY_NAME_RE_STR)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_REGISTRY_NAME_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_REGISTRY_NAME_RE_STR)],
+    Secret,
 ]
 
 _SCHEMA_NAME_RE_STR = r".*"
 SchemaNameSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_SCHEMA_NAME_RE_STR)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_SCHEMA_NAME_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_SCHEMA_NAME_RE_STR)],
+    Secret,
 ]
 
 
@@ -163,8 +154,7 @@ SchemaRegistrySpec: TypeAlias = Union[
 _SERVERS_VALUE_PATTERN = r".+"
 KafkaServersSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_SERVERS_VALUE_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_SERVERS_VALUE_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_SERVERS_VALUE_PATTERN)],
+    Secret,
 ]
 
 # Topic name -- Kafka topics permit a wide alphabet, validation is
@@ -172,8 +162,7 @@ KafkaServersSpec: TypeAlias = Union[
 _GROUP_VALUE_PATTERN = r".+"
 KafkaGroupSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_GROUP_VALUE_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_GROUP_VALUE_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_GROUP_VALUE_PATTERN)],
+    Secret,
 ]
 
 # Schema
@@ -199,7 +188,7 @@ class KafkaStreamSrcConn(Conn):
 
     :param servers: Bootstrap-server list -- a single
         comma-separated string of ``host[:port]`` items, or an
-        ``Var`` / ``Secret`` ref that resolves to one.
+        ``Secret`` ref that resolves to one.
     :param credentials: :class:`UserPassword` for SASL/SCRAM-256
         auth. Omit for an unauthenticated cluster.
     :param group_id: Consumer-group id used by the source's

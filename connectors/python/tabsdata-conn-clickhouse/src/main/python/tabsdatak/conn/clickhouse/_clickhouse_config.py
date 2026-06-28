@@ -8,7 +8,7 @@ class ClickHouseConfig:
     """Connection parameters for a ClickHouse server.
 
     Credentials are plain strings (the new-model connector resolves
-    Secret/Var into raw values before constructing this config). When
+    Secret into raw values before constructing this config). When
     ``username``/``password`` are empty strings, the ``default`` user
     with no password is used.
     """

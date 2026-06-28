@@ -11,8 +11,8 @@ subscriber, or transformer to target Snowflake:
   by the destination plugin (``COPY INTO`` via a stage).
 
 Snowflake is dest-only in this connector; there is no
-``SnowflakeSrc``. Identifier and account fields accept ``Var`` /
-``Secret`` references so values can be injected from the runtime
+``SnowflakeSrc``. Identifier and account fields accept ``Secret``
+references so values can be injected from the runtime
 environment rather than hard-coded.
 """
 
@@ -27,7 +27,7 @@ from pydantic import StringConstraints
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, Secret, Var
+from tabsdatak.api import Conn, Dest, Secret
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -46,8 +46,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 AccountSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.ACCOUNT_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
+    Secret,
 ]
 
 
@@ -58,10 +57,7 @@ AccountSpec: TypeAlias = Union[
 
 IdentifierSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
-    ],
+    Secret,
 ]
 
 NameSpec: TypeAlias = IdentifierSpec
@@ -89,7 +85,7 @@ class SnowflakeDestConn(Conn):
     """Snowflake account connection.
 
     :param account: Snowflake account locator (e.g. ``ABCDEFG-XY12345``).
-        Accepts a plain str, ``Var``, or ``Secret``.
+        Accepts a plain str or ``Secret``.
     :param credentials: :class:`UserPassword` (user + password / PAT).
     :param role: Default Snowflake role. Optional.
     :param database: Default database. Required if ``schema`` is set.

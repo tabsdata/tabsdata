@@ -7,8 +7,8 @@
   table. Writes go via a GCS staging bucket and a
   ``load_table_from_uri`` load job.
 
-No ``BigQuerySrc`` today. Credential fields accept ``Var`` /
-``Secret`` references.
+No ``BigQuerySrc`` today. Credential fields accept ``Secret``
+references.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from pydantic import StringConstraints
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, Secret, Var
+from tabsdatak.api import Conn, Dest, Secret
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation
@@ -50,14 +50,12 @@ CredentialsSpec: TypeAlias = GCPJson
 
 ProjectSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.PROJECT_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.PROJECT_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.PROJECT_PATTERN)],
+    Secret,
 ]
 
 DatasetSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.DATASET_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.DATASET_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.DATASET_PATTERN)],
+    Secret,
 ]
 
 BigQueryTableNameSpec: TypeAlias = Annotated[

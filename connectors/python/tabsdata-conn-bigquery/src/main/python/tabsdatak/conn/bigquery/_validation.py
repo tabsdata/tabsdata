@@ -5,7 +5,7 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 
 # --- Project / dataset patterns -------------------------------------
 
-# Pure-regex forms used as ``value_pattern`` on the Var / Secret
+# Pure-regex forms used as ``value_pattern`` on the Secret
 # subclasses for the BigQuery identifier-shaped fields (``project`` /
 # ``dataset``). They are enforced via
 # :class:`~tabsdatak._types.ValOrRef`'s ``re.fullmatch`` on the

@@ -25,7 +25,7 @@ CDC (change-data capture):
   :class:`TimestampPosition` -- ``start_from`` primitives for
   resuming binlog replication at a specific position.
 
-URI and credential fields accept ``Var`` / ``Secret`` references.
+URI and credential fields accept ``Secret`` references.
 Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
 size, read/write engine selection); CDC tuning lives in
 ``MySQLCdcStreamSrc.src_cfg`` (buffer / trigger thresholds, polling
@@ -51,7 +51,6 @@ from tabsdatak.api import (
     Secret,
     Src,
     StreamSrc,
-    Var,
 )
 
 # noinspection PyProtectedMember
@@ -142,10 +141,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 UriSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.MSYQL_URI_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.MSYQL_URI_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.MSYQL_URI_PATTERN)
-    ],
+    Secret,
 ]
 QueriesSpec: TypeAlias = list[str]
 MySQLTableNameSpec: TypeAlias = Annotated[str, _validation.MYSQL_TABLE_FQN_VALIDATOR]
@@ -193,7 +189,7 @@ class MySQLSrcConn(Conn):
 
     :param uri: SQLAlchemy-style URI
         (``mysql+mysqlconnector://host:port/db``). Accepts a plain
-        str, ``Var``, or ``Secret``.
+        str or ``Secret``.
     :param credentials: :class:`UserPassword` -- user + password
         spliced into the URI by the engine factory.
     :param entity_whitelist: Optional list of regex patterns; the
@@ -333,8 +329,8 @@ class MySQLCdcStreamSrcConn(Conn):
     permissions, replica id reservation) and a divergent attribute
     set is expected over time.
 
-    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Var`` /
-        ``Secret`` per :data:`UriSpec`.
+    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Secret``
+        per :data:`UriSpec`.
     :param credentials: :class:`UserPassword`.
     :param server_id: MySQL replica id for the binlog stream.
         Default 512 matches the legacy connector.

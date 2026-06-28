@@ -51,8 +51,8 @@ def collection():
     help=(
         "Connection YAML document ('-' to read from stdin). Required for a "
         "source/destination collection — it is created WITH its connection. "
-        "The connection is validated and dehydrated client-side; secret/var "
-        "values are stripped into the secret/var payloads."
+        "The connection is validated and dehydrated client-side; secret "
+        "values are stripped into the secret payload."
     ),
 )
 @click.pass_context
@@ -74,9 +74,8 @@ def create(
     description = description or ""
     connection = None
     secrets = None
-    variables = None
     if conn_file:
-        connection, group, secrets, variables = _load_connection_document(
+        connection, group, secrets = _load_connection_document(
             conn_file, group
         )
     elif group in ("source", "destination"):
@@ -94,7 +93,6 @@ def create(
             base_path=base_path,
             connection=connection,
             secrets=secrets,
-            variables=variables,
         )
         click.echo("Collection created successfully")
     except Exception as e:
@@ -127,11 +125,10 @@ def _kv_list(kvs) -> list:
 def _load_connection_document(conn_file, group):
     """Read the connection YAML, validate it as a `Conn`, and dehydrate it.
 
-    Returns ``(connection_yaml, group, secrets, variables)``: the dehydrated
-    connection re-serialized as YAML (secret/var leaves reduced to ``secret:`` /
-    ``var:``), the group its kind implies, and the harvested secret/var values.
-    No secret value is sent inside the connection document — they ride in the
-    secret/var payloads.
+    Returns ``(connection_yaml, group, secrets)``: the dehydrated connection
+    re-serialized as YAML (secret leaves reduced to ``secret:``), the group its
+    kind implies, and the harvested secret values. No secret value is sent
+    inside the connection document — they ride in the secret payload.
     """
     try:
         raw = (
@@ -155,8 +152,8 @@ def _load_connection_document(conn_file, group):
             f"kind '{kind}' makes this a {implied} collection, "
             f"but --group says '{group}'"
         )
-    dehydrated, secrets, variables = dehydrate(document)
-    return template.to_yaml(dehydrated), implied, _kv_list(secrets), _kv_list(variables)
+    dehydrated, secrets = dehydrate(document)
+    return template.to_yaml(dehydrated), implied, _kv_list(secrets)
 
 
 @collection.command()

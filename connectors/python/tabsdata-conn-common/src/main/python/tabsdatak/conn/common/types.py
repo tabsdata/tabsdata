@@ -4,7 +4,7 @@ package.
 Lives under ``tabsdata-conn-common`` so each connector imports the
 same field aliases (``UserPassword``, ``AwsAccessSecretKey``,
 ``GCPJson``, ``EntityWhitelistSpec``, ``CfgSpec``, etc.) instead
-of redefining them per package. ``Var`` / ``Secret`` references
+of redefining them per package. ``Secret`` references
 are honoured uniformly: a bare string passed to one of these
 fields is auto-wrapped as ``Secret(...)`` at field-validation
 time.
@@ -25,7 +25,7 @@ import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.common._validation as _validation
-from tabsdatak.api import Secret, Var
+from tabsdatak.api import Secret
 from tabsdatak.conn.common.error import ConnErrorCode
 
 # --- Credentials -----------------------------------------------------
@@ -112,11 +112,10 @@ class DataType(Enum):  # PLACEHOLDER
 
 # --- Cloud-location field specs --------------------------------------
 #
-# Each spec is a ``Union[Annotated[Secret, SecretValuePattern(<regex>)],
-# Annotated[Var, EnvValuePattern(<regex>)]]``. The annotation injects
-# the regex into the Var / Secret instance bound to the field, so the
-# pattern travels through serialization and is enforced both at literal
-# construction and at ``value()`` time on resolved refs.
+# Each spec is a ``Union[Annotated[str, StringConstraints(<regex>)],
+# Secret]``: a plain string literal is validated against the location's
+# regex, while a ``Secret`` carries the value opaquely (the regex does
+# not apply to secret values).
 
 
 # --- BasePath -------------------------------------------------------
@@ -132,15 +131,14 @@ _BASE_PATH_RE_STR = r"[^\\\x00]*"
 
 BasePathSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_BASE_PATH_RE_STR)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_BASE_PATH_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_BASE_PATH_RE_STR)],
+    Secret,
 ]
 
 
 def full_path(base_path: BasePathSpec, path: str) -> str:
     """Join ``base_path`` with ``path``, stripping leading and
     trailing ``/`` from each side and from the result. ``base_path``
-    may be a ``str`` or a ``Secret`` / ``Var`` whose ``.value``
+    may be a ``str`` or a ``Secret`` whose ``.value()``
     resolves to the path string.
     """
     resolved = _convert(base_path, str)
@@ -157,8 +155,7 @@ _S3_BUCKET_RE_STR = r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]"
 
 S3BucketSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_S3_BUCKET_RE_STR)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_S3_BUCKET_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_S3_BUCKET_RE_STR)],
+    Secret,
 ]
 
 # --- AWS region ----------------------------------------------------
@@ -168,8 +165,7 @@ _AWS_REGION_RE_STR = r"[a-z]{2}(?:-[a-z]+)+-\d+"
 
 AwsRegionSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_AWS_REGION_RE_STR)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_AWS_REGION_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_AWS_REGION_RE_STR)],
+    Secret,
 ]
 
 # --- GCS bucket -----------------------------------------------------
@@ -181,8 +177,7 @@ _GCS_BUCKET_RE_STR = r"[a-z0-9][a-z0-9_-]{1,61}[a-z0-9]"
 
 GCSBucketSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_GCS_BUCKET_RE_STR)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_GCS_BUCKET_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_GCS_BUCKET_RE_STR)],
+    Secret,
 ]
 
 
@@ -198,8 +193,7 @@ _AZ_CONTAINER_RE_STR = r"[a-z0-9](?:-?[a-z0-9]){2,62}"
 
 AzContainerSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_AZ_CONTAINER_RE_STR)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_AZ_CONTAINER_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_AZ_CONTAINER_RE_STR)],
+    Secret,
 ]
 
 
@@ -245,11 +239,10 @@ EntityWhitelistSpec: TypeAlias = Annotated[
 _CoercionTypeSpec: TypeAlias = Union[int, float, str, bool, Decimal, bytes, datetime]
 
 
-def _convert[T: _CoercionTypeSpec](spec: T | Secret | Var, type_: Type[T]) -> T:
-    """Return the T form of a ``T`` / ``Secret`` / ``Var``
-    spec."""
+def _convert[T: _CoercionTypeSpec](spec: T | Secret, type_: Type[T]) -> T:
+    """Return the T form of a ``T`` / ``Secret`` spec."""
     if isinstance(spec, type_):
         return spec
     else:
         # Pydantic coercion to
-        return TypeAdapter(type_).validate_python(spec.value)
+        return TypeAdapter(type_).validate_python(spec.value())

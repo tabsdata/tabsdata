@@ -3,8 +3,8 @@
 #
 
 """`tdk collection create --conn-file`: the connection is now a YAML `Conn`
-document, validated and dehydrated client-side into the (connection, secrets,
-vars) the server receives."""
+document, validated and dehydrated client-side into the (connection, secrets)
+the server receives."""
 
 from __future__ import annotations
 
@@ -54,19 +54,18 @@ def test_load_connection_document_dehydrates(tmp_path):
     # noinspection PyProtectedMember
     from tabsdatak import _template as template
 
-    connection, group, secrets, variables = collection_group._load_connection_document(
+    connection, group, secrets = collection_group._load_connection_document(
         _write(tmp_path, _MYSQL_SRC_YAML), None
     )
     assert group == "source"
     # The secret values are harvested out of the document, into the payload.
     assert {kv["value"] for kv in secrets} == {"etl", "hunter2"}
-    assert variables == []
-    # The connection sent is dehydrated YAML: secret leaves reduced to "secret:",
+    # The connection sent is dehydrated YAML: secret leaves reduced to ":secret:",
     # plain identifiers left as-is.
     sent = template.from_yaml(connection)
     creds = sent["spec"]["credentials"]["spec"]
-    assert creds["user"] == "secret:"
-    assert creds["password"] == "secret:"
+    assert creds["user"] == ":secret:"
+    assert creds["password"] == ":secret:"
     assert sent["spec"]["uri"] == "mysql://h:3306/db"
 
 

@@ -70,7 +70,9 @@ def test_oracle_conn_round_trip(cls):
         conn_cfg={"oracle.timeout": 30},
     )
     loaded = cls.from_json(c.to_json())
-    assert loaded == c
+    # Serializing always dehydrates, so secret values do not survive the
+    # round-trip -- the credentials come back dehydrated.
+    assert loaded.credentials == UserPassword(user=Secret(), password=Secret())
     assert loaded.uri == "oracle://oracle.example.com:1521/orcl"
     assert loaded.conn_cfg == {"oracle.timeout": 30}
 
@@ -81,7 +83,7 @@ def test_oracle_src_dest_conn_have_distinct_kinds():
 
 @pytest.mark.parametrize("cls", [OracleSrcConn, OracleDestConn])
 def test_oracle_conn_rejects_bad_uri(cls):
-    # The ``uri`` field is a Union of ``str | Secret | Var``, each
+    # The ``uri`` field is a Union of ``str | Secret``, each
     # carrying the same regex. A bad value fails *every* branch of the
     # Union -- pydantic surfaces whichever raised; assert on the
     # ``TabsdataException`` umbrella rather than the specific code.

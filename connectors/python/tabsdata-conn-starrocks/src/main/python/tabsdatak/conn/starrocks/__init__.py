@@ -6,7 +6,7 @@
   one parquet slot per table. Writes go through an S3 staging
   area + native ``FILES()`` ingestion.
 
-``port`` accepts ``int|Var|Secret``; call
+``port`` accepts ``int|Secret``; call
 ``_convert(conn.port, int)`` from
 ``tabsdatak.conn.common.types`` at the use site to resolve to a
 runtime ``int``. Iceberg-style schema evolution is supported on
@@ -29,7 +29,6 @@ from tabsdatak.api import (
     Conn,
     Dest,
     Secret,
-    Var,
 )
 
 # noinspection PyProtectedMember
@@ -61,18 +60,16 @@ CredentialsSpec: TypeAlias = UserPassword
 # shortcut at the field site.
 HostSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=r".+")],
-    Annotated[Var, _api.VarValueConstraints(pattern=r".+")],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
+    Secret,
 ]
 
-# Port: plain int, or an Var / Secret whose resolved value parses as an
+# Port: plain int, or a Secret whose resolved value parses as an
 # unsigned integer. Call ``_convert(conn.port, int)`` at the use site to
 # do the final cast.
 _PORT_PATTERN = r"[0-9]+"
 PortSpec: TypeAlias = Union[
     int,
-    Annotated[Var, _api.VarValueConstraints(pattern=_PORT_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_PORT_PATTERN)],
+    Secret,
 ]
 
 
@@ -80,8 +77,7 @@ _IDENTIFIER_PATTERN = r"[A-Za-z_][A-Za-z0-9_]*"
 
 DatabaseSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_IDENTIFIER_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_IDENTIFIER_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_IDENTIFIER_PATTERN)],
+    Secret,
 ]
 StarRocksTableNameSpec: TypeAlias = Annotated[
     str,
@@ -185,7 +181,7 @@ class StarRocksDestConn(Conn):
 
     :param host: StarRocks FE host.
     :param port: MySQL-protocol port; default 9030. Accepts
-        ``int``, ``Var``, or ``Secret`` -- resolve at the use site
+        ``int`` or ``Secret`` -- resolve at the use site
         with ``_convert(conn.port, int)``.
     :param credentials: :class:`UserPassword`.
     :param staging: :class:`CloudLocation` (S3 / AzBlob / GCS).

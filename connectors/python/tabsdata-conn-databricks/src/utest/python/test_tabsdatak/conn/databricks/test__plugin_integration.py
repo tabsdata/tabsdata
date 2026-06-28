@@ -50,7 +50,7 @@ pytestmark = pytest.mark.databricks
 
 
 # ---------------------------------------------------------------------------
-# Var gate -- skip the whole module unless an external Databricks
+# Env var gate -- skip the whole module unless an external Databricks
 # workspace is configured (DBX0__* prefix, same as the legacy
 # ``tabsdata-databricks`` conftest).
 # ---------------------------------------------------------------------------

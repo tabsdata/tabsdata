@@ -48,7 +48,9 @@ def test_mssql_conn_round_trip(cls):
         conn_cfg={"mssql.timeout": 30},
     )
     loaded = cls.from_json(c.to_json())
-    assert loaded == c
+    # Serializing always dehydrates, so secret values do not survive the
+    # round-trip -- the credentials come back dehydrated.
+    assert loaded.credentials == UserPassword(user=Secret(), password=Secret())
     assert loaded.uri == "mssql://mssql.example.com:1433/analytics"
     assert loaded.conn_cfg == {"mssql.timeout": 30}
 
@@ -72,7 +74,9 @@ def test_mssql_conn_accepts_odbc_connection_string_and_round_trips():
         ),
     )
     loaded = MSSQLSrcConn.from_json(conn.to_json())
-    assert loaded == conn
+    # Serializing always dehydrates, so secret values do not survive the
+    # round-trip -- the credentials come back dehydrated.
+    assert loaded.credentials == UserPassword(user=Secret(), password=Secret())
     assert loaded.uri == odbc_uri
 
     src = MSSQLSrc(queries=["SELECT 1"])
@@ -84,7 +88,7 @@ def test_mssql_conn_accepts_odbc_connection_string_and_round_trips():
 
 @pytest.mark.parametrize("cls", [MSSQLSrcConn, MSSQLDestConn])
 def test_mssql_conn_rejects_bad_uri(cls):
-    # The ``uri`` field is a Union of ``str | Secret | Var``, each
+    # The ``uri`` field is a Union of ``str | Secret``, each
     # carrying the same regex. A bad value fails *every* branch of the
     # Union -- pydantic surfaces whichever raised; assert on the
     # ``TabsdataException`` umbrella rather than the specific code.

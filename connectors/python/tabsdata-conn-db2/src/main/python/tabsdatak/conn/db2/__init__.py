@@ -27,7 +27,7 @@ CDC (change-data capture):
   :class:`TimestampPosition` -- ``start_from`` primitives for
   resuming CD-table ingestion at a specific commit sequence.
 
-URI and credential fields accept ``Var`` / ``Secret`` references.
+URI and credential fields accept ``Secret`` references.
 Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
 size, read/write engine selection); CDC tuning lives in
 ``Db2CdcStreamSrc.src_cfg`` (buffer / trigger thresholds, polling
@@ -53,7 +53,6 @@ from tabsdatak.api import (
     Secret,
     Src,
     StreamSrc,
-    Var,
 )
 
 # noinspection PyProtectedMember
@@ -72,8 +71,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 UriSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.URI_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.URI_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URI_PATTERN)],
+    Secret,
 ]
 QueriesSpec: TypeAlias = list[str]
 Db2TableNameSpec: TypeAlias = Annotated[
@@ -117,7 +115,7 @@ class Db2SrcConn(Conn):
 
     :param uri: SQLAlchemy-style URI
         (``db2+ibm_db://host:port/db``). Accepts a plain str,
-        ``Var``, or ``Secret``.
+        or ``Secret``.
     :param credentials: :class:`UserPassword` -- user + password
         spliced into the URI by the engine factory.
     :param entity_whitelist: Optional list of regex patterns; the
@@ -321,7 +319,7 @@ class Db2CdcStreamSrcConn(Conn):
     different grants) and a divergent attribute set is expected
     over time.
 
-    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Var`` /
+    :param uri: SQLAlchemy-style URI; accepts ``str`` /
         ``Secret`` per :data:`UriSpec`.
     :param credentials: :class:`UserPassword`.
     :param entity_whitelist: Optional regex patterns narrowing

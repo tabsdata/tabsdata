@@ -1,5 +1,5 @@
 """Visitor helpers for the dict-representation of a `_JsonSerde` subclass,
-plus the secret/var dehydrate/hydrate pipeline built on top.
+plus the secret dehydrate/hydrate pipeline built on top.
 
 A serialized `_JsonSerde` subclass is a tree of *envelopes*:
 
@@ -12,23 +12,23 @@ returned by the walker. These power the *connection* helpers
 (`extract_connection_names`, `hydrate_connections`) -- a `NamedConn`
 serializes to an envelope of kind ``connectionRef``.
 
-Secrets and vars are NOT envelopes. A `tabsdatak.api.Secret` serializes
-to a single string ``"secret:<value>"`` (``"secret:"`` when unhydrated);
-a `tabsdatak.api.Var` to ``"var:<value>"`` (``"var:"`` when unhydrated).
-The secret/var helpers walk the tree for those string leaves and key
-each one on the var-style form of its jsonpath:
+Secrets are NOT envelopes. A `tabsdatak.api.Secret` string leaf is one
+of two forms: the dehydrated marker ``":secret:"`` (no value), or the
+hydrated ``"secret:<value>"``. The secret helpers walk the tree for those
+leaves and key each one on the env-var-style form of its jsonpath:
 
-* `dehydrate` strips every secret/var value out of the tree (replacing
-  ``"secret:hunter2"`` with ``"secret:"``) and returns it alongside two
-  `KeyValue` lists -- one for secrets, one for vars -- matching the
-  ``Vec<KeyValue>`` the apiserver's connection upsert expects. Keys are
-  the jsonpath form prefixed with ``SECRET_`` / ``VAR_``.
-* `hydrate` is the inverse: given the dehydrated tree plus the two
-  `KeyValue` lists (with values filled in), it writes each value back.
-* `env_hydrate` fills unhydrated secret/var leaves from the process
-  environment, reading the same ``SECRET_<key>`` / ``VAR_<key>`` names.
-* `list_refs` lists the secret/var keys a tree carries (for the
-  ``secret_names`` / ``var_names`` an apiserver connection read returns).
+* `dehydrate` strips every secret value out of the tree (replacing
+  ``"secret:hunter2"`` with ``":secret:"``) and returns it alongside a
+  `KeyValue` list, matching the ``Vec<KeyValue>`` the apiserver's
+  connection upsert expects. Keys are the jsonpath form prefixed with
+  ``SECRET_``.
+* `hydrate` is the inverse: given the dehydrated tree plus the
+  `KeyValue` list (with values filled in), it writes each value back as
+  ``"secret:<value>"``.
+* `env_hydrate` fills dehydrated secret leaves from the process
+  environment, reading the same ``SECRET_<key>`` names.
+* `list_refs` lists the secret keys a tree carries (for the
+  ``secret_names`` an apiserver connection read returns).
 """
 
 from __future__ import annotations
@@ -46,13 +46,13 @@ type Envelope = dict[str, Any]
 
 JsonSerdeData = Union[dict, list]
 
-# Valid var-style name (uppercase, no spaces).
-VarNameSpec: TypeAlias = str
+# Valid env-var-style key name (uppercase, no spaces).
+KeyNameSpec: TypeAlias = str
 
 
 @dataclass
 class KeyValue:
-    key: VarNameSpec
+    key: KeyNameSpec
     value: str | None = None
 
 
@@ -138,19 +138,18 @@ def replace_at(
 
 
 # ---------------------------------------------------------------------------
-# Secret / var helpers
+# Secret helpers
 # ---------------------------------------------------------------------------
 
-# Wire prefixes -- must match ``tabsdatak.api.Secret._prefix`` /
-# ``tabsdatak.api.Var._prefix``. A secret/var is a plain string leaf
-# ``"<prefix><value>"``; ``"<prefix>"`` (no value) is an unhydrated ref.
+# Wire forms for a secret string leaf -- must match `tabsdatak.api.Secret`:
+#   * ``":secret:"``       -- a dehydrated secret (no value).
+#   * ``"secret:<value>"`` -- a hydrated secret carrying ``<value>``.
+_SECRET_DEHYDRATED = ":secret:"
 _SECRET_PREFIX = "secret:"
-_VAR_PREFIX = "var:"
 
-# Key prefixes for the harvested `KeyValue` keys (and the env-var names
-# `env_hydrate` reads). Secrets get ``SECRET_``, vars ``VAR_``.
+# Key prefix for the harvested `KeyValue` keys (and the env-var names
+# `env_hydrate` reads). Secrets get ``SECRET_``.
 _SECRET_KEY_PREFIX = "SECRET_"
-_VAR_KEY_PREFIX = "VAR_"
 
 
 def _to_key(path: JsonPath) -> str:
@@ -165,15 +164,14 @@ def _to_key(path: JsonPath) -> str:
     return rest.upper()
 
 
-def _value_refs(
-    data: JsonSerdeData, prefix: str
-) -> list[tuple[JsonPath, str | None]]:
-    """Return ``(json_path, value)`` for every string leaf under ``data``
-    starting with ``prefix``.
+def _secret_refs(data: JsonSerdeData) -> list[tuple[JsonPath, str | None]]:
+    """Return ``(json_path, value)`` for every secret string leaf under
+    ``data``.
 
-    ``value`` is the text after the prefix, or ``None`` when the leaf is a
-    bare ``"<prefix>"`` (an unhydrated ref). Paths use the same syntax as
-    `find_by_kind`, so `replace_at` and `_to_key` accept them.
+    ``value`` is the hydrated value (the text after the ``"secret:"``
+    prefix), or ``None`` for a dehydrated ``":secret:"`` leaf. Paths use
+    the same syntax as `find_by_kind`, so `replace_at` and `_to_key`
+    accept them.
     """
     found: list[tuple[JsonPath, str | None]] = []
 
@@ -184,149 +182,117 @@ def _value_refs(
         elif isinstance(n, list):
             for i, v in enumerate(n):
                 walk(v, f"{path}[{i}]")
-        elif isinstance(n, str) and n.startswith(prefix):
-            found.append((path, n[len(prefix) :] or None))
+        elif isinstance(n, str):
+            if n == _SECRET_DEHYDRATED:
+                found.append((path, None))
+            elif n.startswith(_SECRET_PREFIX):
+                found.append((path, n[len(_SECRET_PREFIX) :]))
 
     walk(data, "$")
     return found
 
 
-def _harvest(
-    out: JsonSerdeData, prefix: str, key_prefix: str
-) -> list[KeyValue]:
-    """Collect a `KeyValue` per ``prefix`` leaf under ``out`` and blank
-    each leaf back to the bare ``"<prefix>"`` placeholder, in place."""
-    harvested: list[KeyValue] = []
-    for path, value in _value_refs(out, prefix):
-        harvested.append(KeyValue(key=key_prefix + _to_key(path), value=value))
-        replace_at(out, path, prefix)
-    return harvested
-
-
 def dehydrate(
     data: JsonSerdeData,
-) -> tuple[JsonSerdeData, list[KeyValue], list[KeyValue]]:
-    """Strip every secret/var value out of ``data``.
+) -> tuple[JsonSerdeData, list[KeyValue]]:
+    """Strip every secret value out of ``data``.
 
-    Returns ``(dehydrated, secrets, vars)``:
+    Returns ``(dehydrated, secrets)``:
 
     * ``dehydrated`` -- a deep copy of ``data`` with every secret leaf
-      reduced to ``"secret:"`` and every var leaf to ``"var:"``.
-    * ``secrets`` / ``vars`` -- one `KeyValue` per leaf, keyed by the
-      jsonpath form prefixed with ``SECRET_`` / ``VAR_``. ``value`` is
-      the inline value the leaf carried, or ``None`` for a leaf that was
-      already an unhydrated ref.
+      reduced to the dehydrated marker ``":secret:"``.
+    * ``secrets`` -- one `KeyValue` per leaf, keyed by the jsonpath form
+      prefixed with ``SECRET_``. ``value`` is the value the leaf carried,
+      or ``None`` for a leaf that was already dehydrated.
 
-    The two lists serialize to the ``Vec<KeyValue>`` the apiserver's
+    The list serializes to the ``Vec<KeyValue>`` the apiserver's
     connection upsert expects (``[{"key": ..., "value": ...}]``).
     """
     out = deepcopy(data)
-    secrets = _harvest(out, _SECRET_PREFIX, _SECRET_KEY_PREFIX)
-    vars_ = _harvest(out, _VAR_PREFIX, _VAR_KEY_PREFIX)
-    return out, secrets, vars_
+    secrets: list[KeyValue] = []
+    for path, value in _secret_refs(out):
+        secrets.append(KeyValue(key=_SECRET_KEY_PREFIX + _to_key(path), value=value))
+        replace_at(out, path, _SECRET_DEHYDRATED)
+    return out, secrets
 
 
-def _restore(
-    out: JsonSerdeData, prefix: str, key_prefix: str, kvs: list[KeyValue]
-) -> None:
-    missing_values = sorted(kv.key for kv in kvs if kv.value is None)
+def hydrate(
+    data: JsonSerdeData,
+    secrets: list[KeyValue],
+) -> JsonSerdeData:
+    """Write secret values back into a dehydrated tree.
+
+    The inverse of `dehydrate`: given the dehydrated ``data`` plus the
+    `KeyValue` list (with every ``value`` filled in), returns a deep copy
+    with each ``":secret:"`` leaf restored to ``"secret:<value>"``.
+
+    Raises:
+        CommonRuntimeException: if any entry in ``secrets`` has
+            ``value is None`` (COMMON_6), or if the set of keys does not
+            exactly match the keys derived from the leaves in ``data``
+            (COMMON_7).
+    """
+    out = deepcopy(data)
+    missing_values = sorted(kv.key for kv in secrets if kv.value is None)
     if missing_values:
         raise CommonErrorCode.COMMON_6.exception(keys=missing_values)
 
-    refs = _value_refs(out, prefix)
-    expected = {key_prefix + _to_key(path) for path, _ in refs}
-    provided = {kv.key for kv in kvs}
+    refs = _secret_refs(out)
+    expected = {_SECRET_KEY_PREFIX + _to_key(path) for path, _ in refs}
+    provided = {kv.key for kv in secrets}
     if expected != provided:
         raise CommonErrorCode.COMMON_7.exception(
             missing=sorted(expected - provided),
             extra=sorted(provided - expected),
         )
 
-    values = {kv.key: kv.value for kv in kvs}
+    values = {kv.key: kv.value for kv in secrets}
     for path, _ in refs:
-        replace_at(out, path, prefix + values[key_prefix + _to_key(path)])
-
-
-def hydrate(
-    data: JsonSerdeData,
-    secrets: list[KeyValue],
-    vars_: list[KeyValue],
-) -> JsonSerdeData:
-    """Write secret/var values back into a dehydrated tree.
-
-    The inverse of `dehydrate`: given the dehydrated ``data`` plus the
-    two `KeyValue` lists (with every ``value`` filled in), returns a deep
-    copy with each ``"secret:"`` / ``"var:"`` leaf restored to
-    ``"secret:<value>"`` / ``"var:<value>"``.
-
-    Raises:
-        CommonRuntimeException: if any entry in ``secrets`` / ``vars_``
-            has ``value is None`` (COMMON_6), or if the set of keys does
-            not exactly match the keys derived from the leaves in
-            ``data`` (COMMON_7).
-    """
-    out = deepcopy(data)
-    _restore(out, _SECRET_PREFIX, _SECRET_KEY_PREFIX, secrets)
-    _restore(out, _VAR_PREFIX, _VAR_KEY_PREFIX, vars_)
+        replace_at(out, path, _SECRET_PREFIX + values[_SECRET_KEY_PREFIX + _to_key(path)])
     return out
 
 
-def _env_restore(out: JsonSerdeData, prefix: str, key_prefix: str) -> None:
+def env_hydrate(data: JsonSerdeData) -> JsonSerdeData:
+    """Fill dehydrated secret leaves from the process environment.
+
+    Returns a deep copy of ``data`` with every ``":secret:"`` leaf set
+    from ``os.environ["SECRET_<key>"]`` as ``"secret:<value>"`` (``<key>``
+    is the jsonpath form, the same suffix `dehydrate` produces). Hydrated
+    leaves are left untouched.
+
+    Raises:
+        CommonRuntimeException: if any expected env var is unset
+            (COMMON_6, reported with the missing ``SECRET_`` keys).
+    """
+    out = deepcopy(data)
     plan: list[tuple[JsonPath, str]] = []
     missing: list[str] = []
-    for path, value in _value_refs(out, prefix):
-        # Inline literals are left untouched; only unhydrated refs
-        # (bare ``"<prefix>"``) are resolved from the environment.
+    for path, value in _secret_refs(out):
+        # Hydrated leaves are left untouched; only dehydrated leaves
+        # (``":secret:"``) are resolved from the environment.
         if value is not None:
             continue
-        key = key_prefix + _to_key(path)
+        key = _SECRET_KEY_PREFIX + _to_key(path)
         env_value = os.environ.get(key)
         if env_value is None:
             missing.append(key)
         else:
-            plan.append((path, prefix + env_value))
+            plan.append((path, _SECRET_PREFIX + env_value))
     if missing:
         raise CommonErrorCode.COMMON_6.exception(keys=sorted(set(missing)))
     for path, new_value in plan:
         replace_at(out, path, new_value)
-
-
-def env_hydrate(data: JsonSerdeData) -> JsonSerdeData:
-    """Fill unhydrated secret/var leaves from the process environment.
-
-    Returns a deep copy of ``data`` with every bare ``"secret:"`` leaf
-    set from ``os.environ["SECRET_<key>"]`` and every bare ``"var:"``
-    leaf from ``os.environ["VAR_<key>"]`` (``<key>`` is the jsonpath
-    form, the same suffix `dehydrate` produces). Inline literals are left
-    untouched.
-
-    Raises:
-        CommonRuntimeException: if any expected env var is unset
-            (COMMON_6, reported with the missing ``SECRET_`` / ``VAR_``
-            keys).
-    """
-    out = deepcopy(data)
-    _env_restore(out, _SECRET_PREFIX, _SECRET_KEY_PREFIX)
-    _env_restore(out, _VAR_PREFIX, _VAR_KEY_PREFIX)
     return out
 
 
-def list_refs(data: JsonSerdeData) -> tuple[list[str], list[str]]:
-    """Return ``(secret_keys, var_keys)`` for ``data``.
+def list_refs(data: JsonSerdeData) -> list[str]:
+    """Return ``secret_keys`` for ``data``.
 
-    The keys are the ``SECRET_`` / ``VAR_``-prefixed jsonpath forms of
-    every secret/var leaf -- matching the `KeyValue` keys `dehydrate`
-    produces. This backs the ``secret_names`` / ``var_names`` an
-    apiserver connection read returns.
+    The keys are the ``SECRET_``-prefixed jsonpath forms of every secret
+    leaf -- matching the `KeyValue` keys `dehydrate` produces. This backs
+    the ``secret_names`` an apiserver connection read returns.
     """
-    secret_keys = [
-        _SECRET_KEY_PREFIX + _to_key(path)
-        for path, _ in _value_refs(data, _SECRET_PREFIX)
-    ]
-    var_keys = [
-        _VAR_KEY_PREFIX + _to_key(path) for path, _ in _value_refs(data, _VAR_PREFIX)
-    ]
-    return secret_keys, var_keys
+    return [_SECRET_KEY_PREFIX + _to_key(path) for path, _ in _secret_refs(data)]
 
 
 # ---------------------------------------------------------------------------

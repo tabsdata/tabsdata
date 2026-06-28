@@ -9,7 +9,6 @@ from pydantic import ValidationError
 # noinspection PyProtectedMember
 from tabsdatak import _api
 from tabsdatak.api import (
-    Var,
     Secret,
     Src,
 )
@@ -57,7 +56,7 @@ def test_dataclass_frozen_false_opts_out():
 # ---------------------------------------------------------------------------
 
 
-@_api.dataclass(ApiErrorCode.API_7)
+@_api.dataclass(ApiErrorCode.API_14)
 class _RequiresField(_api.JsonSerde):
     name: str
 
@@ -66,8 +65,8 @@ def test_dataclass_wraps_validation_error_with_registered_exception(monkeypatch)
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
     with pytest.raises(ApiException) as excinfo:
         _RequiresField()  # type: ignore[call-arg]
-    assert excinfo.value.api_error is ApiErrorCode.API_7
-    # API_7 declares ApiInitException as its exception class.
+    assert excinfo.value.api_error is ApiErrorCode.API_14
+    # API_14 declares ApiInitException as its exception class.
     assert type(excinfo.value) is ApiInitException
     # Cause is preserved as the underlying pydantic ValidationError.
     assert isinstance(excinfo.value.cause, ValidationError)
@@ -93,23 +92,23 @@ def test_dataclass_does_not_wrap_construction_errors_unrelated_to_validation():
 
 
 @_api.dataclass(ApiErrorCode.API_14)
-class _SrcWithEnvField(Src):
-    e: Var
+class _SrcWithRefField(Src):
+    e: Secret
 
 
-def test_var_literal_at_field_dumps_to_string():
-    # ``e: Var`` populated with an inline literal. A ``Var`` serializes to
-    # the single ``"var:<value>"`` string -- not an envelope -- even when
-    # it sits inside a polymorphic ``Src`` envelope.
-    s = _SrcWithEnvField(e=Var("my-literal"))
+def test_secret_hydrated_at_field_dumps_dehydrated():
+    # ``e: Secret`` populated with a value. A ``Secret`` always serializes
+    # to the dehydrated ``":secret:"`` marker -- not an envelope, and never
+    # its value -- even when it sits inside a polymorphic ``Src`` envelope.
+    s = _SrcWithRefField(e=Secret("my-literal"))
     d = s.to_dict()
-    assert d["spec"]["e"] == "var:my-literal"
+    assert d["spec"]["e"] == ":secret:"
 
 
-def test_var_ref_at_field_dumps_to_bare_prefix():
-    # An unhydrated ``Var()`` dumps to the bare ``"var:"`` placeholder.
-    s = _SrcWithEnvField(e=Var())
-    assert s.to_dict()["spec"]["e"] == "var:"
+def test_secret_dehydrated_at_field_dumps_dehydrated():
+    # A dehydrated ``Secret()`` also dumps to the ``":secret:"`` marker.
+    s = _SrcWithRefField(e=Secret())
+    assert s.to_dict()["spec"]["e"] == ":secret:"
 
 
 # ---------------------------------------------------------------------------
@@ -118,10 +117,10 @@ def test_var_ref_at_field_dumps_to_bare_prefix():
 
 
 def test_already_instance_at_parent_slot_passes_through_unchanged():
-    # Passing a pre-built Var instance as the value to a field must not
+    # Passing a pre-built Secret instance as the value to a field must not
     # rebuild it -- the validator returns the existing instance.
-    inner = Var("HOME")
-    s = _SrcWithEnvField(e=inner)
+    inner = Secret("HOME")
+    s = _SrcWithRefField(e=inner)
     assert s.e is inner
 
 
@@ -131,7 +130,7 @@ def test_already_instance_via_pydantic_validator(monkeypatch):
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
     inner = Secret()
     # Round-trip: building a Src that holds the secret, then accessing
-    # ``.e`` on a nested Var-typed field is the standard path; here we
+    # ``.e`` on a nested Secret-typed field is the standard path; here we
     # just confirm the instance path through the schema's wrap-validator.
     @_api.dataclass(ApiErrorCode.API_14)
     class _SrcWithSecretField(Src):
@@ -334,18 +333,20 @@ def test_named_conn_round_trips():
     assert m.NamedConn.from_dict(d) == nc
 
 
-def test_env_round_trips():
-    e = m.Var("DB_PASSWORD")
+def test_secret_hydrated_serializes_dehydrated():
+    e = m.Secret("DB_PASSWORD")
     d = e.to_dict()
-    # A Var serializes to the single ``"var:<value>"`` string.
-    assert d == "var:DB_PASSWORD"
-    assert m.Var.from_dict(d) == e
+    # A Secret always serializes to the dehydrated ``":secret:"`` marker;
+    # the value never lands in the serialized form, so it round-trips back
+    # as a dehydrated secret.
+    assert d == ":secret:"
+    assert m.Secret.from_dict(d) == m.Secret()
 
 
-def test_secret_ref_round_trips():
+def test_secret_dehydrated_round_trips():
     s = m.Secret()
     d = s.to_dict()
-    assert d == "secret:"
+    assert d == ":secret:"
     assert m.Secret.from_dict(d) == s
 
 
@@ -385,13 +386,13 @@ def test_kind_mismatch_rejected():
         m.Conn.from_dict(d)
 
 
-def test_var_rejects_envelope_dict():
-    # A Var only validates from a string (or a Var instance). Handing it a
-    # NamedConn envelope dict is rejected.
+def test_secret_rejects_envelope_dict():
+    # A Secret only validates from a string (or a Secret instance). Handing it
+    # a NamedConn envelope dict is rejected.
     nc = m.NamedConn(name="prod")
     d = nc.to_dict()
     with pytest.raises(Exception, match="expects a string"):
-        m.Var.from_dict(d)
+        m.Secret.from_dict(d)
 
 
 # ---------------------------------------------------------------------------
@@ -624,26 +625,20 @@ def test_named_conn_rejects_invalid_name():
 
 
 # ---------------------------------------------------------------------------
-# Var / Secret constructor: ``X()`` is an unhydrated ref, ``X("v")`` an
-# inline literal. Reading ``.value`` on a ref raises.
+# Secret constructor: ``Secret()`` is dehydrated, ``Secret("v")`` is
+# hydrated. Reading ``.value()`` on a dehydrated secret raises.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("value", ["DB_PASSWORD", "_FOO", "x", "MIXED_case_42"])
-def test_var_literal_holds_value(value):
-    e = m.Var(value)
-    assert e.value == value
+def test_secret_hydrated_holds_value(value):
+    e = m.Secret(value)
+    assert e.value() == value
 
 
-def test_var_ref_value_raises():
+def test_secret_dehydrated_value_raises():
     with pytest.raises(ApiException) as excinfo:
-        m.Var().value
-    assert excinfo.value.api_error is ApiErrorCode.API_8
-
-
-def test_secret_ref_value_raises():
-    with pytest.raises(ApiException) as excinfo:
-        m.Secret().value
+        m.Secret().value()
     assert excinfo.value.api_error is ApiErrorCode.API_11
 
 
@@ -652,18 +647,11 @@ def test_secret_ref_value_raises():
 # ---------------------------------------------------------------------------
 
 
-def test_var_json_round_trips():
-    e = m.Var("DB_PASSWORD")
-    back = m.Var.from_json(e.to_json())
-    assert isinstance(back, m.Var)
-    assert back.value == "DB_PASSWORD"
-
-
 def test_secret_json_round_trips():
     s = m.Secret()
     back = m.Secret.from_json(s.to_json())
     assert isinstance(back, m.Secret)
-    assert back._raw is None
+    assert back == m.Secret()
 
 
 # ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ from pydantic import Field, StringConstraints
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Secret, Src, Var
+from tabsdatak.api import Conn, Secret, Src
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -50,7 +50,7 @@ class SalesforceCredentials(Credentials, ABC):
 class SalesforceTokenCredentials(SalesforceCredentials):
     """Salesforce username + password + security-token credentials,
     the standard SOAP / REST credential triple. All three fields
-    accept ``Var`` / ``Secret`` references; the plugin combines
+    accept ``Secret`` references; the plugin combines
     ``password`` and ``security_token`` per Salesforce's expected
     concatenated-secret format at login time.
 
@@ -78,10 +78,7 @@ ObjectsNameSpec: TypeAlias = Annotated[
 
 InstanceUrlSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.INSTANCE_URL_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.INSTANCE_URL_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.INSTANCE_URL_PATTERN)
-    ],
+    Secret,
 ]
 # Salesforce SOQL query list. Today exactly one query (one input
 # slot) -- the list shape leaves room for future multi-query

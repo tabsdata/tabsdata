@@ -499,16 +499,15 @@ def test_load_connection_document_dehydrates(tmp_path):
 
     path = tmp_path / "conn.yaml"
     path.write_text(_MYSQL_SRC_YAML)
-    connection, group, secrets, variables = collection_group._load_connection_document(
+    connection, group, secrets = collection_group._load_connection_document(
         str(path), None
     )
     assert group == "source"
     assert {kv["value"] for kv in secrets} == {"etl", "hunter2"}
-    assert variables == []
     sent = template.from_yaml(connection)
     creds = sent["spec"]["credentials"]["spec"]
-    assert creds["user"] == "secret:"
-    assert creds["password"] == "secret:"
+    assert creds["user"] == ":secret:"
+    assert creds["password"] == ":secret:"
     assert sent["spec"]["uri"] == "mysql://h:3306/db"
 
 

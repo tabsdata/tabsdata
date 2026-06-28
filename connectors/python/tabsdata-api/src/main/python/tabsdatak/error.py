@@ -293,29 +293,14 @@ class ApiErrorCode(ErrorCode):
     # AllTablesTrigger (fire on any upstream table change)
 
     # --- Value references (tabsdatak.api) ---------------------------
-    # The value-reference family (`_ValOrRef` / `Var` / `Secret` and their
-    # `LiteralEnv` / `LiteralSecret` literal siblings) maps to a fixed
-    # cluster of codes, one per validation site.
-    API_5 = ErrorDef(ApiInternalException, "Cannot create _ValOrRef")
-    # `_ValOrRef` dataclass decorator (abstract base for Var / Secret)
-    API_6 = ErrorDef(
-        ApiRuntimeException,
-        "Var var {name} value `{value!r}` does not match pattern `{pattern!r}`",
-    )
-    # `_ValOrRef._validate()` -- shared pattern-mismatch raise for both
-    # `Var` / `Secret` subclasses with a `_value_pattern` ClassVar.
-    API_7 = ErrorDef(ApiInitException, "Cannot create Var")
-    # `Var` dataclass decorator
-    API_8 = ErrorDef(ApiRuntimeException, "Var var {name} not defined")
-    # `Var._value()` -- env var unset at resolve time
-    API_9 = ErrorDef(ApiInitException, "Invalid inline env var value")
-    # `LiteralEnv` dataclass decorator
-    API_10 = ErrorDef(ApiInitException, "Cannot create Secret")
-    # `Secret` dataclass decorator
+    # The `Secret` value reference maps to two codes. (API_6 / API_7-10 /
+    # API_12 were retired with the `_ValOrRef` / `Var` / `LiteralEnv` /
+    # `LiteralSecret` types and the per-field value-pattern checks; their
+    # slots are left vacant so the surviving codes keep their stable numbers.)
+    API_5 = ErrorDef(ApiInitException, "Secret value must be a string, got {type}")
+    # `Secret.__init__` -- a non-string, non-None value was passed.
     API_11 = ErrorDef(ApiInternalException, "Secret {name}, missing secret resolution ")
-    # `Secret._value()` -- non-literal secret has no resolver in scope
-    API_12 = ErrorDef(ApiInitException, "Invalid inline secret value")
-    # `LiteralSecret` dataclass decorator
+    # `Secret.value()` -- reading the value of a dehydrated secret
 
     # --- Connections (tabsdatak.api) --------------------------------
     API_13 = ErrorDef(ApiInitException, "Cannot create NamedConn")

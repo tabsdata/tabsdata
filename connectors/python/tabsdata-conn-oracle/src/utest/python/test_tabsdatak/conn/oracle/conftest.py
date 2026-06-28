@@ -75,7 +75,7 @@ def pytest_sessionfinish(session, exitstatus):
     clean_everything()
 
 
-# --- Var var gates --------------------------------------------------
+# --- Secret gates --------------------------------------------------
 
 # Anything in TRUE_VALUES (case-insensitive) opts out of teardown.
 TRUE_VALUES = frozenset({"1", "true", "yes", "y", "on"})

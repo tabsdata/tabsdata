@@ -13,7 +13,6 @@ from typing import Annotated
 
 from tabsdatak.api import (
     Conn,
-    Var,
     Secret,
     Src,
 )
@@ -1142,20 +1141,15 @@ def test_auto_src_defx_resolves_via_registry():
 
 
 # ===========================================================================
-# Var / Secret value references
+# Secret value references
 #
-# A ``Var`` / ``Secret`` is a plain value reference: ``X()`` is an
-# unhydrated ref (stored value is None), ``X("v")`` an inline literal.
-# Reading ``.value`` returns the literal (after the optional pattern
-# check) or raises if the ref was never hydrated. Each serializes to a
-# single string -- ``"var:<value>"`` / ``"secret:<value>"`` (bare
-# ``"var:"`` / ``"secret:"`` when unhydrated).
+# A ``Secret`` is either hydrated (``Secret("v")``, carries a value) or
+# dehydrated (``Secret()``, carries none). ``value()`` returns the value
+# of a hydrated secret and raises on a dehydrated one. A secret always
+# serializes to the dehydrated marker ``":secret:"`` (its value never
+# lands in the serialized form); deserialization accepts that marker as
+# well as the hydrated forms ``"secret:<value>"`` and a bare ``"<value>"``.
 # ===========================================================================
-
-
-@_api.dataclass(ApiErrorCode.API_14)
-class _SrcWithEnv(Src):
-    e: Var
 
 
 @_api.dataclass(ApiErrorCode.API_14)
@@ -1163,228 +1157,96 @@ class _SrcWithSecret(Src):
     s: Secret
 
 
-@_api.dataclass(ApiErrorCode.API_14)
-class _SrcWithDigitsField(Src):
-    e: Annotated[Var, _api.VarValueConstraints(pattern=r"\d+")]
+# --- construction ----------------------------------------------------------
 
 
-@_api.dataclass(ApiErrorCode.API_14)
-class _SrcWithHexField(Src):
-    s: Annotated[Secret, _api.SecretValueConstraints(pattern=r"[0-9a-fA-F]+")]
-
-
-@_api.dataclass(ApiErrorCode.API_14)
-class _SrcWithSecretOrEnv(Src):
-    v: m.VarOrSecretSpec
-
-
-# --- inheritance / construction --------------------------------------------
-
-
-def test_var_and_secret_extend_base_ref():
-    assert issubclass(Var, _api.BaseRef)
-    assert issubclass(Secret, _api.BaseRef)
-
-
-def test_var_literal_holds_value():
-    e = Var("etl")
-    assert e.value == "etl"
-    assert e._raw == "etl"
-
-
-def test_var_ref_has_none_value_and_raises_on_read():
-    e = Var()
-    assert e._raw is None
-    with pytest.raises(ApiException) as excinfo:
-        e.value
-    assert excinfo.value.api_error is ApiErrorCode.API_8
-
-
-def test_secret_literal_holds_value():
+def test_secret_hydrated_holds_value():
     s = Secret("hunter2")
-    assert s.value == "hunter2"
-    assert s._raw == "hunter2"
+    assert s.value() == "hunter2"
 
 
-def test_secret_ref_has_none_value_and_raises_on_read():
+def test_secret_dehydrated_raises_on_read():
     s = Secret()
-    assert s._raw is None
     with pytest.raises(ApiInternalException) as excinfo:
-        s.value
+        s.value()
     assert excinfo.value.api_error is ApiErrorCode.API_11
 
 
-def test_secret_repr_redacts_inline_value():
+def test_secret_rejects_non_string_value():
+    # A hydrated secret must carry a string; None is the dehydrated sentinel.
+    assert Secret(None) == Secret()
+    with pytest.raises(ApiException) as excinfo:
+        Secret(123)
+    assert excinfo.value.api_error is ApiErrorCode.API_5
+
+
+def test_secret_repr_is_redacted():
+    # Neither the value nor the hydration state leaks through repr / logs.
     assert "hunter2" not in repr(Secret("hunter2"))
     assert "redacted" in repr(Secret("hunter2"))
+    assert repr(Secret()) == repr(Secret("hunter2"))
 
 
-def test_var_repr_shows_value():
-    assert repr(Var("etl")) == "Var('etl')"
+def test_secret_equality():
+    assert Secret("a") == Secret("a")
+    assert Secret() == Secret()
+    assert Secret("a") != Secret("b")
+    assert Secret("a") != Secret()
 
 
 # --- serialization (string form) -------------------------------------------
 
 
-def test_var_serializes_to_string():
-    assert Var("etl").to_dict() == "var:etl"
-    assert Var().to_dict() == "var:"
+def test_secret_always_serializes_dehydrated():
+    # Both a hydrated and a dehydrated secret serialize to ``":secret:"``;
+    # the value never lands in the serialized form.
+    assert Secret("hunter2").to_dict() == ":secret:"
+    assert Secret().to_dict() == ":secret:"
 
 
-def test_secret_serializes_to_string():
-    assert Secret("hunter2").to_dict() == "secret:hunter2"
-    assert Secret().to_dict() == "secret:"
+def test_secret_deserializes_dehydrated_marker():
+    assert Secret.from_dict(":secret:") == Secret()
 
 
-def test_var_round_trips_through_dict_and_json():
-    for e in (Var("etl"), Var()):
-        assert Var.from_dict(e.to_dict()) == e
-        assert Var.from_json(e.to_json()) == e
+def test_secret_deserializes_hydrated_forms():
+    # Both the prefixed and the bare form hydrate with the value.
+    assert Secret.from_dict("secret:etl").value() == "etl"
+    assert Secret.from_dict("etl").value() == "etl"
 
 
-def test_secret_round_trips_through_dict_and_json():
-    for s in (Secret("hunter2"), Secret()):
-        assert Secret.from_dict(s.to_dict()) == s
-        assert Secret.from_json(s.to_json()) == s
-
-
-def test_var_parses_bare_string_as_literal():
-    # A bare string without the prefix is taken verbatim as the value.
-    assert Var.from_dict("etl") == Var("etl")
+def test_secret_serialize_drops_value_on_round_trip():
+    # Serializing is always dehydrating: a hydrated secret round-trips
+    # back as a dehydrated one.
+    assert Secret.from_dict(Secret("hunter2").to_dict()) == Secret()
+    assert Secret.from_json(Secret("hunter2").to_json()) == Secret()
 
 
 # --- fields ----------------------------------------------------------------
 
 
-def test_var_field_accepts_instance_and_bare_string():
-    assert _SrcWithEnv(e=Var("h")).e == Var("h")
-    assert _SrcWithEnv(e="h").e == Var("h")
+def test_secret_field_accepts_instance_and_bare_string():
+    assert _SrcWithSecret(s=Secret("h")).s == Secret("h")
+    assert _SrcWithSecret(s="h").s == Secret("h")
+    assert _SrcWithSecret(s="h").s.value() == "h"
 
 
-def test_var_field_dumps_to_string():
-    assert _SrcWithEnv(e=Var("h")).to_dict()["spec"]["e"] == "var:h"
-    assert _SrcWithEnv(e=Var()).to_dict()["spec"]["e"] == "var:"
+def test_secret_field_dumps_dehydrated():
+    assert _SrcWithSecret(s=Secret("h")).to_dict()["spec"]["s"] == ":secret:"
+    assert _SrcWithSecret(s=Secret()).to_dict()["spec"]["s"] == ":secret:"
 
 
-def test_secret_field_round_trips():
+def test_secret_field_round_trip_drops_value():
+    # The field serializes dehydrated, so the value does not survive a
+    # serialize/deserialize round-trip.
     s = _SrcWithSecret(s=Secret("hunter2"))
     back = _SrcWithSecret.from_dict(s.to_dict())
-    assert back.s.value == "hunter2"
+    with pytest.raises(ApiInternalException) as excinfo:
+        back.s.value()
+    assert excinfo.value.api_error is ApiErrorCode.API_11
 
 
-# --- pattern: literals validated eagerly at the field site ------------------
-
-
-def test_pattern_field_accepts_matching_literal():
-    s = _SrcWithDigitsField(e="42")
-    assert s.e.value == "42"
-    assert s.e._value_pattern == r"\d+"
-
-
-def test_pattern_field_rejects_non_matching_literal_eagerly():
-    with pytest.raises(ApiException) as excinfo:
-        _SrcWithDigitsField(e="abc")
-    assert excinfo.value.api_error is ApiErrorCode.API_6
-
-
-def test_pattern_field_requires_full_match():
-    with pytest.raises(ApiException) as excinfo:
-        _SrcWithDigitsField(e="42x")
-    assert excinfo.value.api_error is ApiErrorCode.API_6
-
-
-def test_pattern_injected_into_ref_but_not_validated():
-    # A ref carries the field pattern but is not validated until hydrated;
-    # reading it raises not-hydrated (API_8), not the pattern error.
-    s = _SrcWithDigitsField(e=Var())
-    assert s.e._value_pattern == r"\d+"
-    with pytest.raises(ApiException) as excinfo:
-        s.e.value
-    assert excinfo.value.api_error is ApiErrorCode.API_8
-
-
-def test_secret_pattern_field_rejects_non_matching_literal():
-    with pytest.raises(ApiException) as excinfo:
-        _SrcWithHexField(s="not-hex!")
-    assert excinfo.value.api_error is ApiErrorCode.API_6
-
-
-def test_secret_pattern_field_accepts_matching_literal():
-    s = _SrcWithHexField(s="cafe")
-    assert s.s.value == "cafe"
-    assert s.s._value_pattern == r"[0-9a-fA-F]+"
-
-
-# --- pattern: not serialized, re-attached from the field on load -----------
-
-
-def test_pattern_reattached_on_field_reload():
-    # The pattern is a field-site constraint -- it is not serialized (the
-    # wire form is just the string) and is re-attached from the field
-    # annotation when the envelope is loaded back.
-    s = _SrcWithHexField(s=Secret("cafe"))
-    assert s.to_dict()["spec"]["s"] == "secret:cafe"
-    back = _SrcWithHexField.from_dict(s.to_dict())
-    assert back.s.value == "cafe"
-    assert back.s._value_pattern == r"[0-9a-fA-F]+"
-
-
-def test_pattern_reload_rejects_value_violating_field_pattern():
-    # A serialized literal whose value no longer matches the field's
-    # pattern is rejected when loaded back into that field.
-    payload = _SrcWithHexField(s=Secret("cafe")).to_dict()
-    payload["spec"]["s"] = "secret:not-hex!"
-    with pytest.raises(ApiException) as excinfo:
-        _SrcWithHexField.from_dict(payload)
-    assert excinfo.value.api_error is ApiErrorCode.API_6
-
-
-# --- pattern: instance reconstruction at the field site --------------------
-
-
-def test_pattern_field_keeps_instance_when_pattern_matches():
-    incoming = Var("42", _value_pattern=r"\d+")
-    s = _SrcWithDigitsField(e=incoming)
-    assert s.e is incoming
-
-
-def test_pattern_field_reconstructs_instance_with_different_pattern():
-    incoming = Var("42", _value_pattern=r".+")
-    s = _SrcWithDigitsField(e=incoming)
-    assert s.e is not incoming
-    assert s.e._value_pattern == r"\d+"
-    assert s.e.value == "42"
-
-
-def test_pattern_field_reconstructs_and_rejects_failing_value():
-    incoming = Var("abc", _value_pattern=r".+")
-    with pytest.raises(ApiException) as excinfo:
-        _SrcWithDigitsField(e=incoming)
-    assert excinfo.value.api_error is ApiErrorCode.API_6
-
-
-# --- direct construction: pattern checked on read --------------------------
-
-
-def test_direct_construction_pattern_checked_on_read():
-    # Constructing with a pattern directly does not validate eagerly; the
-    # check runs when the value is read.
-    s = Secret("not-hex!", _value_pattern=r"[0-9a-fA-F]+")
-    with pytest.raises(ApiException) as excinfo:
-        s.value
-    assert excinfo.value.api_error is ApiErrorCode.API_6
-
-
-# --- VarOrSecretSpec union field -------------------------------------------
-
-
-def test_secret_or_var_field_keeps_explicit_types():
-    assert isinstance(_SrcWithSecretOrEnv(v=Var("h")).v, Var)
-    assert isinstance(_SrcWithSecretOrEnv(v=Secret("x")).v, Secret)
-
-
-def test_secret_or_var_field_round_trips_var():
-    s = _SrcWithSecretOrEnv(v=Var("hello"))
-    back = _SrcWithSecretOrEnv.from_dict(s.to_dict())
-    assert isinstance(back.v, Var)
-    assert back.v.value == "hello"
+def test_secret_field_accepts_hydrated_wire_form():
+    # A field deserializing the hydrated wire form keeps the value.
+    payload = _SrcWithSecret(s=Secret()).to_dict()
+    payload["spec"]["s"] = "secret:hunter2"
+    assert _SrcWithSecret.from_dict(payload).s.value() == "hunter2"

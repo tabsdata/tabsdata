@@ -9,12 +9,12 @@ Introspects the connectors registered through the SPI registry
 ``avail_dests``) and emits the connectors' own envelope dialect as YAML::
 
     # Connection template for: mysql (src)
-    # Secret values must be prefixed with 'secret:', variables with 'var:'.
+    # Secret values must be prefixed with 'secret:'.
     kind: mysqlSrcConn
     apiVersion: '1.0'
     type: tabsdatak.conn.mysql:MySQLSrcConn
     spec:
-      # accepts: <value> | var:<value> | secret:<value>
+      # accepts: <value> | secret:<value>
       uri: <FILL: uri>
       credentials:           # ... nested userPasswordCredentials envelope ...
         ...
@@ -23,14 +23,14 @@ The ``spec`` mirrors the connection :class:`~tabsdatak.api.Conn` dataclass's
 pydantic fields. Each field's sample is generated from the **first** member of
 its type union:
 
-- a :class:`~tabsdatak.api.Secret` / :class:`~tabsdatak.api.Var` first member
-  renders as a bare runtime-resolved reference -- the ``"secret:"`` / ``"var:"``
-  string; no value ever lands in the file (the runtime store resolves it);
+- a :class:`~tabsdatak.api.Secret` first member renders as a bare
+  runtime-resolved reference -- the ``":secret:"`` string; no value ever lands in
+  the file (the runtime store resolves it);
 - a nested-object first member recurses into its own envelope;
 - any other first member renders a typed sample value, or a ``<FILL: ...>``
   placeholder when none can be derived.
 
-A field that accepts more than one form -- a Secret/Var reference plus a plain
+A field that accepts more than one form -- a Secret reference plus a plain
 literal (uri, bucket, region) -- carries a ``# accepts: ...`` comment listing
 those forms in the union's declaration order, regardless of which one the sample
 shows. A field with a single accepted form (a plain scalar, or a lone ``Secret``
@@ -62,7 +62,7 @@ from ruamel.yaml.comments import CommentedMap
 # noinspection PyProtectedMember
 from tabsdatak._api import DescriptorBase, qualified_class, resolve_class
 from tabsdatak._connectors import avail_dests, avail_srcs, avail_stream_srcs
-from tabsdatak.api import Conn, Secret, Var
+from tabsdatak.api import Conn, Secret
 
 # pydantic marks a required field's default with a sentinel; treat it as unset.
 try:
@@ -179,29 +179,27 @@ def _members(ann: Any) -> list[Any]:
 
 
 def _ref_class(first: Any) -> Optional[type]:
-    """If the union's first member is a :class:`~tabsdatak.api.Secret` /
-    :class:`~tabsdatak.api.Var` reference type, return it (else ``None``).
+    """If the union's first member is a :class:`~tabsdatak.api.Secret`
+    reference type, return it (else ``None``).
     Drives both the static sample and the wizard's secret-style prompt."""
-    if isinstance(first, type) and issubclass(first, (Secret, Var)):
+    if isinstance(first, type) and issubclass(first, Secret):
         return first
     return None
 
 
 def _type_comment(members: list[Any]) -> Optional[str]:
     """A one-line note listing the forms a field accepts, in the union's
-    declaration order -- e.g. ``Union[str, Var, Secret]`` (uri, bucket, region)
-    -> ``accepts: <value> | var:<value> | secret:<value>``. ``None`` for a field
+    declaration order -- e.g. ``Union[str, Secret]`` (uri, bucket, region)
+    -> ``accepts: <value> | secret:<value>``. ``None`` for a field
     that accepts a single form (a plain scalar, a lone ``Secret`` credential, or
     a nested object carries no such note)."""
-    has_ref = any(isinstance(m, type) and issubclass(m, (Secret, Var)) for m in members)
+    has_ref = any(isinstance(m, type) and issubclass(m, Secret) for m in members)
     if not has_ref:
         return None
     forms: list[str] = []
     for m in members:
         if isinstance(m, type) and issubclass(m, Secret):
             forms.append("secret:<value>")
-        elif isinstance(m, type) and issubclass(m, Var):
-            forms.append("var:<value>")
         else:
             forms.append("<value>")
     if len(forms) <= 1:
@@ -232,8 +230,7 @@ def _first_concrete(cls: type) -> type:
 
 def _pattern_of(ann: Any) -> Optional[str]:
     """The first regex pattern declared on the annotation's ``Annotated``
-    metadata (``StringConstraints`` / Secret/Var value constraints), for wizard
-    display."""
+    metadata (``StringConstraints``), for wizard display."""
     candidates = (
         list(typing.get_args(ann))
         if typing.get_origin(ann) in (typing.Union, _types.UnionType)
@@ -295,7 +292,7 @@ _NEST_INDENT = 4
 
 def _set_template_header(env: CommentedMap, conn_cls: type) -> None:
     """Prepend a header naming the connector / direction the template targets and
-    reminding that secret / var values carry the ``secret:`` / ``var:`` prefix."""
+    reminding that secret values carry the ``secret:`` prefix."""
     label = conn_cls.__kind__
     for r in list_connectors():
         if r.conn_cls is conn_cls:
@@ -303,7 +300,7 @@ def _set_template_header(env: CommentedMap, conn_cls: type) -> None:
             break
     env.yaml_set_start_comment(
         f"Connection template for: {label}\n"
-        "Secret values must be prefixed with 'secret:', variables with 'var:'."
+        "Secret values must be prefixed with 'secret:'."
     )
 
 
@@ -334,8 +331,8 @@ def _build_spec(cls: type, prefix: str, all_fields: bool, indent: int) -> Commen
                 obj, _build_spec(obj, f"{path}.", all_fields, indent + _NEST_INDENT)
             )
         elif ref is not None:
-            # Secret/Var first member -> bare runtime-resolved ref ("secret:" /
-            # "var:"); no value ever lands in the file.
+            # Secret first member -> bare runtime-resolved ref (":secret:");
+            # no value ever lands in the file.
             out[name] = ref().to_dict()
         else:
             out[name] = _scalar_placeholder([first], default, path)
@@ -385,8 +382,11 @@ def _prompt_spec(cls: type, prefix: str, prompt: PromptFn) -> dict:
                 pattern=None,
                 choices=None,
             )
-            # A secret-first field captures a Secret; a var-first field a Var.
-            out[name] = ref(value).to_dict() if value else ref().to_dict()
+            # A user-supplied value is captured as the hydrated wire form
+            # ("secret:<value>"), which `dehydrate` harvests out at upsert
+            # time; with no value, the dehydrated marker (":secret:") is
+            # written and the value is resolved at run time.
+            out[name] = f"{ref._PREFIX}{value}" if value else ref().to_dict()
         else:
             value = prompt(
                 path,

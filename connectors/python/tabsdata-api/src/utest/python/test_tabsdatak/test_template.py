@@ -22,7 +22,7 @@ from tabsdatak import _template as template
 
 # noinspection PyProtectedMember
 from tabsdatak._api import resolve_class
-from tabsdatak.api import Secret, Var
+from tabsdatak.api import Secret
 
 
 def _installed(type_: str, direction: str) -> bool:
@@ -143,16 +143,15 @@ def test_validate_rejects_non_connection_type():
 
 
 def test_members_unwraps_union_and_annotated():
-    assert template._members(typing.Union[str, Secret, Var]) == [str, Secret, Var]
+    assert template._members(typing.Union[str, Secret]) == [str, Secret]
     assert template._members(typing.Optional[int]) == [int]
 
 
 def test_ref_class_picks_first_union_member():
-    # First member Secret/Var -> that ref class drives the sample.
-    assert template._ref_class(template._members(typing.Union[Secret, Var, str])[0]) is Secret
-    assert template._ref_class(template._members(typing.Union[Var, str])[0]) is Var
+    # First member Secret -> that ref class drives the sample.
+    assert template._ref_class(template._members(typing.Union[Secret, str])[0]) is Secret
     # First member a plain type -> not a ref (rendered as a scalar/placeholder).
-    assert template._ref_class(template._members(typing.Union[str, Secret, Var])[0]) is None
+    assert template._ref_class(template._members(typing.Union[str, Secret])[0]) is None
 
 
 def test_scalar_placeholder_by_type():
@@ -167,12 +166,8 @@ def test_scalar_placeholder_by_type():
 def test_type_comment_lists_accepted_forms():
     # Forms are listed in the union's declaration order.
     assert (
-        template._type_comment(template._members(typing.Union[str, Var, Secret]))
-        == "accepts: <value> | var:<value> | secret:<value>"
-    )
-    assert (
-        template._type_comment(template._members(typing.Union[Var, Secret]))
-        == "accepts: var:<value> | secret:<value>"
+        template._type_comment(template._members(typing.Union[str, Secret]))
+        == "accepts: <value> | secret:<value>"
     )
     # A single accepted form -- a plain scalar, or a lone Secret credential --
     # gets no comment.
@@ -201,8 +196,8 @@ def test_yaml_template_has_header():
     lines = text.splitlines()
     # Names the connector/direction the template targets.
     assert lines[0] == "# Connection template for: localfile (src)"
-    # Reminds that secret/var values carry the 'secret:' / 'var:' prefix.
-    assert "secret:" in lines[1] and "var:" in lines[1]
+    # Reminds that secret values carry the 'secret:' prefix.
+    assert "secret:" in lines[1]
     # The header is a comment, so the document still parses + validates.
     assert template.validate(template.from_yaml(text)) == "localFileSrcConn"
 
@@ -213,8 +208,8 @@ def test_yaml_template_has_header():
 def test_yaml_template_carries_accepts_comments():
     info = template.resolve_conn("mysql", "src")
     text = template.to_yaml(template.build_template(info.conn_cls))
-    # uri (str|Var|Secret) lists its forms in the union's declaration order.
-    assert "# accepts: <value> | var:<value> | secret:<value>" in text  # uri
+    # uri (str|Secret) lists its forms in the union's declaration order.
+    assert "# accepts: <value> | secret:<value>" in text  # uri
     # Single-form fields (the Secret-only credentials) carry no comment, so uri
     # is the only "# accepts:" note.
     assert text.count("# accepts:") == 1
@@ -241,15 +236,15 @@ def test_localfile_wizard_validates():
 def test_mysql_secrets_render_as_refs_and_wizard_validates():
     info = template.resolve_conn("mysql", "src")
     # Each field renders from its union's FIRST member. credentials.user/password
-    # are Union[Secret, Var] -> the bare unhydrated ref string "secret:". uri is
-    # Union[str, Secret, Var] (str-first, so plain strings parse as strings) ->
-    # a fill-in placeholder; it still accepts a "secret:"/"var:" ref if edited.
+    # are Secret -> the dehydrated ref marker ":secret:". uri is
+    # Union[str, Secret] (str-first, so plain strings parse as strings) ->
+    # a fill-in placeholder; it still accepts a "secret:<value>" ref if edited.
     doc = template.build_template(info.conn_cls)
     creds = doc["spec"]["credentials"]["spec"]
-    assert creds["user"] == "secret:"
-    assert creds["password"] == "secret:"
+    assert creds["user"] == ":secret:"
+    assert creds["password"] == ":secret:"
     assert doc["spec"]["uri"] == "<FILL: uri>"
-    # Wizard: secret/var-first leaves are prompted as refs; the str-first uri is
+    # Wizard: secret-first leaves are prompted as refs; the str-first uri is
     # a plain prompt. A valid uri makes the result validate.
     record: list = []
     out = template.build_template_interactive(

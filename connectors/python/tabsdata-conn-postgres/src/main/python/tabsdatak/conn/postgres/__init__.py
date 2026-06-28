@@ -25,7 +25,7 @@ CDC (change-data capture):
 * :class:`LsnPosition` -- ``start_from`` primitive for resuming
   logical replication at a specific WAL LSN.
 
-URI and credential fields accept ``Var`` / ``Secret`` references.
+URI and credential fields accept ``Secret`` references.
 Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
 size, read/write engine selection); CDC tuning lives in
 ``PostgresCdcStreamSrc.src_cfg`` (buffer / trigger thresholds,
@@ -50,7 +50,6 @@ from tabsdatak.api import (
     Secret,
     Src,
     StreamSrc,
-    Var,
 )
 
 # noinspection PyProtectedMember
@@ -69,8 +68,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 UriSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.URI_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.URI_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URI_PATTERN)],
+    Secret,
 ]
 QueriesSpec: TypeAlias = list[str]
 PostgresTableNameSpec: TypeAlias = Annotated[
@@ -113,8 +111,8 @@ class PostgresSrcConn(Conn):
     """Postgres connection used by :class:`PostgresSrc`.
 
     :param uri: SQLAlchemy-style URI
-        (``postgres+psycopg2://host:port/db``). Accepts a plain str,
-        ``Var``, or ``Secret``.
+        (``postgres+psycopg2://host:port/db``). Accepts a plain str
+        or ``Secret``.
     :param credentials: :class:`UserPassword` -- user + password
         spliced into the URI by the engine factory.
     :param entity_whitelist: Optional list of regex patterns; the
@@ -296,7 +294,7 @@ class PostgresCdcStreamSrcConn(Conn):
     is separate from query permissions) and a divergent attribute
     set is expected over time.
 
-    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Var`` /
+    :param uri: SQLAlchemy-style URI; accepts ``str`` /
         ``Secret`` per :data:`UriSpec`.
     :param credentials: :class:`UserPassword`. The connecting role
         must have the ``REPLICATION`` attribute.

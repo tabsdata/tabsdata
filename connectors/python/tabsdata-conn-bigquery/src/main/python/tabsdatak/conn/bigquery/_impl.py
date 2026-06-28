@@ -30,7 +30,7 @@ def _gcp_json_to_dict(credentials: GCPJson) -> dict[str, Any]:
     """Resolve a ``GCPJson`` credentials field to a plain dict.
 
     Mirrors the legacy behaviour: the service-account-key JSON travels
-    through the connector as a ``Secret`` / ``Var``-backed string, and
+    through the connector as a ``Secret``-backed string, and
     the underlying SDK takes a ``dict``.
     """
     raw = _convert(credentials.json, str)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdatak.api import Secret, Var
+from tabsdatak.api import Secret
 from tabsdatak.common._error import CommonErrorCode, CommonRuntimeException
 from tabsdatak.common._json_serde import (
     KeyValue,
@@ -29,14 +29,11 @@ def _wrap(spec: dict) -> dict:
     return {"kind": "outer", "apiVersion": "1.0", "type": "Outer", "spec": spec}
 
 
-# Secret/Var serialize to plain strings; these helpers spell out the wire
-# form the walker matches on. ``Secret("x").to_dict()`` == ``"secret:x"``.
+# A secret string leaf has two wire forms: the hydrated ``"secret:<value>"``
+# and the dehydrated marker ``":secret:"`` (``Secret().to_dict()``). This
+# helper spells out the form the walker matches on.
 def _secret(value: str | None) -> str:
-    return "secret:" + (value or "")
-
-
-def _var(value: str | None) -> str:
-    return "var:" + (value or "")
+    return f"secret:{value}" if value is not None else ":secret:"
 
 
 # ---------------------------------------------------------------------------
@@ -130,15 +127,15 @@ def test_replace_at_rejects_unexpected_char_after_root():
 
 
 # ---------------------------------------------------------------------------
-# Wire form sanity: Secret / Var serialize to the strings the walker matches.
+# Wire form sanity: Secret serializes to the strings the walker matches.
 # ---------------------------------------------------------------------------
 
 
-def test_secret_var_serialize_to_prefixed_strings():
-    assert Secret("hunter2").to_dict() == "secret:hunter2"
-    assert Secret().to_dict() == "secret:"
-    assert Var("etl").to_dict() == "var:etl"
-    assert Var().to_dict() == "var:"
+def test_secret_serialize_to_dehydrated_marker():
+    # A Secret always serializes to the dehydrated marker; its value never
+    # lands in the serialized form.
+    assert Secret("hunter2").to_dict() == ":secret:"
+    assert Secret().to_dict() == ":secret:"
 
 
 # ---------------------------------------------------------------------------
@@ -147,52 +144,62 @@ def test_secret_var_serialize_to_prefixed_strings():
 
 
 def test_dehydrate_empty_payload():
-    out, secrets, vars_ = dehydrate(_wrap({}))
+    out, secrets = dehydrate(_wrap({}))
     assert out == _wrap({})
     assert secrets == []
-    assert vars_ == []
 
 
 def test_dehydrate_harvests_literal_secret_and_blanks_it():
     data = _wrap({"password": _secret("hunter2")})
-    out, secrets, vars_ = dehydrate(data)
+    out, secrets = dehydrate(data)
     # Value harvested, keyed by the jsonpath (prefixed SECRET_); leaf blanked.
     assert secrets == [KeyValue(key="SECRET_PASSWORD", value="hunter2")]
-    assert vars_ == []
-    assert out["spec"]["password"] == "secret:"
+    assert out["spec"]["password"] == _secret(None)
 
 
 def test_dehydrate_harvests_ref_secret_with_none_value():
     data = _wrap({"password": _secret(None)})
-    out, secrets, _ = dehydrate(data)
+    out, secrets = dehydrate(data)
     assert secrets == [KeyValue(key="SECRET_PASSWORD", value=None)]
-    assert out["spec"]["password"] == "secret:"
+    assert out["spec"]["password"] == _secret(None)
 
 
-def test_dehydrate_separates_secrets_and_vars():
-    data = _wrap({"password": _secret("pw"), "user": _var("etl")})
-    out, secrets, vars_ = dehydrate(data)
+def test_dehydrate_harvests_multiple_secrets():
+    data = _wrap({"password": _secret("pw"), "token": _secret("tk")})
+    out, secrets = dehydrate(data)
+    assert secrets == [
+        KeyValue(key="SECRET_PASSWORD", value="pw"),
+        KeyValue(key="SECRET_TOKEN", value="tk"),
+    ]
+    assert out["spec"] == {"password": _secret(None), "token": _secret(None)}
+
+
+def test_dehydrate_ignores_non_secret_prefixed_strings():
+    # A bare ``var:``-looking string is now an ordinary literal, not harvested.
+    data = _wrap({"schema": "var:etl", "password": _secret("pw")})
+    out, secrets = dehydrate(data)
     assert secrets == [KeyValue(key="SECRET_PASSWORD", value="pw")]
-    assert vars_ == [KeyValue(key="VAR_USER", value="etl")]
-    assert out["spec"] == {"password": "secret:", "user": "var:"}
+    assert out["spec"]["schema"] == "var:etl"
 
 
 def test_dehydrate_handles_list_paths():
-    data = _wrap({"creds": [_secret("a"), _var("b")]})
-    _out, secrets, vars_ = dehydrate(data)
-    assert secrets == [KeyValue(key="SECRET_CREDS_0_", value="a")]
-    assert vars_ == [KeyValue(key="VAR_CREDS_1_", value="b")]
+    data = _wrap({"creds": [_secret("a"), _secret("b")]})
+    _out, secrets = dehydrate(data)
+    assert secrets == [
+        KeyValue(key="SECRET_CREDS_0_", value="a"),
+        KeyValue(key="SECRET_CREDS_1_", value="b"),
+    ]
 
 
 def test_dehydrate_key_uses_jsonpath():
     data = _wrap({"password": _secret("hunter2")})
-    _out, secrets, _ = dehydrate(data)
+    _out, secrets = dehydrate(data)
     assert secrets[0].key == "SECRET_PASSWORD"
 
 
 def test_dehydrate_ignores_plain_strings():
     data = _wrap({"host": "db.example.com", "password": _secret("pw")})
-    out, secrets, _ = dehydrate(data)
+    out, secrets = dehydrate(data)
     assert secrets == [KeyValue(key="SECRET_PASSWORD", value="pw")]
     assert out["spec"]["host"] == "db.example.com"
 
@@ -209,38 +216,40 @@ def test_dehydrate_does_not_mutate_input():
 
 
 def test_hydrate_restores_values():
-    data = _wrap({"password": _secret(None), "user": _var(None)})
+    data = _wrap({"password": _secret(None), "token": _secret(None)})
     out = hydrate(
         data,
-        [KeyValue(key="SECRET_PASSWORD", value="hunter2")],
-        [KeyValue(key="VAR_USER", value="etl")],
+        [
+            KeyValue(key="SECRET_PASSWORD", value="hunter2"),
+            KeyValue(key="SECRET_TOKEN", value="etl"),
+        ],
     )
-    assert out["spec"] == {"password": "secret:hunter2", "user": "var:etl"}
+    assert out["spec"] == {"password": "secret:hunter2", "token": "secret:etl"}
 
 
 def test_hydrate_does_not_mutate_input():
     data = _wrap({"password": _secret(None)})
-    hydrate(data, [KeyValue(key="SECRET_PASSWORD", value="x")], [])
-    assert data["spec"]["password"] == "secret:"
+    hydrate(data, [KeyValue(key="SECRET_PASSWORD", value="x")])
+    assert data["spec"]["password"] == _secret(None)
 
 
 def test_dehydrate_then_hydrate_round_trips():
-    original = _wrap({"password": _secret("hunter2"), "user": _var("etl")})
-    dehydrated, secrets, vars_ = dehydrate(original)
-    assert hydrate(dehydrated, secrets, vars_) == original
+    original = _wrap({"password": _secret("hunter2"), "token": _secret("etl")})
+    dehydrated, secrets = dehydrate(original)
+    assert hydrate(dehydrated, secrets) == original
 
 
 def test_hydrate_rejects_none_value():
     data = _wrap({"password": _secret(None)})
     with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate(data, [KeyValue(key="SECRET_PASSWORD", value=None)], [])
+        hydrate(data, [KeyValue(key="SECRET_PASSWORD", value=None)])
     assert exc_info.value.api_error is CommonErrorCode.COMMON_6
 
 
 def test_hydrate_rejects_missing_keys():
     data = _wrap({"u": _secret(None), "p": _secret(None)})
     with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate(data, [KeyValue(key="SECRET_U", value="user")], [])
+        hydrate(data, [KeyValue(key="SECRET_U", value="user")])
     assert exc_info.value.api_error is CommonErrorCode.COMMON_7
 
 
@@ -253,7 +262,6 @@ def test_hydrate_rejects_extra_keys():
                 KeyValue(key="SECRET_U", value="user"),
                 KeyValue(key="SECRET_EXTRA", value="x"),
             ],
-            [],
         )
     assert exc_info.value.api_error is CommonErrorCode.COMMON_7
 
@@ -264,22 +272,18 @@ def test_hydrate_rejects_extra_keys():
 
 
 def test_list_refs_empty():
-    assert list_refs(_wrap({})) == ([], [])
+    assert list_refs(_wrap({})) == []
 
 
 def test_list_refs_returns_prefixed_keys():
-    data = _wrap({"password": _secret("pw"), "schema": _var(None)})
-    secret_keys, var_keys = list_refs(data)
-    assert secret_keys == ["SECRET_PASSWORD"]
-    assert var_keys == ["VAR_SCHEMA"]
+    data = _wrap({"password": _secret("pw"), "schema": _secret(None)})
+    assert list_refs(data) == ["SECRET_PASSWORD", "SECRET_SCHEMA"]
 
 
 def test_list_refs_agrees_with_dehydrate_keys():
-    data = _wrap({"password": _secret("pw"), "user": _var("etl")})
-    dehydrated, secrets, vars_ = dehydrate(data)
-    secret_keys, var_keys = list_refs(dehydrated)
-    assert secret_keys == [kv.key for kv in secrets]
-    assert var_keys == [kv.key for kv in vars_]
+    data = _wrap({"password": _secret("pw"), "token": _secret("etl")})
+    dehydrated, secrets = dehydrate(data)
+    assert list_refs(dehydrated) == [kv.key for kv in secrets]
 
 
 # ---------------------------------------------------------------------------
@@ -289,10 +293,10 @@ def test_list_refs_agrees_with_dehydrate_keys():
 
 def test_env_hydrate_reads_prefixed_env_vars(monkeypatch):
     monkeypatch.setenv("SECRET_PASSWORD", "hunter2")
-    monkeypatch.setenv("VAR_USER", "etl")
-    data = _wrap({"password": _secret(None), "user": _var(None)})
+    monkeypatch.setenv("SECRET_TOKEN", "etl")
+    data = _wrap({"password": _secret(None), "token": _secret(None)})
     out = env_hydrate(data)
-    assert out["spec"] == {"password": "secret:hunter2", "user": "var:etl"}
+    assert out["spec"] == {"password": "secret:hunter2", "token": "secret:etl"}
 
 
 def test_env_hydrate_leaves_inline_literals_untouched(monkeypatch):
@@ -315,7 +319,7 @@ def test_env_hydrate_does_not_mutate_input(monkeypatch):
     monkeypatch.setenv("SECRET_PASSWORD", "hunter2")
     data = _wrap({"password": _secret(None)})
     env_hydrate(data)
-    assert data["spec"]["password"] == "secret:"
+    assert data["spec"]["password"] == _secret(None)
 
 
 # ---------------------------------------------------------------------------

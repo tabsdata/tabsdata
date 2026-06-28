@@ -55,7 +55,7 @@ pytestmark = pytest.mark.druid
 
 
 # ---------------------------------------------------------------------------
-# Var-driven gates for the S3 staging side
+# Env-var-driven gates for the S3 staging side
 # ---------------------------------------------------------------------------
 
 

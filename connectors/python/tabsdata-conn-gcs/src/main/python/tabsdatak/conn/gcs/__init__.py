@@ -9,7 +9,7 @@
   and ``${EXEC_PLAN_TS}`` in dest paths are resolved at write time.
 
 File transport goes through the shared ``td_transporter`` binary.
-String, ``Var``, and ``Secret`` are accepted on credential and
+String and ``Secret`` are accepted on credential and
 identifier fields.
 """
 
@@ -28,7 +28,6 @@ from tabsdatak.api import (
     Dest,
     Secret,
     Src,
-    Var,
 )
 
 # noinspection PyProtectedMember
@@ -68,8 +67,7 @@ CredentialsSpec: TypeAlias = GCPJson
 # bare-string shortcut at the field site.
 ProjectSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=r".+")],
-    Annotated[Var, _api.VarValueConstraints(pattern=r".+")],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
+    Secret,
 ]
 
 

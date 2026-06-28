@@ -8,7 +8,7 @@
 * :class:`DatabricksDest` -- destination: list of table FQNs;
   one parquet slot per table. Uses Volumes + ``COPY INTO``.
 
-Token, host, identifier fields accept ``Var`` / ``Secret``.
+Token, host, identifier fields accept ``Secret``.
 """
 
 from __future__ import annotations
@@ -28,8 +28,6 @@ from tabsdatak.api import (
     Dest,
     Secret,
     Src,
-    Var,
-    VarOrSecretSpec,
 )
 
 # noinspection PyProtectedMember
@@ -45,45 +43,29 @@ from tabsdatak.conn.databricks.error import DatabricksErrorCode
 # --- Type aliases ----------------------------------------------------
 
 
-HostUrlSpec: TypeAlias = VarOrSecretSpec
+HostUrlSpec: TypeAlias = Secret
 DatabricksTokenSpec: TypeAlias = Secret
 CredentialsSpec: TypeAlias = DatabricksTokenSpec
 
 
 IdentifierSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
-    ],
+    Secret,
 ]
 
 WarehouseSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)],
-    Annotated[
-        Var, _api.VarValueConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
-    ],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
-    ],
+    Secret,
 ]
 
 WarehouseIdSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)
-    ],
+    Secret,
 ]
 
 VolumeSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)],
-    Annotated[
-        Var, _api.VarValueConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
-    ],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
-    ],
+    Secret,
 ]
 QueriesSpec: TypeAlias = list[str]
 DatabricksTableNameSpec: TypeAlias = Annotated[

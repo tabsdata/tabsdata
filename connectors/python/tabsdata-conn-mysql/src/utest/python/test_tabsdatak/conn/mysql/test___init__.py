@@ -76,14 +76,16 @@ def test_mysql_conn_round_trip(cls):
         conn_cfg={"mysql.timeout": 30},
     )
     loaded = cls.from_json(c.to_json())
-    assert loaded == c
+    # Serializing always dehydrates, so secret values do not survive the
+    # round-trip -- the credentials come back dehydrated.
+    assert loaded.credentials == UserPassword(user=Secret(), password=Secret())
     assert loaded.uri == "mysql://mysql.example.com:3306/analytics"
     assert loaded.conn_cfg == {"mysql.timeout": 30}
 
 
 @pytest.mark.parametrize("cls", [MySQLSrcConn, MySQLDestConn])
 def test_mysql_conn_rejects_bad_uri(cls):
-    # The ``uri`` field is a Union of ``str | Secret | Var``, each
+    # The ``uri`` field is a Union of ``str | Secret``, each
     # carrying the same regex. A bad value fails *every* branch of the
     # Union -- pydantic surfaces whichever raised; assert on the
     # ``TabsdataException`` umbrella rather than the specific code.

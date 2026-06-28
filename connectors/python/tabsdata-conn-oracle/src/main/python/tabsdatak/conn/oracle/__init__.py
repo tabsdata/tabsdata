@@ -6,7 +6,7 @@
 * :class:`OracleDest` -- destination: list of target table names;
   consumes one parquet slot per table.
 
-URI and credential fields accept ``Var`` / ``Secret`` references.
+URI and credential fields accept ``Secret`` references.
 Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
 size, read/write engine selection).
 """
@@ -28,7 +28,6 @@ from tabsdatak.api import (
     Dest,
     Secret,
     Src,
-    Var,
 )
 
 # noinspection PyProtectedMember
@@ -47,8 +46,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 UriSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.URI_PATTERN)],
-    Annotated[Var, _api.VarValueConstraints(pattern=_validation.URI_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URI_PATTERN)],
+    Secret,
 ]
 QueriesSpec: TypeAlias = list[str]
 OracleTableNameSpec: TypeAlias = Annotated[

@@ -9,7 +9,7 @@
   and ``${EXEC_PLAN_TS}`` in dest paths are resolved at write time.
 
 File transport goes through the shared ``td_transporter`` binary.
-String, ``Var``, and ``Secret`` are accepted on credential and
+String and ``Secret`` are accepted on credential and
 identifier fields.
 """
 

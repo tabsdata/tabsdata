@@ -4,7 +4,7 @@ import typing
 
 import pytest
 
-from tabsdatak.api import Var, Secret
+from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     CfgSpec,
@@ -118,7 +118,7 @@ def test_port_unhydrated_ref_rejected_at_value():
     from tabsdatak.conn.common.types import _convert
 
     # An unhydrated port ref carries no value yet; converting it raises.
-    conn = _conn_with_port(Var())
+    conn = _conn_with_port(Secret())
     with pytest.raises(Exception):
         _convert(conn.port, int)
 

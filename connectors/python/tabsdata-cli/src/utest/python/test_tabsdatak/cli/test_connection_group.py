@@ -37,8 +37,8 @@ def test_template_emits_yaml():
 def test_template_yaml_carries_accepts_comments():
     result = CliRunner().invoke(cli, ["connection", "template", "-t", "mysql", "-d", "src"])
     assert result.exit_code == 0, result.output
-    # uri (str|Var|Secret) carries an "# accepts:" note in union order.
-    assert "# accepts: <value> | var:<value> | secret:<value>" in result.output
+    # uri (str|Secret) carries an "# accepts:" note in union order.
+    assert "# accepts: <value> | secret:<value>" in result.output
 
 
 def test_validate_reads_yaml(tmp_path):
