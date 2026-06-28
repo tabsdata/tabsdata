@@ -152,15 +152,15 @@ def test_dehydrate_empty_payload():
 def test_dehydrate_harvests_literal_secret_and_blanks_it():
     data = _wrap({"password": _secret("hunter2")})
     out, secrets = dehydrate(data)
-    # Value harvested, keyed by the jsonpath (prefixed SECRET_); leaf blanked.
-    assert secrets == [KeyValue(key="SECRET_PASSWORD", value="hunter2")]
+    # Value harvested, keyed by the jsonpath (prefixed SECRET_CONN__); leaf blanked.
+    assert secrets == [KeyValue(key="SECRET_CONN__PASSWORD", value="hunter2")]
     assert out["spec"]["password"] == _secret(None)
 
 
 def test_dehydrate_harvests_ref_secret_with_none_value():
     data = _wrap({"password": _secret(None)})
     out, secrets = dehydrate(data)
-    assert secrets == [KeyValue(key="SECRET_PASSWORD", value=None)]
+    assert secrets == [KeyValue(key="SECRET_CONN__PASSWORD", value=None)]
     assert out["spec"]["password"] == _secret(None)
 
 
@@ -168,8 +168,8 @@ def test_dehydrate_harvests_multiple_secrets():
     data = _wrap({"password": _secret("pw"), "token": _secret("tk")})
     out, secrets = dehydrate(data)
     assert secrets == [
-        KeyValue(key="SECRET_PASSWORD", value="pw"),
-        KeyValue(key="SECRET_TOKEN", value="tk"),
+        KeyValue(key="SECRET_CONN__PASSWORD", value="pw"),
+        KeyValue(key="SECRET_CONN__TOKEN", value="tk"),
     ]
     assert out["spec"] == {"password": _secret(None), "token": _secret(None)}
 
@@ -178,7 +178,7 @@ def test_dehydrate_ignores_non_secret_prefixed_strings():
     # A bare ``var:``-looking string is now an ordinary literal, not harvested.
     data = _wrap({"schema": "var:etl", "password": _secret("pw")})
     out, secrets = dehydrate(data)
-    assert secrets == [KeyValue(key="SECRET_PASSWORD", value="pw")]
+    assert secrets == [KeyValue(key="SECRET_CONN__PASSWORD", value="pw")]
     assert out["spec"]["schema"] == "var:etl"
 
 
@@ -186,21 +186,21 @@ def test_dehydrate_handles_list_paths():
     data = _wrap({"creds": [_secret("a"), _secret("b")]})
     _out, secrets = dehydrate(data)
     assert secrets == [
-        KeyValue(key="SECRET_CREDS_0_", value="a"),
-        KeyValue(key="SECRET_CREDS_1_", value="b"),
+        KeyValue(key="SECRET_CONN__CREDS_0_", value="a"),
+        KeyValue(key="SECRET_CONN__CREDS_1_", value="b"),
     ]
 
 
 def test_dehydrate_key_uses_jsonpath():
     data = _wrap({"password": _secret("hunter2")})
     _out, secrets = dehydrate(data)
-    assert secrets[0].key == "SECRET_PASSWORD"
+    assert secrets[0].key == "SECRET_CONN__PASSWORD"
 
 
 def test_dehydrate_ignores_plain_strings():
     data = _wrap({"host": "db.example.com", "password": _secret("pw")})
     out, secrets = dehydrate(data)
-    assert secrets == [KeyValue(key="SECRET_PASSWORD", value="pw")]
+    assert secrets == [KeyValue(key="SECRET_CONN__PASSWORD", value="pw")]
     assert out["spec"]["host"] == "db.example.com"
 
 
@@ -220,8 +220,8 @@ def test_hydrate_restores_values():
     out = hydrate(
         data,
         [
-            KeyValue(key="SECRET_PASSWORD", value="hunter2"),
-            KeyValue(key="SECRET_TOKEN", value="etl"),
+            KeyValue(key="SECRET_CONN__PASSWORD", value="hunter2"),
+            KeyValue(key="SECRET_CONN__TOKEN", value="etl"),
         ],
     )
     assert out["spec"] == {"password": "secret:hunter2", "token": "secret:etl"}
@@ -229,7 +229,7 @@ def test_hydrate_restores_values():
 
 def test_hydrate_does_not_mutate_input():
     data = _wrap({"password": _secret(None)})
-    hydrate(data, [KeyValue(key="SECRET_PASSWORD", value="x")])
+    hydrate(data, [KeyValue(key="SECRET_CONN__PASSWORD", value="x")])
     assert data["spec"]["password"] == _secret(None)
 
 
@@ -242,14 +242,14 @@ def test_dehydrate_then_hydrate_round_trips():
 def test_hydrate_rejects_none_value():
     data = _wrap({"password": _secret(None)})
     with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate(data, [KeyValue(key="SECRET_PASSWORD", value=None)])
+        hydrate(data, [KeyValue(key="SECRET_CONN__PASSWORD", value=None)])
     assert exc_info.value.api_error is CommonErrorCode.COMMON_6
 
 
 def test_hydrate_rejects_missing_keys():
     data = _wrap({"u": _secret(None), "p": _secret(None)})
     with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate(data, [KeyValue(key="SECRET_U", value="user")])
+        hydrate(data, [KeyValue(key="SECRET_CONN__U", value="user")])
     assert exc_info.value.api_error is CommonErrorCode.COMMON_7
 
 
@@ -259,8 +259,8 @@ def test_hydrate_rejects_extra_keys():
         hydrate(
             data,
             [
-                KeyValue(key="SECRET_U", value="user"),
-                KeyValue(key="SECRET_EXTRA", value="x"),
+                KeyValue(key="SECRET_CONN__U", value="user"),
+                KeyValue(key="SECRET_CONN__EXTRA", value="x"),
             ],
         )
     assert exc_info.value.api_error is CommonErrorCode.COMMON_7
@@ -277,7 +277,7 @@ def test_list_refs_empty():
 
 def test_list_refs_returns_prefixed_keys():
     data = _wrap({"password": _secret("pw"), "schema": _secret(None)})
-    assert list_refs(data) == ["SECRET_PASSWORD", "SECRET_SCHEMA"]
+    assert list_refs(data) == ["SECRET_CONN__PASSWORD", "SECRET_CONN__SCHEMA"]
 
 
 def test_list_refs_agrees_with_dehydrate_keys():
@@ -292,15 +292,15 @@ def test_list_refs_agrees_with_dehydrate_keys():
 
 
 def test_env_hydrate_reads_prefixed_env_vars(monkeypatch):
-    monkeypatch.setenv("SECRET_PASSWORD", "hunter2")
-    monkeypatch.setenv("SECRET_TOKEN", "etl")
+    monkeypatch.setenv("SECRET_CONN__PASSWORD", "hunter2")
+    monkeypatch.setenv("SECRET_CONN__TOKEN", "etl")
     data = _wrap({"password": _secret(None), "token": _secret(None)})
     out = env_hydrate(data)
     assert out["spec"] == {"password": "secret:hunter2", "token": "secret:etl"}
 
 
 def test_env_hydrate_leaves_inline_literals_untouched(monkeypatch):
-    monkeypatch.setenv("SECRET_TOKEN", "from-env")
+    monkeypatch.setenv("SECRET_CONN__TOKEN", "from-env")
     data = _wrap({"token": _secret(None), "pw": _secret("keepme")})
     out = env_hydrate(data)
     assert out["spec"]["token"] == "secret:from-env"
@@ -308,7 +308,7 @@ def test_env_hydrate_leaves_inline_literals_untouched(monkeypatch):
 
 
 def test_env_hydrate_raises_on_missing_env(monkeypatch):
-    monkeypatch.delenv("SECRET_PASSWORD", raising=False)
+    monkeypatch.delenv("SECRET_CONN__PASSWORD", raising=False)
     data = _wrap({"password": _secret(None)})
     with pytest.raises(CommonRuntimeException) as exc_info:
         env_hydrate(data)
@@ -316,7 +316,7 @@ def test_env_hydrate_raises_on_missing_env(monkeypatch):
 
 
 def test_env_hydrate_does_not_mutate_input(monkeypatch):
-    monkeypatch.setenv("SECRET_PASSWORD", "hunter2")
+    monkeypatch.setenv("SECRET_CONN__PASSWORD", "hunter2")
     data = _wrap({"password": _secret(None)})
     env_hydrate(data)
     assert data["spec"]["password"] == _secret(None)

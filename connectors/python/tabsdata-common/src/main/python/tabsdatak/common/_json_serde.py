@@ -168,8 +168,8 @@ _SECRET_DEHYDRATED = ":secret:"
 _SECRET_PREFIX = "secret:"
 
 # Key prefix for the harvested `KeyValue` keys (and the env-var names
-# `env_hydrate` reads). Secrets get ``SECRET_``.
-_SECRET_KEY_PREFIX = "SECRET_"
+# `env_hydrate` reads). Secrets get ``SECRET_CONN__``.
+_SECRET_KEY_PREFIX = "SECRET_CONN__"
 
 
 def _to_key(path: JsonPath) -> str:
