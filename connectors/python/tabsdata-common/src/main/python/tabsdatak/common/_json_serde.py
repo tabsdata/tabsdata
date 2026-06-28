@@ -21,7 +21,10 @@ leaves and key each one on the env-var-style form of its jsonpath:
   ``"secret:hunter2"`` with ``":secret:"``) and returns it alongside a
   `KeyValue` list, matching the ``Vec<KeyValue>`` the apiserver's
   connection upsert expects. Keys are the jsonpath form prefixed with
-  ``SECRET_``.
+  ``SECRET_``. A *type-aware* ``reference`` (a ``model.to_dict()``) may be
+  passed so secret leaves are located by field type rather than by the
+  ``"secret:"`` prefix -- harvesting even an un-prefixed value so it never
+  lands in the stored connection in plain text.
 * `hydrate` is the inverse: given the dehydrated tree plus the
   `KeyValue` list (with values filled in), it writes each value back as
   ``"secret:<value>"``.
@@ -137,6 +140,23 @@ def replace_at(
     target[tokens[-1]] = value
 
 
+_MISSING = object()
+
+
+def _value_at(json_serde_data: JsonSerdeData, path: JsonPath) -> Any:
+    """The value at `path` inside `node`, or :data:`_MISSING` if any
+    segment of the path is absent. Uses the syntax produced by
+    `find_by_kind`.
+    """
+    cur: Any = json_serde_data
+    for token in _parse_path(path):
+        try:
+            cur = cur[token]
+        except (KeyError, IndexError, TypeError):
+            return _MISSING
+    return cur
+
+
 # ---------------------------------------------------------------------------
 # Secret helpers
 # ---------------------------------------------------------------------------
@@ -162,6 +182,18 @@ def _to_key(path: JsonPath) -> str:
     for ch in ".[]":
         rest = rest.replace(ch, "_")
     return rest.upper()
+
+
+def _parse_leaf(leaf: str) -> str | None:
+    """The value a secret leaf carries: ``":secret:"`` -> ``None``,
+    ``"secret:<value>"`` -> ``"<value>"``, and a bare ``"<value>"`` ->
+    ``"<value>"`` (an un-prefixed value supplied for a ``Secret`` field).
+    """
+    if leaf == _SECRET_DEHYDRATED:
+        return None
+    if leaf.startswith(_SECRET_PREFIX):
+        return leaf[len(_SECRET_PREFIX) :]
+    return leaf
 
 
 def _secret_refs(data: JsonSerdeData) -> list[tuple[JsonPath, str | None]]:
@@ -194,6 +226,7 @@ def _secret_refs(data: JsonSerdeData) -> list[tuple[JsonPath, str | None]]:
 
 def dehydrate(
     data: JsonSerdeData,
+    reference: JsonSerdeData | None = None,
 ) -> tuple[JsonSerdeData, list[KeyValue]]:
     """Strip every secret value out of ``data``.
 
@@ -202,15 +235,34 @@ def dehydrate(
     * ``dehydrated`` -- a deep copy of ``data`` with every secret leaf
       reduced to the dehydrated marker ``":secret:"``.
     * ``secrets`` -- one `KeyValue` per leaf, keyed by the jsonpath form
-      prefixed with ``SECRET_``. ``value`` is the value the leaf carried,
-      or ``None`` for a leaf that was already dehydrated.
+      prefixed with ``SECRET_``. ``value`` is the value the leaf carried
+      (the text after a ``"secret:"`` prefix, or a bare un-prefixed
+      ``"<value>"``), or ``None`` for a leaf that was already dehydrated.
+
+    ``reference`` locates the secret leaves; it defaults to ``data``, so
+    secrets are found by scanning ``data`` for the wire forms
+    (``":secret:"`` / ``"secret:<value>"``). Pass a *type-aware* reference
+    -- typically ``model.to_dict()`` of the validated document -- to
+    locate secrets by field type instead: a ``Secret`` field serializes
+    to ``":secret:"``, so its position is harvested regardless of how the
+    value was written in ``data``. This is what stops a secret value
+    supplied without the ``"secret:"`` prefix (e.g. a bare ``"hunter2"``)
+    from leaking into the stored connection in plain text.
 
     The list serializes to the ``Vec<KeyValue>`` the apiserver's
     connection upsert expects (``[{"key": ..., "value": ...}]``).
     """
+    if reference is None:
+        reference = data
     out = deepcopy(data)
     secrets: list[KeyValue] = []
-    for path, value in _secret_refs(out):
+    for path, _ in _secret_refs(reference):
+        leaf = _value_at(data, path)
+        if leaf is _MISSING:
+            # Present in the reference (e.g. a model default) but absent
+            # from ``data`` -- nothing in the document to harvest or blank.
+            continue
+        value = _parse_leaf(leaf) if isinstance(leaf, str) else None
         secrets.append(KeyValue(key=_SECRET_KEY_PREFIX + _to_key(path), value=value))
         replace_at(out, path, _SECRET_DEHYDRATED)
     return out, secrets

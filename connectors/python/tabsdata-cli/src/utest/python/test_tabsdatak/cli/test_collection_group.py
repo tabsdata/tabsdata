@@ -69,6 +69,46 @@ def test_load_connection_document_dehydrates(tmp_path):
     assert sent["spec"]["uri"] == "mysql://h:3306/db"
 
 
+# Same connection, but the secret values are supplied WITHOUT the `secret:`
+# prefix. They are `Secret`-typed fields, so dehydration must still harvest
+# them (driven by the validated model, not by the prefix) -- otherwise the
+# plain values would leak into the stored connection.
+_MYSQL_SRC_YAML_BARE = """\
+kind: mysqlSrcConn
+apiVersion: '1.0'
+type: tabsdatak.conn.mysql:MySQLSrcConn
+spec:
+  uri: mysql://h:3306/db
+  credentials:
+    kind: userPasswordCredentials
+    apiVersion: '1.0'
+    type: tabsdatak.conn.common.types:UserPassword
+    spec:
+      user: etl
+      password: hunter2
+"""
+
+
+@pytest.mark.skipif(
+    not _installed("mysql", "src"), reason="mysql connector not installed"
+)
+def test_load_connection_document_dehydrates_unprefixed_secret_values(tmp_path):
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+
+    connection, group, secrets = collection_group._load_connection_document(
+        _write(tmp_path, _MYSQL_SRC_YAML_BARE), None
+    )
+    # Bare values are harvested just like prefixed ones -- no plaintext leak.
+    assert {kv["value"] for kv in secrets} == {"etl", "hunter2"}
+    sent = template.from_yaml(connection)
+    creds = sent["spec"]["credentials"]["spec"]
+    assert creds["user"] == ":secret:"
+    assert creds["password"] == ":secret:"
+    # `uri` resolves to the str member of `str | Secret`, so it is NOT a secret.
+    assert sent["spec"]["uri"] == "mysql://h:3306/db"
+
+
 @pytest.mark.skipif(
     not _installed("mysql", "src"), reason="mysql connector not installed"
 )

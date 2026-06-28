@@ -152,7 +152,11 @@ def _load_connection_document(conn_file, group):
             f"kind '{kind}' makes this a {implied} collection, "
             f"but --group says '{group}'"
         )
-    dehydrated, secrets = dehydrate(document)
+    # Dehydrate type-awarely: a Secret field serializes to ":secret:" in the
+    # validated model, so its value is harvested whether or not the user
+    # prefixed it with "secret:" -- no secret leaks into the stored document.
+    model = template.resolve_class(document["type"]).from_dict(document)
+    dehydrated, secrets = dehydrate(document, model.to_dict())
     return template.to_yaml(dehydrated), implied, _kv_list(secrets)
 
 
