@@ -172,7 +172,8 @@ def _build_manifest_stage_conn(function_stage: Location) -> SimpleNamespace:
     conn pointing at the *stage root* so the substituted
     ``ManifestStageSrcPlugin`` can glob
     ``manifests/stream-manifest-*.json`` and resolve each manifest's
-    inner ``files/<name>.parquet`` entries.
+    inner ``files/<TS>/<name>.parquet`` entries (one files subdir per
+    manifest).
 
     Returns a :class:`SimpleNamespace` with the four expected backend
     attributes (``local`` / ``s3`` / ``az`` / ``gcs``) -- exactly the

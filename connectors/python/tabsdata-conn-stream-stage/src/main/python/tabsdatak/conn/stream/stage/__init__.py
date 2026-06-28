@@ -49,7 +49,8 @@ class ManifestStageSrc(Src):
 # ``conn.base_path``, which by convention is the stage root, so this
 # globs ``<stage_root>/manifests/stream-manifest-*.json``. The file
 # paths inside each manifest stay relative to the same
-# ``conn.base_path`` (typically ``files/<name>.parquet``).
+# ``conn.base_path`` (typically ``files/<TS>/<name>.parquet``, one
+# subdir per manifest).
 _STREAM_MANIFEST_FILE_WILDCARD = "manifests/stream-manifest-*.json"
 
 # Per-flow cursor for the manifest wildcard. Dot-separated, hyphenated

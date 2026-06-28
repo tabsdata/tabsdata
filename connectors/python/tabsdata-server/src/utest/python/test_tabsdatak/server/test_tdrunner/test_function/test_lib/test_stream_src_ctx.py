@@ -35,6 +35,7 @@ from tabsdatak.server._tdrunner.function._lib.stage_layout import (
     STREAM_STATE_API_VERSION,
     STREAM_STATE_FILENAME,
     STREAM_STATE_KIND,
+    manifest_files_dir,
 )
 from tabsdatak.server._tdrunner.function._lib.stream_src_ctx import (
     StreamerPluginCtx,
@@ -251,19 +252,25 @@ def test_ctx_construction_loads_existing_state(tmp_path):
 # --- stage(): StoreStreamState branch -------------------------------------
 
 
-def test_stage_store_stream_state_moves_files_to_files_subdir(tmp_path):
+def test_stage_store_stream_state_moves_files_to_per_manifest_files_subdir(tmp_path):
     """The parquets the plugin produced in work_dir must end up under
-    `<stage>/files/` -- that's where the publisher's
-    ManifestStageSrcPlugin (via NU5's conn pointing at stage_root)
-    will resolve them."""
+    `<stage>/files/<TS>/` -- a per-batch subdir named for the manifest's
+    timestamp, where the publisher's ManifestStageSrcPlugin (via NU5's
+    conn pointing at stage_root) will resolve them."""
     ctx = _make_ctx(tmp_path=tmp_path)
     work_dir = tmp_path / "work"
     f1 = _write_parquet_stub(work_dir / "people-1.parquet")
     f2 = _write_parquet_stub(work_dir / "people-2.parquet")
     ctx.stage([[f1, f2]], StoreStreamState(state={"offset": 1}))
-    files_dir = tmp_path / "stage" / FILES_SUBDIR
-    assert (files_dir / "people-1.parquet").is_file()
-    assert (files_dir / "people-2.parquet").is_file()
+    manifest_path = next(
+        (tmp_path / "stage" / MANIFESTS_SUBDIR).glob("stream-manifest-*.json")
+    )
+    external_id = manifest_path.stem[len("stream-manifest-") :]
+    batch_dir = manifest_files_dir(tmp_path / "stage", external_id)
+    assert (batch_dir / "people-1.parquet").is_file()
+    assert (batch_dir / "people-2.parquet").is_file()
+    # nothing landed flat under files/
+    assert not (tmp_path / "stage" / FILES_SUBDIR / "people-1.parquet").exists()
     # work_dir entries gone
     assert not f1.exists()
     assert not f2.exists()
@@ -280,7 +287,8 @@ def test_stage_store_stream_state_writes_manifest_under_manifests_subdir(tmp_pat
     # Manifest content holds the path *relative to stage_root* --
     # NU5's publisher conn points at stage_root and resolves these.
     content = json.loads(manifests[0].read_text())
-    assert content == [["files/data.parquet"]]
+    external_id = manifests[0].stem[len("stream-manifest-") :]
+    assert content == [[f"files/{external_id}/data.parquet"]]
 
 
 def test_stage_store_stream_state_persists_state_envelope(tmp_path):
@@ -430,6 +438,27 @@ def test_stage_multiple_batches_produce_distinct_manifests(tmp_path):
     assert manifests[0].name < manifests[1].name
 
 
+def test_stage_multiple_batches_use_distinct_files_subdirs(tmp_path):
+    """Each batch's parquets land in their own files/<TS>/ subdir keyed
+    to that batch's manifest, so two batches never share a directory --
+    this is what lets the sidecar reclaim one batch with a single rmdir."""
+    ctx = _make_ctx(tmp_path=tmp_path)
+    work_dir = tmp_path / "work"
+    f1 = _write_parquet_stub(work_dir / "batch-1.parquet")
+    ctx.stage([[f1]], StoreStreamState(state={"n": 1}))
+    f2 = _write_parquet_stub(work_dir / "batch-2.parquet")
+    ctx.stage([[f2]], StoreStreamState(state={"n": 2}))
+    manifests = sorted(
+        (tmp_path / "stage" / MANIFESTS_SUBDIR).glob("stream-manifest-*.json")
+    )
+    ids = [m.stem[len("stream-manifest-") :] for m in manifests]
+    dir1 = manifest_files_dir(tmp_path / "stage", ids[0])
+    dir2 = manifest_files_dir(tmp_path / "stage", ids[1])
+    assert dir1 != dir2
+    assert (dir1 / "batch-1.parquet").is_file()
+    assert (dir2 / "batch-2.parquet").is_file()
+
+
 def test_stage_handles_empty_slots(tmp_path):
     """A slot with zero files this batch is valid (e.g. one of N
     output_tables produced nothing this rollover). The manifest must
@@ -441,7 +470,8 @@ def test_stage_handles_empty_slots(tmp_path):
     manifests = list((tmp_path / "stage" / MANIFESTS_SUBDIR).glob("*.json"))
     assert len(manifests) == 1
     content = json.loads(manifests[0].read_text())
-    assert content == [["files/data.parquet"], []]
+    external_id = manifests[0].stem[len("stream-manifest-") :]
+    assert content == [[f"files/{external_id}/data.parquet"], []]
 
 
 # --- mark_inactive --------------------------------------------------------

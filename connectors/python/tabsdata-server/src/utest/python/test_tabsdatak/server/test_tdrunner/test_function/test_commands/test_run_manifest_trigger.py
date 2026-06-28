@@ -7,10 +7,12 @@
 Covers:
   * `_resolve_local_stage_path`: file:// accepted, others raise MT_2
   * `_build_trigger_request`: env:/val: resolution, headers built
-  * `_enqueue_for_deletion`: full manifest, missing manifest, malformed manifest
+  * `_enqueue_for_deletion`: full manifest (files + manifest + per-batch dir),
+    empty slots, missing manifest, malformed manifest
   * `_trigger_one`: 200 OK / 4xx / 5xx / connection error / malformed filename
-  * `_drain_until`: pops + deletes, handles missing files, respects deadline,
-    respects active flag, sleeps on empty queue
+  * `_drain_until`: pops + deletes, rmdirs empty per-batch dirs, handles missing
+    files + delete failures, respects deadline, respects active flag, sleeps on
+    empty queue
   * End-to-end main loop integration (one iteration against a fake apiserver)
 """
 
@@ -34,9 +36,11 @@ from tabsdatak.server._tdrunner.function._lib.http_request import (
 from tabsdatak.server._tdrunner.function._lib.request import Location
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
     files_dir,
+    manifest_files_dir,
     manifests_dir,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
+    external_uid_from_filename,
     format_manifest_filename,
     write_stage_manifest,
 )
@@ -101,13 +105,11 @@ def _request_capturing_handler(status: int, capture: list[dict]):
         def do_POST(self):
             length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(length) if length else b""
-            capture.append(
-                {
-                    "path": self.path,
-                    "body": body,
-                    "content_type": self.headers.get("Content-Type"),
-                }
-            )
+            capture.append({
+                "path": self.path,
+                "body": body,
+                "content_type": self.headers.get("Content-Type"),
+            })
             self.send_response(status)
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -125,16 +127,24 @@ def _write_a_manifest(
     ts: datetime,
 ) -> Path:
     """Convenience: write a manifest under `<stage_root>/manifests/`
-    and create the referenced files under `<stage_root>/files/` so
-    tests have something realistic to delete."""
-    files_target = files_dir(stage_root)
-    files_target.mkdir(parents=True, exist_ok=True)
+    and create the referenced files at their manifest-relative paths
+    (e.g. `files/<TS>/<name>`) so tests have something realistic to
+    delete."""
+    files_dir(stage_root).mkdir(parents=True, exist_ok=True)
     for slot in files:
         for rel in slot:
-            # rel is "files/<name>" — strip the prefix to compute the real path
-            name = rel.split("/", 1)[1] if "/" in rel else rel
-            (files_target / name).write_text("parquet-stub")
+            # rel is relative to stage_root (e.g. "files/<TS>/a.parquet").
+            dst = stage_root / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text("parquet-stub")
     return write_stage_manifest(stage_root, files, ts=ts)
+
+
+def _batch_files(ts: datetime, *names: str) -> list[str]:
+    """Build the manifest-relative paths a single batch's files take
+    under `files/<TS>/`, matching what `stream_src_ctx.stage` writes."""
+    external_id = external_uid_from_filename(format_manifest_filename(ts))
+    return [f"files/{external_id}/{name}" for name in names]
 
 
 # --- _resolve_local_stage_path --------------------------------------------
@@ -205,19 +215,21 @@ def test_enqueue_for_deletion_queues_files_then_manifest(tmp_path):
     crashes mid-drain (the next iteration's dedup-reject re-enqueues
     whatever's still on disk, so order is not load-bearing)."""
     ts = datetime(2026, 6, 16, 10, 30, 12, 345_000)
-    manifest_path = _write_a_manifest(
-        tmp_path,
-        [["files/a.parquet"], ["files/b.parquet", "files/c.parquet"]],
-        ts=ts,
-    )
+    slot0 = _batch_files(ts, "a.parquet")
+    slot1 = _batch_files(ts, "b.parquet", "c.parquet")
+    manifest_path = _write_a_manifest(tmp_path, [slot0, slot1], ts=ts)
+    external_id = external_uid_from_filename(manifest_path.name)
+    batch_dir = manifest_files_dir(tmp_path, external_id)
     queue: deque[Path] = deque()
     _enqueue_for_deletion(manifest_path, tmp_path, queue)
     queued = list(queue)
+    # files first, manifest, then the now-empty per-batch dir last.
     assert queued == [
-        tmp_path / "files" / "a.parquet",
-        tmp_path / "files" / "b.parquet",
-        tmp_path / "files" / "c.parquet",
+        tmp_path / slot0[0],
+        tmp_path / slot1[0],
+        tmp_path / slot1[1],
         manifest_path,
+        batch_dir,
     ]
 
 
@@ -244,12 +256,19 @@ def test_enqueue_for_deletion_malformed_manifest_queues_manifest_only(tmp_path):
     assert list(queue) == [bad]
 
 
-def test_enqueue_for_deletion_empty_slots_just_queues_manifest(tmp_path):
+def test_enqueue_for_deletion_empty_slots_queues_manifest_and_batch_dir(tmp_path):
+    """No files this batch, but the manifest and its (never-created)
+    per-batch dir are still queued; the drain's rmdir no-ops if the dir
+    was never written."""
     ts = datetime(2026, 6, 16, 10, 30, 12, 345_000)
     manifest_path = _write_a_manifest(tmp_path, [[], []], ts=ts)
+    external_id = external_uid_from_filename(manifest_path.name)
     queue: deque[Path] = deque()
     _enqueue_for_deletion(manifest_path, tmp_path, queue)
-    assert list(queue) == [manifest_path]
+    assert list(queue) == [
+        manifest_path,
+        manifest_files_dir(tmp_path, external_id),
+    ]
 
 
 # --- _trigger_one ---------------------------------------------------------
@@ -273,15 +292,18 @@ def test_trigger_one_409_enqueues(tmp_path):
     external_id; the function-publisher is done with the manifest --
     safe to delete."""
     ts = datetime(2026, 6, 16, 10, 30, 12, 345_000)
-    manifest_path = _write_a_manifest(tmp_path, [["files/a.parquet"]], ts=ts)
+    slot0 = _batch_files(ts, "a.parquet")
+    manifest_path = _write_a_manifest(tmp_path, [slot0], ts=ts)
+    external_id = external_uid_from_filename(manifest_path.name)
     queue: deque[Path] = deque()
     handler = _silent_handler(409, body=b'{"error":"external_id seen"}')
     with _server(handler) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         _trigger_one(manifest_path, tmp_path, req, queue)
     assert list(queue) == [
-        tmp_path / "files" / "a.parquet",
+        tmp_path / slot0[0],
         manifest_path,
+        manifest_files_dir(tmp_path, external_id),
     ]
 
 
@@ -439,16 +461,38 @@ def test_drain_until_exits_immediately_when_inactive(tmp_path):
     assert list(queue) == [a]
 
 
-def test_drain_until_logs_warning_on_unlink_failure(tmp_path, caplog):
-    """Permission failures etc. are logged + swallowed; the loop
-    moves on rather than crashing the sidecar."""
-    # Make a path that points at a directory; unlink will refuse.
-    a_dir = tmp_path / "i-am-a-dir"
+def test_drain_until_logs_warning_on_delete_failure(tmp_path, caplog):
+    """Permission failures, non-empty dirs, etc. are logged + swallowed;
+    the loop moves on rather than crashing the sidecar."""
+    # A non-empty directory: rmdir will refuse (directory not empty).
+    a_dir = tmp_path / "i-am-not-empty"
     a_dir.mkdir()
+    (a_dir / "leftover.parquet").write_text("x")
     queue = deque([a_dir])
     deadline = time.monotonic() + 1
+    with caplog.at_level("WARNING"):
+        _drain_until(deadline, queue, lambda: True)
+    # We pop it regardless; the dir survives and the warning was logged.
+    assert list(queue) == []
+    assert a_dir.exists()
+    assert any("could not delete" in r.message for r in caplog.records)
+
+
+def test_drain_until_rmdirs_empty_batch_dir(tmp_path):
+    """A per-batch files/<TS>/ dir queued after its files is reclaimed
+    via rmdir once those files have drained, leaving no orphan dir."""
+    ts = datetime(2026, 6, 16, 10, 30, 12, 345_000)
+    external_id = external_uid_from_filename(format_manifest_filename(ts))
+    batch_dir = manifest_files_dir(tmp_path, external_id)
+    batch_dir.mkdir(parents=True)
+    f = batch_dir / "a.parquet"
+    f.write_text("x")
+    # File ahead of the dir, exactly as _enqueue_for_deletion orders them.
+    queue = deque([f, batch_dir])
+    deadline = time.monotonic() + 5
     _drain_until(deadline, queue, lambda: True)
-    # We pop it regardless; the warning was logged
+    assert not f.exists()
+    assert not batch_dir.exists()
     assert list(queue) == []
 
 
@@ -462,8 +506,12 @@ def test_main_loop_one_iteration_processes_and_drains(tmp_path, monkeypatch):
     stage_root = tmp_path / "stage"
     ts1 = datetime(2026, 6, 16, 10, 30, 12, 345_000)
     ts2 = datetime(2026, 6, 16, 10, 30, 13, 999_000)
-    m1 = _write_a_manifest(stage_root, [["files/p1.parquet"]], ts=ts1)
-    m2 = _write_a_manifest(stage_root, [["files/p2.parquet"]], ts=ts2)
+    slot1 = _batch_files(ts1, "p1.parquet")
+    slot2 = _batch_files(ts2, "p2.parquet")
+    m1 = _write_a_manifest(stage_root, [slot1], ts=ts1)
+    m2 = _write_a_manifest(stage_root, [slot2], ts=ts2)
+    dir1 = manifest_files_dir(stage_root, external_uid_from_filename(m1.name))
+    dir2 = manifest_files_dir(stage_root, external_uid_from_filename(m2.name))
     queue: deque[Path] = deque()
 
     # Fake apiserver: 409 for everything (treat as dedup-reject).
@@ -472,20 +520,25 @@ def test_main_loop_one_iteration_processes_and_drains(tmp_path, monkeypatch):
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         _trigger_one(m1, stage_root, req, queue)
         _trigger_one(m2, stage_root, req, queue)
-    # Both rejected -> both queued; files-then-manifest per call.
+    # Both rejected -> both queued; files-then-manifest-then-batch-dir per call.
     assert list(queue) == [
-        stage_root / "files" / "p1.parquet",
+        stage_root / slot1[0],
         m1,
-        stage_root / "files" / "p2.parquet",
+        dir1,
+        stage_root / slot2[0],
         m2,
+        dir2,
     ]
     # Drain with plenty of time
     deadline = time.monotonic() + 5
     _drain_until(deadline, queue, lambda: True)
     assert not m1.exists()
     assert not m2.exists()
-    assert not (stage_root / "files" / "p1.parquet").exists()
-    assert not (stage_root / "files" / "p2.parquet").exists()
+    assert not (stage_root / slot1[0]).exists()
+    assert not (stage_root / slot2[0]).exists()
+    # The per-batch dirs are reclaimed too -- no orphan directories.
+    assert not dir1.exists()
+    assert not dir2.exists()
 
 
 # --- error code wiring ----------------------------------------------------

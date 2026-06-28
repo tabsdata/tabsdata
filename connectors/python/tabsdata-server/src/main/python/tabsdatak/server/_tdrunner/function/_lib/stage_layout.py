@@ -13,9 +13,19 @@ the per-function ``function_stage`` root:
         manifests/
             stream-manifest-<TS_ISO8601>.json          <- one per ``ctx.stage()`` call
         files/
-            <table_a>-<TS>.parquet                     <- the staged data files
-            <table_b>-<TS>.parquet
-            ...
+            <TS_ISO8601>/                              <- one subdir per manifest
+                <table_a>-<TS>.parquet                 <- the staged data files
+                <table_b>-<TS>.parquet
+                ...
+
+The parquets for a given batch live under ``files/<TS>/`` where ``<TS>``
+is the timestamp portion of that batch's manifest filename -- so a
+manifest and its data files share a name, and cleaning up an orphaned
+batch is a single ``rmdir`` of its ``files/<TS>/`` directory rather than
+a hunt through a flat ``files/`` shared by every batch. The
+``manifests/`` / ``files/`` split itself is kept so the manifest stays
+small (it carries paths, not payload); the per-manifest grouping applies
+only *within* ``files/``.
 
 This module pins those names and provides the envelope shape for the
 ``stream-state.json`` file. It is pure utility code: no I/O, no callers
@@ -44,9 +54,22 @@ def manifests_dir(stage_root: Path) -> Path:
 
 
 def files_dir(stage_root: Path) -> Path:
-    """``<stage_root>/files/`` -- where the streamer writes parquets that
-    each manifest then points at."""
+    """``<stage_root>/files/`` -- the root the streamer writes parquets
+    under; each batch gets its own :func:`manifest_files_dir` subdir."""
     return stage_root / FILES_SUBDIR
+
+
+def manifest_files_dir(stage_root: Path, external_id: str) -> Path:
+    """``<stage_root>/files/<external_id>/`` -- the per-batch subdir
+    holding the parquets a single ``ctx.stage()`` call staged.
+
+    ``external_id`` is the timestamp portion of that batch's manifest
+    filename (see ``stage_manifest.external_uid_from_filename``), so the
+    manifest ``stream-manifest-<TS>.json`` and its data files under
+    ``files/<TS>/`` share a name. That pairing lets the manifest-trigger
+    sidecar reclaim a whole batch with one directory removal and lets an
+    operator eyeball which files belong to which manifest."""
+    return files_dir(stage_root) / external_id
 
 
 def stream_state_path(stage_root: Path) -> Path:

@@ -85,6 +85,9 @@ from tabsdatak.server._tdrunner.function._lib.request import (
     Location,
     load_any_request_or_raise,
 )
+from tabsdatak.server._tdrunner.function._lib.stage_layout import (
+    manifest_files_dir,
+)
 from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     InvalidStageManifestError,
     enumerate_pending,
@@ -205,14 +208,17 @@ def _enqueue_for_deletion(
     stage_root: Path,
     queue: deque[Path],
 ) -> None:
-    """Queue every file referenced by the manifest plus the manifest
-    file itself for deletion.
+    """Queue every file referenced by the manifest, the manifest file
+    itself, and the batch's now-empty ``files/<TS>/`` subdir for deletion.
 
-    Files first, manifest last -- if the sidecar crashes mid-drain,
-    the next iteration's dedup-reject re-enqueues whatever's still
-    on disk, so order is for tidiness rather than correctness. A
-    missing or malformed manifest is logged and silently skipped
-    (the manifest gets queued anyway; the publisher already saw it).
+    Files first, manifest, then the per-batch files subdir last -- if the
+    sidecar crashes mid-drain, the next iteration's dedup-reject re-enqueues
+    whatever's still on disk, so order is for tidiness rather than
+    correctness. The trailing ``rmdir`` only succeeds once the subdir's
+    files have drained (see :func:`_drain_until`), which the ordering
+    guarantees on a clean pass. A missing or malformed manifest is logged
+    and silently skipped (the manifest gets queued anyway; the publisher
+    already saw it).
     """
     try:
         slots = load_stage_manifest(manifest_path)
@@ -231,6 +237,15 @@ def _enqueue_for_deletion(
         for rel_path in slot:
             queue.append(stage_root / rel_path)
     queue.append(manifest_path)
+    # The batch's parquets all live under files/<external_id>/; enqueue
+    # that subdir last so it's empty by the time the drain rmdir's it,
+    # leaving no orphan directory behind.
+    try:
+        external_id = external_uid_from_filename(manifest_path.name)
+    except InvalidStageManifestError:
+        pass
+    else:
+        queue.append(manifest_files_dir(stage_root, external_id))
 
 
 _DEDUP_REJECT_STATUS = 409
@@ -339,19 +354,27 @@ def _drain_until(
     deletion_queue: deque[Path],
     is_active: callable,
 ) -> None:
-    """Pop and delete files from ``deletion_queue`` until the deadline
+    """Pop and delete paths from ``deletion_queue`` until the deadline
     or shutdown signal arrives.
 
-    Each pop deletes one file. Failures are logged + swallowed (the
-    file may have been removed by a parallel actor; the goal is best-
-    effort cleanup). When the queue is empty we sleep
-    ``_IDLE_SLEEP_SECS`` so the loop doesn't busy-spin.
+    Each pop removes one path: a file via ``unlink``, or a per-batch
+    ``files/<TS>/`` directory via ``rmdir`` (which only succeeds once the
+    directory is empty -- its files are enqueued ahead of it, so a clean
+    drain empties it first). Failures are logged + swallowed (the path may
+    have been removed by a parallel actor, or a directory may still hold
+    files when a prior drain was cut short; the goal is best-effort
+    cleanup and the next iteration re-enqueues anything left). When the
+    queue is empty we sleep ``_IDLE_SLEEP_SECS`` so the loop doesn't
+    busy-spin.
     """
     while is_active() and time.monotonic() < deadline_monotonic:
         if deletion_queue:
             path = deletion_queue.popleft()
             try:
-                path.unlink(missing_ok=True)
+                if path.is_dir():
+                    path.rmdir()
+                else:
+                    path.unlink(missing_ok=True)
                 logger.debug("run-manifest-trigger: deleted %s", path)
             except OSError as exc:
                 logger.warning(

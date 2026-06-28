@@ -16,7 +16,8 @@ Layout (see :mod:`stage_layout`):
         manifests/
             stream-manifest-<TS_ISO8601>.json
         files/
-            ...
+            <TS_ISO8601>/
+                ...
 
 Filename: ``stream-manifest-<ISO-8601-us>.json`` -- for example,
 ``stream-manifest-2026-06-16T10-30-12.345678.json``. The
@@ -35,8 +36,10 @@ Content: JSON, ``list[list[str]]``. The outer list is positional by
 output table (slot ``i`` -> table ``i``); the inner list is the parquet
 file paths the streamer wrote for that slot in this batch. Paths are
 relative to the stage root, so the publisher's ``ManifestStageSrcPlugin``
-resolves them against its conn's ``base_path`` (set to
-``<stage_root>``); a typical entry looks like ``files/people-<TS>.parquet``.
+resolves them against its conn's ``base_path`` (set to ``<stage_root>``);
+a typical entry looks like ``files/<TS>/people-<TS>.parquet``, where the
+``<TS>`` subdir matches this manifest's filename timestamp (see
+``stage_layout.manifest_files_dir``).
 
 The manifest-trigger sidecar calls :func:`external_uid_from_filename`
 to extract the timestamp portion of the filename and passes it as

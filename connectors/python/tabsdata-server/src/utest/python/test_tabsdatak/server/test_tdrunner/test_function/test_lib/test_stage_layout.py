@@ -24,6 +24,7 @@ from tabsdatak.server._tdrunner.function._lib.stage_layout import (
     StreamStateView,
     files_dir,
     format_state_envelope,
+    manifest_files_dir,
     manifests_dir,
     parse_state_envelope,
     stream_state_path,
@@ -60,6 +61,14 @@ def test_manifests_dir_joins_under_stage_root():
 
 def test_files_dir_joins_under_stage_root():
     assert files_dir(Path("/stage")) == Path("/stage/files")
+
+
+def test_manifest_files_dir_nests_external_id_under_files():
+    """A batch's parquets live in files/<external_id>/, named for the
+    timestamp portion of that batch's manifest filename."""
+    assert manifest_files_dir(Path("/stage"), "2026-06-16T10-30-12.345678") == Path(
+        "/stage/files/2026-06-16T10-30-12.345678"
+    )
 
 
 def test_stream_state_path_joins_under_stage_root():

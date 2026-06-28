@@ -69,13 +69,14 @@ from tabsdatak.server._tdrunner.function._lib.stage_layout import (
     FILES_SUBDIR,
     InvalidStateEnvelopeError,
     StreamStateView,
-    files_dir,
     format_state_envelope,
+    manifest_files_dir,
     parse_state_envelope,
     stream_state_path,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     external_uid_from_filename,
+    format_manifest_filename,
     write_stage_manifest,
 )
 from tabsdatak.spi import CommitStateSpec, StoreStreamState, StreamSrcPluginCtx
@@ -244,10 +245,16 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
             FileNotFoundError: any path in ``tables_files`` does not
                 exist in the plugin's ``work_dir``.
         """
-        files_target_dir = files_dir(self._stage_root)
+        # The batch timestamp drives both the manifest filename and the
+        # per-batch files subdir, so the two share a name. It must be
+        # fixed up front: the files move into files/<external_id>/ before
+        # the manifest that records their paths is written.
+        ts = datetime.now(tz=timezone.utc)
+        external_id = external_uid_from_filename(format_manifest_filename(ts))
+        files_target_dir = manifest_files_dir(self._stage_root, external_id)
         files_target_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Move files from work_dir → <stage_root>/files/.
+        # 1. Move files from work_dir → <stage_root>/files/<external_id>/.
         # ``shutil.move`` is atomic when src + dst are on the same
         # filesystem (rename) and falls back to copy+delete across
         # filesystems. The relative-to-stage_root path the manifest
@@ -265,16 +272,15 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
                     )
                 dst = files_target_dir / src_path.name
                 shutil.move(str(src_path), str(dst))
-                moved_slot.append(f"{FILES_SUBDIR}/{src_path.name}")
+                moved_slot.append(f"{FILES_SUBDIR}/{external_id}/{src_path.name}")
             moved.append(moved_slot)
 
-        # 2. Write the manifest under <stage_root>/manifests/. The
-        # filename's TS portion serves as the external_id we'll pair
-        # with the state file so a future operator can cross-reference
-        # the state with the manifest that produced it.
-        ts = datetime.now(tz=timezone.utc)
+        # 2. Write the manifest under <stage_root>/manifests/ with the
+        # same ``ts``. Its filename TS portion is the external_id we
+        # paired the files subdir with above and that we cross-reference
+        # the state file with, so an operator can tie state ↔ manifest ↔
+        # files together.
         manifest_path = write_stage_manifest(self._stage_root, moved, ts=ts)
-        external_id = external_uid_from_filename(manifest_path.name)
         logger.info(
             "stream_src_ctx.stage: wrote manifest %s with %d slot(s); "
             "files per slot=%s",
