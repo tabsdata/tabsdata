@@ -11,6 +11,7 @@ pub mod errors;
 pub mod list_condition;
 mod list_filter;
 mod sea_value;
+pub mod serde_utils;
 pub mod sql_condition;
 mod tagged;
 

@@ -215,4 +215,60 @@ mod tests {
         assert_eq!(updated.modified_by, user.name);
         assert!(*updated.enabled);
     }
+
+    /// email is tri-state: setting it, then clearing it (the JSON `null` =
+    /// `Some(None)` state) persists NULL. Exercises the macro-injected
+    /// deserializer plus the `UserUpdateDB.email` tri-state through update_values.
+    #[td_test::test(db)]
+    async fn test_update_user_clear_email(db: TdPool) {
+        let user = db
+            .seed()
+            .user(&UserName::try_from("u0").unwrap(), &UserEnabled::from(true))
+            .await
+            .unwrap();
+
+        // Set an email (Some(Email) -> Some(Some(..)) = set).
+        let set = UserUpdate::builder()
+            .full_name(None)
+            .email(Some(Email::try_from("u0@foo.com").unwrap()))
+            .password(None)
+            .enabled(None)
+            .build()
+            .unwrap();
+        let updated = UpdateUserService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
+                    UserParam::builder().user(UserIdName::from_str("u0").unwrap()).build().unwrap(),
+                    set,
+                ),
+            )
+            .await
+            .unwrap();
+        assert_eq!(updated.email.unwrap(), Email::try_from("u0@foo.com").unwrap());
+
+        // Clear it (Some(None) = the JSON `null` state).
+        let clear = UserUpdate::builder()
+            .full_name(None)
+            .email(Some(None::<Email>))
+            .password(None)
+            .enabled(None)
+            .build()
+            .unwrap();
+        let cleared = UpdateUserService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
+                    UserParam::builder().user(UserIdName::from_str("u0").unwrap()).build().unwrap(),
+                    clear,
+                ),
+            )
+            .await
+            .unwrap();
+        assert!(cleared.email.is_none(), "email cleared via null");
+
+        // It persisted as NULL on the row.
+        let db_user: UserDB = db.live().fetch_one::<UserDB>(&user.id).await.unwrap();
+        assert!(db_user.email.is_none());
+    }
 }

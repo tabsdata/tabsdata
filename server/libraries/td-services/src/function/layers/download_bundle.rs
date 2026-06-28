@@ -63,7 +63,8 @@ pub async fn build_bundle_download(
     function: Ref<FunctionDBWithNames>,
 ) -> Result<BundleDownload, TdError> {
     // The bundle's storage prefix is frozen on the (durable) bundle row; fall back
-    // to the collection's live base_path if the bundle row predates retention.
+    // to the collection's effective base_path (its own, else the project's — resolved
+    // by the collections_active view) if the bundle row predates retention.
     let bundle: Option<BundleDB> = conn
         .live()
         .fetch_optional::<BundleDB>(&function.bundle_id)
@@ -75,7 +76,7 @@ pub async fn build_bundle_download(
                 .live()
                 .fetch_one::<CollectionDB>(&function.collection_id)
                 .await?;
-            collection.base_path
+            collection.effective_base_path
         }
     };
     let (path, _) = StorageLocation::from(&function.storage_version)

@@ -307,7 +307,10 @@ mod tests {
             .context;
         let mut builder = CollectionUpdateDBBuilder::try_from(collection)?;
         let builder = TryUpdater::try_update_from(&mut builder, &request_context)?;
-        let update = builder.clone().base_path(base_path.clone()).build()?;
+        let update = builder
+            .clone()
+            .base_path(Some(Some(base_path.clone())))
+            .build()?;
         db.scoped(ProjectId::sandbox())
             .live()
             .update::<CollectionUpdateDB, CollectionDB>(&update, &collection.id)
@@ -404,7 +407,7 @@ mod tests {
         let coll_base = BasePath::try_from("/coll")?;
         set_collection_base_path(&db, &coll, &coll_base).await?;
         let coll: CollectionDB = db.live().fetch_one::<CollectionDB>(&coll.id).await?;
-        assert_eq!(coll.base_path, coll_base);
+        assert_eq!(coll.base_path, Some(coll_base.clone()));
 
         let override_base = BasePath::try_from("/a")?;
         let lfr_a = seed_dispatch_lfr(&db, &coll, "fa", Some(override_base.clone())).await?;

@@ -23,7 +23,7 @@ use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::rest_urls::ProjectParam;
 use td_objects::types::basic::{
-    AccessTokenId, Description, EntityId, PermissionEntityType, PermissionType, ProjectId,
+    AccessTokenId, BasePath, Description, EntityId, PermissionEntityType, PermissionType, ProjectId,
     ProjectIdName, ProjectName, RoleKind, RoleName, UserEnabled, UserId, UserName,
 };
 use td_queries::LiveEntry;
@@ -48,10 +48,12 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
     let initial_desc = Description::try_from("Payments project")?;
     let updated_desc = Description::try_from("Payments project (renamed)")?;
 
-    // Create.
+    // Create with an explicit base_path (the default would be `/`).
+    let base_path = BasePath::try_from("/payments")?;
     let create = ProjectCreate::builder()
         .name(&initial_name)
         .description(&initial_desc)
+        .base_path(&base_path)
         .build()?;
     let created = CreateProjectService::with_defaults(db.clone())
         .service()
@@ -59,6 +61,7 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
         .await?;
     assert_eq!(created.name, initial_name);
     assert_eq!(created.description, initial_desc);
+    assert_eq!(created.base_path, base_path);
 
     // Read by name.
     let read = ReadProjectService::with_defaults(db.clone())
@@ -66,6 +69,7 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
         .raw_oneshot(admin_ctx().read(project_param("payments")))
         .await?;
     assert_eq!(read.id, created.id);
+    assert_eq!(read.base_path, base_path, "base_path round-trips through read");
 
     // Update.
     let upd = ProjectUpdate::builder()

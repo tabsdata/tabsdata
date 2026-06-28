@@ -42,8 +42,10 @@ impl UpdateCollectionDBBuilderUpdate for With<CollectionUpdate> {
         if let Some(description) = &update.description {
             builder.description(description);
         }
+        // Re-wrap as `Some(inner)` so `update_values` writes the column; the DTO's
+        // outer `None` falls through here (unchanged).
         if let Some(base_path) = &update.base_path {
-            builder.base_path(base_path);
+            builder.base_path(Some(base_path.clone()));
         }
 
         Ok(builder)

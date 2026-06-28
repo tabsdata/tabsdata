@@ -675,4 +675,32 @@ mod tests {
         assert!(json.get("description").is_some());
         assert!(json.get("version").is_none());
     }
+
+    #[ta_objects::dxo]
+    mod dxo_tristate {
+        use super::*;
+
+        #[ta_objects::Dto]
+        pub struct TriStateUpdate {
+            #[builder(default)]
+            pub value: Option<Option<TestName>>,
+        }
+    }
+
+    /// The Dto macro auto-injects the `double_option` deserializer for any
+    /// `Option<Option<T>>` field, so JSON distinguishes absent (unchanged),
+    /// `null` (clear), and a value (set).
+    #[test]
+    fn test_dto_auto_injects_double_option_tristate() {
+        use dxo_tristate::TriStateUpdate;
+
+        let unchanged: TriStateUpdate = serde_json::from_str("{}").unwrap();
+        assert_eq!(unchanged.value, None);
+
+        let cleared: TriStateUpdate = serde_json::from_str(r#"{"value":null}"#).unwrap();
+        assert_eq!(cleared.value, Some(None));
+
+        let set: TriStateUpdate = serde_json::from_str(r#"{"value":"hello"}"#).unwrap();
+        assert_eq!(set.value, Some(Some(TestName::try_from("hello").unwrap())));
+    }
 }

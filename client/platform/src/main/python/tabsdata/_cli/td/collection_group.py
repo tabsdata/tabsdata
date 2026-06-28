@@ -188,12 +188,14 @@ def info(ctx: click.Context, name: str):
         table = Table(title=f"Collection '{name}'")
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("Description")
+        table.add_column("Base path")
         table.add_column("Created on")
         table.add_column("Created by")
 
         table.add_row(
             collection.name,
             collection.description,
+            collection.base_path or "(inherits project)",
             collection.created_on_str,
             collection.created_by,
         )
@@ -219,6 +221,7 @@ def list(ctx: click.Context):
         table = Table(title="Collections")
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("Description")
+        table.add_column("Base path")
         table.add_column("Created on")
         table.add_column("Created by")
 
@@ -226,6 +229,7 @@ def list(ctx: click.Context):
             table.add_row(
                 collection.name,
                 collection.description,
+                collection.base_path or "(inherits project)",
                 collection.created_on_str,
                 collection.created_by,
             )
@@ -251,6 +255,11 @@ def list(ctx: click.Context):
         "versions keep their stamped path; only new artifacts use the new prefix."
     ),
 )
+@click.option(
+    "--inherit-base-path",
+    is_flag=True,
+    help="Clear the collection's base_path so it inherits the project's.",
+)
 @click.pass_context
 def update(
     ctx: click.Context,
@@ -258,6 +267,7 @@ def update(
     new_name: str,
     description: str,
     base_path: str,
+    inherit_base_path: bool,
 ):
     """Update a collection by name"""
     verify_login_or_prompt(ctx)
@@ -275,6 +285,7 @@ def update(
             new_name=new_name,
             new_description=description,
             new_base_path=base_path,
+            inherit_base_path=inherit_base_path,
         )
         click.echo("Collection updated successfully")
     except Exception as e:

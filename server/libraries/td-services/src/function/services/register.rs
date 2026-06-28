@@ -68,7 +68,8 @@ fn service() {
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<CollectionDB>::extract::<CollectionName>),
-        // Stage/checkpoint storage prefix is stamped from the collection base_path.
+        // Stage/checkpoint storage prefix: the collection's effective base_path (its
+        // own, else the project's — already resolved by the collections_active view).
         from_fn(With::<CollectionDB>::extract::<BasePath>),
         // Get function.
         from_fn(With::<FunctionRegister>::extract::<FunctionName>),

@@ -39,10 +39,11 @@ mod definitions {
         // Resolved from `CollectionCreate::group` (id-or-name) by the create service.
         #[dxo(setter)]
         pub group_id: GroupId,
-        // Logical storage prefix, mapped from `CollectionCreate::base_path` (defaults `/`).
+        // Logical storage prefix, mapped from `CollectionCreate::base_path`.
+        // `None` (omitted) inherits the owning project's base_path at stamp time.
         #[dxo(builder(include))]
         #[builder(default)]
-        pub base_path: BasePath,
+        pub base_path: Option<BasePath>,
         // Inferred from the resolved group by the create service.
         #[dxo(setter)]
         pub collection_type: CollectionType,
@@ -71,8 +72,12 @@ mod definitions {
         pub modified_on: AtTime,
         pub modified_by_id: UserId,
         pub group_id: GroupId,
-        #[dxo(extractor)]
-        pub base_path: BasePath,
+        // Raw override: `None` means inherit the owning project's base_path.
+        pub base_path: Option<BasePath>,
+        // Resolved prefix from the `collections_active` view (COALESCE of own
+        // base_path, else project's). Read-only; stamp it at register/upload/download.
+        #[dxo(extractor, builder(skip))]
+        pub effective_base_path: BasePath,
         #[dxo(extractor)]
         pub collection_type: CollectionType,
         /// The connection minted with this collection (source/destination
@@ -124,10 +129,11 @@ mod definitions {
         #[serde(default = "GroupName::default_group")]
         #[builder(default = "GroupName::default_group()")]
         pub group: GroupName,
-        // Logical storage prefix for the collection's artifacts. Defaults to `/`.
+        // Logical storage prefix for the collection's artifacts.
+        // Omitted (`None`) inherits the owning project's base_path.
         #[serde(default)]
         #[builder(default)]
-        pub base_path: BasePath,
+        pub base_path: Option<BasePath>,
         /// The connection triple — REQUIRED for source/destination collections
         /// (they are 1:1 with their connection and cannot exist without it),
         /// forbidden for a DataFactory.
@@ -147,9 +153,11 @@ mod definitions {
     pub struct CollectionUpdate {
         pub name: Option<CollectionName>,
         pub description: Option<Description>,
-        #[serde(default)]
+        // Tri-state (the Dto macro injects the serde deserializer): absent -> None
+        // (unchanged); `null` -> Some(None) (clear -> inherit project); value ->
+        // Some(Some(x)) (set).
         #[builder(default)]
-        pub base_path: Option<BasePath>,
+        pub base_path: Option<Option<BasePath>>,
     }
 
     #[ta_objects::Dao]
@@ -165,9 +173,10 @@ mod definitions {
         pub modified_on: AtTime,
         #[dxo(updater(include, field = "user_id"))]
         pub modified_by_id: UserId,
-        // Seeded from the current `CollectionDB`; overridden by the update layer when
-        // `CollectionUpdate::base_path` is provided.
-        pub base_path: BasePath,
+        // DAO side of `CollectionUpdate::base_path`'s tri-state (here the outer
+        // `None` skips the column). Seeded from the current `CollectionDB`,
+        // overridden by the update layer.
+        pub base_path: Option<Option<BasePath>>,
     }
 
     #[ta_objects::Dto]
@@ -182,8 +191,8 @@ mod definitions {
         pub description: Description,
         #[dto(list(filter, filter_like, order_by))]
         pub group: GroupName,
-        #[dto(list(filter, filter_like, order_by))]
-        pub base_path: BasePath,
+        // `None` means the collection inherits its project's base_path.
+        pub base_path: Option<BasePath>,
         #[dto(list(filter, order_by))]
         pub collection_type: CollectionType,
         pub connection_id: Option<ConnectionId>,

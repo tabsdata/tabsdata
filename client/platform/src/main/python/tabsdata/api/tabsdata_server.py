@@ -597,6 +597,7 @@ class Collection:
         name: str,
         description: str = None,
         base_path: str = None,
+        inherit_base_path: bool = False,
         raise_for_status: bool = True,
     ) -> Collection:
         response = self.connection.collection_update(
@@ -604,6 +605,7 @@ class Collection:
             new_collection_name=name,
             description=description,
             base_path=base_path,
+            inherit_base_path=inherit_base_path,
             raise_for_status=raise_for_status,
         )
         self.name = name
@@ -2208,6 +2210,7 @@ class Project:
     and rejects create / delete.
     """
 
+    base_path = _LazyProperty("base_path")
     created_by = _LazyProperty("created_by")
     created_on = _LazyProperty("created_on")
     created_on_str = _LazyProperty("created_on_str", subordinate_time_string=True)
@@ -2227,6 +2230,7 @@ class Project:
         self.connection = connection
         self.name = name
 
+        self.base_path = kwargs.get("base_path")
         self.created_by = kwargs.get("created_by")
         self.created_on = kwargs.get("created_on")
         self.created_on_str = None
@@ -2256,6 +2260,7 @@ class Project:
         response = self.connection.project_create(
             self.name,
             self._description,
+            base_path=self._base_path,
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -2266,6 +2271,7 @@ class Project:
         self.connection.project_delete(self.name, raise_for_status=raise_for_status)
 
     def refresh(self) -> Project:
+        self.base_path = None
         self.created_by = None
         self.created_on = None
         self.created_on_str = None
@@ -3782,6 +3788,7 @@ class TabsdataServer:
         new_name: str = None,
         new_description: str = None,
         new_base_path: str = None,
+        inherit_base_path: bool = False,
         raise_for_status: bool = True,
     ) -> Collection:
         """
@@ -3805,6 +3812,7 @@ class TabsdataServer:
             name=new_name,
             description=new_description,
             base_path=new_base_path,
+            inherit_base_path=inherit_base_path,
             raise_for_status=raise_for_status,
         )
 
@@ -4401,7 +4409,11 @@ class TabsdataServer:
         )
 
     def create_project(
-        self, name: str, description: str = None, raise_for_status: bool = True
+        self,
+        name: str,
+        description: str = None,
+        base_path: str = None,
+        raise_for_status: bool = True,
     ) -> Project:
         """
         Create a project in the server.
@@ -4409,12 +4421,17 @@ class TabsdataServer:
         Args:
             name (str): The name of the project.
             description (str, optional): The description of the project.
+            base_path (str, optional): The logical storage prefix for the
+                project's artifacts (and the default its collections inherit
+                when they omit their own). None lets the server default it to "/".
             raise_for_status (bool, optional): Whether to raise on a non-2xx response.
 
         Returns:
             Project: The created project.
         """
-        project = Project(self.connection, name, description=description)
+        project = Project(
+            self.connection, name, description=description, base_path=base_path
+        )
         project.create(raise_for_status=raise_for_status)
         return project
 

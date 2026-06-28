@@ -649,8 +649,9 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
         // Base paths the worker-yaml builder needs, joined here so dispatch avoids
         // per-run fetches. stage_id / stage_base_path are head-side (the function
         // version's, stable across patches). collection_base_path is the collection's
-        // live prefix (used for the function-run content dir). bundle_base_path is the
-        // stamped prefix of the *effective* bundle (patch's if patched, else head's).
+        // effective live prefix (function-run content dir) — the collections_active
+        // view already folds in the project fallback. bundle_base_path is the stamped
+        // prefix of the *effective* bundle (patch's if patched, else head's).
         .expr_as(
             Expr::col((FunctionDBIden::Table, FunctionDBIden::StageId)),
             FunctionDBIden::StageId,
@@ -660,16 +661,16 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
             FunctionDBIden::StageBasePath,
         )
         .expr_as(
-            Expr::col((CollectionDBIden::Table, CollectionDBIden::BasePath)),
+            Expr::col((CollectionDBIden::Table, CollectionDBIden::EffectiveBasePath)),
             Alias::new("collection_base_path"),
         )
-        // COALESCE to the collection base_path so a missing bundle row (anomaly in
-        // prod; common in seeds that don't stage a bundle) decodes to a valid prefix
-        // rather than NULL.
+        // COALESCE to the collection's effective prefix so a missing bundle row
+        // (anomaly in prod; common in seeds that don't stage a bundle) decodes to a
+        // valid prefix rather than NULL.
         .expr_as(
             Expr::expr(Func::coalesce([
                 Expr::col((BundleDBIden::Table, BundleDBIden::BasePath)),
-                Expr::col((CollectionDBIden::Table, CollectionDBIden::BasePath)),
+                Expr::col((CollectionDBIden::Table, CollectionDBIden::EffectiveBasePath)),
             ])),
             Alias::new("bundle_base_path"),
         )
@@ -784,10 +785,11 @@ pub(crate) fn fetch_runs_for_dispatch_query(
 
 /// Effective output base_path per function version, resolved in one
 /// `functions ⋈ collections_active` join:
-/// `COALESCE(functions.base_path, collections_active.base_path)` keyed by
-/// function version id. SELECT order (id, then base_path) maps
-/// positionally onto the `(FunctionVersionId, BasePath)` tuple that
-/// `build_query_as` decodes each row into.
+/// `COALESCE(functions.base_path, collections_active.effective_base_path)` keyed
+/// by function version id. The collection's `effective_base_path` already folds
+/// in the project fallback (and is NOT NULL), so the COALESCE always resolves.
+/// SELECT order (id, then base_path) maps positionally onto the
+/// `(FunctionVersionId, BasePath)` tuple that `build_query_as` decodes each row into.
 pub(crate) fn fetch_effective_output_base_paths_query(
     fvids: &[FunctionVersionId],
 ) -> sea_query::SelectStatement {
@@ -800,7 +802,7 @@ pub(crate) fn fetch_effective_output_base_paths_query(
         .expr_as(
             Expr::expr(Func::coalesce([
                 Expr::col((FunctionDBIden::Table, FunctionDBIden::BasePath)),
-                Expr::col((CollectionDBIden::Table, CollectionDBIden::BasePath)),
+                Expr::col((CollectionDBIden::Table, CollectionDBIden::EffectiveBasePath)),
             ])),
             Alias::new("base_path"),
         )
@@ -1131,20 +1133,29 @@ mod tests {
             sql.contains(r#""functions"."stage_base_path""#),
             "must project the function stage_base_path: {sql}"
         );
-        // Collection's live prefix (function-run content dir).
+        // Collection's effective prefix (the collections_active view already folds
+        // in the project fallback), read directly.
         assert!(
-            sql.contains(r#"AS "collection_base_path""#),
-            "must project the collection base_path as collection_base_path: {sql}"
+            sql.contains(r#""collections_active"."effective_base_path" AS "collection_base_path""#),
+            "collection_base_path must read the view's effective_base_path: {sql}"
         );
-        // bundle_base_path = stamped bundle prefix, falling back to the collection
-        // prefix via COALESCE when the bundle row is absent (so it never decodes NULL).
+        // bundle_base_path = stamped bundle prefix, falling back to the collection's
+        // effective prefix via COALESCE when the bundle row is absent (never NULL).
         assert!(
-            sql.contains(r#"COALESCE("bundles"."base_path", "collections_active"."base_path")"#),
-            "bundle_base_path must coalesce bundle.base_path then collection.base_path: {sql}"
+            sql.contains(
+                r#"COALESCE("bundles"."base_path", "collections_active"."effective_base_path")"#
+            ),
+            "bundle_base_path must coalesce bundle then the collection effective prefix: {sql}"
         );
         assert!(
             sql.contains(r#"AS "bundle_base_path""#),
             "bundle prefix must be aliased bundle_base_path: {sql}"
+        );
+        // The project fallback now lives in the view, so the dispatch query itself
+        // must NOT join projects_active.
+        assert!(
+            !sql.contains(r#""projects_active""#),
+            "dispatch query must not join projects (the view resolves it): {sql}"
         );
     }
 

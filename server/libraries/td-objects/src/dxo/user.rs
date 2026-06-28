@@ -82,7 +82,10 @@ mod definitions {
     )]
     pub struct UserUpdateDB {
         pub full_name: FullName,
-        pub email: Option<Email>,
+        // Tri-state for update_values: outer `None` skips the column (unchanged),
+        // `Some(None)` sets it NULL (clear), `Some(Some(v))` sets `v`. Seeded from
+        // the current `UserDB`, overridden by the update layer.
+        pub email: Option<Option<Email>>,
         #[dxo(updater(include, field = "time"))]
         pub modified_on: AtTime,
         #[dxo(updater(include, field = "user_id"))]

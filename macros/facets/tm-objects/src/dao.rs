@@ -848,7 +848,11 @@ pub fn field_type_by_name<'a>(fields: &'a Fields, name: &str) -> Option<&'a Type
     let ty = fields
         .iter()
         .find_map(|f| f.ident.as_ref().filter(|i| *i == name).map(|_| &f.ty))?;
+    Some(option_inner_type(ty).unwrap_or(ty))
+}
 
+/// The `T` of an `Option<T>` type, else `None`.
+pub fn option_inner_type(ty: &Type) -> Option<&Type> {
     if let Type::Path(tp) = ty
         && let Some(seg) = tp.path.segments.last()
         && seg.ident == "Option"
@@ -857,7 +861,7 @@ pub fn field_type_by_name<'a>(fields: &'a Fields, name: &str) -> Option<&'a Type
     {
         return Some(inner);
     }
-    Some(ty)
+    None
 }
 
 fn is_sqlx_skip(f: &syn::Field) -> bool {

@@ -39,6 +39,7 @@ pub enum Projects {
     Id,
     Name,
     Description,
+    BasePath,
     CreatedOn,
     CreatedById,
     ModifiedOn,
@@ -63,6 +64,12 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Projects::Id).text().not_null().primary_key())
                 .col(ColumnDef::new(Projects::Name).text().not_null().unique_key())
                 .col(ColumnDef::new(Projects::Description).text().not_null())
+                // Logical storage prefix for the project's artifacts and the
+                // default inherited by its collections (a collection with a NULL
+                // base_path resolves to this). Mandatory; the `/` default is
+                // applied by the BasePath Rust newtype, not here. Create-only for
+                // now (project "move" deferred); physical backend selected by mounts.
+                .col(ColumnDef::new(Projects::BasePath).text().not_null())
                 .col(ColumnDef::new(Projects::CreatedOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Projects::CreatedById).text().not_null())
                 .col(ColumnDef::new(Projects::ModifiedOn).timestamp_with_time_zone().not_null())
@@ -87,6 +94,7 @@ impl Entity for Defs {
                     .column(Projects::Id)
                     .column(Projects::Name)
                     .column(Projects::Description)
+                    .column(Projects::BasePath)
                     .column(Projects::CreatedOn)
                     .column(Projects::CreatedById)
                     .column(Projects::ModifiedOn)
@@ -107,6 +115,7 @@ impl Entity for Defs {
                     Projects::Id,
                     Projects::Name,
                     Projects::Description,
+                    Projects::BasePath,
                     Projects::CreatedOn,
                     Projects::CreatedById,
                     Projects::ModifiedOn,
@@ -116,6 +125,7 @@ impl Entity for Defs {
                     ENCODED_ID_PROJECT_SANDBOX.into(),
                     "sandbox".into(),
                     "Sandbox project — the only project the bootstrap seeds; further projects come from the projects CRUD API.".into(),
+                    "/".into(),
                     Keyword::CurrentTimestamp.into(),
                     SYSTEM_USER_ID.into(),
                     Keyword::CurrentTimestamp.into(),
@@ -138,6 +148,7 @@ fn projects_with_names(b: &Backend) -> ViewDef {
             .expr(Expr::col((ProjectsActive, Projects::Id)))
             .expr(Expr::col((ProjectsActive, Projects::Name)))
             .expr(Expr::col((ProjectsActive, Projects::Description)))
+            .expr(Expr::col((ProjectsActive, Projects::BasePath)))
             .expr(Expr::col((ProjectsActive, Projects::CreatedOn)))
             .expr(Expr::col((ProjectsActive, Projects::CreatedById)))
             .expr_as(

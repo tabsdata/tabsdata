@@ -44,12 +44,12 @@ fn service() {
         // Extract collection
         from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
         from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        // The bundle is stored under the collection's base_path, stamped onto the
-        // bundle row so it self-locates regardless of later collection changes.
-        from_fn(With::<CollectionDB>::extract::<BasePath>),
         // check requester can manage or develop the current project
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
+        // The bundle's storage prefix: the collection's effective base_path (resolved
+        // by the view), stamped onto the bundle row so it self-locates after moves.
+        from_fn(With::<CollectionDB>::extract::<BasePath>),
         // Get storage version.
         from_fn(With::<StorageVersion>::default),
         // Write to storage with new bundle id.
@@ -120,10 +120,10 @@ mod tests {
                 // Extract collection
                 type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
                 type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                type_of_val(&With::<CollectionDB>::extract::<BasePath>),
                 // check requester can manage or develop the current project
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
+                type_of_val(&With::<CollectionDB>::extract::<BasePath>),
                 // Get storage version.
                 type_of_val(&With::<StorageVersion>::default),
                 // Write to storage with new bundle id.
@@ -184,8 +184,11 @@ mod tests {
         assert_eq!(bundle.hash.to_string(), hash);
         assert_eq!(bundle.created_by_id, UserId::admin());
 
-        // Bundle is stamped with the collection base_path and starts Pending.
-        assert_eq!(bundle.base_path, collection.base_path);
+        // Bundle is stamped with the effective base_path and starts Pending. The
+        // seeded collection inherits (NULL base_path), so it resolves to the sandbox
+        // project's `/` (BasePath::default()).
+        assert_eq!(collection.base_path, None);
+        assert_eq!(bundle.base_path, BasePath::default());
         assert_eq!(bundle.status, BundleStatus::Pending);
 
         // Assert storage
@@ -248,13 +251,13 @@ mod tests {
         let update: CollectionUpdateDB = CollectionUpdateDBBuilder::try_from(&collection)?
             .modified_on(AtTime::now())
             .modified_by_id(UserId::admin())
-            .base_path(prod.clone())
+            .base_path(Some(Some(prod.clone())))
             .build()?;
         db.live()
             .update::<CollectionUpdateDB, CollectionDB>(&update, &collection.id)
             .await?;
         let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
-        assert_eq!(reloaded.base_path, prod);
+        assert_eq!(reloaded.base_path, Some(prod.clone()));
 
         // Upload: the bundle must inherit the collection's non-default base_path.
         let payload = "TEXT";

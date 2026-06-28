@@ -9,7 +9,7 @@
 #[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;
-    use crate::types::basic::{AtTime, Description, ProjectId, ProjectName, UserId, UserName};
+    use crate::types::basic::{AtTime, BasePath, Description, ProjectId, ProjectName, UserId, UserName};
     use td_common::id::Id;
 
     #[ta_objects::Dao]
@@ -26,6 +26,10 @@ mod definitions {
         pub name: ProjectName,
         #[dxo(builder(include))]
         pub description: Description,
+        // Logical storage prefix, mapped from `ProjectCreate::base_path` (defaults `/`).
+        #[dxo(builder(include))]
+        #[builder(default)]
+        pub base_path: BasePath,
         #[dxo(updater(include, field = "time"))]
         pub created_on: AtTime,
         #[dxo(updater(include, field = "user_id"))]
@@ -47,6 +51,8 @@ mod definitions {
         #[dxo(extractor)]
         pub name: ProjectName,
         pub description: Description,
+        #[dxo(extractor)]
+        pub base_path: BasePath,
         pub created_on: AtTime,
         pub created_by_id: UserId,
         pub modified_on: AtTime,
@@ -90,6 +96,11 @@ mod definitions {
     pub struct ProjectCreate {
         pub name: ProjectName,
         pub description: Description,
+        // Logical storage prefix for the project's artifacts. Defaults to `/`.
+        // Create-only for now: not mutable via `ProjectUpdate` (project "move" deferred).
+        #[serde(default)]
+        #[builder(default)]
+        pub base_path: BasePath,
     }
 
     #[ta_objects::Dto]
@@ -123,5 +134,7 @@ mod definitions {
         pub name: ProjectName,
         #[dto(list(filter, filter_like, order_by))]
         pub description: Description,
+        #[dto(list(filter, filter_like, order_by))]
+        pub base_path: BasePath,
     }
 }

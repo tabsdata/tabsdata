@@ -3,12 +3,13 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
-    TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Func, Iden, Index, IndexCreateStatement, JoinType, Query,
+    Table, TableCreateStatement,
 };
 
 use super::connections::Connections;
 use super::groups::Groups;
+use super::projects::{Projects, ProjectsActive};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -61,10 +62,11 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Collections::ModifiedById).text().not_null())
                 .col(ColumnDef::new(Collections::NameWhenDeleted).text().null())
                 .col(ColumnDef::new(Collections::GroupId).text().not_null())
-                // Logical storage prefix for the collection's artifacts. Mandatory;
-                // the `/` default is applied by the BasePath Rust newtype, not here.
-                // Mutable; physical backend is selected by mounts.
-                .col(ColumnDef::new(Collections::BasePath).text().not_null())
+                // Logical storage prefix for the collection's artifacts. Optional:
+                // NULL means "inherit the owning project's base_path" (resolved at
+                // stamp time via COALESCE(function, collection, project)). Mutable;
+                // physical backend is selected by mounts.
+                .col(ColumnDef::new(Collections::BasePath).text().null())
                 // Collection flavour (DataFactory/Source/Destination), single-char code.
                 .col(ColumnDef::new(Collections::CollectionType).text().not_null())
                 // The collection's connection (source/destination only); set on the
@@ -117,23 +119,40 @@ impl Entity for Defs {
 
     fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
         vec![
+            // Columns are table-qualified because the `projects_active` join below
+            // shares many column names (id, name, base_path, audit columns).
             ViewDef::new(
                 CollectionsActive,
                 Query::select()
-                    .column(Collections::Id)
-                    .column(Collections::ProjectId)
-                    .column(Collections::Name)
-                    .column(Collections::Description)
-                    .column(Collections::CreatedOn)
-                    .column(Collections::CreatedById)
-                    .column(Collections::ModifiedOn)
-                    .column(Collections::ModifiedById)
-                    .column(Collections::GroupId)
-                    .column(Collections::BasePath)
-                    .column(Collections::CollectionType)
-                    .column(Collections::ConnectionId)
+                    .column((Collections::Table, Collections::Id))
+                    .column((Collections::Table, Collections::ProjectId))
+                    .column((Collections::Table, Collections::Name))
+                    .column((Collections::Table, Collections::Description))
+                    .column((Collections::Table, Collections::CreatedOn))
+                    .column((Collections::Table, Collections::CreatedById))
+                    .column((Collections::Table, Collections::ModifiedOn))
+                    .column((Collections::Table, Collections::ModifiedById))
+                    .column((Collections::Table, Collections::GroupId))
+                    .column((Collections::Table, Collections::BasePath))
+                    .column((Collections::Table, Collections::CollectionType))
+                    .column((Collections::Table, Collections::ConnectionId))
+                    // Resolved storage prefix: own base_path, else the project's
+                    // (NOT NULL). Resolved once here so every reader gets a concrete
+                    // prefix without repeating the COALESCE + projects join.
+                    .expr_as(
+                        Func::coalesce([
+                            Expr::col((Collections::Table, Collections::BasePath)),
+                            Expr::col((ProjectsActive, Projects::BasePath)),
+                        ]),
+                        Alias::new("effective_base_path"),
+                    )
                     .from(Collections::Table)
-                    .and_where(Expr::col(Collections::NameWhenDeleted).is_null())
+                    .join(
+                        JoinType::LeftJoin,
+                        ProjectsActive,
+                        Expr::col((Collections::Table, Collections::ProjectId)).equals((ProjectsActive, Projects::Id)),
+                    )
+                    .and_where(Expr::col((Collections::Table, Collections::NameWhenDeleted)).is_null())
                     .to_owned(),
             ),
             collections_with_names(b),

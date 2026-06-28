@@ -2,7 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::dao::iden_variant;
+use crate::dao::{iden_variant, option_inner_type};
 use crate::type_builder::{DxoFields, parse_input_item_struct, td_type};
 use darling::{FromDeriveInput, FromField, FromMeta};
 use proc_macro::TokenStream;
@@ -56,7 +56,13 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
                 let doc = doc.trim_end_matches(", ").to_string();
                 quote! { #[doc = #doc] }
             });
-        quote! { #(#doc_comments)* #field, }
+        // Tri-state `Option<Option<T>>` update fields need `double_option` (plus the
+        // `default` that maps an absent field to the outer `None`) to tell a present
+        // `null` (clear) from an absent field (unchanged).
+        let serde_tristate = is_double_option_type(field).then(|| {
+            quote! { #[serde(default, deserialize_with = "ta_objects::serde_utils::double_option")] }
+        });
+        quote! { #serde_tristate #(#doc_comments)* #field, }
     });
 
     quote! {
@@ -72,6 +78,11 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
     .into()
+}
+
+/// `true` when the field type is `Option<Option<…>>`.
+fn is_double_option_type(f: &syn::Field) -> bool {
+    matches!(option_inner_type(&f.ty), Some(inner) if option_inner_type(inner).is_some())
 }
 
 #[derive(Debug, FromDeriveInput)]

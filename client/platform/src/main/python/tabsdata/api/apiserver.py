@@ -542,13 +542,19 @@ class APIServer:
         new_collection_name: str = None,
         description: str = None,
         base_path: str = None,
+        inherit_base_path: bool = False,
         raise_for_status: bool = True,
     ):
         endpoint = f"/collections/{collection_name}"
         data = self.get_params_dict(
-            ["name", "description", "base_path"],
-            [new_collection_name, description, base_path],
+            ["name", "description"], [new_collection_name, description]
         )
+        # base_path is a tri-state: omit it to leave unchanged, send an explicit
+        # null to clear it (inherit the project's), or send a value to set it.
+        if inherit_base_path:
+            data["base_path"] = None
+        elif base_path is not None:
+            data["base_path"] = base_path
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -988,10 +994,16 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def project_create(
-        self, name: str, description: str = None, raise_for_status: bool = True
+        self,
+        name: str,
+        description: str = None,
+        base_path: str = None,
+        raise_for_status: bool = True,
     ):
         endpoint = "/projects"
-        data = self.get_params_dict(["name", "description"], [name, description])
+        data = self.get_params_dict(
+            ["name", "description", "base_path"], [name, description, base_path]
+        )
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 

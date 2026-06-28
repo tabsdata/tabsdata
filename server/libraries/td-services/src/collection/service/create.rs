@@ -212,7 +212,7 @@ mod tests {
     use td_objects::dxo::collection::CollectionCreateDB;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BasePath, CollectionName, CollectionType, Description, GroupName,
+        AccessTokenId, AtTime, CollectionName, CollectionType, Description, GroupName,
         ProjectId, ProjectName, UserId, UserName,
     };
     use td_queries::LiveEntry;
@@ -274,9 +274,9 @@ mod tests {
         assert_eq!(created.name, name);
         assert_eq!(created.description, description);
         assert_eq!(created.group, GroupName::default_group());
-        // base_path was omitted on create: the `/` default comes from the BasePath
-        // newtype (the DB column carries no DEFAULT), and is stored NOT NULL.
-        assert_eq!(created.base_path, BasePath::default());
+        // base_path was omitted on create: it is stored NULL, meaning the collection
+        // inherits its owning project's base_path (resolved at stamp time).
+        assert_eq!(created.base_path, None);
         // No group specified → default group → DataFactory flavour.
         assert_eq!(created.collection_type, CollectionType::DataFactory);
         assert!(created.created_on >= before);

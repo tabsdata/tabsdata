@@ -23,8 +23,16 @@ def project():
 @project.command()
 @click.option("--name", "-n", help="Name of the project to create.")
 @click.option("--description", help="Description of the project.")
+@click.option(
+    "--base-path",
+    help=(
+        "Logical storage prefix for the project's artifacts and the default "
+        "inherited by its collections. Defaults to '/'. The physical backend is "
+        "selected by the server's configured mounts."
+    ),
+)
 @click.pass_context
-def create(ctx: click.Context, name: str, description: str):
+def create(ctx: click.Context, name: str, description: str, base_path: str):
     """Create a new project"""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the project to create")
@@ -33,7 +41,7 @@ def create(ctx: click.Context, name: str, description: str):
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.create_project(name, description)
+        server.create_project(name, description, base_path=base_path)
         click.echo("Project created successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -83,6 +91,7 @@ def info(ctx: click.Context, name: str):
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("ID", no_wrap=True)
         table.add_column("Description")
+        table.add_column("Base path")
         table.add_column("Created on")
         table.add_column("Created by")
 
@@ -90,6 +99,7 @@ def info(ctx: click.Context, name: str):
             prj.name,
             prj.id,
             prj.description,
+            prj.base_path,
             prj.created_on_str,
             prj.created_by,
         )
@@ -115,6 +125,7 @@ def list(ctx: click.Context):
         table.add_column("Name", style="cyan", no_wrap=True)
         table.add_column("ID", no_wrap=True)
         table.add_column("Description")
+        table.add_column("Base path")
         table.add_column("Created on")
         table.add_column("Created by")
 
@@ -123,6 +134,7 @@ def list(ctx: click.Context):
                 prj.name,
                 prj.id,
                 prj.description,
+                prj.base_path,
                 prj.created_on_str,
                 prj.created_by,
             )

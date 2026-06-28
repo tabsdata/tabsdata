@@ -365,7 +365,7 @@ mod tests {
         collection_name: &CollectionName,
         name: Option<CollectionName>,
         description: Option<Description>,
-        base_path: Option<BasePath>,
+        base_path: Option<Option<BasePath>>,
     ) -> Result<CollectionRead, TdError> {
         let update = CollectionUpdate::builder()
             .name(name)
@@ -408,16 +408,40 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        // Seeded collections start on the default base_path "/".
-        assert_eq!(collection.base_path, BasePath::default());
+        // Seeded collections start with NULL base_path (they inherit the project).
+        assert_eq!(collection.base_path, None);
 
         let data = BasePath::try_from("/data")?;
-        update_collection(&db, &collection_name, None, None, Some(data.clone())).await?;
+        update_collection(&db, &collection_name, None, None, Some(Some(data.clone()))).await?;
 
         // Read back the persisted CollectionDB and confirm the new base_path.
         let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
-        assert_eq!(reloaded.base_path, data);
+        assert_eq!(reloaded.base_path, Some(data.clone()));
+
+        // Clearing it (base_path = null) reverts to inheriting the project.
+        update_collection(&db, &collection_name, None, None, Some(None)).await?;
+        let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
+        assert_eq!(reloaded.base_path, None, "cleared back to inherit");
         Ok(())
+    }
+
+    /// The update DTO's `base_path` is a JSON tri-state: absent leaves it
+    /// unchanged, an explicit `null` clears it (inherit the project), a value
+    /// sets a concrete prefix.
+    #[test]
+    fn test_collection_update_base_path_tristate_deser() {
+        let unchanged: CollectionUpdate = serde_json::from_str(r#"{}"#).unwrap();
+        assert_eq!(unchanged.base_path, None, "absent -> unchanged");
+
+        let cleared: CollectionUpdate = serde_json::from_str(r#"{"base_path":null}"#).unwrap();
+        assert_eq!(cleared.base_path, Some(None), "null -> clear (inherit)");
+
+        let set: CollectionUpdate = serde_json::from_str(r#"{"base_path":"/x"}"#).unwrap();
+        assert_eq!(
+            set.base_path,
+            Some(Some(BasePath::try_from("/x").unwrap())),
+            "value -> set concrete prefix"
+        );
     }
 
     #[td_test::test(db)]
@@ -429,11 +453,10 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await;
 
-        // name=None, description=None, base_path=None -> nothing to update.
+        // name=None, description=None, base_path omitted (None) -> nothing to update.
         let update = CollectionUpdate::builder()
             .name(None)
             .description(None)
-            .base_path(None)
             .build()
             .unwrap();
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -475,7 +498,7 @@ mod tests {
 
         // Put the collection on base_path "/a" before any artifacts exist.
         let a = BasePath::try_from("/a")?;
-        update_collection(&db, &collection_name, None, None, Some(a.clone())).await?;
+        update_collection(&db, &collection_name, None, None, Some(Some(a.clone()))).await?;
 
         // Upload a real bundle so a Pending BundleDB row + storage object exist.
         let payload = b"BUNDLE-PAYLOAD".to_vec();
@@ -533,9 +556,9 @@ mod tests {
 
         // Move the collection to "/b".
         let b = BasePath::try_from("/b")?;
-        update_collection(&db, &collection_name, None, None, Some(b.clone())).await?;
+        update_collection(&db, &collection_name, None, None, Some(Some(b.clone()))).await?;
         let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
-        assert_eq!(reloaded.base_path, b);
+        assert_eq!(reloaded.base_path, Some(b));
 
         // The previously-generated artifacts still carry "/a": the move did not
         // relocate them, and no new function version was created.

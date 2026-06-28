@@ -70,8 +70,10 @@ impl UpdateUserDBBuilderUpdate for With<UserUpdate> {
         if let Some(full_name) = &update.full_name {
             builder.full_name(full_name);
         }
+        // Re-wrap as `Some(inner)` so update_values writes the column; the DTO's
+        // outer `None` falls through here (unchanged).
         if let Some(email) = &update.email {
-            builder.email(email.clone());
+            builder.email(Some(email.clone()));
         }
         if let Some(password) = &update.password {
             builder.try_password_hash(create_password_hash(
