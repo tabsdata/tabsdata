@@ -6,7 +6,7 @@ use td_bridge::messaging::{CronStartRequest, FunctionStartRequest, StageTriggerS
 use td_common::worker::Callback;
 
 use crate::base::labels::{
-    LABEL_COLLECTION, LABEL_COLLECTION_ID, LABEL_FUNCTION, LABEL_FUNCTION_ID,
+    LABEL_COLLECTION, LABEL_COLLECTION_ID, LABEL_CONNECTION_ID, LABEL_FUNCTION, LABEL_FUNCTION_ID,
     LABEL_FUNCTION_VERSION_ID, LABEL_PROJECT_ID,
 };
 
@@ -21,6 +21,7 @@ pub(crate) trait WorkerStartRequest {
     fn project_id(&self) -> String;
     fn collection_id(&self) -> String;
     fn collection(&self) -> String;
+    fn connection_id(&self) -> Option<String>;
     fn function(&self) -> String;
 
     fn custom_labels(&self) -> Vec<(String, String)>;
@@ -32,6 +33,9 @@ pub(crate) trait WorkerStartRequest {
             (LABEL_COLLECTION.to_owned(), self.collection()),
             (LABEL_FUNCTION.to_owned(), self.function()),
         ];
+        if let Some(connection_id) = self.connection_id() {
+            labels.push((LABEL_CONNECTION_ID.to_owned(), connection_id));
+        }
         labels.extend(self.custom_labels());
         labels
     }
@@ -72,6 +76,10 @@ impl WorkerStartRequest for FunctionStartRequest {
 
     fn collection(&self) -> String {
         self.collection.to_string()
+    }
+
+    fn connection_id(&self) -> Option<String> {
+        self.connection_id.as_ref().map(ToString::to_string)
     }
 
     fn function(&self) -> String {
@@ -118,6 +126,10 @@ impl WorkerStartRequest for StageTriggerStartRequest {
 
     fn collection(&self) -> String {
         self.collection.to_string()
+    }
+
+    fn connection_id(&self) -> Option<String> {
+        self.connection_id.as_ref().map(ToString::to_string)
     }
 
     fn function(&self) -> String {
@@ -167,6 +179,10 @@ impl WorkerStartRequest for CronStartRequest {
 
     fn collection(&self) -> String {
         self.collection.to_string()
+    }
+
+    fn connection_id(&self) -> Option<String> {
+        self.connection_id.as_ref().map(ToString::to_string)
     }
 
     fn function(&self) -> String {

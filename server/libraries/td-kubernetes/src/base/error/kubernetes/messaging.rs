@@ -20,4 +20,9 @@ pub enum KubeMessagingError {
         "Start message for worker '{worker}' id '{worker_id}' carries a callback variant other than HTTP."
     )]
     UnsupportedCallbackVariant { worker: String, worker_id: String } = 5002,
+    #[error("Could not derive the kubernetes name for connection '{connection_id}': {cause}.")]
+    ConnectionNameDerivationFailed {
+        connection_id: String,
+        cause: String,
+    } = 5003,
 }

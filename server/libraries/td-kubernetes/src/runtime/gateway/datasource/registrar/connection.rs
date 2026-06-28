@@ -184,18 +184,17 @@ fn decode_secret_entries(data: BTreeMap<String, Vec<u8>>) -> Result<Vec<KeyValue
 }
 
 fn parse_document(data: &BTreeMap<String, String>) -> Result<serde_json::Value, TdError> {
-    let raw = data
-        .get(CONNECTION_CONFIGMAP_KEY)
-        .ok_or_else(|| KubeConnectionError::DocumentKeyMissing {
+    let raw = data.get(CONNECTION_CONFIGMAP_KEY).ok_or_else(|| {
+        KubeConnectionError::DocumentKeyMissing {
             key: CONNECTION_CONFIGMAP_KEY.to_owned(),
-        })?;
-    serde_yaml::from_str(raw)
-        .map_err(|error| {
-            KubeConnectionError::DocumentCorrupt {
-                cause: error.to_string(),
-            }
-            .into()
-        })
+        }
+    })?;
+    serde_yaml::from_str(raw).map_err(|error| {
+        KubeConnectionError::DocumentCorrupt {
+            cause: error.to_string(),
+        }
+        .into()
+    })
 }
 
 #[cfg(test)]

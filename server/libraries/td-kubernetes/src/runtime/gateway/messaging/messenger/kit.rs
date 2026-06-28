@@ -15,6 +15,7 @@ use td_common::worker::{Callback, HttpCallback};
 
 use crate::base::error::kubernetes::messaging::KubeMessagingError;
 use crate::base::labels::LABEL_WORKER_ID;
+use crate::base::naming::to_connection_object_name;
 use crate::runtime::gateway::messaging::messenger::request::WorkerStartRequest;
 
 const ENV_TD_WORKER: &str = "TD_WORKER";
@@ -38,12 +39,15 @@ const LATCH_NAME_SUFFIX: &str = "-latch";
 const ENV_TD_LATCH: &str = "TD_LATCH";
 const LATCH_VALUE_READY: &str = "ready";
 const SECRET_ENV_PREFIX: &str = "SECRET__";
+const SECRET_CONN_ENV_PREFIX: &str = "";
+const ENV_TD_INJECT_CONNECTION: &str = "TD_INJECT_CONNECTION";
 
 pub struct FunctionRunKit {
     pub main_configmap: ConfigMap,
     pub main_secret: Secret,
     pub latch_configmap: ConfigMap,
-    pub envfrom: Vec<EnvFromSource>,
+    pub common_envfrom: Vec<EnvFromSource>,
+    pub connection_envfrom: Option<EnvFromSource>,
     pub labels: Vec<(String, String)>,
 }
 
@@ -85,15 +89,30 @@ pub(crate) fn build_worker_run_kit(
     let mut labels = request.labels();
     labels.push((LABEL_WORKER_ID.to_owned(), worker_id));
 
+    let common_envfrom = vec![
+        envfrom_configmap(&main_name),
+        envfrom_secret(&main_name, SECRET_ENV_PREFIX),
+        envfrom_configmap(&latch_name),
+    ];
+    let connection_envfrom = match request.connection_id() {
+        Some(connection_id) => {
+            let name = to_connection_object_name(&connection_id).map_err(|error| {
+                KubeMessagingError::ConnectionNameDerivationFailed {
+                    connection_id,
+                    cause: error.to_string(),
+                }
+            })?;
+            Some(envfrom_secret(&name, SECRET_CONN_ENV_PREFIX))
+        }
+        None => None,
+    };
+
     Ok(FunctionRunKit {
         main_configmap: build_configmap(&main_name, namespace, config_data),
         main_secret: build_secret(&main_name, namespace, secret_data),
         latch_configmap: build_configmap(&latch_name, namespace, latch_data),
-        envfrom: vec![
-            envfrom_configmap(&main_name),
-            envfrom_secret(&main_name),
-            envfrom_configmap(&latch_name),
-        ],
+        common_envfrom,
+        connection_envfrom,
         labels,
     })
 }
@@ -144,15 +163,15 @@ fn apply_labels(metadata: &mut ObjectMeta, labels: &[(String, String)]) {
     }
 }
 
-pub fn inject_envfrom_into_pod(pod: &mut Pod, envfrom: &[EnvFromSource]) {
+pub fn inject_common_envfrom_into_pod(pod: &mut Pod, envfrom: &[EnvFromSource]) {
     let Some(spec) = pod.spec.as_mut() else {
         return;
     };
-    inject_envfrom_into_containers(spec.init_containers.as_mut(), envfrom);
-    inject_envfrom_into_containers(Some(&mut spec.containers), envfrom);
+    inject_envfrom_into_all_containers(spec.init_containers.as_mut(), envfrom);
+    inject_envfrom_into_all_containers(Some(&mut spec.containers), envfrom);
 }
 
-pub fn inject_envfrom_into_job(job: &mut Job, envfrom: &[EnvFromSource]) {
+pub fn inject_common_envfrom_into_job(job: &mut Job, envfrom: &[EnvFromSource]) {
     let Some(template) = job
         .spec
         .as_mut()
@@ -160,11 +179,11 @@ pub fn inject_envfrom_into_job(job: &mut Job, envfrom: &[EnvFromSource]) {
     else {
         return;
     };
-    inject_envfrom_into_containers(template.init_containers.as_mut(), envfrom);
-    inject_envfrom_into_containers(Some(&mut template.containers), envfrom);
+    inject_envfrom_into_all_containers(template.init_containers.as_mut(), envfrom);
+    inject_envfrom_into_all_containers(Some(&mut template.containers), envfrom);
 }
 
-fn inject_envfrom_into_containers(
+fn inject_envfrom_into_all_containers(
     containers: Option<&mut Vec<Container>>,
     envfrom: &[EnvFromSource],
 ) {
@@ -176,6 +195,48 @@ fn inject_envfrom_into_containers(
             .env_from
             .get_or_insert_with(Vec::new)
             .extend(envfrom.iter().cloned());
+    }
+}
+
+pub fn inject_connection_envfrom_into_pod(pod: &mut Pod, envfrom: &EnvFromSource) {
+    let Some(spec) = pod.spec.as_mut() else {
+        return;
+    };
+    inject_envfrom_into_marked_containers(spec.init_containers.as_mut(), envfrom);
+    inject_envfrom_into_marked_containers(Some(&mut spec.containers), envfrom);
+}
+
+pub fn inject_connection_envfrom_into_job(job: &mut Job, envfrom: &EnvFromSource) {
+    let Some(template) = job
+        .spec
+        .as_mut()
+        .and_then(|spec| spec.template.spec.as_mut())
+    else {
+        return;
+    };
+    inject_envfrom_into_marked_containers(template.init_containers.as_mut(), envfrom);
+    inject_envfrom_into_marked_containers(Some(&mut template.containers), envfrom);
+}
+
+fn inject_envfrom_into_marked_containers(
+    containers: Option<&mut Vec<Container>>,
+    envfrom: &EnvFromSource,
+) {
+    let Some(containers) = containers else {
+        return;
+    };
+    for container in containers {
+        let marked = container
+            .env
+            .iter()
+            .flatten()
+            .any(|var| var.name == ENV_TD_INJECT_CONNECTION);
+        if marked {
+            container
+                .env_from
+                .get_or_insert_with(Vec::new)
+                .push(envfrom.clone());
+        }
     }
 }
 
@@ -281,13 +342,13 @@ fn envfrom_configmap(name: &str) -> EnvFromSource {
     }
 }
 
-fn envfrom_secret(name: &str) -> EnvFromSource {
+fn envfrom_secret(name: &str, prefix: &str) -> EnvFromSource {
     EnvFromSource {
         secret_ref: Some(SecretEnvSource {
             name: name.to_owned(),
             optional: Some(false),
         }),
-        prefix: Some(SECRET_ENV_PREFIX.to_owned()),
+        prefix: Some(prefix.to_owned()),
         config_map_ref: None,
     }
 }
