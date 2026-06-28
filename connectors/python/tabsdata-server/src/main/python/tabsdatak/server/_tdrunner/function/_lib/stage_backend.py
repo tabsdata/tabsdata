@@ -25,8 +25,14 @@ resolved-values dict.
 
 from __future__ import annotations
 
-from tabsdatak.conn.common.file import _transporter
-from tabsdatak.conn.stream.stage._backend import StageBackend
+import tempfile
+from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
+
+from tabsdatak.conn.common.file import _output, _transporter
+from tabsdatak.conn.localfile import LocalFileSrcConn
+from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureEndpoint,
     CredRef,
@@ -107,12 +113,53 @@ class _EndpointStageBackend(StageBackend):
         # process env rather than receiving a resolved-values dict.
         return None
 
+    def upload(self, local_path: Path, rel: str) -> None:
+        # Raw byte-copy (TransporterParquetFormat skips transcoding), so
+        # both parquet data and JSON control files upload verbatim.
+        source = _transporter.TransporterLocalFile(
+            _transporter.path_to_file_uri(local_path)
+        )
+        with tempfile.TemporaryDirectory() as work_dir:
+            _output.copy_one(
+                source_target_pairs=[(source, self.build_location(rel))],
+                work_dir=Path(work_dir),
+                format=_transporter.TransporterParquetFormat(),
+                env=self.credential_env(),
+            )
+
+    def read_text(self, rel: str) -> str | None:
+        with tempfile.TemporaryDirectory() as work_dir:
+            dst_path = Path(work_dir) / "download"
+            target = _transporter.TransporterLocalFile(
+                _transporter.path_to_file_uri(dst_path)
+            )
+            try:
+                _output.copy_one(
+                    source_target_pairs=[(self.build_location(rel), target)],
+                    work_dir=Path(work_dir),
+                    format=_transporter.TransporterParquetFormat(),
+                    env=self.credential_env(),
+                )
+            except _transporter.TransporterRunError:
+                # Missing/unreadable object -> treat as absent. The streamer's
+                # state read tolerates this (falls back to first-run), matching
+                # the local "file does not exist" path.
+                return None
+            return dst_path.read_text(encoding="utf-8") if dst_path.is_file() else None
+
 
 def stage_backend_from_location(location: Location) -> StageBackend:
-    """Resolve a request ``Location`` (file / s3 / az / gcs) into a
-    :class:`StageBackend`.
+    """Resolve a request ``Location`` into a :class:`StageBackend`.
+
+    ``file://`` returns a local-filesystem backend (``shutil``-based
+    upload, direct reads -- no transporter spawn on the streamer's hot
+    path); cloud schemes (s3 / az / gs) return an endpoint-backed backend
+    that moves data through the transporter.
 
     Raises:
         UnsupportedSchemeError: the URI scheme has no endpoint builder.
     """
+    parsed = urlparse(location.uri)
+    if parsed.scheme == "file":
+        return _LocalStageBackend(LocalFileSrcConn(base_path=url2pathname(parsed.path)))
     return _EndpointStageBackend(endpoint_from_location(location))

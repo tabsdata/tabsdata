@@ -87,6 +87,26 @@ def test_local_backend_build_location_resolves_under_base_path():
     assert "x.parquet" in loc.url
 
 
+def test_local_backend_upload_moves_file_under_base_path(tmp_path):
+    stage = tmp_path / "stage"
+    backend = _LocalStageBackend(LocalFileSrcConn(base_path=str(stage)))
+    src = tmp_path / "src.parquet"
+    src.write_text("data")
+    backend.upload(src, "files/2026-06-26T00-00-00.000000/x.parquet")
+    dst = stage / "files" / "2026-06-26T00-00-00.000000" / "x.parquet"
+    assert dst.read_text() == "data"
+    assert not src.exists()  # move (rename), not copy
+
+
+def test_local_backend_read_text_absent_then_present(tmp_path):
+    stage = tmp_path / "stage"
+    backend = _LocalStageBackend(LocalFileSrcConn(base_path=str(stage)))
+    assert backend.read_text("stream-state.json") is None
+    stage.mkdir()
+    (stage / "stream-state.json").write_text('{"k": "v"}')
+    assert backend.read_text("stream-state.json") == '{"k": "v"}'
+
+
 # --- _CloudStageBackend ---------------------------------------------------
 
 

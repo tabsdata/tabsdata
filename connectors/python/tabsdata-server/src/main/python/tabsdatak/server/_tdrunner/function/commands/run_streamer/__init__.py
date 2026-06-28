@@ -45,6 +45,9 @@ from tabsdatak.server._tdrunner.function._lib.command import (
     command,
     notify_done,
 )
+from tabsdatak.server._tdrunner.function._lib.endpoint import (
+    UnsupportedSchemeError as _StageUnsupportedSchemeError,
+)
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
@@ -54,7 +57,6 @@ from tabsdatak.server._tdrunner.function._lib.request import (
 )
 from tabsdatak.server._tdrunner.function._lib.stream_src_ctx import (
     StreamerPluginCtx,
-    UnsupportedStageSchemeError as _CtxUnsupportedSchemeError,
 )
 from tabsdatak.server._tdrunner.function.commands.run_streamer.error import (
     RunStreamerErrorCode,
@@ -181,7 +183,7 @@ def main(args: argparse.Namespace) -> int:
             flush_interval_mins=info.fallback_rollover_mins,
             tabsdata_version=_tabsdata_version(),
         )
-    except _CtxUnsupportedSchemeError as exc:
+    except _StageUnsupportedSchemeError as exc:
         from urllib.parse import urlparse
 
         raise RunStreamerErrorCode.RS_7.exception(

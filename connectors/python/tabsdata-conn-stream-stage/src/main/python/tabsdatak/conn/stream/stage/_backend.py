@@ -27,7 +27,9 @@ operations) as cloud staging lands -- see ``cloud-staging-design.md``.
 
 from __future__ import annotations
 
+import shutil
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 from tabsdatak.conn.azureblob import AzureBlobSrcConn, _plugin as _azureblob_plugin
 from tabsdatak.conn.common.file import _transporter
@@ -39,7 +41,13 @@ from tabsdatak.conn.stream.stage.error import ManifestStageErrorCode
 
 class StageBackend(ABC):
     """Scheme-agnostic view of one stage backend (the populated slot of
-    a ``ManifestStageConn``)."""
+    a ``ManifestStageConn``).
+
+    ``build_location`` / ``credential_env`` / ``is_object_store`` are the
+    read-side surface every backend supports. ``upload`` / ``read_text``
+    are write-side capabilities used by the streamer; they default to
+    ``NotImplementedError`` so a read-only backend need not implement
+    them."""
 
     @property
     @abstractmethod
@@ -57,6 +65,16 @@ class StageBackend(ABC):
     def credential_env(self) -> dict[str, str] | None:
         """The transporter binary's credential env for this backend, or
         ``None`` when none is required (local)."""
+
+    def upload(self, local_path: Path, rel: str) -> None:
+        """Publish a local file to the stage at stage-relative ``rel``
+        (creating intermediate prefixes/dirs as needed)."""
+        raise NotImplementedError(f"{type(self).__name__} does not support upload")
+
+    def read_text(self, rel: str) -> str | None:
+        """Read a small stage control file at ``rel`` as UTF-8 text, or
+        ``None`` if it does not exist."""
+        raise NotImplementedError(f"{type(self).__name__} does not support read_text")
 
 
 class _LocalStageBackend(StageBackend):
@@ -76,6 +94,17 @@ class _LocalStageBackend(StageBackend):
 
     def credential_env(self) -> dict[str, str] | None:
         return None
+
+    def upload(self, local_path: Path, rel: str) -> None:
+        # ``shutil.move`` is a rename on the same filesystem -- atomic and
+        # cheap, matching the streamer's prior in-process behaviour.
+        dst = Path(self._conn.base_path) / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(local_path), str(dst))
+
+    def read_text(self, rel: str) -> str | None:
+        src = Path(self._conn.base_path) / rel
+        return src.read_text(encoding="utf-8") if src.is_file() else None
 
 
 class _CloudStageBackend(StageBackend):

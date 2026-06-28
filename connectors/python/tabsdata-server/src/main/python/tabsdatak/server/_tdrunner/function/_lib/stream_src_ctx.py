@@ -18,12 +18,19 @@ Layout (single source of truth: :mod:`stage_layout`):
         manifests/
             stream-manifest-<TS_ISO8601>.json
         files/
-            <filename>.parquet               <- moved from plugin's work_dir
+            <TS_ISO8601>/
+                <filename>.parquet           <- uploaded from plugin's work_dir
+
+All writes go through a :class:`StageBackend` resolved from
+``function_stage`` (``stage_backend_from_location``): a local-filesystem
+backend (``shutil.move`` / direct reads) for ``file://`` stages, or a
+transporter-backed backend for cloud stages (``s3://`` / ``az://`` /
+``gs://``). Callers never branch on scheme.
 
 Responsibilities on each :meth:`StreamerPluginCtx.stage` call:
 
-  1. Move parquets from the plugin's ``work_dir`` into
-     ``<stage_root>/files/`` (atomic per file).
+  1. Upload parquets from the plugin's ``work_dir`` into
+     ``<stage_root>/files/<TS>/`` via the backend.
   2. Emit ``<stage_root>/manifests/stream-manifest-<TS>.json`` listing
      the moved files as paths *relative to ``stage_root``* (so the
      publisher's ``ManifestStageSrcPlugin`` can resolve them against
@@ -44,77 +51,43 @@ Responsibilities on each :meth:`StreamerPluginCtx.stage` call:
        we persist an empty-dict envelope as the first-invocation marker.
 
   4. Flip :attr:`first_stage` to ``False``.
-
-Today only ``file://`` URIs are supported on ``function_stage``.
-Cloud schemes (``s3://`` / ``az://`` / ``gcs://``) will land once the
-streamer pod's deployment requires them; the streamer is currently
-intended to be co-located with its stage volume.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
-from urllib.request import url2pathname
 
+from tabsdatak.conn.stream.stage._backend import StageBackend
 from tabsdatak.server._tdrunner.function._lib.request import Location
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromFlowRequestCtx
+from tabsdatak.server._tdrunner.function._lib.stage_backend import (
+    stage_backend_from_location,
+)
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
     FILES_SUBDIR,
+    MANIFESTS_SUBDIR,
+    STREAM_STATE_FILENAME,
     InvalidStateEnvelopeError,
     StreamStateView,
     format_state_envelope,
-    manifest_files_dir,
     parse_state_envelope,
-    stream_state_path,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     external_uid_from_filename,
     format_manifest_filename,
-    write_stage_manifest,
 )
 from tabsdatak.spi import StreamSrcPluginCtx, StreamStateDict, StreamStateSpec
 
 logger = logging.getLogger(__name__)
 
 
-class UnsupportedStageSchemeError(ValueError):
-    """``function_stage`` URI uses a scheme the streamer runtime does
-    not yet support (today: only ``file://``)."""
-
-
-def _resolve_local_path(location: Location) -> Path:
-    """``file://`` -> local Path. Other schemes raise
-    :class:`UnsupportedStageSchemeError`."""
-    parsed = urlparse(location.uri)
-    if parsed.scheme != "file":
-        raise UnsupportedStageSchemeError(
-            f"location {location.uri!r} uses scheme {parsed.scheme!r}; "
-            "the streamer runtime only supports file:// today"
-        )
-    return Path(url2pathname(parsed.path))
-
-
-def _atomic_write_text(path: Path, text: str) -> None:
-    """Write ``text`` to ``path`` atomically: tmp + rename.
-
-    Readers of ``path`` see either the prior contents or the new
-    contents, never a partial write. Used for ``stream-state.json``,
-    which a concurrent pod restart might race to read.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    tmp.replace(path)
-
-
-def _load_state(stage_root: Path) -> StreamStateView | None:
-    """Read the prior ``stream-state.json`` if present.
+def _load_state(backend: StageBackend) -> StreamStateView | None:
+    """Read the prior ``stream-state.json`` from the stage if present.
 
     Returns ``None`` when:
       * the file does not exist (streamer has never run for this
@@ -125,26 +98,30 @@ def _load_state(stage_root: Path) -> StreamStateView | None:
       * the file's envelope is structurally wrong (wrong ``kind`` /
         unknown ``apiVersion`` / missing ``state`` -- same recovery)
 
+    The read goes through the backend (a direct file read for a local
+    stage; a transporter download for a cloud stage), so a missing or
+    unreadable object surfaces as ``None`` -> first-run semantics.
+
     A successful parse returns the full :class:`StreamStateView`; the
     caller exposes only the inner ``state`` dict (which may be ``{}``,
     the first-invocation marker) via :attr:`StreamerPluginCtx.stream_state`.
     """
-    state_path = stream_state_path(stage_root)
-    if not state_path.is_file():
+    raw_text = backend.read_text(STREAM_STATE_FILENAME)
+    if raw_text is None:
         return None
     try:
-        raw = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        raw = json.loads(raw_text)
+    except ValueError:
         logger.exception(
-            "stream_src_ctx: could not read %s; treating as first-stage",
-            state_path,
+            "stream_src_ctx: could not parse %s; treating as first-stage",
+            STREAM_STATE_FILENAME,
         )
         return None
     if not isinstance(raw, dict):
         logger.warning(
             "stream_src_ctx: %s contains %s, expected dict envelope; "
             "treating as first-stage",
-            state_path,
+            STREAM_STATE_FILENAME,
             type(raw).__name__,
         )
         return None
@@ -153,7 +130,7 @@ def _load_state(stage_root: Path) -> StreamStateView | None:
     except InvalidStateEnvelopeError:
         logger.exception(
             "stream_src_ctx: %s has unexpected envelope shape; treating as first-stage",
-            state_path,
+            STREAM_STATE_FILENAME,
         )
         return None
 
@@ -194,12 +171,12 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
             function_id=function_id,
             function_name=function_name,
         )
-        self._stage_root = _resolve_local_path(function_stage)
+        self._backend = stage_backend_from_location(function_stage)
         self._flush_interval_mins = flush_interval_mins
         self._tabsdata_version = tabsdata_version
         self._active = True
         self._first_stage = True
-        self._state_view: StreamStateView | None = _load_state(self._stage_root)
+        self._state_view: StreamStateView | None = _load_state(self._backend)
 
     # --- StreamSrcPluginCtx contract ----------------------------------
 
@@ -246,20 +223,17 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         """
         # The batch timestamp drives both the manifest filename and the
         # per-batch files subdir, so the two share a name. It must be
-        # fixed up front: the files move into files/<external_id>/ before
+        # fixed up front: the files upload into files/<external_id>/ before
         # the manifest that records their paths is written.
         ts = datetime.now(tz=timezone.utc)
-        external_id = external_uid_from_filename(format_manifest_filename(ts))
-        files_target_dir = manifest_files_dir(self._stage_root, external_id)
-        files_target_dir.mkdir(parents=True, exist_ok=True)
+        manifest_filename = format_manifest_filename(ts)
+        external_id = external_uid_from_filename(manifest_filename)
 
-        # 1. Move files from work_dir → <stage_root>/files/<external_id>/.
-        # ``shutil.move`` is atomic when src + dst are on the same
-        # filesystem (rename) and falls back to copy+delete across
-        # filesystems. The relative-to-stage_root path the manifest
-        # stores is what the publisher's ManifestStageSrcPlugin will
-        # resolve against its conn's base_path (which NU5 sets to
-        # the stage root).
+        # 1. Upload files to <stage>/files/<external_id>/ via the backend
+        # (a rename for a local stage; a transporter copy for cloud). The
+        # relative-to-stage-root path the manifest stores is what the
+        # publisher's ManifestStageSrcPlugin resolves against its conn's
+        # base_path (the stage root).
         moved: list[list[str]] = []
         for slot_idx, slot in enumerate(tables_files):
             moved_slot: list[str] = []
@@ -269,21 +243,21 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
                         f"plugin staged file slot {slot_idx} file {file_idx} "
                         f"({src_path}) does not exist"
                     )
-                dst = files_target_dir / src_path.name
-                shutil.move(str(src_path), str(dst))
-                moved_slot.append(f"{FILES_SUBDIR}/{external_id}/{src_path.name}")
+                rel = f"{FILES_SUBDIR}/{external_id}/{src_path.name}"
+                self._backend.upload(src_path, rel)
+                moved_slot.append(rel)
             moved.append(moved_slot)
 
-        # 2. Write the manifest under <stage_root>/manifests/ with the
-        # same ``ts``. Its filename TS portion is the external_id we
-        # paired the files subdir with above and that we cross-reference
-        # the state file with, so an operator can tie state ↔ manifest ↔
-        # files together.
-        manifest_path = write_stage_manifest(self._stage_root, moved, ts=ts)
+        # 2. Upload the manifest under <stage>/manifests/. Its filename TS
+        # portion is the external_id we paired the files subdir with above
+        # and that we cross-reference the state file with, so an operator
+        # can tie state ↔ manifest ↔ files together. Uploaded after the
+        # files so a visible manifest never points at not-yet-staged data.
+        self._upload_text(f"{MANIFESTS_SUBDIR}/{manifest_filename}", json.dumps(moved))
         logger.info(
             "stream_src_ctx.stage: wrote manifest %s with %d slot(s); "
             "files per slot=%s",
-            manifest_path.name,
+            manifest_filename,
             len(moved),
             [len(s) for s in moved],
         )
@@ -346,20 +320,26 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
     # --- private helpers ---------------------------------------------
 
     def _write_state(self, state: dict[str, Any], *, external_id: str) -> None:
-        """Atomically write ``<stage_root>/stream-state.json`` with the
-        envelope around ``state``."""
+        """Write ``<stage>/stream-state.json`` with the envelope around
+        ``state`` (via the backend: a rename for local, a transporter
+        copy for cloud -- both atomic at the destination)."""
         envelope = format_state_envelope(
             state,
             external_id=external_id,
             tabsdata_version=self._tabsdata_version,
         )
-        _atomic_write_text(
-            stream_state_path(self._stage_root),
-            json.dumps(envelope),
-        )
+        self._upload_text(STREAM_STATE_FILENAME, json.dumps(envelope))
+
+    def _upload_text(self, rel: str, text: str) -> None:
+        """Serialise ``text`` to a temp file and upload it to the stage at
+        ``rel`` -- the path the control files (manifest, state) take to
+        the stage regardless of backend."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir) / "upload"
+            tmp.write_text(text, encoding="utf-8")
+            self._backend.upload(tmp, rel)
 
 
 __all__ = [
     "StreamerPluginCtx",
-    "UnsupportedStageSchemeError",
 ]

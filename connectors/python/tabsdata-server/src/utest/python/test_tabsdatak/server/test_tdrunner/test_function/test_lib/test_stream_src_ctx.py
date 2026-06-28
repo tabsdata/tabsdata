@@ -5,13 +5,13 @@
 """Tests for `_lib/stream_src_ctx.py`.
 
 Covers:
-  * `_resolve_local_path`: file:// happy + non-file:// rejection
-  * `_atomic_write_text`: tmp + rename, parent-mkdir
-  * `_load_state`: missing file, malformed JSON, non-dict, envelope-mismatch,
-    happy round-trip
-  * `StreamerPluginCtx` construction: scheme rejection, initial state
-  * `StreamerPluginCtx.stage`:
-    - dict branch (Tabsdata-owned state): files moved to `files/`, manifest
+  * `_load_state` (over a local backend): missing file, malformed JSON,
+    non-dict, envelope-mismatch, happy round-trip
+  * `StreamerPluginCtx` construction: file + cloud stages resolve, unsupported
+    scheme rejected, initial state
+  * `StreamerPluginCtx.stage` (writes go through the resolved backend; the
+    local backend uploads via shutil.move so on-disk layout is unchanged):
+    - dict branch (Tabsdata-owned state): files under `files/<TS>/`, manifest
       in `manifests/`, state envelope persisted with the manifest's TS as
       external_id
     - lambda branch: callback invoked first, then empty-dict marker persisted
@@ -28,6 +28,8 @@ from pathlib import Path
 
 import pytest
 
+from tabsdatak.conn.localfile import LocalFileSrcConn
+from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
 from tabsdatak.server._tdrunner.function._lib.request import Location
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
     FILES_SUBDIR,
@@ -39,10 +41,7 @@ from tabsdatak.server._tdrunner.function._lib.stage_layout import (
 )
 from tabsdatak.server._tdrunner.function._lib.stream_src_ctx import (
     StreamerPluginCtx,
-    UnsupportedStageSchemeError,
-    _atomic_write_text,
     _load_state,
-    _resolve_local_path,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -56,6 +55,12 @@ _TABSDATA_VERSION = "2.0.0-test"
 
 def _file_location(path: Path) -> Location:
     return Location(uri=f"file://{path}")
+
+
+def _local_backend(stage: Path) -> StageBackend:
+    """A local-filesystem StageBackend rooted at ``stage`` -- what
+    ``stage_backend_from_location`` returns for a ``file://`` stage."""
+    return _LocalStageBackend(LocalFileSrcConn(base_path=str(stage)))
 
 
 def _make_ctx(
@@ -86,68 +91,30 @@ def _write_parquet_stub(path: Path, payload: bytes = b"PAR1stub") -> Path:
     return path
 
 
-# --- _resolve_local_path --------------------------------------------------
-
-
-def test_resolve_local_path_accepts_file_uri(tmp_path):
-    p = _resolve_local_path(_file_location(tmp_path))
-    assert p == tmp_path
-
-
-@pytest.mark.parametrize("scheme", ["s3", "az", "gcs", "http"])
-def test_resolve_local_path_rejects_non_file_schemes(scheme):
-    """The streamer is co-located with its stage volume today;
-    non-file schemes will land once cloud-stage deployments do."""
-    loc = Location(uri=f"{scheme}://bucket/stage")
-    with pytest.raises(UnsupportedStageSchemeError, match=scheme):
-        _resolve_local_path(loc)
-
-
-# --- _atomic_write_text ---------------------------------------------------
-
-
-def test_atomic_write_text_creates_parent(tmp_path):
-    target = tmp_path / "a" / "b" / "out.txt"
-    _atomic_write_text(target, "hello")
-    assert target.read_text() == "hello"
-
-
-def test_atomic_write_text_no_tmp_leftover(tmp_path):
-    """tmp + replace must leave no `.tmp` sibling after success --
-    matters because the sidecar's deletion sweeper would otherwise
-    have to know about an interim file shape."""
-    target = tmp_path / "out.json"
-    _atomic_write_text(target, "{}")
-    siblings = list(tmp_path.iterdir())
-    assert siblings == [target]
-
-
-def test_atomic_write_text_overwrites_existing(tmp_path):
-    target = tmp_path / "out.txt"
-    target.write_text("old")
-    _atomic_write_text(target, "new")
-    assert target.read_text() == "new"
-
-
 # --- _load_state ----------------------------------------------------------
+#
+# Scheme resolution (file / cloud / unsupported) now lives in
+# stage_backend_from_location (see test_stage_backend); the streamer reads
+# state through the resolved backend. These exercise _load_state over a
+# local backend.
 
 
 def test_load_state_returns_none_when_file_missing(tmp_path):
     """The streamer hasn't run before; ctx.stream_state will be None →
     plugin's consumption loop will use config.initial_values."""
-    assert _load_state(tmp_path) is None
+    assert _load_state(_local_backend(tmp_path)) is None
 
 
 def test_load_state_returns_none_on_malformed_json(tmp_path, caplog):
     """Corrupt files don't lock the pod into a fail-loop -- fall back to
     first-stage semantics and log."""
     (tmp_path / STREAM_STATE_FILENAME).write_text("not-json{")
-    assert _load_state(tmp_path) is None
+    assert _load_state(_local_backend(tmp_path)) is None
 
 
 def test_load_state_returns_none_on_non_dict_top_level(tmp_path):
     (tmp_path / STREAM_STATE_FILENAME).write_text("[1, 2, 3]")
-    assert _load_state(tmp_path) is None
+    assert _load_state(_local_backend(tmp_path)) is None
 
 
 def test_load_state_returns_none_on_envelope_mismatch(tmp_path):
@@ -157,7 +124,7 @@ def test_load_state_returns_none_on_envelope_mismatch(tmp_path):
     (tmp_path / STREAM_STATE_FILENAME).write_text(
         json.dumps({"kind": "streamState", "apiVersion": 999, "state": {}})
     )
-    assert _load_state(tmp_path) is None
+    assert _load_state(_local_backend(tmp_path)) is None
 
 
 def test_load_state_returns_view_for_valid_envelope(tmp_path):
@@ -169,7 +136,7 @@ def test_load_state_returns_view_for_valid_envelope(tmp_path):
         "state": {"offset": 42},
     }
     (tmp_path / STREAM_STATE_FILENAME).write_text(json.dumps(envelope))
-    view = _load_state(tmp_path)
+    view = _load_state(_local_backend(tmp_path))
     assert view is not None
     assert view.state == {"offset": 42}
     assert view.external_id == "2026-06-16T10-30-12.345"
@@ -187,7 +154,7 @@ def test_load_state_returns_view_for_empty_state_marker(tmp_path):
         "state": {},
     }
     (tmp_path / STREAM_STATE_FILENAME).write_text(json.dumps(envelope))
-    view = _load_state(tmp_path)
+    view = _load_state(_local_backend(tmp_path))
     assert view is not None
     assert view.state == {}
 
@@ -203,20 +170,38 @@ def test_ctx_construction_succeeds_for_file_stage(tmp_path):
     assert ctx.flush_interval_mins == 5
 
 
-def test_ctx_construction_rejects_non_file_stage(tmp_path):
+def _construct_ctx_for(stage_uri: str, tmp_path: Path) -> StreamerPluginCtx:
     work_dir = tmp_path / "work"
-    work_dir.mkdir()
-    with pytest.raises(UnsupportedStageSchemeError):
-        StreamerPluginCtx(
-            work_dir=work_dir,
-            collection_id="C-1",
-            collection_name="c",
-            function_id="F-1",
-            function_name="stream_people",
-            function_stage=Location(uri="s3://bucket/stage"),
-            flush_interval_mins=5,
-            tabsdata_version=_TABSDATA_VERSION,
-        )
+    work_dir.mkdir(exist_ok=True)
+    return StreamerPluginCtx(
+        work_dir=work_dir,
+        collection_id="C-1",
+        collection_name="c",
+        function_id="F-1",
+        function_name="stream_people",
+        function_stage=Location(uri=stage_uri),
+        flush_interval_mins=5,
+        tabsdata_version=_TABSDATA_VERSION,
+    )
+
+
+def test_ctx_construction_succeeds_for_cloud_stage(tmp_path):
+    """A cloud stage now resolves (no startup read on a first run) -- the
+    streamer is no longer file://-only."""
+    ctx = _construct_ctx_for("s3://bucket/stage", tmp_path)
+    assert ctx.active is True
+    assert ctx.first_stage is True
+
+
+def test_ctx_construction_rejects_unsupported_scheme(tmp_path):
+    """An unknown scheme surfaces the resolver's UnsupportedSchemeError
+    (GCS uses gs://, so gcs:// has no endpoint builder)."""
+    from tabsdatak.server._tdrunner.function._lib.endpoint import (
+        UnsupportedSchemeError,
+    )
+
+    with pytest.raises(UnsupportedSchemeError):
+        _construct_ctx_for("gcs://bucket/stage", tmp_path)
 
 
 def test_ctx_construction_loads_existing_state(tmp_path):
