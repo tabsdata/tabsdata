@@ -664,6 +664,12 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
             Expr::col((CollectionDBIden::Table, CollectionDBIden::EffectiveBasePath)),
             Alias::new("collection_base_path"),
         )
+        // The collection's connection (NULL for non-source/destination
+        // collections), carried into the dispatch request.
+        .expr_as(
+            Expr::col((CollectionDBIden::Table, CollectionDBIden::ConnectionId)),
+            Alias::new("connection_id"),
+        )
         // COALESCE to the collection's effective prefix so a missing bundle row
         // (anomaly in prod; common in seeds that don't stage a bundle) decodes to a
         // valid prefix rather than NULL.

@@ -136,9 +136,9 @@ impl SchemaVersion for Schema {
     // Refresh via `cargo test -p td-schema --lib print_schema_fingerprints --
     // --ignored --nocapture` after any intentional change to current/.
     const FINGERPRINTS: [&'static str; 3] = [
-        "d677b8e7e4e20af1dc8be5b4f3cbe600dc69d05dd653abf5360b8c4afcfcc5ec", // Sqlite
-        "9317c4417fd9ce6b0577a6e40167cf27915d4468d95b272624dfe4c5421ad701", // Postgres
-        "63bc42f97fb5e9328c1e59f4092da706d23572402b08ef51aba2b5d57dc4847e", // MySql
+        "4e7c7303058db3f9780f53c16e4a674d50529d0eb777d6865cdb06498a3cec0e", // Sqlite
+        "4530ad8b34a411fd7a586b7e4795a28ada4668c6355d40c0feb716028273710b", // Postgres
+        "80fd2c64221f8d783ba1ca7375a162a735493b7186139252fec8e4a3c02e9ff3", // MySql
     ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {

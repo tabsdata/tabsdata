@@ -9,8 +9,8 @@ mod definitions {
     use crate::dxo::yaml::WorkerOutput;
     use crate::dxo::yaml::function_runner::v2::WrittenTable;
     use crate::types::basic::{
-        AtTime, ByteCount, CollectionId, CollectionName, CronMask, Enabled, EpochMs, ExecutionId,
-        ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId,
+        AtTime, ByteCount, CollectionId, CollectionName, ConnectionId, CronMask, Enabled, EpochMs,
+        ExecutionId, ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId,
         PhysicalFunctionRunId, ProjectId, RowCount, SizeThreshold, TableVersionCount,
         TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus,
         WorkerStatus, WorkerType,
@@ -82,6 +82,9 @@ mod definitions {
         pub logical_function_run_id: Option<LogicalFunctionRunId>,
 
         pub collection: CollectionName,
+        // The collection's connection (NULL for non-source/destination),
+        // joined from the collections table for the stage/cron-trigger requests.
+        pub connection_id: Option<ConnectionId>,
         pub execution: Option<ExecutionName>,
         pub function: FunctionName,
         pub enabled: Enabled,

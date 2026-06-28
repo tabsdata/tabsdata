@@ -71,6 +71,7 @@ impl Entity for Defs {
                 .expr(Expr::col((Workers::Table, Asterisk)))
                 .expr_as(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)), Alias::new("logical_function_run_id"))
                 .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((Collections::Table, Collections::ConnectionId)), Alias::new("connection_id"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .expr_as(Expr::col((Functions::Table, Functions::Enabled)), Alias::new("enabled"))

@@ -125,6 +125,7 @@ mod tests {
             bundle_id: BundleId::default(),
             defined_on: AtTime::now(),
             decorator: Decorator::Transformer,
+            connection_id: None,
             bundle_base_path: BasePath::try_from("/b").unwrap(),
             stage_id: StageId::default(),
             stage_base_path: BasePath::try_from("/s").unwrap(),

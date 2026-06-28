@@ -7,10 +7,11 @@ mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
-        AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, Decorator, EpochMs,
-        ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
-        PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, RowCount, StageId,
-        StorageVersion, TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId, UserName,
+        AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, ConnectionId,
+        Decorator, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
+        FunctionVersionId, PhysicalFunctionRunId, PhysicalFunctionRunStatus, ProjectId, RowCount,
+        StageId, StorageVersion, TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId,
+        UserName,
     };
 
     #[ta_objects::Dao]
@@ -102,6 +103,9 @@ mod definitions {
         pub bundle_id: BundleId,
         pub defined_on: AtTime,
         pub decorator: Decorator,
+        // The collection's connection (NULL for non-source/destination),
+        // joined in function_run_to_execute_select for the dispatch request.
+        pub connection_id: Option<ConnectionId>,
         // Joined base paths (see function_run_to_execute_select): the effective
         // bundle's stamped prefix, the function version's stage identity + stamped
         // stage prefix, and the collection's live prefix (for run-content).

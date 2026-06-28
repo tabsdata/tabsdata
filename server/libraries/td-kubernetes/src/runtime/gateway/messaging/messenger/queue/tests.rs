@@ -14,7 +14,7 @@ use td_bridge::messaging::{
 use td_common::worker::{Callback, Decorator, HttpRequest, MessageAction, WorkerName};
 use td_objects::dxo::yaml::location::Location;
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId,
+    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, ProjectId,
     WorkerConfig, WorkerId,
 };
 use url::Url;
@@ -73,8 +73,10 @@ fn function_start_routes_with_decorator() {
                 decorator: Decorator::Publisher,
                 resolver: resolver(),
                 responder: responder(),
+                project_id: ProjectId::default(),
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
+                connection_id: None,
                 function_id: FunctionId::default(),
                 function: FunctionName::try_from("function").unwrap(),
             }),
@@ -117,8 +119,10 @@ fn stream_publisher_start_routes_by_worker_name() {
                 decorator: Decorator::Publisher,
                 trigger: trigger(),
                 responder: responder(),
+                project_id: ProjectId::default(),
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
+                connection_id: None,
                 function_version_id: FunctionVersionId::try_from("FV20260101.0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
                 function_bundle: location(),
@@ -176,8 +180,10 @@ fn cron_publisher_start_routes_by_worker_name() {
                 worker_id: WorkerId::default(),
                 trigger: trigger(),
                 responder: responder(),
+                project_id: ProjectId::default(),
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
+                connection_id: None,
                 function_version_id: FunctionVersionId::try_from("FV20260101.0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
                 scheduled_on: AtTime::default(),
