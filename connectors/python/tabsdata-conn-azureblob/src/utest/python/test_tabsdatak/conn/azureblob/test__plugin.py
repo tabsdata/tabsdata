@@ -22,8 +22,8 @@ pytestmark = pytest.mark.azureblob
 
 def _az_creds() -> AzureAccountKey:
     return AzureAccountKey(
-        account_name=Secret.lit("acctname"),
-        account_key=Secret.lit("acctkey"),
+        account_name=Secret("acctname"),
+        account_key=Secret("acctkey"),
     )
 
 

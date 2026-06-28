@@ -96,8 +96,8 @@ def _s3_staging() -> S3Location:
         bucket="staging-bucket",
         region="us-east-1",
         credentials=AwsAccessSecretKey(
-            access_key_id=Secret.lit("AKIA..."),
-            secret_access_key=Secret.lit("secret"),
+            access_key_id=Secret("AKIA..."),
+            secret_access_key=Secret("secret"),
         ),
         base_path="staging/",
     )
@@ -106,7 +106,7 @@ def _s3_staging() -> S3Location:
 def _gcs_staging() -> GCSLocation:
     return GCSLocation(
         bucket="staging-bucket",
-        credentials=GCPJson(json=Secret.lit('{"type": "service_account"}')),
+        credentials=GCPJson(json=Secret('{"type": "service_account"}')),
         base_path="staging/",
     )
 
@@ -115,8 +115,8 @@ def _az_staging() -> AzBlobLocation:
     return AzBlobLocation(
         container="td-stage",
         credentials=AzureAccountKey(
-            account_name=Secret.lit("acct"),
-            account_key=Secret.lit("key"),
+            account_name=Secret("acct"),
+            account_key=Secret("key"),
         ),
         base_path="staging/",
     )
@@ -127,8 +127,8 @@ def _conn(staging=None) -> DruidDestConn:
         overlord_url="http://druid.example.com:8081",
         staging=staging or _s3_staging(),
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
     )
 

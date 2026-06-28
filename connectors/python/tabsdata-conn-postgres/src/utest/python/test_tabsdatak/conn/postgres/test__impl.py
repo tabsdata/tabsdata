@@ -40,8 +40,8 @@ class _CapturedURL:
 
 def _credentials() -> UserPassword:
     return UserPassword(
-        user=Secret.lit("etl"),
-        password=Secret.lit("hunter2"),
+        user=Secret("etl"),
+        password=Secret("hunter2"),
     )
 
 
@@ -121,7 +121,7 @@ def test_build_postgres_engine_preserves_driver_with_postgres_alias(captured):
 
 def test_build_postgres_engine_accepts_secret_uri(captured):
     impl.build_postgres_engine(
-        Secret.lit("postgresql://host:5432/db"),
+        Secret("postgresql://host:5432/db"),
         _credentials(),
         connect_args=None,
     )

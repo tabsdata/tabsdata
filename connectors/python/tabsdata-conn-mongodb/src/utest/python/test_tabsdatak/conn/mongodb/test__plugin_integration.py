@@ -63,8 +63,8 @@ def conn(mongodb_config) -> MongoDBDestConn:
     return MongoDBDestConn(
         uri=mongodb_config.uri,
         credentials=UserPassword(
-            user=Secret.lit(mongodb_config.user),
-            password=Secret.lit(mongodb_config.password),
+            user=Secret(mongodb_config.user),
+            password=Secret(mongodb_config.password),
         ),
     )
 

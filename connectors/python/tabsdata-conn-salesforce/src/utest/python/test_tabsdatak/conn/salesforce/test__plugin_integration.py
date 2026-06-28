@@ -125,11 +125,11 @@ def work_dir(tmp_path: Path) -> Path:
 def conn() -> SalesforceSrcConn:
     return SalesforceSrcConn(
         credentials=SalesforceTokenCredentials(
-            username=Secret.lit(_USERNAME),
-            password=Secret.lit(_PASSWORD),
-            security_token=Secret.lit(_SECURITY_TOKEN),
+            username=Secret(_USERNAME),
+            password=Secret(_PASSWORD),
+            security_token=Secret(_SECURITY_TOKEN),
         ),
-        instance_url=Secret.lit(_INSTANCE_URL) if _INSTANCE_URL else None,
+        instance_url=Secret(_INSTANCE_URL) if _INSTANCE_URL else None,
     )
 
 

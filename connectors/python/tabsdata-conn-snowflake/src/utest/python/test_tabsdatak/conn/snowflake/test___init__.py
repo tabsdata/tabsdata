@@ -50,8 +50,8 @@ def test_snowflake_conn_validate_rejects_schema_without_database():
         SnowflakeDestConn(
             account="ACME-MAIN",
             credentials=UserPassword(
-                user=Secret.lit("etl"),
-                password=Secret.lit("hunter2"),
+                user=Secret("etl"),
+                password=Secret("hunter2"),
             ),
             schema="PUBLIC",
         )
@@ -118,8 +118,8 @@ def test_snowflake_conn_rejects_missing_account():
     with pytest.raises(ConnInitException) as ei:
         SnowflakeDestConn(  # type: ignore[call-arg]
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
             database="DB",
         )

@@ -166,8 +166,8 @@ class DBConfig:
     @property
     def credentials(self) -> UserPassword:
         return UserPassword(
-            user=Secret.lit(self.user),
-            password=Secret.lit(self.password),
+            user=Secret(self.user),
+            password=Secret(self.password),
         )
 
 

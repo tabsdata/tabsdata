@@ -6,7 +6,7 @@ same field aliases (``UserPassword``, ``AwsAccessSecretKey``,
 ``GCPJson``, ``EntityWhitelistSpec``, ``CfgSpec``, etc.) instead
 of redefining them per package. ``Var`` / ``Secret`` references
 are honoured uniformly: a bare string passed to one of these
-fields is auto-wrapped as ``Secret.lit(...)`` at field-validation
+fields is auto-wrapped as ``Secret(...)`` at field-validation
 time.
 """
 
@@ -25,7 +25,7 @@ import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.common._validation as _validation
-from tabsdatak.api import Secret, Var, VarOrSecretSpec
+from tabsdatak.api import Secret, Var
 from tabsdatak.conn.common.error import ConnErrorCode
 
 # --- Credentials -----------------------------------------------------
@@ -41,8 +41,8 @@ class Credentials(ABC, _api.DescriptorBase):
 @_api.dataclass(ConnErrorCode.CONN_1, kw_only=True)
 class UserPassword(Credentials):
     __kind__ = "userPasswordCredentials"
-    user: VarOrSecretSpec
-    password: VarOrSecretSpec
+    user: Secret
+    password: Secret
 
 
 # --- GCP -------------------------------------------------------------
@@ -55,7 +55,7 @@ class GCPCredentials(Credentials, ABC):
 @_api.dataclass(ConnErrorCode.CONN_2, kw_only=True)
 class GCPJson(GCPCredentials):
     __kind__ = "gcpJsonCredentials"
-    json: VarOrSecretSpec
+    json: Secret
 
 
 @_api.dataclass(ConnErrorCode.CONN_10)
@@ -68,8 +68,8 @@ class GCPHmac(GCPCredentials):
     """
 
     __kind__ = "gcpHmacCredentials"
-    access_key: VarOrSecretSpec
-    secret_key: VarOrSecretSpec
+    access_key: Secret
+    secret_key: Secret
 
 
 # --- AWS -------------------------------------------------------------
@@ -78,8 +78,8 @@ class GCPHmac(GCPCredentials):
 @_api.dataclass(ConnErrorCode.CONN_3, kw_only=True)
 class AwsAccessSecretKey(Credentials):
     __kind__ = "awsAccessSecretKeyCredentials"
-    access_key_id: VarOrSecretSpec
-    secret_access_key: VarOrSecretSpec
+    access_key_id: Secret
+    secret_access_key: Secret
 
 
 # --- Azure -----------------------------------------------------------
@@ -92,8 +92,8 @@ class AzureCredentials(Credentials, ABC):
 @_api.dataclass(ConnErrorCode.CONN_4, kw_only=True)
 class AzureAccountKey(AzureCredentials):
     __kind__ = "azureAccountKeyCredentials"
-    account_name: VarOrSecretSpec
-    account_key: VarOrSecretSpec
+    account_name: Secret
+    account_key: Secret
 
 
 # --- Data types (placeholder) ----------------------------------------
@@ -140,7 +140,7 @@ BasePathSpec: TypeAlias = Union[
 def full_path(base_path: BasePathSpec, path: str) -> str:
     """Join ``base_path`` with ``path``, stripping leading and
     trailing ``/`` from each side and from the result. ``base_path``
-    may be a ``str`` or a ``Secret`` / ``Var`` whose ``.value()``
+    may be a ``str`` or a ``Secret`` / ``Var`` whose ``.value``
     resolves to the path string.
     """
     resolved = _convert(base_path, str)
@@ -252,4 +252,4 @@ def _convert[T: _CoercionTypeSpec](spec: T | Secret | Var, type_: Type[T]) -> T:
         return spec
     else:
         # Pydantic coercion to
-        return TypeAdapter(type_).validate_python(spec.value())
+        return TypeAdapter(type_).validate_python(spec.value)

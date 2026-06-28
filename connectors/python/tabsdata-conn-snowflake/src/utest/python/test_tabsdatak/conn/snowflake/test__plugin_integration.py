@@ -139,8 +139,8 @@ def conn() -> SnowflakeDestConn:
     kwargs: dict = dict(
         account=_ACCOUNT,
         credentials=UserPassword(
-            user=Secret.lit(_USER),
-            password=Secret.lit(_PASSWORD),
+            user=Secret(_USER),
+            password=Secret(_PASSWORD),
         ),
         database=_DATABASE,
         schema=_SCHEMA,

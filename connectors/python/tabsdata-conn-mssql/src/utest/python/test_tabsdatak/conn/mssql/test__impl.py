@@ -40,8 +40,8 @@ class _CapturedURL:
 
 def _credentials() -> UserPassword:
     return UserPassword(
-        user=Secret.lit("etl"),
-        password=Secret.lit("hunter2"),
+        user=Secret("etl"),
+        password=Secret("hunter2"),
     )
 
 
@@ -100,7 +100,7 @@ def test_build_mssql_engine_preserves_explicit_driver(captured):
 
 def test_build_mssql_engine_accepts_secret_uri(captured):
     impl.build_mssql_engine(
-        Secret.lit("mssql://host:1433/db"),
+        Secret("mssql://host:1433/db"),
         _credentials(),
         connect_args=None,
     )
@@ -193,7 +193,7 @@ def test_build_mssql_engine_odbc_caller_uid_pwd_take_precedence(captured):
 
 def test_build_mssql_engine_odbc_accepts_secret_uri(captured):
     impl.build_mssql_engine(
-        Secret.lit(_ODBC_URI),
+        Secret(_ODBC_URI),
         _credentials(),
         connect_args=None,
     )

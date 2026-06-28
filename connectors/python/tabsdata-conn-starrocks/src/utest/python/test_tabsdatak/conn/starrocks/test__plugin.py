@@ -69,8 +69,8 @@ def _staging() -> S3Location:
         bucket="staging-bucket",
         region="us-east-1",
         credentials=AwsAccessSecretKey(
-            access_key_id=Secret.lit("AKIA..."),
-            secret_access_key=Secret.lit("secret"),
+            access_key_id=Secret("AKIA..."),
+            secret_access_key=Secret("secret"),
         ),
         base_path="stg/",
     )
@@ -83,8 +83,8 @@ def _bare_conn() -> StarRocksDestConn:
         database="testdb",
         staging=_staging(),
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 

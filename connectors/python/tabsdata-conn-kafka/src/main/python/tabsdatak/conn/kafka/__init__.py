@@ -46,7 +46,7 @@ from tabsdatak.conn.kafka.error import KafkaErrorCode
 
 
 # SASL username + password. Bare strings are auto-wrapped by the
-# framework as ``Secret.lit(...)`` at field-validation time.
+# framework as ``Secret(...)`` at field-validation time.
 KafkaCredentialsSpec: TypeAlias = UserPassword
 
 # Confluent SR uses basic-auth (user + password); AWS Glue uses an

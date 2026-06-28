@@ -169,7 +169,7 @@ def _db_name(fresh_clickhouse) -> str:
     bare string; this helper normalizes that.
     """
     db = fresh_clickhouse.database
-    return db.value() if hasattr(db, "value") else db
+    return db.value if hasattr(db, "value") else db
 
 
 def _ch_client(fresh_clickhouse):
@@ -179,9 +179,9 @@ def _ch_client(fresh_clickhouse):
     import clickhouse_connect
 
     host = fresh_clickhouse.host
-    host = host.value() if hasattr(host, "value") else host
-    user = fresh_clickhouse.credentials.user.value()
-    password = fresh_clickhouse.credentials.password.value()
+    host = host.value if hasattr(host, "value") else host
+    user = fresh_clickhouse.credentials.user.value
+    password = fresh_clickhouse.credentials.password.value
     return clickhouse_connect.get_client(
         host=host,
         port=fresh_clickhouse.port,

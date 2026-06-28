@@ -41,8 +41,8 @@ def _src_conn() -> Db2SrcConn:
     return Db2SrcConn(
         uri="db2://db2.example.com:50000/SAMPLE",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"db2.timeout": 30},
     )
@@ -52,8 +52,8 @@ def _dest_conn() -> Db2DestConn:
     return Db2DestConn(
         uri="db2://db2.example.com:50000/SAMPLE",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"db2.timeout": 30},
     )
@@ -69,8 +69,8 @@ def test_db2_conn_round_trip(cls):
     c = cls(
         uri="db2://db2.example.com:50000/SAMPLE",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"db2.timeout": 30},
     )
@@ -86,8 +86,8 @@ def test_db2_conn_rejects_bad_uri(cls):
         cls(
             uri="ftp://host/db",
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
 
@@ -265,7 +265,7 @@ from datetime import datetime, timezone  # noqa: E402
 
 
 def _cdc_creds():
-    return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+    return UserPassword(user=Secret("u"), password=Secret("p"))
 
 
 # --- Position primitives --------------------------------------------
@@ -428,8 +428,8 @@ def test_db2_conn_rejects_missing_uri(cls):
     with pytest.raises(ConnInitException) as ei:
         cls(  # type: ignore[call-arg]
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
     assert ei.value.api_error is Db2ErrorCode.DB2_1

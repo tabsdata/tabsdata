@@ -40,8 +40,8 @@ class _CapturedURL:
 
 def _credentials() -> UserPassword:
     return UserPassword(
-        user=Secret.lit("etl"),
-        password=Secret.lit("hunter2"),
+        user=Secret("etl"),
+        password=Secret("hunter2"),
     )
 
 
@@ -110,7 +110,7 @@ def test_build_mysql_engine_accepts_mariadb_scheme(captured):
 
 def test_build_mysql_engine_accepts_secret_uri(captured):
     impl.build_mysql_engine(
-        Secret.lit("mysql://host:3306/db"),
+        Secret("mysql://host:3306/db"),
         _credentials(),
         connect_args=None,
     )

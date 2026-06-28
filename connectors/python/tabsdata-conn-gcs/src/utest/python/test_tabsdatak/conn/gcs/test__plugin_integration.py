@@ -111,7 +111,7 @@ def src_conn() -> GCSSrcConn:
     bucket, base_path = _parse_uri(_URI)
     return GCSSrcConn(
         bucket=bucket,
-        credentials=GCPJson(json=Secret.lit(_SA_JSON)),
+        credentials=GCPJson(json=Secret(_SA_JSON)),
         base_path=base_path,
     )
 
@@ -121,7 +121,7 @@ def dest_conn() -> GCSDestConn:
     bucket, base_path = _parse_uri(_URI)
     return GCSDestConn(
         bucket=bucket,
-        credentials=GCPJson(json=Secret.lit(_SA_JSON)),
+        credentials=GCPJson(json=Secret(_SA_JSON)),
         base_path=base_path,
     )
 

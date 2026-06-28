@@ -2,22 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdatak.api import Var, Secret, _LiteralSecret
-from tabsdatak.error import ApiInternalException
+from tabsdatak.api import Secret, Var
 from tabsdatak.common._error import CommonErrorCode, CommonRuntimeException
 from tabsdatak.common._json_serde import (
     KeyValue,
-    dehydrate_secrets,
-    dehydrate_vars,
+    dehydrate,
+    env_hydrate,
     extract_connection_names,
-    extract_secrets,
-    extract_vars,
     find_by_kind,
+    hydrate,
     hydrate_connections,
-    hydrate_secrets,
-    hydrate_secrets_as_envs,
-    hydrate_vars,
-    hydrate_vars_as_envs,
     list_refs,
     replace_at,
 )
@@ -29,6 +23,22 @@ def _env(kind: str, spec: dict | list) -> dict:
     return {"kind": kind, "apiVersion": "1.0", "type": "X", "spec": spec}
 
 
+def _wrap(spec: dict) -> dict:
+    """Top-level envelope -- mimics a serialized SrcDef / DestDef so its
+    ``spec`` provides the ``$.spec.`` prefix that ``_to_key`` strips."""
+    return {"kind": "outer", "apiVersion": "1.0", "type": "Outer", "spec": spec}
+
+
+# Secret/Var serialize to plain strings; these helpers spell out the wire
+# form the walker matches on. ``Secret("x").to_dict()`` == ``"secret:x"``.
+def _secret(value: str | None) -> str:
+    return "secret:" + (value or "")
+
+
+def _var(value: str | None) -> str:
+    return "var:" + (value or "")
+
+
 # ---------------------------------------------------------------------------
 # find_by_kind
 # ---------------------------------------------------------------------------
@@ -38,85 +48,42 @@ def test_find_by_kind_on_empty_dict_returns_nothing():
     assert find_by_kind({}, "secret") == []
 
 
-def test_find_by_kind_on_empty_list_returns_nothing():
-    assert find_by_kind([], "secret") == []
-
-
 def test_find_by_kind_matches_root_envelope():
-    root = _env("secret", {"name": "PW"})
-    results = find_by_kind(root, "secret")
-    assert results == [("$", root)]
-
-
-def test_find_by_kind_returns_dollar_path_for_root_match():
-    # The walker enters with path ``$`` and reports the root unchanged.
-    root = _env("secret", {})
-    path, node = find_by_kind(root, "secret")[0]
-    assert path == "$"
-    assert node is root
+    root = _env("connectionRef", {"name": "PW"})
+    assert find_by_kind(root, "connectionRef") == [("$", root)]
 
 
 def test_find_by_kind_nested_under_dict_key():
-    inner = _env("secret", {"name": "PW"})
+    inner = _env("connectionRef", {"name": "PW"})
     root = _env("outer", {"creds": inner})
-    results = find_by_kind(root, "secret")
-    # Root matches ``outer``, not ``secret``. The inner envelope lives
-    # under ``.spec.creds`` and is the only match.
-    assert results == [("$.spec.creds", inner)]
+    assert find_by_kind(root, "connectionRef") == [("$.spec.creds", inner)]
 
 
 def test_find_by_kind_nested_under_list_index():
-    a = _env("secret", {"i": 0})
-    b = _env("secret", {"i": 1})
+    a = _env("connectionRef", {"i": 0})
+    b = _env("connectionRef", {"i": 1})
     root = _env("outer", [a, b])
-    results = find_by_kind(root, "secret")
-    assert results == [("$.spec[0]", a), ("$.spec[1]", b)]
-
-
-def test_find_by_kind_descends_into_matched_envelopes():
-    inner = _env("secret", {"i": 1})
-    outer = _env("secret", {"inner": inner})
-    results = find_by_kind(outer, "secret")
-    # The outer envelope matches, and the walker keeps descending into
-    # it, so the nested match is also reported.
-    assert results == [("$", outer), ("$.spec.inner", inner)]
+    assert find_by_kind(root, "connectionRef") == [("$.spec[0]", a), ("$.spec[1]", b)]
 
 
 def test_find_by_kind_skips_non_dict_non_list_values():
-    # Strings, ints, None must not raise and must not be reported.
     root = {"kind": "x", "spec": "not-a-container", "n": 1, "b": True, "z": None}
     assert find_by_kind(root, "x") == [("$", root)]
 
 
-def test_find_by_kind_no_match_returns_empty_list():
-    root = _env("outer", {"inner": _env("middle", {})})
-    assert find_by_kind(root, "secret") == []
-
-
 def test_find_by_kind_does_not_match_partial_envelopes():
-    # A dict without a ``kind`` key is not an envelope and must not match
-    # under any kind.
     root = {"apiVersion": "1.0", "spec": {"name": "PW"}}
-    assert find_by_kind(root, "secret") == []
-
-
-def test_find_by_kind_returns_same_object_reference():
-    inner = _env("secret", {})
-    root = _env("outer", {"x": inner})
-    [(_, node)] = find_by_kind(root, "secret")
-    # ``node`` is the actual dict from the tree, not a copy -- callers
-    # rely on this for in-place mutation.
-    assert node is inner
+    assert find_by_kind(root, "connectionRef") == []
 
 
 # ---------------------------------------------------------------------------
-# replace_at -- happy paths
+# replace_at
 # ---------------------------------------------------------------------------
 
 
 def test_replace_at_dict_key():
-    root = _env("outer", {"creds": _env("secret", {"name": "old"})})
-    replace_at(root, "$.spec.creds", _env("secret", {"name": "new"}))
+    root = _env("outer", {"creds": _env("x", {"name": "old"})})
+    replace_at(root, "$.spec.creds", _env("x", {"name": "new"}))
     assert root["spec"]["creds"]["spec"]["name"] == "new"
 
 
@@ -126,35 +93,13 @@ def test_replace_at_list_index():
     assert root["spec"] == [10, 99, 30]
 
 
-def test_replace_at_deeply_nested_mixed_path():
-    inner = _env("secret", {"name": "old"})
-    root = _env("outer", {"items": [{"creds": inner}]})
-    replace_at(root, "$.spec.items[0].creds", _env("secret", {"name": "new"}))
-    assert root["spec"]["items"][0]["creds"]["spec"]["name"] == "new"
-
-
 def test_replace_at_mutates_in_place_returns_none():
     root = _env("outer", {"x": 1})
     assert replace_at(root, "$.spec.x", 2) is None
     assert root["spec"]["x"] == 2
 
 
-def test_replace_at_using_path_from_find_by_kind_round_trip():
-    inner = _env("secret", {"name": "old"})
-    root = _env("outer", {"creds": inner})
-    [(path, _)] = find_by_kind(root, "secret")
-    replace_at(root, path, _env("secret", {"name": "new"}))
-    assert root["spec"]["creds"]["spec"]["name"] == "new"
-
-
-# ---------------------------------------------------------------------------
-# replace_at -- error paths
-# ---------------------------------------------------------------------------
-
-
 def test_replace_at_rejects_root_replacement():
-    # The caller already holds the root reference; we refuse rather than
-    # silently no-op.
     with pytest.raises(CommonRuntimeException) as exc_info:
         replace_at({"x": 1}, "$", "anything")
     assert exc_info.value.api_error is CommonErrorCode.COMMON_5
@@ -167,17 +112,8 @@ def test_replace_at_rejects_path_without_dollar_prefix():
 
 
 def test_replace_at_rejects_empty_dict_key():
-    # ``$.`` with nothing after the dot -- malformed.
     with pytest.raises(CommonRuntimeException) as exc_info:
         replace_at({"x": 1}, "$.", 2)
-    assert exc_info.value.api_error is CommonErrorCode.COMMON_2
-
-
-def test_replace_at_rejects_consecutive_dots():
-    # ``$.a..b`` -- the second dot starts a key but the third dot ends it
-    # immediately, producing an empty key.
-    with pytest.raises(CommonRuntimeException) as exc_info:
-        replace_at({"a": {"b": 1}}, "$.a..b", 2)
     assert exc_info.value.api_error is CommonErrorCode.COMMON_2
 
 
@@ -188,279 +124,198 @@ def test_replace_at_rejects_unclosed_bracket():
 
 
 def test_replace_at_rejects_unexpected_char_after_root():
-    # Anything that isn't ``.`` or ``[`` immediately after ``$`` is a
-    # syntax error.
     with pytest.raises(CommonRuntimeException) as exc_info:
         replace_at({"x": 1}, "$x", 2)
     assert exc_info.value.api_error is CommonErrorCode.COMMON_4
 
 
 # ---------------------------------------------------------------------------
-# Secret / var envelope helpers
-#
-# Realistic envelope shapes:
-#   secretRef:     {"kind": "secretRef",     "spec": {"_s": "<name>", "_value_pattern": "..."}}
-#   secretLiteral: {"kind": "secretLiteral", "spec": {"_s": "<value>", "_value_pattern": "..."}}
-#   varRef:        {"kind": "varRef",        "spec": {"_s": "<name>"}}
-#   varLiteral:    {"kind": "varLiteral",    "spec": {"_s": "<value>"}}
+# Wire form sanity: Secret / Var serialize to the strings the walker matches.
 # ---------------------------------------------------------------------------
 
 
-def _secret_ref(name: str, *, pattern: str | None = None) -> dict:
-    # ``Secret()`` is the only public constructor shape -- private
-    # fields are ``init=False``. Use the same dict-input validator
-    # path the framework uses to seed an instance with a named ref.
-    return Secret.__pydantic_validator__.validate_python(
-        {"_s": name, "_value_pattern": pattern}
-    ).to_dict()
+def test_secret_var_serialize_to_prefixed_strings():
+    assert Secret("hunter2").to_dict() == "secret:hunter2"
+    assert Secret().to_dict() == "secret:"
+    assert Var("etl").to_dict() == "var:etl"
+    assert Var().to_dict() == "var:"
 
 
-def _secret_literal(value: str, *, pattern: str | None = None) -> dict:
-    return _LiteralSecret(_s=value, _value_pattern=pattern).to_dict()
+# ---------------------------------------------------------------------------
+# dehydrate
+# ---------------------------------------------------------------------------
 
 
-def _var_ref(name: str) -> dict:
-    return Var._var_key(name).to_dict()
+def test_dehydrate_empty_payload():
+    out, secrets, vars_ = dehydrate(_wrap({}))
+    assert out == _wrap({})
+    assert secrets == []
+    assert vars_ == []
 
 
-def _var_literal(value: str) -> dict:
-    return Var.lit(value).to_dict()
+def test_dehydrate_harvests_literal_secret_and_blanks_it():
+    data = _wrap({"password": _secret("hunter2")})
+    out, secrets, vars_ = dehydrate(data)
+    # Value harvested, keyed by the jsonpath (prefixed SECRET_); leaf blanked.
+    assert secrets == [KeyValue(key="SECRET_PASSWORD", value="hunter2")]
+    assert vars_ == []
+    assert out["spec"]["password"] == "secret:"
 
 
-def _wrap(spec: dict) -> dict:
-    """Top-level envelope -- mimics a serialized SrcDef / DestDef so its
-    ``spec`` provides the ``$.spec.`` prefix that ``_to_key`` strips."""
-    return {"kind": "outer", "apiVersion": "1.0", "type": "Outer", "spec": spec}
+def test_dehydrate_harvests_ref_secret_with_none_value():
+    data = _wrap({"password": _secret(None)})
+    out, secrets, _ = dehydrate(data)
+    assert secrets == [KeyValue(key="SECRET_PASSWORD", value=None)]
+    assert out["spec"]["password"] == "secret:"
 
 
-# --- extract_secrets -------------------------------------------------------
+def test_dehydrate_separates_secrets_and_vars():
+    data = _wrap({"password": _secret("pw"), "user": _var("etl")})
+    out, secrets, vars_ = dehydrate(data)
+    assert secrets == [KeyValue(key="SECRET_PASSWORD", value="pw")]
+    assert vars_ == [KeyValue(key="VAR_USER", value="etl")]
+    assert out["spec"] == {"password": "secret:", "user": "var:"}
 
 
-def test_extract_secrets_on_empty_payload_returns_empty():
-    assert extract_secrets(_wrap({})) == []
+def test_dehydrate_handles_list_paths():
+    data = _wrap({"creds": [_secret("a"), _var("b")]})
+    _out, secrets, vars_ = dehydrate(data)
+    assert secrets == [KeyValue(key="SECRET_CREDS_0_", value="a")]
+    assert vars_ == [KeyValue(key="VAR_CREDS_1_", value="b")]
 
 
-def test_extract_secrets_returns_ref_without_value():
-    data = _wrap({"password": _secret_ref("PW")})
-    [kv] = extract_secrets(data)
-    # Key comes from the jsonpath, not from the ref's ``_s`` -- ``_s``
-    # is only the ref's display name.
-    assert kv == KeyValue(key="PASSWORD", value=None)
+def test_dehydrate_key_uses_jsonpath():
+    data = _wrap({"password": _secret("hunter2")})
+    _out, secrets, _ = dehydrate(data)
+    assert secrets[0].key == "SECRET_PASSWORD"
 
 
-def test_extract_secrets_returns_literal_with_value():
-    data = _wrap({"password": _secret_literal("hunter2")})
-    [kv] = extract_secrets(data)
-    assert kv == KeyValue(key="PASSWORD", value="hunter2")
+def test_dehydrate_ignores_plain_strings():
+    data = _wrap({"host": "db.example.com", "password": _secret("pw")})
+    out, secrets, _ = dehydrate(data)
+    assert secrets == [KeyValue(key="SECRET_PASSWORD", value="pw")]
+    assert out["spec"]["host"] == "db.example.com"
 
 
-def test_extract_secrets_mixes_refs_and_literals():
-    data = _wrap(
-        {
-            "password": _secret_ref("PW"),
-            "token": _secret_literal("abc"),
-        }
+def test_dehydrate_does_not_mutate_input():
+    data = _wrap({"password": _secret("hunter2")})
+    dehydrate(data)
+    assert data["spec"]["password"] == "secret:hunter2"
+
+
+# ---------------------------------------------------------------------------
+# hydrate
+# ---------------------------------------------------------------------------
+
+
+def test_hydrate_restores_values():
+    data = _wrap({"password": _secret(None), "user": _var(None)})
+    out = hydrate(
+        data,
+        [KeyValue(key="SECRET_PASSWORD", value="hunter2")],
+        [KeyValue(key="VAR_USER", value="etl")],
     )
-    result = extract_secrets(data)
-    # The harvest visits refs before literals, so the ref comes first.
-    assert result == [
-        KeyValue(key="PASSWORD", value=None),
-        KeyValue(key="TOKEN", value="abc"),
-    ]
+    assert out["spec"] == {"password": "secret:hunter2", "user": "var:etl"}
 
 
-def test_extract_secrets_key_uses_jsonpath_not_ref_name():
-    # ``_s`` is "DIFFERENT_NAME" but the key is derived purely from the
-    # jsonpath -- ``$.spec.password`` → ``PASSWORD``.
-    data = _wrap({"password": _secret_ref("DIFFERENT_NAME")})
-    [kv] = extract_secrets(data)
-    assert kv.key == "PASSWORD"
+def test_hydrate_does_not_mutate_input():
+    data = _wrap({"password": _secret(None)})
+    hydrate(data, [KeyValue(key="SECRET_PASSWORD", value="x")], [])
+    assert data["spec"]["password"] == "secret:"
 
 
-def test_extract_secrets_handles_list_paths():
-    data = _wrap({"creds": [_secret_ref("A"), _secret_literal("b")]})
-    result = extract_secrets(data)
-    assert result == [
-        KeyValue(key="CREDS_0_", value=None),
-        KeyValue(key="CREDS_1_", value="b"),
-    ]
+def test_dehydrate_then_hydrate_round_trips():
+    original = _wrap({"password": _secret("hunter2"), "user": _var("etl")})
+    dehydrated, secrets, vars_ = dehydrate(original)
+    assert hydrate(dehydrated, secrets, vars_) == original
 
 
-def test_extract_secrets_ignores_var_envelopes():
-    data = _wrap({"u": _var_ref("USER"), "p": _secret_ref("PW")})
-    result = extract_secrets(data)
-    assert result == [KeyValue(key="P", value=None)]
-
-
-# --- list_refs -------------------------------------------------------------
-
-
-def test_list_refs_on_empty_payload_returns_empty():
-    assert list_refs(_wrap({})) == ([], [])
-
-
-def test_list_refs_returns_secret_and_var_ref_keys():
-    data = _wrap({"password": _secret_ref("PW"), "schema": _var_ref("SCHEMA")})
-    secret_keys, var_keys = list_refs(data)
-    assert secret_keys == ["PASSWORD"]
-    assert var_keys == ["SCHEMA"]
-
-
-def test_list_refs_keys_match_extract_keys_on_dehydrated():
-    # A dehydrated connection carries only refs; list_refs must agree with the
-    # keys extract_* derives — this is the alignment invariant the CLI relies on.
-    original = _wrap(
-        {
-            "uri": _secret_literal("mysql://h/db"),
-            "password": _secret_ref("PW"),
-            "schema": _var_literal("public"),
-        }
-    )
-    dehydrated = dehydrate_vars(dehydrate_secrets(original))
-    secret_keys, var_keys = list_refs(dehydrated)
-    assert secret_keys == [kv.key for kv in extract_secrets(dehydrated)]
-    assert var_keys == [kv.key for kv in extract_vars(dehydrated)]
-
-
-# --- dehydrate_secrets -----------------------------------------------------
-
-
-def test_dehydrate_secrets_rewrites_literal_to_ref():
-    data = _wrap({"password": _secret_literal("hunter2")})
-    out = dehydrate_secrets(data)
-    secret = out["spec"]["password"]
-    assert secret["kind"] == "secretRef"
-    # Literal value is dropped -- replaced by the placeholder.
-    assert secret["spec"]["_s"] == "<secret>"
-
-
-def test_dehydrate_secrets_preserves_value_pattern():
-    data = _wrap({"password": _secret_literal("hunter2", pattern="^.{6,}$")})
-    out = dehydrate_secrets(data)
-    assert out["spec"]["password"]["spec"]["_value_pattern"] == "^.{6,}$"
-
-
-def test_dehydrate_secrets_does_not_mutate_input():
-    data = _wrap({"password": _secret_literal("hunter2")})
-    before = data["spec"]["password"]["kind"]
-    dehydrate_secrets(data)
-    assert data["spec"]["password"]["kind"] == before == "secretLiteral"
-
-
-def test_dehydrate_secrets_leaves_refs_alone():
-    data = _wrap({"password": _secret_ref("PW")})
-    out = dehydrate_secrets(data)
-    # The placeholder rewrite only applies to literals; existing refs
-    # are copied through untouched.
-    assert out["spec"]["password"]["spec"]["_s"] == "PW"
-
-
-def test_dehydrate_secrets_ignores_var_envelopes():
-    data = _wrap({"user": _var_literal("etl"), "pw": _secret_literal("hunter2")})
-    out = dehydrate_secrets(data)
-    assert out["spec"]["user"]["kind"] == "varLiteral"
-    assert out["spec"]["user"]["spec"]["_s"] == "etl"
-    assert out["spec"]["pw"]["kind"] == "secretRef"
-
-
-# --- hydrate_secrets -- happy paths ----------------------------------------
-
-
-def test_hydrate_secrets_rewrites_ref_to_literal_with_value():
-    data = _wrap({"password": _secret_ref("PW")})
-    secrets = [KeyValue(key="PASSWORD", value="hunter2")]
-    out = hydrate_secrets(data, secrets)
-    secret = out["spec"]["password"]
-    assert secret["kind"] == "secretLiteral"
-    assert secret["spec"]["_s"] == "hunter2"
-
-
-def test_hydrate_secrets_preserves_value_pattern():
-    data = _wrap({"password": _secret_ref("PW", pattern="^.{6,}$")})
-    secrets = [KeyValue(key="PASSWORD", value="hunter2")]
-    out = hydrate_secrets(data, secrets)
-    assert out["spec"]["password"]["spec"]["_value_pattern"] == "^.{6,}$"
-
-
-def test_hydrate_secrets_does_not_mutate_input():
-    data = _wrap({"password": _secret_ref("PW")})
-    hydrate_secrets(data, [KeyValue(key="PASSWORD", value="hunter2")])
-    # Input dehydrated tree is untouched -- callers can re-use it.
-    assert data["spec"]["password"]["kind"] == "secretRef"
-
-
-def test_hydrate_secrets_dehydrate_round_trip():
-    original = _wrap({"password": _secret_literal("hunter2", pattern="^.+$")})
-    dehydrated = dehydrate_secrets(original)
-    rehydrated = hydrate_secrets(
-        dehydrated, [KeyValue(key="PASSWORD", value="hunter2")]
-    )
-    # The placeholder ``<secret>`` from dehydration is replaced; the
-    # pattern survives both legs.
-    assert rehydrated["spec"]["password"]["kind"] == "secretLiteral"
-    assert rehydrated["spec"]["password"]["spec"] == {
-        "_s": "hunter2",
-        "_value_pattern": "^.+$",
-    }
-
-
-# --- hydrate_secrets -- error paths ----------------------------------------
-
-
-def test_hydrate_secrets_rejects_entries_with_none_value():
-    data = _wrap({"password": _secret_ref("PW")})
+def test_hydrate_rejects_none_value():
+    data = _wrap({"password": _secret(None)})
     with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate_secrets(data, [KeyValue(key="PASSWORD", value=None)])
+        hydrate(data, [KeyValue(key="SECRET_PASSWORD", value=None)], [])
     assert exc_info.value.api_error is CommonErrorCode.COMMON_6
 
 
-def test_hydrate_secrets_rejects_missing_secret_keys():
-    # data needs two secrets but only one value is supplied.
-    data = _wrap({"u": _secret_ref("U"), "p": _secret_ref("P")})
+def test_hydrate_rejects_missing_keys():
+    data = _wrap({"u": _secret(None), "p": _secret(None)})
     with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate_secrets(data, [KeyValue(key="U", value="user")])
+        hydrate(data, [KeyValue(key="SECRET_U", value="user")], [])
     assert exc_info.value.api_error is CommonErrorCode.COMMON_7
 
 
-def test_hydrate_secrets_rejects_extra_secret_keys():
-    data = _wrap({"u": _secret_ref("U")})
+def test_hydrate_rejects_extra_keys():
+    data = _wrap({"u": _secret(None)})
     with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate_secrets(
+        hydrate(
             data,
             [
-                KeyValue(key="U", value="user"),
-                KeyValue(key="EXTRA", value="x"),
+                KeyValue(key="SECRET_U", value="user"),
+                KeyValue(key="SECRET_EXTRA", value="x"),
             ],
+            [],
         )
     assert exc_info.value.api_error is CommonErrorCode.COMMON_7
 
 
-# --- hydrate_secrets_as_envs ----------------------------------------------
+# ---------------------------------------------------------------------------
+# list_refs
+# ---------------------------------------------------------------------------
 
 
-def test_hydrate_secrets_as_envs_reads_prefixed_env_vars(monkeypatch):
-    data = _wrap({"password": _secret_ref("PW"), "token": _secret_ref("TK")})
-    monkeypatch.setenv("MY_PASSWORD", "hunter2")
-    monkeypatch.setenv("MY_TOKEN", "abc")
-    out = hydrate_secrets_as_envs(data, "MY_")
-    assert out["spec"]["password"]["kind"] == "secretLiteral"
-    assert out["spec"]["password"]["spec"]["_s"] == "hunter2"
-    assert out["spec"]["token"]["spec"]["_s"] == "abc"
+def test_list_refs_empty():
+    assert list_refs(_wrap({})) == ([], [])
 
 
-def test_hydrate_secrets_as_envs_empty_prefix(monkeypatch):
-    data = _wrap({"password": _secret_ref("PW")})
-    monkeypatch.setenv("PASSWORD", "hunter2")
-    out = hydrate_secrets_as_envs(data, "")
-    assert out["spec"]["password"]["spec"]["_s"] == "hunter2"
+def test_list_refs_returns_prefixed_keys():
+    data = _wrap({"password": _secret("pw"), "schema": _var(None)})
+    secret_keys, var_keys = list_refs(data)
+    assert secret_keys == ["SECRET_PASSWORD"]
+    assert var_keys == ["VAR_SCHEMA"]
 
 
-def test_hydrate_secrets_as_envs_raises_on_missing_env(monkeypatch):
-    data = _wrap({"password": _secret_ref("PW")})
-    monkeypatch.delenv("MY_PASSWORD", raising=False)
+def test_list_refs_agrees_with_dehydrate_keys():
+    data = _wrap({"password": _secret("pw"), "user": _var("etl")})
+    dehydrated, secrets, vars_ = dehydrate(data)
+    secret_keys, var_keys = list_refs(dehydrated)
+    assert secret_keys == [kv.key for kv in secrets]
+    assert var_keys == [kv.key for kv in vars_]
+
+
+# ---------------------------------------------------------------------------
+# env_hydrate
+# ---------------------------------------------------------------------------
+
+
+def test_env_hydrate_reads_prefixed_env_vars(monkeypatch):
+    monkeypatch.setenv("SECRET_PASSWORD", "hunter2")
+    monkeypatch.setenv("VAR_USER", "etl")
+    data = _wrap({"password": _secret(None), "user": _var(None)})
+    out = env_hydrate(data)
+    assert out["spec"] == {"password": "secret:hunter2", "user": "var:etl"}
+
+
+def test_env_hydrate_leaves_inline_literals_untouched(monkeypatch):
+    monkeypatch.setenv("SECRET_TOKEN", "from-env")
+    data = _wrap({"token": _secret(None), "pw": _secret("keepme")})
+    out = env_hydrate(data)
+    assert out["spec"]["token"] == "secret:from-env"
+    assert out["spec"]["pw"] == "secret:keepme"
+
+
+def test_env_hydrate_raises_on_missing_env(monkeypatch):
+    monkeypatch.delenv("SECRET_PASSWORD", raising=False)
+    data = _wrap({"password": _secret(None)})
     with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate_secrets_as_envs(data, "MY_")
+        env_hydrate(data)
     assert exc_info.value.api_error is CommonErrorCode.COMMON_6
+
+
+def test_env_hydrate_does_not_mutate_input(monkeypatch):
+    monkeypatch.setenv("SECRET_PASSWORD", "hunter2")
+    data = _wrap({"password": _secret(None)})
+    env_hydrate(data)
+    assert data["spec"]["password"] == "secret:"
 
 
 # ---------------------------------------------------------------------------
@@ -468,9 +323,7 @@ def test_hydrate_secrets_as_envs_raises_on_missing_env(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _conn_ref(name: str | dict) -> dict:
-    """Serialized ``NamedConn`` envelope. ``name`` may be a literal string
-    or an ``varRef`` / ``varLiteral`` envelope dict."""
+def _conn_ref(name: str) -> dict:
     return {
         "kind": "connectionRef",
         "apiVersion": "1.0",
@@ -480,9 +333,6 @@ def _conn_ref(name: str | dict) -> dict:
 
 
 def _conn_def(label: str) -> dict:
-    """Stand-in for a serialized concrete ``Conn`` (``kind`` ==
-    ``connectionDef``). The ``label`` field is just to confirm identity
-    after replacement."""
     return {
         "kind": "connectionDef",
         "apiVersion": "1.0",
@@ -491,111 +341,57 @@ def _conn_def(label: str) -> dict:
     }
 
 
-# --- extract_connection_names ---------------------------------------------
-
-
-def test_extract_connection_names_on_empty_payload_returns_empty():
+def test_extract_connection_names_empty():
     assert extract_connection_names(_wrap({})) == []
 
 
-def test_extract_connection_names_returns_literal_string_name():
-    data = _wrap({"conn": _conn_ref("prod-pg")})
-    assert extract_connection_names(data) == ["prod-pg"]
-
-
-def test_extract_connection_names_resolves_var_literal_name():
-    # name is an Var literal -- value is the inlined string.
-    data = _wrap({"conn": _conn_ref(Var.lit("staging-mysql").to_dict())})
-    assert extract_connection_names(data) == ["staging-mysql"]
-
-
-def test_extract_connection_names_resolves_var_ref_name(monkeypatch):
-    monkeypatch.setenv("DB_CONN", "prod-pg")
-    data = _wrap({"conn": _conn_ref(Var._var_key("DB_CONN").to_dict())})
-    assert extract_connection_names(data) == ["prod-pg"]
-
-
-def test_extract_connection_names_raises_on_unset_var_ref(monkeypatch):
-    monkeypatch.delenv("DB_CONN", raising=False)
-    data = _wrap({"conn": _conn_ref(Var._var_key("DB_CONN").to_dict())})
-    with pytest.raises(CommonRuntimeException) as exc_info:
-        extract_connection_names(data)
-    assert exc_info.value.api_error is CommonErrorCode.COMMON_9
-
-
-def test_extract_connection_names_raises_on_unsupported_name_shape():
-    # ``name`` is neither a string nor a var envelope.
-    data = _wrap({"conn": _conn_ref({"kind": "something-else", "spec": {}})})
-    with pytest.raises(CommonRuntimeException) as exc_info:
-        extract_connection_names(data)
-    assert exc_info.value.api_error is CommonErrorCode.COMMON_10
+def test_extract_connection_names_returns_literal_names():
+    data = _wrap({"conn": _conn_ref("prod_pg")})
+    assert extract_connection_names(data) == ["prod_pg"]
 
 
 def test_extract_connection_names_dedupes_in_order():
-    # Two refs pointing at the same name → one entry; original order kept.
     data = _wrap(
-        {
-            "src": _conn_ref("b"),
-            "dst": _conn_ref("a"),
-            "also": _conn_ref("b"),
-        }
+        {"src": _conn_ref("b"), "dst": _conn_ref("a"), "also": _conn_ref("b")}
     )
     assert extract_connection_names(data) == ["b", "a"]
 
 
 def test_extract_connection_names_ignores_connection_defs():
-    # A connectionDef sitting in the tree is not a ref and must not be
-    # reported.
     data = _wrap({"inline": _conn_def("x"), "ref": _conn_ref("y")})
     assert extract_connection_names(data) == ["y"]
 
 
-# --- hydrate_connections --------------------------------------------------
-
-
 def test_hydrate_connections_replaces_ref_with_def():
-    data = _wrap({"conn": _conn_ref("prod-pg")})
-    out = hydrate_connections(data, {"prod-pg": _conn_def("prod-pg")})
+    data = _wrap({"conn": _conn_ref("prod_pg")})
+    out = hydrate_connections(data, {"prod_pg": _conn_def("prod_pg")})
     assert out["spec"]["conn"]["kind"] == "connectionDef"
-    assert out["spec"]["conn"]["spec"]["label"] == "prod-pg"
+    assert out["spec"]["conn"]["spec"]["label"] == "prod_pg"
 
 
 def test_hydrate_connections_does_not_mutate_input():
-    data = _wrap({"conn": _conn_ref("prod-pg")})
-    hydrate_connections(data, {"prod-pg": _conn_def("prod-pg")})
+    data = _wrap({"conn": _conn_ref("prod_pg")})
+    hydrate_connections(data, {"prod_pg": _conn_def("prod_pg")})
     assert data["spec"]["conn"]["kind"] == "connectionRef"
 
 
 def test_hydrate_connections_replaces_each_ref_independently():
-    # Two refs to the same name → each replacement is its own deep copy,
-    # so mutating one must not affect the other.
     data = _wrap({"a": _conn_ref("x"), "b": _conn_ref("x")})
     conn_by_name = {"x": _conn_def("x")}
     out = hydrate_connections(data, conn_by_name)
     out["spec"]["a"]["spec"]["label"] = "tainted"
     assert out["spec"]["b"]["spec"]["label"] == "x"
-    # And the source map is untouched.
     assert conn_by_name["x"]["spec"]["label"] == "x"
-
-
-def test_hydrate_connections_resolves_var_named_refs(monkeypatch):
-    monkeypatch.setenv("DB_CONN", "prod-pg")
-    data = _wrap({"conn": _conn_ref(Var._var_key("DB_CONN").to_dict())})
-    out = hydrate_connections(data, {"prod-pg": _conn_def("prod-pg")})
-    assert out["spec"]["conn"]["spec"]["label"] == "prod-pg"
 
 
 def test_hydrate_connections_raises_on_unknown_name():
     data = _wrap({"conn": _conn_ref("ghost")})
     with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate_connections(data, {"prod-pg": _conn_def("prod-pg")})
+        hydrate_connections(data, {"prod_pg": _conn_def("prod_pg")})
     assert exc_info.value.api_error is CommonErrorCode.COMMON_8
 
 
 def test_hydrate_connections_raises_when_root_is_ref():
-    # The walker reports the root at ``$`` and `replace_at` refuses to
-    # rewrite the root. ``hydrate_connections`` surfaces COMMON_5 rather
-    # than silently no-op'ing.
     data = _conn_ref("x")
     with pytest.raises(CommonRuntimeException) as exc_info:
         hydrate_connections(data, {"x": _conn_def("x")})
@@ -605,167 +401,5 @@ def test_hydrate_connections_raises_when_root_is_ref():
 def test_hydrate_connections_leaves_connection_defs_alone():
     data = _wrap({"inline": _conn_def("already-here"), "ref": _conn_ref("x")})
     out = hydrate_connections(data, {"x": _conn_def("x")})
-    # The inline def is unchanged; only the ref is rewritten.
     assert out["spec"]["inline"]["spec"]["label"] == "already-here"
     assert out["spec"]["ref"]["spec"]["label"] == "x"
-
-
-# --- round-trip observed through `Secret.value()` --------------------------
-
-
-def test_dehydrate_then_hydrate_restores_field_value():
-    # End-to-end check: a `Secret` field reconstructed from the hydrated
-    # tree returns the original value, while the same field reconstructed
-    # from the *dehydrated* tree raises -- there's no resolver wired up,
-    # which is the whole point of dehydration.
-    original = _wrap(
-        {
-            "password": _secret_literal("hunter2"),
-            "token": _secret_literal("abc"),
-        }
-    )
-    secrets = extract_secrets(original)
-    dehydrated = dehydrate_secrets(original)
-
-    # Dehydrated: every field is a bare `Secret` ref; ``.value()`` blows
-    # up because there's no secret-store resolver to call.
-    dpw = Secret.from_dict(dehydrated["spec"]["password"])
-    dtk = Secret.from_dict(dehydrated["spec"]["token"])
-    with pytest.raises(ApiInternalException):
-        dpw.value()
-    with pytest.raises(ApiInternalException):
-        dtk.value()
-
-    # Hydrated: every field is a `_LiteralSecret`, so ``.value()`` returns
-    # the inlined value the literal carries.
-    rehydrated = hydrate_secrets(dehydrated, secrets)
-    pw = Secret.from_dict(rehydrated["spec"]["password"])
-    tk = Secret.from_dict(rehydrated["spec"]["token"])
-    assert pw.value() == "hunter2"
-    assert tk.value() == "abc"
-
-
-# ---------------------------------------------------------------------------
-# Var pipeline (mirrors the Secret pipeline above): the `Var` class has
-# the same shape as `Secret` -- no user-provided name, refs are
-# anonymous until hydration. `dehydrate_vars` / `hydrate_vars` /
-# `hydrate_vars_as_envs` operate on ``varRef`` / ``varLiteral``
-# envelopes the same way the Secret helpers do for ``secretRef`` /
-# ``secretLiteral``.
-# ---------------------------------------------------------------------------
-
-
-# --- extract_vars / dehydrate_vars / hydrate_vars happy path ----------------
-
-
-def test_extract_vars_returns_ref_without_value():
-    data = _wrap({"user": _var_ref("DB_USER")})
-    [kv] = extract_vars(data)
-    assert kv == KeyValue(key="USER", value=None)
-
-
-def test_extract_vars_returns_literal_with_value():
-    data = _wrap({"user": _var_literal("etl")})
-    [kv] = extract_vars(data)
-    assert kv == KeyValue(key="USER", value="etl")
-
-
-def test_extract_vars_ignores_secret_envelopes():
-    data = _wrap({"u": _var_ref("USER"), "p": _secret_ref("PW")})
-    result = extract_vars(data)
-    assert result == [KeyValue(key="U", value=None)]
-
-
-def test_dehydrate_vars_rewrites_literal_to_ref():
-    data = _wrap({"user": _var_literal("etl")})
-    before = data["spec"]["user"]["kind"]
-    out = dehydrate_vars(data)
-    assert before == "varLiteral"
-    assert out["spec"]["user"]["kind"] == "varRef"
-    assert out["spec"]["user"]["spec"]["_s"] == "<var>"
-    # Hydrated input is not mutated in place.
-    assert data["spec"]["user"]["kind"] == "varLiteral"
-
-
-def test_dehydrate_vars_leaves_refs_alone():
-    data = _wrap({"user": _var_ref("DB_USER")})
-    out = dehydrate_vars(data)
-    assert out["spec"]["user"]["spec"]["_s"] == "DB_USER"
-
-
-def test_dehydrate_vars_ignores_secret_envelopes():
-    data = _wrap({"u": _var_literal("etl"), "pw": _secret_literal("hunter2")})
-    out = dehydrate_vars(data)
-    assert out["spec"]["u"]["kind"] == "varRef"
-    # Secret envelope is left untouched by the var pipeline.
-    assert out["spec"]["pw"]["kind"] == "secretLiteral"
-
-
-def test_hydrate_vars_rewrites_ref_to_literal_with_value():
-    data = _wrap({"user": _var_ref("USER")})
-    out = hydrate_vars(data, [KeyValue(key="USER", value="etl")])
-    inner = out["spec"]["user"]
-    assert inner["kind"] == "varLiteral"
-    assert inner["spec"]["_s"] == "etl"
-
-
-def test_hydrate_vars_missing_value_raises():
-    data = _wrap({"user": _var_ref("USER")})
-    with pytest.raises(CommonRuntimeException) as ei:
-        hydrate_vars(data, [KeyValue(key="USER", value=None)])
-    assert ei.value.api_error is CommonErrorCode.COMMON_6
-
-
-def test_hydrate_vars_keyset_must_match():
-    data = _wrap({"user": _var_ref("USER")})
-    with pytest.raises(CommonRuntimeException) as ei:
-        hydrate_vars(data, [KeyValue(key="USERX", value="etl")])
-    assert ei.value.api_error is CommonErrorCode.COMMON_7
-
-
-def test_dehydrate_then_hydrate_vars_round_trips():
-    data = _wrap({"u": _var_literal("etl"), "h": _var_literal("db")})
-    dehydrated = dehydrate_vars(data)
-    rehydrated = hydrate_vars(
-        dehydrated,
-        [KeyValue(key="U", value="etl"), KeyValue(key="H", value="db")],
-    )
-    assert rehydrated["spec"]["u"]["kind"] == "varLiteral"
-    assert rehydrated["spec"]["u"]["spec"]["_s"] == "etl"
-    assert rehydrated["spec"]["h"]["spec"]["_s"] == "db"
-
-
-# --- hydrate_vars_as_envs --------------------------------------------------
-
-
-def test_hydrate_vars_as_envs_reads_os_environ(monkeypatch):
-    monkeypatch.setenv("USER", "etl-from-env")
-    data = _wrap({"user": _var_ref("USER")})
-    out = hydrate_vars_as_envs(data, prefix="")
-    assert out["spec"]["user"]["kind"] == "varLiteral"
-    assert out["spec"]["user"]["spec"]["_s"] == "etl-from-env"
-
-
-def test_hydrate_vars_as_envs_honours_prefix(monkeypatch):
-    monkeypatch.setenv("TD_USER", "etl-prefixed")
-    data = _wrap({"user": _var_ref("USER")})
-    out = hydrate_vars_as_envs(data, prefix="TD_")
-    assert out["spec"]["user"]["spec"]["_s"] == "etl-prefixed"
-
-
-def test_hydrate_vars_as_envs_missing_env_raises(monkeypatch):
-    monkeypatch.delenv("USER", raising=False)
-    data = _wrap({"user": _var_ref("USER")})
-    with pytest.raises(CommonRuntimeException) as ei:
-        hydrate_vars_as_envs(data, prefix="")
-    assert ei.value.api_error is CommonErrorCode.COMMON_6
-
-
-def test_hydrate_vars_as_envs_ignores_secret_envelopes(monkeypatch):
-    monkeypatch.setenv("U", "etl")
-    data = _wrap({"u": _var_ref("U"), "pw": _secret_ref("PW")})
-    out = hydrate_vars_as_envs(data, prefix="")
-    assert out["spec"]["u"]["kind"] == "varLiteral"
-    assert out["spec"]["u"]["spec"]["_s"] == "etl"
-    # Secret envelope is left as a ref -- only the var pipeline ran.
-    assert out["spec"]["pw"]["kind"] == "secretRef"

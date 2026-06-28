@@ -191,10 +191,10 @@ def _conn_from(cfg: _BqConfig) -> BigQueryDestConn:
     return BigQueryDestConn(
         staging=GCSLocation(
             bucket=cfg.bucket,
-            credentials=GCPJson(json=Secret.lit(cfg.sa_json)),
+            credentials=GCPJson(json=Secret(cfg.sa_json)),
             base_path=cfg.base_path,
         ),
-        credentials=GCPJson(json=Secret.lit(cfg.sa_json)),
+        credentials=GCPJson(json=Secret(cfg.sa_json)),
         project=cfg.project,
         dataset=cfg.dataset,
     )

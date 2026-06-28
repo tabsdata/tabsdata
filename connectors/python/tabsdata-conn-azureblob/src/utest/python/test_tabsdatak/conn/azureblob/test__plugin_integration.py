@@ -112,8 +112,8 @@ def src_conn() -> AzureBlobSrcConn:
     return AzureBlobSrcConn(
         container=container,
         credentials=AzureAccountKey(
-            account_name=Secret.lit(_ACCT_NAME),
-            account_key=Secret.lit(_ACCT_KEY),
+            account_name=Secret(_ACCT_NAME),
+            account_key=Secret(_ACCT_KEY),
         ),
         base_path=base_path,
     )
@@ -125,8 +125,8 @@ def dest_conn() -> AzureBlobDestConn:
     return AzureBlobDestConn(
         container=container,
         credentials=AzureAccountKey(
-            account_name=Secret.lit(_ACCT_NAME),
-            account_key=Secret.lit(_ACCT_KEY),
+            account_name=Secret(_ACCT_NAME),
+            account_key=Secret(_ACCT_KEY),
         ),
         base_path=base_path,
     )

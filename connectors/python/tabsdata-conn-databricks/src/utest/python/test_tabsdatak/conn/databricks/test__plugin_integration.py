@@ -228,23 +228,23 @@ def databricks_config():
 
 def _src_conn_from(cfg) -> DatabricksSrcConn:
     return DatabricksSrcConn(
-        host_url=Secret.lit(cfg.host),
-        token=Secret.lit(cfg.token),
-        volume=Secret.lit(cfg.volume),
-        warehouse=Secret.lit(cfg.warehouse),
-        catalog=Secret.lit(cfg.catalog),
-        schema=Secret.lit(cfg.schema),
+        host_url=Secret(cfg.host),
+        token=Secret(cfg.token),
+        volume=Secret(cfg.volume),
+        warehouse=Secret(cfg.warehouse),
+        catalog=Secret(cfg.catalog),
+        schema=Secret(cfg.schema),
     )
 
 
 def _dest_conn_from(cfg) -> DatabricksDestConn:
     return DatabricksDestConn(
-        host_url=Secret.lit(cfg.host),
-        token=Secret.lit(cfg.token),
-        volume=Secret.lit(cfg.volume),
-        warehouse=Secret.lit(cfg.warehouse),
-        catalog=Secret.lit(cfg.catalog),
-        schema=Secret.lit(cfg.schema),
+        host_url=Secret(cfg.host),
+        token=Secret(cfg.token),
+        volume=Secret(cfg.volume),
+        warehouse=Secret(cfg.warehouse),
+        catalog=Secret(cfg.catalog),
+        schema=Secret(cfg.schema),
     )
 
 

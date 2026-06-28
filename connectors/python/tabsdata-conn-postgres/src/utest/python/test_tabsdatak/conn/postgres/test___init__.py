@@ -39,8 +39,8 @@ def _src_conn() -> PostgresSrcConn:
     return PostgresSrcConn(
         uri="postgresql://pg.example.com:5432/analytics",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"postgres.timeout": 30},
     )
@@ -50,8 +50,8 @@ def _dest_conn() -> PostgresDestConn:
     return PostgresDestConn(
         uri="postgresql://pg.example.com:5432/analytics",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"postgres.timeout": 30},
     )
@@ -67,8 +67,8 @@ def test_postgres_conn_round_trip(cls):
     c = cls(
         uri="postgresql://pg.example.com:5432/analytics",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"postgres.timeout": 30},
     )
@@ -94,8 +94,8 @@ def test_postgres_conn_rejects_bad_uri(cls):
         cls(
             uri="ftp://host/db",
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
 
@@ -258,7 +258,7 @@ def test_postgres_dest_accepts_known_dest_cfg_keys():
 
 
 def _cdc_creds():
-    return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+    return UserPassword(user=Secret("u"), password=Secret("p"))
 
 
 # --- LsnPosition ----------------------------------------------------
@@ -412,8 +412,8 @@ def test_postgres_conn_rejects_missing_uri(cls):
     with pytest.raises(ConnInitException) as ei:
         cls(  # type: ignore[call-arg]
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_1

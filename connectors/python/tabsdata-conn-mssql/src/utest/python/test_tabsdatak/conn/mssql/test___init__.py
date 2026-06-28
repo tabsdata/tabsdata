@@ -42,8 +42,8 @@ def test_mssql_conn_round_trip(cls):
     c = cls(
         uri="mssql://mssql.example.com:1433/analytics",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"mssql.timeout": 30},
     )
@@ -67,8 +67,8 @@ def test_mssql_conn_accepts_odbc_connection_string_and_round_trips():
     conn = MSSQLSrcConn(
         uri=odbc_uri,
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
     )
     loaded = MSSQLSrcConn.from_json(conn.to_json())
@@ -92,8 +92,8 @@ def test_mssql_conn_rejects_bad_uri(cls):
         cls(
             uri="ftp://host/db",
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
 
@@ -255,8 +255,8 @@ def test_mssql_conn_rejects_missing_uri(cls):
     with pytest.raises(ConnInitException) as ei:
         cls(  # type: ignore[call-arg]
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
     assert ei.value.api_error is MssqlErrorCode.MSSQL_1

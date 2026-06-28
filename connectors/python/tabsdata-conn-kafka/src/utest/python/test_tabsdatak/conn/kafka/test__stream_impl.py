@@ -22,7 +22,7 @@ pytestmark = pytest.mark.kafka
 
 
 def _creds():
-    return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+    return UserPassword(user=Secret("u"), password=Secret("p"))
 
 
 # --- MessagesBuffer -------------------------------------------------
@@ -111,8 +111,8 @@ def test_build_kafka_configs_with_credentials_sets_sasl_keys():
 
 def test_build_kafka_configs_resolves_secret_servers_and_group_id():
     conn = KafkaStreamSrcConn(
-        servers=Secret.lit("a:9092"),
-        group_id=Secret.lit("g1"),
+        servers=Secret("a:9092"),
+        group_id=Secret("g1"),
     )
     cfg = build_kafka_configs(conn=conn)
     assert cfg["bootstrap.servers"] == "a:9092"

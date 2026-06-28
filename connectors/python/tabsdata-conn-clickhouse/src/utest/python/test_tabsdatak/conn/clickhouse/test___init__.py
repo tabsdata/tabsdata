@@ -39,8 +39,8 @@ def _staging():
         bucket="staging-bucket",
         region="us-east-1",
         credentials=AwsAccessSecretKey(
-            access_key_id=Secret.lit("AKIA..."),
-            secret_access_key=Secret.lit("secret"),
+            access_key_id=Secret("AKIA..."),
+            secret_access_key=Secret("secret"),
         ),
         base_path="staging/",
     )
@@ -99,7 +99,7 @@ def _bare_conn(*, port, secure=False):
         port=port,
         secure=secure,
         credentials=UserPassword(
-            user=Secret.lit("u"), password=Secret.lit("p"),
+            user=Secret("u"), password=Secret("p"),
         ),
     )
 
@@ -117,15 +117,15 @@ def test_port_resolves_secret_literal():
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.types import _convert
 
-    assert _convert(_bare_conn(port=Secret.lit("9002")).port, int) == 9002
+    assert _convert(_bare_conn(port=Secret("9002")).port, int) == 9002
 
 
-def test_port_env_non_numeric_rejected_at_value(monkeypatch):
+def test_port_unhydrated_ref_rejected_at_value():
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.types import _convert
 
-    monkeypatch.setenv("CH_PORT_BAD", "notanumber")
-    conn = _bare_conn(port=Var._var_key("CH_PORT_BAD"))
+    # An unhydrated port ref carries no value yet; converting it raises.
+    conn = _bare_conn(port=Var())
     with pytest.raises(Exception):
         _convert(conn.port, int)
 
@@ -133,7 +133,7 @@ def test_port_env_non_numeric_rejected_at_value(monkeypatch):
 def test_port_secret_literal_non_numeric_rejected_at_construction():
     # The literal's eager pattern check fires at construction time.
     with pytest.raises(Exception):
-        _bare_conn(port=Secret.lit("notanumber"))
+        _bare_conn(port=Secret("notanumber"))
 
 
 def test_secure_resolves_bool():
@@ -153,18 +153,18 @@ def test_secure_resolves_secret_literal():
     from tabsdatak.conn.common.types import _convert
 
     assert (
-        _convert(_bare_conn(port=1, secure=Secret.lit("true")).secure, bool)
+        _convert(_bare_conn(port=1, secure=Secret("true")).secure, bool)
         is True
     )
     assert (
-        _convert(_bare_conn(port=1, secure=Secret.lit("false")).secure, bool)
+        _convert(_bare_conn(port=1, secure=Secret("false")).secure, bool)
         is False
     )
 
 
 def test_secure_secret_literal_invalid_token_rejected_at_construction():
     with pytest.raises(Exception):
-        _bare_conn(port=1, secure=Secret.lit("maybe"))
+        _bare_conn(port=1, secure=Secret("maybe"))
 
 
 # ---------------------------------------------------------------------------
@@ -173,13 +173,13 @@ def test_secure_secret_literal_invalid_token_rejected_at_construction():
 
 
 def _sa_creds() -> GCPJson:
-    return GCPJson(json=Secret.lit('{"type":"service_account"}'))
+    return GCPJson(json=Secret('{"type":"service_account"}'))
 
 
 def _hmac_creds() -> GCPHmac:
     return GCPHmac(
-        access_key=Secret.lit("GOOG-AK"),
-        secret_key=Secret.lit("GOOG-SK"),
+        access_key=Secret("GOOG-AK"),
+        secret_key=Secret("GOOG-SK"),
     )
 
 
@@ -248,8 +248,8 @@ def test_clickhouse_conn_rejects_missing_required_fields():
         ClickHouseDestConn(  # type: ignore[call-arg]
             staging=_staging(),
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_1

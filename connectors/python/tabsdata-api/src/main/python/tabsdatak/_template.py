@@ -317,7 +317,7 @@ def _prompt_spec(cls: type, prefix: str, prompt: PromptFn) -> dict:
                 pattern=None,
                 choices=None,
             )
-            out[name] = Secret.lit(value).to_dict() if value else Secret().to_dict()
+            out[name] = Secret(value).to_dict() if value else Secret().to_dict()
         else:
             value = prompt(
                 path,

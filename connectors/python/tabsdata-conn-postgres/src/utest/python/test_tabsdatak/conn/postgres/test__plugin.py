@@ -88,8 +88,8 @@ def _bare_src_conn() -> PostgresSrcConn:
     return PostgresSrcConn(
         uri="postgresql://stub.invalid:5432/db",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 
@@ -102,8 +102,8 @@ def _bare_dest_conn() -> PostgresDestConn:
     return PostgresDestConn(
         uri="postgresql://stub.invalid:5432/db",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 

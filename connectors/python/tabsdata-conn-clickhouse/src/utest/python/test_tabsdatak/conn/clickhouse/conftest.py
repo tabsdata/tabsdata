@@ -180,8 +180,8 @@ class CHConfig:
     @property
     def credentials(self) -> UserPassword:
         return UserPassword(
-            user=Secret.lit(self.user),
-            password=Secret.lit(self.password),
+            user=Secret(self.user),
+            password=Secret(self.password),
         )
 
 
@@ -435,12 +435,12 @@ def _staging_config(prefix: str) -> CloudLocation | None:
         if not (uri and region and access and secret):
             return None
         return S3Location(
-            bucket=Secret.lit(_parse_uri(uri)),
-            region=Secret.lit(region),
+            bucket=Secret(_parse_uri(uri)),
+            region=Secret(region),
             base_path=_SESSION_BASE_PATH,
             credentials=AwsAccessSecretKey(
-                access_key_id=Secret.lit(access),
-                secret_access_key=Secret.lit(secret),
+                access_key_id=Secret(access),
+                secret_access_key=Secret(secret),
             ),
         )
     if provider == "azure":
@@ -450,11 +450,11 @@ def _staging_config(prefix: str) -> CloudLocation | None:
         if not (uri and account_name and account_key):
             return None
         return AzBlobLocation(
-            container=Secret.lit(_parse_uri(uri)),
+            container=Secret(_parse_uri(uri)),
             base_path=_SESSION_BASE_PATH,
             credentials=AzureAccountKey(
-                account_name=Secret.lit(account_name),
-                account_key=Secret.lit(account_key),
+                account_name=Secret(account_name),
+                account_key=Secret(account_key),
             ),
         )
     if provider == "gcs":
@@ -471,12 +471,12 @@ def _staging_config(prefix: str) -> CloudLocation | None:
         #     the read side (the only protocol ClickHouse speaks to
         #     GCS).
         return GCSLocation(
-            bucket=Secret.lit(_parse_uri(uri)),
+            bucket=Secret(_parse_uri(uri)),
             base_path=_SESSION_BASE_PATH,
-            credentials=GCPJson(json=Secret.lit(sa_json)),
+            credentials=GCPJson(json=Secret(sa_json)),
             hmac_credentials=GCPHmac(
-                access_key=Secret.lit(hmac_access),
-                secret_key=Secret.lit(hmac_secret),
+                access_key=Secret(hmac_access),
+                secret_key=Secret(hmac_secret),
             ),
         )
     raise RuntimeError(

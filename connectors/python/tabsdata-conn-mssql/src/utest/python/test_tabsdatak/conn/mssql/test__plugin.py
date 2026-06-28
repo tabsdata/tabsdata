@@ -83,8 +83,8 @@ def _bare_src_conn() -> MSSQLSrcConn:
     return MSSQLSrcConn(
         uri="mssql://stub.invalid:1433/db",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 
@@ -97,8 +97,8 @@ def _bare_dest_conn() -> MSSQLDestConn:
     return MSSQLDestConn(
         uri="mssql://stub.invalid:1433/db",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 

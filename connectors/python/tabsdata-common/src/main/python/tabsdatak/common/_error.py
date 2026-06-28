@@ -39,26 +39,18 @@ class CommonErrorCode(ErrorCode):
         "cannot replace the root node via '$'",
     )  # replace_at: empty token list (path is just '$')
 
-    # --- secret hydration (tabsdatak.common._json_serde) -----------
+    # --- secret/var hydration (tabsdatak.common._json_serde) -------
     COMMON_6 = ErrorDef(
         CommonRuntimeException,
-        "secret values missing for keys: {keys!r}",
-    )  # hydrate_secrets: one or more KeyValue.value is None
+        "values missing for keys: {keys!r}",
+    )  # hydrate / env_hydrate: one or more values is None / env var unset
     COMMON_7 = ErrorDef(
         CommonRuntimeException,
-        "secret keys mismatch (missing={missing!r}, extra={extra!r})",
-    )  # hydrate_secrets: provided keys differ from keys derived from data
+        "keys mismatch (missing={missing!r}, extra={extra!r})",
+    )  # hydrate: provided keys differ from keys derived from data
 
     # --- connection hydration (tabsdatak.common._json_serde) -------
     COMMON_8 = ErrorDef(
         CommonRuntimeException,
         "no connection definition supplied for name {name!r}",
     )  # hydrate_connections: connectionRef name has no entry in conn_by_name
-    COMMON_9 = ErrorDef(
-        CommonRuntimeException,
-        "connectionRef name env var {var!r} is not set",
-    )  # _resolve_connection_name: varRef-typed name references an unset var
-    COMMON_10 = ErrorDef(
-        CommonRuntimeException,
-        "connectionRef name has unsupported shape: {name!r}",
-    )  # _resolve_connection_name: name is neither str nor varRef/varLiteral envelope

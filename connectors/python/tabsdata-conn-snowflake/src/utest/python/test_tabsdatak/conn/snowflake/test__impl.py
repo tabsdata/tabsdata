@@ -17,8 +17,8 @@ pytestmark = pytest.mark.snowflake
 
 def _credentials() -> UserPassword:
     return UserPassword(
-        user=Secret.lit("etl"),
-        password=Secret.lit("hunter2"),
+        user=Secret("etl"),
+        password=Secret("hunter2"),
     )
 
 

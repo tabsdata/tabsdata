@@ -24,7 +24,7 @@ from pydantic import Field, StringConstraints
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Secret, Src, Var, VarOrSecretSpec
+from tabsdatak.api import Conn, Secret, Src, Var
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -62,9 +62,9 @@ class SalesforceTokenCredentials(SalesforceCredentials):
     """
 
     __kind__ = "salesforceTokenCredentials"
-    username: VarOrSecretSpec
-    password: VarOrSecretSpec
-    security_token: VarOrSecretSpec
+    username: Secret
+    password: Secret
+    security_token: Secret
 
 
 # --- Type aliases ----------------------------------------------------

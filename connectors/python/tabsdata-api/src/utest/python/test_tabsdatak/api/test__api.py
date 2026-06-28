@@ -97,17 +97,19 @@ class _SrcWithEnvField(Src):
     e: Var
 
 
-def test_subclass_instance_at_parent_field_dumps_subclass_envelope():
-    # ``e: Var`` slot, but populated with a ``_LiteralVar`` (a subclass
-    # built via ``Var.lit``). The wrap-serializer must re-route through
-    # the subclass schema so the dump carries ``kind="varLiteral"`` (not
-    # the parent's ``"varRef"``) and the subclass field ``s`` is present.
-    s = _SrcWithEnvField(e=Var.lit("my-literal"))
+def test_var_literal_at_field_dumps_to_string():
+    # ``e: Var`` populated with an inline literal. A ``Var`` serializes to
+    # the single ``"var:<value>"`` string -- not an envelope -- even when
+    # it sits inside a polymorphic ``Src`` envelope.
+    s = _SrcWithEnvField(e=Var("my-literal"))
     d = s.to_dict()
-    inner = d["spec"]["e"]
-    assert inner["kind"] == "varLiteral"
-    assert inner["type"].endswith(":_LiteralVar")
-    assert inner["spec"]["_s"] == "my-literal"
+    assert d["spec"]["e"] == "var:my-literal"
+
+
+def test_var_ref_at_field_dumps_to_bare_prefix():
+    # An unhydrated ``Var()`` dumps to the bare ``"var:"`` placeholder.
+    s = _SrcWithEnvField(e=Var())
+    assert s.to_dict()["spec"]["e"] == "var:"
 
 
 # ---------------------------------------------------------------------------
@@ -116,10 +118,9 @@ def test_subclass_instance_at_parent_field_dumps_subclass_envelope():
 
 
 def test_already_instance_at_parent_slot_passes_through_unchanged():
-    # Constructing an Var instance, then passing it as the value to a
-    # nested field, must not rebuild it -- the wrap-validator returns
-    # the existing instance.
-    inner = Var._var_key("HOME")
+    # Passing a pre-built Var instance as the value to a field must not
+    # rebuild it -- the validator returns the existing instance.
+    inner = Var("HOME")
     s = _SrcWithEnvField(e=inner)
     assert s.e is inner
 
@@ -334,10 +335,18 @@ def test_named_conn_round_trips():
 
 
 def test_env_round_trips():
-    e = m.Var._var_key("DB_PASSWORD")
+    e = m.Var("DB_PASSWORD")
     d = e.to_dict()
-    assert d["kind"] == "varRef"
+    # A Var serializes to the single ``"var:<value>"`` string.
+    assert d == "var:DB_PASSWORD"
     assert m.Var.from_dict(d) == e
+
+
+def test_secret_ref_round_trips():
+    s = m.Secret()
+    d = s.to_dict()
+    assert d == "secret:"
+    assert m.Secret.from_dict(d) == s
 
 
 def test_cron_trigger_round_trips():
@@ -376,12 +385,12 @@ def test_kind_mismatch_rejected():
         m.Conn.from_dict(d)
 
 
-def test_subclass_check_rejects_unrelated_class():
-    # Type points at NamedConn, but we're loading via Var.from_dict
-    # (different hierarchy). Must reject.
+def test_var_rejects_envelope_dict():
+    # A Var only validates from a string (or a Var instance). Handing it a
+    # NamedConn envelope dict is rejected.
     nc = m.NamedConn(name="prod")
     d = nc.to_dict()
-    with pytest.raises(Exception, match="not a subclass"):
+    with pytest.raises(Exception, match="expects a string"):
         m.Var.from_dict(d)
 
 
@@ -597,72 +606,64 @@ def test_conn_round_trip_for_each_authoring_style(conn_cls):
 
 
 # ---------------------------------------------------------------------------
-# NamedConn name field accepts either a literal string or an Var reference
+# NamedConn name field is a literal string only.
 # ---------------------------------------------------------------------------
 
 
-def test_named_conn_with_env_name_round_trips():
-    nc = m.NamedConn(name=m.Var._var_key("MY_CONN_NAME"))
+def test_named_conn_with_literal_name_round_trips():
+    nc = m.NamedConn(name="MY_CONN_NAME")
     back = m.NamedConn.from_json(nc.to_json())
-    assert isinstance(back.name, m.Var)
-    assert back.name._s == "MY_CONN_NAME"
+    assert back.name == "MY_CONN_NAME"
 
 
-def test_named_conn_with_literal_name_stillvalidates():
-    # Leading-digit identifier still rejected -- both union arms fail
-    # ("1bad" is not a valid named connection identifier and is not a
-    # POSIX var name either). The pattern validator on the Var arm
-    # surfaces API_6 directly.
+def test_named_conn_rejects_invalid_name():
+    # Leading-digit identifier is not a valid named-connection name.
     with pytest.raises(ApiException) as excinfo:
         m.NamedConn(name="1bad")
-    assert excinfo.value.api_error in (ApiErrorCode.API_13, ApiErrorCode.API_6)
+    assert excinfo.value.api_error is ApiErrorCode.API_13
 
 
 # ---------------------------------------------------------------------------
-# Var._var_key: named-ref factory (mirrors Secret._secret_key).
-# ``Var()`` itself takes no args; refs are built via the factory and
-# resolved by the framework at hydration time.
+# Var / Secret constructor: ``X()`` is an unhydrated ref, ``X("v")`` an
+# inline literal. Reading ``.value`` on a ref raises.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["DB_PASSWORD", "_FOO", "x", "MIXED_case_42"])
-def test_var_key_accepts_valid_var_names(name):
-    e = m.Var._var_key(name)
-    assert e._s == name
+@pytest.mark.parametrize("value", ["DB_PASSWORD", "_FOO", "x", "MIXED_case_42"])
+def test_var_literal_holds_value(value):
+    e = m.Var(value)
+    assert e.value == value
 
 
-def test_var_constructor_is_empty_rejects_positional_args():
+def test_var_ref_value_raises():
     with pytest.raises(ApiException) as excinfo:
-        m.Var("FOO")
-    assert excinfo.value.api_error is ApiErrorCode.API_7
+        m.Var().value
+    assert excinfo.value.api_error is ApiErrorCode.API_8
+
+
+def test_secret_ref_value_raises():
+    with pytest.raises(ApiException) as excinfo:
+        m.Secret().value
+    assert excinfo.value.api_error is ApiErrorCode.API_11
 
 
 # ---------------------------------------------------------------------------
-# Polymorphic dispatch through the value-ref family: loading via a
-# concrete class round-trips, loading an unrelated envelope fails the
-# issubclass check.
+# Round-trip through the JSON string form.
 # ---------------------------------------------------------------------------
 
 
-def test_env_polymorphic_dispatch_round_trips():
-    e = m.Var._var_key("DB_PASSWORD")
+def test_var_json_round_trips():
+    e = m.Var("DB_PASSWORD")
     back = m.Var.from_json(e.to_json())
     assert isinstance(back, m.Var)
-    assert back._s == "DB_PASSWORD"
+    assert back.value == "DB_PASSWORD"
 
 
-def test_secret_polymorphic_dispatch_round_trips():
+def test_secret_json_round_trips():
     s = m.Secret()
     back = m.Secret.from_json(s.to_json())
     assert isinstance(back, m.Secret)
-    assert back._name() == "<secret>"
-
-
-def test_env_rejects_unrelated_envelope():
-    # Loading a NamedConn envelope via Var must fail the issubclass check.
-    nc = m.NamedConn(name="prod_db")
-    with pytest.raises(Exception, match="not a subclass"):
-        m.Var.from_json(nc.to_json())
+    assert back._raw is None
 
 
 # ---------------------------------------------------------------------------

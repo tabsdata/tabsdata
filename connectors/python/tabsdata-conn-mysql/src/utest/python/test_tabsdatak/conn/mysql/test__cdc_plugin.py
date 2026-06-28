@@ -25,7 +25,7 @@ from tabsdatak.conn.mysql._cdc_plugin import (
 
 
 def _creds() -> UserPassword:
-    return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+    return UserPassword(user=Secret("u"), password=Secret("p"))
 
 
 def _conn() -> MySQLCdcStreamSrcConn:

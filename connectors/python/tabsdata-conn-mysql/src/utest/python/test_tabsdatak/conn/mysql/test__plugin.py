@@ -92,8 +92,8 @@ def _bare_src_conn() -> MySQLSrcConn:
     return MySQLSrcConn(
         uri="mysql://stub.invalid:3306/db",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 
@@ -105,8 +105,8 @@ def _bare_dest_conn() -> MySQLDestConn:
     return MySQLDestConn(
         uri="mysql://stub.invalid:3306/db",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 

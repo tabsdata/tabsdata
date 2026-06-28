@@ -40,8 +40,8 @@ class _CapturedURL:
 
 def _credentials() -> UserPassword:
     return UserPassword(
-        user=Secret.lit("etl"),
-        password=Secret.lit("hunter2"),
+        user=Secret("etl"),
+        password=Secret("hunter2"),
     )
 
 
@@ -110,7 +110,7 @@ def test_build_db2_engine_accepts_ibm_db_sa_scheme(captured):
 
 def test_build_db2_engine_accepts_secret_uri(captured):
     impl.build_db2_engine(
-        Secret.lit("db2://host:50000/db"),
+        Secret("db2://host:50000/db"),
         _credentials(),
         connect_args=None,
     )

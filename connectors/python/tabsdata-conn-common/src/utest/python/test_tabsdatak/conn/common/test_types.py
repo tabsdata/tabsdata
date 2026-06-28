@@ -25,21 +25,27 @@ from tabsdatak.conn.common.types import _convert
 
 
 def test_user_password_round_trip_with_inline_strings():
-    c = UserPassword(user=Secret.lit("etl"), password=Secret.lit("pw"))
+    c = UserPassword(user=Secret("etl"), password=Secret("pw"))
     back = UserPassword.from_json(c.to_json())
     assert back == c
 
 
-def test_user_password_round_trip_with_env_refs():
-    c = UserPassword(user=Var._var_key("DB_USER"), password=Secret())
+def test_user_password_round_trip_with_unhydrated_refs():
+    c = UserPassword(user=Secret(), password=Secret())
     back = UserPassword.from_json(c.to_json())
-    assert isinstance(back.user, Var)
+    assert isinstance(back.user, Secret)
     assert isinstance(back.password, Secret)
+
+
+def test_user_password_credentials_reject_var():
+    # Credentials are Secret-only; a Var ref is rejected.
+    with pytest.raises(ConnInitException):
+        UserPassword(user=Var(), password=Secret())  # type: ignore[arg-type]
 
 
 def test_aws_access_secret_key_round_trips():
     c = AwsAccessSecretKey(
-        access_key_id=Var._var_key("AWS_ACCESS_KEY_ID"),
+        access_key_id=Secret(),
         secret_access_key=Secret(),
     )
     back = AwsAccessSecretKey.from_json(c.to_json())
@@ -54,7 +60,7 @@ def test_gcp_json_round_trips():
 
 def test_azure_account_key_round_trips():
     c = AzureAccountKey(
-        account_name=Secret.lit("myacct"),
+        account_name=Secret("myacct"),
         account_key=Secret(),
     )
     back = AzureAccountKey.from_json(c.to_json())
@@ -62,12 +68,12 @@ def test_azure_account_key_round_trips():
 
 
 def test_polymorphic_load_via_credentials_base():
-    c = UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+    c = UserPassword(user=Secret("u"), password=Secret("p"))
     back = Credentials.from_json(c.to_json())
     assert isinstance(back, UserPassword)
-    # Credential fields are typed `VarOrSecretSpec`; bare strings coerce
-    # to a `_LiteralSecret`. The literal payload is reachable via `value()`.
-    assert back.user.value() == "u"
+    # Credential fields are typed `Secret`; bare strings coerce to a
+    # `Secret` literal. The literal payload is reachable via `value`.
+    assert back.user.value == "u"
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +84,7 @@ def test_polymorphic_load_via_credentials_base():
 
 def test_user_password_missing_field_raises_conn_1():
     with pytest.raises(ConnInitException) as ei:
-        UserPassword(user=Secret.lit("etl"))  # type: ignore[call-arg]
+        UserPassword(user=Secret("etl"))  # type: ignore[call-arg]
     assert ei.value.api_error is ConnErrorCode.CONN_1
 
 
@@ -90,13 +96,13 @@ def test_gcp_json_missing_field_raises_conn_2():
 
 def test_aws_access_secret_key_missing_field_raises_conn_3():
     with pytest.raises(ConnInitException) as ei:
-        AwsAccessSecretKey(access_key_id=Var._var_key("AWS_ACCESS_KEY_ID"))  # type: ignore[call-arg]
+        AwsAccessSecretKey(access_key_id=Secret())  # type: ignore[call-arg]
     assert ei.value.api_error is ConnErrorCode.CONN_3
 
 
 def test_azure_account_key_missing_field_raises_conn_4():
     with pytest.raises(ConnInitException) as ei:
-        AzureAccountKey(account_name=Secret.lit("a"))  # type: ignore[call-arg]
+        AzureAccountKey(account_name=Secret("a"))  # type: ignore[call-arg]
     assert ei.value.api_error is ConnErrorCode.CONN_4
 
 
@@ -141,7 +147,7 @@ def testfull_path_normalizes_str_base_path(base_path, path, expected):
 
 
 def testfull_path_resolves_secret_base_path():
-    assert full_path(Secret.lit("/data/secret/"), "/foo.csv") == "data/secret/foo.csv"
+    assert full_path(Secret("/data/secret/"), "/foo.csv") == "data/secret/foo.csv"
 
 
 def testfull_path_result_never_starts_or_ends_with_slash():
@@ -184,44 +190,44 @@ def test_convert_passes_through_datetime():
 
 
 def test_convert_resolves_secret_literal_to_str():
-    assert _convert(Secret.lit("hello"), str) == "hello"
+    assert _convert(Secret("hello"), str) == "hello"
 
 
 def test_convert_resolves_env_literal_to_str():
-    assert _convert(Var.lit("hello"), str) == "hello"
+    assert _convert(Var("hello"), str) == "hello"
 
 
 
 
 def test_convert_coerces_secret_to_int():
-    assert _convert(Secret.lit("42"), int) == 42
+    assert _convert(Secret("42"), int) == 42
 
 
 
 
 def test_convert_coerces_secret_to_float():
-    assert _convert(Secret.lit("3.14"), float) == 3.14
+    assert _convert(Secret("3.14"), float) == 3.14
 
 
 def test_convert_coerces_secret_to_bool_true():
-    assert _convert(Secret.lit("true"), bool) is True
+    assert _convert(Secret("true"), bool) is True
 
 
 def test_convert_coerces_secret_to_bool_false():
-    assert _convert(Secret.lit("false"), bool) is False
+    assert _convert(Secret("false"), bool) is False
 
 
 def test_convert_coerces_secret_to_bytes():
-    assert _convert(Secret.lit("abc"), bytes) == b"abc"
+    assert _convert(Secret("abc"), bytes) == b"abc"
 
 
 def test_convert_coerces_secret_to_datetime():
-    out = _convert(Secret.lit("2026-05-21T12:00:00+00:00"), datetime)
+    out = _convert(Secret("2026-05-21T12:00:00+00:00"), datetime)
     assert out == datetime(2026, 5, 21, 12, 0, tzinfo=timezone.utc)
 
 
 def test_convert_raises_on_uncoercible_secret_to_int():
     with pytest.raises(Exception):
-        _convert(Secret.lit("not-a-number"), int)
+        _convert(Secret("not-a-number"), int)
 
 

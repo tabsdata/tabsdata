@@ -42,8 +42,8 @@ def _src_conn() -> MySQLSrcConn:
     return MySQLSrcConn(
         uri="mysql://mysql.example.com:3306/analytics",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"mysql.timeout": 30},
     )
@@ -53,8 +53,8 @@ def _dest_conn() -> MySQLDestConn:
     return MySQLDestConn(
         uri="mysql://mysql.example.com:3306/analytics",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"mysql.timeout": 30},
     )
@@ -70,8 +70,8 @@ def test_mysql_conn_round_trip(cls):
     c = cls(
         uri="mysql://mysql.example.com:3306/analytics",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"mysql.timeout": 30},
     )
@@ -91,8 +91,8 @@ def test_mysql_conn_rejects_bad_uri(cls):
         cls(
             uri="ftp://host/db",
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
 
@@ -323,7 +323,7 @@ def test_cdc_typing_classes_are_mysql_local_not_common_reexports():
 
 
 def _cdc_creds():
-    return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+    return UserPassword(user=Secret("u"), password=Secret("p"))
 
 
 def test_mysql_cdc_conn_default_server_id():
@@ -463,8 +463,8 @@ def test_mysql_conn_rejects_missing_uri(cls):
     with pytest.raises(ConnInitException) as ei:
         cls(  # type: ignore[call-arg]
             credentials=UserPassword(
-                user=Secret.lit("etl"),
-                password=Secret.lit("hunter2"),
+                user=Secret("etl"),
+                password=Secret("hunter2"),
             ),
         )
     assert ei.value.api_error is MysqlErrorCode.MYSQL_1

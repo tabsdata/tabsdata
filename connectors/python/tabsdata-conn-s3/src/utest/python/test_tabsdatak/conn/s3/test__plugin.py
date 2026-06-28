@@ -22,8 +22,8 @@ pytestmark = pytest.mark.s3
 
 def _aws_creds() -> AwsAccessSecretKey:
     return AwsAccessSecretKey(
-        access_key_id=Secret.lit("AKIA0000000000000000"),
-        secret_access_key=Secret.lit("secret-value"),
+        access_key_id=Secret("AKIA0000000000000000"),
+        secret_access_key=Secret("secret-value"),
     )
 
 

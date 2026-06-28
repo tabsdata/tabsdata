@@ -16,11 +16,11 @@ packages import as ``tabsdatak._api`` are:
   for polymorphic loading.
 * :class:`DescriptorBase` -- :class:`JsonSerde` plus the tagging
   the runtime relies on.
-* :class:`BaseRef` -- shared method-host for
+* :class:`BaseRef` -- shared base for
   :class:`~tabsdatak.api.Var` / :class:`~tabsdatak.api.Secret`
-  (the two leaves are structurally identical: same ``_s`` /
-  ``_value_pattern`` shape, same empty-init guard, same named-ref
-  factory).
+  (the two leaves are structurally identical: a single optional
+  ``_raw`` string plus a field-site ``_value_pattern`` regex, both
+  serialized to one ``"<prefix><raw>"`` string).
 * :class:`VarValueConstraints` / :class:`SecretValueConstraints` --
   field-site value-pattern constraints.
 * ``*_CONSTRAINTS`` validators -- per-domain name patterns
@@ -55,7 +55,7 @@ from pydantic import (
 )
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic.errors import PydanticSchemaGenerationError
-from pydantic_core import ArgsKwargs, core_schema
+from pydantic_core import core_schema
 
 # Error codes and exceptions live in `tabsdatak.api_error` so callers
 # only depend on that module when they want to react to errors.
@@ -361,30 +361,32 @@ NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
 # Pattern annotation marker for Var / Secret fields.
 #
 # Use as ``Annotated[Secret, pattern(USER_PATTERN)]`` (or with Var). The
-# regex string is injected into the validated instance's
-# ``_value_pattern`` so it travels through serialization and is enforced
-# at ``value()`` time. For ``LiteralEnv`` / ``LiteralSecret`` (literal
-# values), the pattern is also enforced eagerly at construction and on
-# deserialization, so a value that does not match the pattern is rejected
-# at the boundary rather than at first-use.
+# regex string is attached to the validated instance's ``_value_pattern``
+# and enforced when the value is read (``Secret.value``). For inline
+# literal values the pattern is also enforced eagerly at construction and
+# on deserialization, so a value that does not match the pattern is
+# rejected at the boundary rather than at first-use.
 #
-# A bare ``str`` at the field site is stream-promoted to the literal sibling
-# class with the pattern injected -- so callers can write
-# ``MyConn(user="alice")`` instead of ``MyConn(user=Secret.literal("alice"))``.
+# The pattern is a *field-site* constraint: it is not serialized (the
+# wire form is just the ``"secret:..."`` / ``"var:..."`` string) and is
+# re-attached from the field annotation on load.
+#
+# A bare ``str`` at the field site is promoted to the matching ref with
+# the pattern injected -- so callers can write ``MyConn(user="alice")``
+# instead of ``MyConn(user=Secret("alice"))``.
 # ---------------------------------------------------------------------------
 
 
 class _ValuePattern:
-    """Base for the :class:`AfterValidator` adapters that pin a
-    regex to the *resolved* value of an :class:`Var` /
-    :class:`Secret` field.
+    """Base for the field-site adapters that pin a regex to the
+    *resolved* value of an :class:`Var` / :class:`Secret` field.
 
     Subclasses (:class:`VarValueConstraints`,
     :class:`SecretValueConstraints`) override :meth:`_on_class` to
     declare which value-reference family they cover. The validator
     runs at pydantic schema time -- when a bare string is passed
-    where the field expects an Var / Secret, it is auto-wrapped as
-    the matching literal subclass with the pattern injected.
+    where the field expects an Var / Secret, it is wrapped as the
+    matching ref with the pattern injected.
     """
 
     def __init__(self, *, pattern: str):
@@ -416,52 +418,30 @@ class _ValuePattern:
                 f"(got {source_type!r})"
             )
 
-        # Late import: api.py imports from _api at module load, and these
-        # classes are defined there.
-        # noinspection PyProtectedMember
-        from tabsdatak.api import Secret, Var, _LiteralSecret, _LiteralVar
-
-        if issubclass(source_type, Var):
-            literal_cls: type = _LiteralVar
-            field_name = "_s"
-        elif issubclass(source_type, Secret):
-            literal_cls: type = _LiteralSecret
-            field_name = "_s"
-        else:
-            raise TypeError()
-
         regex = self._pattern
         base = handler(source_type)
 
         def wrap(value: Any, h: Callable[[Any], Any]) -> Any:
-            # Bare-string shortcut: build a literal with the pattern
-            # injected. The literal's own model_validator enforces the
-            # pattern against the value at construction.
+            # Bare/serialized string: build the ref with the field's
+            # pattern injected. ``_parse`` strips the ``secret:`` /
+            # ``var:`` prefix when present (the serialized form) and
+            # takes a bare string verbatim (the user-literal form).
             if isinstance(value, str):
-                return literal_cls(**{field_name: value, "_value_pattern": regex})
-
-            instance = h(value)
-            # Skip reconstruction when the instance already carries the
-            # field's regex. True on round-trips through the *same*
-            # annotated field (the JSON spec carries `_value_pattern`,
-            # so `h(value)` rebuilds an instance with it already set),
-            # or when the caller explicitly built the instance with the
-            # matching regex. False -- and we reconstruct -- in the
-            # common case: a fresh `Var(s=...)` at the call site,
-            # cross-field reuse with a different regex, or legacy
-            # payloads that lack `_value_pattern`.
-            if getattr(instance, "_value_pattern", None) == regex:
-                return instance
-
-            # Reconstruct so the field's pattern wins, and the literal
-            # model_validator runs against the field's pattern.
-            # ``Secret.__init__`` is empty-only (the user-facing guard
-            # in ``api.py``); route via the pydantic validator so the
-            # framework reconstruction is not subject to that guard.
-            return type(instance).__pydantic_validator__.validate_python({
-                field_name: getattr(instance, field_name),
-                "_value_pattern": regex,
-            })
+                instance = source_type(source_type._parse(value), _value_pattern=regex)
+            else:
+                instance = h(value)
+                # Skip reconstruction when the instance already carries
+                # the field's regex (round-trip through the *same* field,
+                # or a caller that built it with the matching regex).
+                if getattr(instance, "_value_pattern", None) == regex:
+                    return instance
+                # Otherwise rebuild so the field's pattern wins.
+                instance = source_type(instance._raw, _value_pattern=regex)
+            # Inline literal: enforce the pattern eagerly so a bad value
+            # is rejected at the boundary, not at first read.
+            if instance._raw is not None:
+                instance._validate(instance._raw)
+            return instance
 
         return core_schema.no_info_wrap_validator_function(wrap, base)
 
@@ -476,9 +456,6 @@ class VarValueConstraints(_ValuePattern):
         from tabsdatak.api import Var
 
         return Var
-
-
-VAR_VALUE_NAMED_CONN_CONSTRAINTS = VarValueConstraints(pattern=_VAR_NAME_RE_STR)
 
 
 class SecretValueConstraints(_ValuePattern):
@@ -1042,15 +1019,15 @@ class DescriptorBase(JsonSerde):
 
 
 # ---------------------------------------------------------------------------
-# Method-host shared by `tabsdatak.api.Var` and `tabsdatak.api.Secret`.
+# Base shared by `tabsdatak.api.Var` and `tabsdatak.api.Secret`.
 #
-# Both leaves are structurally identical: each pairs an ``init=False``
-# ``_s`` slot with an optional ``_value_pattern`` regex, each is built
-# bare from user code (``Var()`` / ``Secret()``), and each gets its
-# real name populated either by the framework during envelope
-# round-trip or by the matching ``_<role>_key`` factory. The shared
-# behaviour -- ``_name`` / ``_value`` / ``_validate`` / ``value``, the
-# pydantic empty-init guard, and the named-ref factory -- lives here
+# Both leaves are structurally identical: a single optional string
+# (``_raw``) plus an optional field-site ``_value_pattern`` regex. They
+# are plain (non-dataclass) classes with a custom pydantic core schema
+# that serializes each to one string -- ``"<prefix><raw or ''>"`` (e.g.
+# ``"secret:hunter2"`` / ``"var:"``) -- and validates the same string
+# (and bare strings / pre-built instances) back. The shared behaviour
+# (``value`` / ``_validate`` / ``_parse`` / the core schema) lives here
 # once. Public surface stays split: ``Var`` and ``Secret`` are
 # first-class classes in ``api.py`` and remain distinct user-facing
 # concepts.
@@ -1058,97 +1035,131 @@ class DescriptorBase(JsonSerde):
 
 
 class BaseRef(JsonSerde, ABC):
-    """Shared method-host for :class:`~tabsdatak.api.Var` and
+    """Shared base for :class:`~tabsdatak.api.Var` and
     :class:`~tabsdatak.api.Secret`.
 
-    Leaves customise three class attributes:
+    A ref carries a single optional string ``_raw``:
 
-    * ``_no_resolver_error`` -- :class:`ApiErrorCode` raised by
-      :meth:`_value` when no resolver is wired up. ``API_8`` for
-      ``Var`` (runtime), ``API_11`` for ``Secret`` (internal).
-    * ``_is_ref_root`` -- ``True`` on the user-facing ref class
-      (``Var`` / ``Secret``), ``False`` on the literal subclass.
-      Gates the empty-init guard and the dict-input re-injection
-      path; literal subclasses redeclare their fields with
-      ``init=True`` and need neither.
-    * ``_role`` -- the role-specific factory name (``"_var_key"`` /
-      ``"_secret_key"``) used in the error message produced when
-      the guard rejects a non-empty user init."""
+    * ``None``  -- an *unhydrated* reference. The value is resolved
+      later by the framework's hydration pipeline (see
+      :mod:`tabsdatak.common._json_serde`); reading :attr:`value`
+      raises ``_not_hydrated_error``.
+    * a string  -- an inline *literal*; :attr:`value` returns it
+      (after the optional ``_value_pattern`` check).
 
-    # Defaults exist so subclasses can selectively override. Declared
-    # without annotations to keep pydantic from treating them as fields.
-    _no_resolver_error = None  # set by leaf
-    _is_ref_root = False
-    _role = "_key"
+    Leaves customise two class attributes:
 
-    def _name(self) -> str:
-        return self._s  # type: ignore[attr-defined]
+    * ``_prefix`` -- the serialized string prefix (``"secret:"`` /
+      ``"var:"``).
+    * ``_not_hydrated_error`` -- :class:`ErrorCode` raised by
+      :attr:`value` on an unhydrated ref. ``API_8`` for ``Var``
+      (runtime), ``API_11`` for ``Secret`` (internal).
+    """
 
-    def _value(self) -> str:
-        # No resolver wired up by default: refs only resolve under a
-        # role-specific integration that is not part of the API
-        # package (env-var lookup for ``Var``, secret-store lookup
-        # for ``Secret``).
-        raise type(self)._no_resolver_error.exception(name=self._s)  # type: ignore[attr-defined]
+    # Set by leaf. Declared without field annotations -- BaseRef is a
+    # plain class, not a pydantic dataclass.
+    _prefix: ClassVar[str] = ""
+    _not_hydrated_error: ClassVar[Any] = None
+
+    def __init__(self, value: str | None = None, *, _value_pattern: str | None = None):
+        # ``Secret("x")`` / ``Var("x")`` -> inline literal;
+        # ``Secret()`` / ``Var()`` -> unhydrated ref (value is None).
+        self._raw = value
+        self._value_pattern = _value_pattern
+
+    @property
+    def value(self) -> str:
+        """The resolved value -- raises if this ref was never hydrated."""
+        if self._raw is None:
+            raise type(self)._not_hydrated_error.exception(name=type(self).__name__)
+        return self._validate(self._raw)
 
     def _validate(self, val: str) -> str:
-        pattern = self._value_pattern  # type: ignore[attr-defined]
+        pattern = self._value_pattern
         if pattern is not None and re.fullmatch(pattern, val) is None:
             raise ApiErrorCode.API_6.exception(
-                name=self._name(),
+                name=type(self).__name__,
                 pattern=pattern,
                 value=val,
             )
         return val
 
-    def value(self) -> str:
-        return self._validate(self._value())
+    @classmethod
+    def _sibling_prefixes(cls) -> set[str]:
+        # Prefixes owned by the *other* ref leaves (e.g. ``"var:"`` from
+        # ``Secret``'s view). Derived from the leaf classes so it stays in
+        # sync without a hand-maintained list.
+        return {
+            sub._prefix
+            for sub in BaseRef.__subclasses__()
+            if sub._prefix and sub._prefix != cls._prefix
+        }
 
     @classmethod
-    def _key(cls, name: str) -> Any:
-        # The leaf's private fields are ``init=False`` so they cannot
-        # be set from the user-visible ``__init__``; route through
-        # the pydantic validator instead, where the dict-input path
-        # re-injects them after the (empty) handler runs.
-        return cls.__pydantic_validator__.validate_python(  # type: ignore[attr-defined]
-            {"_s": name, "_value_pattern": cls._value_pattern}  # type: ignore[attr-defined]
+    def _parse(cls, s: str) -> str | None:
+        # Strip the leaf prefix from a serialized string; a bare string
+        # (no prefix) is taken verbatim. ``"<prefix>"`` (and ``""``) ->
+        # ``None`` (an unhydrated ref).
+        if s.startswith(cls._prefix):
+            rest = s[len(cls._prefix) :]
+            return rest if rest != "" else None
+        # A string carrying a *different* leaf's prefix belongs to that
+        # type, not this one -- reject so a ``Union[Secret, Var]`` field
+        # round-trips each serialized value back to its own type.
+        for sibling in cls._sibling_prefixes():
+            if s.startswith(sibling):
+                raise ValueError(
+                    f"{cls.__name__} cannot parse {s!r}: it carries the "
+                    f"{sibling!r} prefix of a different reference type"
+                )
+        return s if s != "" else None
+
+    def __eq__(self, other: Any) -> bool:
+        return (
+            type(self) is type(other)
+            and self._raw == other._raw
+            and self._value_pattern == other._value_pattern
         )
 
-    @model_validator(mode="wrap")
+    def __hash__(self) -> int:
+        return hash((type(self), self._raw, self._value_pattern))
+
+    def __repr__(self) -> str:
+        # Secrets redact their inline value; vars show it.
+        return f"{type(self).__name__}({self._repr_raw()})"
+
+    def _repr_raw(self) -> str:
+        return repr(self._raw)
+
     @classmethod
-    def _enforce_empty_user_init(cls, data: Any, handler) -> Any:
-        # Two-way guard wrapping pydantic's standard validation:
-        #
-        # 1. ``ArgsKwargs`` arrives only from the user-visible
-        #    ``__init__`` site. On a ref root (``Var`` / ``Secret``)
-        #    it must be empty; anything else is a misuse. The
-        #    literal subclass overrides its fields with ``init=True``
-        #    and sets ``_is_ref_root = False`` so it bypasses this
-        #    branch.
-        #
-        # 2. Dict input arrives from envelope round-trip and the
-        #    ``_key`` factory. The ref root's private fields are
-        #    ``init=False`` so the standard validator drops them; we
-        #    stash them before the handler runs and
-        #    ``object.__setattr__`` them back afterwards.
-        if isinstance(data, ArgsKwargs):
-            if cls._is_ref_root and (data.args or data.kwargs):
-                role = cls.__qualname__
-                raise ValueError(
-                    f"{role}() takes no arguments; "
-                    f"use {role}.lit(value) for inline values, or "
-                    f"{role}.{cls._role}(name) for a named reference"
-                )
-            return handler(data)
+    def __get_pydantic_core_schema__(
+        cls,
+        source_type: Any,
+        handler: GetCoreSchemaHandler,
+    ) -> core_schema.CoreSchema:
+        def validate(value: Any) -> Any:
+            if isinstance(value, cls):
+                return value
+            if isinstance(value, str):
+                return cls(cls._parse(value))
+            raise ValueError(
+                f"{cls.__name__} expects a string or {cls.__name__} "
+                f"instance (got {type(value).__name__})"
+            )
 
-        if cls._is_ref_root and isinstance(data, dict):
-            stash = {k: data[k] for k in ("_s", "_value_pattern") if k in data}
-            instance = handler(data)
-            for k, v in stash.items():
-                object.__setattr__(instance, k, v)
-            return instance
+        def serialize(instance: Any) -> str:
+            # Key off the instance's own class, not ``cls``: in a
+            # ``Union[Secret, Var]`` field pydantic may invoke the
+            # left member's serializer on the other member's instance.
+            prefix = type(instance)._prefix
+            return prefix + (instance._raw if instance._raw is not None else "")
 
-        return handler(data)
+        return core_schema.no_info_plain_validator_function(
+            validate,
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                serialize, return_schema=core_schema.str_schema()
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------

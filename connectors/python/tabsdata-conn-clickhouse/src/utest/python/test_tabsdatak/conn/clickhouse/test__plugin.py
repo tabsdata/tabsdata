@@ -77,8 +77,8 @@ def _s3_staging() -> S3Location:
         bucket="staging-bucket",
         region="us-east-1",
         credentials=AwsAccessSecretKey(
-            access_key_id=Secret.lit("AKIA..."),
-            secret_access_key=Secret.lit("secret"),
+            access_key_id=Secret("AKIA..."),
+            secret_access_key=Secret("secret"),
         ),
         base_path="staging/",
     )
@@ -88,8 +88,8 @@ def _azure_staging() -> AzBlobLocation:
     return AzBlobLocation(
         container="staging-container",
         credentials=AzureAccountKey(
-            account_name=Secret.lit("acct"),
-            account_key=Secret.lit("key=="),
+            account_name=Secret("acct"),
+            account_key=Secret("key=="),
         ),
         base_path="staging/",
     )
@@ -98,10 +98,10 @@ def _azure_staging() -> AzBlobLocation:
 def _gcs_staging() -> GCSLocation:
     return GCSLocation(
         bucket="staging-bucket",
-        credentials=GCPJson(json=Secret.lit("{}")),
+        credentials=GCPJson(json=Secret("{}")),
         hmac_credentials=GCPHmac(
-            access_key=Secret.lit("GOOG..."),
-            secret_key=Secret.lit("secret"),
+            access_key=Secret("GOOG..."),
+            secret_key=Secret("secret"),
         ),
         base_path="staging/",
     )
@@ -114,8 +114,8 @@ def _bare_conn(staging=None) -> ClickHouseDestConn:
         port=8123,
         database="analytics",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 

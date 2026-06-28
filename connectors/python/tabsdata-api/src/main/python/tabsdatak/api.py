@@ -30,7 +30,7 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import Annotated, Callable, TypeAlias, Union
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
@@ -154,157 +154,45 @@ SubscriberTriggerBySpec: TypeAlias = Union[
 FlushIntervalSpec: TypeAlias = Annotated[int, Field(ge=1)]
 
 
-VarNameSpec: TypeAlias = Annotated[str, _api.VAR_NAME_CONSTRAINTS]
-
-
-@_api.dataclass(ApiErrorCode.API_7)
 class Var(_api.BaseRef):
-    """Reference to a variable value resolved at flow run time
-    via the framework's hydration pipeline.
+    """Reference to a variable value resolved at flow run time via
+    the framework's hydration pipeline.
 
-    Bare ``Var()`` is the canonical user-facing construction; the
-    name (used to look up the value during hydration) is inferred
-    from the envelope's jsonpath inside the enclosing config, not
-    supplied by the user. Use :meth:`lit` to embed a value inline.
-    Subclasses may set ``_value_pattern`` to constrain the
-    resolved value to a regex.
+    ``Var()`` is an *unhydrated* reference: the value is filled in by
+    the hydration pipeline (its lookup key is the var-style form of
+    the envelope's jsonpath, not a user-supplied name).
+    ``Var("public")`` is an inline literal. Reading :attr:`value` on
+    an unhydrated ``Var`` raises; on a literal it returns the value
+    (after the optional ``_value_pattern`` check). A ``Var``
+    serializes to the single string ``"var:<value>"`` (``"var:"``
+    when unhydrated). Field annotations may pin a ``_value_pattern``
+    regex (see :class:`~tabsdatak._api.VarValueConstraints`).
     """
 
-    # ``init=False`` makes ``Var()`` the only valid construction
-    # shape at the user-facing ``__init__`` site. Mirrors
-    # :class:`Secret`; the runtime guard in
-    # ``BaseRef._enforce_empty_user_init`` enforces the same.
-    _s: str = Field(default="<var>", init=False)
-    __kind__ = "varRef"
-    _value_pattern: str | None = Field(default=None, init=False)
-
-    # Leaf-specific knobs read by ``BaseRef``.
-    _no_resolver_error = ApiErrorCode.API_8
-    _is_ref_root = True
-    _role = "_var_key"
-
-    @classmethod
-    def lit(cls, value: str) -> "Var":
-        """Wrap ``value`` as an inline literal that bypasses the
-        hydration lookup. Useful for declarative tests and
-        one-shot scripts."""
-        return _LiteralVar(_s=value, _value_pattern=cls._value_pattern)
-
-    @classmethod
-    def _var_key(cls, name: str) -> "Var":
-        # Role-specific alias of ``BaseRef._key`` -- kept so
-        # callers that grep for the role-specific name still find
-        # the factory.
-        return cls._key(name)
+    _prefix = "var:"
+    _not_hydrated_error = ApiErrorCode.API_8
 
 
-@_api.dataclass(ApiErrorCode.API_9)
-class _LiteralVar(Var):
-    # Redeclare both private fields with ``init=True`` to override
-    # ``Var``'s ``init=False``. Mirrors :class:`_LiteralSecret`.
-    _s: str
-    _value_pattern: str | None = None
-    __kind__ = "varLiteral"
-
-    # The literal subclass takes a value through its ``__init__``;
-    # the empty-init guard / dict-input re-injection on ``BaseRef``
-    # do not apply.
-    _is_ref_root = False
-
-    def _name(self) -> str:
-        return "<literal>"
-
-    def _value(self) -> str:
-        # Literal: ``_s`` is the value verbatim, not a var name.
-        return self._s
-
-    @model_validator(mode="after")
-    def _check_literal_pattern(self):
-        self._validate(self._s)
-        return self
-
-
-@_api.dataclass(ApiErrorCode.API_10)
 class Secret(_api.BaseRef):
-    """Reference to a secret value resolved by the runtime's
-    secret store (per-flow scope).
+    """Reference to a secret value resolved at flow run time via the
+    framework's hydration pipeline.
 
-    Bare ``Secret()`` is the canonical user-facing construction;
-    the internal ``_s`` / ``_value_pattern`` fields are populated
-    by the framework's resolver or by :meth:`lit`. Use
-    :meth:`lit` to embed a value inline. Subclasses may set
-    ``_value_pattern`` to constrain the resolved value to a regex.
+    ``Secret()`` is an *unhydrated* reference; ``Secret("hunter2")``
+    is an inline literal. Reading :attr:`value` on an unhydrated
+    ``Secret`` raises; on a literal it returns the value (after the
+    optional ``_value_pattern`` check). Inline values are redacted in
+    ``repr``. A ``Secret`` serializes to the single string
+    ``"secret:<value>"`` (``"secret:"`` when unhydrated). Field
+    annotations may pin a ``_value_pattern`` regex (see
+    :class:`~tabsdatak._api.SecretValueConstraints`).
     """
 
-    # ``init=False`` makes ``Secret()`` the only valid construction
-    # shape at the user-facing ``__init__`` site -- IDEs and type
-    # checkers surface ``Secret('foo')`` and ``Secret(_s='foo')`` as
-    # errors at edit time, layered on top of the runtime guard in
-    # ``BaseRef._enforce_empty_user_init``. Envelope round-trips
-    # and the ``_secret_key`` factory go through the dict-input path,
-    # where the wrap-validator re-injects these fields after pydantic
-    # runs (since ``init=False`` would otherwise drop them).
-    _s: str = Field(default="<secret>", init=False)
-    __kind__ = "secretRef"
-    _value_pattern: str | None = Field(default=None, init=False)
+    _prefix = "secret:"
+    _not_hydrated_error = ApiErrorCode.API_11
 
-    # Leaf-specific knobs read by ``BaseRef``.
-    _no_resolver_error = ApiErrorCode.API_11
-    _is_ref_root = True
-    _role = "_secret_key"
-
-    @classmethod
-    def lit(cls, value: str) -> "Secret":
-        """Wrap ``value`` as an inline literal that bypasses the
-        secret-store lookup. Useful for declarative tests and
-        one-shot scripts."""
-        return _LiteralSecret(_s=value, _value_pattern=cls._value_pattern)
-
-    @classmethod
-    def _secret_key(cls, name: str) -> "Secret":
-        # Role-specific alias of ``BaseRef._key`` -- kept so
-        # callers that grep for the role-specific name still find
-        # the factory.
-        return cls._key(name)
-
-
-@_api.dataclass(ApiErrorCode.API_12)
-class _LiteralSecret(Secret):
-    # Redeclare both private fields with ``init=True`` to override
-    # ``Secret``'s ``init=False``. ``_LiteralSecret`` is private but
-    # the framework's wrap-validator and the ``Secret.lit`` factory
-    # construct instances with ``_s`` / ``_value_pattern`` populated;
-    # the ``_check_literal_pattern`` model_validator below runs at
-    # ``mode='after'`` and needs both fields visible to pydantic so
-    # they're set before it fires.
-    _s: str
-    _value_pattern: str | None = None
-    __kind__ = "secretLiteral"
-
-    # The literal subclass takes a value through its ``__init__``;
-    # the empty-init guard / dict-input re-injection on ``BaseRef``
-    # do not apply.
-    _is_ref_root = False
-
-    def _name(self) -> str:
-        return "<literal>"
-
-    def _value(self) -> str:
-        # Literal: ``_s`` is the value verbatim, not a secret ref.
-        return self._s
-
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}(_s='***redacted***')"
-
-    __str__ = __repr__
-
-    def __repr_args__(self):
-        return [("_s", "***redacted***")]
-
-    @model_validator(mode="after")
-    def _check_literal_pattern(self):
-        self._validate(self._s)
-        return self
+    def _repr_raw(self) -> str:
+        # Never leak an inline secret value through repr / logs.
+        return "'***redacted***'" if self._raw is not None else "None"
 
 
 VarOrSecretSpec: TypeAlias = Union[Var, Secret]
@@ -325,12 +213,8 @@ class Conn(_Conn, ABC):
 
 
 # A connection slot resolved by *name* (looked up in the flow's
-# named-connection registry). Accepts either the raw name as a
-# string or an :class:`Var` reference that yields the name.
-ConnectionNameSpec: TypeAlias = Union[
-    Annotated[str, _api.NAMED_CONN_CONSTRAINTS],
-    Annotated[Var, _api.VAR_VALUE_NAMED_CONN_CONSTRAINTS],
-]
+# named-connection registry). The name is a plain string literal.
+ConnectionNameSpec: TypeAlias = Annotated[str, _api.NAMED_CONN_CONSTRAINTS]
 
 
 @_api.dataclass(ApiErrorCode.API_13)
@@ -338,9 +222,8 @@ class NamedConn(Conn):
     """Reference to a connection by name; the runtime resolves the
     name to a concrete :class:`Conn` at flow run time.
 
-    :param name: Connection identifier registered with the
-        runtime. Accepts a plain string or an :class:`Var`
-        reference.
+    :param name: Connection identifier (a plain string) registered
+        with the runtime.
     """
 
     __kind__ = "connectionRef"

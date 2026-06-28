@@ -115,8 +115,8 @@ def src_conn() -> S3SrcConn:
         bucket=bucket,
         region=_REGION,
         credentials=AwsAccessSecretKey(
-            access_key_id=Secret.lit(_ACCESS),
-            secret_access_key=Secret.lit(_SECRET),
+            access_key_id=Secret(_ACCESS),
+            secret_access_key=Secret(_SECRET),
         ),
         base_path=base_path,
     )
@@ -129,8 +129,8 @@ def dest_conn() -> S3DestConn:
         bucket=bucket,
         region=_REGION,
         credentials=AwsAccessSecretKey(
-            access_key_id=Secret.lit(_ACCESS),
-            secret_access_key=Secret.lit(_SECRET),
+            access_key_id=Secret(_ACCESS),
+            secret_access_key=Secret(_SECRET),
         ),
         base_path=base_path,
     )

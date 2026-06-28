@@ -83,8 +83,8 @@ def _bare_src_conn() -> Db2SrcConn:
     return Db2SrcConn(
         uri="db2://stub.invalid:50000/db",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 
@@ -97,8 +97,8 @@ def _bare_dest_conn() -> Db2DestConn:
     return Db2DestConn(
         uri="db2://stub.invalid:50000/db",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 

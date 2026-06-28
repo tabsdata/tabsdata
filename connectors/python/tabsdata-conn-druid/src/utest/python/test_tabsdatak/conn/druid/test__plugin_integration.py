@@ -168,8 +168,8 @@ def staging() -> S3Location:
         bucket=bucket,
         region=_S3_REGION,
         credentials=AwsAccessSecretKey(
-            access_key_id=Secret.lit(_S3_ACCESS_KEY),
-            secret_access_key=Secret.lit(_S3_SECRET_KEY),
+            access_key_id=Secret(_S3_ACCESS_KEY),
+            secret_access_key=Secret(_S3_SECRET_KEY),
         ),
         base_path=base_path,
     )
@@ -184,8 +184,8 @@ def fresh_druid(overlord_url, staging) -> DruidDestConn:
         overlord_url=overlord_url,
         staging=staging,
         credentials=UserPassword(
-            user=Secret.lit("admin"),
-            password=Secret.lit(""),
+            user=Secret("admin"),
+            password=Secret(""),
         ),
     )
 

@@ -179,11 +179,12 @@ def test_localfile_wizard_validates():
 )
 def test_mysql_secrets_render_as_refs_and_wizard_validates():
     info = template.resolve_conn("mysql", "src")
-    # Static template: credentials are secret refs, uri is a fill-in string.
+    # Static template: credentials are secret refs (the simplified Secret serde
+    # renders a bare, unhydrated ref as the string "secret:"), uri is a fill-in.
     doc = template.build_template(info.conn_cls)
     creds = doc["spec"]["credentials"]["spec"]
-    assert creds["user"]["kind"] == "secretRef"
-    assert creds["password"]["kind"] == "secretRef"
+    assert creds["user"] == "secret:"
+    assert creds["password"] == "secret:"
     assert doc["spec"]["uri"] == "<FILL: uri>"
     # Wizard: secret leaves are prompted; a valid uri makes the result validate.
     record: list = []

@@ -150,8 +150,8 @@ class DBConfig:
     @property
     def credentials(self) -> UserPassword:
         return UserPassword(
-            user=Secret.lit(self.user),
-            password=Secret.lit(self.password),
+            user=Secret(self.user),
+            password=Secret(self.password),
         )
 
 
@@ -591,8 +591,8 @@ def s3_staging() -> S3Location:
         bucket=bucket,
         region=region,
         credentials=AwsAccessSecretKey(
-            access_key_id=Secret.lit(access_key),
-            secret_access_key=Secret.lit(secret_key),
+            access_key_id=Secret(access_key),
+            secret_access_key=Secret(secret_key),
         ),
         base_path=base_path,
     )

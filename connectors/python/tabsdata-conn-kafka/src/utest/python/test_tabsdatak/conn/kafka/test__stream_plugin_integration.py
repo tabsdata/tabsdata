@@ -412,8 +412,8 @@ _VARIANTS = [
 
 def _kafka_creds(kafka_config) -> UserPassword:
     return UserPassword(
-        user=Secret.lit(kafka_config.user),
-        password=Secret.lit(kafka_config.password),
+        user=Secret(kafka_config.user),
+        password=Secret(kafka_config.password),
     )
 
 

@@ -83,8 +83,8 @@ def _bare_src_conn() -> OracleSrcConn:
     return OracleSrcConn(
         uri="oracle://stub.invalid:1521/orcl",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 
@@ -97,8 +97,8 @@ def _bare_dest_conn() -> OracleDestConn:
     return OracleDestConn(
         uri="oracle://stub.invalid:1521/orcl",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 

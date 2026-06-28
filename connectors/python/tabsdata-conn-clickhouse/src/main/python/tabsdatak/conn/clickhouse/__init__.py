@@ -62,7 +62,7 @@ CredentialsSpec: TypeAlias = UserPassword
 # ``.+`` pattern is what enables the bare-string shortcut at the field
 # site (the ``EnvValuePattern`` / ``SecretValuePattern`` wrapper promotes
 # a plain str to a literal); without it, callers would have to spell
-# ``Var.lit("ch.example")`` themselves.
+# ``Var("ch.example")`` themselves.
 HostSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=r".+")],
     Annotated[Var, _api.VarValueConstraints(pattern=r".+")],

@@ -35,8 +35,8 @@ def _staging():
         bucket="staging-bucket",
         region="us-east-1",
         credentials=AwsAccessSecretKey(
-            access_key_id=Secret.lit("AKIA..."),
-            secret_access_key=Secret.lit("secret"),
+            access_key_id=Secret("AKIA..."),
+            secret_access_key=Secret("secret"),
         ),
         base_path="staging/",
     )
@@ -92,7 +92,7 @@ def _conn_with_port(port):
         staging=_staging(),
         port=port,
         credentials=UserPassword(
-            user=Secret.lit("u"), password=Secret.lit("p"),
+            user=Secret("u"), password=Secret("p"),
         ),
     )
 
@@ -110,22 +110,22 @@ def test_port_resolves_secret_literal():
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.types import _convert
 
-    assert _convert(_conn_with_port(Secret.lit("9102")).port, int) == 9102
+    assert _convert(_conn_with_port(Secret("9102")).port, int) == 9102
 
 
-def test_port_env_non_numeric_rejected_at_value(monkeypatch):
+def test_port_unhydrated_ref_rejected_at_value():
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.types import _convert
 
-    monkeypatch.setenv("SR_PORT_BAD", "notanumber")
-    conn = _conn_with_port(Var._var_key("SR_PORT_BAD"))
+    # An unhydrated port ref carries no value yet; converting it raises.
+    conn = _conn_with_port(Var())
     with pytest.raises(Exception):
         _convert(conn.port, int)
 
 
 def test_port_secret_literal_non_numeric_rejected_at_construction():
     with pytest.raises(Exception):
-        _conn_with_port(Secret.lit("notanumber"))
+        _conn_with_port(Secret("notanumber"))
 
 
 # ---------------------------------------------------------------------------
@@ -135,19 +135,19 @@ def test_port_secret_literal_non_numeric_rejected_at_construction():
 
 def _bare_conn():
     return StarRocksDestConn(
-        host=Secret.lit("sr.example.com"),
+        host=Secret("sr.example.com"),
         staging=S3Location(
             bucket="staging",
             base_path="/foo",
             region="us-east-1",
             credentials=AwsAccessSecretKey(
-                access_key_id=Secret.lit("ak"),
-                secret_access_key=Secret.lit("sk"),
+                access_key_id=Secret("ak"),
+                secret_access_key=Secret("sk"),
             ),
         ),
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 
@@ -174,8 +174,8 @@ def test_starrocks_conn_rejects_missing_required_fields():
         StarRocksDestConn(  # type: ignore[call-arg]
             staging=_staging(),
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
     assert ei.value.api_error is StarRocksErrorCode.STARROCKS_1

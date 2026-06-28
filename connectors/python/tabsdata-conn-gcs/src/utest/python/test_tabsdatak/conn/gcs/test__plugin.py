@@ -21,7 +21,7 @@ pytestmark = pytest.mark.gcs
 
 
 def _gcp_creds() -> GCPJson:
-    return GCPJson(json=Secret.lit('{"type":"service_account"}'))
+    return GCPJson(json=Secret('{"type":"service_account"}'))
 
 
 def _src_conn(**overrides) -> GCSSrcConn:

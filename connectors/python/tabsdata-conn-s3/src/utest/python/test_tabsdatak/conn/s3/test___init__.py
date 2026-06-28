@@ -89,8 +89,8 @@ def _conn_with_base(cls, base_path):
         bucket="my-bucket",
         region="us-east-1",
         credentials=AwsAccessSecretKey(
-            access_key_id=Secret.lit("AKIA..."),
-            secret_access_key=Secret.lit("secret"),
+            access_key_id=Secret("AKIA..."),
+            secret_access_key=Secret("secret"),
         ),
         base_path=base_path,
     )
@@ -130,8 +130,8 @@ def test_s3_conn_rejects_missing_bucket(conn_cls):
         conn_cls(  # type: ignore[call-arg]
             region="us-east-1",
             credentials=AwsAccessSecretKey(
-                access_key_id=Secret.lit("AKIA..."),
-                secret_access_key=Secret.lit("secret"),
+                access_key_id=Secret("AKIA..."),
+                secret_access_key=Secret("secret"),
             ),
         )
     assert ei.value.api_error is S3ErrorCode.S3_1

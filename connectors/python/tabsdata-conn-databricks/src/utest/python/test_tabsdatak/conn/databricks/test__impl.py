@@ -37,19 +37,19 @@ def _src_conn(
     warehouse_id: str | None = None,
 ) -> DatabricksSrcConn:
     return DatabricksSrcConn(
-        host_url=Secret.lit("https://example.cloud.databricks.com"),
-        token=Secret.lit("dapi-test"),
-        volume=Secret.lit(volume),
+        host_url=Secret("https://example.cloud.databricks.com"),
+        token=Secret("dapi-test"),
+        volume=Secret(volume),
         warehouse=(
-            Secret.lit(warehouse) if warehouse is not None else None
+            Secret(warehouse) if warehouse is not None else None
         ),
         warehouse_id=(
-            Secret.lit(warehouse_id)
+            Secret(warehouse_id)
             if warehouse_id is not None
             else None
         ),
-        catalog=Secret.lit(catalog) if catalog is not None else None,
-        schema=Secret.lit(schema) if schema is not None else None,
+        catalog=Secret(catalog) if catalog is not None else None,
+        schema=Secret(schema) if schema is not None else None,
     )
 
 
@@ -62,19 +62,19 @@ def _dest_conn(
     warehouse_id: str | None = None,
 ) -> DatabricksDestConn:
     return DatabricksDestConn(
-        host_url=Secret.lit("https://example.cloud.databricks.com"),
-        token=Secret.lit("dapi-test"),
-        volume=Secret.lit(volume),
+        host_url=Secret("https://example.cloud.databricks.com"),
+        token=Secret("dapi-test"),
+        volume=Secret(volume),
         warehouse=(
-            Secret.lit(warehouse) if warehouse is not None else None
+            Secret(warehouse) if warehouse is not None else None
         ),
         warehouse_id=(
-            Secret.lit(warehouse_id)
+            Secret(warehouse_id)
             if warehouse_id is not None
             else None
         ),
-        catalog=Secret.lit(catalog) if catalog is not None else None,
-        schema=Secret.lit(schema) if schema is not None else None,
+        catalog=Secret(catalog) if catalog is not None else None,
+        schema=Secret(schema) if schema is not None else None,
     )
 
 

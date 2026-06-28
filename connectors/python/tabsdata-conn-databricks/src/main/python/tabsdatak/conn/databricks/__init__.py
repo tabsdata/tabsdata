@@ -46,7 +46,7 @@ from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
 
 HostUrlSpec: TypeAlias = VarOrSecretSpec
-DatabricksTokenSpec: TypeAlias = VarOrSecretSpec
+DatabricksTokenSpec: TypeAlias = Secret
 CredentialsSpec: TypeAlias = DatabricksTokenSpec
 
 

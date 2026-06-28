@@ -53,8 +53,8 @@ def _bare_conn() -> MongoDBDestConn:
     return MongoDBDestConn(
         uri="mongodb://stub.invalid:27017",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
 
@@ -505,8 +505,8 @@ def test_uri_with_credentials_inlines_user_pass():
     conn = MongoDBDestConn(
         uri="mongodb://host:27017",
         credentials=UserPassword(
-            user=Secret.lit("us er"),
-            password=Secret.lit("p@ss"),
+            user=Secret("us er"),
+            password=Secret("p@ss"),
         ),
     )
     # ' ' -> '+', '@' -> '%40' (quote_plus).
@@ -519,8 +519,8 @@ def test_pymongo_kwargs_strips_prefix():
     conn = MongoDBDestConn(
         uri="mongodb://host:27017",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
         conn_cfg={
             "pymongo.tls": True,

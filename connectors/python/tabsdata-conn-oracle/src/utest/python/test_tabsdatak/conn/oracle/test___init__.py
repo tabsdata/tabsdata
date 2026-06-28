@@ -36,8 +36,8 @@ def _src_conn() -> OracleSrcConn:
     return OracleSrcConn(
         uri="oracle://oracle.example.com:1521/orcl",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"oracle.timeout": 30},
     )
@@ -47,8 +47,8 @@ def _dest_conn() -> OracleDestConn:
     return OracleDestConn(
         uri="oracle://oracle.example.com:1521/orcl",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"oracle.timeout": 30},
     )
@@ -64,8 +64,8 @@ def test_oracle_conn_round_trip(cls):
     c = cls(
         uri="oracle://oracle.example.com:1521/orcl",
         credentials=UserPassword(
-            user=Secret.lit("etl"),
-            password=Secret.lit("hunter2"),
+            user=Secret("etl"),
+            password=Secret("hunter2"),
         ),
         conn_cfg={"oracle.timeout": 30},
     )
@@ -89,8 +89,8 @@ def test_oracle_conn_rejects_bad_uri(cls):
         cls(
             uri="ftp://host/db",
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
 
@@ -252,8 +252,8 @@ def test_oracle_conn_rejects_missing_uri(cls):
     with pytest.raises(ConnInitException) as ei:
         cls(  # type: ignore[call-arg]
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
     assert ei.value.api_error is OracleErrorCode.ORACLE_1

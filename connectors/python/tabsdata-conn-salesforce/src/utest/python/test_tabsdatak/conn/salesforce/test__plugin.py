@@ -57,9 +57,9 @@ def work_dir(tmp_path: Path) -> Path:
 
 def _credentials() -> SalesforceTokenCredentials:
     return SalesforceTokenCredentials(
-        username=Secret.lit("etl@example.com"),
-        password=Secret.lit("hunter2"),
-        security_token=Secret.lit("salesforce-token"),
+        username=Secret("etl@example.com"),
+        password=Secret("hunter2"),
+        security_token=Secret("salesforce-token"),
     )
 
 

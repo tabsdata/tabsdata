@@ -58,8 +58,8 @@ def test_mongodb_conn_accepts_plain_str_uri():
     conn = MongoDBDestConn(
         uri="mongodb+srv://cluster.example.com",
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
     assert conn.uri == "mongodb+srv://cluster.example.com"
@@ -67,21 +67,21 @@ def test_mongodb_conn_accepts_plain_str_uri():
 
 def test_mongodb_conn_accepts_secret_uri():
     conn = MongoDBDestConn(
-        uri=Secret.lit("mongodb://mongo:27017"),
+        uri=Secret("mongodb://mongo:27017"),
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
     assert isinstance(conn.uri, Secret)
 
 
-def test_mongodb_conn_accepts_env_uri():
+def test_mongodb_conn_accepts_var_uri():
     conn = MongoDBDestConn(
-        uri=Var._var_key("MONGO_URI"),
+        uri=Var(),
         credentials=UserPassword(
-            user=Secret.lit("u"),
-            password=Secret.lit("p"),
+            user=Secret("u"),
+            password=Secret("p"),
         ),
     )
     assert isinstance(conn.uri, Var)
@@ -96,8 +96,8 @@ def test_mongodb_conn_rejects_bad_uri_scheme():
         MongoDBDestConn(
             uri="mysql://nope",
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
 
@@ -155,8 +155,8 @@ def test_mongodb_conn_rejects_missing_uri():
     with pytest.raises(ConnInitException) as ei:
         MongoDBDestConn(  # type: ignore[call-arg]
             credentials=UserPassword(
-                user=Secret.lit("u"),
-                password=Secret.lit("p"),
+                user=Secret("u"),
+                password=Secret("p"),
             ),
         )
     assert ei.value.api_error is MongodbErrorCode.MONGODB_1

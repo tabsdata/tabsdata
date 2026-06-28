@@ -50,13 +50,13 @@ pytestmark = pytest.mark.kafka
 
 
 def _creds() -> UserPassword:
-    return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+    return UserPassword(user=Secret("u"), password=Secret("p"))
 
 
 def _aws_creds() -> AwsAccessSecretKey:
     return AwsAccessSecretKey(
-        access_key_id=Secret.lit("u"),
-        secret_access_key=Secret.lit("p"),
+        access_key_id=Secret("u"),
+        secret_access_key=Secret("p"),
     )
 
 

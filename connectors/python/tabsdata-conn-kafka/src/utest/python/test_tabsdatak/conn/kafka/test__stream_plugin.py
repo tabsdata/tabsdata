@@ -28,7 +28,7 @@ pytestmark = pytest.mark.kafka
 
 
 def _creds() -> UserPassword:
-    return UserPassword(user=Secret.lit("u"), password=Secret.lit("p"))
+    return UserPassword(user=Secret("u"), password=Secret("p"))
 
 
 def _conn() -> KafkaStreamSrcConn:

@@ -88,23 +88,23 @@ def _ctx(p: Path) -> _Ctx:
 
 def _src_conn() -> DatabricksSrcConn:
     return DatabricksSrcConn(
-        host_url=Secret.lit("https://example.cloud.databricks.com"),
-        token=Secret.lit("dapi-test"),
-        volume=Secret.lit("my_volume"),
-        warehouse=Secret.lit("MY_WAREHOUSE"),
-        catalog=Secret.lit("main"),
-        schema=Secret.lit("analytics"),
+        host_url=Secret("https://example.cloud.databricks.com"),
+        token=Secret("dapi-test"),
+        volume=Secret("my_volume"),
+        warehouse=Secret("MY_WAREHOUSE"),
+        catalog=Secret("main"),
+        schema=Secret("analytics"),
     )
 
 
 def _dest_conn() -> DatabricksDestConn:
     return DatabricksDestConn(
-        host_url=Secret.lit("https://example.cloud.databricks.com"),
-        token=Secret.lit("dapi-test"),
-        volume=Secret.lit("my_volume"),
-        warehouse=Secret.lit("MY_WAREHOUSE"),
-        catalog=Secret.lit("main"),
-        schema=Secret.lit("analytics"),
+        host_url=Secret("https://example.cloud.databricks.com"),
+        token=Secret("dapi-test"),
+        volume=Secret("my_volume"),
+        warehouse=Secret("MY_WAREHOUSE"),
+        catalog=Secret("main"),
+        schema=Secret("analytics"),
     )
 
 

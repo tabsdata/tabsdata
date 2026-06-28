@@ -73,7 +73,7 @@ def _gcp_key() -> str:
 def _staging() -> GCSLocation:
     return GCSLocation(
         bucket="staging-bucket",
-        credentials=GCPJson(json=Secret.lit(_gcp_key())),
+        credentials=GCPJson(json=Secret(_gcp_key())),
         base_path="staging/",
     )
 
@@ -81,7 +81,7 @@ def _staging() -> GCSLocation:
 def _bare_conn() -> BigQueryDestConn:
     return BigQueryDestConn(
         staging=_staging(),
-        credentials=GCPJson(json=Secret.lit(_gcp_key())),
+        credentials=GCPJson(json=Secret(_gcp_key())),
         project="my-project",
         dataset="analytics",
     )

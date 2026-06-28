@@ -191,8 +191,8 @@ def _make_cdc_conn(cfg) -> Db2CdcStreamSrcConn:
             f"{cfg.host}:{cfg.port}/{cfg.database}"
         ),
         credentials=UserPassword(
-            user=Secret.lit(cfg.root_user),
-            password=Secret.lit(cfg.root_password),
+            user=Secret(cfg.root_user),
+            password=Secret(cfg.root_password),
         ),
     )
 

@@ -47,6 +47,4 @@ def test_codes_have_expected_names():
         "COMMON_6",
         "COMMON_7",
         "COMMON_8",
-        "COMMON_9",
-        "COMMON_10",
     ]

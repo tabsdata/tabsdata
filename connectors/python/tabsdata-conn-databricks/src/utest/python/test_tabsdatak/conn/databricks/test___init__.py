@@ -69,8 +69,8 @@ def test_databricks_dest_full_round_trip():
 def test_databricks_conn_validate_rejects_warehouse_and_warehouse_id(cls):
     with pytest.raises(DatabricksValidateException) as ei:
         cls(
-            host_url=Secret.lit("https://my-workspace.cloud.databricks.com"),
-            token=Secret.lit("dapi-secret-token"),
+            host_url=Secret("https://my-workspace.cloud.databricks.com"),
+            token=Secret("dapi-secret-token"),
             volume="main.staging.my_volume",
             warehouse="MY_WAREHOUSE",
             warehouse_id="0123456789abcdef",
@@ -82,8 +82,8 @@ def test_databricks_conn_validate_rejects_warehouse_and_warehouse_id(cls):
 def test_databricks_conn_validate_rejects_schema_without_catalog(cls):
     with pytest.raises(DatabricksValidateException) as ei:
         cls(
-            host_url=Secret.lit("https://my-workspace.cloud.databricks.com"),
-            token=Secret.lit("dapi-secret-token"),
+            host_url=Secret("https://my-workspace.cloud.databricks.com"),
+            token=Secret("dapi-secret-token"),
             volume="main.staging.my_volume",
             schema="analytics",
         )
@@ -178,7 +178,7 @@ def test_databricks_conn_rejects_missing_required_fields(cls):
 
     with pytest.raises(ConnInitException) as ei:
         cls(  # type: ignore[call-arg]
-            token=Secret.lit("dapi-..."),
+            token=Secret("dapi-..."),
             volume="main.staging.v",
         )
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_1

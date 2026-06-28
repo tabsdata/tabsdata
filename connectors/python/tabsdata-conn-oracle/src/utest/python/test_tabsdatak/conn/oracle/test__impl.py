@@ -40,8 +40,8 @@ class _CapturedURL:
 
 def _credentials() -> UserPassword:
     return UserPassword(
-        user=Secret.lit("etl"),
-        password=Secret.lit("hunter2"),
+        user=Secret("etl"),
+        password=Secret("hunter2"),
     )
 
 
@@ -100,7 +100,7 @@ def test_build_oracle_engine_preserves_explicit_driver(captured):
 
 def test_build_oracle_engine_accepts_secret_uri(captured):
     impl.build_oracle_engine(
-        Secret.lit("oracle://host:1521/orcl"),
+        Secret("oracle://host:1521/orcl"),
         _credentials(),
         connect_args=None,
     )
