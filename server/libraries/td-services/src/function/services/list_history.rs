@@ -118,7 +118,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -139,7 +139,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -197,7 +197,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)

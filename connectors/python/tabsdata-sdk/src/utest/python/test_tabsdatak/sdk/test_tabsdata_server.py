@@ -53,6 +53,11 @@ class _FakeDest:
     pass
 
 
+class _FakeConn:
+    def __init__(self, kind: str):
+        self.__kind__ = kind
+
+
 def _decorated(name: str):
     def f():  # pragma: no cover - never called
         return None
@@ -85,6 +90,7 @@ def _publisher_info(
         kind=KIND_PUBLISHER_DEF,
         func=_decorated(func_name),
         source=_FakeSrc(),
+        conn=_FakeConn("mysqlSrcConn"),
         output_tables=output_tables or ["t1"],
         trigger_by=trigger_by,
         on_tables=None,
@@ -122,6 +128,7 @@ def _subscriber_info(
         kind=KIND_SUBSCRIBER_DEF,
         func=_decorated(func_name),
         destination=_FakeDest(),
+        conn=_FakeConn("mysqlDestConn"),
         input_tables=input_tables or ["coll/x"],
         trigger_by=trigger_by,
     )
@@ -179,6 +186,18 @@ def test_source_or_destination_name_for_subscriber_returns_destination_class_nam
 
 def test_source_or_destination_name_for_transformer_is_none():
     assert ts._source_or_destination_name(_transformer_info()) is None
+
+
+def test_connection_kind_for_publisher_returns_conn_kind():
+    assert ts._connection_kind(_publisher_info()) == "mysqlSrcConn"
+
+
+def test_connection_kind_for_subscriber_returns_conn_kind():
+    assert ts._connection_kind(_subscriber_info()) == "mysqlDestConn"
+
+
+def test_connection_kind_for_transformer_is_none():
+    assert ts._connection_kind(_transformer_info()) is None
 
 
 def test_cron_workers_returns_ct_payload_for_cron_trigger():
@@ -314,6 +333,7 @@ def test_create_archive_publisher_cron_extracts_metadata(project_root, _no_op_bu
     assert archive.trigger_string_list is None  # cron -> workers
     assert archive.workers is not None and "CT" in archive.workers
     assert archive.source_or_destination == "_FakeSrc"
+    assert archive.connection_kind == "mysqlSrcConn"
     assert archive.table_types == {}
     assert archive.function_snippet == "<source>"
 
@@ -333,6 +353,7 @@ def test_create_archive_transformer_tables_trigger(project_root, _no_op_bundle):
     assert archive.trigger_string_list == ["coll/trig"]
     assert archive.workers is None
     assert archive.source_or_destination is None  # transformers have no plugin name
+    assert archive.connection_kind is None
 
 
 def test_create_archive_subscriber_no_outputs(project_root, _no_op_bundle):
@@ -343,6 +364,7 @@ def test_create_archive_subscriber_no_outputs(project_root, _no_op_bundle):
     assert archive.tables == []
     assert archive.string_dependencies == ["coll/x", "coll/y"]
     assert archive.source_or_destination == "_FakeDest"
+    assert archive.connection_kind == "mysqlDestConn"
 
 
 def test_create_archive_accepts_temporary_directory_object(project_root, _no_op_bundle):

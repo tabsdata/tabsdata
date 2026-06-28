@@ -318,7 +318,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(vec![TableNameDto::try_from("table_1")?])
@@ -374,7 +374,7 @@ mod tests {
             .name(Some("joaquin_2".try_into()?))
             .description(Some("function_foo description".try_into()?))
             .snippet(Some("function_foo snippet".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .tables(vec![TableNameDto::try_from("table_1")?])
             .build()?;
 
@@ -492,7 +492,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(vec![TableNameDto::try_from("table_1")?])

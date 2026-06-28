@@ -5,12 +5,16 @@
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
+use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_database::dynamic::DynamicConnection;
 use td_error::DisplayVec;
 use td_error::{ApiError, TdError, api_error, td_error};
 use td_execution::VersionResolver;
 use td_objects::dxo::bundle::BundleRegisteredDB;
+use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::connection::ConnectionDB;
 use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
+use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::{TableDB, TableDBBuilder, TableDBWithNames};
 use td_objects::dxo::trigger::{TriggerDB, TriggerDBBuilder, TriggerDBWithNames};
 use td_objects::dxo::worker::{UpdateWorkerDB, WorkerDB, WorkerDBBuilder};
@@ -18,8 +22,8 @@ use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES, TD_FN_STATE_PREFIX,
 };
 use td_objects::types::basic::{
-    AtTime, BundleStatus, CollectionId, CollectionName, DependencyId, DependencyPos,
-    DependencyStatus, FunctionId, FunctionVersionId, ResetState, ReuseFrozen,
+    AtTime, BundleStatus, CollectionId, CollectionName, ConnectionKind, Decorator, DependencyId,
+    DependencyPos, DependencyStatus, FunctionId, FunctionVersionId, ResetState, ReuseFrozen,
     TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus, TableType, TriggerId,
     TriggerStatus, TriggerVersionId, TriggeredOn, WorkerConfig, WorkerStatus, WorkerType,
     WorkerTypeDto,
@@ -49,6 +53,14 @@ pub enum RegisterFunctionError {
     PrivateTableDependency(CollectionName, TableName) = 5,
     #[error("Duplicate output tables defined: [{0}]")]
     DuplicateTableDefinition(DisplayVec<TableName>) = 6,
+    #[error("A {0:?} function must declare the connection kind it uses")]
+    ConnectionKindRequired(Decorator) = 7,
+    #[error("A transformer function cannot declare a connection kind (got '{0}')")]
+    ConnectionKindNotAllowed(ConnectionKind) = 8,
+    #[error("Collection '{0}' has no connection; a publisher/subscriber requires one")]
+    CollectionHasNoConnection(CollectionName) = 9,
+    #[error("Connection kind '{0}' does not match collection '{2}' connection kind '{1}'")]
+    ConnectionKindMismatch(ConnectionKind, ConnectionKind, CollectionName) = 10,
 }
 
 /// The bundle-claim update: a function register/update/patch flips the
@@ -57,6 +69,54 @@ pub async fn bundle_registered() -> Result<BundleRegisteredDB, TdError> {
     Ok(BundleRegisteredDB {
         status: BundleStatus::Registered,
     })
+}
+
+/// A publisher/subscriber must declare the connection kind it uses, its
+/// collection must carry a connection, and the two kinds must match. A
+/// transformer must declare none.
+///
+/// TODO FOR 2.0: this contract is enforced only under the Kubernetes
+/// orchestrator (the 2.x deployment). The 1.x local Supervisor still runs
+/// the legacy `tabsdata` client, which declares no connection kind and uses
+/// connection-less collections, so the contract cannot hold there -- the
+/// guard below skips the check. Remove the guard once the legacy client is
+/// retired, so the check applies under every orchestrator.
+pub async fn ensure_connection_kind_matches(
+    mut conn: MutRef<DynamicConnection<'static>>,
+    bridge: Ref<BridgeProviderHandle>,
+    function: Ref<FunctionDB>,
+    collection: Ref<CollectionDB>,
+) -> Result<(), TdError> {
+    // TODO FOR 2.0: drop this guard (see fn doc) -- enforce on every orchestrator.
+    if !matches!(bridge.orchestrator(), Orchestrator::Kubernetes) {
+        return Ok(());
+    }
+    match &function.decorator {
+        Decorator::Publisher | Decorator::Subscriber => {
+            let connection_kind = function.connection_kind.as_ref().ok_or_else(|| {
+                RegisterFunctionError::ConnectionKindRequired(function.decorator.clone())
+            })?;
+            let connection_id = collection.connection_id.ok_or_else(|| {
+                RegisterFunctionError::CollectionHasNoConnection(collection.name.clone())
+            })?;
+            let connection: ConnectionDB = conn.live().fetch_one(connection_id).await?;
+            if *connection_kind != connection.kind {
+                Err(RegisterFunctionError::ConnectionKindMismatch(
+                    connection_kind.clone(),
+                    connection.kind.clone(),
+                    collection.name.clone(),
+                ))?
+            }
+        }
+        Decorator::Transformer => {
+            if let Some(connection_kind) = function.connection_kind.as_ref() {
+                Err(RegisterFunctionError::ConnectionKindNotAllowed(
+                    connection_kind.clone(),
+                ))?
+            }
+        }
+    }
+    Ok(())
 }
 
 pub async fn validate_tables_do_not_exist(

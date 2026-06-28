@@ -498,6 +498,7 @@ class Collection:
             reuse_frozen_tables=reuse_tables,
             decorator=archive.function_type,
             plugin_name=archive.source_or_destination,
+            connection_kind=archive.connection_kind,
             workers=archive.workers,
             enabled=enabled,
             base_path=base_path,
@@ -703,6 +704,7 @@ class Collection:
             runtime_values=runtime_values,
             reuse_frozen_tables=reuse_tables,
             plugin_name=archive.source_or_destination,
+            connection_kind=archive.connection_kind,
             workers=archive.workers,
             enabled=enabled,
             base_path=base_path,
@@ -5290,6 +5292,7 @@ class _FunctionArchive:
     function_name: str
     function_type: str
     source_or_destination: str | None
+    connection_kind: str | None
     workers: dict[str, str] | None
 
 
@@ -5379,6 +5382,14 @@ def _source_or_destination_name(info: FunctionInfo) -> str | None:
     return None
 
 
+def _connection_kind(info: FunctionInfo) -> str | None:
+    """The connection kind a publisher/subscriber uses (e.g.
+    ``"mysqlSrcConn"``), read from its declared ``conn``. ``None`` for
+    transformers (no external connection)."""
+    conn = getattr(info, "conn", None)
+    return getattr(conn, "__kind__", None) if conn is not None else None
+
+
 def _input_tables(info: FunctionInfo) -> list[str]:
     """For transformers / subscribers, the cross-collection
     ``"collection/table"`` references. For publishers, an empty list."""
@@ -5464,6 +5475,7 @@ def _create_archive(
         function_name=function_name,
         function_type=function_type,
         source_or_destination=_source_or_destination_name(info),
+        connection_kind=_connection_kind(info),
         # ``_workers`` emits ``CT`` for ``CronTrigger`` and ``ST`` for
         # ``@stream_publisher``; ``None`` otherwise. The ``ST`` branch
         # is what makes the apiserver enqueue the long-running

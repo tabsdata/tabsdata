@@ -211,6 +211,7 @@ pub async fn function(function: &FunctionName) -> FunctionDBWithNames {
         .description(Description::default())
         .decorator(Decorator::Publisher)
         .connector(None)
+        .connection_kind(None)
         .runtime_values(FunctionRuntimeValues::default())
         .function_id(FUNCTION_IDS.get(function).unwrap())
         .base_path(None)

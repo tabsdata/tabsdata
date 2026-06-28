@@ -6,11 +6,11 @@
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
-        AtTime, BasePath, BundleId, CollectionId, CollectionName, Connector, Decorator,
-        Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues, FunctionStatus,
-        FunctionVersionId, GroupId, ResetStage, ResetState, ReuseFrozen, Snippet, StageId,
-        StorageVersion, TableName, TableNameDto, TableType, UserId, UserName, WorkerConfig,
-        WorkerId, WorkerTypeDto,
+        AtTime, BasePath, BundleId, CollectionId, CollectionName, ConnectionKind, Connector,
+        Decorator, Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues,
+        FunctionStatus, FunctionVersionId, GroupId, ResetStage, ResetState, ReuseFrozen, Snippet,
+        StageId, StorageVersion, TableName, TableNameDto, TableType, UserId, UserName,
+        WorkerConfig, WorkerId, WorkerTypeDto,
     };
     use crate::types::composed::{
         TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -28,6 +28,8 @@ mod definitions {
         pub decorator: Decorator,
         #[builder(default)]
         pub connector: Option<Connector>,
+        #[builder(default)]
+        pub connection_kind: Option<ConnectionKind>,
         // Optional storage-prefix override for this function's output table data.
         #[serde(default)]
         #[builder(default)]
@@ -67,6 +69,7 @@ mod definitions {
         pub snippet: Option<Snippet>,
         pub decorator: Option<Decorator>,
         pub connector: Option<Option<Connector>>,
+        pub connection_kind: Option<Option<ConnectionKind>>,
         #[dxo(extractor)]
         pub dependencies: Option<Vec<TableDependencyDto>>,
         #[dxo(extractor)]
@@ -160,6 +163,8 @@ mod definitions {
         pub decorator: Decorator,
         #[dxo(builder(include))]
         pub connector: Option<Connector>,
+        #[dxo(builder(include))]
+        pub connection_kind: Option<ConnectionKind>,
         #[dxo(builder(include))]
         pub runtime_values: FunctionRuntimeValues,
         #[builder(default)]
@@ -326,6 +331,8 @@ mod definitions {
         pub decorator: Decorator,
         #[dto(list(filter, filter_like, order_by))]
         pub connector: Option<Connector>,
+        #[dto(list(filter, filter_like, order_by))]
+        pub connection_kind: Option<ConnectionKind>,
         #[dto(list(filter, order_by))]
         pub defined_on: AtTime,
         #[dto(list(filter, order_by))]

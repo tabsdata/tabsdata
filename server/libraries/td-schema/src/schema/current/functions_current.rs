@@ -37,6 +37,7 @@ pub enum FunctionsCurrent {
     DefinedById,
     Status,
     Connector,
+    ConnectionKind,
     Enabled,
 }
 
@@ -67,6 +68,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(FunctionsCurrent::DefinedById).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::Status).text().not_null())
                 .col(ColumnDef::new(FunctionsCurrent::Connector).text().null())
+                .col(ColumnDef::new(FunctionsCurrent::ConnectionKind).text().null())
                 .col(ColumnDef::new(FunctionsCurrent::Enabled).boolean().default(true))
                 .to_owned(),
         ]

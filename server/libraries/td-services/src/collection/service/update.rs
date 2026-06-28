@@ -527,7 +527,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(bundle.id)
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)

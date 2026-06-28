@@ -244,7 +244,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -294,7 +294,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
@@ -347,7 +347,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
@@ -366,7 +366,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
             .triggers(None)
             .tables(None)
@@ -416,7 +416,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
@@ -435,7 +435,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(None)
@@ -485,7 +485,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
@@ -504,7 +504,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
             .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(Some(vec![TableNameDto::try_from("workout_1")?]))
@@ -530,7 +530,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
             .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(Some(vec![TableNameDto::try_from("workout_2")?]))
@@ -597,7 +597,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))

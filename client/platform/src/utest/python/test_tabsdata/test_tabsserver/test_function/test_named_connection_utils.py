@@ -542,7 +542,7 @@ class TestResolveNamedConnIfNeeded:
     def test_resolves_named_conn_on_destination_plugin(self, monkeypatch, tmp_path):
         monkeypatch.setenv(TD_URI_REPOSITORY, str(tmp_path))
         cx_dict = {
-            "kind": "postgresDstConn",
+            "kind": "postgresDestConn",
             "apiVersion": "1.0",
             "name": "my_pg",
             "conn_configs": {"uri": "postgresql://localhost/mydb"},

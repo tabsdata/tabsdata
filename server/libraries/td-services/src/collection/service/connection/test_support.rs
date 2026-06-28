@@ -157,7 +157,7 @@ pub fn create_request(
         .description(Description::try_from("d").unwrap());
     if let Some(group) = group {
         let kind = if group == GroupName::destination() {
-            "mysqlDstConn"
+            "mysqlDestConn"
         } else {
             "mysqlSrcConn"
         };

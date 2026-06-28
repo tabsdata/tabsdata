@@ -2,7 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::function::layers::register::{bundle_registered, validate_tables_do_not_exist};
+use crate::function::layers::register::{
+    bundle_registered, ensure_connection_kind_matches, validate_tables_do_not_exist,
+};
 use crate::function::layers::{
     check_private_tables, register_dependencies, register_tables, register_triggers,
     register_workers,
@@ -12,6 +14,7 @@ use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
+use td_bridge::BridgeProviderHandle;
 use td_execution::SchedulerNotify;
 use td_objects::And;
 use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
@@ -45,6 +48,7 @@ use td_tower::layers;
     scope = "Project",
     context = AuthzContext,
     context = SchedulerNotify,
+    context = BridgeProviderHandle,
 )]
 fn service() {
     layers!(
@@ -96,6 +100,8 @@ fn service() {
         from_fn(With::<BasePath>::set::<FunctionDBBuilder>),
         from_fn(With::<Enabled>::set::<FunctionDBBuilder>),
         from_fn(With::<FunctionDBBuilder>::build::<FunctionDB>),
+        // A publisher/subscriber's connector must match the collection's connection kind.
+        from_fn(ensure_connection_kind_matches),
         from_fn(insert::<FunctionDB>),
         // Mark the uploaded bundle as Registered (kept as a durable record, not deleted)
         from_fn(With::<FunctionDB>::extract::<BundleId>),
@@ -142,6 +148,7 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::collection::service::connection::test_support::create_collection;
     use crate::collection::service::update::UpdateCollectionService;
     use crate::function::layers::register::RegisterFunctionError;
     use crate::function::services::tests::assert_register;
@@ -159,8 +166,9 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
-        AccessTokenId, BasePath, BundleStatus, Decorator, FunctionName, FunctionRuntimeValues,
-        FunctionStatus, ProjectId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, BasePath, BundleStatus, ConnectionKind, Decorator, FunctionName,
+        FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, UserId, WorkerMessageStatus,
+        WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -276,6 +284,7 @@ mod tests {
                 type_of_val(&With::<BasePath>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<Enabled>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB>),
+                type_of_val(&ensure_connection_kind_matches),
                 type_of_val(&insert::<FunctionDB>),
                 // Mark the uploaded bundle as Registered (kept, not deleted)
                 type_of_val(&With::<FunctionDB>::extract::<BundleId>),
@@ -360,7 +369,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -403,7 +412,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -446,7 +455,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -494,7 +503,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -546,7 +555,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -614,7 +623,7 @@ mod tests {
             .try_description("function_1 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_1 snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -696,7 +705,7 @@ mod tests {
             .try_description("function_1 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_1 snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -809,7 +818,7 @@ mod tests {
             .try_description("function_1 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_1 snippet")?
-            .decorator(Decorator::Subscriber)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -842,7 +851,7 @@ mod tests {
             .try_description("function_3 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_3 snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -896,7 +905,7 @@ mod tests {
             .try_description("function_2 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_2 snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -939,7 +948,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -1020,7 +1029,7 @@ mod tests {
                 .try_description("function_1 description")?
                 .bundle_id(bundle_id)
                 .try_snippet("function_1 snippet")?
-                .decorator(Decorator::Subscriber)
+                .decorator(Decorator::Transformer)
                 .dependencies(dependencies.clone())
                 .triggers(triggers.clone())
                 .tables(tables.clone())
@@ -1062,7 +1071,7 @@ mod tests {
             .try_description("function_2 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_2 snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies)
             .triggers(triggers)
             .tables(tables)
@@ -1110,7 +1119,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(bundle_id)
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![]))
             .triggers(Some(vec![]))
             .tables(tables)
@@ -1155,7 +1164,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(bundle_id)
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from(
                 "table_0@00000000000000000000000004",
             )?]))
@@ -1190,7 +1199,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(bundle_id)
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from(
                 "table_0@00000000000000000000000004..00000000000000000000000004",
             )?]))
@@ -1236,7 +1245,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(bundle_id)
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from(
                 "table_0@HEAD..HEAD~2",
             )?]))
@@ -1279,7 +1288,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -1331,7 +1340,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -1378,7 +1387,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -1449,7 +1458,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(bundle.id)
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -1492,7 +1501,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .base_path(Some(BasePath::try_from("/fn")?))
             .dependencies(None)
             .triggers(None)
@@ -1521,6 +1530,200 @@ mod tests {
             function.stage_base_path, prod,
             "stage_base_path still comes from the collection, not the override"
         );
+        Ok(())
+    }
+
+    // ---- publisher/subscriber connector validation ----
+
+    fn pubsub_register(
+        name: &str,
+        decorator: Decorator,
+        connection_kind: Option<&str>,
+    ) -> Result<FunctionRegister, TdError> {
+        let mut builder = FunctionRegister::builder();
+        builder
+            .try_name(name)?
+            .try_description("d")?
+            .bundle_id(BundleId::default())
+            .try_snippet("s")?
+            .decorator(decorator)
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false);
+        if let Some(connection_kind) = connection_kind {
+            builder.connection_kind(Some(ConnectionKind::try_from(connection_kind)?));
+        }
+        Ok(builder.build()?)
+    }
+
+    async fn register_in(
+        db: &TdPool,
+        collection: &str,
+        create: FunctionRegister,
+    ) -> Result<Function, TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection)?)
+                    .build()?,
+                create,
+            )
+            .in_project(ProjectId::sandbox());
+        RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(request)
+            .await
+    }
+
+    /// Like [`register_in`] but runs the service under the Kubernetes
+    /// orchestrator (where a publisher/subscriber connection kind is
+    /// mandatory) rather than the default local Supervisor.
+    async fn register_in_kubernetes(
+        db: &TdPool,
+        collection: &str,
+        create: FunctionRegister,
+    ) -> Result<Function, TdError> {
+        use std::sync::Arc;
+        use ta_services::factory::ServiceFactory;
+        use td_bridge::test::TestBridgeProvider;
+        use td_bridge::{BridgeProviderHandle, Orchestrator};
+
+        let mut context = crate::Context::with_defaults(db.clone());
+        context.bridge = Arc::new(BridgeProviderHandle::new(Arc::new(
+            TestBridgeProvider::default().with_orchestrator(Orchestrator::Kubernetes),
+        )));
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str(collection)?)
+                    .build()?,
+                create,
+            )
+            .in_project(ProjectId::sandbox());
+        RegisterFunctionService::build(&context)
+            .service()
+            .raw_oneshot(request)
+            .await
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_publisher_matching_connector_ok(db: TdPool) -> Result<(), TdError> {
+        create_collection(&db, "src_pub", Some(GroupName::source())).await;
+        let create = pubsub_register("pub_fn", Decorator::Publisher, Some("mysqlSrcConn"))?;
+        register_in_kubernetes(&db, "src_pub", create).await?;
+
+        let function = active_function(&db, &FunctionName::try_from("pub_fn")?).await?;
+        assert_eq!(function.decorator, Decorator::Publisher);
+        assert_eq!(
+            function.connection_kind,
+            Some(ConnectionKind::try_from("mysqlSrcConn")?)
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_subscriber_matching_connector_ok(db: TdPool) -> Result<(), TdError> {
+        create_collection(&db, "dst_sub", Some(GroupName::destination())).await;
+        let create = pubsub_register("sub_fn", Decorator::Subscriber, Some("mysqlDestConn"))?;
+        register_in_kubernetes(&db, "dst_sub", create).await?;
+
+        let function = active_function(&db, &FunctionName::try_from("sub_fn")?).await?;
+        assert_eq!(function.decorator, Decorator::Subscriber);
+        assert_eq!(
+            function.connection_kind,
+            Some(ConnectionKind::try_from("mysqlDestConn")?)
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_publisher_connector_mismatch_err(db: TdPool) -> Result<(), TdError> {
+        create_collection(&db, "src_mm", Some(GroupName::source())).await;
+        let create = pubsub_register("mm_fn", Decorator::Publisher, Some("postgresSrcConn"))?;
+        let err = register_in_kubernetes(&db, "src_mm", create)
+            .await
+            .unwrap_err();
+        let err = err.domain_err::<RegisterFunctionError>();
+        assert!(matches!(
+            err,
+            RegisterFunctionError::ConnectionKindMismatch(..)
+        ));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_publisher_requires_connector_err(db: TdPool) -> Result<(), TdError> {
+        // Under Kubernetes a publisher must declare its connection kind.
+        create_collection(&db, "src_req", Some(GroupName::source())).await;
+        let create = pubsub_register("req_fn", Decorator::Publisher, None)?;
+        let err = register_in_kubernetes(&db, "src_req", create)
+            .await
+            .unwrap_err();
+        let err = err.domain_err::<RegisterFunctionError>();
+        assert!(matches!(
+            err,
+            RegisterFunctionError::ConnectionKindRequired(_)
+        ));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_publisher_without_connection_err(db: TdPool) -> Result<(), TdError> {
+        // A plain (DataFactory) collection carries no connection.
+        let collection_name = CollectionName::try_from("fac_pub")?;
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+        let create = pubsub_register("facpub_fn", Decorator::Publisher, Some("mysqlSrcConn"))?;
+        let err = register_in_kubernetes(&db, "fac_pub", create)
+            .await
+            .unwrap_err();
+        let err = err.domain_err::<RegisterFunctionError>();
+        assert!(matches!(
+            err,
+            RegisterFunctionError::CollectionHasNoConnection(_)
+        ));
+        Ok(())
+    }
+
+    // TODO FOR 2.0: remove together with the Supervisor exemption in
+    // `ensure_connection_kind_matches`. Pins the 1.x behaviour: under the
+    // local Supervisor a publisher registers with no connection kind (the
+    // legacy `tabsdata` client never sends one); under Kubernetes the same
+    // registration is rejected -- see
+    // `test_register_publisher_requires_connector_err`.
+    #[td_test::test(db)]
+    async fn test_register_publisher_legacy_no_connection_ok(db: TdPool) -> Result<(), TdError> {
+        // A plain (DataFactory) collection carries no connection.
+        let collection_name = CollectionName::try_from("fac_legacy_pub")?;
+        db.scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+        let create = pubsub_register("legacy_pub_fn", Decorator::Publisher, None)?;
+        register_in(&db, "fac_legacy_pub", create).await?;
+
+        let function = active_function(&db, &FunctionName::try_from("legacy_pub_fn")?).await?;
+        assert_eq!(function.decorator, Decorator::Publisher);
+        assert_eq!(function.connection_kind, None);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_transformer_with_connector_err(db: TdPool) -> Result<(), TdError> {
+        create_collection(&db, "src_tf", Some(GroupName::source())).await;
+        let create = pubsub_register("tf_fn", Decorator::Transformer, Some("mysqlSrcConn"))?;
+        let err = register_in_kubernetes(&db, "src_tf", create)
+            .await
+            .unwrap_err();
+        let err = err.domain_err::<RegisterFunctionError>();
+        assert!(matches!(
+            err,
+            RegisterFunctionError::ConnectionKindNotAllowed(_)
+        ));
         Ok(())
     }
 }

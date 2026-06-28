@@ -382,6 +382,7 @@ pub(crate) mod tests {
             snippet: update.snippet.unwrap_or(create.snippet),
             decorator: update.decorator.unwrap_or(create.decorator),
             connector: update.connector.unwrap_or(create.connector),
+            connection_kind: update.connection_kind.unwrap_or(create.connection_kind),
             dependencies: update.dependencies,
             triggers: update.triggers,
             tables: update.tables,

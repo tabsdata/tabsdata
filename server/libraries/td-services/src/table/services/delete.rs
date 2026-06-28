@@ -182,7 +182,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
@@ -204,7 +204,7 @@ mod tests {
             .name(Some("joaquin_workout".try_into()?))
             .description(Some("function_foo description".try_into()?))
             .snippet(Some("function_foo snippet".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .tables(Some(vec![TableNameDto::try_from("keep_this_one")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .build()?;
@@ -260,7 +260,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
@@ -283,7 +283,7 @@ mod tests {
             .try_description("joaquin_dependant_function description")?
             .bundle_id(BundleId::default())
             .try_snippet("joaquin_dependant_function snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from("super_table")?]))
             .triggers(None)
             .tables(None)
@@ -302,7 +302,7 @@ mod tests {
             .name(Some("joaquin_workout".try_into()?))
             .description(Some("function_foo description".try_into()?))
             .snippet(Some("function_foo snippet".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .tables(Some(vec![TableNameDto::try_from("keep_this_one")?]))
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .build()?;

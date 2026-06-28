@@ -110,7 +110,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(tables)
@@ -131,7 +131,7 @@ mod tests {
             .name(Some("joaquin".try_into()?))
             .description(Some("function_foo description".try_into()?))
             .snippet(Some("function_foo snippet".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .tables(Some(tables))
             .build()?;
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())

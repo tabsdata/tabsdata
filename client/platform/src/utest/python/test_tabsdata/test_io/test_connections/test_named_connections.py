@@ -488,7 +488,7 @@ def test_azuredest_with_named_conn_replaced_by_resolved_azure_conn(monkeypatch):
     assert dest.conn is nc
 
     cx_dict = {
-        "kind": "azureDstConn",
+        "kind": "azureDestConn",
         "apiVersion": "1.0",
         "name": "azure_dest_conn",
         "conn_configs": {
@@ -561,7 +561,7 @@ def test_s3dest_with_named_conn_replaced_by_resolved_s3_conn(monkeypatch):
     assert dest.conn is nc
 
     cx_dict = {
-        "kind": "s3DstConn",
+        "kind": "s3DestConn",
         "apiVersion": "1.0",
         "name": "s3_dest_conn",
         "conn_configs": {
@@ -628,7 +628,7 @@ def test_gcsdest_with_named_conn_replaced_by_resolved_gcs_conn(monkeypatch):
     assert dest.conn is nc
 
     cx_dict = {
-        "kind": "gcsDstConn",
+        "kind": "gcsDestConn",
         "apiVersion": "1.0",
         "name": "gcs_dest_conn",
         "conn_configs": {

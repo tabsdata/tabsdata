@@ -6,9 +6,9 @@
 A connection document's top-level ``kind`` (e.g. ``mysqlSrcConn``) is THE
 connector identifier product-wide: the server pins it per connection
 (immutable across upserts) and the stores key content under it. Shape:
-``<token><Src|Dst>Conn`` — the token is the ``Conn`` subclass name minus the
+``<token><Src|Dest>Conn`` — the token is the ``Conn`` subclass name minus the
 ``Conn`` suffix, lowercased (``MySQLConn`` → ``mysql``, ``Db2CdcConn`` →
-``db2cdc``), and the ``Src``/``Dst`` suffix carries what ``conn_mode`` used
+``db2cdc``), and the ``Src``/``Dest`` suffix carries what ``conn_mode`` used
 to. Derivation instead of a static table keeps separately-distributed
 connector packages (``tabsdata.connector.*``) registered for free: any loaded
 ``Conn`` subclass resolves, exactly like the class-name lookup it replaces.
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from tabsdata._io.connections.connections import Conn
 
-_MODE_TO_SUFFIX = {"src": "Src", "dest": "Dst"}
+_MODE_TO_SUFFIX = {"src": "Src", "dest": "Dest"}
 _SUFFIX_TO_MODE = {v: k for k, v in _MODE_TO_SUFFIX.items()}
 
 
@@ -26,7 +26,7 @@ def split_kind(kind: str) -> tuple[str, str]:
     """Split a ``kind`` into ``(token, mode)`` syntactically.
 
     ``mode`` is ``"src"`` or ``"dest"``. Raises ``ValueError`` when the value
-    is not shaped ``<token><Src|Dst>Conn``.
+    is not shaped ``<token><Src|Dest>Conn``.
     """
     if isinstance(kind, str) and kind.endswith("Conn"):
         stem = kind[: -len("Conn")]
@@ -34,7 +34,7 @@ def split_kind(kind: str) -> tuple[str, str]:
             if stem.endswith(suffix) and len(stem) > len(suffix):
                 return stem[: -len(suffix)], mode
     raise ValueError(
-        f"Invalid connection kind {kind!r}; expected '<connector><Src|Dst>Conn'"
+        f"Invalid connection kind {kind!r}; expected '<connector><Src|Dest>Conn'"
         " (e.g. 'mysqlSrcConn')"
     )
 

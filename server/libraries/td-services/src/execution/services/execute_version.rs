@@ -397,7 +397,7 @@ mod tests {
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(vec![TableNameDto::try_from("table_0")?])
@@ -480,7 +480,7 @@ mod tests {
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(vec![TableNameDto::try_from("table_0")?])
@@ -549,7 +549,7 @@ mod tests {
             .try_description("d")?
             .bundle_id(BundleId::default())
             .try_snippet("s")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(vec![TableNameDto::try_from("t0")?])

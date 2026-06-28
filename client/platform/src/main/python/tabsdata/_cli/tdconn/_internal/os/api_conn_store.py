@@ -62,7 +62,7 @@ class ApiConnStore(ConnStore):
                 )
             else:
                 # A connection is 1:1 with its source/destination collection
-                # and is created WITH it; the kind's Src/Dst suffix picks the
+                # and is created WITH it; the kind's Src/Dest suffix picks the
                 # group.
                 _, mode = split_kind(document.get("kind", ""))
                 group = "source" if mode == "src" else "destination"

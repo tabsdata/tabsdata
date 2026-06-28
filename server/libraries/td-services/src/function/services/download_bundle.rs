@@ -115,7 +115,7 @@ mod tests {
             .try_description("desc")?
             .bundle_id(bundle_a_id)
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -206,7 +206,7 @@ mod tests {
             .try_description("desc")?
             .bundle_id(bundle_id)
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)

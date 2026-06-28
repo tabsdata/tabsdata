@@ -35,7 +35,7 @@ class _ConnDef:
             }
         }
 
-    ``kind`` is the connector identifier (``<token><Src|Dst>Conn``); the
+    ``kind`` is the connector identifier (``<token><Src|Dest>Conn``); the
     old ``conn_type``/``conn_mode`` pair is derived from it via the
     [`kind_registry`](kind_registry.py).
     """

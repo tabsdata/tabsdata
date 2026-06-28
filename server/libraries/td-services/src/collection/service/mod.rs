@@ -10,7 +10,7 @@ use crate::collection::service::read::ReadCollectionService;
 use crate::collection::service::update::UpdateCollectionService;
 use ta_services::factory::ServiceFactory;
 
-mod connection;
+pub(crate) mod connection;
 mod create;
 mod delete;
 mod layer;

@@ -2,7 +2,9 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
-use crate::function::layers::register::{bundle_registered, validate_tables_do_not_exist};
+use crate::function::layers::register::{
+    bundle_registered, ensure_connection_kind_matches, validate_tables_do_not_exist,
+};
 use crate::function::layers::update::{
     assert_function_name_not_exists, update_function_db_builder,
 };
@@ -15,6 +17,7 @@ use std::collections::HashMap;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
+use td_bridge::BridgeProviderHandle;
 use td_execution::SchedulerNotify;
 use td_objects::And;
 use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
@@ -48,6 +51,7 @@ use td_tower::layers;
     scope = "Project",
     context = AuthzContext,
     context = SchedulerNotify,
+    context = BridgeProviderHandle,
 )]
 fn service() {
     layers!(
@@ -91,6 +95,8 @@ fn service() {
         from_fn(With::<RequestContext>::update::<FunctionDBBuilder, _>),
         from_fn(With::<StorageVersion>::set::<FunctionDBBuilder>),
         from_fn(With::<FunctionDBBuilder>::build::<FunctionDB>),
+        // A publisher/subscriber's connector must match the collection's connection kind.
+        from_fn(ensure_connection_kind_matches),
         from_fn(insert::<FunctionDB>),
         // Mark the uploaded bundle as Registered (kept as a durable record, not deleted)
         from_fn(With::<FunctionDB>::extract::<BundleId>),
@@ -225,6 +231,7 @@ mod tests {
                 type_of_val(&With::<RequestContext>::update::<FunctionDBBuilder, _>),
                 type_of_val(&With::<StorageVersion>::set::<FunctionDBBuilder>),
                 type_of_val(&With::<FunctionDBBuilder>::build::<FunctionDB>),
+                type_of_val(&ensure_connection_kind_matches),
                 type_of_val(&insert::<FunctionDB>),
                 // Mark the uploaded bundle as Registered (kept, not deleted)
                 type_of_val(&With::<FunctionDB>::extract::<BundleId>),
@@ -304,7 +311,7 @@ mod tests {
             .try_description("foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -323,7 +330,7 @@ mod tests {
             .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("foo_updated snippet".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .build()?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -366,7 +373,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -385,7 +392,7 @@ mod tests {
             .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet updated".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
@@ -430,7 +437,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
@@ -449,7 +456,7 @@ mod tests {
             .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet updated".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
@@ -493,7 +500,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
@@ -512,7 +519,7 @@ mod tests {
             .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet updated".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
@@ -570,7 +577,7 @@ mod tests {
             .try_description("desc")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("user_table")?]))
@@ -639,7 +646,7 @@ mod tests {
             .try_description("desc")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("user_table")?]))
@@ -712,7 +719,7 @@ mod tests {
             .try_description("desc")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -778,7 +785,7 @@ mod tests {
             .try_description("desc")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -843,7 +850,7 @@ mod tests {
             .try_description("desc")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -928,7 +935,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
@@ -947,7 +954,7 @@ mod tests {
             .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet updated".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from("new_table")?]))
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
@@ -993,7 +1000,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from("new_table")?]))
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
@@ -1012,7 +1019,7 @@ mod tests {
             .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet updated".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
@@ -1057,7 +1064,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from("new_table")?]))
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
@@ -1076,7 +1083,7 @@ mod tests {
             .description(Some("foo_updated description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet updated".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from("new_table")?]))
             .tables(Some(vec![TableNameDto::try_from("new_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
@@ -1122,7 +1129,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
@@ -1142,7 +1149,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -1161,7 +1168,7 @@ mod tests {
             .description(Some("function_foo description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet updated".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
@@ -1206,7 +1213,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
@@ -1226,7 +1233,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(None)
@@ -1245,7 +1252,7 @@ mod tests {
             .description(Some("function_foo description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet updated".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
 
@@ -1289,7 +1296,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("trigger_table")?]))
@@ -1309,7 +1316,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(None)
@@ -1328,7 +1335,7 @@ mod tests {
             .description(Some("function_foo description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet updated".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .runtime_values(FunctionRuntimeValues::try_from("new mock runtime values")?)
             .build()?;
@@ -1373,7 +1380,7 @@ mod tests {
             .try_description("wanted")?
             .bundle_id(BundleId::default())
             .try_snippet("the_trigger snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![
@@ -1396,7 +1403,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![TableDependencyDto::try_from("trigger_table")?]))
             .triggers(Some(vec![TableTriggerDto::try_from("trigger_table")?]))
             .tables(Some(vec![
@@ -1418,7 +1425,7 @@ mod tests {
             .description(Some("function_foo description updated".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet updated".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![
                 TableDependencyDto::try_from("trigger_table")?,
                 TableDependencyDto::try_from("trigger_table_2")?,
@@ -1471,7 +1478,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(Some(vec![TableNameDto::try_from("joaquin_table")?]))
@@ -1490,7 +1497,7 @@ mod tests {
             .description(Some("function_foo description".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("function_foo snippet".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .build()?;
 
@@ -1597,7 +1604,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(bundle_id)
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies.clone())
             .triggers(triggers.clone())
             .tables(tables.clone())
@@ -1710,7 +1717,7 @@ mod tests {
                 .try_description("function_1 description")?
                 .bundle_id(bundle_id)
                 .try_snippet("function_1 snippet")?
-                .decorator(Decorator::Subscriber)
+                .decorator(Decorator::Transformer)
                 .dependencies(dependencies.clone())
                 .triggers(triggers.clone())
                 .tables(tables.clone())
@@ -1739,7 +1746,7 @@ mod tests {
             .try_description("function_2 description")?
             .bundle_id(bundle_id)
             .try_snippet("function_2 snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies)
             .triggers(triggers)
             .tables(tables)
@@ -1780,7 +1787,7 @@ mod tests {
             .description(Some("function_2 description".try_into()?))
             .bundle_id(bundle_id)
             .snippet(Some("function_2 snippet".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(dependencies)
             .triggers(triggers)
             .tables(tables)
@@ -1829,7 +1836,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(bundle_id)
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(Some(vec![]))
             .triggers(Some(vec![]))
             .tables(tables)
@@ -1893,7 +1900,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(vec![TableNameDto::try_from("table_1")?])
@@ -1912,7 +1919,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(vec![TableDependencyDto::try_from("table_1")?])
             .triggers(vec![TableTriggerDto::try_from("table_1")?])
             .tables(None)
@@ -1931,7 +1938,7 @@ mod tests {
             .description(Some("description".try_into()?))
             .bundle_id(BundleId::default())
             .snippet(Some("snippet".try_into()?))
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .tables(Some(vec![TableNameDto::try_from("table_1")?]))
             .build()?;
 
@@ -2013,7 +2020,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(vec![TableNameDto::try_from("table_1")?])
@@ -2032,7 +2039,7 @@ mod tests {
             .try_description("description")?
             .bundle_id(BundleId::default())
             .try_snippet("snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(vec![TableDependencyDto::try_from("table_1")?])
             .triggers(vec![TableTriggerDto::try_from("table_1")?])
             .tables(None)
@@ -2115,7 +2122,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -2346,7 +2353,7 @@ mod tests {
             .try_description("function_foo description")?
             .bundle_id(BundleId::default())
             .try_snippet("function_foo snippet")?
-            .decorator(Decorator::Publisher)
+            .decorator(Decorator::Transformer)
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -2387,6 +2394,80 @@ mod tests {
         assert!(res.is_err());
         let err = res.err().unwrap();
         assert!(format!("{err}").contains("Multiple workers are not supported."));
+        Ok(())
+    }
+
+    // An update that changes a publisher's connector to one that no longer
+    // matches the collection's connection kind is rejected.
+    #[td_test::test(db)]
+    async fn test_update_publisher_connector_mismatch_err(db: TdPool) -> Result<(), TdError> {
+        use crate::collection::service::connection::test_support::create_collection;
+        use std::sync::Arc;
+        use ta_services::factory::ServiceFactory;
+        use td_bridge::test::TestBridgeProvider;
+        use td_bridge::{BridgeProviderHandle, Orchestrator};
+        use td_objects::types::basic::{ConnectionKind, GroupName};
+
+        create_collection(&db, "src_upd", Some(GroupName::source())).await;
+
+        // Register a valid publisher whose connector matches the connection.
+        let create = FunctionRegister::builder()
+            .try_name("upd_pub")?
+            .try_description("d")?
+            .bundle_id(BundleId::default())
+            .try_snippet("s")?
+            .decorator(Decorator::Publisher)
+            .connection_kind(Some(ConnectionKind::try_from("mysqlSrcConn")?))
+            .dependencies(None)
+            .triggers(None)
+            .tables(None)
+            .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let register_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam::builder()
+                    .collection(CollectionIdName::from_str("src_upd")?)
+                    .build()?,
+                create,
+            )
+            .in_project(ProjectId::sandbox());
+        RegisterFunctionService::with_defaults(db.clone())
+            .service()
+            .raw_oneshot(register_request)
+            .await?;
+
+        // Update to a connector that no longer matches -> rejected.
+        let update = FunctionUpdate::builder()
+            .bundle_id(BundleId::default())
+            .snippet(Some("s2".try_into()?))
+            .connection_kind(Some(ConnectionKind::try_from("postgresSrcConn")?))
+            .build()?;
+        let update_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                FunctionParam::builder()
+                    .collection(CollectionIdName::from_str("src_upd")?)
+                    .function(FunctionIdName::from_str("upd_pub")?)
+                    .build()?,
+                update,
+            )
+            .in_project(ProjectId::sandbox());
+        // Run the update under Kubernetes, where the connection-kind
+        // contract is enforced (see `ensure_connection_kind_matches`).
+        let mut context = crate::Context::with_defaults(db.clone());
+        context.bridge = Arc::new(BridgeProviderHandle::new(Arc::new(
+            TestBridgeProvider::default().with_orchestrator(Orchestrator::Kubernetes),
+        )));
+        let err = UpdateFunctionService::build(&context)
+            .service()
+            .raw_oneshot(update_request)
+            .await
+            .unwrap_err();
+        let err = err.domain_err::<RegisterFunctionError>();
+        assert!(matches!(
+            err,
+            RegisterFunctionError::ConnectionKindMismatch(..)
+        ));
         Ok(())
     }
 }

@@ -166,27 +166,6 @@ fn kept_keys(entries: &[KeyValue]) -> Vec<String> {
         .collect()
 }
 
-/// The kind's `Src`/`Dst` suffix carries the connector's direction — it must
-/// agree with the collection's flavour.
-fn ensure_kind_matches_type(
-    kind: &ConnectionKind,
-    collection_type: &CollectionType,
-) -> Result<(), TdError> {
-    let expected = match collection_type {
-        CollectionType::Source => "SrcConn",
-        CollectionType::Destination => "DstConn",
-        CollectionType::DataFactory => return Ok(()),
-    };
-    if !kind.to_string().ends_with(expected) {
-        return Err(api_error!(
-            ApiError::InputError,
-            "the connection kind '{kind}' does not match the collection's flavour \
-             ({collection_type:?} expects a '*{expected}' kind)"
-        ));
-    }
-    Ok(())
-}
-
 /// What the read-only resolution hands the upsert orchestrator: the existing
 /// connection row (upserts only UPDATE — the connection is created with its
 /// collection) and the validated document.
@@ -285,7 +264,6 @@ pub async fn plan_collection_create(
                 ));
             };
             let document = validate_connection_document(document, secrets, vars)?;
-            ensure_kind_matches_type(&document.kind, collection_type.deref())?;
             if !document.kept_secrets.is_empty() || !document.kept_vars.is_empty() {
                 return Err(api_error!(
                     ApiError::InputError,
