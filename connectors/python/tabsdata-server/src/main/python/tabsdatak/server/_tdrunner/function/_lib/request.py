@@ -40,7 +40,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from tabsdatak.error import ErrorCode
 
-REQUEST_ENVELOPE_SUPPORTED = ("FunctionV2",)
+REQUEST_ENVELOPE_SUPPORTED = ("FunctionV2", "StreamerV1")
 REQUEST_ENVELOPE_KNOWN = REQUEST_ENVELOPE_SUPPORTED
 
 TABLE_VARIANT_SUPPORTED = ("Table",)
@@ -159,6 +159,45 @@ class Request(BaseModel):
     system_output: tuple[OutputTable, ...] = ()
 
 
+class StreamerInfo(BaseModel):
+    """Streamer-pod request envelope shape.
+
+    Deliberately leaner than :class:`Info`: a streamer is a long-lived
+    worker that produces batches (each becoming its own function run
+    downstream via ``fn_trigger``), so the per-execution identifiers
+    (``execution_id`` / ``transaction_id`` / ``function_run_id`` /
+    ``triggered_on``) on :class:`Info` do not represent real entities
+    at the streamer's lifecycle. They are intentionally absent here.
+
+    The k8s gateway builds this envelope from the lean
+    :class:`StageTriggerStartRequest` at job-create time and writes it
+    into the per-pod configmap; the pod mounts it as ``request.yaml``.
+    No apiserver fetch round-trip — streamer state is static across
+    its lifetime (no late binding to defer).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    project_id: str | int
+    collection_id: str | int
+    collection: str
+    function_version_id: str | int
+    function_defined_on: int
+    function: str
+    function_bundle: Location
+    function_stage: Location
+    scheduled_on: int
+    worker_id: str | int
+
+
+class StreamerRequest(BaseModel):
+    """Resolved request.yaml for a streamer pod (``StreamerV1`` envelope)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    info: StreamerInfo
+
+
 def _strip_variant(
     value: object,
     supported: tuple[str, ...],
@@ -226,7 +265,7 @@ def load_request(path: Path) -> Request:
     try:
         payload = _strip_variant(
             raw,
-            REQUEST_ENVELOPE_SUPPORTED,
+            ("FunctionV2",),
             REQUEST_ENVELOPE_KNOWN,
             "request",
         )
@@ -250,6 +289,130 @@ def load_request(path: Path) -> Request:
         raise InvalidRequestError(
             f"invalid request structure in {path}: {exc}"
         ) from exc
+
+
+def load_streamer_request(path: Path) -> StreamerRequest:
+    """Load and validate a streamer-pod request.yaml (``StreamerV1``
+    envelope).
+
+    Sibling of :func:`load_request` for the streamer pod: a different
+    top-level envelope (``StreamerV1`` instead of ``FunctionV2``) and a
+    leaner :class:`StreamerInfo` payload (no input/output tables, no
+    per-execution identifiers).
+
+    Raises:
+        FileNotFoundError: if `path` does not exist.
+        InvalidRequestError: if the YAML is malformed or fails schema
+            validation.
+    """
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise InvalidRequestError(f"malformed YAML in {path}: {exc}") from exc
+
+    try:
+        payload = _strip_variant(
+            raw,
+            ("StreamerV1",),
+            REQUEST_ENVELOPE_KNOWN,
+            "request",
+        )
+    except InvalidRequestError as exc:
+        raise InvalidRequestError(
+            f"invalid streamer request structure in {path}: {exc}"
+        ) from exc
+
+    try:
+        return StreamerRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise InvalidRequestError(
+            f"invalid streamer request structure in {path}: {exc}"
+        ) from exc
+
+
+def load_streamer_request_or_raise(
+    path: Path, error_code: ErrorCode
+) -> StreamerRequest:
+    """:func:`load_streamer_request` with a per-command typed-error wrap.
+    Sibling of :func:`load_request_or_raise` for the streamer pod."""
+    try:
+        return load_streamer_request(path)
+    except (FileNotFoundError, InvalidRequestError) as exc:
+        raise error_code.exception(cause=exc, path=path, detail=str(exc))
+
+
+class _AnyRequestInfo(BaseModel):
+    """Just-enough-fields view of either request envelope's ``info``.
+
+    Used by tdrunner commands that are shared between the
+    function-publisher pod (``FunctionV2`` envelope) and the
+    stream-publisher pod (``StreamerV1`` envelope) and only need the
+    handful of fields both shapes expose -- e.g.
+
+    * ``localize_fn_bundle`` reads ``info.function_bundle.uri``;
+    * ``run_manifest_trigger`` reads ``info.function_stage``.
+
+    ``extra="ignore"`` lets either envelope's full payload validate
+    against this slim view without touching the per-envelope models.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    function_bundle: Location
+    function_stage: Location
+
+
+class AnyRequest(BaseModel):
+    """Envelope-agnostic request view exposing only ``info.function_bundle``.
+
+    Loaded by :func:`load_any_request` when the caller is shared between
+    function-publisher and stream-publisher pods.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    info: _AnyRequestInfo
+
+
+def load_any_request(path: Path) -> AnyRequest:
+    """Load either a ``FunctionV2`` or a ``StreamerV1`` envelope and
+    return the envelope-agnostic slim view :class:`AnyRequest`.
+
+    For tdrunner commands that participate in both pod profiles and
+    only need a small subset of the envelope (today: just
+    ``function_bundle`` for ``localize_fn_bundle``).
+    """
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise InvalidRequestError(f"malformed YAML in {path}: {exc}") from exc
+
+    try:
+        payload = _strip_variant(
+            raw,
+            ("FunctionV2", "StreamerV1"),
+            REQUEST_ENVELOPE_KNOWN,
+            "request",
+        )
+    except InvalidRequestError as exc:
+        raise InvalidRequestError(
+            f"invalid request structure in {path}: {exc}"
+        ) from exc
+
+    try:
+        return AnyRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise InvalidRequestError(
+            f"invalid request structure in {path}: {exc}"
+        ) from exc
+
+
+def load_any_request_or_raise(path: Path, error_code: ErrorCode) -> AnyRequest:
+    """:func:`load_any_request` with a per-command typed-error wrap."""
+    try:
+        return load_any_request(path)
+    except (FileNotFoundError, InvalidRequestError) as exc:
+        raise error_code.exception(cause=exc, path=path, detail=str(exc))
 
 
 def load_request_or_raise(path: Path, error_code: ErrorCode) -> Request:

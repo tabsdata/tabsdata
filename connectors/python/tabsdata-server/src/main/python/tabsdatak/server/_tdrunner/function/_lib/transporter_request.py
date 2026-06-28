@@ -39,6 +39,7 @@ from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_NAME_KEY,
 )
 from tabsdatak.server._tdrunner.function._lib.request import (
+    AnyRequest,
     InputTable,
     InputTableVersions,
     Request,
@@ -125,13 +126,17 @@ def build_localize_state_request(
 
 
 def build_bundle_fetch_request(
-    request: Request, target_path: Path
+    request: Request | AnyRequest, target_path: Path
 ) -> TransporterCopyRequest:
     """Build a single-pair copy request that pulls the function bundle to
     `target_path`.
 
     Used by the `localize-fn-bundle` command to download the bundle
-    tarball via `td_transporter` before extracting it.
+    tarball via `td_transporter` before extracting it. Accepts either
+    the full :class:`Request` (function-publisher pod, ``FunctionV2``
+    envelope) or the slim envelope-agnostic :class:`AnyRequest`
+    (stream-publisher pod, ``StreamerV1`` envelope) -- both expose
+    ``info.function_bundle`` the same way.
     """
     return TransporterCopyRequest(
         pairs=(

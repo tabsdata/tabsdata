@@ -70,9 +70,6 @@ def _make_ctx(
     stage.mkdir(parents=True, exist_ok=True)
     return StreamerPluginCtx(
         work_dir=work_dir,
-        exec_plan_id="EP-1",
-        trx_id="TX-1",
-        exec_plan_ts="2026-01-15T12:00:00",
         collection_id="C-1",
         collection_name="c",
         function_id="F-1",
@@ -212,9 +209,6 @@ def test_ctx_construction_rejects_non_file_stage(tmp_path):
     with pytest.raises(UnsupportedStageSchemeError):
         StreamerPluginCtx(
             work_dir=work_dir,
-            exec_plan_id="EP-1",
-            trx_id="TX-1",
-            exec_plan_ts="2026-01-15T12:00:00",
             collection_id="C-1",
             collection_name="c",
             function_id="F-1",
@@ -243,9 +237,6 @@ def test_ctx_construction_loads_existing_state(tmp_path):
     work_dir.mkdir()
     ctx = StreamerPluginCtx(
         work_dir=work_dir,
-        exec_plan_id="EP-1",
-        trx_id="TX-1",
-        exec_plan_ts="2026-01-15T12:00:00",
         collection_id="C-1",
         collection_name="c",
         function_id="F-1",

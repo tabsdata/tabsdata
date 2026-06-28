@@ -29,7 +29,7 @@ import zstandard
 
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
+from tabsdatak.server._tdrunner.function._lib.request import load_any_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
     TransporterNotFoundError,
     run_transporter,
@@ -135,7 +135,7 @@ def main(args: argparse.Namespace) -> int:
     transporter_response = Path(args.transporter_response)
 
     logger.info("Localizing function bundle")
-    request = load_request_or_raise(request_path, LocalizeFnBundleErrorCode.LFB_1)
+    request = load_any_request_or_raise(request_path, LocalizeFnBundleErrorCode.LFB_1)
     logger.debug(
         "Bundle URI: %s -> archive %s, extract dir %s",
         request.info.function_bundle.uri,

@@ -24,7 +24,7 @@ use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::kit::{
     FunctionRunKit, build_cron_run_kit, build_function_run_kit, build_stream_run_kit,
     inject_envfrom_into_job, inject_envfrom_into_pod, inject_labels_into_job,
-    inject_labels_into_pod,
+    inject_labels_into_pod, inject_request_volume_into_job, inject_request_volume_into_pod,
 };
 use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
@@ -290,11 +290,14 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             Some(kit) => {
                                 inject_envfrom_into_pod(&mut pod, &kit.envfrom);
                                 inject_labels_into_pod(&mut pod, &kit.labels);
-                                (
-                                    vec![kit.main_configmap],
-                                    vec![kit.main_secret],
-                                    Some(kit.latch_configmap),
-                                )
+                                let mut configmaps = vec![kit.main_configmap];
+                                if let Some(request_cm) = kit.request_configmap {
+                                    let cm_name =
+                                        request_cm.metadata.name.clone().unwrap_or_default();
+                                    inject_request_volume_into_pod(&mut pod, &cm_name);
+                                    configmaps.push(request_cm);
+                                }
+                                (configmaps, vec![kit.main_secret], Some(kit.latch_configmap))
                             }
                             None => (Vec::new(), Vec::new(), None),
                         };
@@ -310,11 +313,14 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             Some(kit) => {
                                 inject_envfrom_into_job(&mut job, &kit.envfrom);
                                 inject_labels_into_job(&mut job, &kit.labels);
-                                (
-                                    vec![kit.main_configmap],
-                                    vec![kit.main_secret],
-                                    Some(kit.latch_configmap),
-                                )
+                                let mut configmaps = vec![kit.main_configmap];
+                                if let Some(request_cm) = kit.request_configmap {
+                                    let cm_name =
+                                        request_cm.metadata.name.clone().unwrap_or_default();
+                                    inject_request_volume_into_job(&mut job, &cm_name);
+                                    configmaps.push(request_cm);
+                                }
+                                (configmaps, vec![kit.main_secret], Some(kit.latch_configmap))
                             }
                             None => (Vec::new(), Vec::new(), None),
                         };

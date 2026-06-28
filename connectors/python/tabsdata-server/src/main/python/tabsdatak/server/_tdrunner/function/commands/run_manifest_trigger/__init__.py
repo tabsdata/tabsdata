@@ -22,15 +22,18 @@ Per the TED's Manifest Trigger Runner section:
           ``ExecutionRequestInternal`` shape the supervisor's cron
           trigger already sends, so the apiserver handler accepts
           both orchestrators uniformly.
-        * if running (200 OK): run back-off-and-delete (do NOT queue
+        * if accepted (2xx): run back-off-and-delete (do NOT queue
           this manifest yet -- the function-publisher is still reading;
-          wait for the next iteration to see a dedup-reject, then
-          delete)
-        * if rejected because of external_uid (4xx): queue this
-          manifest + its files for deletion, then run
+          wait for the next iteration to see the apiserver's 409
+          external_uid dedup-reject, then delete)
+        * if 409 Conflict (apiserver's external_uid dedup fired):
+          queue this manifest + its files for deletion, then run
           back-off-and-delete
-        * if 5xx / connection error: log warning, leave manifest in
-          place; next iteration retries
+        * any other 4xx, 5xx, or connection error: log warning,
+          leave manifest in place; next iteration retries.
+          (Important: do NOT delete on other 4xx -- a misconfigured
+          trigger callback returning 403 would otherwise silently
+          burn through every batch the streamer produces.)
 
   Back-Off-And-Delete -- while within the back-off period:
 
@@ -80,7 +83,7 @@ from tabsdatak.server._tdrunner.function._lib.http_request import (
 )
 from tabsdatak.server._tdrunner.function._lib.request import (
     Location,
-    load_request_or_raise,
+    load_any_request_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     InvalidStageManifestError,
@@ -109,10 +112,11 @@ MAN = (
     "    ... + standard responder/liveness/log/journal args\n\n"
     "Reads request.yaml to discover the function_stage URI. Builds "
     "an HttpRequest from the --trigger-* triplet and replays it per "
-    "manifest under <stage>/manifests/. On dedup-rejected responses "
-    "(4xx) queues the manifest's files + manifest itself for "
-    "back-off-and-delete cleanup. Exits when SIGTERM/SIGINT arrives "
-    "(K8s native-sidecar shutdown signal)."
+    "manifest under <stage>/manifests/. On 409 Conflict (apiserver's "
+    "external_uid dedup fired) queues the manifest's files + manifest "
+    "itself for back-off-and-delete cleanup; on any other 4xx/5xx "
+    "leaves the manifest in place + logs a warning. Exits when "
+    "SIGTERM/SIGINT arrives (K8s native-sidecar shutdown signal)."
 )
 
 # Min idle sleep while draining the deletion queue: 0.5s is short
@@ -229,6 +233,9 @@ def _enqueue_for_deletion(
     queue.append(manifest_path)
 
 
+_DEDUP_REJECT_STATUS = 409
+
+
 def _trigger_one(
     manifest_path: Path,
     stage_root: Path,
@@ -240,10 +247,22 @@ def _trigger_one(
     Outcomes:
       * 2xx -- triggered; manifest stays in place (next iteration's
         dedup-reject is the cue to delete; see module docstring).
-      * 4xx -- apiserver rejected (typically external_uid collision);
-        enqueue manifest + files for deletion.
-      * 5xx / connection error -- transient; log + leave; next
-        iteration retries.
+      * 409 Conflict -- apiserver's ``external_uid`` dedup gate fired
+        (``td-services/.../execution/layers/execution_version.rs:121``):
+        the previous iteration's POST was accepted, the execution was
+        scheduled, and the function-publisher pod will consume (or has
+        consumed) this manifest. Safe to delete the manifest + its
+        files.
+      * Any other 4xx, 5xx, or connection error -- anomalous (bad
+        request shape, auth failure, server error, network blip).
+        DO NOT delete: the publisher may never have seen the manifest
+        and deleting destroys evidence + data. Leave in place; the
+        next iteration retries.
+
+    The narrow 409-only delete fixes a prior bug where any 4xx
+    silently deleted the manifest -- in particular, a 403 from a
+    misconfigured trigger JWT scope would burn through every batch
+    the streamer produced without the streamer or operator noticing.
     """
     try:
         external_uid = external_uid_from_filename(manifest_path.name)
@@ -293,22 +312,25 @@ def _trigger_one(
             response.status_code,
         )
         return
-    if 400 <= response.status_code < 500:
+    if response.status_code == _DEDUP_REJECT_STATUS:
         logger.info(
-            "run-manifest-trigger: manifest %s rejected (status=%d); "
-            "queueing %d-file payload for deletion",
+            "run-manifest-trigger: manifest %s dedup-rejected (status=%d); "
+            "external_uid already seen, queueing for deletion",
             manifest_path.name,
             response.status_code,
-            -1,  # exact count logged inside _enqueue_for_deletion via slots read
         )
         _enqueue_for_deletion(manifest_path, stage_root, deletion_queue)
         return
-    # 5xx, etc.
+    # Anything else (other 4xx, 5xx, etc.) is anomalous -- leave the
+    # manifest in place so the next iteration retries, and log loudly
+    # at warning so the operator notices. Body snippet helps debug.
+    body_preview = response.body[:256] if response.body else b""
     logger.warning(
-        "run-manifest-trigger: manifest %s got server error (status=%d); "
-        "leaving in place, will retry next iteration",
+        "run-manifest-trigger: manifest %s got unexpected response "
+        "(status=%d); leaving in place for retry. Body: %r",
         manifest_path.name,
         response.status_code,
+        body_preview,
     )
 
 
@@ -352,7 +374,7 @@ def main(args: argparse.Namespace) -> int:
     back_off_secs = int(args.back_off_secs)
 
     logger.info("Starting manifest-trigger sidecar (back_off_secs=%d)", back_off_secs)
-    request = load_request_or_raise(request_path, RunManifestTriggerErrorCode.MT_1)
+    request = load_any_request_or_raise(request_path, RunManifestTriggerErrorCode.MT_1)
     stage_root = _resolve_local_stage_path(request.info.function_stage)
     trigger_request = _build_trigger_request(args)
     logger.info(

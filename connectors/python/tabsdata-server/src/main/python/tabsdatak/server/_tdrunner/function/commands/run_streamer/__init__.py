@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tabsdatak._connectors import get_stream_src
-from tabsdatak._info import KIND_STREAM_PUBLISHER_DEF, StreamPublisherInfo
+from tabsdatak._info import KIND_STREAM_PUBLISHER_DEF, StreamPublisherInfo, _unwrap_info
 from tabsdatak.extensions.variant.version import version as _tabsdata_version
 from tabsdatak.server._tdrunner.function._lib.command import (
     build_parser,
@@ -49,7 +49,9 @@ from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
+from tabsdatak.server._tdrunner.function._lib.request import (
+    load_streamer_request_or_raise,
+)
 from tabsdatak.server._tdrunner.function._lib.stream_src_ctx import (
     StreamerPluginCtx,
     UnsupportedStageSchemeError as _CtxUnsupportedSchemeError,
@@ -141,14 +143,28 @@ def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     out_dir = Path(args.out_dir)
+    # The streamer plugin writes parquets directly into ctx.work_dir
+    # (== --out-dir) before staging them; the runner owns ensuring it
+    # exists. Same idempotent mkdir `run_function` does for its own
+    # out_dir (`run_function/__init__.py:488`); a missing dir would
+    # surface to the user as a confusing `FileNotFoundError` from
+    # polars during the plugin's `write_parquet` call.
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Starting streamer pod")
-    request = load_request_or_raise(request_path, RunStreamerErrorCode.RS_1)
+    request = load_streamer_request_or_raise(request_path, RunStreamerErrorCode.RS_1)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
+    # `info.func` is the @stream_publisher-decorated descriptor (the
+    # decorator replaces the module-level function binding), not the
+    # bare user callable. `_unwrap_info` descends through the wrapper
+    # to reach the underlying function so its `__name__` is readable.
+    # Same trick `run_function` uses (`_unwrap_info(info.func)` at
+    # invocation time).
+    user_func = _unwrap_info(info.func)
     logger.debug(
         "Loaded StreamPublisherInfo (function=%s, source=%s); resolved plugin=%s",
-        info.func.__name__ if callable(info.func) else info.func,
+        getattr(user_func, "__name__", repr(user_func)),
         type(info.source).__name__,
         type(plugin).__name__,
     )
@@ -157,12 +173,9 @@ def main(args: argparse.Namespace) -> int:
     try:
         ctx = StreamerPluginCtx(
             work_dir=out_dir,
-            exec_plan_id=str(request.info.execution_id),
-            trx_id=str(request.info.transaction_id),
-            exec_plan_ts=request.info.triggered_on_iso,
             collection_id=str(request.info.collection_id),
             collection_name=request.info.collection,
-            function_id=str(request.info.function_run_id),
+            function_id=str(request.info.function_version_id),
             function_name=request.info.function,
             function_stage=function_stage,
             flush_interval_mins=info.fallback_rollover_mins,
@@ -198,7 +211,7 @@ def main(args: argparse.Namespace) -> int:
         "Invoking %s.run() (function=%s, work_dir=%s, stage=%s, "
         "flush_interval_mins=%d)",
         type(plugin).__name__,
-        info.func.__name__ if callable(info.func) else info.func,
+        getattr(user_func, "__name__", repr(user_func)),
         out_dir,
         function_stage.uri,
         info.fallback_rollover_mins,

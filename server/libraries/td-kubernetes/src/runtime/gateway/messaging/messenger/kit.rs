@@ -7,11 +7,14 @@ use std::collections::BTreeMap;
 use k8s_openapi::ByteString;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::{
-    ConfigMap, ConfigMapEnvSource, Container, EnvFromSource, Pod, Secret, SecretEnvSource,
+    ConfigMap, ConfigMapEnvSource, ConfigMapVolumeSource, Container, EnvFromSource, KeyToPath, Pod,
+    Secret, SecretEnvSource, Volume, VolumeMount,
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use serde::Serialize;
 use td_bridge::messaging::{CronStartRequest, FunctionStartRequest, StageTriggerStartRequest};
 use td_common::worker::{Callback, HttpCallback};
+use td_objects::dxo::yaml::location::Location;
 
 use crate::base::constants::TABSDATA_LABEL_NAMESPACE;
 use crate::base::error::kubernetes::messaging::KubeMessagingError;
@@ -44,16 +47,60 @@ const HEADER_AUTHORIZATION: &str = "authorization";
 
 const MAIN_NAME_SUFFIX: &str = "-main";
 const LATCH_NAME_SUFFIX: &str = "-latch";
+const REQUEST_NAME_SUFFIX: &str = "-request";
 const ENV_TD_LATCH: &str = "TD_LATCH";
 const LATCH_VALUE_READY: &str = "ready";
 const SECRET_ENV_PREFIX: &str = "SECRET__";
+
+/// ConfigMap key + in-pod filename for the streamer's `request.yaml`.
+/// The ConfigMap is volume-mounted at `REQUEST_MOUNT_DIR` so the
+/// streamer pod's containers can read it via
+/// `--request <REQUEST_MOUNT_DIR>/<key>` without any HTTP resolver
+/// round-trip (a streamer's envelope is static; see TD-2570).
+const REQUEST_CONFIGMAP_KEY: &str = "request.yaml";
+/// Directory the ConfigMap volume mounts at. Kubernetes mounts a
+/// ConfigMap volume as a directory whose entries are the configmap's
+/// keys; with `items: [{key, path}]` only `request.yaml` appears in
+/// it. We mount a directory rather than `subPath`-mounting a single
+/// file because kminus's pod-runner rejects subPath. Separate from
+/// `/tabsdata/shared/` (an emptyDir) so the two mounts don't collide.
+const REQUEST_MOUNT_DIR: &str = "/tabsdata/request";
+const REQUEST_VOLUME_NAME: &str = "request";
+
+/// Envelope tag the streamer's `_lib/request.py` loader expects.
+const STREAMER_ENVELOPE_TAG: &str = "StreamerV1";
 
 pub struct FunctionRunKit {
     pub main_configmap: ConfigMap,
     pub main_secret: Secret,
     pub latch_configmap: ConfigMap,
+    /// Per-pod ConfigMap whose single `request.yaml` entry is mounted
+    /// as a file at `REQUEST_MOUNT_PATH` on every container.
+    /// `Some` only for the streamer pod kit -- the streamer is the
+    /// only worker that ships its `request.yaml` via configmap rather
+    /// than fetching it from the apiserver (TD-2570: a streamer has
+    /// no late binding to defer, so the envelope is fully knowable at
+    /// Job-create time).
+    pub request_configmap: Option<ConfigMap>,
     pub envfrom: Vec<EnvFromSource>,
     pub labels: Vec<(String, String)>,
+}
+
+/// `StreamerV1` envelope the gateway writes into the streamer pod's
+/// `request.yaml`. Mirrors the Python loader's `StreamerInfo` shape
+/// in `_lib/request.py` -- if you change either, change both.
+#[derive(Serialize)]
+struct StreamerRequestInfo<'a> {
+    project_id: String,
+    collection_id: String,
+    collection: String,
+    function_version_id: String,
+    function_defined_on: i64,
+    function: String,
+    function_bundle: &'a Location,
+    function_stage: &'a Location,
+    scheduled_on: i64,
+    worker_id: String,
 }
 
 pub fn build_function_run_kit(
@@ -102,6 +149,7 @@ pub fn build_function_run_kit(
         main_configmap: build_configmap(&main_name, namespace, config_data),
         main_secret: build_secret(&main_name, namespace, secret_data),
         latch_configmap: build_configmap(&latch_name, namespace, latch_data),
+        request_configmap: None,
         envfrom: vec![
             envfrom_configmap(&main_name),
             envfrom_secret(&main_name),
@@ -138,6 +186,16 @@ pub fn build_stream_run_kit(
 
     let main_name = format!("{pod_name}{MAIN_NAME_SUFFIX}");
     let latch_name = format!("{pod_name}{LATCH_NAME_SUFFIX}");
+    let request_name = format!("{pod_name}{REQUEST_NAME_SUFFIX}");
+
+    // Serialize a `StreamerV1` envelope from the lean request struct
+    // -- the streamer pod reads it from a configmap-mounted file
+    // instead of fetching it from the apiserver. Mirrors the Python
+    // `_lib/request.py:StreamerInfo` model field-for-field; if you
+    // change either, change both.
+    let envelope_yaml = build_streamer_envelope_yaml(request, &worker_id)?;
+    let mut request_data = BTreeMap::new();
+    request_data.insert(REQUEST_CONFIGMAP_KEY.to_owned(), envelope_yaml);
 
     let labels = vec![
         (
@@ -157,6 +215,7 @@ pub fn build_stream_run_kit(
         main_configmap: build_configmap(&main_name, namespace, config_data),
         main_secret: build_secret(&main_name, namespace, secret_data),
         latch_configmap: build_configmap(&latch_name, namespace, latch_data),
+        request_configmap: Some(build_configmap(&request_name, namespace, request_data)),
         envfrom: vec![
             envfrom_configmap(&main_name),
             envfrom_secret(&main_name),
@@ -208,6 +267,7 @@ pub fn build_cron_run_kit(
         main_configmap: build_configmap(&main_name, namespace, config_data),
         main_secret: build_secret(&main_name, namespace, secret_data),
         latch_configmap: build_configmap(&latch_name, namespace, latch_data),
+        request_configmap: None,
         envfrom: vec![
             envfrom_configmap(&main_name),
             envfrom_secret(&main_name),
@@ -215,6 +275,120 @@ pub fn build_cron_run_kit(
         ],
         labels,
     })
+}
+
+/// Serialize the streamer's `request.yaml` as a YAML string ready to
+/// drop into a ConfigMap entry. Output is the single-variant envelope
+/// `StreamerV1` whose payload matches the Python loader's
+/// `_lib/request.py:StreamerInfo` model field-for-field.
+fn build_streamer_envelope_yaml(
+    request: &StageTriggerStartRequest,
+    worker_id: &str,
+) -> Result<String, KubeMessagingError> {
+    // The lean `StageTriggerStartRequest` does not carry
+    // `project_id` or `function_defined_on`. They're not consumed by
+    // any streamer-pod container today (`run_streamer` /
+    // `localize_fn_bundle` / `run_manifest_trigger`), and the Python
+    // `StreamerInfo` model marks them with `extra="ignore"`-style
+    // tolerance via `_AnyRequestInfo`. We deliberately omit them
+    // here rather than fake values; if a future consumer needs them,
+    // they should be added to the bridge struct and the Python
+    // model in lockstep.
+    let info = StreamerRequestInfo {
+        project_id: String::new(),
+        collection_id: request.collection_id.to_string(),
+        collection: request.collection.to_string(),
+        function_version_id: request.function_version_id.to_string(),
+        function_defined_on: 0,
+        function: request.function.to_string(),
+        function_bundle: &request.function_bundle,
+        function_stage: &request.function_stage,
+        scheduled_on: 0,
+        worker_id: worker_id.to_owned(),
+    };
+    // Serialise as a single-variant envelope: `{StreamerV1: {info: {...}}}`.
+    let mut envelope = serde_yaml::Mapping::new();
+    let mut payload = serde_yaml::Mapping::new();
+    payload.insert(
+        serde_yaml::Value::String("info".to_owned()),
+        serde_yaml::to_value(&info).map_err(|e| KubeMessagingError::SerializationFailed {
+            what: "streamer request.yaml info".to_owned(),
+            cause: e.to_string(),
+        })?,
+    );
+    envelope.insert(
+        serde_yaml::Value::String(STREAMER_ENVELOPE_TAG.to_owned()),
+        serde_yaml::Value::Mapping(payload),
+    );
+    serde_yaml::to_string(&serde_yaml::Value::Mapping(envelope)).map_err(|e| {
+        KubeMessagingError::SerializationFailed {
+            what: "streamer request.yaml envelope".to_owned(),
+            cause: e.to_string(),
+        }
+    })
+}
+
+/// Inject the streamer pod's `request.yaml` configmap volume and
+/// per-container volumeMount. Idempotent and a no-op when the kit
+/// carries no `request_configmap`.
+pub fn inject_request_volume_into_pod(pod: &mut Pod, configmap_name: &str) {
+    let Some(spec) = pod.spec.as_mut() else {
+        return;
+    };
+    spec.volumes
+        .get_or_insert_with(Vec::new)
+        .push(build_request_volume(configmap_name));
+    inject_request_mount_into_containers(spec.init_containers.as_mut());
+    inject_request_mount_into_containers(Some(&mut spec.containers));
+}
+
+pub fn inject_request_volume_into_job(job: &mut Job, configmap_name: &str) {
+    let Some(template) = job
+        .spec
+        .as_mut()
+        .and_then(|spec| spec.template.spec.as_mut())
+    else {
+        return;
+    };
+    template
+        .volumes
+        .get_or_insert_with(Vec::new)
+        .push(build_request_volume(configmap_name));
+    inject_request_mount_into_containers(template.init_containers.as_mut());
+    inject_request_mount_into_containers(Some(&mut template.containers));
+}
+
+fn build_request_volume(configmap_name: &str) -> Volume {
+    Volume {
+        name: REQUEST_VOLUME_NAME.to_owned(),
+        config_map: Some(ConfigMapVolumeSource {
+            name: configmap_name.to_owned(),
+            items: Some(vec![KeyToPath {
+                key: REQUEST_CONFIGMAP_KEY.to_owned(),
+                path: REQUEST_CONFIGMAP_KEY.to_owned(),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+fn inject_request_mount_into_containers(containers: Option<&mut Vec<Container>>) {
+    let Some(containers) = containers else {
+        return;
+    };
+    for container in containers {
+        container
+            .volume_mounts
+            .get_or_insert_with(Vec::new)
+            .push(VolumeMount {
+                name: REQUEST_VOLUME_NAME.to_owned(),
+                mount_path: REQUEST_MOUNT_DIR.to_owned(),
+                read_only: Some(true),
+                ..Default::default()
+            });
+    }
 }
 
 pub fn inject_labels_into_pod(pod: &mut Pod, labels: &[(String, String)]) {

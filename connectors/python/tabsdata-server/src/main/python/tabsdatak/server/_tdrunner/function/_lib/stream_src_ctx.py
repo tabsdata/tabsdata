@@ -64,7 +64,7 @@ from urllib.parse import urlparse
 from urllib.request import url2pathname
 
 from tabsdatak.server._tdrunner.function._lib.request import Location
-from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
+from tabsdatak.server._tdrunner.function._lib.request_ctx import FromFlowRequestCtx
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
     FILES_SUBDIR,
     InvalidStateEnvelopeError,
@@ -158,23 +158,27 @@ def _load_state(stage_root: Path) -> StreamStateView | None:
         return None
 
 
-class StreamerPluginCtx(FromRequestCtx, StreamSrcPluginCtx):
+class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
     """Concrete :class:`StreamSrcPluginCtx` for the streamer pod.
 
-    Multiple-inheritance composition mirrors the existing per-command
-    contexts (``_SrcContext`` / ``_DestContext`` / ``_FunctionContext``):
-    :class:`FromRequestCtx` provides the trx + flow surface populated
-    from ``request.yaml``; :class:`StreamSrcPluginCtx` is the abstract
-    SPI base satisfied by this class.
+    Multiple-inheritance composition mirrors the SPI: a streamer is
+    :class:`StreamSrcPluginCtx`, which extends :class:`PluginCtx`
+    (= :class:`FlowCtx` + ``work_dir``) but NOT :class:`TrxCtx` -- a
+    streamer is a long-lived worker, not part of any execution plan or
+    transaction. The downstream per-batch publisher pods (spawned by
+    the manifest-trigger sidecar via ``fn_trigger``) are where real
+    ``execution_id`` / ``transaction_id`` / ``function_run_id`` values
+    live; the streamer pod itself has none. This is why the runtime
+    mixin used here is :class:`FromFlowRequestCtx` rather than the
+    full :class:`FromRequestCtx` used by ``_SrcContext`` /
+    ``_DestContext`` / ``_FunctionContext`` -- those role-typed
+    contexts inherit :class:`TrxCtx`, so they get the trx fields too.
     """
 
     def __init__(
         self,
         *,
         work_dir: Path,
-        exec_plan_id: str,
-        trx_id: str,
-        exec_plan_ts: str,
         collection_id: str,
         collection_name: str,
         function_id: str,
@@ -185,9 +189,6 @@ class StreamerPluginCtx(FromRequestCtx, StreamSrcPluginCtx):
     ) -> None:
         super().__init__(
             work_dir=work_dir,
-            exec_plan_id=exec_plan_id,
-            trx_id=trx_id,
-            exec_plan_ts=exec_plan_ts,
             collection_id=collection_id,
             collection_name=collection_name,
             function_id=function_id,

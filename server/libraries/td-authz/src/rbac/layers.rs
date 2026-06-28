@@ -52,6 +52,7 @@ use std::marker::PhantomData;
 use td_database::dynamic::DynamicConnection;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
+use td_objects::types::basic::UserId;
 use td_tower::extractors::{MutRef, Ref};
 
 /// Errors raised by the enforcement layer.
@@ -249,6 +250,20 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
         request: Ref<RequestContext>,
         scope: Ref<Scope<E>>,
     ) -> Result<(), TdError> {
+        // Internal-token-authenticated callers reach handlers with the
+        // `UserId::system()` identity (set by the apiserver's
+        // `internal_token_layer`, which replaces the prior loopback-IP
+        // trust gate). The token itself binds `(method, scope, bindings)`
+        // to the exact request -- THAT is the authorization boundary
+        // for internal callers; RBAC on top would over-constrain it
+        // (the system user has no role grants, so every internal call
+        // would 403, e.g. the streamer pod's manifest-trigger sidecar
+        // hitting `function_version_execute`). Short-circuit RBAC for
+        // the system user; external callers continue through the
+        // normal grant check below.
+        if request.user_id == UserId::system() {
+            return Ok(());
+        }
         let user_grants = source.user_grants(&mut conn, &request.user_id).await?;
         let request_grants = identity_grants(&request);
         if enforce::<E, R>(&user_grants, &request_grants, &scope.0) {
@@ -533,5 +548,47 @@ mod tests {
         )
         .await
         .unwrap_err();
+    }
+
+    #[td_test::test(db)]
+    async fn test_enforce_layer_bypasses_for_system_user(db: td_database::pool::TdPool) {
+        use std::sync::Arc;
+
+        // `UserId::system()` is the identity the apiserver's
+        // `internal_token_layer` injects on internal-token-authenticated
+        // requests. The token already binds (method, scope, bindings)
+        // to the exact request -- the system user therefore bypasses
+        // RBAC. This is what lets the streamer pod's manifest-trigger
+        // sidecar POST `function_version_execute` (which carries
+        // `Rbac::<Project, DevelopProject>::check`) without holding
+        // a DevelopProject grant the system user could not have.
+        let p = ProjectId::default();
+        let system_request = Arc::new(RequestContext::with(
+            AccessTokenId::default(),
+            UserId::system(),
+        ));
+        let source = Arc::new(FixedRbacSource::new()); // empty: system has no grants
+        let scope = Arc::new(Scope::<Project>(On::Entity(p)));
+
+        let conn = MutRef::new(db.acquire().await.unwrap());
+        Enforce::<FixedRbacSource, Project, DevelopProject>::check(
+            Ref::from_arc(source.clone()),
+            conn,
+            Ref::from_arc(system_request.clone()),
+            Ref::from_arc(scope.clone()),
+        )
+        .await
+        .unwrap();
+
+        // Even the strictest requirement passes for the system user.
+        let conn = MutRef::new(db.acquire().await.unwrap());
+        Enforce::<FixedRbacSource, Project, ManageProject>::check(
+            Ref::from_arc(source.clone()),
+            conn,
+            Ref::from_arc(system_request),
+            Ref::from_arc(scope),
+        )
+        .await
+        .unwrap();
     }
 }

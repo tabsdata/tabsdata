@@ -298,6 +298,23 @@ def test_trigger_one_5xx_does_not_enqueue(tmp_path):
     assert list(queue) == []
 
 
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 410, 422])
+def test_trigger_one_non_409_4xx_does_not_enqueue(tmp_path, status):
+    """Only 409 (apiserver's external_uid dedup) means the function
+    was already triggered for this manifest. Other 4xx (bad request,
+    auth failure, route gone, etc.) is anomalous -- deleting the
+    manifest would silently lose data + evidence. Leave in place so
+    the next iteration retries and the operator sees the warning."""
+    ts = datetime(2026, 6, 16, 10, 30, 12, 345_000)
+    manifest_path = _write_a_manifest(tmp_path, [["files/a.parquet"]], ts=ts)
+    queue: deque[Path] = deque()
+    handler = _silent_handler(status)
+    with _server(handler) as base_url:
+        req = HttpRequest(url=base_url + "/fn_trigger", headers={})
+        _trigger_one(manifest_path, tmp_path, req, queue)
+    assert list(queue) == [], f"status={status} should not enqueue for deletion"
+
+
 def test_trigger_one_connection_failure_does_not_enqueue(tmp_path):
     """The apiserver is down; same recovery as 5xx -- leave in place
     and retry next iteration."""

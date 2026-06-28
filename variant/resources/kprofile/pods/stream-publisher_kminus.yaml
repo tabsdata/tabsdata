@@ -100,67 +100,17 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0020-fetch-request
-          image: function
-          imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_fetch_request"]
-          args:
-            - --shared-dir
-            - $(CONTAINER_ROOT)/tabsdata/shared
-            - --work-dir
-            - $(CONTAINER_ROOT)/tabsdata/work
-            - --log-config
-            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
-            - --liveness
-            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
-            - --responder-url
-            - env:SECRET__TD_RESPONDER_URL
-            - --responder-method
-            - env:SECRET__TD_RESPONDER_METHOD
-            - --responder-authorization
-            - env:SECRET__TD_RESPONDER_AUTHORIZATION
-            - --journal-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
-            - --resolver-url
-            - env:SECRET__TD_RESOLVER_URL
-            - --resolver-method
-            - env:SECRET__TD_RESOLVER_METHOD
-            - --resolver-authorization
-            - env:SECRET__TD_RESOLVER_AUTHORIZATION
-            - --request-file
-            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
-          resources:
-            requests:
-              cpu: "50m"
-              memory: "32Mi"
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-          env:
-            - name: CONTAINER_ROOT
-              value: "$(KM_CONTAINER_ROOT)"
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: POD_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: POD_TABSDATA_INSTANCE
-              value: "${{system:tdk_instance_name}}"
-            - name: TD_LOG_CONFIG
-              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
-          volumeMounts:
-            - name: config-fetch-request
-              mountPath: /tabsdata/config
-              readOnly: true
-            - name: pyenv
-              mountPath: /tabsdata/pyenv
-              readOnly: true
-            - name: shared
-              mountPath: /tabsdata/shared
+        # 0020-fetch-request is intentionally absent from the
+        # stream-publisher pod profile (TD-2570). The streamer's
+        # request.yaml has no late-bound state (no input tables, no
+        # per-execution identifiers), so the k8s gateway builds the
+        # envelope client-side from `StageTriggerStartRequest` fields
+        # and writes it into a per-pod ConfigMap whose `request.yaml`
+        # entry is mounted at `/tabsdata/request/request.yaml` on
+        # every container in this pod (volume + per-container mount
+        # are programmatically injected by `inject_request_volume_into_job`
+        # in td-kubernetes). Downstream containers below read from
+        # that path; no apiserver fetch.
         - name: 0030-localize-fn-bundle
           image: function
           imagePullPolicy: IfNotPresent
@@ -183,7 +133,7 @@ spec:
             - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
-            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - $(CONTAINER_ROOT)/tabsdata/request/request.yaml
             - --bundle-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --bundle-archive
@@ -252,7 +202,7 @@ spec:
             - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
-            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - $(CONTAINER_ROOT)/tabsdata/request/request.yaml
             - --trigger-url
             - env:SECRET__TD_TRIGGER_URL
             - --trigger-method
@@ -316,7 +266,7 @@ spec:
             - --journal-file
             - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
             - --request
-            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - $(CONTAINER_ROOT)/tabsdata/request/request.yaml
             - --bundle-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --out-dir
@@ -355,13 +305,6 @@ spec:
               mountPath: /tabsdata/shared
       volumes:
         - name: config-begin-execution
-          projected:
-            sources:
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
-              - configMap:
-                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-fetch-request
           projected:
             sources:
               - configMap:
