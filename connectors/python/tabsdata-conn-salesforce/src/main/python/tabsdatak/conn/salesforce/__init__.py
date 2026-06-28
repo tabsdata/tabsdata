@@ -78,7 +78,9 @@ ObjectsNameSpec: TypeAlias = Annotated[
 
 InstanceUrlSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.INSTANCE_URL_PATTERN)],
-    Secret,
+    Annotated[
+        Secret, _api.SecretValueConstraints(pattern=_validation.INSTANCE_URL_PATTERN)
+    ],
 ]
 # Salesforce SOQL query list. Today exactly one query (one input
 # slot) -- the list shape leaves room for future multi-query

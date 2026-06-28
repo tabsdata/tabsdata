@@ -46,7 +46,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 AccountSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.ACCOUNT_PATTERN)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
 ]
 
 
@@ -57,7 +57,9 @@ AccountSpec: TypeAlias = Union[
 
 IdentifierSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
-    Secret,
+    Annotated[
+        Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
+    ],
 ]
 
 NameSpec: TypeAlias = IdentifierSpec

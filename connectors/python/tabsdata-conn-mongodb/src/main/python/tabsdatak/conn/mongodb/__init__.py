@@ -39,7 +39,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 UriSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.URI_PATTERN)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URI_PATTERN)],
 ]
 CollectionSpec: TypeAlias = Annotated[str, _validation.COLLECTION_NAME_VALIDATOR]
 ColumnNameSpec: TypeAlias = Annotated[str, _validation.FIELD_NAME_VALIDATOR]

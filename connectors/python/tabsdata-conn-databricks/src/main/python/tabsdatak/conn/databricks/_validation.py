@@ -23,24 +23,22 @@ _QUALIFIED_PART = rf"(?:{_UNQUOTED_IDENTIFIER_PART}|{_BACKTICK_IDENTIFIER_PART})
 
 # Identifier: a single per-part identifier (catalog / schema / table /
 # volume part), matching the per-part rules above.
-IDENTIFIER_PATTERN = _QUALIFIED_PART
+IDENTIFIER_PATTERN = rf"^(?:{_QUALIFIED_PART})$"
 
 # Qualified name: 1-, 2-, or 3-part dotted name; each part follows
 # the per-part identifier rules above. Used as ``value_pattern`` for
 # the ``volume`` field on ``DatabricksConn`` (which accepts a
 # fully-qualified ``catalog.schema.volume`` reference).
-QUALIFIED_NAME_PATTERN = rf"{_QUALIFIED_PART}(?:\.{_QUALIFIED_PART}){{0,2}}"
+QUALIFIED_NAME_PATTERN = rf"^(?:{_QUALIFIED_PART}(?:\.{_QUALIFIED_PART}){{0,2}})$"
 
 # Warehouse name: 1-100 chars, no leading/trailing whitespace, no
 # ASCII control chars.
 WAREHOUSE_NAME_PATTERN = (
-    r"[^\s\x00-\x1f\x7f](?:[^\x00-\x1f\x7f]{0,98}[^\s\x00-\x1f\x7f])?"
+    r"^(?:[^\s\x00-\x1f\x7f](?:[^\x00-\x1f\x7f]{0,98}[^\s\x00-\x1f\x7f])?)$"
 )
 
 # Warehouse id: 16-char lowercase hex.
-WAREHOUSE_ID_PATTERN = r"[0-9a-f]{16}"
-
-
+WAREHOUSE_ID_PATTERN = r"^(?:[0-9a-f]{16})$"
 # --- Table FQN ------------------------------------------------------
 
 # Databricks tables can be referenced as ``table``, ``schema.table``

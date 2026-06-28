@@ -10,12 +10,9 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 # ``schema`` / ``warehouse`` / ``stage``). Accepts an unquoted
 # identifier or a double-quoted identifier honoring the doubled-quote
 # escape convention.
-IDENTIFIER_PATTERN = r'[A-Za-z_][A-Za-z0-9_$]*|"[^"\x00]+(?:""[^"\x00]+)*"'
-
+IDENTIFIER_PATTERN = r'^(?:[A-Za-z_][A-Za-z0-9_$]*|"[^"\x00]+(?:""[^"\x00]+)*")$'
 # Pure-regex form used as ``value_pattern`` for ``AccountSpec``.
-ACCOUNT_PATTERN = r"[A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9]"
-
-
+ACCOUNT_PATTERN = r"^(?:[A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9])$"
 # --- Table FQN ------------------------------------------------------
 
 # Snowflake tables can be referenced as ``table``, ``schema.table`` or

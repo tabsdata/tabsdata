@@ -83,7 +83,10 @@ ConfluentSchemaRegistryUrlNameSpec: TypeAlias = Union[
     Annotated[
         str, StringConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR)
     ],
-    Secret,
+    Annotated[
+        Secret,
+        _api.SecretValueConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR),
+    ],
 ]
 
 
@@ -108,13 +111,13 @@ class ConfluentSchemaRegistry:
 _REGISTRY_NAME_RE_STR = r".*"
 RegistryNameSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_REGISTRY_NAME_RE_STR)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_REGISTRY_NAME_RE_STR)],
 ]
 
 _SCHEMA_NAME_RE_STR = r".*"
 SchemaNameSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_SCHEMA_NAME_RE_STR)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_SCHEMA_NAME_RE_STR)],
 ]
 
 
@@ -154,7 +157,7 @@ SchemaRegistrySpec: TypeAlias = Union[
 _SERVERS_VALUE_PATTERN = r".+"
 KafkaServersSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_SERVERS_VALUE_PATTERN)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_SERVERS_VALUE_PATTERN)],
 ]
 
 # Topic name -- Kafka topics permit a wide alphabet, validation is
@@ -162,7 +165,7 @@ KafkaServersSpec: TypeAlias = Union[
 _GROUP_VALUE_PATTERN = r".+"
 KafkaGroupSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_GROUP_VALUE_PATTERN)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_GROUP_VALUE_PATTERN)],
 ]
 
 # Schema

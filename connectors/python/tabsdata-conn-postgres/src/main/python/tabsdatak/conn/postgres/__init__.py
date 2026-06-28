@@ -68,7 +68,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 UriSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.URI_PATTERN)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URI_PATTERN)],
 ]
 QueriesSpec: TypeAlias = list[str]
 PostgresTableNameSpec: TypeAlias = Annotated[

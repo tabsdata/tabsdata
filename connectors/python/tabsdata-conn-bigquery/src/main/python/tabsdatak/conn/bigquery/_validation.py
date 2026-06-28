@@ -13,12 +13,9 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 
 # Project id: 6-30 chars, lowercase letters / digits / hyphens, start
 # with a letter, end alphanumeric.
-PROJECT_PATTERN = r"[a-z][a-z0-9-]{4,28}[a-z0-9]"
-
+PROJECT_PATTERN = r"^(?:[a-z][a-z0-9-]{4,28}[a-z0-9])$"
 # Dataset id: 1-1024 chars, ASCII letters / digits / underscores.
-DATASET_PATTERN = r"[A-Za-z0-9_]{1,1024}"
-
-
+DATASET_PATTERN = r"^(?:[A-Za-z0-9_]{1,1024})$"
 # --- Table FQN ------------------------------------------------------
 
 # BigQuery tables can be referenced as ``project.dataset.table``.

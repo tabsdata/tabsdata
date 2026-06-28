@@ -113,9 +113,11 @@ class DataType(Enum):  # PLACEHOLDER
 # --- Cloud-location field specs --------------------------------------
 #
 # Each spec is a ``Union[Annotated[str, StringConstraints(<regex>)],
-# Secret]``: a plain string literal is validated against the location's
-# regex, while a ``Secret`` carries the value opaquely (the regex does
-# not apply to secret values).
+# Annotated[Secret, _api.SecretValueConstraints(<regex>)]]``. The same
+# location regex is enforced on a plain string literal and on a
+# ``Secret``'s hydrated value (at construction and whenever the runtime
+# re-hydrates the secret). A dehydrated ``Secret`` carries no value and
+# is left unchecked.
 
 
 # --- BasePath -------------------------------------------------------
@@ -127,11 +129,10 @@ class DataType(Enum):  # PLACEHOLDER
 # joins ``base_path`` with a relative path and strips leading /
 # trailing ``/`` from the result. The empty string represents the
 # root. Backslash and NUL are forbidden.
-_BASE_PATH_RE_STR = r"[^\\\x00]*"
-
+_BASE_PATH_RE_STR = r"^(?:[^\\\x00]*)$"
 BasePathSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_BASE_PATH_RE_STR)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_BASE_PATH_RE_STR)],
 ]
 
 
@@ -151,21 +152,19 @@ def full_path(base_path: BasePathSpec, path: str) -> str:
 # and end alphanumeric. (Doesn't capture the imperative reserved-prefix
 # / reserved-suffix / IPv4 checks the cloud provider enforces server-
 # side anyway.)
-_S3_BUCKET_RE_STR = r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]"
-
+_S3_BUCKET_RE_STR = r"^(?:[a-z0-9][a-z0-9-]{1,61}[a-z0-9])$"
 S3BucketSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_S3_BUCKET_RE_STR)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_S3_BUCKET_RE_STR)],
 ]
 
 # --- AWS region ----------------------------------------------------
 
 # AWS region: ``us-east-1`` / ``us-gov-west-1`` style.
-_AWS_REGION_RE_STR = r"[a-z]{2}(?:-[a-z]+)+-\d+"
-
+_AWS_REGION_RE_STR = r"^(?:[a-z]{2}(?:-[a-z]+)+-\d+)$"
 AwsRegionSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_AWS_REGION_RE_STR)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_AWS_REGION_RE_STR)],
 ]
 
 # --- GCS bucket -----------------------------------------------------
@@ -173,11 +172,10 @@ AwsRegionSpec: TypeAlias = Union[
 # GCS bucket: same length / charset rules as S3 plus underscore.
 # Doesn't capture the imperative ``goog`` prefix / Google-misspelling
 # reserved-substring checks.
-_GCS_BUCKET_RE_STR = r"[a-z0-9][a-z0-9_-]{1,61}[a-z0-9]"
-
+_GCS_BUCKET_RE_STR = r"^(?:[a-z0-9][a-z0-9_-]{1,61}[a-z0-9])$"
 GCSBucketSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_GCS_BUCKET_RE_STR)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_GCS_BUCKET_RE_STR)],
 ]
 
 
@@ -189,11 +187,10 @@ GCSBucketSpec: TypeAlias = Union[
 # every char after the first is either alphanumeric, or a single hyphen
 # *followed by* an alphanumeric -- so consecutive / trailing hyphens
 # never match.
-_AZ_CONTAINER_RE_STR = r"[a-z0-9](?:-?[a-z0-9]){2,62}"
-
+_AZ_CONTAINER_RE_STR = r"^(?:[a-z0-9](?:-?[a-z0-9]){2,62})$"
 AzContainerSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_AZ_CONTAINER_RE_STR)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_AZ_CONTAINER_RE_STR)],
 ]
 
 

@@ -60,7 +60,7 @@ CredentialsSpec: TypeAlias = UserPassword
 # shortcut at the field site.
 HostSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=r".+")],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
 ]
 
 # Port: plain int, or a Secret whose resolved value parses as an
@@ -69,15 +69,14 @@ HostSpec: TypeAlias = Union[
 _PORT_PATTERN = r"[0-9]+"
 PortSpec: TypeAlias = Union[
     int,
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_PORT_PATTERN)],
 ]
 
 
-_IDENTIFIER_PATTERN = r"[A-Za-z_][A-Za-z0-9_]*"
-
+_IDENTIFIER_PATTERN = r"^(?:[A-Za-z_][A-Za-z0-9_]*)$"
 DatabaseSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_IDENTIFIER_PATTERN)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_IDENTIFIER_PATTERN)],
 ]
 StarRocksTableNameSpec: TypeAlias = Annotated[
     str,

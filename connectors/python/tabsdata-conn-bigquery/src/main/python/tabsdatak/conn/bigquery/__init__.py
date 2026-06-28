@@ -50,12 +50,12 @@ CredentialsSpec: TypeAlias = GCPJson
 
 ProjectSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.PROJECT_PATTERN)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.PROJECT_PATTERN)],
 ]
 
 DatasetSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.DATASET_PATTERN)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.DATASET_PATTERN)],
 ]
 
 BigQueryTableNameSpec: TypeAlias = Annotated[

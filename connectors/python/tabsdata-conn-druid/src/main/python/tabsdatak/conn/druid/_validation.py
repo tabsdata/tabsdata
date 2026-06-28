@@ -34,4 +34,4 @@ DATASOURCE_VALIDATOR = AfterValidator(_validate_datasource)
 
 # Pure-regex form used as ``value_pattern`` on the ``UrlSpec``'s Secret
 # branch.
-URL_PATTERN = r"(?i)https?://[^/\s]+(?:/.*)?"
+URL_PATTERN = r"(?i)^(?:https?://[^/\s]+(?:/.*)?)$"

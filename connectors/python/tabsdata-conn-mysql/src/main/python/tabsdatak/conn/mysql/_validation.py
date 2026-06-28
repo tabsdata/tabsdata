@@ -8,9 +8,7 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 # Pure-regex equivalent (for use as ``value_pattern`` on Secret
 # subclasses); same prefix shape as ``_URI_RE`` plus an unrestricted
 # tail so ``re.fullmatch`` matches whole URIs.
-MSYQL_URI_PATTERN = r"(?i)(?:mysql|mariadb)(?:\+[a-z0-9]+)?://.*"
-
-
+MSYQL_URI_PATTERN = r"(?i)^(?:(?:mysql|mariadb)(?:\+[a-z0-9]+)?://.*)$"
 # --- Table FQN ------------------------------------------------------
 
 # MySQL / MariaDB tables can be referenced as ``table`` or

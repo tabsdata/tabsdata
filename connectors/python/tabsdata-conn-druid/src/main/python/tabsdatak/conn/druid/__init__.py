@@ -55,7 +55,7 @@ CredentialsSpec: TypeAlias = UserPassword
 
 UrlSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.URL_PATTERN)],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URL_PATTERN)],
 ]
 DatasourceSpec: TypeAlias = Annotated[str, _validation.DATASOURCE_VALIDATOR]
 DruidTableNameSpec: TypeAlias = DatasourceSpec

@@ -50,22 +50,30 @@ CredentialsSpec: TypeAlias = DatabricksTokenSpec
 
 IdentifierSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
-    Secret,
+    Annotated[
+        Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
+    ],
 ]
 
 WarehouseSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)],
-    Secret,
+    Annotated[
+        Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
+    ],
 ]
 
 WarehouseIdSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)],
-    Secret,
+    Annotated[
+        Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)
+    ],
 ]
 
 VolumeSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)],
-    Secret,
+    Annotated[
+        Secret, _api.SecretValueConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
+    ],
 ]
 QueriesSpec: TypeAlias = list[str]
 DatabricksTableNameSpec: TypeAlias = Annotated[

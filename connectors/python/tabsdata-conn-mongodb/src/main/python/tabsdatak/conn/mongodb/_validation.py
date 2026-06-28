@@ -99,4 +99,4 @@ def _validate_uri(value: str) -> str:
 URI_VALIDATOR = AfterValidator(_validate_uri)
 
 # Pure-regex equivalent for use as ``value_pattern``.
-URI_PATTERN = r"(?i)mongodb(?:\+srv)?://.*"
+URI_PATTERN = r"(?i)^(?:mongodb(?:\+srv)?://.*)$"

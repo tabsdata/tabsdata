@@ -7,9 +7,7 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 
 # Pure-regex form used as ``value_pattern`` on Secret subclasses
 # and as ``StringConstraints`` on the bare-str branch of ``UriSpec``.
-URI_PATTERN = r"(?i)(?:starrocks|mysql)(?:\+[a-z0-9]+)?://.*"
-
-
+URI_PATTERN = r"(?i)^(?:(?:starrocks|mysql)(?:\+[a-z0-9]+)?://.*)$"
 # --- Table FQN ------------------------------------------------------
 
 # StarRocks (MySQL-protocol-compatible) tables can be referenced as

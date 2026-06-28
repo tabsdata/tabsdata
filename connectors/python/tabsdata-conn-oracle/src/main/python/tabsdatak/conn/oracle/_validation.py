@@ -7,9 +7,7 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 
 # Pure-regex form used as ``value_pattern`` on Secret subclasses
 # and as ``StringConstraints`` on the bare-str branch of ``UriSpec``.
-URI_PATTERN = r"(?i)oracle(?:\+[a-z0-9_]+)?://.*"
-
-
+URI_PATTERN = r"(?i)^(?:oracle(?:\+[a-z0-9_]+)?://.*)$"
 # --- Table FQN ------------------------------------------------------
 
 # Oracle tables can be referenced as ``table`` or ``schema.table``.

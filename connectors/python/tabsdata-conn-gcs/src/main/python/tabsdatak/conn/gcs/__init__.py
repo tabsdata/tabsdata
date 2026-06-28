@@ -67,7 +67,7 @@ CredentialsSpec: TypeAlias = GCPJson
 # bare-string shortcut at the field site.
 ProjectSpec: TypeAlias = Union[
     Annotated[str, StringConstraints(pattern=r".+")],
-    Secret,
+    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
 ]
 
 

@@ -51,7 +51,7 @@ from pydantic_core import core_schema
 
 # Error codes and exceptions live in `tabsdatak.api_error` so callers
 # only depend on that module when they want to react to errors.
-from tabsdatak.error import ErrorCode
+from tabsdatak.error import ApiErrorCode, ErrorCode
 
 _C = TypeVar("_C", bound=type)
 
@@ -285,6 +285,77 @@ CRON_MASK_CONSTRAINTS = AfterValidator(_validate_cron_mask)
 NAMED_CONN_CONSTRAINTS = AfterValidator(_validate_named_connection)
 
 NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
+
+
+# ---------------------------------------------------------------------------
+# Field-site value constraint for `tabsdatak.api.Secret`.
+#
+# Use as ``Annotated[Secret, SecretValueConstraints(pattern=<regex>)]``.
+# The regex is enforced on the secret's *hydrated value*: eagerly at
+# construction for an inline value, and again whenever the runtime
+# re-hydrates the dehydrated marker back into a value (the rehydrated
+# tree is re-validated through the field). A dehydrated secret
+# (``":secret:"``) carries no value and is left unchecked.
+#
+# The pattern is a field-site constraint: it is never serialized (the
+# wire form is just the ``":secret:"`` marker) and is re-applied from the
+# field annotation on every validation. As a side effect a bad bare
+# string at a ``Union[Annotated[str, StringConstraints(<re>)],
+# Annotated[Secret, SecretValueConstraints(<re>)]]`` field is rejected by
+# *both* union members instead of silently falling through to a literal
+# secret.
+# ---------------------------------------------------------------------------
+
+
+class SecretValueConstraints:
+    """Field-site regex on the hydrated value of a
+    :class:`~tabsdatak.api.Secret`."""
+
+    def __init__(self, *, pattern: str):
+        if not isinstance(pattern, str):
+            raise TypeError(
+                f"SecretValueConstraints expects a regex string, "
+                f"got {type(pattern)!r}"
+            )
+        self._pattern = pattern
+
+    def __repr__(self) -> str:
+        return f"SecretValueConstraints(pattern={self._pattern!r})"
+
+    def __get_pydantic_core_schema__(
+        self,
+        source_type: Any,
+        handler: GetCoreSchemaHandler,
+    ) -> core_schema.CoreSchema:
+        # Deferred import: keeps the api <-> _api import cycle from racing
+        # at module load (the field schema is built well after both
+        # modules are imported).
+        from tabsdatak.api import Secret
+
+        if not (
+            isinstance(source_type, type) and issubclass(source_type, Secret)
+        ):
+            raise TypeError(
+                f"SecretValueConstraints can only annotate Secret subclasses "
+                f"(got {source_type!r})"
+            )
+
+        pattern = self._pattern
+        base = handler(source_type)
+
+        def check(secret: Any) -> Any:
+            # Only a hydrated secret has a value to check; a dehydrated
+            # one (``":secret:"``) is left untouched.
+            value = secret._value
+            if value is not None and re.fullmatch(pattern, value) is None:
+                raise ApiErrorCode.API_6.exception(
+                    name=type(secret).__name__,
+                    pattern=pattern,
+                    value=value,
+                )
+            return secret
+
+        return core_schema.no_info_after_validator_function(check, base)
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,9 @@ from tabsdatak import _connectors as _connectors
 from tabsdatak import spi
 from tabsdatak import _info
 import json
-from typing import Annotated
+from typing import Annotated, Union
+
+from pydantic import StringConstraints
 
 from tabsdatak.api import (
     Conn,
@@ -1250,3 +1252,70 @@ def test_secret_field_accepts_hydrated_wire_form():
     payload = _SrcWithSecret(s=Secret()).to_dict()
     payload["spec"]["s"] = "secret:hunter2"
     assert _SrcWithSecret.from_dict(payload).s.value() == "hunter2"
+
+
+# ===========================================================================
+# SecretValueConstraints -- field-site regex on a Secret's hydrated value.
+#
+# ``Annotated[Secret, SecretValueConstraints(pattern=...)]`` enforces the
+# regex on the secret's *hydrated value*: eagerly at construction (for an
+# inline value or a bare string) and again whenever the runtime
+# re-hydrates the dehydrated marker back into a value. A dehydrated secret
+# carries no value and is left unchecked. The pattern is never serialized.
+# ===========================================================================
+
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _SrcWithConstrainedSecret(Src):
+    s: Annotated[Secret, _api.SecretValueConstraints(pattern=r"\d+")]
+
+
+@_api.dataclass(ApiErrorCode.API_14)
+class _SrcWithUnionSpec(Src):
+    # The realistic spec shape: a plain string OR a Secret, both pinned to
+    # the same regex.
+    v: Union[
+        Annotated[str, StringConstraints(pattern=r"\d+")],
+        Annotated[Secret, _api.SecretValueConstraints(pattern=r"\d+")],
+    ]
+
+
+def test_secret_constraint_accepts_matching_hydrated_value():
+    assert _SrcWithConstrainedSecret(s=Secret("123")).s.value() == "123"
+    # A bare string is wrapped into a Secret and validated against the
+    # field's pattern.
+    assert _SrcWithConstrainedSecret(s="123").s == Secret("123")
+
+
+def test_secret_constraint_rejects_violating_hydrated_value():
+    with pytest.raises(ApiException) as excinfo:
+        _SrcWithConstrainedSecret(s=Secret("nope"))
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+
+def test_secret_constraint_skips_dehydrated_secret():
+    # A dehydrated secret has no value, so the pattern is not applied.
+    src = _SrcWithConstrainedSecret(s=Secret())
+    assert src.to_dict()["spec"]["s"] == ":secret:"
+
+
+def test_secret_constraint_enforced_on_rehydration():
+    # The dehydrated field, re-hydrated from the wire form, is re-validated.
+    payload = _SrcWithConstrainedSecret(s=Secret()).to_dict()
+    payload["spec"]["s"] = "secret:123"
+    assert _SrcWithConstrainedSecret.from_dict(payload).s.value() == "123"
+    payload["spec"]["s"] = "secret:nope"
+    with pytest.raises(ApiException) as excinfo:
+        _SrcWithConstrainedSecret.from_dict(payload)
+    assert excinfo.value.api_error is ApiErrorCode.API_6
+
+
+def test_union_spec_bad_bare_string_does_not_fall_through_to_secret():
+    # Regression guard: a bare string that fails the str member must not
+    # silently become a literal Secret. The constrained Secret member
+    # rejects it too, so construction fails instead of producing a Secret.
+    assert _SrcWithUnionSpec(v="123").v == "123"  # str member
+    assert _SrcWithUnionSpec(v=Secret("123")).v == Secret("123")  # secret member
+    with pytest.raises(ApiException) as excinfo:
+        _SrcWithUnionSpec(v="nope")
+    assert excinfo.value.api_error is ApiErrorCode.API_6

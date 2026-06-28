@@ -293,12 +293,18 @@ class ApiErrorCode(ErrorCode):
     # AllTablesTrigger (fire on any upstream table change)
 
     # --- Value references (tabsdatak.api) ---------------------------
-    # The `Secret` value reference maps to two codes. (API_6 / API_7-10 /
-    # API_12 were retired with the `_ValOrRef` / `Var` / `LiteralEnv` /
-    # `LiteralSecret` types and the per-field value-pattern checks; their
-    # slots are left vacant so the surviving codes keep their stable numbers.)
+    # The `Secret` value reference maps to three codes. (API_7-10 / API_12
+    # were retired with the `_ValOrRef` / `Var` / `LiteralEnv` /
+    # `LiteralSecret` types; their slots are left vacant so the surviving
+    # codes keep their stable numbers.)
     API_5 = ErrorDef(ApiInitException, "Secret value must be a string, got {type}")
     # `Secret.__init__` -- a non-string, non-None value was passed.
+    API_6 = ErrorDef(
+        ApiRuntimeException,
+        "Secret {name} value `{value!r}` does not match pattern `{pattern!r}`",
+    )
+    # `SecretValueConstraints` -- field-site pattern-mismatch raise for a
+    # `Secret` carrying a hydrated value that fails the field's regex.
     API_11 = ErrorDef(ApiInternalException, "Secret {name}, missing secret resolution ")
     # `Secret.value()` -- reading the value of a dehydrated secret
 

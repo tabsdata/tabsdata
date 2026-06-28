@@ -16,9 +16,7 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 #
 # Pure-regex form used as ``value_pattern`` on Secret subclasses
 # and as ``StringConstraints`` on the bare-str branch of ``UriSpec``.
-MSSQL_URI_PATTERN = r"(?i)(?:mssql(?:\+[a-z0-9]+)?://.*|[A-Za-z][A-Za-z0-9 ]*=.+)"
-
-
+MSSQL_URI_PATTERN = r"(?i)^(?:(?:mssql(?:\+[a-z0-9]+)?://.*|[A-Za-z][A-Za-z0-9 ]*=.+))$"
 # --- Table FQN ------------------------------------------------------
 
 # MSSQL tables can be 1-, 2-, or 3-part: ``table``, ``schema.table``

@@ -48,8 +48,8 @@ INSTANCE_URL_VALIDATOR = AfterValidator(_validate_instance_url)
 
 # Pure-regex equivalent for use as ``value_pattern``.
 INSTANCE_URL_PATTERN = (
-    r"https://[A-Za-z0-9][A-Za-z0-9.-]*"
-    r"\.(?:salesforce|force|cloudforce|salesforce-setup)\.com/?"
+    r"^(?:https://[A-Za-z0-9][A-Za-z0-9.-]*"
+    r"\.(?:salesforce|force|cloudforce|salesforce-setup)\.com/?)$"
 )
 
 
