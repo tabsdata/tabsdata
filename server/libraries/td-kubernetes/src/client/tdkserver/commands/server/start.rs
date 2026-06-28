@@ -7,7 +7,7 @@ use td_common::status::ExitStatus::Cancelled;
 
 use crate::base::reporter::InteractiveReporter;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
+use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::cwarn;
@@ -63,7 +63,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
     if preview {
         preview::start_server(&provider.summary());
     }
-    if !effective_yes(yes) && !prompt_yes_no("Proceed with the start?") {
+    if !yes && !prompt_yes_no("Proceed with the start?") {
         return abort(Cancelled);
     }
 

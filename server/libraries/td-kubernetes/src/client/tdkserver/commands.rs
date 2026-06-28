@@ -2,7 +2,6 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-pub mod autoconfirm;
 pub mod cluster;
 pub mod config;
 pub mod instance;

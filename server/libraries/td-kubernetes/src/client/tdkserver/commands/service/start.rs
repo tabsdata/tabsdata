@@ -6,8 +6,12 @@ use clap_derive::Args;
 use td_common::status::ExitStatus::Cancelled;
 
 use crate::base::reporter::InteractiveReporter;
+use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
-use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
+use crate::client::tdkserver::commands::service::{
+    instance_markers, resolved_instance, resolved_preview, resolved_yes,
+};
+use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::cwarn;
@@ -19,6 +23,7 @@ pub struct StartArguments {
         long,
         name = "instance",
         required = false,
+        display_order = 10,
         long_help = "Name of the instance to start. Defaults to 'tabsdata'."
     )]
     pub instance: Option<String>,
@@ -27,23 +32,25 @@ pub struct StartArguments {
         long,
         name = "preview",
         required = false,
-        default_value_t = true,
         num_args = 0..=1,
         default_missing_value = "true",
+        display_order = 110,
         long_help = "Show the summary of resolved values before starting the instance. \
                      Defaults to 'true'. Pass '--preview false' to skip the summary."
     )]
-    pub preview: bool,
+    pub preview: Option<bool>,
 
     #[arg(
         long,
         name = "yes",
         short = 'y',
         required = false,
-        default_value_t = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 120,
         long_help = "Skip the interactive confirmation prompt and proceed immediately."
     )]
-    pub yes: bool,
+    pub yes: Option<bool>,
 }
 
 pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments) -> CommandResult {
@@ -53,7 +60,13 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
         yes,
     } = arguments;
 
-    let provider = provider_for_instance(instance, globals.verbose).await?;
+    let pins = PinContext::pins();
+    let instance = resolved_instance(instance, &pins);
+    let preview = resolved_preview(preview, &pins);
+    let yes = resolved_yes(yes, &pins);
+    let verbose = globals.verbose;
+
+    let provider = provider_for_instance(instance.value, verbose).await?;
     provider.ensure_startable_service().await?;
 
     if provider.service_alive().await {
@@ -61,10 +74,11 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
         return Ok(());
     }
 
-    if preview {
-        preview::start_service(&provider.summary());
+    if preview.value {
+        let markers = instance_markers(&provider.summary(), instance.pinned);
+        preview::start_service(&provider.summary(), &markers);
     }
-    if !effective_yes(yes) && !prompt_yes_no("Proceed with the start?") {
+    if !yes.value && !prompt_yes_no("Proceed with the start?") {
         return abort(Cancelled);
     }
 

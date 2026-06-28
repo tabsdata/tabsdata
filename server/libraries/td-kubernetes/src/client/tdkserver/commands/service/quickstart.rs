@@ -8,10 +8,14 @@ use clap_derive::Args;
 use td_common::status::ExitStatus::Cancelled;
 
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
+use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments};
 use crate::client::tdkserver::commands::service::create::create_instance;
 use crate::client::tdkserver::commands::service::init::{InitArguments, command_init};
 use crate::client::tdkserver::commands::service::start::{StartArguments, command_start};
+use crate::client::tdkserver::commands::service::{
+    resolved_instance, resolved_preview, resolved_yes,
+};
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::core::system::exit::{CommandResult, abort};
 use crate::runtime::instance::ports::DEFAULT_BASE_PORT;
@@ -22,6 +26,7 @@ pub struct QuickstartArguments {
         long,
         name = "instance",
         required = false,
+        display_order = 10,
         long_help = "Name of the instance to initialize, create and start. Defaults to 'tabsdata'."
     )]
     pub instance: Option<String>,
@@ -34,6 +39,7 @@ pub struct QuickstartArguments {
         name = "port",
         required = false,
         default_value_t = DEFAULT_BASE_PORT,
+        display_order = 70,
         long_help = "Base HTTP/HTTPS port. Ports for the instance services are assigned \
                      sequentially starting from this value."
     )]
@@ -43,6 +49,7 @@ pub struct QuickstartArguments {
         long,
         name = "openai-key",
         required = false,
+        display_order = 80,
         long_help = "OpenAI API key for the aiagent. Optional."
     )]
     pub openai_key: Option<String>,
@@ -51,6 +58,7 @@ pub struct QuickstartArguments {
         long,
         name = "anthropic-key",
         required = false,
+        display_order = 90,
         long_help = "Anthropic API key for the aiagent. Optional."
     )]
     pub anthropic_key: Option<String>,
@@ -59,11 +67,37 @@ pub struct QuickstartArguments {
         long,
         name = "save",
         required = false,
-        default_value_t = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 100,
         long_help = "Copy the cluster settings files (kubeconfig, etc.) into the instance \
                      folder so the instance is self-contained."
     )]
-    pub save: bool,
+    pub save: Option<bool>,
+
+    #[arg(
+        long,
+        name = "preview",
+        required = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 110,
+        long_help = "Show the summary of resolved values before each step. Defaults to \
+                     'true'. Pass '--preview false' to skip the summaries."
+    )]
+    pub preview: Option<bool>,
+
+    #[arg(
+        long,
+        name = "yes",
+        short = 'y',
+        required = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 120,
+        long_help = "Skip the interactive confirmation prompts and proceed immediately."
+    )]
+    pub yes: Option<bool>,
 }
 
 pub async fn command_quickstart(
@@ -77,6 +111,8 @@ pub async fn command_quickstart(
         openai_key,
         anthropic_key,
         save,
+        preview,
+        yes,
     } = arguments;
 
     let mut overrides: HashMap<String, String> = HashMap::new();
@@ -96,21 +132,36 @@ pub async fn command_quickstart(
         InitArguments {
             instance: instance.clone(),
             cluster,
-            preview: false,
+            preview,
             save,
-            yes: true,
+            yes,
         },
         globals,
     )
     .await?;
 
-    create_instance(instance.clone(), port, &overrides, globals).await?;
+    let pins = PinContext::pins();
+    let resolved_instance_value = resolved_instance(instance.clone(), &pins);
+    let resolved_preview_value = resolved_preview(preview, &pins);
+    let resolved_yes_value = resolved_yes(yes, &pins);
+    let resolved_verbose_value = globals.verbose;
+
+    create_instance(
+        resolved_instance_value.value,
+        resolved_instance_value.pinned,
+        port,
+        resolved_preview_value.value,
+        resolved_yes_value.value,
+        resolved_verbose_value,
+        &overrides,
+    )
+    .await?;
 
     command_start(
         StartArguments {
             instance,
-            preview: false,
-            yes: true,
+            preview,
+            yes,
         },
         globals,
     )

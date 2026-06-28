@@ -18,9 +18,13 @@ use crate::client::registry::{
     ClusterViews, InstanceSettings, InstanceState, instance_folder, instance_init_folder,
     instance_kube_folder,
 };
+use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
+use crate::client::tdkserver::commands::service::{
+    resolved_cluster, resolved_instance, resolved_preview, resolved_save, resolved_yes,
+};
 use crate::client::tdkserver::commands::template::get::get_templates;
-use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
+use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort, abort_with};
 use crate::runtime::instance::cluster::ClusterProperties;
@@ -35,6 +39,7 @@ pub struct InitArguments {
         long,
         name = "instance",
         required = false,
+        display_order = 10,
         long_help = "Name of the instance whose editable input config folder is produced. \
                      Defaults to 'tabsdata'."
     )]
@@ -47,59 +52,76 @@ pub struct InitArguments {
         long,
         name = "preview",
         required = false,
-        default_value_t = true,
         num_args = 0..=1,
         default_missing_value = "true",
+        display_order = 110,
         long_help = "Show the summary of resolved values before initializing the instance. \
                      Defaults to 'true'. Pass '--preview false' to skip the summary."
     )]
-    pub preview: bool,
+    pub preview: Option<bool>,
 
     #[arg(
         long,
         name = "save",
         required = false,
-        default_value_t = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 100,
         long_help = "Copy the cluster settings files (kubeconfig, etc.) into the instance \
                      folder so the instance is self-contained."
     )]
-    pub save: bool,
+    pub save: Option<bool>,
 
     #[arg(
         long,
         name = "yes",
         short = 'y',
         required = false,
-        default_value_t = false,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        display_order = 120,
         long_help = "Skip the interactive confirmation prompt and proceed immediately."
     )]
-    pub yes: bool,
+    pub yes: Option<bool>,
 }
 
 pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -> CommandResult {
     let InitArguments {
         instance,
-        mut cluster,
+        cluster,
         save,
         preview,
         yes,
     } = arguments;
 
-    let instance_defaulted = instance.is_none();
-    let provider_defaulted = cluster.provider.is_none();
-    let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
+    let pins = PinContext::pins();
+    let instance = resolved_instance(instance, &pins);
+    let (mut cluster, cluster_pinned) = resolved_cluster(cluster, &pins);
+    let save = resolved_save(save, &pins);
+    let preview = resolved_preview(preview, &pins);
+    let yes = resolved_yes(yes, &pins);
+    let verbose = globals.verbose;
+
+    let instance_pinned = instance.pinned;
+    let instance_defaulted = instance.value.is_none();
+    let provider_defaulted = cluster.provider.is_none() && !cluster_pinned.provider;
+    let instance = instance
+        .value
+        .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
     let provider = cluster.provider.unwrap_or(DEFAULT_PROVIDER);
     cluster.provider = Some(provider);
 
-    if preview {
+    if preview.value {
         preview::init_service(
             &instance,
+            instance_pinned,
             instance_defaulted,
             provider.as_str(),
+            cluster_pinned.provider,
             provider_defaulted,
         );
     }
-    if !effective_yes(yes) && !prompt_yes_no("Proceed with the initialization?") {
+    if !yes.value && !prompt_yes_no("Proceed with the initialization?") {
         info!("Operation cancelled.");
         return abort(Cancelled);
     }
@@ -122,13 +144,13 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     let built = provider_for(
         cluster,
         InstanceArguments::new(Some(instance.clone())),
-        globals.verbose,
+        verbose,
         None,
     )
     .await?;
 
     let mut adjusted = built.cluster_settings(provided.clone())?;
-    if save
+    if save.value
         && provider != ClusterProvider::Kminus
         && let Some(kubeconfig) = &adjusted.kubeconfig
     {
@@ -156,7 +178,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         folder.display()
     ));
 
-    get_templates(&reporter, provider, &init_folder, globals.verbose)?;
+    get_templates(&reporter, provider, &init_folder, verbose)?;
 
     let step = reporter.step("Writing tabsdata instance settings");
     let settings = InstanceSettings {

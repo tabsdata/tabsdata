@@ -18,10 +18,12 @@ use tracing::info;
 
 use crate::client::tdkserver::arguments::GlobalArguments;
 
-use super::autoconfirm::{AutoconfirmCommands, command_autoconfirm};
 use super::config::{ConfigCommands, command_config};
 use super::secret::{SecretCommands, command_secret};
 use super::server::{ServerCommands, command_server};
+use super::session::pin::{PinArguments, command_pin};
+use super::session::show::{ShowArguments, command_show};
+use super::session::unpin::{UnpinArguments, command_unpin};
 use super::session::{SessionCommands, command_session};
 use crate::cerror;
 use crate::client::session::pin::{PinContext, tdkpin_path};
@@ -37,9 +39,6 @@ enum ShellCommand {
     Exit,
     /// Exit the shell
     Quit,
-    /// Manage the autoconfirm preference
-    #[command(subcommand)]
-    Autoconfirm(AutoconfirmCommands),
     /// Manage tabsdata configs
     #[command(subcommand)]
     Config(ConfigCommands),
@@ -52,6 +51,12 @@ enum ShellCommand {
     /// Manage the active tabsdata session
     #[command(subcommand)]
     Session(SessionCommands),
+    /// Pin default values used when commands omit them
+    Pin(PinArguments),
+    /// Unpin default values
+    Unpin(UnpinArguments),
+    /// Show the pinned default values
+    Show(ShowArguments),
 }
 
 #[derive(Debug, Parser)]
@@ -127,9 +132,6 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
         match ShellInput::try_parse_from(tokens) {
             Ok(input) => match input.command {
                 ShellCommand::Exit | ShellCommand::Quit => break,
-                ShellCommand::Autoconfirm(command) => {
-                    let _ = command_autoconfirm(command, globals).await;
-                }
                 ShellCommand::Config(command) => {
                     let _ = command_config(command, globals).await;
                 }
@@ -141,6 +143,15 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 }
                 ShellCommand::Session(command) => {
                     let _ = command_session(command, globals).await;
+                }
+                ShellCommand::Pin(arguments) => {
+                    let _ = command_pin(arguments, globals).await;
+                }
+                ShellCommand::Unpin(arguments) => {
+                    let _ = command_unpin(arguments, globals).await;
+                }
+                ShellCommand::Show(arguments) => {
+                    let _ = command_show(arguments, globals).await;
                 }
             },
             Err(error) => {

@@ -5,7 +5,6 @@
 use std::io::{self, BufRead, Write};
 
 use crate::base::constants::{VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
-use crate::client::session::pin::PinContext;
 
 const MAX_INSTANCE_NAME_LENGTH: usize = 256;
 
@@ -79,10 +78,6 @@ pub fn prompt_yes_no(message: &str) -> bool {
             return answer;
         }
     }
-}
-
-pub fn effective_yes(yes: bool) -> bool {
-    yes || PinContext::autoconfirm_enabled()
 }
 
 #[cfg(test)]

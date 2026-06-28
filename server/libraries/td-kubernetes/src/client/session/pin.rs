@@ -76,33 +76,195 @@ pub enum Session {
     },
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Autoconfirm {
-    pub enabled: bool,
+#[derive(Debug, Clone)]
+pub struct Resolved<T> {
+    pub value: T,
+    pub pinned: bool,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct InstancePin {
-    pub name: String,
+pub fn resolve<T>(user: Option<T>, pinned: Option<T>) -> Resolved<Option<T>> {
+    match user {
+        Some(value) => Resolved {
+            value: Some(value),
+            pinned: false,
+        },
+        None => match pinned {
+            Some(value) => Resolved {
+                value: Some(value),
+                pinned: true,
+            },
+            None => Resolved {
+                value: None,
+                pinned: false,
+            },
+        },
+    }
+}
+
+pub fn resolve_flag(user: Option<bool>, pinned: Option<bool>, fallback: bool) -> Resolved<bool> {
+    match user {
+        Some(value) => Resolved {
+            value,
+            pinned: false,
+        },
+        None => match pinned {
+            Some(value) => Resolved {
+                value,
+                pinned: true,
+            },
+            None => Resolved {
+                value: fallback,
+                pinned: false,
+            },
+        },
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Pins {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub instance: Option<InstancePin>,
+    pub instance: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ClusterProvider>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kubeconfig: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub save: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub autoconfirm: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PinContext {
     #[serde(default, skip_serializing_if = "Pins::is_empty")]
     pub pins: Pins,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub autoconfirm: Option<Autoconfirm>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PinSelection {
+    pub instance: bool,
+    pub provider: bool,
+    pub kubeconfig: bool,
+    pub context: bool,
+    pub namespace: bool,
+    pub save: bool,
+    pub preview: bool,
+    pub autoconfirm: bool,
+}
+
+impl PinSelection {
+    pub fn any(&self) -> bool {
+        self.instance
+            || self.provider
+            || self.kubeconfig
+            || self.context
+            || self.namespace
+            || self.save
+            || self.preview
+            || self.autoconfirm
+    }
 }
 
 impl Pins {
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.instance.is_none()
+            && self.provider.is_none()
+            && self.kubeconfig.is_none()
+            && self.context.is_none()
+            && self.namespace.is_none()
+            && self.save.is_none()
+            && self.preview.is_none()
+            && self.autoconfirm.is_none()
+    }
+
+    pub fn report(&self, heading: &str) {
+        info!("{heading}");
+        if let Some(instance) = &self.instance {
+            info!("  - instance.....: {instance}");
+        }
+        if let Some(provider) = &self.provider {
+            info!("  - provider.....: {}", provider.as_str());
+        }
+        if let Some(kubeconfig) = &self.kubeconfig {
+            info!("  - kubeconfig...: {}", kubeconfig.display());
+        }
+        if let Some(context) = &self.context {
+            info!("  - context......: {context}");
+        }
+        if let Some(namespace) = &self.namespace {
+            info!("  - namespace....: {namespace}");
+        }
+        if let Some(save) = self.save {
+            info!("  - save.........: {save}");
+        }
+        if let Some(preview) = self.preview {
+            info!("  - preview......: {preview}");
+        }
+        if let Some(autoconfirm) = self.autoconfirm {
+            info!("  - autoconfirm..: {autoconfirm}");
+        }
+    }
+
+    fn merge(&mut self, values: Pins) {
+        if values.instance.is_some() {
+            self.instance = values.instance;
+        }
+        if values.provider.is_some() {
+            self.provider = values.provider;
+        }
+        if values.kubeconfig.is_some() {
+            self.kubeconfig = values.kubeconfig;
+        }
+        if values.context.is_some() {
+            self.context = values.context;
+        }
+        if values.namespace.is_some() {
+            self.namespace = values.namespace;
+        }
+        if values.save.is_some() {
+            self.save = values.save;
+        }
+        if values.preview.is_some() {
+            self.preview = values.preview;
+        }
+        if values.autoconfirm.is_some() {
+            self.autoconfirm = values.autoconfirm;
+        }
+    }
+
+    fn clear(&mut self, selection: &PinSelection) -> bool {
+        let mut cleared = false;
+        if selection.instance && self.instance.take().is_some() {
+            cleared = true;
+        }
+        if selection.provider && self.provider.take().is_some() {
+            cleared = true;
+        }
+        if selection.kubeconfig && self.kubeconfig.take().is_some() {
+            cleared = true;
+        }
+        if selection.context && self.context.take().is_some() {
+            cleared = true;
+        }
+        if selection.namespace && self.namespace.take().is_some() {
+            cleared = true;
+        }
+        if selection.save && self.save.take().is_some() {
+            cleared = true;
+        }
+        if selection.preview && self.preview.take().is_some() {
+            cleared = true;
+        }
+        if selection.autoconfirm && self.autoconfirm.take().is_some() {
+            cleared = true;
+        }
+        cleared
     }
 }
 
@@ -169,7 +331,7 @@ impl PinContext {
     }
 
     fn delete_if_empty(&self) -> CommandResult {
-        if self.pins.is_empty() && self.autoconfirm.is_none() {
+        if self.pins.is_empty() {
             let path = tdkpin_path();
             if path.exists()
                 && let Err(error) = fs::remove_file(&path)
@@ -182,43 +344,39 @@ impl PinContext {
         self.save()
     }
 
-    pub fn pin_instance(name: String) -> CommandResult {
+    pub fn pin_values(values: Pins) -> CommandResult {
         let mut pin = Self::load()?;
-        pin.pins.instance = Some(InstancePin { name });
+        pin.pins.merge(values);
         pin.save()
     }
 
-    pub fn unpin_instance() -> CommandResult<bool> {
+    pub fn unpin_values(selection: &PinSelection) -> CommandResult<bool> {
         let mut pin = Self::load()?;
-        let existed = pin.pins.instance.is_some();
-        pin.pins.instance = None;
+        let cleared = pin.pins.clear(selection);
+        pin.delete_if_empty()?;
+        Ok(cleared)
+    }
+
+    pub fn unpin_all() -> CommandResult<bool> {
+        let mut pin = Self::load()?;
+        let existed = !pin.pins.is_empty();
+        pin.pins = Pins::default();
         pin.delete_if_empty()?;
         Ok(existed)
+    }
+
+    pub fn pins() -> Pins {
+        Self::read().pins
+    }
+
+    pub fn pin_instance(name: String) -> CommandResult {
+        let mut pin = Self::load()?;
+        pin.pins.instance = Some(name);
+        pin.save()
     }
 
     pub fn pinned_instance() -> Option<String> {
-        Self::read().pins.instance.map(|instance| instance.name)
-    }
-
-    pub fn pin_autoconfirm(enabled: bool) -> CommandResult {
-        let mut pin = Self::load()?;
-        pin.autoconfirm = Some(Autoconfirm { enabled });
-        pin.save()
-    }
-
-    pub fn unpin_autoconfirm() -> CommandResult<bool> {
-        let mut pin = Self::load()?;
-        let existed = pin.autoconfirm.is_some();
-        pin.autoconfirm = None;
-        pin.delete_if_empty()?;
-        Ok(existed)
-    }
-
-    pub fn autoconfirm_enabled() -> bool {
-        Self::read()
-            .autoconfirm
-            .map(|autoconfirm| autoconfirm.enabled)
-            .unwrap_or(false)
+        Self::read().pins.instance
     }
 }
 

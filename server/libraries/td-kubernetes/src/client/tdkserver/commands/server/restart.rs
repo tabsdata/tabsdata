@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::client::tdkserver::common::{effective_yes, prompt_yes_no};
+use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::CommandResult;
 use crate::cwarn;
@@ -67,7 +67,7 @@ pub async fn command_restart(
     if preview {
         preview::restart_server(&provider.summary());
     }
-    if !effective_yes(yes) && !prompt_yes_no("Proceed with the restart?") {
+    if !yes && !prompt_yes_no("Proceed with the restart?") {
         info!("Operation cancelled.");
         return Ok(());
     }

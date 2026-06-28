@@ -12,27 +12,27 @@ use clap::{CommandFactory, Parser};
 
 use crate::cerror;
 use crate::client::tdkserver::arguments::{Arguments, Commands};
-use crate::client::tdkserver::commands::autoconfirm::command_autoconfirm;
-use crate::client::tdkserver::commands::cluster::command_cluster;
-use crate::client::tdkserver::commands::config::command_config;
-use crate::client::tdkserver::commands::instance::command_instance;
-use crate::client::tdkserver::commands::secret::command_secret;
-use crate::client::tdkserver::commands::server::command_server;
+// use crate::client::tdkserver::commands::cluster::command_cluster;
+// use crate::client::tdkserver::commands::config::command_config;
+// use crate::client::tdkserver::commands::instance::command_instance;
+// use crate::client::tdkserver::commands::secret::command_secret;
+// use crate::client::tdkserver::commands::server::command_server;
 use crate::client::tdkserver::commands::service::create::command_create;
 use crate::client::tdkserver::commands::service::init::command_init;
 use crate::client::tdkserver::commands::service::list::command_list;
-use crate::client::tdkserver::commands::service::pin::command_pin;
 use crate::client::tdkserver::commands::service::quickstart::command_quickstart;
 use crate::client::tdkserver::commands::service::register::command_register;
 use crate::client::tdkserver::commands::service::restart::command_restart;
 use crate::client::tdkserver::commands::service::start::command_start;
 use crate::client::tdkserver::commands::service::status::command_status;
 use crate::client::tdkserver::commands::service::stop::command_stop;
-use crate::client::tdkserver::commands::service::unpin::command_unpin;
 use crate::client::tdkserver::commands::service::unregister::command_unregister;
-use crate::client::tdkserver::commands::session::command_session;
+use crate::client::tdkserver::commands::session::pin::command_pin;
+use crate::client::tdkserver::commands::session::show::command_show;
+use crate::client::tdkserver::commands::session::unpin::command_unpin;
+// use crate::client::tdkserver::commands::session::command_session;
 use crate::client::tdkserver::commands::shell::command_shell;
-use crate::client::tdkserver::commands::template::command_template;
+// use crate::client::tdkserver::commands::template::command_template;
 use crate::core::system::exit::{CommandError, CommandResult};
 use td_common::crypto::install_crypto_provider;
 use td_common::status::ExitStatus;
@@ -49,27 +49,27 @@ impl TabsDataKubernetesClient {
                 println!();
                 Ok(())
             }
-            Some(Commands::Shell) => command_shell(&globals).await,
-            Some(Commands::Cluster(command)) => command_cluster(command, &globals).await,
-            Some(Commands::Instance(command)) => command_instance(command, &globals).await,
-            Some(Commands::Server(command)) => command_server(command, &globals).await,
+            Some(Commands::Quickstart(arguments)) => command_quickstart(arguments, &globals).await,
             Some(Commands::Init(arguments)) => command_init(arguments, &globals).await,
             Some(Commands::Create(arguments)) => command_create(arguments, &globals).await,
-            Some(Commands::Register(arguments)) => command_register(arguments, &globals).await,
-            Some(Commands::Unregister(arguments)) => command_unregister(arguments, &globals).await,
-            Some(Commands::List) => command_list(&globals).await,
-            Some(Commands::Pin(arguments)) => command_pin(arguments, &globals).await,
-            Some(Commands::Unpin) => command_unpin(&globals).await,
             Some(Commands::Start(arguments)) => command_start(arguments, &globals).await,
             Some(Commands::Stop(arguments)) => command_stop(arguments, &globals).await,
             Some(Commands::Restart(arguments)) => command_restart(arguments, &globals).await,
             Some(Commands::Status(arguments)) => command_status(arguments, &globals).await,
-            Some(Commands::Quickstart(arguments)) => command_quickstart(arguments, &globals).await,
-            Some(Commands::Template(command)) => command_template(command, &globals).await,
-            Some(Commands::Config(command)) => command_config(command, &globals).await,
-            Some(Commands::Secret(command)) => command_secret(command, &globals).await,
-            Some(Commands::Session(command)) => command_session(command, &globals).await,
-            Some(Commands::Autoconfirm(command)) => command_autoconfirm(command, &globals).await,
+            Some(Commands::Register(arguments)) => command_register(arguments, &globals).await,
+            Some(Commands::Unregister(arguments)) => command_unregister(arguments, &globals).await,
+            Some(Commands::Shell) => command_shell(&globals).await,
+            Some(Commands::Pin(arguments)) => command_pin(arguments, &globals).await,
+            Some(Commands::Unpin(arguments)) => command_unpin(arguments, &globals).await,
+            Some(Commands::Show(arguments)) => command_show(arguments, &globals).await,
+            Some(Commands::List) => command_list(&globals).await,
+            // Some(Commands::Template(command)) => command_template(command, &globals).await,
+            // Some(Commands::Cluster(command)) => command_cluster(command, &globals).await,
+            // Some(Commands::Instance(command)) => command_instance(command, &globals).await,
+            // Some(Commands::Server(command)) => command_server(command, &globals).await,
+            // Some(Commands::Config(command)) => command_config(command, &globals).await,
+            // Some(Commands::Secret(command)) => command_secret(command, &globals).await,
+            // Some(Commands::Session(command)) => command_session(command, &globals).await,
         }
     }
 }

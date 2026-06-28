@@ -16,18 +16,18 @@ use crate::core::system::exit::CommandResult;
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum SessionCommands {
-    #[command(about = "Pin a tabsdata session as active")]
+    #[command(about = "Pin default values used when commands omit them")]
     Pin(PinArguments),
-    #[command(about = "Show the active tabsdata session")]
+    #[command(about = "Show the pinned default values")]
     Show(ShowArguments),
-    #[command(about = "Unpin the active tabsdata session")]
+    #[command(about = "Unpin default values")]
     Unpin(UnpinArguments),
 }
 
 pub async fn command_session(command: SessionCommands, globals: &GlobalArguments) -> CommandResult {
     match command {
         SessionCommands::Pin(arguments) => command_pin(arguments, globals).await,
-        SessionCommands::Show(arguments) => command_show(arguments).await,
-        SessionCommands::Unpin(arguments) => command_unpin(arguments).await,
+        SessionCommands::Show(arguments) => command_show(arguments, globals).await,
+        SessionCommands::Unpin(arguments) => command_unpin(arguments, globals).await,
     }
 }
