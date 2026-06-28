@@ -18,6 +18,7 @@ use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::crudl::{ListParams, RequestContext};
 use td_objects::dxo::permission::PermissionDB;
+use td_objects::errors::SqlError;
 use td_objects::dxo::project::{ProjectCreate, ProjectUpdate};
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user_role::UserRoleDB;
@@ -185,12 +186,18 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
         .raw_oneshot(admin_ctx().create((), create()))
         .await?;
 
-    // Second create with the same name fails (unique constraint).
+    // Second create with the same name fails up front with a clean
+    // `EntityAlreadyExists` (via the `By::<ProjectName>::assert_not_exists`
+    // pre-check) rather than the raw unique-constraint violation.
     let second = CreateProjectService::with_defaults(db.clone())
         .service()
         .raw_oneshot(admin_ctx().create((), create()))
         .await;
-    assert!(second.is_err(), "duplicate project name must be rejected");
+    let err = second.err().expect("duplicate project name must be rejected");
+    assert!(
+        matches!(err.domain_err::<SqlError>(), SqlError::EntityAlreadyExists(_, _)),
+        "expected EntityAlreadyExists, got {err:?}"
+    );
 
     // Soft-delete frees the name: the row is renamed to `deleted_<id>` so the
     // unique constraint on `name` no longer blocks reuse.
@@ -202,6 +209,43 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
         .service()
         .raw_oneshot(admin_ctx().create((), create()))
         .await?;
+    Ok(())
+}
+
+/// Renaming a project to a name already taken by another project is rejected
+/// up front with a clean `EntityAlreadyExists` (via the
+/// `assert_project_rename_available` pre-check) rather than the raw
+/// unique-constraint violation from the update write.
+#[td_test::test(db)]
+async fn test_rename_to_existing_name_rejected(db: TdPool) -> Result<(), TdError> {
+    // A second project alongside the seeded `sandbox`.
+    CreateProjectService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(
+            admin_ctx().create(
+                (),
+                ProjectCreate::builder()
+                    .name(&ProjectName::try_from("billing")?)
+                    .description(&Description::try_from("Billing")?)
+                    .build()?,
+            ),
+        )
+        .await?;
+
+    // Renaming `sandbox` to the taken name `billing` collides.
+    let upd = ProjectUpdate::builder()
+        .name(Some(ProjectName::try_from("billing")?))
+        .description(None)
+        .build()?;
+    let res = UpdateProjectService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(admin_ctx().update(project_param("sandbox"), upd))
+        .await;
+    let err = res.err().expect("rename to an existing name must be rejected");
+    assert!(
+        matches!(err.domain_err::<SqlError>(), SqlError::EntityAlreadyExists(_, _)),
+        "expected EntityAlreadyExists, got {err:?}"
+    );
     Ok(())
 }
 

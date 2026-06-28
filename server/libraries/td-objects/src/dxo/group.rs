@@ -28,7 +28,7 @@ mod definitions {
         #[builder(default)]
         #[dxo(extractor)]
         pub id: GroupId,
-        #[dxo(builder(include))]
+        #[dxo(builder(include), extractor)]
         pub name: GroupName,
         #[dxo(builder(include))]
         pub description: Description,

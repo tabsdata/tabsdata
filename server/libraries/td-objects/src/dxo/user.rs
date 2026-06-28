@@ -22,6 +22,7 @@ mod definitions {
         #[builder(default)]
         #[dxo(extractor)]
         pub id: UserId,
+        #[dxo(extractor)]
         pub name: UserName,
         pub full_name: FullName,
         pub email: Option<Email>,

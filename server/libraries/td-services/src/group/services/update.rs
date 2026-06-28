@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::group::layers::assert_not_system;
+use crate::group::layers::{assert_group_rename_available, assert_not_system};
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project, Rbac, Scope};
@@ -42,10 +42,11 @@ fn service() {
         // Reject mutation of the seeded system groups via the `system`
         // flag — `default` / `source` / `destination` carry it.
         from_fn(assert_not_system),
+        // A rename to a name already taken by another group in the project
+        // reports a clean "already exists" error instead of the raw
+        // unique-constraint violation from the update write.
+        from_fn(assert_group_rename_available),
         from_fn(With::<GroupDBWithNames>::extract::<GroupId>),
-        // Rename collisions surface as `SqlError::UniqueViolation` from
-        // the `groups___name___idx` unique index — same pattern as
-        // `collections.update`.
         from_fn(By::<GroupId>::update::<GroupDBUpdate, GroupDB>),
         from_fn(By::<GroupId>::fetch_one::<GroupDBWithNames>),
         from_fn(With::<GroupDBWithNames>::try_convert_to::<GroupBuilder, _>),
@@ -109,9 +110,10 @@ mod tests {
         Ok(())
     }
 
-    /// Renaming a group to a name already taken by another group is
-    /// rejected by the unique index — surfaces as
-    /// `SqlError::UniqueViolation`. Same pattern as `collections.update`.
+    /// Renaming a group to a name already taken by another group in the project
+    /// is rejected up front with a clean `SqlError::EntityAlreadyExists` (via
+    /// the `assert_group_rename_available` pre-check) rather than the raw
+    /// `UniqueViolation` from the unique index.
     #[td_test::test(db)]
     async fn test_update_rename_to_existing_name_rejected(db: TdPool) {
         let _ = db
@@ -149,8 +151,8 @@ mod tests {
 
         let service = UpdateGroupService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
-            td_objects::errors::SqlError::UniqueViolation(_, _, _) => {}
-            other => panic!("Expected 'UniqueViolation', got {other:?}"),
+            td_objects::errors::SqlError::EntityAlreadyExists(_, _) => {}
+            other => panic!("Expected 'EntityAlreadyExists', got {other:?}"),
         })
         .await;
     }

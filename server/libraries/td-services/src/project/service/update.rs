@@ -3,7 +3,7 @@
 //
 
 use crate::project::service::layer::update::{
-    UpdateProjectDBBuilderUpdate, update_project_validate,
+    UpdateProjectDBBuilderUpdate, assert_project_rename_available, update_project_validate,
 };
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
@@ -41,6 +41,10 @@ fn service() {
         from_fn(Rbac::<Project, ManageProject>::check),
         from_fn(With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract_data::<ProjectUpdate>),
         from_fn(update_project_validate),
+        // A rename to a name already taken by another project reports a clean
+        // "already exists" error instead of the raw unique-constraint
+        // violation from the update write.
+        from_fn(assert_project_rename_available),
         from_fn(With::<ProjectDB>::try_convert_to::<ProjectUpdateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<ProjectUpdateDBBuilder, _>),
         from_fn(With::<ProjectUpdate>::update_project_update_db_builder),
@@ -80,6 +84,7 @@ mod tests {
                     &With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract_data::<ProjectUpdate>,
                 ),
                 type_of_val(&update_project_validate),
+                type_of_val(&assert_project_rename_available),
                 type_of_val(&With::<ProjectDB>::try_convert_to::<ProjectUpdateDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<ProjectUpdateDBBuilder, _>),
                 type_of_val(&With::<ProjectUpdate>::update_project_update_db_builder),

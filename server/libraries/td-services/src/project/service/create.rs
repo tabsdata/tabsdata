@@ -11,11 +11,11 @@ use td_authz::rbac::{CreateProjects, Rbac, Scope, System};
 use td_authz::{AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::project::{
-    ProjectCreate, ProjectCreateDB, ProjectCreateDBBuilder, ProjectDBWithNames, ProjectRead,
-    ProjectReadBuilder,
+    ProjectCreate, ProjectCreateDB, ProjectCreateDBBuilder, ProjectDB, ProjectDBWithNames,
+    ProjectRead, ProjectReadBuilder,
 };
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::ProjectId;
+use td_objects::types::basic::{ProjectId, ProjectName};
 use td_queries::{By, insert};
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -39,6 +39,10 @@ fn service() {
         from_fn(With::<ProjectCreate>::try_convert_to::<ProjectCreateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<ProjectCreateDBBuilder, _>),
         from_fn(With::<ProjectCreateDBBuilder>::build::<ProjectCreateDB>),
+        // A duplicate project name reports a clean "already exists" error
+        // instead of the raw unique-constraint violation from the insert.
+        from_fn(With::<ProjectCreateDB>::extract::<ProjectName>),
+        from_fn(By::<ProjectName>::assert_not_exists::<ProjectDB>),
         from_fn(insert::<ProjectCreateDB>),
         from_fn(With::<ProjectCreateDB>::extract::<ProjectId>),
         // Scope the connection to the new project so the group seeds default
@@ -84,6 +88,8 @@ mod tests {
                 type_of_val(&With::<ProjectCreate>::try_convert_to::<ProjectCreateDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<ProjectCreateDBBuilder, _>),
                 type_of_val(&With::<ProjectCreateDBBuilder>::build::<ProjectCreateDB>),
+                type_of_val(&With::<ProjectCreateDB>::extract::<ProjectName>),
+                type_of_val(&By::<ProjectName>::assert_not_exists::<ProjectDB>),
                 type_of_val(&insert::<ProjectCreateDB>),
                 type_of_val(&With::<ProjectCreateDB>::extract::<ProjectId>),
                 type_of_val(&scope_to_created_project),

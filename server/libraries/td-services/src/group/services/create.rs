@@ -10,7 +10,7 @@ use td_objects::dxo::group::{
     Group, GroupBuilder, GroupCreate, GroupDB, GroupDBBuilder, GroupDBWithNames,
 };
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::GroupId;
+use td_objects::types::basic::{GroupId, GroupName};
 use td_queries::By;
 use td_queries::insert;
 use td_tower::default_services::TransactionProvider;
@@ -34,10 +34,12 @@ fn service() {
         from_fn(With::<GroupCreate>::try_convert_to::<GroupDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<GroupDBBuilder, _>),
         from_fn(With::<GroupDBBuilder>::build::<GroupDB>),
-        // Duplicate names within a project are rejected by the
-        // `groups___project_id__name___idx` UNIQUE index — the insert surfaces
-        // a `SqlError::UniqueViolation` to the caller, same pattern as
-        // `collections.create`.
+        // A duplicate name within the project (the connection is project-scoped,
+        // matching the `groups___project_id__name___idx` UNIQUE index) reports a
+        // clean "already exists" error instead of the raw unique-constraint
+        // violation from the insert.
+        from_fn(With::<GroupDB>::extract::<GroupName>),
+        from_fn(By::<GroupName>::assert_not_exists::<GroupDB>),
         from_fn(insert::<GroupDB>),
         from_fn(With::<GroupDB>::extract::<GroupId>),
         from_fn(By::<GroupId>::fetch_one::<GroupDBWithNames>),
@@ -98,11 +100,11 @@ mod tests {
     }
 
     /// Creating a group with a name that already exists in the project is
-    /// rejected by the `groups___project_id__name___idx` UNIQUE constraint,
-    /// surfacing as `SqlError::UniqueViolation` — same pattern as
-    /// `collections.create`.
-    /// (Case-insensitive uniqueness is a follow-up; for now the DB
-    /// constraint is exact-match, matching the collections convention.)
+    /// rejected up front with a clean `SqlError::EntityAlreadyExists` (via the
+    /// `By::<GroupName>::assert_not_exists` pre-check) rather than the raw
+    /// `UniqueViolation` from the `groups___project_id__name___idx` constraint.
+    /// (Case-insensitive uniqueness is a follow-up; for now the check is
+    /// exact-match, matching the collections convention.)
     #[td_test::test(db)]
     async fn test_create_duplicate_name_rejected(db: TdPool) {
         let name = GroupName::try_from("analytics").unwrap();
@@ -123,8 +125,8 @@ mod tests {
             .in_project(ProjectId::sandbox());
 
         assert_service_error(service, request, |err| match err {
-            SqlError::UniqueViolation(_, _, _) => {}
-            other => panic!("Expected 'UniqueViolation', got {other:?}"),
+            SqlError::EntityAlreadyExists(_, _) => {}
+            other => panic!("Expected 'EntityAlreadyExists', got {other:?}"),
         })
         .await;
     }

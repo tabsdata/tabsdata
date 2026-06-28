@@ -14,7 +14,7 @@ use td_objects::dxo::user_role::{
     FixedUserRole, FixedUserRoleBuilder, UserRoleDB, UserRoleDBBuilder,
 };
 use td_objects::tower_service::with::{With, builder};
-use td_objects::types::basic::{AtTime, UserId};
+use td_objects::types::basic::{AtTime, UserId, UserName};
 use td_queries::By;
 use td_queries::insert;
 use td_security::config::PasswordHashingConfig;
@@ -43,6 +43,10 @@ fn service() {
         from_fn(With::<RequestContext>::update::<UserDBBuilder, _>),
         from_fn(With::<UserCreate>::update_create_user_db_builder),
         from_fn(With::<UserDBBuilder>::build::<UserDB>),
+        // A duplicate user name reports a clean "already exists" error instead
+        // of the raw unique-constraint violation from the insert.
+        from_fn(With::<UserDB>::extract::<UserName>),
+        from_fn(By::<UserName>::assert_not_exists::<UserDB>),
         from_fn(insert::<UserDB>),
         // Add user to fixed 'user' role
         from_fn(builder::<UserRoleDB>),
@@ -90,6 +94,8 @@ mod tests {
                 type_of_val(&With::<RequestContext>::update::<UserDBBuilder, _>),
                 type_of_val(&With::<UserCreate>::update_create_user_db_builder),
                 type_of_val(&With::<UserDBBuilder>::build::<UserDB>),
+                type_of_val(&With::<UserDB>::extract::<UserName>),
+                type_of_val(&By::<UserName>::assert_not_exists::<UserDB>),
                 type_of_val(&insert::<UserDB>),
                 type_of_val(&builder::<UserRoleDB>),
                 type_of_val(&With::<UserDB>::extract::<UserId>),
