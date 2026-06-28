@@ -105,12 +105,12 @@ impl GroupId {
         Self(Id::_new(ID_GROUP_DEFAULT))
     }
 
-    /// The seeded `source` group — collections in it are `Source` flavour.
+    /// The seeded `sources` group — collections in it are `Source` flavour.
     pub fn source() -> Self {
         Self(Id::_new(ID_GROUP_SOURCE))
     }
 
-    /// The seeded `destination` group — collections in it are `Destination` flavour.
+    /// The seeded `destinations` group — collections in it are `Destination` flavour.
     pub fn destination() -> Self {
         Self(Id::_new(ID_GROUP_DESTINATION))
     }

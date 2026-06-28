@@ -78,7 +78,7 @@ def create(
         connection, group, secrets = _load_connection_document(
             conn_file, group
         )
-    elif group in ("source", "destination"):
+    elif group in ("sources", "destinations"):
         raise click.ClickException(
             f"a {group} collection is created WITH its connection; pass --conn-file"
         )
@@ -100,12 +100,12 @@ def create(
         raise click.ClickException(f"Failed to create collection: {e}")
 
 
-_KIND_SUFFIX_TO_GROUP = {"Src": "source", "Dest": "destination"}
+_KIND_SUFFIX_TO_GROUP = {"Src": "sources", "Dest": "destinations"}
 
 
 def _group_for_kind(kind) -> str:
     """The collection group a connection kind implies (``...SrcConn`` ->
-    source, ``...DestConn`` -> destination)."""
+    sources, ``...DestConn`` -> destinations)."""
     if isinstance(kind, str) and kind.endswith("Conn"):
         stem = kind[: -len("Conn")]
         for suffix, group in _KIND_SUFFIX_TO_GROUP.items():

@@ -160,6 +160,7 @@ mod tests {
         LIST_COLLECTIONS, UPDATE_COLLECTION, UPSERT_COLLECTION_CONNECTION,
     };
     use td_objects::types::basic::{AccessTokenId, UserId};
+    use td_security::{DESTINATION_GROUP, SOURCE_GROUP};
     use td_services::Context;
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;
@@ -362,8 +363,8 @@ mod tests {
         let mut body = json!({"name": name, "description": "d"});
         if let Some(group) = group {
             body["group"] = json!(group);
-            if group == "source" || group == "destination" {
-                let suffix = if group == "source" { "Src" } else { "Dst" };
+            if group == SOURCE_GROUP || group == DESTINATION_GROUP {
+                let suffix = if group == SOURCE_GROUP { "Src" } else { "Dest" };
                 // The create endpoint takes the connection as a dehydrated YAML
                 // string; the server reads only `kind` off it (the rest is opaque
                 // and forwarded to the store/worker).
@@ -394,7 +395,7 @@ mod tests {
         )));
 
         // Source collection (group `source` → CollectionType::Source).
-        create_collection_in(&router, db.clone(), "src_coll", Some("source")).await;
+        create_collection_in(&router, db.clone(), "src_coll", Some(SOURCE_GROUP)).await;
 
         let conn_body = json!({
             "connection": {

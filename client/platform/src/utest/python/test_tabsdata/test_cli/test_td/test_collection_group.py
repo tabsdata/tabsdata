@@ -482,8 +482,8 @@ spec:
 
 
 def test_group_for_kind():
-    assert collection_group._group_for_kind("mysqlSrcConn") == "source"
-    assert collection_group._group_for_kind("mysqlDestConn") == "destination"
+    assert collection_group._group_for_kind("mysqlSrcConn") == "sources"
+    assert collection_group._group_for_kind("mysqlDestConn") == "destinations"
     import click
 
     with pytest.raises(click.ClickException):
@@ -502,7 +502,7 @@ def test_load_connection_document_dehydrates(tmp_path):
     connection, group, secrets = collection_group._load_connection_document(
         str(path), None
     )
-    assert group == "source"
+    assert group == "sources"
     assert {kv["value"] for kv in secrets} == {"etl", "hunter2"}
     sent = template.from_yaml(connection)
     creds = sent["spec"]["credentials"]["spec"]
@@ -525,7 +525,7 @@ def test_collection_create_source_without_conn_file_fails(login):
             "--description",
             "d",
             "--group",
-            "source",
+            "sources",
         ],
     )
     assert result.exit_code != 0

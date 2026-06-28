@@ -53,8 +53,8 @@ pub enum CollectionType {
 }
 
 impl CollectionType {
-    /// Infer the flavour from the collection's group. The reserved `source` and
-    /// `destination` groups map to `Source`/`Destination`; every other group
+    /// Infer the flavour from the collection's group. The reserved `sources` and
+    /// `destinations` groups map to `Source`/`Destination`; every other group
     /// (default or user-created) is a `DataFactory`. Keying on the group *id* is
     /// sound because the seeded system groups carry the same well-known id in
     /// every project (group ids are unique per project, not globally).

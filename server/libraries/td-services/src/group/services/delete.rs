@@ -55,6 +55,7 @@ mod tests {
     use td_objects::types::basic::{AccessTokenId, Description, GroupName, ProjectId, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
+    use td_security::SOURCE_GROUP;
     use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
@@ -95,7 +96,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete(
                 GroupParam::builder()
-                    .group(GroupIdName::from_str("source")?)
+                    .group(GroupIdName::from_str(SOURCE_GROUP)?)
                     .build()?,
             )
             .in_project(ProjectId::sandbox());

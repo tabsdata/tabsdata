@@ -57,7 +57,7 @@ def test_load_connection_document_dehydrates(tmp_path):
     connection, group, secrets = collection_group._load_connection_document(
         _write(tmp_path, _MYSQL_SRC_YAML), None
     )
-    assert group == "source"
+    assert group == "sources"
     # The secret values are harvested out of the document, into the payload.
     assert {kv["value"] for kv in secrets} == {"etl", "hunter2"}
     # The connection sent is dehydrated YAML: secret leaves reduced to ":secret:",
@@ -113,10 +113,10 @@ def test_load_connection_document_dehydrates_unprefixed_secret_values(tmp_path):
     not _installed("mysql", "src"), reason="mysql connector not installed"
 )
 def test_load_connection_document_group_mismatch(tmp_path):
-    # kind implies 'source'; --group says 'destination'.
-    with pytest.raises(click.ClickException, match="source"):
+    # kind implies 'sources'; --group says 'destinations'.
+    with pytest.raises(click.ClickException, match="sources"):
         collection_group._load_connection_document(
-            _write(tmp_path, _MYSQL_SRC_YAML), "destination"
+            _write(tmp_path, _MYSQL_SRC_YAML), "destinations"
         )
 
 
@@ -128,8 +128,8 @@ def test_load_connection_document_invalid_yaml(tmp_path):
 
 
 def test_group_for_kind():
-    assert collection_group._group_for_kind("mysqlSrcConn") == "source"
-    assert collection_group._group_for_kind("mysqlDestConn") == "destination"
-    assert collection_group._group_for_kind("mysqlCdcStreamSrcConn") == "source"
+    assert collection_group._group_for_kind("mysqlSrcConn") == "sources"
+    assert collection_group._group_for_kind("mysqlDestConn") == "destinations"
+    assert collection_group._group_for_kind("mysqlCdcStreamSrcConn") == "sources"
     with pytest.raises(click.ClickException):
         collection_group._group_for_kind("notAConn")

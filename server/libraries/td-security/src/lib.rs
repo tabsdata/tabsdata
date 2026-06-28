@@ -61,8 +61,8 @@ pub const ENCODED_ID_GROUP_DESTINATION: &str = "0000000000000000000000020G";
 
 /// Predefined group names.
 pub const DEFAULT_GROUP: &str = "default";
-pub const SOURCE_GROUP: &str = "source";
-pub const DESTINATION_GROUP: &str = "destination";
+pub const SOURCE_GROUP: &str = "sources";
+pub const DESTINATION_GROUP: &str = "destinations";
 
 /// The per-project system groups as `(encoded id, name, description)` — the
 /// single source every seeder (schema bootstrap, project create, test utils)
@@ -77,12 +77,12 @@ pub const SYSTEM_GROUPS: [(&str, &str, &str); 3] = [
     (
         ENCODED_ID_GROUP_SOURCE,
         SOURCE_GROUP,
-        "Source group — assigned to ingestion collections.",
+        "Sources group — assigned to ingestion collections.",
     ),
     (
         ENCODED_ID_GROUP_DESTINATION,
         DESTINATION_GROUP,
-        "Destination group — assigned to egestion collections.",
+        "Destinations group — assigned to egestion collections.",
     ),
 ];
 
