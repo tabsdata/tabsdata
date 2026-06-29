@@ -28,6 +28,7 @@ from pathlib import Path
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
@@ -52,11 +53,12 @@ INFO = (
 )
 MAN = (
     "run-destination-plugin --request <PATH> --bundle-dir <PATH> "
-    "--outputs-manifest <PATH> --liveness <PATH>\n\n"
+    "--outputs-manifest <PATH> --connection-file <PATH> --liveness <PATH>\n\n"
     "Loads function_def.json from --bundle-dir (must be a "
     "subscriberDef), reads --outputs-manifest, resolves the destination "
-    "plugin via the tabsdatak connectors registry, and invokes "
-    "write_out() with the list of parquet paths the function produced."
+    "plugin via the tabsdatak connectors registry, loads the connection "
+    "from --connection-file, and invokes write_out() with the list of "
+    "parquet paths the function produced."
 )
 
 
@@ -82,6 +84,12 @@ def _build_parser():
             "declaration order. Entries with `file: null` are rejected "
             "(subscribers must return concrete frames for every slot)."
         ),
+    )
+    parser.add_argument(
+        "--connection-file",
+        required=True,
+        dest="connection_file",
+        help="Path to the connection definition file.",
     )
     return parser
 
@@ -152,15 +160,17 @@ def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     outputs_manifest_path = Path(args.outputs_manifest)
+    connection_file = Path(args.connection_file)
 
     logger.info("Running destination plugin")
     request = load_request_or_raise(request_path, RunDestinationPluginErrorCode.RDP_1)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
+    conn = load_connection(connection_file)
     logger.debug(
         "Resolved Dest plugin %s for connector %s",
         type(plugin).__name__,
-        type(info.conn).__name__,
+        type(conn).__name__,
     )
 
     entries = load_outputs_manifest_or_raise(
@@ -187,7 +197,7 @@ def main(args: argparse.Namespace) -> int:
         function_name=request.info.function,
     )
     logger.info("Invoking destination plugin's write_out")
-    _invoke_write_out(plugin, ctx, info.conn, info.destination, tables)
+    _invoke_write_out(plugin, ctx, conn, info.destination, tables)
     logger.info("Destination plugin completed")
     return 0
 

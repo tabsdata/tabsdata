@@ -390,8 +390,16 @@ def test_subscriber_full_chain(
     assert all(e["file"] is not None for e in outputs["outputs"])
 
     # --- 5. run-destination-plugin ------------------------------------
+    from tabsdatak.conn.localfile import LocalFileDestConn
     from tabsdatak.server._tdrunner.function.commands.run_destination_plugin import (
         main as rdp_main,
+    )
+
+    # The connection (with the dest base_path) now comes from the
+    # connection file the runtime loads, not from the function descriptor.
+    connection_yaml = tmp_path / "connection.yaml"
+    connection_yaml.write_text(
+        yaml.safe_dump(LocalFileDestConn(base_path=str(dest_out)).to_dict())
     )
 
     rc = _invoke(
@@ -405,6 +413,8 @@ def test_subscriber_full_chain(
             str(extracted),
             "--outputs-manifest",
             str(outputs_manifest),
+            "--connection-file",
+            str(connection_yaml),
             "--liveness",
             str(tmp_path / "liveness-rdp"),
         ],

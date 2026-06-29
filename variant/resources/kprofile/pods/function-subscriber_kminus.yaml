@@ -514,6 +514,8 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared
             - --work-dir
             - $(CONTAINER_ROOT)/tabsdata/work
+            - --connection-file
+            - $(CONTAINER_ROOT)/tabsdata/connection/connection.yaml
             - --log-config
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
@@ -555,9 +557,15 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+          envFrom:
+            - secretRef:
+                name: ${{system:tdk_connection_secret_name}}
           volumeMounts:
             - name: config-run-destination-plugin
               mountPath: /tabsdata/config
+              readOnly: true
+            - name: connection
+              mountPath: /tabsdata/connection
               readOnly: true
             - name: pyenv
               mountPath: /tabsdata/pyenv
@@ -806,6 +814,14 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: connection
+          projected:
+            sources:
+              - configMap:
+                  name: ${{system:tdk_connection_configmap_name}}
+                  items:
+                    - key: connection.yaml
+                      path: connection.yaml
         - name: config-prep-upload-state
           projected:
             sources:

@@ -74,3 +74,19 @@ spec:
                   fieldPath: spec.serviceAccountName
             - name: POD_TABSDATA_INSTANCE
               value: "${{system:tdk_instance_name}}"
+          envFrom:
+            - secretRef:
+                name: ${{system:tdk_connection_secret_name}}
+          volumeMounts:
+            - name: connection
+              mountPath: /tabsdata/connection
+              readOnly: true
+      volumes:
+        - name: connection
+          projected:
+            sources:
+              - configMap:
+                  name: ${{system:tdk_connection_configmap_name}}
+                  items:
+                    - key: connection.yaml
+                      path: connection.yaml

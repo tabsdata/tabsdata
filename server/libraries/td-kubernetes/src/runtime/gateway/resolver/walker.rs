@@ -270,6 +270,15 @@ fn walk_sequence<V: PlaceholderVisitor>(
         return Ok(());
     }
 
+    if !sequence_has_scalar_first_values(items) {
+        for (index, item) in items.iter_mut().enumerate() {
+            path.push(index.to_string());
+            walk_node(item, path, visitor)?;
+            path.pop();
+        }
+        return Ok(());
+    }
+
     let identities = sequence_identities(items, &displayed_path)?;
     for (item, identity) in items.iter_mut().zip(identities.into_iter()) {
         path.push(identity);
@@ -277,6 +286,17 @@ fn walk_sequence<V: PlaceholderVisitor>(
         path.pop();
     }
     Ok(())
+}
+
+fn sequence_has_scalar_first_values(items: &[Value]) -> bool {
+    !items.is_empty()
+        && items.iter().all(|item| match item {
+            Value::Mapping(map) => matches!(
+                map.iter().next(),
+                Some((_, Value::String(_) | Value::Number(_) | Value::Bool(_)))
+            ),
+            _ => false,
+        })
 }
 
 fn sequence_identities(

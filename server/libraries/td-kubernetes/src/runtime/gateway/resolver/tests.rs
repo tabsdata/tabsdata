@@ -148,6 +148,28 @@ async fn resolve_secret_substitutes_named_placeholder_using_path_encoding() {
 }
 
 #[tokio::test]
+async fn connection_envfrom_secret_ref_materializes_without_identity_error() {
+    let resolver = resolver_with_system(SystemValues {
+        connection_secret_name: Some("td-conn-abc123".to_string()),
+        ..SystemValues::default()
+    });
+    let yaml = "\
+envFrom:
+  - secretRef:
+      name: ${{system:tdk_connection_secret_name}}
+";
+    let resolved = resolver
+        .materialize(yaml)
+        .await
+        .expect("envFrom must materialize without keyed-sequence identity error");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
+    assert_eq!(
+        parsed["envFrom"][0]["secretRef"]["name"].as_str(),
+        Some("td-conn-abc123")
+    );
+}
+
+#[tokio::test]
 async fn resolve_secret_errors_when_env_var_missing() {
     unsafe { std::env::remove_var("TD_RESOLVE_TEST_MISSING__SECRET") };
 

@@ -58,6 +58,10 @@ pub enum SystemKey {
     DatabasePort,
     #[strum(serialize = "tdk_kminus_api_port")]
     KminusApiPort,
+    #[strum(serialize = "tdk_connection_configmap_name")]
+    ConnectionConfigmapName,
+    #[strum(serialize = "tdk_connection_secret_name")]
+    ConnectionSecretName,
 }
 
 impl SystemKey {
@@ -88,6 +92,8 @@ pub struct SystemValues {
     pub aiagent_public_port: Option<String>,
     pub database_port: Option<String>,
     pub kminus_api_port: Option<String>,
+    pub connection_configmap_name: Option<String>,
+    pub connection_secret_name: Option<String>,
 }
 
 impl SystemValues {
@@ -110,6 +116,8 @@ impl SystemValues {
             SystemKey::AiagentPublicPort => self.aiagent_public_port.as_deref(),
             SystemKey::DatabasePort => self.database_port.as_deref(),
             SystemKey::KminusApiPort => self.kminus_api_port.as_deref(),
+            SystemKey::ConnectionConfigmapName => self.connection_configmap_name.as_deref(),
+            SystemKey::ConnectionSecretName => self.connection_secret_name.as_deref(),
         }
     }
 }

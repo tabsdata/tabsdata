@@ -96,11 +96,6 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        # The streamer fetches its resolved request.yaml from the
-        # apiserver resolve endpoint (worker-scoped), like the function
-        # pod -- the gateway provides the resolver via the Secret-backed
-        # `SECRET__TD_RESOLVER_*` env. Downstream containers read it from
-        # the shared dir.
         - name: 0020-fetch-request
           image: tabsdata/kube/tabsdata:2.0.0
           imagePullPolicy: IfNotPresent
@@ -313,6 +308,8 @@ spec:
             - /tabsdata/shared/bundle/folder
             - --out-dir
             - /tabsdata/shared/out
+            - --connection-file
+            - /tabsdata/connection/connection.yaml
           resources:
             requests:
               cpu: "100m"
@@ -336,9 +333,15 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "/tabsdata/config/tabsdata.log.rs.yaml"
+          envFrom:
+            - secretRef:
+                name: ${{system:tdk_connection_secret_name}}
           volumeMounts:
             - name: config-run-streamer
               mountPath: /tabsdata/config
+              readOnly: true
+            - name: connection
+              mountPath: /tabsdata/connection
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
@@ -378,5 +381,13 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: connection
+          projected:
+            sources:
+              - configMap:
+                  name: ${{system:tdk_connection_configmap_name}}
+                  items:
+                    - key: connection.yaml
+                      path: connection.yaml
         - name: shared
           emptyDir: {}

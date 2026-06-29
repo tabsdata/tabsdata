@@ -49,6 +49,7 @@ from tabsdatak._info import (
     _unwrap_info,
 )
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
@@ -131,6 +132,12 @@ def _build_parser():
             "<state-dir>/<table.name>.parquet, mirroring the wire "
             "format prep-localize-state / prep-upload-state already use."
         ),
+    )
+    parser.add_argument(
+        "--connection-file",
+        required=True,
+        dest="connection_file",
+        help="Path to the connection definition file.",
     )
     return parser
 
@@ -217,11 +224,12 @@ def _build_manifest_stage_conn(function_stage: Location) -> SimpleNamespace:
 def _resolve_plugin_and_io(
     info: PublisherInfo | StreamPublisherInfo,
     function_stage: Location,
+    connection_file: Path,
 ) -> tuple[object, object, object, int]:
     """Pick the right (plugin, conn, src, cardinality) tuple for ``info``.
 
-    For ``PublisherInfo`` this is a straight pass-through of the
-    user-declared values, with the plugin instantiated from the
+    For ``PublisherInfo`` the connection is the one in
+    ``connection_file``; the source and plugin come from the
     registered ``SrcDef``.
 
     For ``StreamPublisherInfo`` we substitute (see module docstring):
@@ -271,14 +279,14 @@ def _resolve_plugin_and_io(
             src_def.cardinality(substituted_src),
         )
 
-    # Regular @publisher: passthrough.
     try:
         src_def = get_src(type(info.source))
     except KeyError as exc:
         raise RunSourcePluginErrorCode.RSP_5.exception(
             cause=exc, src_type=type(info.source).__name__, detail=str(exc)
         )
-    return src_def.plugin(), info.conn, info.source, src_def.cardinality(info.source)
+    conn = load_connection(connection_file)
+    return src_def.plugin(), conn, info.source, src_def.cardinality(info.source)
 
 
 def _invoke_read_in(plugin, ctx: SrcPluginCtx, conn, src) -> list[list[TableFileInput]]:
@@ -398,12 +406,15 @@ def main(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir)
     inputs_manifest = Path(args.inputs_manifest)
     state_dir = Path(args.state_dir)
+    connection_file = Path(args.connection_file)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Running source plugin")
     request = load_request_or_raise(request_path, RunSourcePluginErrorCode.RSP_1)
     info = _load_function_def(bundle_dir)
     plugin, conn, src, cardinality = _resolve_plugin_and_io(
-        info, request.info.function_stage
+        info, request.info.function_stage, connection_file
     )
     logger.debug(
         "Resolved Src plugin %s for connector %s (kind=%s, cardinality=%d)",

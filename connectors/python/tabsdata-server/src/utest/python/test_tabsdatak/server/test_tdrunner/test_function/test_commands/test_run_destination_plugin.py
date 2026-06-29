@@ -136,6 +136,19 @@ def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
     return path
 
 
+def _write_connection_file(path: Path, base_path: Path) -> Path:
+    """Write the connection.yaml the command loads via --connection-file.
+
+    The connection is no longer carried on the function descriptor; the
+    runtime reads it from this file (the collection's connection)."""
+    from tabsdatak.conn.localfile import LocalFileDestConn
+
+    path.write_text(
+        yaml.safe_dump(LocalFileDestConn(base_path=str(base_path)).to_dict())
+    )
+    return path
+
+
 def _set_argv(
     monkeypatch,
     request_path: Path,
@@ -143,6 +156,7 @@ def _set_argv(
     outputs_manifest: Path,
     liveness: Path,
     *,
+    connection_file: Path,
     responder_url: str,
     responder_method: str = "POST",
     responder_authorization: str = "Bearer tok",
@@ -158,6 +172,8 @@ def _set_argv(
             str(bundle_dir),
             "--outputs-manifest",
             str(outputs_manifest),
+            "--connection-file",
+            str(connection_file),
             "--liveness",
             str(liveness),
             "--responder-url",
@@ -367,6 +383,7 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok
         tmp_path / "bundle",
         tmp_path / "outputs.yaml",
         tmp_path / "live",
+        connection_file=tmp_path / "connection.yaml",
         responder_url=http_ok_url,
     )
     assert main() == BadRequestError.exit_code
@@ -380,6 +397,7 @@ def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_u
         tmp_path / "no-bundle",
         tmp_path / "outputs.yaml",
         tmp_path / "live",
+        connection_file=tmp_path / "connection.yaml",
         responder_url=http_ok_url,
     )
     assert main() == BadBundleError.exit_code
@@ -394,12 +412,16 @@ def test_main_missing_outputs_manifest_returns_bad_manifest(
     tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
     req = _write_request(tmp_path / "request.yaml")
+    conn_file = _write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "dest_out"
+    )
     _set_argv(
         monkeypatch,
         req,
         built_bundle,
         tmp_path / "no-outputs.yaml",
         tmp_path / "live",
+        connection_file=conn_file,
         responder_url=http_ok_url,
     )
     assert main() == BadManifestError.exit_code
@@ -409,6 +431,9 @@ def test_main_null_file_in_manifest_returns_bad_manifest(
     tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
     req = _write_request(tmp_path / "request.yaml")
+    conn_file = _write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "dest_out"
+    )
     outputs_manifest = tmp_path / "outputs.yaml"
     write_outputs_manifest(
         [{MANIFEST_NAME_KEY: "out_0", MANIFEST_FILE_KEY: None}],
@@ -420,6 +445,7 @@ def test_main_null_file_in_manifest_returns_bad_manifest(
         built_bundle,
         outputs_manifest,
         tmp_path / "live",
+        connection_file=conn_file,
         responder_url=http_ok_url,
     )
     assert main() == BadManifestError.exit_code
@@ -450,6 +476,12 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
         outputs_manifest,
     )
 
+    # The connection (with the dest base_path) now comes from the
+    # connection file the runtime loads, not from the function descriptor.
+    conn_file = _write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "dest_out"
+    )
+
     liveness = tmp_path / "live"
     _set_argv(
         monkeypatch,
@@ -457,6 +489,7 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
         built_bundle,
         outputs_manifest,
         liveness,
+        connection_file=conn_file,
         responder_url=http_ok_url,
     )
 

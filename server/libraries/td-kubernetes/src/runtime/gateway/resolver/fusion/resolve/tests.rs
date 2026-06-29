@@ -40,3 +40,31 @@ database:
         "password must be a generated value, not the token: {password}"
     );
 }
+
+#[test]
+fn connection_envfrom_secret_ref_resolves_without_identity_error() {
+    let config = "\
+envFrom:
+  - secretRef:
+      name: ${{system:tdk_connection_secret_name}}
+";
+    let system = SystemValues {
+        connection_secret_name: Some("td-conn-abc123".to_owned()),
+        ..SystemValues::default()
+    };
+    let auto = HashMap::new();
+
+    let outcome =
+        resolve_config_file(config, config, &system, &auto).expect("envFrom must resolve");
+
+    assert!(
+        outcome.rendered.contains("td-conn-abc123"),
+        "connection secret name must be rendered: {}",
+        outcome.rendered
+    );
+    assert!(
+        !outcome.rendered.contains("${"),
+        "no placeholder token must remain: {}",
+        outcome.rendered
+    );
+}

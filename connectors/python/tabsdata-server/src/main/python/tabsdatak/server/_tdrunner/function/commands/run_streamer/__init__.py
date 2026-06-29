@@ -45,6 +45,7 @@ from tabsdatak.server._tdrunner.function._lib.command import (
     command,
     notify_done,
 )
+from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     UnsupportedSchemeError as _StageUnsupportedSchemeError,
 )
@@ -74,6 +75,7 @@ MAN = (
     "    --request <PATH>\n"
     "    --bundle-dir <PATH>\n"
     "    --out-dir <PATH>\n"
+    "    --connection-file <PATH>\n"
     "    --shared-dir <PATH>\n"
     "    --work-dir <PATH>\n"
     "    --log-config <PATH>\n"
@@ -82,11 +84,11 @@ MAN = (
     "    --responder-method <METHOD>\n"
     "    --responder-authorization <AUTH>\n"
     "    --journal-file <PATH>\n\n"
-    "Loads the StreamPublisherInfo from --bundle-dir, builds the "
-    "StreamerPluginCtx from request.info, installs SIGTERM/SIGINT "
-    "handlers that flip ctx.active to False, then invokes "
-    "plugin.run(ctx, conn, stream_src) and blocks until it returns. "
-    "Stamps journal.end + posts Done on clean exit."
+    "Loads the StreamPublisherInfo from --bundle-dir, loads the connection "
+    "from --connection-file, builds the StreamerPluginCtx from "
+    "request.info, installs SIGTERM/SIGINT handlers that flip ctx.active "
+    "to False, then invokes plugin.run(ctx, conn, stream_src) and blocks "
+    "until it returns. Stamps journal.end + posts Done on clean exit."
 )
 
 
@@ -111,6 +113,12 @@ def _build_parser():
             "Local scratch directory the StreamSrcPlugin writes parquets "
             "into; ctx.stage() then moves them to <stage>/files/."
         ),
+    )
+    parser.add_argument(
+        "--connection-file",
+        required=True,
+        dest="connection_file",
+        help="Path to the connection definition file.",
     )
     return parser
 
@@ -145,6 +153,7 @@ def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     out_dir = Path(args.out_dir)
+    connection_file = Path(args.connection_file)
     # The streamer plugin writes parquets directly into ctx.work_dir
     # (== --out-dir) before staging them; the runner owns ensuring it
     # exists. Same idempotent mkdir `run_function` does for its own
@@ -157,6 +166,7 @@ def main(args: argparse.Namespace) -> int:
     request = load_streamer_request_or_raise(request_path, RunStreamerErrorCode.RS_1)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
+    conn = load_connection(connection_file)
     # `info.func` is the @stream_publisher-decorated descriptor (the
     # decorator replaces the module-level function binding), not the
     # bare user callable. `_unwrap_info` descends through the wrapper
@@ -219,7 +229,7 @@ def main(args: argparse.Namespace) -> int:
         info.fallback_rollover_mins,
     )
     try:
-        plugin.run(ctx, info.conn, info.source)
+        plugin.run(ctx, conn, info.source)
     except Exception as exc:
         raise RunStreamerErrorCode.RS_6.exception(cause=exc, detail=str(exc))
     logger.info("Streamer plugin returned cleanly")

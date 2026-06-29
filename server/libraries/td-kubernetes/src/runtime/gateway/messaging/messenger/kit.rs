@@ -47,6 +47,8 @@ pub struct FunctionRunKit {
     pub main_secret: Secret,
     pub latch_configmap: ConfigMap,
     pub common_envfrom: Vec<EnvFromSource>,
+    pub connection_configmap_name: Option<String>,
+    pub connection_secret_name: Option<String>,
     pub connection_envfrom: Option<EnvFromSource>,
     pub labels: Vec<(String, String)>,
 }
@@ -94,24 +96,31 @@ pub(crate) fn build_worker_run_kit(
         envfrom_secret(&main_name, SECRET_ENV_PREFIX),
         envfrom_configmap(&latch_name),
     ];
-    let connection_envfrom = match request.connection_id() {
-        Some(connection_id) => {
-            let name = to_connection_object_name(&connection_id).map_err(|error| {
-                KubeMessagingError::ConnectionNameDerivationFailed {
-                    connection_id,
-                    cause: error.to_string(),
-                }
-            })?;
-            Some(envfrom_secret(&name, SECRET_CONN_ENV_PREFIX))
-        }
-        None => None,
-    };
+    let (connection_configmap_name, connection_secret_name, connection_envfrom) =
+        match request.connection_id() {
+            Some(connection_id) => {
+                let name = to_connection_object_name(&connection_id).map_err(|error| {
+                    KubeMessagingError::ConnectionNameDerivationFailed {
+                        connection_id,
+                        cause: error.to_string(),
+                    }
+                })?;
+                (
+                    Some(name.clone()),
+                    Some(name.clone()),
+                    Some(envfrom_secret(&name, SECRET_CONN_ENV_PREFIX)),
+                )
+            }
+            None => (None, None, None),
+        };
 
     Ok(FunctionRunKit {
         main_configmap: build_configmap(&main_name, namespace, config_data),
         main_secret: build_secret(&main_name, namespace, secret_data),
         latch_configmap: build_configmap(&latch_name, namespace, latch_data),
         common_envfrom,
+        connection_configmap_name,
+        connection_secret_name,
         connection_envfrom,
         labels,
     })

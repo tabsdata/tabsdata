@@ -358,7 +358,18 @@ fn is_keyed_map_sequence(template_items: &[Value]) -> bool {
         && template_items
             .iter()
             .all(|item| matches!(item, Value::Mapping(_)))
+        && template_items.iter().all(first_value_is_scalar)
         && template_items.iter().any(node_contains_placeholder)
+}
+
+fn first_value_is_scalar(item: &Value) -> bool {
+    match item {
+        Value::Mapping(map) => matches!(
+            map.iter().next(),
+            Some((_, Value::String(_) | Value::Number(_) | Value::Bool(_)))
+        ),
+        _ => false,
+    }
 }
 
 fn item_identity(

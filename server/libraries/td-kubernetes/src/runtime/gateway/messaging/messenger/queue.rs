@@ -244,8 +244,17 @@ impl KubernetesOrchestratorMessageQueue {
         Ok(system)
     }
 
-    async fn materialize(&self, manifest: &str) -> Result<String, QueueError> {
-        let resolver = ConfigurationResolver::new(self.system_values()?);
+    async fn materialize(
+        &self,
+        manifest: &str,
+        kit: Option<&FunctionRunKit>,
+    ) -> Result<String, QueueError> {
+        let mut system = self.system_values()?;
+        if let Some(kit) = kit {
+            system.connection_configmap_name = kit.connection_configmap_name.clone();
+            system.connection_secret_name = kit.connection_secret_name.clone();
+        }
+        let resolver = ConfigurationResolver::new(system);
         resolver
             .materialize(manifest)
             .await
@@ -254,16 +263,26 @@ impl KubernetesOrchestratorMessageQueue {
             })
     }
 
-    async fn manifest_pod(&self, template: &PodTemplate, name: &str) -> Result<Pod, QueueError> {
-        let materialized = self.materialize(&template.manifest).await?;
+    async fn manifest_pod(
+        &self,
+        template: &PodTemplate,
+        name: &str,
+        kit: Option<&FunctionRunKit>,
+    ) -> Result<Pod, QueueError> {
+        let materialized = self.materialize(&template.manifest, kit).await?;
         let mut pod: Pod = serde_yaml::from_str(&materialized)?;
         pod.metadata.name = Some(name.to_owned());
         pod.metadata.namespace = Some(self.context.namespace().to_owned());
         Ok(pod)
     }
 
-    async fn manifest_job(&self, template: &PodTemplate, name: &str) -> Result<Job, QueueError> {
-        let materialized = self.materialize(&template.manifest).await?;
+    async fn manifest_job(
+        &self,
+        template: &PodTemplate,
+        name: &str,
+        kit: Option<&FunctionRunKit>,
+    ) -> Result<Job, QueueError> {
+        let materialized = self.materialize(&template.manifest, kit).await?;
         let mut job: Job = serde_yaml::from_str(&materialized)?;
         job.metadata.name = Some(name.to_owned());
         job.metadata.namespace = Some(self.context.namespace().to_owned());
@@ -286,7 +305,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                 let kit = kit_for_payload(&name, self.context.namespace(), &payload)?;
                 match template.kind {
                     TemplateKind::Pod => {
-                        let mut pod = self.manifest_pod(template, &name).await?;
+                        let mut pod = self.manifest_pod(template, &name, kit.as_ref()).await?;
                         let (configmaps, secrets, latch) = match kit {
                             Some(kit) => {
                                 inject_common_envfrom_into_pod(&mut pod, &kit.common_envfrom);
@@ -312,7 +331,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             })?;
                     }
                     TemplateKind::Job => {
-                        let mut job = self.manifest_job(template, &name).await?;
+                        let mut job = self.manifest_job(template, &name, kit.as_ref()).await?;
                         let (configmaps, secrets, latch) = match kit {
                             Some(kit) => {
                                 inject_common_envfrom_into_job(&mut job, &kit.common_envfrom);
