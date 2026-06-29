@@ -76,9 +76,7 @@ def create(
     connection = None
     secrets = None
     if conn_file:
-        connection, group, secrets = _load_connection_document(
-            conn_file, group
-        )
+        connection, group, secrets = _load_connection_document(conn_file, group)
     elif group in ("sources", "destinations"):
         raise click.ClickException(
             f"a {group} collection is created WITH its connection; pass --conn-file"

@@ -2,7 +2,7 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-"""TableFrame wrapper-API generator (``tdx_gtableframe``).
+"""TableFrame wrapper-API generator (``tdx-gtableframe``).
 
 Generates a delegating, whitelist-driven wrapper API over the Polars lazy API
 (the ``tabsdatak.tableframe`` surface). Introspects whatever Polars is installed

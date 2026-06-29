@@ -60,9 +60,10 @@ tdx-harvester = "tabsdatax.pytesting.plugins.harvester.plugin"
 
 [project.scripts]
 tdkdocker = "tabsdatax.docker.cli:main"
-tdx_gconnector = "tabsdatax.generator.connector.cli:main"
-tdx_gtableframe = "tabsdatax.generator.tableframe.cli:main"
-tdx_pyoutdated = "tabsdatax.cmake.pyoutdated:main"
+tdx-gconnector = "tabsdatax.generator.connector.cli:main"
+tdx-gtableframe = "tabsdatax.generator.tableframe.cli:main"
+tdx-pyoutdated = "tabsdatax.cmake.pyoutdated:main"
+tdx-bundle = "tabsdatax.support.bundle:main"
 tdx-harvester-monitor = "tabsdatax.pytesting.plugins.harvester.client:main"
 
 [project.urls]

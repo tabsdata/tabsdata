@@ -4,7 +4,7 @@
 
 accessify==0.3.1
 annotated-types==0.7.0
-anyio==4.14.0
+anyio==4.14.1
 archspec==0.2.5
 asn1crypto==1.5.1
 attrs==26.1.0
@@ -39,7 +39,7 @@ fastparquet==2026.3.0
 filelock==3.25.2
 fsspec==2026.6.0
 google-api-core==2.30.3
-google-auth==2.55.0
+google-auth==2.55.1
 google-cloud-bigquery==3.40.1
 google-cloud-core==2.6.0
 google-cloud-storage==3.10.0
@@ -47,7 +47,7 @@ google-cloud-storage-control==1.10.0
 google-crc32c==1.8.0
 google-resumable-media==2.10.0
 googleapis-common-protos==1.75.0
-greenlet==3.5.2 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
+greenlet==3.5.3 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
 grpc-google-iam-v1==0.14.4
 grpcio==1.81.1
 grpcio-status==1.81.1

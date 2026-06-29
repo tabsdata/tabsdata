@@ -54,8 +54,10 @@ script = [
     end
 
     make_with_banners = get_env TD_MAKE_WITH_BANNERS
+    make_with_banners_empty = is_empty ${make_with_banners}
     make_with_banners_true = eq ${make_with_banners} "true"
-    if ${make_with_banners_true}
+    make_with_banners = set ${make_with_banners_empty} or ${make_with_banners_true}
+    if ${make_with_banners}
         cm_run_task banner
     end
 

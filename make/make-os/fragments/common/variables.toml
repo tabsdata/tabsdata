@@ -54,11 +54,11 @@ script = [
         if eq ${argument} "--no-server"
             set_env TD_WITH_SERVER "false"
         end
-        if eq ${argument} "--with-banners"
-            set_env TD_MAKE_WITH_BANNERS "true"
+        if eq ${argument} "--no-banners"
+            set_env TD_MAKE_WITH_BANNERS "false"
         end
-        if eq ${argument} "--with-responsive"
-            set_env TD_MAKE_WITH_RESPONSIVE "true"
+        if eq ${argument} "--no-responsive"
+            set_env TD_MAKE_WITH_RESPONSIVE "false"
         end
         if eq ${argument} "--fast"
             at_fast = set true
@@ -147,8 +147,10 @@ script = [
     debug "🔅 Using td with server: '${TD_WITH_SERVER}'"
 
     make_with_banners = get_env TD_MAKE_WITH_BANNERS
+    make_with_banners_empty = is_empty ${make_with_banners}
     make_with_banners_true = eq ${make_with_banners} "true"
-    if ${make_with_banners_true}
+    make_with_banners = set ${make_with_banners_empty} or ${make_with_banners_true}
+    if ${make_with_banners}
         set_env TD_MAKE_WITH_BANNERS "true"
     else
         set_env TD_MAKE_WITH_BANNERS "false"
@@ -157,8 +159,10 @@ script = [
     debug "🔅 Using td make with banners: '${TD_MAKE_WITH_BANNERS}'"
 
     make_with_responsive = get_env TD_MAKE_WITH_RESPONSIVE
+    make_with_responsive_empty = is_empty ${make_with_responsive}
     make_with_responsive_true = eq ${make_with_responsive} "true"
-    if ${make_with_responsive_true}
+    make_with_responsive = set ${make_with_responsive_empty} or ${make_with_responsive_true}
+    if ${make_with_responsive}
         set_env TD_MAKE_WITH_RESPONSIVE "true"
     else
         set_env TD_MAKE_WITH_RESPONSIVE "false"

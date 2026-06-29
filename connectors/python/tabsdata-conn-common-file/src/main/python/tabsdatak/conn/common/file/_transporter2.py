@@ -652,8 +652,13 @@ def find(
     """
     extra = ("--alpha-suborder",) if alpha_suborder else ()
     return _run(
-        _FIND, request, work_dir, FindResponse,
-        env=env, binary_path=binary_path, extra_args=extra,
+        _FIND,
+        request,
+        work_dir,
+        FindResponse,
+        env=env,
+        binary_path=binary_path,
+        extra_args=extra,
     )
 
 
@@ -674,8 +679,13 @@ def find_copy(
     """
     extra = ("--alpha-suborder",) if alpha_suborder else ()
     return _run(
-        _FIND_COPY, request, work_dir, CopyResponse,
-        env=env, binary_path=binary_path, extra_args=extra,
+        _FIND_COPY,
+        request,
+        work_dir,
+        CopyResponse,
+        env=env,
+        binary_path=binary_path,
+        extra_args=extra,
     )
 
 
@@ -687,7 +697,9 @@ def copy(
     binary_path: str | None = None,
 ) -> TransporterReport:
     """Copy / convert an explicit list of (from, to) pairs."""
-    return _run(_COPY, request, work_dir, CopyResponse, env=env, binary_path=binary_path)
+    return _run(
+        _COPY, request, work_dir, CopyResponse, env=env, binary_path=binary_path
+    )
 
 
 def delete(

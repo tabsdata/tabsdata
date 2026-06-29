@@ -122,9 +122,7 @@ def _parse_path(path: JsonPath) -> list[str | int]:
     return tokens
 
 
-def replace_at(
-    json_serde_data: JsonSerdeData, path: JsonPath, value: Any
-) -> None:
+def replace_at(json_serde_data: JsonSerdeData, path: JsonPath, value: Any) -> None:
     """Replace the element at `path` inside `node` with `value`, in place.
 
     `path` must use the syntax produced by `find_by_kind`. Replacing the
@@ -300,7 +298,9 @@ def hydrate(
 
     values = {kv.key: kv.value for kv in secrets}
     for path, _ in refs:
-        replace_at(out, path, _SECRET_PREFIX + values[_SECRET_KEY_PREFIX + _to_key(path)])
+        replace_at(
+            out, path, _SECRET_PREFIX + values[_SECRET_KEY_PREFIX + _to_key(path)]
+        )
     return out
 
 

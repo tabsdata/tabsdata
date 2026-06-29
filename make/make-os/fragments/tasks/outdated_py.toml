@@ -26,6 +26,6 @@ script = [
     # debug "🚀 pip-upgrade --dry-run requirements-dev.txt"
     # exec --fail-on-error --input "x" pip-upgrade --dry-run requirements-dev.txt
 
-    debug "🚀 tdx_pyoutdated requirements-dev.txt"
-    exec --fail-on-error tdx_pyoutdated requirements-dev.txt
+    debug "🚀 tdx-pyoutdated requirements-dev.txt"
+    exec --fail-on-error tdx-pyoutdated requirements-dev.txt
     ''']

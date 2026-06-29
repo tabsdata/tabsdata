@@ -37,8 +37,9 @@ from typing import (
     Callable,
     Type,
     TypeAlias,
+    Union,
     cast,
-    get_type_hints, Union,
+    get_type_hints,
 )
 
 from pydantic import ConfigDict, model_validator

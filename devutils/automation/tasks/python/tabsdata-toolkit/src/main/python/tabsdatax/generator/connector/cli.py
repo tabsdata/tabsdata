@@ -621,9 +621,9 @@ def main(package: str, backend: str, root: Path | None, verbose: bool) -> None:
 
     \b
     Examples:
-        tdx_gconnector -p mysql -b MySQL
-        tdx_gconnector --package postgres --backend PostgreSQL
-        tdx_gconnector -p oracle -b Oracle --verbose
+        tdx-gconnector -p mysql -b MySQL
+        tdx-gconnector --package postgres --backend PostgreSQL
+        tdx-gconnector -p oracle -b Oracle --verbose
     """
     current = Path(root).resolve() if root else Path.cwd()
     placeholders = build_placeholders(package, backend, current)

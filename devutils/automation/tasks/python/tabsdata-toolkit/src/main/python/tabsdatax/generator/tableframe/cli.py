@@ -2,7 +2,7 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-"""Command-line interface for the Polars delegation generator (``tdx_gtableframe``).
+"""Command-line interface for the Polars delegation generator (``tdx-gtableframe``).
 
 A rich-click app with three subcommands:
 

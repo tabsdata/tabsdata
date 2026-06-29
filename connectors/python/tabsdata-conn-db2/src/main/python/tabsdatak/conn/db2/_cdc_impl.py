@@ -381,9 +381,9 @@ class CommitSeqOffset(CdcOffset):
 
     def write(self) -> str:
         # Serialise the per-table map with binary commitseqs as hex strings.
-        return json.dumps(
-            {table: commitseq.hex() for table, commitseq in self.commits.items()}
-        )
+        return json.dumps({
+            table: commitseq.hex() for table, commitseq in self.commits.items()
+        })
 
     @classmethod
     def read(cls, data: str) -> "CommitSeqOffset":

@@ -314,8 +314,7 @@ class SecretValueConstraints:
     def __init__(self, *, pattern: str):
         if not isinstance(pattern, str):
             raise TypeError(
-                f"SecretValueConstraints expects a regex string, "
-                f"got {type(pattern)!r}"
+                f"SecretValueConstraints expects a regex string, got {type(pattern)!r}"
             )
         self._pattern = pattern
 
@@ -332,9 +331,7 @@ class SecretValueConstraints:
         # modules are imported).
         from tabsdatak.api import Secret
 
-        if not (
-            isinstance(source_type, type) and issubclass(source_type, Secret)
-        ):
+        if not (isinstance(source_type, type) and issubclass(source_type, Secret)):
             raise TypeError(
                 f"SecretValueConstraints can only annotate Secret subclasses "
                 f"(got {source_type!r})"

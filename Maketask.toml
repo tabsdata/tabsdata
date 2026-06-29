@@ -651,6 +651,7 @@ script = [
     packages_filter = set ""
     modules_filter = set ""
     preview = set false
+    help = set false
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         is_package = starts_with ${argument} ${packages_prefix}
@@ -664,7 +665,55 @@ script = [
         if eq ${argument} "--preview"
             preview = set true
         end
+        if eq ${argument} "--help"
+            help = set true
+        end
+        if eq ${argument} "-h"
+            help = set true
+        end
     end
+
+    if ${help}
+        info ""
+        info "🧪 test_py — Run the Python test suite in parallel with pytest and xdist."
+        info ""
+        info "🛟 Usage:"
+        info "   cargo make test_py [-- <options>]"
+        info ""
+        info "🛟 Test options:"
+        info "   --packages=<list>  Comma-separated package names to test."
+        info "                      The 'tabsdata-' prefix is optional, and wildcards are supported (for example, 'conn-*')."
+        info "                      When omitted, every package is tested."
+        info "   --modules=<list>   Comma-separated dotted module paths to narrow the run within the selected packages."
+        info "                      Each leaf is resolved as both itself and its 'test_' counterpart, so 'tabsdata.api' matches the 'tabsdata/api' and 'test_tabsdata/api' folders."
+        info "                      Modules that do not exist are silently skipped."
+        info "   --preview          List the test folders (packages and modules) that would be selected, then exit without running any test."
+        info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting."
+        info "   --skipe            Report test failures as a diagnostic summary instead of failing the task."
+        info "   -h, --help         Show this help and exit."
+        info ""
+        info "🛟 Build mode flags (handled before the tests run; they shape the wrapping build):"
+        info "   --fast             Shorthand for --no-banners --no-responsive --no-permit --no-license --no-compile --no-deploy."
+        info "                      Use it when your environment is fully functional and you just want to run the tests."
+        info "   --warp             Everything '--fast' implies, plus --no-server."
+        info "                      Use it when you also do not need a running tabsdata server for the tests."
+        info "   --no-banners       Disable terminal output banners (on by default)."
+        info "   --no-responsive    Disable terminal responsive output (on by default)."
+        info "   --no-permit        Skip the proactive dependency check and installation (active by default)."
+        info "   --no-license       Skip the license check and generation (active by default)."
+        info "   --no-compile       Skip compilation and linking of the Rust projects (active by default)."
+        info "   --no-deploy        Skip deployment (hydration) of the tabsdata packages (active by default)."
+        info "   --no-server        Skip starting the supporting tabsdata test servers (active by default)."
+        info ""
+        info "🛟 Examples:"
+        info "   cargo make test_py"
+        info "   cargo make test_py --packages=tabsdata,conn-mysql"
+        info "   cargo make test_py --packages=conn-* --modules=tabsdata.api --preview"
+        info "   cargo make test_py --fast --tb=short"
+        info ""
+        exit 0
+    end
+
     packages_filter_list = split ${packages_filter} ,
     modules_filter_list = split ${modules_filter} ,
 
