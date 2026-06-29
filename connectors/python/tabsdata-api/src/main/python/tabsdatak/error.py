@@ -308,9 +308,10 @@ class ApiErrorCode(ErrorCode):
     API_11 = ErrorDef(ApiInternalException, "Secret {name}, missing secret resolution ")
     # `Secret.value()` -- reading the value of a dehydrated secret
 
-    # --- Connections (tabsdatak.api) --------------------------------
-    API_13 = ErrorDef(ApiInitException, "Cannot create NamedConn")
-    # NamedConn
+    # --- Connections --------------------------------------------------
+    # (API_13 was retired with `NamedConn`; connections are now resolved
+    # from the function's collection, not declared by name on the flow.
+    # Its slot is left vacant so the surviving codes keep their numbers.)
 
     # --- Source / destination / action bases (tabsdatak.spi) --------
     # Tag for every concrete `Src` / `Dest` subclass, every `SrcDef` /

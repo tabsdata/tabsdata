@@ -6,11 +6,9 @@ A serialized `_JsonSerde` subclass is a tree of *envelopes*:
     {"kind": ..., "apiVersion": ..., "type": ..., "spec": {...}}
 
 `spec` may contain plain fields, lists, or further envelopes (nested
-`_JsonSerde` payload). `find_by_kind` walks the tree and yields every
-envelope whose `kind` matches; `replace_at` writes a new value at a path
-returned by the walker. These power the *connection* helpers
-(`extract_connection_names`, `hydrate_connections`) -- a `NamedConn`
-serializes to an envelope of kind ``connectionRef``.
+`_JsonSerde` payload). `_secret_refs` walks the tree for secret string
+leaves and yields a jsonpath for each; `replace_at` writes a new value at
+such a path.
 
 Secrets are NOT envelopes. A `tabsdatak.api.Secret` string leaf is one
 of two forms: the dehydrated marker ``":secret:"`` (no value), or the
@@ -44,7 +42,6 @@ from typing import Any, TypeAlias, Union
 from tabsdatak.common._error import CommonErrorCode
 
 type JsonPath = str
-type Envelope = dict[str, Any]
 
 
 JsonSerdeData = Union[dict, list]
@@ -62,38 +59,6 @@ class KeyValue:
 # ---------------------------------------------------------------------------
 # Visitor helpers
 # ---------------------------------------------------------------------------
-
-
-def find_by_kind(
-    json_serde_data: JsonSerdeData, kind: str
-) -> list[tuple[JsonPath, Envelope]]:
-    """Return every envelope under `node` whose ``kind`` equals `kind`.
-
-    Each result is a ``(json_path, envelope)`` pair. The path uses the
-    subset of JSONPath understood by `replace_at`:
-
-    - ``$``          — the root
-    - ``.<key>``     — dict key access (key must be a python identifier-ish
-                       string; keys with ``.`` or ``[`` are not supported)
-    - ``[<index>]``  — list element access
-
-    The walk descends into matched envelopes too, so nested occurrences
-    are also reported.
-    """
-    found: list[tuple[JsonPath, Envelope]] = []
-
-    def walk(n: Any, path: JsonPath) -> None:
-        if isinstance(n, dict):
-            if n.get("kind") == kind:
-                found.append((path, n))
-            for k, v in n.items():
-                walk(v, f"{path}.{k}")
-        elif isinstance(n, list):
-            for i, v in enumerate(n):
-                walk(v, f"{path}[{i}]")
-
-    walk(json_serde_data, "$")
-    return found
 
 
 def _parse_path(path: JsonPath) -> list[str | int]:
@@ -125,9 +90,9 @@ def _parse_path(path: JsonPath) -> list[str | int]:
 def replace_at(json_serde_data: JsonSerdeData, path: JsonPath, value: Any) -> None:
     """Replace the element at `path` inside `node` with `value`, in place.
 
-    `path` must use the syntax produced by `find_by_kind`. Replacing the
-    root (``$``) is not supported — the caller already holds that
-    reference and can assign to it directly.
+    `path` must use the jsonpath syntax produced by `_secret_refs`.
+    Replacing the root (``$``) is not supported — the caller already holds
+    that reference and can assign to it directly.
     """
     tokens = _parse_path(path)
     if not tokens:
@@ -144,7 +109,7 @@ _MISSING = object()
 def _value_at(json_serde_data: JsonSerdeData, path: JsonPath) -> Any:
     """The value at `path` inside `node`, or :data:`_MISSING` if any
     segment of the path is absent. Uses the syntax produced by
-    `find_by_kind`.
+    `_secret_refs`.
     """
     cur: Any = json_serde_data
     for token in _parse_path(path):
@@ -200,8 +165,8 @@ def _secret_refs(data: JsonSerdeData) -> list[tuple[JsonPath, str | None]]:
 
     ``value`` is the hydrated value (the text after the ``"secret:"``
     prefix), or ``None`` for a dehydrated ``":secret:"`` leaf. Paths use
-    the same syntax as `find_by_kind`, so `replace_at` and `_to_key`
-    accept them.
+    the ``$.key[i]`` jsonpath syntax that `replace_at` and `_to_key`
+    accept.
     """
     found: list[tuple[JsonPath, str | None]] = []
 
@@ -345,57 +310,3 @@ def list_refs(data: JsonSerdeData) -> list[str]:
     the ``secret_names`` an apiserver connection read returns.
     """
     return [_SECRET_KEY_PREFIX + _to_key(path) for path, _ in _secret_refs(data)]
-
-
-# ---------------------------------------------------------------------------
-# Connection helpers
-# ---------------------------------------------------------------------------
-
-# On purpose, we don't use constants for the __kind__ attributes.
-# Not to break backwards compatibility with serialized data
-# out there unknowingly because of a change of constant that would not
-# break things in our code because we are using the constant all over,
-# but it would break things outside.
-_CONNECTION_REF_KIND = "connectionRef"
-_CONNECTION_NAME_FIELD = "name"
-
-
-def extract_connection_names(data: JsonSerdeData) -> list[str]:
-    """Return the de-duplicated, in-order list of connection names
-    referenced by every ``connectionRef`` envelope under ``data``.
-
-    A ``connectionRef``'s ``name`` field is a plain string literal.
-    """
-    seen: dict[str, None] = {}
-    for _path, env in find_by_kind(data, _CONNECTION_REF_KIND):
-        seen.setdefault(env["spec"][_CONNECTION_NAME_FIELD], None)
-    return list(seen)
-
-
-def hydrate_connections(
-    data: JsonSerdeData,
-    conn_by_name: dict[str, JsonSerdeData],
-) -> JsonSerdeData:
-    """Return a deep copy of ``data`` with every ``connectionRef`` envelope
-    replaced by ``conn_by_name[<name>]`` (itself deep-copied).
-
-    The name comes from the ``connectionRef``'s ``name`` field (a plain
-    string). Each ``connectionRef`` is replaced by an independent copy of
-    the matching value in ``conn_by_name``, so callers can safely reuse
-    the mapping across multiple hydrations.
-
-    Raises:
-        CommonRuntimeException: if any referenced name is missing from
-            ``conn_by_name`` (COMMON_8), or if the root envelope itself is
-            a ``connectionRef`` (COMMON_5, which `replace_at` cannot
-            rewrite).
-    """
-    out = deepcopy(data)
-    for path, env in find_by_kind(out, _CONNECTION_REF_KIND):
-        if path == "$":
-            raise CommonErrorCode.COMMON_5.exception()
-        name = env["spec"][_CONNECTION_NAME_FIELD]
-        if name not in conn_by_name:
-            raise CommonErrorCode.COMMON_8.exception(name=name)
-        replace_at(out, path, deepcopy(conn_by_name[name]))
-    return out

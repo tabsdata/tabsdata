@@ -8,10 +8,7 @@ from tabsdatak.common._json_serde import (
     KeyValue,
     dehydrate,
     env_hydrate,
-    extract_connection_names,
-    find_by_kind,
     hydrate,
-    hydrate_connections,
     list_refs,
     replace_at,
 )
@@ -34,43 +31,6 @@ def _wrap(spec: dict) -> dict:
 # helper spells out the form the walker matches on.
 def _secret(value: str | None) -> str:
     return f"secret:{value}" if value is not None else ":secret:"
-
-
-# ---------------------------------------------------------------------------
-# find_by_kind
-# ---------------------------------------------------------------------------
-
-
-def test_find_by_kind_on_empty_dict_returns_nothing():
-    assert find_by_kind({}, "secret") == []
-
-
-def test_find_by_kind_matches_root_envelope():
-    root = _env("connectionRef", {"name": "PW"})
-    assert find_by_kind(root, "connectionRef") == [("$", root)]
-
-
-def test_find_by_kind_nested_under_dict_key():
-    inner = _env("connectionRef", {"name": "PW"})
-    root = _env("outer", {"creds": inner})
-    assert find_by_kind(root, "connectionRef") == [("$.spec.creds", inner)]
-
-
-def test_find_by_kind_nested_under_list_index():
-    a = _env("connectionRef", {"i": 0})
-    b = _env("connectionRef", {"i": 1})
-    root = _env("outer", [a, b])
-    assert find_by_kind(root, "connectionRef") == [("$.spec[0]", a), ("$.spec[1]", b)]
-
-
-def test_find_by_kind_skips_non_dict_non_list_values():
-    root = {"kind": "x", "spec": "not-a-container", "n": 1, "b": True, "z": None}
-    assert find_by_kind(root, "x") == [("$", root)]
-
-
-def test_find_by_kind_does_not_match_partial_envelopes():
-    root = {"apiVersion": "1.0", "spec": {"name": "PW"}}
-    assert find_by_kind(root, "connectionRef") == []
 
 
 # ---------------------------------------------------------------------------
@@ -320,90 +280,3 @@ def test_env_hydrate_does_not_mutate_input(monkeypatch):
     data = _wrap({"password": _secret(None)})
     env_hydrate(data)
     assert data["spec"]["password"] == _secret(None)
-
-
-# ---------------------------------------------------------------------------
-# Connection helpers
-# ---------------------------------------------------------------------------
-
-
-def _conn_ref(name: str) -> dict:
-    return {
-        "kind": "connectionRef",
-        "apiVersion": "1.0",
-        "type": "tabsdatak.api:NamedConn",
-        "spec": {"name": name},
-    }
-
-
-def _conn_def(label: str) -> dict:
-    return {
-        "kind": "connectionDef",
-        "apiVersion": "1.0",
-        "type": "tabsdatak.api:SomeConn",
-        "spec": {"label": label},
-    }
-
-
-def test_extract_connection_names_empty():
-    assert extract_connection_names(_wrap({})) == []
-
-
-def test_extract_connection_names_returns_literal_names():
-    data = _wrap({"conn": _conn_ref("prod_pg")})
-    assert extract_connection_names(data) == ["prod_pg"]
-
-
-def test_extract_connection_names_dedupes_in_order():
-    data = _wrap(
-        {"src": _conn_ref("b"), "dst": _conn_ref("a"), "also": _conn_ref("b")}
-    )
-    assert extract_connection_names(data) == ["b", "a"]
-
-
-def test_extract_connection_names_ignores_connection_defs():
-    data = _wrap({"inline": _conn_def("x"), "ref": _conn_ref("y")})
-    assert extract_connection_names(data) == ["y"]
-
-
-def test_hydrate_connections_replaces_ref_with_def():
-    data = _wrap({"conn": _conn_ref("prod_pg")})
-    out = hydrate_connections(data, {"prod_pg": _conn_def("prod_pg")})
-    assert out["spec"]["conn"]["kind"] == "connectionDef"
-    assert out["spec"]["conn"]["spec"]["label"] == "prod_pg"
-
-
-def test_hydrate_connections_does_not_mutate_input():
-    data = _wrap({"conn": _conn_ref("prod_pg")})
-    hydrate_connections(data, {"prod_pg": _conn_def("prod_pg")})
-    assert data["spec"]["conn"]["kind"] == "connectionRef"
-
-
-def test_hydrate_connections_replaces_each_ref_independently():
-    data = _wrap({"a": _conn_ref("x"), "b": _conn_ref("x")})
-    conn_by_name = {"x": _conn_def("x")}
-    out = hydrate_connections(data, conn_by_name)
-    out["spec"]["a"]["spec"]["label"] = "tainted"
-    assert out["spec"]["b"]["spec"]["label"] == "x"
-    assert conn_by_name["x"]["spec"]["label"] == "x"
-
-
-def test_hydrate_connections_raises_on_unknown_name():
-    data = _wrap({"conn": _conn_ref("ghost")})
-    with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate_connections(data, {"prod_pg": _conn_def("prod_pg")})
-    assert exc_info.value.api_error is CommonErrorCode.COMMON_8
-
-
-def test_hydrate_connections_raises_when_root_is_ref():
-    data = _conn_ref("x")
-    with pytest.raises(CommonRuntimeException) as exc_info:
-        hydrate_connections(data, {"x": _conn_def("x")})
-    assert exc_info.value.api_error is CommonErrorCode.COMMON_5
-
-
-def test_hydrate_connections_leaves_connection_defs_alone():
-    data = _wrap({"inline": _conn_def("already-here"), "ref": _conn_ref("x")})
-    out = hydrate_connections(data, {"x": _conn_def("x")})
-    assert out["spec"]["inline"]["spec"]["label"] == "already-here"
-    assert out["spec"]["ref"]["spec"]["label"] == "x"

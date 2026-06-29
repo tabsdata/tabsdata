@@ -1,28 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
-from typing import Annotated, Any, Union
 
 import pytest
 from pydantic import ValidationError
 
 # noinspection PyProtectedMember
-from tabsdatak import _api
+from tabsdatak import _api, _connectors as _connectors, _info, api as m, spi, tableframe
 from tabsdatak.api import (
     Secret,
     Src,
 )
 from tabsdatak.error import (
+    DEBUG_FRAMES_ENV_VAR,
     ApiErrorCode,
     ApiException,
     ApiInitException,
-    DEBUG_FRAMES_ENV_VAR,
 )
-from tabsdatak import _info
-from tabsdatak import api as m, tableframe
-from tabsdatak import _connectors as _connectors
-from tabsdatak import spi
-
 
 # ---------------------------------------------------------------------------
 # 1. ``_api.dataclass`` frozen-by-default invariant + opt-out
@@ -224,6 +218,7 @@ _MissingStepSrc.__api_version__ = "2.0"
 # ---------------------------------------------------------------------------
 
 import dataclasses as _stdlib_dc
+
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass as _pdc
 
@@ -252,7 +247,6 @@ class _BmConn(m.Conn, BaseModel):
 
 def _build_publisher() -> _info.PublisherInfo:
     @m.publisher(
-        conn=m.NamedConn(name="conn1"),
         source=_SerdeSrc(name="src1"),
         output_tables=["out"],
     )
@@ -324,15 +318,6 @@ def test_callable_to_str_rejects_closure():
 # ---------------------------------------------------------------------------
 
 
-def test_named_conn_round_trips():
-    nc = m.NamedConn(name="prod_db")
-    d = nc.to_dict()
-    assert d["kind"] == "connectionRef"
-    assert d["type"].endswith(":NamedConn")
-    assert d["spec"] == {"name": "prod_db"}
-    assert m.NamedConn.from_dict(d) == nc
-
-
 def test_secret_hydrated_serializes_dehydrated():
     e = m.Secret("DB_PASSWORD")
     d = e.to_dict()
@@ -359,9 +344,9 @@ def test_cron_trigger_round_trips():
 
 
 def test_round_trip_via_json_string():
-    nc = m.NamedConn(name="prod_db")
-    s = nc.to_json()
-    assert m.NamedConn.from_json(s) == nc
+    c = _StdlibConn(host="db.example")
+    s = c.to_json()
+    assert _StdlibConn.from_json(s) == c
 
 
 # ---------------------------------------------------------------------------
@@ -370,17 +355,17 @@ def test_round_trip_via_json_string():
 
 
 def test_conn_base_resolves_to_concrete_subclass():
-    nc = m.NamedConn(name="prod")
-    d = nc.to_dict()
-    # Reconstruct via the base class -- it must dispatch to NamedConn.
+    c = _StdlibConn(host="db.example")
+    d = c.to_dict()
+    # Reconstruct via the base class -- it must dispatch to _StdlibConn.
     back = m.Conn.from_dict(d)
-    assert isinstance(back, m.NamedConn)
-    assert back == nc
+    assert isinstance(back, _StdlibConn)
+    assert back == c
 
 
 def test_kind_mismatch_rejected():
-    nc = m.NamedConn(name="prod")
-    d = nc.to_dict()
+    c = _StdlibConn(host="db.example")
+    d = c.to_dict()
     d["kind"] = m.KIND_SOURCE_DEF  # tampered
     with pytest.raises(Exception, match="kind"):
         m.Conn.from_dict(d)
@@ -388,9 +373,9 @@ def test_kind_mismatch_rejected():
 
 def test_secret_rejects_envelope_dict():
     # A Secret only validates from a string (or a Secret instance). Handing it
-    # a NamedConn envelope dict is rejected.
-    nc = m.NamedConn(name="prod")
-    d = nc.to_dict()
+    # a Conn envelope dict is rejected.
+    c = _StdlibConn(host="db.example")
+    d = c.to_dict()
     with pytest.raises(Exception, match="expects a string"):
         m.Secret.from_dict(d)
 
@@ -398,36 +383,6 @@ def test_secret_rejects_envelope_dict():
 # ---------------------------------------------------------------------------
 # _info.PublisherInfo / _info.TransformerInfo / _info.SubscriberInfo round-trip
 # ---------------------------------------------------------------------------
-
-
-def test_publisher_round_trips_with_named_conn():
-    src = _SerdeSrc(name="src1")
-    p = _info.PublisherInfo(
-        func=serde_pub_func,
-        conn=m.NamedConn(name="prod_db"),
-        source=src,
-        output_tables=["out"],
-        trigger_by=None,
-        on_tables=None,
-    )
-    d = p.to_dict()
-    assert d["kind"] == _info.KIND_PUBLISHER_DEF
-    # Spec carries func as module:qualname.
-    assert d["spec"]["func"].endswith(":serde_pub_func")
-    # Conn is wrapped in its own envelope.
-    assert d["spec"]["conn"]["kind"] == "connectionRef"
-    assert d["spec"]["conn"]["spec"]["name"] == "prod_db"
-    # Source is wrapped in its own envelope.
-    assert d["spec"]["source"]["kind"] == m.KIND_SOURCE_DEF
-    assert d["spec"]["source"]["spec"]["name"] == "src1"
-
-    p2 = _info.PublisherInfo.from_dict(d)
-    assert p2.func is serde_pub_func
-    assert isinstance(p2.conn, m.NamedConn)
-    assert p2.conn.name == "prod_db"
-    assert isinstance(p2.source, _SerdeSrc)
-    assert p2.source.name == "src1"
-    assert p2.output_tables == ["out"]
 
 
 def test_publisher_rejects_closure_func():
@@ -442,7 +397,6 @@ def test_publisher_rejects_closure_func():
 def test_publisher_round_trips_via_json_string():
     p = _info.PublisherInfo(
         func=serde_pub_func,
-        conn=m.NamedConn(name="prod_db"),
         source=_SerdeSrc(name="src1"),
         output_tables=["out"],
         trigger_by=None,
@@ -472,7 +426,6 @@ def test_transformer_round_trips():
 def test_subscriber_round_trips():
     s = _info.SubscriberInfo(
         func=serde_sub_func,
-        conn=m.NamedConn(name="dest_conn"),
         destination=_SerdeDest(name="dest1"),
         input_tables=["in"],
         trigger_by=None,
@@ -550,11 +503,11 @@ def test_migration_cycle_detected():
 
 @pytest.mark.parametrize("missing_key", ["kind", "apiVersion", "type", "spec"])
 def test_envelope_missing_key_rejected(missing_key):
-    nc = m.NamedConn(name="prod_db")
-    envelope = nc.to_dict()
+    c = _StdlibConn(host="db.example")
+    envelope = c.to_dict()
     envelope.pop(missing_key)
     with pytest.raises(Exception):
-        m.NamedConn.from_dict(envelope)
+        _StdlibConn.from_dict(envelope)
 
 
 # ---------------------------------------------------------------------------
@@ -572,7 +525,6 @@ class _MarkAction(m.OnTablesAction):
 def test_on_tables_action_round_trips_inside_publisher():
     p = _info.PublisherInfo(
         func=serde_pub_func,
-        conn=m.NamedConn(name="prod_db"),
         source=_SerdeSrc(name="src1"),
         output_tables=["out"],
         trigger_by=None,
@@ -604,24 +556,6 @@ def test_conn_round_trip_for_each_authoring_style(conn_cls):
     assert isinstance(back, conn_cls)
     assert back.host == "db.example"
     assert back.port == 6543
-
-
-# ---------------------------------------------------------------------------
-# NamedConn name field is a literal string only.
-# ---------------------------------------------------------------------------
-
-
-def test_named_conn_with_literal_name_round_trips():
-    nc = m.NamedConn(name="MY_CONN_NAME")
-    back = m.NamedConn.from_json(nc.to_json())
-    assert back.name == "MY_CONN_NAME"
-
-
-def test_named_conn_rejects_invalid_name():
-    # Leading-digit identifier is not a valid named-connection name.
-    with pytest.raises(ApiException) as excinfo:
-        m.NamedConn(name="1bad")
-    assert excinfo.value.api_error is ApiErrorCode.API_13
 
 
 # ---------------------------------------------------------------------------
@@ -702,7 +636,7 @@ def test_cron_trigger_round_trips():
 # ---------------------------------------------------------------------------
 
 
-@_api.dataclass(ApiErrorCode.API_13)
+@_api.dataclass(ApiErrorCode.API_14)
 class _PortRequiresHostConn(m.Conn):
     host: str | None = None
     port: int | None = None
@@ -717,7 +651,7 @@ def testvalidate_hook_runs_on_construction():
     # ApiException with the class's API tag.
     with pytest.raises(ApiException) as excinfo:
         _PortRequiresHostConn(port=5432)
-    assert excinfo.value.api_error is ApiErrorCode.API_13
+    assert excinfo.value.api_error is ApiErrorCode.API_14
     assert "port set without host" in str(excinfo.value)
 
 
@@ -739,9 +673,9 @@ def testvalidate_hook_runs_on_from_json_reload():
 
 
 def test_defaultvalidate_is_no_op():
-    # NamedConn doesn't override validate; it should construct cleanly.
-    nc = m.NamedConn(name="prod_db")
-    assert nc.name == "prod_db"
+    # _StdlibConn doesn't override validate; it should construct cleanly.
+    c = _StdlibConn(host="db.example")
+    assert c.host == "db.example"
 
 
 def test_naive_datetime_rejected_on_load_from_json():

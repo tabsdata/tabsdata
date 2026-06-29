@@ -279,24 +279,6 @@ class Conn(_Conn, ABC):
     __kind__ = "connectionDef"
 
 
-# A connection slot resolved by *name* (looked up in the flow's
-# named-connection registry). The name is a plain string literal.
-ConnectionNameSpec: TypeAlias = Annotated[str, _api.NAMED_CONN_CONSTRAINTS]
-
-
-@_api.dataclass(ApiErrorCode.API_13)
-class NamedConn(Conn):
-    """Reference to a connection by name; the runtime resolves the
-    name to a concrete :class:`Conn` at flow run time.
-
-    :param name: Connection identifier (a plain string) registered
-        with the runtime.
-    """
-
-    __kind__ = "connectionRef"
-    name: ConnectionNameSpec
-
-
 # `__kind__` discriminator values for the descriptor-base JsonSerde
 # envelopes. Centralised here so consumers (server-side dispatch,
 # tests, migration tooling) compare against named constants instead

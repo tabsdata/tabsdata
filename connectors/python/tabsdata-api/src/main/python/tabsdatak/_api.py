@@ -257,15 +257,6 @@ def _validate_coll_table_versions_name(value: str) -> str:
     return value
 
 
-def _validate_named_connection(value: str) -> str:
-    if not _IDENTIFIER_RE.fullmatch(value):
-        raise ValueError(
-            f"not a valid named connection (1-64 chars, must start with a letter, "
-            f"alphanumeric and underscore only): {value!r}"
-        )
-    return value
-
-
 def _validate_cron_mask(value: str) -> str:
     if value in _K8S_CRON_DESCRIPTORS:
         return value
@@ -282,7 +273,6 @@ COLL_TABLE_VERSIONS_NAME_CONSTRAINTS = AfterValidator(
     _validate_coll_table_versions_name
 )
 CRON_MASK_CONSTRAINTS = AfterValidator(_validate_cron_mask)
-NAMED_CONN_CONSTRAINTS = AfterValidator(_validate_named_connection)
 
 NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
 
