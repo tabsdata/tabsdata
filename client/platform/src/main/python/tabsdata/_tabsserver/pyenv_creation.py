@@ -1760,6 +1760,11 @@ def install_host_package(  # noqa: C901
             if package_provider in ["Folder (Editable)"]:
                 as_editable = True
             with_isolation = False
+            logger.info(
+                f"install_host_package: location={package_location} "
+                f"provider={package_provider} -> as_editable={as_editable} "
+                f"(editable only when provider == 'Folder (Editable)')"
+            )
             link_base_binaries(package_location, real_environment_name)
         elif source == "Local":
             logger.info(f"Identified a local package: '{package_location}'")
@@ -2007,18 +2012,31 @@ def get_tabsdata_package_metadata(
     PackageProvider | None,
     str | None,
 ]:
-    td_tabsdata_dev_pkg = os.getenv(variable) if variable is not None else None
-    if td_tabsdata_dev_pkg:
-        return (
-            "Archive (Project)",
-            normalize_location(pathlib.Path(td_tabsdata_dev_pkg)),
-        )
+    # td_tabsdata_dev_pkg = os.getenv(variable) if variable is not None else None
+    # logger.info(
+    #     f"get_tabsdata_package_metadata: module={module} variable={variable} "
+    #     f"env_value={td_tabsdata_dev_pkg}"
+    # )
+    # if td_tabsdata_dev_pkg:
+    #     logger.info(
+    #         f"get_tabsdata_package_metadata: module={module} branch=dev_pkg_env "
+    #         f"-> Archive (Project) (env var {variable} set, "
+    #         f"direct_url.json editability NOT consulted)"
+    #     )
+    #     return (
+    #         "Archive (Project)",
+    #         normalize_location(pathlib.Path(td_tabsdata_dev_pkg)),
+    #     )
     try:
         packages = {
             canonicalize_name(dist.metadata["Name"]): dist.version
             for dist in importlib.metadata.distributions()
         }
         if canonicalize_name(module) not in packages:
+            logger.info(
+                f"get_tabsdata_package_metadata: module={module} "
+                f"branch=not_installed -> (None, None)"
+            )
             return (
                 None,
                 None,
@@ -2026,17 +2044,29 @@ def get_tabsdata_package_metadata(
         distribution = importlib.metadata.distribution(canonicalize_name(module))
         direct_url_content = distribution.read_text("direct_url.json")
         if direct_url_content is None:
+            logger.info(
+                f"get_tabsdata_package_metadata: module={module} "
+                f"branch=no_direct_url -> Package"
+            )
             return (
                 "Package",
                 None,
             )
         direct_url_data = json.loads(direct_url_content)
         provider, location = extract_from_direct_url_data(direct_url_data)
+        logger.info(
+            f"get_tabsdata_package_metadata: module={module} branch=direct_url "
+            f"direct_url={direct_url_data} -> provider={provider} location={location}"
+        )
         return (
             provider,
             normalize_location(location),
         )
     except importlib.metadata.PackageNotFoundError:
+        logger.info(
+            f"get_tabsdata_package_metadata: module={module} "
+            f"branch=package_not_found -> (None, None)"
+        )
         return (
             None,
             None,
@@ -2071,6 +2101,10 @@ def extract_from_direct_url_data(
             url_path,
         )
     is_editable = direct_url_data.get("dir_info", {}).get("editable", False)
+    logger.info(
+        f"extract_from_direct_url_data: url={url} is_editable={is_editable} "
+        f"-> {'Folder (Editable)' if is_editable else 'Folder (Frozen)'}"
+    )
     if is_editable:
         return (
             "Folder (Editable)",

@@ -85,48 +85,52 @@ script = [
 
     debug "🔅 Python system path set to: ${pythonpath}"
 
-    debug "🔷 _____ Setting up tabsdata development package mode..."
-
-    set_env TD_TABSDATA_DEV_PKG ${PROJECT_TABSDATA_ROOT_FOLDER}
-    set_td_tabsdata_dev_pkg = get_env TD_TABSDATA_DEV_PKG
-    debug "🔅 tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
-
-    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata-*
-    for connector in ${connectors}
-        is_connector = is_dir ${connector}
-        if ${is_connector}
-            connector_name = basename ${connector}
-            connector_name_underscore = replace ${connector_name} "-" "_"
-            connector_name_upper = uppercase ${connector_name_underscore}
-            connector_name_env = set TD_${connector_name_upper}_DEV_PKG
-
-            debug "🔷 _____ Setting up ${connector} development package mode..."
-
-            set_env ${connector_name_env} ${connector}
-            set_td_connector_dev_pkg_env = get_env ${connector_name_env}
-            debug "🔅 ${connector} development python package location set to: ${set_td_connector_dev_pkg_env}"
-        end
-    end
-
-    debug "🔷 _____ Setting up tabsdata toolkit development package mode..."
-
-    set_env TD_TABSDATA_TOOLKIT_DEV_PKG ${PROJECT_TABSDATA_TOOLKIT_ROOT_FOLDER}
-    set_td_tabsdata_toolkit_dev_pkg = get_env TD_TABSDATA_TOOLKIT_DEV_PKG
-    debug "🔅 tabsdata toolkit development python package location set to: ${set_td_tabsdata_toolkit_dev_pkg}"
-
-    debug "🔷 _____ Setting up tabsdata agent development package mode..."
-
-    project_tabsdata_ag_root_folder = get_env PROJECT_TABSDATA_AG_ROOT_FOLDER
-    project_tabsdata_ag_root_folder_is_defined = is_defined PROJECT_TABSDATA_AG_ROOT_FOLDER
-    project_tabsdata_ag_root_folder_is_not_defined = not {project_tabsdata_ag_root_folder_is_defined}
-    project_tabsdata_ag_root_folder_is_blank = is_empty ${project_tabsdata_ag_root_folder}
-    if ${project_tabsdata_ag_root_folder_is_not_defined} or ${project_tabsdata_ag_root_folder_is_blank}
-        debug "🔅 tabsdata agent development python package location not set as env PROJECT_TABSDATA_AG_ROOT_FOLDER is not set"
-    else
-        set_env TD_TABSDATA_AGENT_DEV_PKG ${PROJECT_TABSDATA_AG_ROOT_FOLDER}
-        set_td_tabsdata_agent_dev_pkg = get_env TD_TABSDATA_AGENT_DEV_PKG
-        debug "🔅 tabsdata agent development python package location set to: ${set_td_tabsdata_agent_dev_pkg}"
-    end
+    # Development package mode (TD_*_DEV_PKG) disabled: these env vars forced the
+    # venv classifier onto the 'Archive (Project)' fast-path, which installs
+    # non-editable. With them unset, classification falls through to the host
+    # install's direct_url.json and reproduces the editable install.
+    # debug "🔷 _____ Setting up tabsdata development package mode..."
+    #
+    # set_env TD_TABSDATA_DEV_PKG ${PROJECT_TABSDATA_ROOT_FOLDER}
+    # set_td_tabsdata_dev_pkg = get_env TD_TABSDATA_DEV_PKG
+    # debug "🔅 tabsdata development python package location set to: ${set_td_tabsdata_dev_pkg}"
+    #
+    # connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata-*
+    # for connector in ${connectors}
+    #     is_connector = is_dir ${connector}
+    #     if ${is_connector}
+    #         connector_name = basename ${connector}
+    #         connector_name_underscore = replace ${connector_name} "-" "_"
+    #         connector_name_upper = uppercase ${connector_name_underscore}
+    #         connector_name_env = set TD_${connector_name_upper}_DEV_PKG
+    #
+    #         debug "🔷 _____ Setting up ${connector} development package mode..."
+    #
+    #         set_env ${connector_name_env} ${connector}
+    #         set_td_connector_dev_pkg_env = get_env ${connector_name_env}
+    #         debug "🔅 ${connector} development python package location set to: ${set_td_connector_dev_pkg_env}"
+    #     end
+    # end
+    #
+    # debug "🔷 _____ Setting up tabsdata toolkit development package mode..."
+    #
+    # set_env TD_TABSDATA_TOOLKIT_DEV_PKG ${PROJECT_TABSDATA_TOOLKIT_ROOT_FOLDER}
+    # set_td_tabsdata_toolkit_dev_pkg = get_env TD_TABSDATA_TOOLKIT_DEV_PKG
+    # debug "🔅 tabsdata toolkit development python package location set to: ${set_td_tabsdata_toolkit_dev_pkg}"
+    #
+    # debug "🔷 _____ Setting up tabsdata agent development package mode..."
+    #
+    # project_tabsdata_ag_root_folder = get_env PROJECT_TABSDATA_AG_ROOT_FOLDER
+    # project_tabsdata_ag_root_folder_is_defined = is_defined PROJECT_TABSDATA_AG_ROOT_FOLDER
+    # project_tabsdata_ag_root_folder_is_not_defined = not {project_tabsdata_ag_root_folder_is_defined}
+    # project_tabsdata_ag_root_folder_is_blank = is_empty ${project_tabsdata_ag_root_folder}
+    # if ${project_tabsdata_ag_root_folder_is_not_defined} or ${project_tabsdata_ag_root_folder_is_blank}
+    #     debug "🔅 tabsdata agent development python package location not set as env PROJECT_TABSDATA_AG_ROOT_FOLDER is not set"
+    # else
+    #     set_env TD_TABSDATA_AGENT_DEV_PKG ${PROJECT_TABSDATA_AG_ROOT_FOLDER}
+    #     set_td_tabsdata_agent_dev_pkg = get_env TD_TABSDATA_AGENT_DEV_PKG
+    #     debug "🔅 tabsdata agent development python package location set to: ${set_td_tabsdata_agent_dev_pkg}"
+    # end
 
     with_deploy = get_env TD_WITH_DEPLOY
     if eq ${with_deploy} "true"

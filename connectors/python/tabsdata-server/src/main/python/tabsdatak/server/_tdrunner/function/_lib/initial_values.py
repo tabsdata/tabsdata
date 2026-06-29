@@ -66,9 +66,7 @@ logger = logging.getLogger(__name__)
 # the same value Parquet stores and round-trips back.
 _STRICT = ConfigDict(strict=True)
 _KEY_ADAPTER: TypeAdapter[ContextKeySpec] = TypeAdapter(ContextKeySpec, config=_STRICT)
-_VALUE_ADAPTER: TypeAdapter[BasicTypeSpec] = TypeAdapter(
-    BasicTypeSpec, config=_STRICT
-)
+_VALUE_ADAPTER: TypeAdapter[BasicTypeSpec] = TypeAdapter(BasicTypeSpec, config=_STRICT)
 
 # Reserved Parquet column name carrying the entire scratch dict as a
 # Struct cell. The user's flat ``set_attr`` / ``get_attr`` keys are

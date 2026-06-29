@@ -701,6 +701,9 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 ".gitkeep",
                 "*.pyc",
                 "__pycache__/*",
+                ".DS_Store",
+                "Thumbs.db",
+                "desktop.ini",
             ]
         },
     )

@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 BANNER = "BANNER"
 LICENSE = "LICENSE"
 
+ASSET_NOISE_PATTERNS = (".DS_Store", "Thumbs.db", "desktop.ini")
+
 
 def copy_variant_assets(
     variant_assets_folder: str,
@@ -28,6 +30,7 @@ def copy_variant_assets(
             package_assets_folder,
             dirs_exist_ok=True,
             symlinks=False,
+            ignore=shutil.ignore_patterns(*ASSET_NOISE_PATTERNS),
         )
     except Exception as e:
         logger.warning(

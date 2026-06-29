@@ -198,6 +198,9 @@ def build(setup_file: str) -> None:
                     ".gitkeep",
                     "*.pyc",
                     "__pycache__/*",
+                    ".DS_Store",
+                    "Thumbs.db",
+                    "desktop.ini",
                 ]
             },
         )

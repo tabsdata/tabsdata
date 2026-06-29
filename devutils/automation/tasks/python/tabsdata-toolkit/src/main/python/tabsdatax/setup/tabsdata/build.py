@@ -42,7 +42,12 @@ def create_custom_build_py_class(
                             source,
                             destination,
                             dirs_exist_ok=True,
-                            ignore=shutil.ignore_patterns(".gitkeep"),
+                            ignore=shutil.ignore_patterns(
+                                ".gitkeep",
+                                ".DS_Store",
+                                "Thumbs.db",
+                                "desktop.ini",
+                            ),
                         )
                     elif source.is_file():
                         destination.parent.mkdir(parents=True, exist_ok=True)
