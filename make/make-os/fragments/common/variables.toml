@@ -40,6 +40,10 @@ script = [
     at_warp = get_env TD_AT_WARP
     at_warp = eq ${at_warp} "true"
 
+    seen_start = set false
+    seen_stop = set false
+    seen_status = set false
+
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         if eq ${argument} "--no-license"
@@ -52,7 +56,33 @@ script = [
             set_env TD_WITH_DEPLOY "false"
         end
         if eq ${argument} "--no-server"
-            set_env TD_WITH_SERVER "false"
+            set_env TD_WITH_SERVER_START "false"
+            set_env TD_WITH_SERVER_STOP "false"
+        end
+        if eq ${argument} "--no-server-start"
+            set_env TD_WITH_SERVER_START "false"
+        end
+        if eq ${argument} "--no-server-stop"
+            set_env TD_WITH_SERVER_STOP "false"
+        end
+        if eq ${argument} "--start"
+            seen_start = set true
+            set_env TD_WITH_SERVER_START "true"
+            set_env TD_WITH_SERVER_STOP "false"
+            set_env TD_WITH_TESTS_RUN "false"
+        end
+        if eq ${argument} "--stop"
+            seen_stop = set true
+            set_env TD_WITH_SERVER_START "false"
+            set_env TD_WITH_SERVER_STOP "true"
+            set_env TD_WITH_TESTS_RUN "false"
+        end
+        if eq ${argument} "--status"
+            seen_status = set true
+            set_env TD_WITH_SERVER_START "false"
+            set_env TD_WITH_SERVER_STOP "false"
+            set_env TD_WITH_SERVER_STATUS "true"
+            set_env TD_WITH_TESTS_RUN "false"
         end
         if eq ${argument} "--no-banners"
             set_env TD_MAKE_WITH_BANNERS "false"
@@ -66,6 +96,28 @@ script = [
         if eq ${argument} "--warp"
             at_warp = set true
         end
+    end
+
+    lifecycle_count = set 0
+    if ${seen_start}
+        lifecycle_count = calc ${lifecycle_count} + 1
+    end
+    if ${seen_stop}
+        lifecycle_count = calc ${lifecycle_count} + 1
+    end
+    if ${seen_status}
+        lifecycle_count = calc ${lifecycle_count} + 1
+    end
+    lifecycle_conflict = greater_than ${lifecycle_count} 1
+    if ${lifecycle_conflict}
+        error ""
+        error "🧨 '--start', '--stop' and '--status' are mutually exclusive."
+        error ""
+        error "🛟 '--start' does setup and starts the tabsdata servers (no tests, no stop)."
+        error "🛟 '--stop' only runs teardown and stops the tabsdata servers (no start, no tests)."
+        error "🛟 '--status' does setup and reports the tabsdata servers status (no start, no stop, no tests)."
+        error ""
+        assert false
     end
 
     if ${at_warp}
@@ -84,7 +136,8 @@ script = [
     end
     if ${at_warp}
         set_env TD_AT_WARP "true"
-        set_env TD_WITH_SERVER "false"
+        set_env TD_WITH_SERVER_START "false"
+        set_env TD_WITH_SERVER_STOP "false"
         debug "🛸 Warp mode: also skipping server."
     end
 
@@ -134,17 +187,51 @@ script = [
     TD_WITH_DEPLOY = get_env TD_WITH_DEPLOY
     debug "🔅 Using td deploy: '${TD_WITH_DEPLOY}'"
 
-    with_server = get_env TD_WITH_SERVER
-    with_server_empty = is_empty ${with_server}
-    with_server_true = eq ${with_server} "true"
-    with_server = set ${with_server_empty} or ${with_server_true}
-    if ${with_server}
-        set_env TD_WITH_SERVER "true"
+    with_server_start = get_env TD_WITH_SERVER_START
+    with_server_start_empty = is_empty ${with_server_start}
+    with_server_start_true = eq ${with_server_start} "true"
+    with_server_start = set ${with_server_start_empty} or ${with_server_start_true}
+    if ${with_server_start}
+        set_env TD_WITH_SERVER_START "true"
     else
-        set_env TD_WITH_SERVER "false"
+        set_env TD_WITH_SERVER_START "false"
     end
-    TD_WITH_SERVER = get_env TD_WITH_SERVER
-    debug "🔅 Using td with server: '${TD_WITH_SERVER}'"
+    TD_WITH_SERVER_START = get_env TD_WITH_SERVER_START
+    debug "🔅 Using td with server start: '${TD_WITH_SERVER_START}'"
+
+    with_server_stop = get_env TD_WITH_SERVER_STOP
+    with_server_stop_empty = is_empty ${with_server_stop}
+    with_server_stop_true = eq ${with_server_stop} "true"
+    with_server_stop = set ${with_server_stop_empty} or ${with_server_stop_true}
+    if ${with_server_stop}
+        set_env TD_WITH_SERVER_STOP "true"
+    else
+        set_env TD_WITH_SERVER_STOP "false"
+    end
+    TD_WITH_SERVER_STOP = get_env TD_WITH_SERVER_STOP
+    debug "🔅 Using td with server stop: '${TD_WITH_SERVER_STOP}'"
+
+    with_server_status = get_env TD_WITH_SERVER_STATUS
+    with_server_status_true = eq ${with_server_status} "true"
+    if ${with_server_status_true}
+        set_env TD_WITH_SERVER_STATUS "true"
+    else
+        set_env TD_WITH_SERVER_STATUS "false"
+    end
+    TD_WITH_SERVER_STATUS = get_env TD_WITH_SERVER_STATUS
+    debug "🔅 Using td with server status: '${TD_WITH_SERVER_STATUS}'"
+
+    with_tests_run = get_env TD_WITH_TESTS_RUN
+    with_tests_run_empty = is_empty ${with_tests_run}
+    with_tests_run_true = eq ${with_tests_run} "true"
+    with_tests_run = set ${with_tests_run_empty} or ${with_tests_run_true}
+    if ${with_tests_run}
+        set_env TD_WITH_TESTS_RUN "true"
+    else
+        set_env TD_WITH_TESTS_RUN "false"
+    end
+    TD_WITH_TESTS_RUN = get_env TD_WITH_TESTS_RUN
+    debug "🔅 Using td with tests run: '${TD_WITH_TESTS_RUN}'"
 
     make_with_banners = get_env TD_MAKE_WITH_BANNERS
     make_with_banners_empty = is_empty ${make_with_banners}

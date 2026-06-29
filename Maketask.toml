@@ -582,6 +582,12 @@ run_task = [
     { name = [
         "__os__setup_test_py",
         "__os__start_test_py",
+        "__os__stop_test_py",
+        "__os__cleanup_test_py"
+    ], condition = { env = { "TD_WITH_TESTS_RUN" = "false" } } },
+    { name = [
+        "__os__setup_test_py",
+        "__os__start_test_py",
         "__os__check_hydrate_py",
         "test_parallel_py",
         "__os__stop_test_py",
@@ -684,9 +690,10 @@ script = [
         info "   --packages=<list>  Comma-separated package names to test."
         info "                      The 'tabsdata-' prefix is optional, and wildcards are supported (for example, 'conn-*')."
         info "                      When omitted, every package is tested."
-        info "   --modules=<list>   Comma-separated dotted module paths to narrow the run within the selected packages."
-        info "                      Each leaf is resolved as both itself and its 'test_' counterpart, so 'tabsdata.api' matches the 'tabsdata/api' and 'test_tabsdata/api' folders."
-        info "                      Modules that do not exist are silently skipped."
+        info "   --modules=<list>   Comma-separated '/'-delimited paths to narrow the run within the selected packages."
+        info "                      A path can be a folder ('tabsdata/api'), a file ('tabsdata/api/test_x.py'), or a single test ('tabsdata/api/test_x.py::test_case')."
+        info "                      The leading segment is resolved against its 'test_' counterpart, so 'tabsdata/api' matches the 'test_tabsdata/api' folder; pass a 'test_' prefix to opt out."
+        info "                      Paths that do not exist are silently skipped."
         info "   --preview          List the test folders (packages and modules) that would be selected, then exit without running any test."
         info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting."
         info "   --skipe            Report test failures as a diagnostic summary instead of failing the task."
@@ -703,13 +710,26 @@ script = [
         info "   --no-license       Skip the license check and generation (active by default)."
         info "   --no-compile       Skip compilation and linking of the Rust projects (active by default)."
         info "   --no-deploy        Skip deployment (hydration) of the tabsdata packages (active by default)."
-        info "   --no-server        Skip starting the supporting tabsdata test servers (active by default)."
+        info "   --no-server        Neither start nor stop the supporting tabsdata test servers (both active by default)."
+        info ""
+        info "🛟 Server lifecycle flags (the servers are started before and stopped after the tests by default):"
+        info "   --no-server-start  Do all setup but never start the tabsdata servers (they are still stopped afterwards)."
+        info "   --no-server-stop   Never stop the tabsdata servers afterwards, whether or not this run started them."
+        info "   --no-server        Equivalent to '--no-server-start --no-server-stop'."
+        info "   --start            Do setup and start the tabsdata servers, then exit. No tests, no filtering, no stop."
+        info "   --stop             Only run teardown: setup without starting, then stop the tabsdata servers. No tests."
+        info "   --status           Do setup and report the tabsdata servers status, then exit. No start, no stop, no tests."
+        info "                      '--start', '--stop' and '--status' are mutually exclusive."
         info ""
         info "🛟 Examples:"
         info "   cargo make test_py"
         info "   cargo make test_py --packages=tabsdata,conn-mysql"
-        info "   cargo make test_py --packages=conn-* --modules=tabsdata.api --preview"
+        info "   cargo make test_py --packages=conn-* --modules=tabsdata/api --preview"
+        info "   cargo make test_py --packages=tabsdata --modules=tabsdata/api/test_x.py::test_case"
         info "   cargo make test_py --fast --tb=short"
+        info "   cargo make test_py --start"
+        info "   cargo make test_py --stop"
+        info "   cargo make test_py --status"
         info ""
         exit 0
     end
@@ -823,30 +843,54 @@ script = [
             error ""
             assert ${package_known}
         end
-        info "📦 Running tests for package(s): ${packages_filter}"
     end
 
     if not is_empty ${modules_filter}
         module_narrowed_folders = array
         for selected_tests_folder in ${selected_tests_folders}
             for module_filter in ${modules_filter_list}
-                module_subpath = replace ${module_filter} "." "/"
-                module_has_prefix = starts_with ${module_subpath} "test_"
+                module_parts = split ${module_filter} ::
+                module_path = array_get ${module_parts} 0
+                module_parts_count = array_length ${module_parts}
+                module_node = set ""
+                module_has_node = greater_than ${module_parts_count} 1
+                if ${module_has_node}
+                    module_selector = array_get ${module_parts} 1
+                    module_node = concat "::" ${module_selector}
+                end
+                module_has_prefix = starts_with ${module_path} "test_"
                 if ${module_has_prefix}
-                    module_relative = set ${module_subpath}
+                    module_relative = set ${module_path}
                 else
-                    module_relative = concat "test_" ${module_subpath}
+                    module_relative = concat "test_" ${module_path}
                 end
-                module_folder = concat ${selected_tests_folder} "/" ${module_relative}
-                module_folder = normalize ${module_folder}
-                module_exists = is_path_exists ${module_folder}
+                module_target = concat ${selected_tests_folder} "/" ${module_relative}
+                module_target = normalize ${module_target}
+                module_exists = is_path_exists ${module_target}
                 if ${module_exists}
-                    array_push ${module_narrowed_folders} ${module_folder}
+                    module_selection = concat ${module_target} ${module_node}
+                    array_push ${module_narrowed_folders} ${module_selection}
                 end
+                release ${module_parts}
             end
         end
         selected_tests_folders = set ${module_narrowed_folders}
-        info "🧩 Running tests for module(s): ${modules_filter}"
+    end
+
+    no_packages = is_empty ${packages_filter}
+    no_modules = is_empty ${modules_filter}
+    if ${no_packages}
+        if ${no_modules}
+            info "🧪 Running the full test suite (all packages, no module filter)."
+        else
+            info "🧩 Running tests for module(s) '${modules_filter}' across all packages."
+        end
+    else
+        if ${no_modules}
+            info "📦 Running tests for package(s) '${packages_filter}'."
+        else
+            info "📦🧩 Running tests for module(s) '${modules_filter}' within package(s) '${packages_filter}'."
+        end
     end
 
     pytest_tests_folders = array_join ${selected_tests_folders} " "
@@ -854,9 +898,9 @@ script = [
     if not is_empty ${packages_filter}
         selected_count = array_length ${selected_tests_folders}
         warn ""
-        warn "👁️ Selected ${selected_count} test folder(s):"
-        for selected_test_folder in ${selected_tests_folders}
-            warn "   - 📦️ ${selected_test_folder}"
+        warn "👁️ Selected ${selected_count} test source(s):"
+        for selected_test_source in ${selected_tests_folders}
+            warn "   - 🧪 ${selected_test_source}"
         end
         warn ""
     end
@@ -894,8 +938,8 @@ script = [
     end
 
     if eq ${verbose} "false"
-        debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
-        exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"
+        debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
+        exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"
     else
         debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -v --full-trace --log-level=DEBUG --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
         exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -v --full-trace --log-level=DEBUG --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"

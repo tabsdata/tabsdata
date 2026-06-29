@@ -2,6 +2,7 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
+import calendar
 import os
 import shutil
 import sys
@@ -32,6 +33,8 @@ HARVESTER_FOLDER = (".tabsdatax", "pytest", "harvester")
 INSTANCES_FOLDER = (".tabsdata", "instances")
 
 LOG_PATTERN = "*.log*"
+
+ZIP_EPOCH = calendar.timegm((1980, 1, 1, 0, 0, 0))
 
 BUNDLE_PREFIX = "td-support"
 BUNDLE_TIMESTAMP = "%Y%m%d-%H%M%S"
@@ -77,12 +80,24 @@ def bundle_sources() -> dict[str, tuple[Path, str | None]]:
     return sources
 
 
+def clamp_timestamp(path: Path) -> None:
+    status = path.stat()
+    if status.st_mtime < ZIP_EPOCH:
+        os.utime(path, (ZIP_EPOCH, ZIP_EPOCH))
+        console.print(
+            f"🕰️ The file '{path}' had a modification time before 1980 "
+            f"({status.st_mtime}); it was clamped to 1980-01-01 so it can be zipped."
+        )
+
+
 def stage_source(source: Path, target: Path, pattern: str | None = None) -> int:
     target.mkdir(parents=True, exist_ok=True)
     if not source.exists():
         return 0
     if source.is_file():
-        shutil.copy2(source, target / source.name)
+        destination = target / source.name
+        shutil.copy2(source, destination)
+        clamp_timestamp(destination)
         return 1
     staged = 0
     items = source.rglob(pattern) if pattern else source.rglob("*")
@@ -93,6 +108,7 @@ def stage_source(source: Path, target: Path, pattern: str | None = None) -> int:
         destination.parent.mkdir(parents=True, exist_ok=True)
         try:
             shutil.copy2(item, destination)
+            clamp_timestamp(destination)
             staged = staged + 1
         except Exception as error:  # noqa: BLE001
             console.print(f"⚠️ The file '{item}' could not be staged: {error}.")

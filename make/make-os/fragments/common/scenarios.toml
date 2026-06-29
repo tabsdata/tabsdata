@@ -82,8 +82,8 @@ script = [
         info "🔗 Setting TD_SYMLINK_POLARS_LIBS_PYTEST to true as TD_SYMLINK_POLARS_LIBS is also set to true"
     end
 
-    with_server = get_env TD_WITH_SERVER
-    if eq ${with_server} "true"
+    with_server_start = get_env TD_WITH_SERVER_START
+    if eq ${with_server_start} "true"
         debug "🔷 _____ Starting tabsdata server (pytest)..."
 
         set_env TD_INHERIT_TABSDATA_PACKAGES "true"
@@ -97,6 +97,12 @@ script = [
     else
         info "🚜 Starting tabsdata server skipped."
     end
+
+    with_server_status = get_env TD_WITH_SERVER_STATUS
+    if eq ${with_server_status} "true"
+        debug "🔷 _____ Reporting tabsdata server status (pytest)..."
+        cm_run_task __os__ps_pytest_tabsdata_servers
+    end
     ''']
 
 [tasks.__os__cleanup_test_py]
@@ -109,8 +115,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    with_server = get_env TD_WITH_SERVER
-    if eq ${with_server} "true"
+    with_server_stop = get_env TD_WITH_SERVER_STOP
+    if eq ${with_server_stop} "true"
         debug "🔷 _____ Stopping tabsdata server (pytest)..."
         cm_run_task __os__stop_pytest_tabsdata_servers
     else
