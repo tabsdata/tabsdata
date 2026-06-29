@@ -78,7 +78,7 @@ def test_exception_picks_class_from_variant(monkeypatch):
     pt = ApiErrorCode.API_2.exception()
     assert type(pt) is ApiInitException
 
-    val = ApiErrorCode.API_22.exception(path="X")
+    val = ApiErrorCode.API_6.exception(name="X")
     assert type(val) is ApiRuntimeException
 
     intern = ApiErrorCode.API_11.exception(name="X")
@@ -87,17 +87,17 @@ def test_exception_picks_class_from_variant(monkeypatch):
 
 def test_exception_format_map_interpolates_kwargs(monkeypatch):
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
-    exc = ApiErrorCode.API_22.exception(path="MY_DIR")
-    assert "project_root is not a directory: MY_DIR" in str(exc)
+    exc = ApiErrorCode.API_6.exception(name="MY_SECRET", value="V", pattern="P")
+    assert "Secret MY_SECRET value" in str(exc)
 
 
 def test_exception_safe_format_keeps_unknown_placeholders(monkeypatch):
     # Missing kwargs round-trip as ``{key}`` instead of raising
     # KeyError.
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
-    exc = ApiErrorCode.API_22.exception()  # path missing
+    exc = ApiErrorCode.API_6.exception()  # name/value/pattern missing
     rendered = str(exc)
-    assert "{path!r}" in rendered or "{path}" in rendered
+    assert "{name}" in rendered
     assert exc.extra == {}
 
 
@@ -239,10 +239,12 @@ def test_errorcode_str_only_replaces_last_underscore():
 
 def test_tabsdata_exception_renders_with_cause_no_source(monkeypatch):
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
-    exc = ApiErrorCode.API_22.exception(path="MY_DIR", cause=RuntimeError("oops"))
+    exc = ApiErrorCode.API_6.exception(
+        name="N", value="V", pattern="P", cause=RuntimeError("oops")
+    )
     rendered = str(exc)
     # Format: "<code>: <message>: <cause>"
-    assert rendered.startswith("API_22: project_root is not a directory: MY_DIR")
+    assert rendered.startswith("API_6: Secret N value")
     assert "oops" in rendered
     # Source is disabled, so no " at " suffix.
     assert " at " not in rendered
@@ -250,7 +252,9 @@ def test_tabsdata_exception_renders_with_cause_no_source(monkeypatch):
 
 def test_tabsdata_exception_renders_with_cause_and_source(monkeypatch):
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "1")
-    exc = ApiErrorCode.API_22.exception(path="MY_DIR", cause=RuntimeError("oops"))
+    exc = ApiErrorCode.API_6.exception(
+        name="N", value="V", pattern="P", cause=RuntimeError("oops")
+    )
     rendered = str(exc)
     # Source-suffix format: "... at <file>:<line>: <line-content>".
     assert " at " in rendered

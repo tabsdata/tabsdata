@@ -31,7 +31,8 @@ def test_every_code_constructs_a_common_runtime_exception(monkeypatch):
     for code in CommonErrorCode:
         exc = code.exception()
         # All current codes in CommonErrorCode are JSONPath parser /
-        # secret-hydration failures tagged with CommonRuntimeException.
+        # secret-hydration / bundle-production failures tagged with
+        # CommonRuntimeException.
         assert isinstance(exc, CommonRuntimeException)
         assert type(exc) is code.value.exception
 
@@ -47,4 +48,7 @@ def test_codes_have_expected_names():
         "COMMON_6",
         "COMMON_7",
         "COMMON_8",
+        "COMMON_9",
+        "COMMON_10",
+        "COMMON_11",
     ]

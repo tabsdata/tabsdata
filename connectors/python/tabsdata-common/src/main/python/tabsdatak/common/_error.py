@@ -54,3 +54,21 @@ class CommonErrorCode(ErrorCode):
         CommonRuntimeException,
         "no connection definition supplied for name {name!r}",
     )  # hydrate_connections: connectionRef name has no entry in conn_by_name
+
+    # --- bundle production (tabsdatak.common._archive.bundle) -------
+    # Raised by `build_bundle` and its helpers at registration time
+    # when filesystem or environment preconditions aren't met. These
+    # are runtime conditions (path doesn't exist, version mismatch),
+    # not type / value bugs at object construction.
+    COMMON_9 = ErrorDef(
+        CommonRuntimeException,
+        "project_root is not a directory: {path}",
+    )  # build_bundle: project_root argument doesn't resolve to a directory
+    COMMON_10 = ErrorDef(
+        CommonRuntimeException,
+        "local package is not a directory: {path}",
+    )  # collect_local_packages: entry in local_packages isn't a directory
+    COMMON_11 = ErrorDef(
+        CommonRuntimeException,
+        "python {version} not in allowed set: {allowed}",
+    )  # validate_python_version: producer's interpreter not whitelisted

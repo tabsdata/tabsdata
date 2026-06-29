@@ -53,8 +53,8 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
+from tabsdatak.common._error import CommonErrorCode
 from tabsdatak.common._interpreter.python.venv import PythonEnvironment
-from tabsdatak.error import ApiErrorCode
 
 log = logging.getLogger(__name__)
 
@@ -177,7 +177,9 @@ def validate_python_version(python_version: str, valid_versions: Iterable[str]) 
     """Exact-match check: raise if `python_version` isn't in `valid_versions`."""
     allowed = list(valid_versions)
     if python_version not in allowed:
-        raise ApiErrorCode.API_24.exception(version=python_version, allowed=allowed)
+        raise CommonErrorCode.COMMON_11.exception(
+            version=python_version, allowed=allowed
+        )
 
 
 # --- local packages ------------------------------------------------------
@@ -190,13 +192,13 @@ def collect_local_packages(packages: Iterable[Path], dest_dir: Path) -> list[Pat
     Returns the list of staged target directories, in order.
 
     Raises:
-        ApiRuntimeException (API_23): an entry isn't a directory.
+        CommonRuntimeException (COMMON_10): an entry isn't a directory.
     """
     base = dest_dir / BUNDLE_LOCAL_PACKAGES_DIRNAME
     staged: list[Path] = []
     for index, pkg in enumerate(packages):
         if not pkg.is_dir():
-            raise ApiErrorCode.API_23.exception(path=pkg)
+            raise CommonErrorCode.COMMON_10.exception(path=pkg)
         slot = base / str(index)
         slot.mkdir(parents=True, exist_ok=True)
         target = slot / pkg.name
@@ -247,7 +249,7 @@ def build_bundle(
         local_packages: optional list of local-package directories to
             stage under `local_packages/<n>/`.
         valid_python_versions: optional whitelist; if given and the
-            producer's interpreter isn't listed, `ApiErrorCode.API_24`
+            producer's interpreter isn't listed, `CommonErrorCode.COMMON_11`
             is raised.
         include: optional iterable of top-level names in `project_root`
             to bundle; if `None`, every non-ignored entry is included.
@@ -262,13 +264,13 @@ def build_bundle(
         `output_path`.
 
     Raises:
-        ApiRuntimeException (API_22): `project_root` is not a directory.
-        ApiRuntimeException (API_23): a local-package entry is not a directory.
-        ApiRuntimeException (API_24): see `valid_python_versions`.
+        CommonRuntimeException (COMMON_9): `project_root` is not a directory.
+        CommonRuntimeException (COMMON_10): a local-package entry is not a directory.
+        CommonRuntimeException (COMMON_11): see `valid_python_versions`.
         OSError: I/O failure during staging or tar creation.
     """
     if not project_root.is_dir():
-        raise ApiErrorCode.API_22.exception(path=project_root)
+        raise CommonErrorCode.COMMON_9.exception(path=project_root)
     include_list = list(include) if include is not None else None
 
     if requirements_yaml is None:

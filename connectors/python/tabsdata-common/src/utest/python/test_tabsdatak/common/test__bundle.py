@@ -28,7 +28,7 @@ from tabsdatak.common._archive.bundle import (
 from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
 from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
-from tabsdatak.error import ApiErrorCode, ApiRuntimeException
+from tabsdatak.common._error import CommonErrorCode, CommonRuntimeException
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -154,15 +154,15 @@ def test_validate_python_version_accepts_listed():
 
 
 def test_validate_python_version_rejects_unlisted():
-    with pytest.raises(ApiRuntimeException, match="3.12.10") as exc_info:
+    with pytest.raises(CommonRuntimeException, match="3.12.10") as exc_info:
         validate_python_version("3.12.10", ["2.0.0", "1.0.0"])
-    assert exc_info.value.api_error is ApiErrorCode.API_24
+    assert exc_info.value.api_error is CommonErrorCode.COMMON_11
 
 
 def test_validate_python_version_empty_allowed_rejects_anything():
-    with pytest.raises(ApiRuntimeException) as exc_info:
+    with pytest.raises(CommonRuntimeException) as exc_info:
         validate_python_version("3.12.10", [])
-    assert exc_info.value.api_error is ApiErrorCode.API_24
+    assert exc_info.value.api_error is CommonErrorCode.COMMON_11
 
 
 # --- local packages ------------------------------------------------------
@@ -203,9 +203,9 @@ def test_collect_local_packages_ignores_pycache(tmp_path):
 
 def test_collect_local_packages_rejects_non_directory(tmp_path):
     missing = tmp_path / "nope"
-    with pytest.raises(ApiRuntimeException, match="not a directory") as exc_info:
+    with pytest.raises(CommonRuntimeException, match="not a directory") as exc_info:
         collect_local_packages([missing], tmp_path / "stage")
-    assert exc_info.value.api_error is ApiErrorCode.API_23
+    assert exc_info.value.api_error is CommonErrorCode.COMMON_10
 
 
 def test_collect_local_packages_empty_iterable_is_noop(tmp_path):
@@ -339,9 +339,9 @@ def test_build_bundle_creates_missing_parent_for_output(tmp_path):
 
 
 def test_build_bundle_rejects_missing_project_root(tmp_path):
-    with pytest.raises(ApiRuntimeException, match="not a directory") as exc_info:
+    with pytest.raises(CommonRuntimeException, match="not a directory") as exc_info:
         build_bundle(_info(), tmp_path / "nope", tmp_path / "out.tar.zst")
-    assert exc_info.value.api_error is ApiErrorCode.API_22
+    assert exc_info.value.api_error is CommonErrorCode.COMMON_9
 
 
 def test_build_bundle_tolerates_user_file_named_like_a_reserved_path(tmp_path):
@@ -360,14 +360,14 @@ def test_build_bundle_tolerates_user_file_named_like_a_reserved_path(tmp_path):
 
 def test_build_bundle_rejects_unsupported_python_version(tmp_path):
     project = _make_project(tmp_path)
-    with pytest.raises(ApiRuntimeException) as exc_info:
+    with pytest.raises(CommonRuntimeException) as exc_info:
         build_bundle(
             _info(),
             project,
             tmp_path / "out.tar.zst",
             valid_python_versions=["2.0.0"],
         )
-    assert exc_info.value.api_error is ApiErrorCode.API_24
+    assert exc_info.value.api_error is CommonErrorCode.COMMON_11
 
 
 def test_build_bundle_accepts_current_python_version(tmp_path):
