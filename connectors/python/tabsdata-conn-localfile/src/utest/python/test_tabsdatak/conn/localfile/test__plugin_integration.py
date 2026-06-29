@@ -172,7 +172,7 @@ def test_dest_then_src_round_trip(tmp_path: Path):
 
     assert len(out) == 1
     assert len(out[0]) >= 1
-    df = pl.read_parquet(out[0][0]).select("id", "name").sort("id")
+    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
@@ -193,7 +193,7 @@ def test_src_treats_absolute_path_as_relative_to_base_path(tmp_path: Path):
     work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
     assert len(out[0]) >= 1
-    assert pl.read_parquet(out[0][0]).select("x").to_dicts() == [{"x": 1}]
+    assert pl.read_parquet(out[0][0].file).select("x").to_dicts() == [{"x": 1}]
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +224,7 @@ def test_src_wildcard_in_basename_matches_multiple_files(tmp_path: Path):
     # Three parquet inputs -> at least three target files in the report
     assert len(out[0]) >= 3
     names = sorted(
-        pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
+        pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0]
     )
     assert names == ["a.parquet", "b.parquet", "c.parquet"]
 
@@ -287,7 +287,7 @@ def test_src_initial_last_modified_filters_out_older_files(tmp_path: Path):
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
 
     names = sorted(
-        pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
+        pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0]
     )
     assert names == ["new"]
 
@@ -315,7 +315,7 @@ def test_src_initial_last_modified_at_or_before_oldest_returns_all(
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
 
     names = sorted(
-        pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
+        pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0]
     )
     assert names == ["a", "b"]
 
@@ -345,7 +345,7 @@ def test_src_format_csv_reads_with_default_options(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
-    df = pl.read_parquet(out[0][0]).select("id", "name").sort("id")
+    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
@@ -376,7 +376,7 @@ def test_src_format_csv_honours_separator_option(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
-    df = pl.read_parquet(out[0][0]).select("id", "name").sort("id")
+    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
@@ -400,7 +400,7 @@ def test_src_format_json_reads_records(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
-    df = pl.read_parquet(out[0][0]).select("id", "name").sort("id")
+    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
@@ -434,7 +434,7 @@ def test_src_format_avro_reads_records(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
-    df = pl.read_parquet(out[0][0]).select("id", "name").sort("id")
+    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
@@ -457,7 +457,7 @@ def test_src_format_auto_infers_parquet_from_extension(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
-    df = pl.read_parquet(out[0][0]).select("id", "name")
+    df = pl.read_parquet(out[0][0].file).select("id", "name")
     assert df.to_dicts() == [{"id": 1, "name": "alice"}]
 
 
@@ -647,7 +647,7 @@ def _read_csv_with_cfg(
     work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
     # Drop the binary's ``$td.opt.*`` provenance columns.
-    df = pl.read_parquet(out[0][0])
+    df = pl.read_parquet(out[0][0].file)
     user_cols = [c for c in df.columns if not c.startswith("$td.")]
     return df.select(user_cols)
 
@@ -906,7 +906,7 @@ def test_csv_src_encoding_utf8(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
-    df = pl.read_parquet(out[0][0]).select("id", "name")
+    df = pl.read_parquet(out[0][0].file).select("id", "name")
     assert df.sort("id").to_dicts() == [
         {"id": 1, "name": "café"},
         {"id": 2, "name": "piñata"},

@@ -571,8 +571,8 @@ def delete_from_volume(ws_client, file_in_volume: str) -> None:
 def read_all_queries(cfg: DatabricksReadCfg, work_dir: Path) -> list[Path]:
     """Execute every statement in ``cfg.queries`` against the
     workspace and return the list of resulting parquet paths (one per
-    query, in order). The plugin maps these into
-    ``list[list[TableFileSpec]]`` for the SPI."""
+    query, in order). The plugin wraps these into
+    ``list[list[TableFileInput]]`` for the SPI."""
     logger.debug("databricks: establishing workspace client")
     ws_client = _build_workspace_client(cfg.conn)
     out: list[Path] = []

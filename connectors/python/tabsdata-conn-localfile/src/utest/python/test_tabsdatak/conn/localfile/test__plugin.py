@@ -10,6 +10,7 @@ from tabsdatak.conn.common.file import _plugin as _file_plugin
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _transporter
 from tabsdatak.conn.localfile import LocalFileDest, LocalFileDestConn, LocalFileSrc, LocalFileSrcConn
+from tabsdatak.spi import TableFileInput
 # noinspection PyProtectedMember
 import tabsdatak.conn.localfile._plugin as plugin
 
@@ -80,7 +81,7 @@ def test_src_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
         _src_ctx(tmp_path), LocalFileSrcConn(), src
     )
 
-    assert out == [[Path(tmp_path / "ok.parquet")]]
+    assert out == [[TableFileInput(file=Path(tmp_path / "ok.parquet"))]]
     assert captured["build_location"] is plugin.build_location
     assert captured["errors"] is plugin.ERRORS
     # localfile has no creds -> no run_env passed

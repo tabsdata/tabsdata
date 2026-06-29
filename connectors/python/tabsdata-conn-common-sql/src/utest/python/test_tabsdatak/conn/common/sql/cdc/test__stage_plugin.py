@@ -26,6 +26,7 @@ from tabsdatak.conn.common.sql.cdc._stage_plugin import (
     _table_key,
 )
 from tabsdatak.conn.common.sql.cdc.constants import CDC_META_ORD, CDC_META_SEG
+from tabsdatak.spi import TableFileInput
 
 
 class FakeCtx:
@@ -49,8 +50,11 @@ class FakeCtx:
 
 def _write(
     path: Path, rows: list[tuple[int, int, str]], decimal: bool = False
-) -> Path:
+) -> TableFileInput:
     """Write a tiny parquet with (seg, ord, payload) rows.
+
+    Returns the :class:`TableFileInput` handle ``process_files`` consumes
+    (metadata left at its default).
 
     ``decimal=True`` casts seg/ord to ``decimal128(38, 0)``, the dtype the
     CDC ingester actually emits; the default Int64 keeps the other cases
@@ -66,11 +70,11 @@ def _write(
             pl.col(CDC_META_ORD).cast(pl.Decimal(38, 0)),
         )
     frame.write_parquet(path)
-    return path
+    return TableFileInput(file=path)
 
 
-def _read(path: Path) -> list[tuple[int, int]]:
-    df = pl.read_parquet(path)
+def _read(tfi: TableFileInput) -> list[tuple[int, int]]:
+    df = pl.read_parquet(tfi.file)
     return list(zip(df.get_column(CDC_META_SEG), df.get_column(CDC_META_ORD)))
 
 
@@ -132,7 +136,7 @@ def test_ord_breaks_segment_ties_and_dedup_is_on_pair(tmp_path):
     assert _read(out[0][0]) == [(5, 1), (5, 2)]
     # Among the two (5, 1) duplicates the earliest-arriving row is kept:
     # the stable sort + unique(keep="first") retains "first", not "first-dup".
-    df = pl.read_parquet(out[0][0])
+    df = pl.read_parquet(out[0][0].file)
     kept = df.filter(
         (pl.col(CDC_META_SEG) == 5) & (pl.col(CDC_META_ORD) == 1)
     ).get_column("payload")
@@ -152,7 +156,7 @@ def test_dedup_and_cursor_filter_combine_in_one_run(tmp_path):
     # (1,1)/(2,1) <= (2,1) filtered; the (3,1) duplicate collapsed; (4,1) new.
     assert _read(out[0][0]) == [(3, 1), (4, 1)]
     # The earliest-arriving (3,1) survives the dedup ("c", not "c-dup").
-    df = pl.read_parquet(out[0][0])
+    df = pl.read_parquet(out[0][0].file)
     kept = df.filter(
         (pl.col(CDC_META_SEG) == 3) & (pl.col(CDC_META_ORD) == 1)
     ).get_column("payload")
@@ -179,7 +183,7 @@ def test_decimal128_seg_ord_dedup_filter_and_cursor(tmp_path):
     out = CdcStageSrcPlugin().process_files(ctx, [[f1, f2]])
 
     assert _read(out[0][0]) == [(3, 1), (4, 1)]
-    df = pl.read_parquet(out[0][0])
+    df = pl.read_parquet(out[0][0].file)
     # decimal128 survives the round trip; the earliest (3,1) wins the dedup.
     assert df.schema[CDC_META_SEG] == pl.Decimal(38, 0)
     kept = df.filter(

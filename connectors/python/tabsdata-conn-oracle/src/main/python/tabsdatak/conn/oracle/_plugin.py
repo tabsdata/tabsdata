@@ -23,8 +23,10 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
+    TableFileInput,
     TableFileSpec,
     TableMode,
+    to_table_file_inputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -119,7 +121,7 @@ class OracleSrcPlugin(SrcPlugin[OracleSrcConn, OracleSrc]):
         ctx: SrcPluginCtx,
         conn: OracleSrcConn,
         src: OracleSrc,
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
         # noinspection PyProtectedMember
@@ -149,7 +151,7 @@ class OracleSrcPlugin(SrcPlugin[OracleSrcConn, OracleSrc]):
         )
 
         try:
-            return engine.read(read_cfg, ctx.work_dir)
+            return to_table_file_inputs(engine.read(read_cfg, ctx.work_dir))
         except OperationalError as e:
             raise OracleErrorCode.ORACLE_5.exception(
                 cause=e,

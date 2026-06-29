@@ -110,10 +110,10 @@ def test_read_in_materialises_nested_slots(tmp_path: Path):
     assert [len(slot) for slot in result] == [1, 2]
     for slot in result:
         for parquet in slot:
-            assert Path(parquet).exists()
-            pl.read_parquet(parquet)  # readable
+            assert parquet.file.exists()
+            pl.read_parquet(parquet.file)  # readable
     # First slot's single file round-trips its contents.
-    assert pl.read_parquet(result[0][0]).sort("id").to_dicts() == [
+    assert pl.read_parquet(result[0][0].file).sort("id").to_dicts() == [
         {"id": 1},
         {"id": 2},
     ]
@@ -148,7 +148,7 @@ def test_read_in_picks_up_next_manifest(tmp_path: Path):
 
     third = plugin.read_in(ctx, _local_conn(data), SimpleNamespace())
     assert [len(slot) for slot in third] == [1]
-    assert Path(third[0][0]).name.endswith("t2.parquet")
+    assert third[0][0].file.name.endswith("t2.parquet")
 
 
 def test_read_in_requires_exactly_one_backend(tmp_path: Path):

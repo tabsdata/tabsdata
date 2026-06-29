@@ -25,6 +25,7 @@ from tabsdatak.conn.salesforce.error import (
     SalesforceErrorCode,
     SalesforceRuntimeException,
 )
+from tabsdatak.spi import TableFileInput
 
 
 pytestmark = pytest.mark.salesforce
@@ -181,8 +182,8 @@ def _patch_login(monkeypatch, fake_sf: _FakeSF) -> None:
     monkeypatch.setattr(reader, "login", lambda conn, api_version=None: fake_sf)
 
 
-def _read_parquet(path: Path) -> pl.DataFrame:
-    return pl.read_parquet(path)
+def _read_parquet(tfi: TableFileInput) -> pl.DataFrame:
+    return pl.read_parquet(tfi.file)
 
 
 def test_src_plugin_writes_one_parquet_per_query(monkeypatch, work_dir):
@@ -269,7 +270,7 @@ def test_src_plugin_handles_empty_result_set(monkeypatch, work_dir):
     # Even on empty results we must emit one parquet so the framework
     # has a slot to consume.
     assert len(out) == 1
-    assert out[0][0].exists()
+    assert out[0][0].file.exists()
 
 
 # ---------------------------------------------------------------------------

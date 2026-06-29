@@ -12,6 +12,7 @@ from tabsdatak.conn.common.file import _plugin as _file_plugin
 from tabsdatak.conn.common.file import _transporter
 from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
+from tabsdatak.spi import TableFileInput
 # noinspection PyProtectedMember
 import tabsdatak.conn.gcs._plugin as plugin
 
@@ -121,7 +122,7 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
     src = GCSSrc(paths=["a/b.parquet"])
     out = plugin.GCSSrcPlugin().read_in(_src_ctx(tmp_path), conn, src)
 
-    assert out == [[Path(tmp_path / "ok.parquet")]]
+    assert out == [[TableFileInput(file=Path(tmp_path / "ok.parquet"))]]
     assert captured["build_location"] is plugin.build_location
     assert captured["run_env"] is plugin.run_env
     assert captured["errors"] is plugin.ERRORS

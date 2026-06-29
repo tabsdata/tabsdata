@@ -69,6 +69,7 @@ from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import
     RunSourcePluginErrorCode,
     UnsupportedStageSchemeError,
 )
+from tabsdatak.spi import TableFileInput
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
     info_payload as _info_payload,
 )
@@ -584,10 +585,10 @@ def test_load_function_def_accepts_stream_publisher_kind(tmp_path):
 def test_invoke_read_in_returns_plugin_result():
     class _FakePlugin:
         def read_in(self, ctx, conn, src):
-            return [[Path("/x.parquet")]]
+            return [[TableFileInput(file=Path("/x.parquet"))]]
 
     out = _invoke_read_in(_FakePlugin(), object(), object(), object())
-    assert out == [[Path("/x.parquet")]]
+    assert out == [[TableFileInput(file=Path("/x.parquet"))]]
 
 
 def test_invoke_read_in_wraps_exceptions_as_plugin_failed():
@@ -604,7 +605,12 @@ def test_invoke_read_in_wraps_exceptions_as_plugin_failed():
 
 def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
     out = tmp_path / "manifest.yaml"
-    produced = [[Path("/tmp/a.parquet"), Path("/tmp/b.parquet")]]
+    produced = [
+        [
+            TableFileInput(file=Path("/tmp/a.parquet")),
+            TableFileInput(file=Path("/tmp/b.parquet")),
+        ]
+    ]
     _write_inputs_manifest(fixture_publisher, produced, out, cardinality=1)
     data = yaml.safe_load(out.read_text())
 
@@ -639,7 +645,7 @@ def test_write_inputs_manifest_normalises_file_uris(tmp_path, fixture_publisher)
     rather than bare paths; the manifest must always carry plain
     absolute filesystem paths."""
     out = tmp_path / "manifest.yaml"
-    produced = [[Path("file:///tmp/uri-shaped.parquet")]]
+    produced = [[TableFileInput(file=Path("file:///tmp/uri-shaped.parquet"))]]
     _write_inputs_manifest(fixture_publisher, produced, out, cardinality=1)
     data = yaml.safe_load(out.read_text())
     assert [t["file"] for t in data["inputs"][0]["tables"]] == [
@@ -651,7 +657,10 @@ def test_write_inputs_manifest_cardinality_mismatch_raises(tmp_path, fixture_pub
     """Source cardinality is 1 (`LocalFileSrc` with one path); a plugin
     that returns two slots is a contract violation."""
     out = tmp_path / "manifest.yaml"
-    produced = [[Path("/x.parquet")], [Path("/y.parquet")]]
+    produced = [
+        [TableFileInput(file=Path("/x.parquet"))],
+        [TableFileInput(file=Path("/y.parquet"))],
+    ]
     with pytest.raises(PluginFailedError):
         _write_inputs_manifest(fixture_publisher, produced, out, cardinality=1)
 
@@ -686,7 +695,7 @@ def test_write_inputs_manifest_negative_cardinality_does_not_pad_when_matched(
     out = tmp_path / "manifest.yaml"
     _write_inputs_manifest(
         fixture_publisher,
-        [[Path("/tmp/a.parquet")]],
+        [[TableFileInput(file=Path("/tmp/a.parquet"))]],
         out,
         cardinality=-1,
     )
@@ -706,7 +715,10 @@ def test_write_inputs_manifest_negative_cardinality_overproduction_raises(
     with pytest.raises(PluginFailedError):
         _write_inputs_manifest(
             fixture_publisher,
-            [[Path("/x.parquet")], [Path("/y.parquet")]],
+            [
+                [TableFileInput(file=Path("/x.parquet"))],
+                [TableFileInput(file=Path("/y.parquet"))],
+            ],
             out,
             cardinality=-1,
         )
@@ -719,7 +731,7 @@ def test_write_inputs_manifest_oserror_raises_manifest_write_failed(
     `IsADirectoryError` (a subclass of `OSError`)."""
     a_dir = tmp_path / "i-am-a-dir"
     a_dir.mkdir()
-    produced = [[Path("/x.parquet")]]
+    produced = [[TableFileInput(file=Path("/x.parquet"))]]
     with pytest.raises(ManifestWriteFailedError):
         _write_inputs_manifest(fixture_publisher, produced, a_dir, cardinality=1)
 

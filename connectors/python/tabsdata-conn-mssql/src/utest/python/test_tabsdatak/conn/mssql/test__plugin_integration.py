@@ -20,7 +20,7 @@ from sqlalchemy import create_engine, text
 from tabsdatak.conn.mssql import MSSQLDestConn, MSSQLSrcConn, MSSQLDest, MSSQLSrc
 # noinspection PyProtectedMember
 from tabsdatak.conn.mssql import _plugin as plugin
-from tabsdatak.spi import DestContext, SrcPluginCtx
+from tabsdatak.spi import DestContext, SrcPluginCtx, TableFileInput
 
 
 pytestmark = [pytest.mark.mssql, pytest.mark.xdist_group("mssql-plugin_integration_seq")]
@@ -149,7 +149,8 @@ def _dest_conn_from(cfg) -> MSSQLDestConn:
     )
 
 
-def _read_parquet(p: Path) -> pl.DataFrame:
+def _read_parquet(tfi: TableFileInput) -> pl.DataFrame:
+    p = tfi.file
     return pl.from_arrow(pq.read_table(p))
 
 

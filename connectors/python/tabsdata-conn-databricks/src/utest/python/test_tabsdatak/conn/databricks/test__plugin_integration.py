@@ -510,6 +510,6 @@ def test_src_plugin_round_trip(
     )
     assert len(result) == 1  # one query
     assert len(result[0]) == 1  # one parquet
-    df = pl.read_parquet(result[0][0])
+    df = pl.read_parquet(result[0][0].file)
     assert df.shape == (2, 2)
     assert df["name"].to_list() == ["alice", "bob"]

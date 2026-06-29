@@ -29,6 +29,7 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
+    TableFileInput,
     TableFileSpec,
     TableMode,
 )
@@ -156,7 +157,7 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
         ctx: SrcPluginCtx,
         conn: DatabricksSrcConn,
         src: DatabricksSrc,
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         # noinspection PyProtectedMember
         from tabsdatak.conn.databricks import _impl
 
@@ -192,9 +193,9 @@ class _DatabricksSrcPlugin(SrcPlugin[DatabricksSrcConn, DatabricksSrc]):
             )
 
         # One parquet per query; SrcDef.table_mode is SINGLE.
-        # ``TableFileSpec`` aliases ``Path``, a ``Path``
-        # subclass -- wrap each adapter-returned path.
-        return [[Path(p)] for p in parquet_paths]
+        # Wrap each adapter-returned path as a ``TableFileInput``
+        # (metadata defaults to ``None``).
+        return [[TableFileInput(file=Path(p))] for p in parquet_paths]
 
 
 class _DatabricksDestPlugin(DestPlugin[DatabricksDestConn, DatabricksDest]):

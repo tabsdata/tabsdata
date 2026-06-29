@@ -16,8 +16,10 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
+    TableFileInput,
     TableFileSpec,
     TableMode,
+    to_table_file_inputs,
 )
 
 # Conn helpers operate on both Src and Dest variants.
@@ -83,13 +85,15 @@ class GCSSrcPlugin(SrcPlugin[GCSSrcConn, GCSSrc]):
         ctx: SrcPluginCtx,
         conn: GCSSrcConn,
         src: GCSSrc,
-    ) -> list[list[TableFileSpec]]:
-        return _plugin.import_files(
-            ctx=ctx,
-            cfg=_plugin.ReaderConf.from_src(conn, src),
-            build_location=build_location,
-            run_env=run_env,
-            errors=ERRORS,
+    ) -> list[list[TableFileInput]]:
+        return to_table_file_inputs(
+            _plugin.import_files(
+                ctx=ctx,
+                cfg=_plugin.ReaderConf.from_src(conn, src),
+                build_location=build_location,
+                run_env=run_env,
+                errors=ERRORS,
+            )
         )
 
 

@@ -24,9 +24,11 @@ from tabsdatak.spi import (
     SrcPluginCtx,
     StreamStageSrc,
     StreamStageSrcPlugin,
+    TableFileInput,
     TableFileSpec,
     TableMode,
     _StreamStageSrcConn,
+    to_table_file_inputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,7 +73,7 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
         ctx: SrcPluginCtx,
         conn: ManifestStageConn,
         src: ManifestStageSrc,
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         backend = backend_for_conn(conn)
 
         try:
@@ -88,7 +90,9 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
             return []
 
         slots = self._parse_manifest(manifest_path)
-        return self._fetch_data_files(ctx, backend, env, manifest_path, slots)
+        return to_table_file_inputs(
+            self._fetch_data_files(ctx, backend, env, manifest_path, slots)
+        )
 
     # -- steps ------------------------------------------------------
 

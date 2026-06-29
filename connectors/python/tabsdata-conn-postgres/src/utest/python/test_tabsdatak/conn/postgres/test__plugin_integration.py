@@ -20,7 +20,7 @@ from sqlalchemy import create_engine, text
 from tabsdatak.conn.postgres import PostgresSrcConn, PostgresDestConn, PostgresDest, PostgresSrc
 # noinspection PyProtectedMember
 from tabsdatak.conn.postgres import _plugin as plugin
-from tabsdatak.spi import DestContext, SrcPluginCtx
+from tabsdatak.spi import DestContext, SrcPluginCtx, TableFileInput
 
 
 pytestmark = [pytest.mark.postgres, pytest.mark.xdist_group("postgres-plugin_integration_seq")]
@@ -145,7 +145,8 @@ def _dest_conn_from(cfg) -> PostgresDestConn:
     )
 
 
-def _read_parquet(p: Path) -> pl.DataFrame:
+def _read_parquet(tfi: TableFileInput) -> pl.DataFrame:
+    p = tfi.file
     return pl.from_arrow(pq.read_table(p))
 
 

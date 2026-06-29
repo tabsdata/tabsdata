@@ -25,7 +25,7 @@ from tabsdatak.conn.mysql import (
 )
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql import _plugin as plugin
-from tabsdatak.spi import DestContext, SrcPluginCtx
+from tabsdatak.spi import DestContext, SrcPluginCtx, TableFileInput
 
 
 pytestmark = [pytest.mark.mysql, pytest.mark.xdist_group("mysql-plugin_integration_seq")]
@@ -144,7 +144,8 @@ def _dest_conn_from(cfg) -> MySQLDestConn:
     return MySQLDestConn(uri=cfg.uri, credentials=cfg.credentials)
 
 
-def _read_parquet(p: Path) -> pl.DataFrame:
+def _read_parquet(tfi: TableFileInput) -> pl.DataFrame:
+    p = tfi.file
     return pl.from_arrow(pq.read_table(p))
 
 

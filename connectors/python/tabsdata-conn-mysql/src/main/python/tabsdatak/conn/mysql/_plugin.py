@@ -23,8 +23,10 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
+    TableFileInput,
     TableFileSpec,
     TableMode,
+    to_table_file_inputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -134,7 +136,7 @@ class MySQLSrcPlugin(SrcPlugin[MySQLSrcConn, MySQLSrc]):
         ctx: SrcPluginCtx,
         conn: MySQLSrcConn,
         src: MySQLSrc,
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
         # noinspection PyProtectedMember
@@ -164,7 +166,7 @@ class MySQLSrcPlugin(SrcPlugin[MySQLSrcConn, MySQLSrc]):
         )
 
         try:
-            return engine.read(read_cfg, ctx.work_dir)
+            return to_table_file_inputs(engine.read(read_cfg, ctx.work_dir))
         except OperationalError as e:
             # Engine connect / handshake failures bubble up as
             # OperationalError both for the initial connect and

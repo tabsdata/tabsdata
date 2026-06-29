@@ -73,7 +73,7 @@ from tabsdatak.server._tdrunner.function._lib.stage_backend import (
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin.error import (
     RunSourcePluginErrorCode,
 )
-from tabsdatak.spi import SrcPluginCtx
+from tabsdatak.spi import SrcPluginCtx, TableFileInput
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +281,7 @@ def _resolve_plugin_and_io(
     return src_def.plugin(), info.conn, info.source, src_def.cardinality(info.source)
 
 
-def _invoke_read_in(plugin, ctx: SrcPluginCtx, conn, src) -> list[list[Path]]:
+def _invoke_read_in(plugin, ctx: SrcPluginCtx, conn, src) -> list[list[TableFileInput]]:
     try:
         return plugin.read_in(ctx, conn, src)
     except Exception as exc:
@@ -313,7 +313,7 @@ def _normalise_table_file(p) -> str:
 
 def _write_inputs_manifest(
     info: PublisherInfo | StreamPublisherInfo,
-    produced: list[list[Path]],
+    produced: list[list[TableFileInput]],
     path: Path,
     *,
     cardinality: int,
@@ -373,7 +373,7 @@ def _write_inputs_manifest(
             table_pos=i,
             tables=[
                 build_table_record(
-                    file=_normalise_table_file(f),
+                    file=_normalise_table_file(f.file),
                     input_idx=None,
                     version_pos=-1,
                 )

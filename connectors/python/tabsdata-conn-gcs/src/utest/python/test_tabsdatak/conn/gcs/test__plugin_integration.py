@@ -159,7 +159,7 @@ def test_dest_then_src_round_trip(src_conn, dest_conn, run_prefix, tmp_path):
 
     assert len(out) == 1
     assert len(out[0]) >= 1
-    df = pl.read_parquet(out[0][0]).select("id", "name").sort("id")
+    df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
         {"id": 2, "name": "bob"},
@@ -182,7 +182,7 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
     out = plugin.GCSSrcPlugin().read_in(_SrcCtx(work_src), src_conn, src)
 
     names = sorted(
-        pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
+        pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0]
     )
     assert names == ["a.parquet", "b.parquet", "c.parquet"]
 
@@ -215,6 +215,6 @@ def test_src_initial_last_modified_filters_out_older_objects(
     out = plugin.GCSSrcPlugin().read_in(_SrcCtx(work_src), src_conn, src)
 
     names = sorted(
-        pl.read_parquet(f).select("name").item(0, 0) for f in out[0]
+        pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0]
     )
     assert names == ["new"]

@@ -18,8 +18,10 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
+    TableFileInput,
     TableFileSpec,
     TableMode,
+    to_table_file_inputs,
 )
 
 # Conn helpers operate on both Src and Dest variants.
@@ -64,12 +66,14 @@ class LocalFileSrcPlugin(SrcPlugin[LocalFileSrcConn, LocalFileSrc]):
         ctx: SrcPluginCtx,
         conn: LocalFileSrcConn,
         src: LocalFileSrc,
-    ) -> list[list[TableFileSpec]]:
-        return _file_plugin.import_files(
-            ctx=ctx,
-            cfg=_file_plugin.ReaderConf.from_src(conn, src),
-            build_location=build_location,
-            errors=ERRORS,
+    ) -> list[list[TableFileInput]]:
+        return to_table_file_inputs(
+            _file_plugin.import_files(
+                ctx=ctx,
+                cfg=_file_plugin.ReaderConf.from_src(conn, src),
+                build_location=build_location,
+                errors=ERRORS,
+            )
         )
 
 

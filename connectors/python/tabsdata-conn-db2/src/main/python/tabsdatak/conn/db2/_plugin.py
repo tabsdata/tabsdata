@@ -23,8 +23,10 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
+    TableFileInput,
     TableFileSpec,
     TableMode,
+    to_table_file_inputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -119,7 +121,7 @@ class Db2SrcPlugin(SrcPlugin[Db2SrcConn, Db2Src]):
         ctx: SrcPluginCtx,
         conn: Db2SrcConn,
         src: Db2Src,
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
         # noinspection PyProtectedMember
@@ -149,7 +151,7 @@ class Db2SrcPlugin(SrcPlugin[Db2SrcConn, Db2Src]):
         )
 
         try:
-            return engine.read(read_cfg, ctx.work_dir)
+            return to_table_file_inputs(engine.read(read_cfg, ctx.work_dir))
         except OperationalError as e:
             # Engine connect / handshake failures bubble up as
             # OperationalError both for the initial connect and

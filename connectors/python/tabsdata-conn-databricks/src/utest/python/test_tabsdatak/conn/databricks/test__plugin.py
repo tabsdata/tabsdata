@@ -30,6 +30,7 @@ from tabsdatak.conn.databricks import _impl as impl
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import _plugin as plugin
+from tabsdatak.spi import TableFileInput
 from tabsdatak.conn.databricks.error import (
     DatabricksErrorCode,
     DatabricksRuntimeException,
@@ -231,14 +232,15 @@ def test_src_plugin_returns_one_parquet_per_query(
         queries=["SELECT 1", "SELECT 2"],
     )
     out = plugin._DatabricksSrcPlugin().read_in(_ctx(work_dir), _src_conn(), src)
-    # Each spec IS a Path (Path subclass).
+    # Each spec is a TableFileInput wrapping the adapter's Path.
     assert len(out) == 2
     assert all(len(row) == 1 for row in out)
-    assert [str(out[0][0]), str(out[1][0])] == [
+    assert [str(out[0][0].file), str(out[1][0].file)] == [
         "q0.parquet",
         "q1.parquet",
     ]
-    assert all(isinstance(out[i][0], Path) for i in (0, 1))
+    assert all(isinstance(out[i][0], TableFileInput) for i in (0, 1))
+    assert all(isinstance(out[i][0].file, Path) for i in (0, 1))
 
 
 # ---------------------------------------------------------------------------

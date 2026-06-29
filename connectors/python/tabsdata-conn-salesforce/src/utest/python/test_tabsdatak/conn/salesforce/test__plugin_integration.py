@@ -145,7 +145,7 @@ def test_src_plugin_read_in_returns_parquet_files(conn, work_dir):
     out = plugin._SalesforceSrcPlugin().read_in(_SrcCtx(work_dir), conn, src)
     assert len(out) == 1
     assert len(out[0]) == 1
-    df = pl.read_parquet(out[0][0])
+    df = pl.read_parquet(out[0][0].file)
     # We can't assert row counts (the org's data is out of our
     # control) -- but the schema must include the Id column.
     assert "Id" in df.columns
@@ -158,4 +158,4 @@ def test_src_plugin_includes_deleted_flag_runs(conn, work_dir):
     )
     out = plugin._SalesforceSrcPlugin().read_in(_SrcCtx(work_dir), conn, src)
     assert len(out) == 1
-    assert out[0][0].exists()
+    assert out[0][0].file.exists()

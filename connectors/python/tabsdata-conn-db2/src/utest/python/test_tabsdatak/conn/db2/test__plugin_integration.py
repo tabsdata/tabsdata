@@ -20,7 +20,7 @@ from sqlalchemy import create_engine, text
 from tabsdatak.conn.db2 import Db2SrcConn, Db2DestConn, Db2Dest, Db2Src
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2 import _plugin as plugin
-from tabsdatak.spi import DestContext, SrcPluginCtx
+from tabsdatak.spi import DestContext, SrcPluginCtx, TableFileInput
 from test_tabsdatak.conn.db2.conftest import run_query_with_retry
 
 
@@ -150,7 +150,8 @@ def _dest_conn_from(cfg) -> Db2DestConn:
     )
 
 
-def _read_parquet(p: Path) -> pl.DataFrame:
+def _read_parquet(tfi: TableFileInput) -> pl.DataFrame:
+    p = tfi.file
     return pl.from_arrow(pq.read_table(p))
 
 

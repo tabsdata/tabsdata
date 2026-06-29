@@ -16,8 +16,9 @@ from tabsdatak.spi import (
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
-    TableFileSpec,
+    TableFileInput,
     TableMode,
+    to_table_file_inputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -68,7 +69,7 @@ class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceSrc]):
         ctx: SrcPluginCtx,
         conn: SalesforceSrcConn,
         src: SalesforceSrc,
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         # noinspection PyProtectedMember
         from tabsdatak.conn.salesforce import _reader
 
@@ -79,7 +80,7 @@ class _SalesforceSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceSrc]):
         api_version = src.api_version
         sf = _reader.login(conn, api_version=api_version)
         try:
-            return _reader.read_soql_src(sf, src, ctx.work_dir)
+            return to_table_file_inputs(_reader.read_soql_src(sf, src, ctx.work_dir))
         finally:
             logger.info("salesforce: read_in finished (%d quer(ies))", len(src.queries))
 
@@ -93,7 +94,7 @@ class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceReportSr
         ctx: SrcPluginCtx,
         conn: SalesforceSrcConn,
         src: SalesforceReportSrc,
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         # noinspection PyProtectedMember
         from tabsdatak.conn.salesforce import _reader
 
@@ -103,7 +104,7 @@ class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceReportSr
 
         sf = _reader.login(conn)
         try:
-            return _reader.read_report_src(sf, src, ctx.work_dir)
+            return to_table_file_inputs(_reader.read_report_src(sf, src, ctx.work_dir))
         finally:
             logger.info("salesforce: read_in finished (%d report(s))", len(src.reports))
 

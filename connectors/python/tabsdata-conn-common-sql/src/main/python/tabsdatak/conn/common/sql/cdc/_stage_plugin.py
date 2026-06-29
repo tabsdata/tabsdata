@@ -47,9 +47,11 @@ from tabsdatak.spi import (
     SrcPluginCtx,
     StreamStageSrc,
     StreamStageSrcPlugin,
+    TableFileInput,
     TableFileSpec,
     TableMode,
     _StreamStageSrcConn,
+    to_table_file_inputs,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,8 +80,8 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
     def process_files(
         self,
         ctx: SrcPluginCtx,
-        files: list[list[TableFileSpec]],
-    ) -> list[list[TableFileSpec]]:
+        files: list[list[TableFileInput]],
+    ) -> list[list[TableFileInput]]:
         """De-duplicate and ``(seg, ord)``-filter each slot's CDC rows.
 
         ``files`` is positional by output slot (the same shape the base
@@ -103,7 +105,7 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                 results.append([])
                 continue
 
-            lazy_frames = [pl.scan_parquet(path) for path in slot_files]
+            lazy_frames = [pl.scan_parquet(tfi.file) for tfi in slot_files]
             # Stays lazy end to end: the dedup is a window aggregation rather
             # than ``unique(keep="first")`` so it does not depend on engine
             # row order (which the parallel/streaming engine does not
@@ -185,7 +187,7 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
             results.append([out_path])
 
         logger.info("cdc-stage: processed %d slot(s)", len(results))
-        return results
+        return to_table_file_inputs(results)
 
 
 # Entry-point binding for the CDC stream-stage publisher. Like the generic

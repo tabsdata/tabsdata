@@ -28,6 +28,7 @@ from tabsdatak.spi import (
     SrcPluginCtx,
     SrcDef,
     SrcPlugin,
+    TableFileInput,
     TableFileSpec,
     TableMode,
     check_plugin_param_type,
@@ -66,7 +67,7 @@ class _CheckOtherSrc(Src):
 class _GoodSrcPlugin(SrcPlugin[_Conn, _CheckSrc]):
     def read_in(
         self, ctx: SrcPluginCtx, conn: _Conn, src: _CheckSrc
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         return [[]]
 
 
@@ -78,14 +79,14 @@ class _PluginNoAnnotation(SrcPlugin[_Conn, _CheckSrc]):
 class _PluginWrongSrcType(SrcPlugin[_Conn, _CheckSrc]):
     def read_in(
         self, ctx: SrcPluginCtx, conn: _Conn, src: _CheckOtherSrc
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         return [[]]
 
 
 class _PluginWrongConnType(SrcPlugin[_Conn, _CheckSrc]):
     def read_in(
         self, ctx: SrcPluginCtx, conn: _OtherConn, src: _CheckSrc
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         return [[]]
 
 
@@ -162,7 +163,7 @@ class _SDDest(Dest):
 class _SDSrcPlugin(SrcPlugin[_Conn, _SDSrc]):
     def read_in(
         self, ctx: SrcPluginCtx, conn: _Conn, src: _SDSrc
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         return [[]]
 
 
@@ -257,7 +258,7 @@ class _MismatchSrcPlugin(SrcPlugin[_Conn, _SDSrc]):
     # Annotated against ``_OtherSrc``, but the Def binds ``_SDSrc``.
     def read_in(
         self, ctx: SrcPluginCtx, conn: _Conn, src: _OtherSrc
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         return [[]]
 
 
@@ -265,7 +266,7 @@ class _MismatchConnSrcPlugin(SrcPlugin[_Conn, _SDSrc]):
     # ``conn`` annotated against ``_OtherConn``, but the Def binds ``_Conn``.
     def read_in(
         self, ctx: SrcPluginCtx, conn: _OtherConn, src: _SDSrc
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         return [[]]
 
 

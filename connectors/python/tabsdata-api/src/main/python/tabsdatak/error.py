@@ -339,3 +339,5 @@ class ApiErrorCode(ErrorCode):
     # SubscriberInfo dataclass (covers @subscriber factory args + sig)
     API_21 = ErrorDef(ApiInitException, "Cannot create StageManifestEntry")
     # StageManifestEntry
+    API_22 = ErrorDef(ApiInitException, "Cannot create TableFileInput")
+    # TableFileInput

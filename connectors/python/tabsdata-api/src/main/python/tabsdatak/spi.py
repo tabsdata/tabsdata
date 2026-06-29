@@ -19,10 +19,10 @@ The plugin abstracts (:class:`SrcPlugin`, :class:`StreamSrcPlugin`,
 :class:`DestPlugin`) and their per-mode context types
 (:class:`SrcPluginCtx`, :class:`StreamSrcPluginCtx`,
 :class:`DestContext`) are what plugin code consumes. The remaining
-pieces -- :data:`TableFileSpec`, :class:`TableMode`,
-:data:`StreamStateSpec` (:data:`StreamStateDict` | :data:`CommitStateFn`)
--- are the data-shape contracts that travel between framework and plugin
-during a trx.
+pieces -- :data:`TableFileSpec`, :class:`TableFileInput`
+(:data:`MetadataSpec`), :class:`TableMode`, :data:`StreamStateSpec`
+(:data:`StreamStateDict` | :data:`CommitStateFn`) -- are the data-shape
+contracts that travel between framework and plugin during a trx.
 """
 
 from __future__ import annotations
@@ -54,17 +54,63 @@ from tabsdatak.api import (
 )
 from tabsdatak.error import ApiErrorCode
 
-# All in-flight tables travel between framework and plugin as Parquet
-# files on disk (a plain ``pathlib.Path``). Plugins materialise rows to
-# these paths during reads and consume them during writes.
+# The on-disk transport for one in-flight table: a single Parquet file as
+# a plain ``pathlib.Path``. Plugins materialise rows to these paths during
+# reads (wrapping each in a :class:`TableFileInput`) and consume them
+# during writes (as bare paths via :meth:`DestPlugin.write_out`).
 TableFileSpec: TypeAlias = Path
+
+# Optional per-file metadata a reader may attach to a :class:`TableFileInput`.
+# A convenience for the framework to add each metadata entry as a metadata
+# column on the given parquet file's table: every entry becomes one column, by
+# convention named with a leading ``@``. Restricted to JSON-scalar values
+# (``str`` / ``int`` / ``float`` / ``bool``), a flat list of them, or a flat
+# ``str``-keyed dict of them -- nothing nested.
+_MetadataBasicType: TypeAlias = Union[str, int, float, bool]
+MetadataSpec: TypeAlias = Union[
+    _MetadataBasicType,
+    list[_MetadataBasicType],
+    dict[str, _MetadataBasicType],
+]
+
+
+@_api.dataclass(ApiErrorCode.API_22)
+class TableFileInput:
+    """One parquet file :meth:`SrcPlugin.read_in` produces for an output
+    slot, paired with optional metadata to carry alongside it.
+
+    :param file: Path to the parquet file the plugin materialised under
+        :attr:`PluginCtx.work_dir`.
+    :param metadata: Optional per-file :data:`MetadataSpec`. A convenience
+        that has the framework add each metadata entry as a metadata column
+        on ``file``'s table -- every entry becomes one column, by convention
+        named with a leading ``@``. ``None`` when the reader has nothing to
+        attach -- the common case, see :func:`to_table_file_inputs`.
+    """
+
+    file: Path
+    metadata: MetadataSpec | None = None
+
+
+def to_table_file_inputs(
+    files: list[list[TableFileSpec]],
+) -> list[list[TableFileInput]]:
+    """Wrap per-slot parquet paths as :class:`TableFileInput`\\ s, leaving
+    ``metadata`` at its default (``None``) -- the shape
+    :meth:`SrcPlugin.read_in` returns.
+
+    A reader that produces bare :data:`TableFileSpec` paths funnels them
+    through this helper; a reader that has per-file metadata to attach
+    constructs :class:`TableFileInput` directly instead."""
+    return [[TableFileInput(file=f) for f in slot] for slot in files]
 
 
 class TableMode(Enum):
-    """How a :class:`SrcPlugin` returns slot contents:
+    """How a :class:`SrcPlugin` returns slot contents -- the length of
+    each inner list in :meth:`SrcPlugin.read_in`'s return:
 
-    * ``SINGLE`` -- exactly one parquet file per output slot.
-    * ``ARRAY`` -- one or more parquet files per output slot
+    * ``SINGLE`` -- exactly one :class:`TableFileInput` per output slot.
+    * ``ARRAY`` -- one or more :class:`TableFileInput` per output slot
       (file-shard style).
     """
 
@@ -122,20 +168,21 @@ class SrcPlugin[C: Conn, S: Src](ABC):
     """Plugin implementing the read-side of a :class:`Src` subclass."""
 
     @abstractmethod
-    def read_in(self, ctx: SrcPluginCtx, conn: C, src: S) -> list[list[TableFileSpec]]:
+    def read_in(self, ctx: SrcPluginCtx, conn: C, src: S) -> list[list[TableFileInput]]:
         """Materialise ``src``'s output slots to parquet under
         ``ctx.work_dir``.
 
-        Returns one inner list per output slot: when the binding's
-        :class:`TableMode` is ``SINGLE`` each inner list has
-        exactly one file; in ``ARRAY`` mode it may have more.
+        Returns one inner list of :class:`TableFileInput` per output
+        slot: when the binding's :class:`TableMode` is ``SINGLE`` each
+        inner list has exactly one file; in ``ARRAY`` mode it may have
+        more. Readers that produce bare paths can wrap them via
+        :func:`to_table_file_inputs` (metadata defaults to ``None``).
         """
 
     # if TableMode is SINGLE, inner list must always have 1 element.
 
 
 FilesSpec: TypeAlias = Annotated[list[TableFileSpec], _api.NON_EMPTY_LIST_CONSTRAINTS]
-
 
 # ``arbitrary_types_allowed=True`` escape hatch for the ``SrcDef`` /
 # ``StreamSrcDef`` / ``DestDef`` dataclasses below, whose ``Type[...]``
@@ -292,7 +339,7 @@ class StreamStageSrcPlugin(SrcPlugin[_StreamStageSrcConn, StreamStageSrc]):
         ctx: SrcPluginCtx,
         conn: _StreamStageSrcConn,
         src: StreamStageSrc,
-    ) -> list[list[TableFileSpec]]:
+    ) -> list[list[TableFileInput]]:
         """Ingest the oldest unconsumed manifest's files.
 
         Final -- subclasses must **not** override this; customise the
@@ -308,8 +355,8 @@ class StreamStageSrcPlugin(SrcPlugin[_StreamStageSrcConn, StreamStageSrc]):
     def process_files(
         self,
         _ctx: SrcPluginCtx,
-        files: list[list[TableFileSpec]],
-    ) -> list[list[TableFileSpec]]:
+        files: list[list[TableFileInput]],
+    ) -> list[list[TableFileInput]]:
         """Hook for subclass post-processing of the ingested files
         (e.g. de-duplication).
 
