@@ -5385,16 +5385,16 @@ def _source_or_destination_name(info: FunctionInfo) -> str | None:
 
 
 def _connection_kind(info: FunctionInfo) -> str | None:
-    """The connection kind a publisher/subscriber uses (e.g.
-    ``"mysqlSrcConn"``), resolved from the connector registry by the
-    source/destination the function binds to -- *not* from the ``conn``
-    declared on the decorator.
+    """The connection kind a publisher/subscriber uses, resolved from the
+    connector registry by the source/destination the function binds to --
+    *not* from the ``conn`` declared on the decorator.
 
-    The bound source/destination type authoritatively determines the
-    connection kind via its registered ``SrcDef`` / ``StreamSrcDef`` /
-    ``DestDef`` (``def.conn`` is the concrete :class:`Conn` subclass,
-    whose ``__kind__`` is the wire kind). ``None`` for transformers
-    (no external connection)."""
+    The bound source/destination type determines the connection class via
+    its registered ``SrcDef`` / ``StreamSrcDef`` / ``DestDef``
+    (``def.conn`` is the concrete :class:`Conn` subclass). Every connection
+    now shares the uniform ``"connectionDef"`` kind, so this returns that
+    for any connection-bearing function and ``None`` for transformers (no
+    external connection)."""
     kind = getattr(info, "__kind__", None)
     if kind == KIND_PUBLISHER_DEF:
         source = getattr(info, "source", None)

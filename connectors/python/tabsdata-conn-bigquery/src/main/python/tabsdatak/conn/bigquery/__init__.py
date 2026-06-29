@@ -129,8 +129,6 @@ class BigQueryDestConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
-    __kind__ = "bigQueryDestConn"
-
     staging: GCSLocation
     credentials: CredentialsSpec
     project: ProjectSpec | None = None

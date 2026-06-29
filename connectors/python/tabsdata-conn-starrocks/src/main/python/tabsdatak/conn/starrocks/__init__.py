@@ -189,8 +189,6 @@ class StarRocksDestConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
-    __kind__ = "starRocksDestConn"
-
     host: HostSpec
     port: PortSpec = 9030
     credentials: CredentialsSpec

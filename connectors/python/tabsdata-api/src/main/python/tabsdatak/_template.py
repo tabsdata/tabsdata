@@ -10,7 +10,7 @@ Introspects the connectors registered through the SPI registry
 
     # Connection template for: mysql-sql-in (src)
     # Secret values must be prefixed with 'secret:'.
-    kind: mysqlSrcConn
+    kind: connectionDef
     apiVersion: '1.0'
     type: tabsdatak.conn.mysql:MySQLSrcConn
     spec:
@@ -104,12 +104,12 @@ class ConnectorInfo:
 
 
 def _user_facing(conn_cls: type) -> bool:
-    """A real connection class: pydantic-introspectable and carrying its own
-    ``__kind__`` (excludes internal bindings like the stream-stage publisher's
-    ``_StreamStageSrcConn``, which keeps the base ``connectionDef`` kind)."""
-    return (
-        hasattr(conn_cls, "__pydantic_fields__") and conn_cls.__kind__ != Conn.__kind__
-    )
+    """A real connection class: a pydantic-introspectable connection that
+    declares its own config fields. Excludes internal field-less bindings
+    like the stream-stage publisher's ``_StreamStageSrcConn`` (every
+    connection now shares the same ``connectionDef`` kind, so the kind no
+    longer distinguishes them)."""
+    return hasattr(conn_cls, "__pydantic_fields__")
 
 
 def list_connectors() -> list[ConnectorInfo]:

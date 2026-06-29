@@ -77,8 +77,12 @@ def test_oracle_conn_round_trip(cls):
     assert loaded.conn_cfg == {"oracle.timeout": 30}
 
 
-def test_oracle_src_dest_conn_have_distinct_kinds():
-    assert OracleSrcConn.__kind__ != OracleDestConn.__kind__
+def test_oracle_src_dest_conn_are_distinct_classes():
+    # Source and destination use distinct connection classes (told apart
+    # on the wire by the envelope ``type``), though both now share the
+    # uniform ``connectionDef`` kind.
+    assert OracleSrcConn is not OracleDestConn
+    assert OracleSrcConn.__kind__ == OracleDestConn.__kind__ == "connectionDef"
 
 
 @pytest.mark.parametrize("cls", [OracleSrcConn, OracleDestConn])

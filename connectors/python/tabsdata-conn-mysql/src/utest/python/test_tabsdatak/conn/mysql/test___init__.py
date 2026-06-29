@@ -99,10 +99,12 @@ def test_mysql_conn_rejects_bad_uri(cls):
         )
 
 
-def test_mysql_src_dest_conn_have_distinct_kinds():
-    assert MySQLSrcConn.__kind__ != MySQLDestConn.__kind__
-    assert "Src" in MySQLSrcConn.__kind__
-    assert "Dest" in MySQLDestConn.__kind__
+def test_mysql_src_dest_conn_are_distinct_classes():
+    # Source and destination use distinct connection classes (told apart
+    # on the wire by the envelope ``type``), though both now share the
+    # uniform ``connectionDef`` kind.
+    assert MySQLSrcConn is not MySQLDestConn
+    assert MySQLSrcConn.__kind__ == MySQLDestConn.__kind__ == "connectionDef"
 
 
 # ---------------------------------------------------------------------------

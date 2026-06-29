@@ -75,7 +75,7 @@ def test_localfile_template_round_trips():
     info = template.resolve_conn("local-file-in", "src")
     doc = template.build_template(info.conn_cls)
     assert doc["spec"] == {}
-    assert template.validate(doc) == "localFileSrcConn"
+    assert template.validate(doc) == "connectionDef"
     # --all-fields surfaces the optional fields.
     assert set(template.build_template(info.conn_cls, all_fields=True)["spec"]) == {
         "base_path",
@@ -118,7 +118,7 @@ def test_validate_rejects_non_dict():
 
 def test_validate_rejects_missing_envelope_keys():
     with pytest.raises(template.TemplateError, match="missing envelope key"):
-        template.validate({"kind": "localFileSrcConn"})
+        template.validate({"kind": "connectionDef"})
 
 
 def test_validate_rejects_unresolvable_type():
@@ -184,11 +184,11 @@ def test_yaml_round_trips_through_from_yaml():
     info = template.resolve_conn("local-file-in", "src")
     doc = template.build_template(info.conn_cls, all_fields=True)
     text = template.to_yaml(doc)
-    assert "kind: localFileSrcConn" in text
+    assert "kind: connectionDef" in text
     # YAML parses back to an equivalent structure that still validates.
     parsed = template.from_yaml(text)
-    assert parsed["kind"] == "localFileSrcConn"
-    assert template.validate(parsed) == "localFileSrcConn"
+    assert parsed["kind"] == "connectionDef"
+    assert template.validate(parsed) == "connectionDef"
 
 
 def test_yaml_template_has_header():
@@ -200,7 +200,7 @@ def test_yaml_template_has_header():
     # Reminds that secret values carry the 'secret:' prefix.
     assert "secret:" in lines[1]
     # The header is a comment, so the document still parses + validates.
-    assert template.validate(template.from_yaml(text)) == "localFileSrcConn"
+    assert template.validate(template.from_yaml(text)) == "connectionDef"
 
 
 @pytest.mark.skipif(
@@ -218,7 +218,7 @@ def test_yaml_template_carries_accepts_comments():
     # raw template carries a "<FILL: uri>" placeholder, so it is not yet a valid
     # connection -- the user fills it in).
     parsed = template.from_yaml(text)
-    assert parsed["kind"] == "mysqlSrcConn"
+    assert parsed["kind"] == "connectionDef"
     assert parsed["spec"]["uri"] == "<FILL: uri>"
 
 
@@ -228,7 +228,7 @@ def test_yaml_template_carries_accepts_comments():
 def test_localfile_wizard_validates():
     info = template.resolve_conn("local-file-in", "src")
     doc = template.build_template_interactive(info.conn_cls, _scripted({}))
-    assert template.validate(doc) == "localFileSrcConn"
+    assert template.validate(doc) == "connectionDef"
 
 
 @pytest.mark.skipif(
@@ -254,4 +254,4 @@ def test_mysql_secrets_render_as_refs_and_wizard_validates():
     secret_paths = {p for p, s, o, c in record if s}
     assert {"credentials.user", "credentials.password"} <= secret_paths
     assert "uri" not in secret_paths
-    assert template.validate(out) == "mysqlSrcConn"
+    assert template.validate(out) == "connectionDef"

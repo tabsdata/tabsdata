@@ -143,8 +143,6 @@ class SalesforceSrcConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
-    __kind__ = "salesforceSrcConn"
-
     credentials: CredentialsSpec
     instance_url: InstanceUrlSpec | None = None
     category: str | None = None

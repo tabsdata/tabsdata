@@ -122,8 +122,6 @@ class PostgresSrcConn(Conn):
         ``connect_args`` to SQLAlchemy).
     """
 
-    __kind__ = "postgresSrcConn"
-
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
@@ -138,8 +136,6 @@ class PostgresDestConn(Conn):
     class so source and destination connections cannot be confused
     at the wire-format level (the ``__kind__`` differs).
     """
-
-    __kind__ = "postgresDestConn"
 
     uri: UriSpec
     credentials: CredentialsSpec
@@ -303,8 +299,6 @@ class PostgresCdcStreamSrcConn(Conn):
     :param conn_cfg: Optional driver-side config forwarded as
         ``connect_args``.
     """
-
-    __kind__ = "postgresCdcStreamSrcConn"
 
     uri: UriSpec
     credentials: CredentialsSpec

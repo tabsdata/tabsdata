@@ -90,8 +90,6 @@ DestCfgSpec: TypeAlias = Annotated[
 class MSSQLSrcConn(Conn):
     """MSSQL connection used by :class:`MSSQLSrc`."""
 
-    __kind__ = "mSSQLSrcConn"
-
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
@@ -106,8 +104,6 @@ class MSSQLDestConn(Conn):
     class so source and destination connections cannot be
     confused at the wire-format level.
     """
-
-    __kind__ = "mSSQLDestConn"
 
     uri: UriSpec
     credentials: CredentialsSpec

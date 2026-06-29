@@ -26,7 +26,7 @@ def _installed(type_: str, direction: str) -> bool:
 
 
 _MYSQL_SRC_YAML = """\
-kind: mysqlSrcConn
+kind: connectionDef
 apiVersion: '1.0'
 type: tabsdatak.conn.mysql:MySQLSrcConn
 spec:
@@ -74,7 +74,7 @@ def test_load_connection_document_dehydrates(tmp_path):
 # them (driven by the validated model, not by the prefix) -- otherwise the
 # plain values would leak into the stored connection.
 _MYSQL_SRC_YAML_BARE = """\
-kind: mysqlSrcConn
+kind: connectionDef
 apiVersion: '1.0'
 type: tabsdatak.conn.mysql:MySQLSrcConn
 spec:
@@ -127,9 +127,25 @@ def test_load_connection_document_invalid_yaml(tmp_path):
         )
 
 
-def test_group_for_kind():
-    assert collection_group._group_for_kind("mysqlSrcConn") == "sources"
-    assert collection_group._group_for_kind("mysqlDestConn") == "destinations"
-    assert collection_group._group_for_kind("mysqlCdcStreamSrcConn") == "sources"
+@pytest.mark.skipif(
+    not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
+)
+def test_group_for_conn():
+    # The group is resolved from the registry binding (source/stream-source ->
+    # sources, destination -> destinations), since every connection now shares
+    # the uniform ``connectionDef`` kind.
+    from tabsdatak.conn.mysql import (
+        MySQLCdcStreamSrcConn,
+        MySQLDestConn,
+        MySQLSrcConn,
+    )
+
+    assert collection_group._group_for_conn(MySQLSrcConn) == "sources"
+    assert collection_group._group_for_conn(MySQLDestConn) == "destinations"
+    assert collection_group._group_for_conn(MySQLCdcStreamSrcConn) == "sources"
+
+    class _Unregistered:
+        pass
+
     with pytest.raises(click.ClickException):
-        collection_group._group_for_kind("notAConn")
+        collection_group._group_for_conn(_Unregistered)

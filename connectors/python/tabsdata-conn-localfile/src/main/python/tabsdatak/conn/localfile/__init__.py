@@ -67,8 +67,6 @@ DestCfgSpec: TypeAlias = Annotated[
 class LocalFileSrcConn(Conn):
     """LocalFile connection used by :class:`LocalFileSrc`."""
 
-    __kind__ = "localFileSrcConn"
-
     base_path: BasePathSpec = ""
     conn_cfg: CfgSpec | None = None
 
@@ -84,8 +82,6 @@ class LocalFileDestConn(Conn):
     distinct class so source and destination connections cannot
     be confused at the wire-format level.
     """
-
-    __kind__ = "localFileDestConn"
 
     base_path: BasePathSpec = ""
     conn_cfg: CfgSpec | None = None

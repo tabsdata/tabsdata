@@ -104,8 +104,6 @@ class SnowflakeDestConn(Conn):
     ``SNOWFLAKE_2``.
     """
 
-    __kind__ = "snowflakeDestConn"
-
     account: AccountSpec
     credentials: CredentialsSpec
     role: NameSpec | None = None

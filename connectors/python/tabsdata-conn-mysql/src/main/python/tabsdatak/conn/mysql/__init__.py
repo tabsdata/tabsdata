@@ -201,8 +201,6 @@ class MySQLSrcConn(Conn):
         ``connect_args`` to SQLAlchemy).
     """
 
-    __kind__ = "mysqlSrcConn"
-
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
@@ -217,8 +215,6 @@ class MySQLDestConn(Conn):
     class so source and destination connections cannot be confused
     at the wire-format level (the ``__kind__`` differs).
     """
-
-    __kind__ = "mysqlDestConn"
 
     uri: UriSpec
     credentials: CredentialsSpec
@@ -341,8 +337,6 @@ class MySQLCdcStreamSrcConn(Conn):
     :param conn_cfg: Optional driver-side config forwarded as
         ``connect_args``.
     """
-
-    __kind__ = "mysqlCdcStreamSrcConn"
 
     uri: UriSpec
     credentials: CredentialsSpec

@@ -55,8 +55,12 @@ def test_mssql_conn_round_trip(cls):
     assert loaded.conn_cfg == {"mssql.timeout": 30}
 
 
-def test_mssql_src_dest_conn_have_distinct_kinds():
-    assert MSSQLSrcConn.__kind__ != MSSQLDestConn.__kind__
+def test_mssql_src_dest_conn_are_distinct_classes():
+    # Source and destination use distinct connection classes (told apart
+    # on the wire by the envelope ``type``), though both now share the
+    # uniform ``connectionDef`` kind.
+    assert MSSQLSrcConn is not MSSQLDestConn
+    assert MSSQLSrcConn.__kind__ == MSSQLDestConn.__kind__ == "connectionDef"
 
 
 def test_mssql_conn_accepts_odbc_connection_string_and_round_trips():

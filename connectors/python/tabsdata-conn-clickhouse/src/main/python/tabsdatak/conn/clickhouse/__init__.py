@@ -237,8 +237,6 @@ class ClickHouseDestConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
-    __kind__ = "clickHouseDestConn"
-
     host: HostSpec
     port: PortSpec = 8123
     credentials: CredentialsSpec

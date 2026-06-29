@@ -94,10 +94,12 @@ def test_db2_conn_rejects_bad_uri(cls):
         )
 
 
-def test_db2_src_dest_conn_have_distinct_kinds():
-    assert Db2SrcConn.__kind__ != Db2DestConn.__kind__
-    assert "Src" in Db2SrcConn.__kind__
-    assert "Dest" in Db2DestConn.__kind__
+def test_db2_src_dest_conn_are_distinct_classes():
+    # Source and destination use distinct connection classes (told apart
+    # on the wire by the envelope ``type``), though both now share the
+    # uniform ``connectionDef`` kind.
+    assert Db2SrcConn is not Db2DestConn
+    assert Db2SrcConn.__kind__ == Db2DestConn.__kind__ == "connectionDef"
 
 
 # ---------------------------------------------------------------------------

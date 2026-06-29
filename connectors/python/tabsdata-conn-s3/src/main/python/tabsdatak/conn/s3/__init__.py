@@ -83,8 +83,6 @@ class S3SrcConn(Conn):
     class wraps this conn and adds the per-flow ``paths`` list.
     """
 
-    __kind__ = "s3SrcConn"
-
     bucket: S3BucketSpec
     region: AwsRegionSpec
     credentials: CredentialsSpec
@@ -105,8 +103,6 @@ class S3DestConn(Conn):
     so source and destination connections cannot be confused at
     the wire-format level.
     """
-
-    __kind__ = "s3DestConn"
 
     bucket: S3BucketSpec
     region: AwsRegionSpec

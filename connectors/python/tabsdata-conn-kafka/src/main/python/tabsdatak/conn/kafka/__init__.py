@@ -203,8 +203,6 @@ class KafkaStreamSrcConn(Conn):
         consumer ``configs`` to ``confluent_kafka.Consumer``).
     """
 
-    __kind__ = "kafkaStreamSrcConn"
-
     servers: KafkaServersSpec
     credentials: KafkaCredentialsSpec | None = None
     group_id: KafkaGroupSpec

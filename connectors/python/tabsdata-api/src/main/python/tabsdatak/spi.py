@@ -55,11 +55,7 @@ from tabsdatak.api import (
 from tabsdatak.error import ApiErrorCode
 
 
-class _Conn(ABC, _api.DescriptorBase):
-    __kind__ = "connectionDef"
-
-
-class Conn(_Conn, ABC):
+class Conn(_api.DescriptorBase, ABC):
     """Abstract base for every connection.
 
     Concrete subclasses live in the per-database connector
@@ -69,7 +65,12 @@ class Conn(_Conn, ABC):
     A connection is never declared on a flow function; it is registered
     on the function's collection and the runtime resolves it and hands
     it to the connector's plugin (``read_in`` / ``write_out`` / ``run``)
-    at run time."""
+    at run time.
+
+    Every connection shares the same on-wire ``__kind__`` discriminator
+    (``"connectionDef"``); subclasses are told apart by their envelope
+    ``type`` (the qualified class name), not by ``__kind__``, and must
+    not redefine it."""
 
     __kind__ = "connectionDef"
 

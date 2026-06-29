@@ -21,8 +21,12 @@ def conn_cls(request):
     return request.param
 
 
-def test_localfile_src_dest_conn_have_distinct_kinds():
-    assert LocalFileSrcConn.__kind__ != LocalFileDestConn.__kind__
+def test_localfile_src_dest_conn_are_distinct_classes():
+    # Source and destination use distinct connection classes (told apart
+    # on the wire by the envelope ``type``), though both now share the
+    # uniform ``connectionDef`` kind.
+    assert LocalFileSrcConn is not LocalFileDestConn
+    assert LocalFileSrcConn.__kind__ == LocalFileDestConn.__kind__ == "connectionDef"
 
 
 def test_localfile_src_full_round_trip():

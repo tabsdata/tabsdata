@@ -125,8 +125,6 @@ class Db2SrcConn(Conn):
         ``connect_args`` to SQLAlchemy).
     """
 
-    __kind__ = "db2SrcConn"
-
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
@@ -141,8 +139,6 @@ class Db2DestConn(Conn):
     so source and destination connections cannot be confused at
     the wire-format level (the ``__kind__`` differs).
     """
-
-    __kind__ = "db2DestConn"
 
     uri: UriSpec
     credentials: CredentialsSpec
@@ -327,8 +323,6 @@ class Db2CdcStreamSrcConn(Conn):
     :param conn_cfg: Optional driver-side config forwarded as
         ``connect_args``.
     """
-
-    __kind__ = "db2CdcStreamSrcConn"
 
     uri: UriSpec
     credentials: CredentialsSpec

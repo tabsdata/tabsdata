@@ -90,8 +90,12 @@ def test_databricks_conn_validate_rejects_schema_without_catalog(cls):
     assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_2
 
 
-def test_databricks_src_dest_conn_have_distinct_kinds():
-    assert DatabricksSrcConn.__kind__ != DatabricksDestConn.__kind__
+def test_databricks_src_dest_conn_are_distinct_classes():
+    # Source and destination use distinct connection classes (told apart
+    # on the wire by the envelope ``type``), though both now share the
+    # uniform ``connectionDef`` kind.
+    assert DatabricksSrcConn is not DatabricksDestConn
+    assert DatabricksSrcConn.__kind__ == DatabricksDestConn.__kind__ == "connectionDef"
 
 
 # ---------------------------------------------------------------------------

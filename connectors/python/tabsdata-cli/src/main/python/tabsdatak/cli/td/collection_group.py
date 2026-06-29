@@ -98,20 +98,23 @@ def create(
         raise click.ClickException(f"Failed to create collection: {e}")
 
 
-_KIND_SUFFIX_TO_GROUP = {"Src": "sources", "Dest": "destinations"}
+_DIRECTION_TO_GROUP = {"src": "sources", "stream-src": "sources", "dest": "destinations"}
 
 
-def _group_for_kind(kind) -> str:
-    """The collection group a connection kind implies (``...SrcConn`` ->
-    sources, ``...DestConn`` -> destinations)."""
-    if isinstance(kind, str) and kind.endswith("Conn"):
-        stem = kind[: -len("Conn")]
-        for suffix, group in _KIND_SUFFIX_TO_GROUP.items():
-            if stem.endswith(suffix) and len(stem) > len(suffix):
-                return group
+def _group_for_conn(conn_cls) -> str:
+    """The collection group a connection belongs to, resolved from the SPI
+    registry: a connection bound to a (stream) source -> ``sources``, one
+    bound to a destination -> ``destinations``.
+
+    Every connection now shares the uniform ``connectionDef`` kind, so the
+    direction is taken from the registered binding rather than parsed out of
+    the kind string."""
+    for r in template.list_connectors():
+        if r.conn_cls is conn_cls:
+            return _DIRECTION_TO_GROUP[r.direction]
     raise click.ClickException(
-        f"invalid connection kind {kind!r}; expected '<connector><Src|Dest>Conn'"
-        " (e.g. 'mysqlSrcConn')"
+        f"connection type {conn_cls.__qualname__!r} is not a registered "
+        "source or destination connection"
     )
 
 
@@ -141,19 +144,20 @@ def _load_connection_document(conn_file, group):
     except Exception as e:  # noqa: BLE001 -- any YAML parse failure
         raise click.ClickException(f"invalid connection YAML: {e}")
     try:
-        kind = template.validate(document)
+        template.validate(document)
     except template.TemplateError as e:
         raise click.ClickException(str(e))
-    implied = _group_for_kind(kind)
+    conn_cls = template.resolve_class(document["type"])
+    implied = _group_for_conn(conn_cls)
     if group is not None and group != implied:
         raise click.ClickException(
-            f"kind '{kind}' makes this a {implied} collection, "
-            f"but --group says '{group}'"
+            f"connection type {document['type']!r} makes this a {implied} "
+            f"collection, but --group says '{group}'"
         )
     # Dehydrate type-awarely: a Secret field serializes to ":secret:" in the
     # validated model, so its value is harvested whether or not the user
     # prefixed it with "secret:" -- no secret leaks into the stored document.
-    model = template.resolve_class(document["type"]).from_dict(document)
+    model = conn_cls.from_dict(document)
     dehydrated, secrets = dehydrate(document, model.to_dict())
     return template.to_yaml(dehydrated), implied, _kv_list(secrets)
 

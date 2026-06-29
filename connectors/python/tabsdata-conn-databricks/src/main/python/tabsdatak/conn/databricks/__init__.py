@@ -124,8 +124,6 @@ def _validate_databricks_conn(conn) -> None:
 class DatabricksSrcConn(Conn):
     """Databricks workspace connection used by :class:`DatabricksSrc`."""
 
-    __kind__ = "databricksSrcConn"
-
     host_url: HostUrlSpec
     token: CredentialsSpec
     volume: VolumeSpec
@@ -148,8 +146,6 @@ class DatabricksDestConn(Conn):
     class so source and destination connections cannot be confused
     at the wire-format level.
     """
-
-    __kind__ = "databricksDestConn"
 
     host_url: HostUrlSpec
     token: CredentialsSpec

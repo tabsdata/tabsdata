@@ -26,7 +26,7 @@ def _installed(type_: str, direction: str) -> bool:
 def test_template_emits_yaml():
     result = CliRunner().invoke(cli, ["connection", "template", "-t", "local-file-in", "-d", "src"])
     assert result.exit_code == 0, result.output
-    assert "kind: localFileSrcConn" in result.output
+    assert "kind: connectionDef" in result.output
     # YAML, not JSON -- no leading brace.
     assert not result.output.lstrip().startswith("{")
 
@@ -50,7 +50,7 @@ def test_validate_reads_yaml(tmp_path):
 
     result = CliRunner().invoke(cli, ["connection", "validate", "-f", str(path)])
     assert result.exit_code == 0, result.output
-    assert "is valid (localFileSrcConn)" in result.output
+    assert "is valid (connectionDef)" in result.output
 
 
 def test_validate_rejects_malformed_yaml(tmp_path):

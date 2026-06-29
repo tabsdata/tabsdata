@@ -89,8 +89,6 @@ class AzureBlobSrcConn(Conn):
     :param conn_cfg: Optional driver-side cfg dict.
     """
 
-    __kind__ = "azureBlobSrcConn"
-
     container: AzContainerSpec
     credentials: CredentialsSpec
     base_path: BasePathSpec = ""
@@ -108,8 +106,6 @@ class AzureBlobDestConn(Conn):
     class so source and destination connections cannot be confused
     at the wire-format level.
     """
-
-    __kind__ = "azureBlobDestConn"
 
     container: AzContainerSpec
     credentials: CredentialsSpec

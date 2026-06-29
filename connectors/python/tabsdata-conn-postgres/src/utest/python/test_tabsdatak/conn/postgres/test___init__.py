@@ -80,10 +80,12 @@ def test_postgres_conn_round_trip(cls):
     assert loaded.conn_cfg == {"postgres.timeout": 30}
 
 
-def test_postgres_src_dest_conn_have_distinct_kinds():
-    assert PostgresSrcConn.__kind__ != PostgresDestConn.__kind__
-    assert "Src" in PostgresSrcConn.__kind__
-    assert "Dest" in PostgresDestConn.__kind__
+def test_postgres_src_dest_conn_are_distinct_classes():
+    # Source and destination use distinct connection classes (told apart
+    # on the wire by the envelope ``type``), though both now share the
+    # uniform ``connectionDef`` kind.
+    assert PostgresSrcConn is not PostgresDestConn
+    assert PostgresSrcConn.__kind__ == PostgresDestConn.__kind__ == "connectionDef"
 
 
 @pytest.mark.parametrize("cls", [PostgresSrcConn, PostgresDestConn])

@@ -193,8 +193,6 @@ class DruidDestConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
-    __kind__ = "druidDestConn"
-
     overlord_url: UrlSpec
     staging: CloudLocation
     credentials: CredentialsSpec

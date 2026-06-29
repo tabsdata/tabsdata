@@ -110,8 +110,12 @@ def test_gcs_conn_full_path_strips_trailing_slashes(conn_cls):
     assert c.full_path("/") == "data"
 
 
-def test_gcs_src_dest_conn_have_distinct_kinds():
-    assert GCSSrcConn.__kind__ != GCSDestConn.__kind__
+def test_gcs_src_dest_conn_are_distinct_classes():
+    # Source and destination use distinct connection classes (told apart
+    # on the wire by the envelope ``type``), though both now share the
+    # uniform ``connectionDef`` kind.
+    assert GCSSrcConn is not GCSDestConn
+    assert GCSSrcConn.__kind__ == GCSDestConn.__kind__ == "connectionDef"
 
 
 # ---------------------------------------------------------------------------

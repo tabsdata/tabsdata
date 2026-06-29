@@ -88,8 +88,6 @@ DestCfgSpec: TypeAlias = Annotated[
 class OracleSrcConn(Conn):
     """Oracle connection used by :class:`OracleSrc`."""
 
-    __kind__ = "oracleSrcConn"
-
     uri: UriSpec
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
@@ -104,8 +102,6 @@ class OracleDestConn(Conn):
     class so source and destination connections cannot be
     confused at the wire-format level.
     """
-
-    __kind__ = "oracleDestConn"
 
     uri: UriSpec
     credentials: CredentialsSpec

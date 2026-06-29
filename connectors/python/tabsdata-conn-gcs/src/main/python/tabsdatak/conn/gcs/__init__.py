@@ -101,8 +101,6 @@ class GCSSrcConn(Conn):
     :param conn_cfg: Optional driver-side cfg dict.
     """
 
-    __kind__ = "gcsSrcConn"
-
     bucket: GCSBucketSpec
     credentials: CredentialsSpec
     project: ProjectSpec | None = None
@@ -121,8 +119,6 @@ class GCSDestConn(Conn):
     class so source and destination connections cannot be
     confused at the wire-format level.
     """
-
-    __kind__ = "gcsDestConn"
 
     bucket: GCSBucketSpec
     credentials: CredentialsSpec

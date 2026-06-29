@@ -87,8 +87,12 @@ def test_azureblob_conn_rejects_missing_credentials(conn_cls):
     assert ei.value.api_error is AzureBlobErrorCode.AZURE_BLOB_1
 
 
-def test_azureblob_src_dest_conn_have_distinct_kinds():
-    assert AzureBlobSrcConn.__kind__ != AzureBlobDestConn.__kind__
+def test_azureblob_src_dest_conn_are_distinct_classes():
+    # Source and destination use distinct connection classes (told apart
+    # on the wire by the envelope ``type``), though both now share the
+    # uniform ``connectionDef`` kind.
+    assert AzureBlobSrcConn is not AzureBlobDestConn
+    assert AzureBlobSrcConn.__kind__ == AzureBlobDestConn.__kind__ == "connectionDef"
 
 
 def test_azureblob_src_rejects_missing_paths():

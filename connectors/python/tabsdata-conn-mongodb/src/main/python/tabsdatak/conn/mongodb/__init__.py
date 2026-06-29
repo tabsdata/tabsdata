@@ -70,8 +70,6 @@ class MongoDBDestConn(Conn):
     :param conn_cfg: Optional driver-side config dict.
     """
 
-    __kind__ = "mongoDBDestConn"
-
     uri: UriSpec
     credentials: CredentialsSpec
     conn_cfg: CfgSpec | None = None
