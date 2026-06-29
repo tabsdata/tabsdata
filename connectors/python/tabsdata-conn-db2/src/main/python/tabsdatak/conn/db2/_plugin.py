@@ -251,7 +251,8 @@ class Db2DestExplorer(Explorer[Db2DestConn]):
 
 DB2_SRC = SrcDef(
     conn=Db2SrcConn,
-    src_type="db2",
+    type_="db2-sql-in",
+    system="IBM Db2",
     src_version="v1",
     src=Db2Src,
     table_mode=TableMode.SINGLE,
@@ -262,7 +263,8 @@ DB2_SRC = SrcDef(
 
 DB2_DEST = DestDef(
     conn=Db2DestConn,
-    dest_type="db2",
+    type_="db2-sql-out",
+    system="IBM Db2",
     dest_version="v1",
     dest=Db2Dest,
     cardinality=lambda dest: len(dest.tables),

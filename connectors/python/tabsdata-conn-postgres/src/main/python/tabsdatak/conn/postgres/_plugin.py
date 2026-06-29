@@ -256,7 +256,8 @@ class PostgresDestExplorer(Explorer[PostgresDestConn]):
 
 POSTGRES_SRC = SrcDef(
     conn=PostgresSrcConn,
-    src_type="postgres",
+    type_="postgres-sql-in",
+    system="PostgreSQL",
     src_version="v1",
     src=PostgresSrc,
     table_mode=TableMode.SINGLE,
@@ -267,7 +268,8 @@ POSTGRES_SRC = SrcDef(
 
 POSTGRES_DEST = DestDef(
     conn=PostgresDestConn,
-    dest_type="postgres",
+    type_="postgres-sql-out",
+    system="PostgreSQL",
     dest_version="v1",
     dest=PostgresDest,
     cardinality=lambda dest: len(dest.tables),

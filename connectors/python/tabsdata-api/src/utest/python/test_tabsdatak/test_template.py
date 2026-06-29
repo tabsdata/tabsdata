@@ -55,8 +55,8 @@ def _scripted(values: dict, record: list | None = None):
 def test_localfile_present_both_directions():
     rows = template.list_connectors()
     pairs = {(r.type, r.direction) for r in rows}
-    assert ("localfile", "src") in pairs
-    assert ("localfile", "dest") in pairs
+    assert ("local-file-in", "src") in pairs
+    assert ("local-file-out", "dest") in pairs
 
 
 def test_every_template_is_structurally_well_formed():
@@ -72,7 +72,7 @@ def test_every_template_is_structurally_well_formed():
 def test_localfile_template_round_trips():
     # localfile has only optional fields, so the required-only template is a
     # complete, valid connection on its own.
-    info = template.resolve_conn("localfile", "src")
+    info = template.resolve_conn("local-file-in", "src")
     doc = template.build_template(info.conn_cls)
     assert doc["spec"] == {}
     assert template.validate(doc) == "localFileSrcConn"
@@ -87,9 +87,10 @@ def test_localfile_template_round_trips():
 
 
 def test_resolve_infers_unique_direction():
-    # localfile is both src and dest -> ambiguous without -d.
-    with pytest.raises(template.TemplateError, match="ambiguous"):
-        template.resolve_conn("localfile", None)
+    # Each connector type is globally unique, so resolve infers the single
+    # direction it offers even when none is given.
+    info = template.resolve_conn("local-file-in", None)
+    assert (info.type, info.direction) == ("local-file-in", "src")
 
 
 def test_resolve_unknown_type():
@@ -99,12 +100,12 @@ def test_resolve_unknown_type():
 
 def test_resolve_bad_direction():
     with pytest.raises(template.TemplateError, match="unknown direction"):
-        template.resolve_conn("localfile", "sideways")
+        template.resolve_conn("local-file-in", "sideways")
 
 
 def test_resolve_direction_not_offered():
     with pytest.raises(template.TemplateError, match="no .* direction"):
-        template.resolve_conn("localfile", "stream-src")
+        template.resolve_conn("local-file-in", "stream-src")
 
 
 # --- validate ---------------------------------------------------------------
@@ -180,7 +181,7 @@ def test_type_comment_lists_accepted_forms():
 
 
 def test_yaml_round_trips_through_from_yaml():
-    info = template.resolve_conn("localfile", "src")
+    info = template.resolve_conn("local-file-in", "src")
     doc = template.build_template(info.conn_cls, all_fields=True)
     text = template.to_yaml(doc)
     assert "kind: localFileSrcConn" in text
@@ -191,11 +192,11 @@ def test_yaml_round_trips_through_from_yaml():
 
 
 def test_yaml_template_has_header():
-    info = template.resolve_conn("localfile", "src")
+    info = template.resolve_conn("local-file-in", "src")
     text = template.to_yaml(template.build_template(info.conn_cls))
     lines = text.splitlines()
     # Names the connector/direction the template targets.
-    assert lines[0] == "# Connection template for: localfile (src)"
+    assert lines[0] == "# Connection template for: local-file-in (src)"
     # Reminds that secret values carry the 'secret:' prefix.
     assert "secret:" in lines[1]
     # The header is a comment, so the document still parses + validates.
@@ -203,10 +204,10 @@ def test_yaml_template_has_header():
 
 
 @pytest.mark.skipif(
-    not _installed("mysql", "src"), reason="mysql connector not installed"
+    not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
 )
 def test_yaml_template_carries_accepts_comments():
-    info = template.resolve_conn("mysql", "src")
+    info = template.resolve_conn("mysql-sql-in", "src")
     text = template.to_yaml(template.build_template(info.conn_cls))
     # uri (str|Secret) lists its forms in the union's declaration order.
     assert "# accepts: <value> | secret:<value>" in text  # uri
@@ -225,16 +226,16 @@ def test_yaml_template_carries_accepts_comments():
 
 
 def test_localfile_wizard_validates():
-    info = template.resolve_conn("localfile", "src")
+    info = template.resolve_conn("local-file-in", "src")
     doc = template.build_template_interactive(info.conn_cls, _scripted({}))
     assert template.validate(doc) == "localFileSrcConn"
 
 
 @pytest.mark.skipif(
-    not _installed("mysql", "src"), reason="mysql connector not installed"
+    not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
 )
 def test_mysql_secrets_render_as_refs_and_wizard_validates():
-    info = template.resolve_conn("mysql", "src")
+    info = template.resolve_conn("mysql-sql-in", "src")
     # Each field renders from its union's FIRST member. credentials.user/password
     # are Secret -> the dehydrated ref marker ":secret:". uri is
     # Union[str, Secret] (str-first, so plain strings parse as strings) ->

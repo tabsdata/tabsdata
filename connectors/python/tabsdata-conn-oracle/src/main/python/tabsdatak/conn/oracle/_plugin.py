@@ -239,7 +239,8 @@ class OracleDestExplorer(Explorer[OracleDestConn]):
 
 ORACLE_SRC = SrcDef(
     conn=OracleSrcConn,
-    src_type="oracle",
+    type_="oracle-sql-in",
+    system="Oracle",
     src_version="v1",
     src=OracleSrc,
     table_mode=TableMode.SINGLE,
@@ -250,7 +251,8 @@ ORACLE_SRC = SrcDef(
 
 ORACLE_DEST = DestDef(
     conn=OracleDestConn,
-    dest_type="oracle",
+    type_="oracle-sql-out",
+    system="Oracle",
     dest_version="v1",
     dest=OracleDest,
     cardinality=lambda dest: len(dest.tables),

@@ -52,7 +52,7 @@ def test_stream_src_def_is_for_mysql_cdc():
     assert MYSQL_CDC_STREAM_SRC.conn is MySQLCdcStreamSrcConn
     assert MYSQL_CDC_STREAM_SRC.src is MySQLCdcStreamSrc
     assert MYSQL_CDC_STREAM_SRC.plugin is MySQLCdcStreamSrcPlugin
-    assert MYSQL_CDC_STREAM_SRC.src_type == "mysql-cdc"
+    assert MYSQL_CDC_STREAM_SRC.type_ == "mysql-cdc"
     assert MYSQL_CDC_STREAM_SRC.publisher_src is CdcStageSrc
 
 

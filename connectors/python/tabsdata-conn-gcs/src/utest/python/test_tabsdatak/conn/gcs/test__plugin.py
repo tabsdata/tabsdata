@@ -176,7 +176,7 @@ def test_gcs_src_def_wires_plugin_and_explorer():
     assert plugin.GCS_SRC.src is GCSSrc
     assert plugin.GCS_SRC.plugin is plugin.GCSSrcPlugin
     assert plugin.GCS_SRC.explorer is plugin.GCSSrcExplorer
-    assert plugin.GCS_SRC.src_type == "gcs"
+    assert plugin.GCS_SRC.type_ == "gcs-file-in"
 
 
 def test_gcs_dest_def_wires_plugin_and_explorer():
@@ -184,7 +184,7 @@ def test_gcs_dest_def_wires_plugin_and_explorer():
     assert plugin.GCS_DEST.dest is GCSDest
     assert plugin.GCS_DEST.plugin is plugin.GCSDestPlugin
     assert plugin.GCS_DEST.explorer is plugin.GCSDestExplorer
-    assert plugin.GCS_DEST.dest_type == "gcs"
+    assert plugin.GCS_DEST.type_ == "gcs-file-out"
 
 
 def test_gcs_cardinality_uses_paths_length():

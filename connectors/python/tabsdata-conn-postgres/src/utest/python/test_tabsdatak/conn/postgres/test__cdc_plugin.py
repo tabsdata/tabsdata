@@ -53,7 +53,7 @@ def test_stream_src_def_is_for_postgres_cdc():
     assert POSTGRES_CDC_STREAM_SRC.conn is PostgresCdcStreamSrcConn
     assert POSTGRES_CDC_STREAM_SRC.src is PostgresCdcStreamSrc
     assert POSTGRES_CDC_STREAM_SRC.plugin is PostgresCdcStreamSrcPlugin
-    assert POSTGRES_CDC_STREAM_SRC.src_type == "postgres-cdc"
+    assert POSTGRES_CDC_STREAM_SRC.type_ == "postgres-cdc"
     assert POSTGRES_CDC_STREAM_SRC.publisher_src is CdcStageSrc
 
 

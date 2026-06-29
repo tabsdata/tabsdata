@@ -8,7 +8,7 @@ Introspects the connectors registered through the SPI registry
 (:func:`tabsdatak._connectors.avail_srcs` / ``avail_stream_srcs`` /
 ``avail_dests``) and emits the connectors' own envelope dialect as YAML::
 
-    # Connection template for: mysql (src)
+    # Connection template for: mysql-sql-in (src)
     # Secret values must be prefixed with 'secret:'.
     kind: mysqlSrcConn
     apiVersion: '1.0'

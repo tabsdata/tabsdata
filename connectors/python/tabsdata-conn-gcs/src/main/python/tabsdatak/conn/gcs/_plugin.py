@@ -143,7 +143,8 @@ class GCSDestExplorer(Explorer[GCSDestConn]):
 
 GCS_SRC = SrcDef(
     conn=GCSSrcConn,
-    src_type="gcs",
+    type_="gcs-file-in",
+    system="Google Storage",
     src_version="v1",
     src=GCSSrc,
     table_mode=TableMode.ARRAY,
@@ -155,7 +156,8 @@ GCS_SRC = SrcDef(
 
 GCS_DEST = DestDef(
     conn=GCSDestConn,
-    dest_type="gcs",
+    type_="gcs-file-out",
+    system="Google Storage",
     dest_version="v1",
     dest=GCSDest,
     cardinality=lambda dest: len(dest.paths),

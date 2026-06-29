@@ -49,8 +49,9 @@ from tabsdatak.conn.common.error import ConnException
 
 # 5. (Optional) Discover what's installed at runtime.
 from tabsdatak._connectors import avail_srcs, avail_stream_srcs, avail_dests
-# Each returns a fresh dict keyed by src_type / dest_type
-# ("mysql", "s3", "salesforce_report", ...). Values are SrcDef /
+# Each returns a fresh dict keyed by type_ (unique across all
+# plugins: "mysql-sql-in", "s3-file-in", "salesforce-report-in",
+# ...). Values are SrcDef /
 # AutoSrcDef / DestDef instances exposing the concrete config
 # class (.src / .dest), .table_mode (for sources), .cardinality,
 # .plugin, and .explorer.
@@ -526,8 +527,8 @@ Without a discovery surface, a generated
 
 * :mod:`tabsdatak.connectors` -- the *runtime* binding registry.
   ``avail_srcs() / avail_auto_srcs() / avail_dests()`` each return
-  a fresh ``dict[str, <Def>]`` keyed by ``src_type`` /
-  ``dest_type``, populated lazily on first call from the
+  a fresh ``dict[str, <Def>]`` keyed by ``type_``
+  (unique across all plugins), populated lazily on first call from the
   ``tabsdatak.connectors`` entry-point group. Each ``SrcDef`` /
   ``AutoSrcDef`` / ``DestDef`` exposes the concrete config class
   (``.src`` / ``.dest``), ``.table_mode`` (sources), ``.cardinality``,

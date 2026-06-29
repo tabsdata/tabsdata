@@ -512,9 +512,13 @@ def check_plugin_param_type(
 class SrcDef[C: Conn, S: Src]:
     """Entry-point registration for a batch :class:`Src` binding.
 
-    :param src_type: Wire-stable identifier (``"mysql"``,
-        ``"postgres"``, ...). Used by the registry to look up the
-        binding when loading a serialised flow.
+    :param type_: Wire-stable identifier, unique across *all* plugins
+        -- batch sources, stream sources and destinations share one
+        namespace (``"mysql-sql-in"``, ``"s3-file-in"``, ...). The
+        registry uses it as the single key for this binding.
+    :param system: Human-readable name of the external system this
+        connector targets (e.g. ``"MySQL"``, ``"AWS S3"``); shown by
+        ``tdk connection types``.
     :param src_version: Connector schema version.
     :param conn: Concrete :class:`Conn` subclass the source binds
         to.
@@ -530,7 +534,8 @@ class SrcDef[C: Conn, S: Src]:
         introspection of the connection.
     """
 
-    src_type: str
+    type_: str
+    system: str
     src_version: str
     conn: Type[C]
     src: Type[S]
@@ -553,8 +558,11 @@ class SrcDef[C: Conn, S: Src]:
 class StreamSrcDef[C: Conn, S: StreamSrc]:
     """Entry-point registration for a :class:`StreamSrc` binding.
 
-    :param src_type: Wire-stable identifier (``"mysql-cdc"``,
-        ``"postgres-cdc"``, ``"db2-cdc"``, ...).
+    :param type_: Wire-stable identifier, unique across *all* plugins
+        (``"mysql-cdc"``, ``"postgres-cdc"``, ``"kafka-topic-in"``, ...).
+    :param system: Human-readable name of the external system this
+        connector targets (e.g. ``"MySQL"``, ``"Apache Kafka"``); shown by
+        ``tdk connection types``.
     :param src_version: Connector schema version.
     :param conn: Concrete :class:`Conn` subclass the stream source
         binds to.
@@ -573,7 +581,8 @@ class StreamSrcDef[C: Conn, S: StreamSrc]:
     :param explorer: Optional :class:`Explorer` for tooling.
     """
 
-    src_type: str
+    type_: str
+    system: str
     src_version: str
     conn: Type[C]
     src: Type[S]
@@ -598,8 +607,11 @@ class StreamSrcDef[C: Conn, S: StreamSrc]:
 class DestDef[C: Conn, D: Dest]:
     """Entry-point registration for a :class:`Dest` binding.
 
-    :param dest_type: Wire-stable identifier (``"mysql"``,
-        ``"postgres"``, ...).
+    :param type_: Wire-stable identifier, unique across *all* plugins
+        (``"mysql-sql-out"``, ``"s3-file-out"``, ...).
+    :param system: Human-readable name of the external system this
+        connector targets (e.g. ``"MySQL"``, ``"AWS S3"``); shown by
+        ``tdk connection types``.
     :param dest_version: Connector schema version.
     :param conn: Concrete :class:`Conn` subclass the destination
         binds to.
@@ -613,7 +625,8 @@ class DestDef[C: Conn, D: Dest]:
     :param explorer: Optional :class:`Explorer` for tooling.
     """
 
-    dest_type: str
+    type_: str
+    system: str
     dest_version: str
     conn: Type[C]
     dest: Type[D]

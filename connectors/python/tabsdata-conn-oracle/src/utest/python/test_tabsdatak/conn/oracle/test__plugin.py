@@ -199,7 +199,7 @@ def test_oracle_src_def_wires_plugin_and_explorer():
     assert plugin.ORACLE_SRC.src is OracleSrc
     assert plugin.ORACLE_SRC.plugin is plugin.OracleSrcPlugin
     assert plugin.ORACLE_SRC.explorer is plugin.OracleSrcExplorer
-    assert plugin.ORACLE_SRC.src_type == "oracle"
+    assert plugin.ORACLE_SRC.type_ == "oracle-sql-in"
 
 
 def test_oracle_dest_def_wires_plugin_and_explorer():
@@ -207,7 +207,7 @@ def test_oracle_dest_def_wires_plugin_and_explorer():
     assert plugin.ORACLE_DEST.dest is OracleDest
     assert plugin.ORACLE_DEST.plugin is plugin.OracleDestPlugin
     assert plugin.ORACLE_DEST.explorer is plugin.OracleDestExplorer
-    assert plugin.ORACLE_DEST.dest_type == "oracle"
+    assert plugin.ORACLE_DEST.type_ == "oracle-sql-out"
 
 
 def test_oracle_src_cardinality_uses_queries_length():

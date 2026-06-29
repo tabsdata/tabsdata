@@ -266,7 +266,7 @@ def test_clickhouse_dest_def_wires_plugin_and_explorer():
     assert plugin.CLICKHOUSE_DEST.dest is ClickHouseDest
     assert plugin.CLICKHOUSE_DEST.plugin is plugin._ClickHouseDestPlugin
     assert plugin.CLICKHOUSE_DEST.explorer is plugin._ClickHouseExplorer
-    assert plugin.CLICKHOUSE_DEST.dest_type == "clickhouse"
+    assert plugin.CLICKHOUSE_DEST.type_ == "clickhouse-bulk-out"
 
 
 def test_clickhouse_dest_cardinality_uses_tables_length():

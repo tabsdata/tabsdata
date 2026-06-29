@@ -135,7 +135,7 @@ def test_localfile_src_def_wires_plugin_and_explorer():
     assert plugin.LOCALFILE_SRC.src is LocalFileSrc
     assert plugin.LOCALFILE_SRC.plugin is plugin.LocalFileSrcPlugin
     assert plugin.LOCALFILE_SRC.explorer is plugin.LocalFileSrcExplorer
-    assert plugin.LOCALFILE_SRC.src_type == "localfile"
+    assert plugin.LOCALFILE_SRC.type_ == "local-file-in"
 
 
 def test_localfile_dest_def_wires_plugin_and_explorer():
@@ -143,7 +143,7 @@ def test_localfile_dest_def_wires_plugin_and_explorer():
     assert plugin.LOCALFILE_DEST.dest is LocalFileDest
     assert plugin.LOCALFILE_DEST.plugin is plugin.LocalFileDestPlugin
     assert plugin.LOCALFILE_DEST.explorer is plugin.LocalFileDestExplorer
-    assert plugin.LOCALFILE_DEST.dest_type == "localfile"
+    assert plugin.LOCALFILE_DEST.type_ == "local-file-out"
 
 
 def test_localfile_cardinality_uses_paths_length():

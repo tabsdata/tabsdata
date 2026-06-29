@@ -199,7 +199,7 @@ def test_mssql_src_def_wires_plugin_and_explorer():
     assert plugin.MSSQL_SRC.src is MSSQLSrc
     assert plugin.MSSQL_SRC.plugin is plugin.MSSQLSrcPlugin
     assert plugin.MSSQL_SRC.explorer is plugin.MSSQLSrcExplorer
-    assert plugin.MSSQL_SRC.src_type == "mssql"
+    assert plugin.MSSQL_SRC.type_ == "mssql-sql-in"
 
 
 def test_mssql_dest_def_wires_plugin_and_explorer():
@@ -207,7 +207,7 @@ def test_mssql_dest_def_wires_plugin_and_explorer():
     assert plugin.MSSQL_DEST.dest is MSSQLDest
     assert plugin.MSSQL_DEST.plugin is plugin.MSSQLDestPlugin
     assert plugin.MSSQL_DEST.explorer is plugin.MSSQLDestExplorer
-    assert plugin.MSSQL_DEST.dest_type == "mssql"
+    assert plugin.MSSQL_DEST.type_ == "mssql-sql-out"
 
 
 def test_mssql_src_cardinality_uses_queries_length():

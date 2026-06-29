@@ -4,9 +4,11 @@ entry-point group.
 On first lookup, :func:`_scan` walks every installed entry point,
 loads the registration dataclass (:class:`~tabsdatak.spi.SrcDef` /
 :class:`~tabsdatak.spi.StreamSrcDef` / :class:`~tabsdatak.spi.DestDef`),
-and indexes it by both the Python class (e.g. ``MySQLSrc``) and the
-wire-stable ``src_type`` / ``dest_type`` identifier. Duplicates
-warn-and-skip; the first registration wins.
+and indexes it by its wire-stable ``type_`` identifier. ``type_`` is
+unique across *all* plugins -- batch sources, stream sources and
+destinations share a single namespace -- so one dictionary keyed by
+``type_`` holds every binding. Duplicates warn-and-skip; the first
+registration wins.
 
 Per-process in-memory registrations made via the ``register_*``
 hooks are tracked separately so they survive
@@ -18,43 +20,35 @@ from __future__ import annotations
 
 import importlib.metadata
 import warnings
-from typing import Type
+from typing import Type, Union
 
 from tabsdatak.api import Dest, Src, StreamSrc
 from tabsdatak.spi import DestDef, SrcDef, StreamSrcDef
 
 _ENTRY_POINT_GROUP = "tabsdatak.connectors"
 
+# A registration is one of the three Def dataclasses; they all share a
+# single ``type_`` namespace.
+_Def = Union[SrcDef, StreamSrcDef, DestDef]
 
-# Lazy caches. Stay ``None`` until something actually triggers the
-# scan; the public ``avail_*`` accessors and the internal ``_get_*``
-# helpers build the indices on first access.
-_SRC_BY_CLASS: dict[Type[Src], SrcDef] | None = None
-_STREAM_SRC_BY_CLASS: dict[Type[StreamSrc], StreamSrcDef] | None = None
-_DEST_BY_CLASS: dict[Type[Dest], DestDef] | None = None
-_SRC_BY_TYPE: dict[str, SrcDef] | None = None
-_STREAM_SRC_BY_TYPE: dict[str, StreamSrcDef] | None = None
-_DEST_BY_TYPE: dict[str, DestDef] | None = None
+
+# Lazy cache. Stays ``None`` until something actually triggers the
+# scan; the public ``avail_*`` accessors and the internal ``get_*``
+# helpers build the index on first access. Keyed by the binding's
+# wire-stable, globally-unique ``type_``.
+_REGISTRY: dict[str, _Def] | None = None
 
 # Persistent record of in-process registrations made via
 # :func:`register_src` / :func:`register_stream_src` / :func:`register_dest`.
 # Re-applied after every :func:`reload_connectors` so test fixtures
 # (and any other dynamic registrations) survive a registry reload.
-_INJECTED_SRCS: list[SrcDef] = []
-_INJECTED_STREAM_SRCS: list[StreamSrcDef] = []
-_INJECTED_DESTS: list[DestDef] = []
+_INJECTED: list[_Def] = []
 
 
 def _scan() -> None:
-    global _SRC_BY_CLASS, _STREAM_SRC_BY_CLASS, _DEST_BY_CLASS
-    global _SRC_BY_TYPE, _STREAM_SRC_BY_TYPE, _DEST_BY_TYPE
+    global _REGISTRY
 
-    src_by_cls: dict[Type[Src], SrcDef] = {}
-    stream_src_by_cls: dict[Type[StreamSrc], StreamSrcDef] = {}
-    dest_by_cls: dict[Type[Dest], DestDef] = {}
-    src_by_type: dict[str, SrcDef] = {}
-    stream_src_by_type: dict[str, StreamSrcDef] = {}
-    dest_by_type: dict[str, DestDef] = {}
+    registry: dict[str, _Def] = {}
 
     for ep in importlib.metadata.entry_points(group=_ENTRY_POINT_GROUP):
         try:
@@ -68,40 +62,7 @@ def _scan() -> None:
             )
             continue
 
-        if isinstance(obj, SrcDef):
-            if obj.src in src_by_cls:
-                warnings.warn(
-                    f"tabsdatak.connectors: duplicate SrcDef for "
-                    f"{obj.src.__qualname__} (existing wins)",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                continue
-            src_by_cls[obj.src] = obj
-            src_by_type[obj.src_type] = obj
-        elif isinstance(obj, StreamSrcDef):
-            if obj.src in stream_src_by_cls:
-                warnings.warn(
-                    f"tabsdatak.connectors: duplicate StreamSrcDef "
-                    f"for {obj.src.__qualname__} (existing wins)",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                continue
-            stream_src_by_cls[obj.src] = obj
-            stream_src_by_type[obj.src_type] = obj
-        elif isinstance(obj, DestDef):
-            if obj.dest in dest_by_cls:
-                warnings.warn(
-                    f"tabsdatak.connectors: duplicate DestDef for "
-                    f"{obj.dest.__qualname__} (existing wins)",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                continue
-            dest_by_cls[obj.dest] = obj
-            dest_by_type[obj.dest_type] = obj
-        else:
+        if not isinstance(obj, (SrcDef, StreamSrcDef, DestDef)):
             warnings.warn(
                 f"tabsdatak.connectors: entry point {ep.name!r} "
                 f"resolved to {type(obj).__name__}, expected "
@@ -109,31 +70,37 @@ def _scan() -> None:
                 RuntimeWarning,
                 stacklevel=2,
             )
+            continue
 
-    _SRC_BY_CLASS = src_by_cls
-    _STREAM_SRC_BY_CLASS = stream_src_by_cls
-    _DEST_BY_CLASS = dest_by_cls
-    _SRC_BY_TYPE = dict(sorted(src_by_type.items()))
-    _STREAM_SRC_BY_TYPE = dict(sorted(stream_src_by_type.items()))
-    _DEST_BY_TYPE = dict(sorted(dest_by_type.items()))
+        if obj.type_ in registry:
+            warnings.warn(
+                f"tabsdatak.connectors: duplicate connector type "
+                f"{obj.type_!r} (existing wins)",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
+
+        registry[obj.type_] = obj
+
+    _REGISTRY = dict(sorted(registry.items()))
 
     # Always re-apply previously-injected fixtures so they survive any
     # scan -- whether triggered by lazy ``_ensure`` or by an explicit
     # ``reload_connectors``.
-    for defx in _INJECTED_SRCS:
-        _SRC_BY_CLASS[defx.src] = defx
-        _SRC_BY_TYPE[defx.src_type] = defx
-    for defx in _INJECTED_STREAM_SRCS:
-        _STREAM_SRC_BY_CLASS[defx.src] = defx
-        _STREAM_SRC_BY_TYPE[defx.src_type] = defx
-    for defx in _INJECTED_DESTS:
-        _DEST_BY_CLASS[defx.dest] = defx
-        _DEST_BY_TYPE[defx.dest_type] = defx
+    for defx in _INJECTED:
+        _REGISTRY[defx.type_] = defx
 
 
 def _ensure() -> None:
-    if _SRC_BY_CLASS is None:
+    if _REGISTRY is None:
         _scan()
+
+
+def _registry() -> dict[str, _Def]:
+    _ensure()
+    assert _REGISTRY is not None  # noqa: S101 -- _ensure populates
+    return _REGISTRY
 
 
 # ---------------------------------------------------------------------------
@@ -142,27 +109,18 @@ def _ensure() -> None:
 
 
 def avail_srcs() -> dict[str, SrcDef]:
-    """Snapshot of registered batch sources, keyed by
-    ``src_type``."""
-    _ensure()
-    assert _SRC_BY_TYPE is not None
-    return dict(_SRC_BY_TYPE)
+    """Snapshot of registered batch sources, keyed by ``type_``."""
+    return {k: v for k, v in _registry().items() if isinstance(v, SrcDef)}
 
 
 def avail_stream_srcs() -> dict[str, StreamSrcDef]:
-    """Snapshot of registered stream sources, keyed by
-    ``src_type``."""
-    _ensure()
-    assert _STREAM_SRC_BY_TYPE is not None
-    return dict(_STREAM_SRC_BY_TYPE)
+    """Snapshot of registered stream sources, keyed by ``type_``."""
+    return {k: v for k, v in _registry().items() if isinstance(v, StreamSrcDef)}
 
 
 def avail_dests() -> dict[str, DestDef]:
-    """Snapshot of registered destinations, keyed by
-    ``dest_type``."""
-    _ensure()
-    assert _DEST_BY_TYPE is not None
-    return dict(_DEST_BY_TYPE)
+    """Snapshot of registered destinations, keyed by ``type_``."""
+    return {k: v for k, v in _registry().items() if isinstance(v, DestDef)}
 
 
 # ---------------------------------------------------------------------------
@@ -173,47 +131,41 @@ def avail_dests() -> dict[str, DestDef]:
 def get_src(cls: Type[Src]) -> SrcDef:
     """Resolve a concrete :class:`Src` subclass to its registered
     :class:`SrcDef`. Raises ``KeyError`` if no binding exists."""
-    _ensure()
-    assert _SRC_BY_CLASS is not None  # noqa: S101 -- _ensure populates
-    try:
-        return _SRC_BY_CLASS[cls]
-    except KeyError:
-        raise KeyError(
-            f"no SrcDef registered for {cls.__qualname__}; install "
-            f"the connector package or check its entry-point "
-            f"declaration in pyproject.toml"
-        ) from None
+    for defx in _registry().values():
+        if isinstance(defx, SrcDef) and defx.src is cls:
+            return defx
+    raise KeyError(
+        f"no SrcDef registered for {cls.__qualname__}; install "
+        f"the connector package or check its entry-point "
+        f"declaration in pyproject.toml"
+    )
 
 
 def get_stream_src(cls: Type[StreamSrc]) -> StreamSrcDef:
     """Resolve a concrete :class:`StreamSrc` subclass to its
     registered :class:`StreamSrcDef`. Raises ``KeyError`` if no
     binding exists."""
-    _ensure()
-    assert _STREAM_SRC_BY_CLASS is not None
-    try:
-        return _STREAM_SRC_BY_CLASS[cls]
-    except KeyError:
-        raise KeyError(
-            f"no StreamSrcDef registered for {cls.__qualname__}; "
-            f"install the connector package or check its entry-point "
-            f"declaration in pyproject.toml"
-        ) from None
+    for defx in _registry().values():
+        if isinstance(defx, StreamSrcDef) and defx.src is cls:
+            return defx
+    raise KeyError(
+        f"no StreamSrcDef registered for {cls.__qualname__}; "
+        f"install the connector package or check its entry-point "
+        f"declaration in pyproject.toml"
+    )
 
 
 def get_dest(cls: Type[Dest]) -> DestDef:
     """Resolve a concrete :class:`Dest` subclass to its registered
     :class:`DestDef`. Raises ``KeyError`` if no binding exists."""
-    _ensure()
-    assert _DEST_BY_CLASS is not None
-    try:
-        return _DEST_BY_CLASS[cls]
-    except KeyError:
-        raise KeyError(
-            f"no DestDef registered for {cls.__qualname__}; install "
-            f"the connector package or check its entry-point "
-            f"declaration in pyproject.toml"
-        ) from None
+    for defx in _registry().values():
+        if isinstance(defx, DestDef) and defx.dest is cls:
+            return defx
+    raise KeyError(
+        f"no DestDef registered for {cls.__qualname__}; install "
+        f"the connector package or check its entry-point "
+        f"declaration in pyproject.toml"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -224,44 +176,29 @@ def get_dest(cls: Type[Dest]) -> DestDef:
 def register_src(defx: SrcDef) -> None:
     """Inject a :class:`SrcDef` at runtime (test fixtures,
     in-process plugins). Survives :func:`reload_connectors`."""
-    _ensure()
-    assert _SRC_BY_CLASS is not None and _SRC_BY_TYPE is not None
-    _SRC_BY_CLASS[defx.src] = defx
-    _SRC_BY_TYPE[defx.src_type] = defx
-    _INJECTED_SRCS.append(defx)
+    _registry()[defx.type_] = defx
+    _INJECTED.append(defx)
 
 
 def register_stream_src(defx: StreamSrcDef) -> None:
     """Inject a :class:`StreamSrcDef` at runtime. Survives
     :func:`reload_connectors`."""
-    _ensure()
-    assert _STREAM_SRC_BY_CLASS is not None and _STREAM_SRC_BY_TYPE is not None
-    _STREAM_SRC_BY_CLASS[defx.src] = defx
-    _STREAM_SRC_BY_TYPE[defx.src_type] = defx
-    _INJECTED_STREAM_SRCS.append(defx)
+    _registry()[defx.type_] = defx
+    _INJECTED.append(defx)
 
 
 def register_dest(defx: DestDef) -> None:
     """Inject a :class:`DestDef` at runtime. Survives
     :func:`reload_connectors`."""
-    _ensure()
-    assert _DEST_BY_CLASS is not None and _DEST_BY_TYPE is not None
-    _DEST_BY_CLASS[defx.dest] = defx
-    _DEST_BY_TYPE[defx.dest_type] = defx
-    _INJECTED_DESTS.append(defx)
+    _registry()[defx.type_] = defx
+    _INJECTED.append(defx)
 
 
 def reload_connectors() -> None:
     """Drop the cached registry and rescan entry points. Any
     in-process ``register_*`` injections are reapplied."""
-    # ``_scan`` re-applies ``_INJECTED_*`` at the end, so a reload is
-    # just "clear caches + re-scan".
-    global _SRC_BY_CLASS, _STREAM_SRC_BY_CLASS, _DEST_BY_CLASS
-    global _SRC_BY_TYPE, _STREAM_SRC_BY_TYPE, _DEST_BY_TYPE
-    _SRC_BY_CLASS = None
-    _STREAM_SRC_BY_CLASS = None
-    _DEST_BY_CLASS = None
-    _SRC_BY_TYPE = None
-    _STREAM_SRC_BY_TYPE = None
-    _DEST_BY_TYPE = None
+    # ``_scan`` re-applies ``_INJECTED`` at the end, so a reload is
+    # just "clear cache + re-scan".
+    global _REGISTRY
+    _REGISTRY = None
     _scan()

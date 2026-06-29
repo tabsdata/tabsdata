@@ -392,7 +392,7 @@ def test_bigquery_dest_def_wires_plugin_and_explorer():
     assert plugin.BIGQUERY_DEST.dest is BigQueryDest
     assert plugin.BIGQUERY_DEST.plugin is plugin._BigQueryDestPlugin
     assert plugin.BIGQUERY_DEST.explorer is plugin._BigQueryExplorer
-    assert plugin.BIGQUERY_DEST.dest_type == "bigquery"
+    assert plugin.BIGQUERY_DEST.type_ == "bigquery-bulk-out"
     assert plugin.BIGQUERY_DEST.dest_version == "v1"
 
 

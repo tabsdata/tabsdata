@@ -567,7 +567,7 @@ def test_druid_dest_def_wires_plugin_and_explorer():
     assert plugin.DRUID_DEST.dest is DruidDest
     assert plugin.DRUID_DEST.plugin is plugin.DruidDestPlugin
     assert plugin.DRUID_DEST.explorer is plugin.DruidExplorer
-    assert plugin.DRUID_DEST.dest_type == "druid"
+    assert plugin.DRUID_DEST.type_ == "druid-bulk-out"
 
 
 def test_druid_dest_cardinality_uses_tables_length():

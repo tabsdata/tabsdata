@@ -331,7 +331,8 @@ class KafkaExplorer(Explorer[KafkaStreamSrcConn]):
 
 KAFKA_STREAM_SRC = StreamSrcDef(
     conn=KafkaStreamSrcConn,
-    src_type="kafka",
+    type_="kafka-topic-in",
+    system="Apache Kafka",
     src_version="v1",
     src=KafkaStreamSrc,
     # One Kafka topic -> one output table; cardinality is always 1.

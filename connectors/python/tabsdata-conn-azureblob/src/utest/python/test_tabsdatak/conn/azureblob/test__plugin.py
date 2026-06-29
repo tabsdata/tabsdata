@@ -190,7 +190,7 @@ def test_azureblob_src_def_wires_plugin_and_explorer():
     assert plugin.AZURE_BLOB_SRC.src is AzureBlobSrc
     assert plugin.AZURE_BLOB_SRC.plugin is plugin.AzureBlobSrcPlugin
     assert plugin.AZURE_BLOB_SRC.explorer is plugin.AzureBlobSrcExplorer
-    assert plugin.AZURE_BLOB_SRC.src_type == "azureBlob"
+    assert plugin.AZURE_BLOB_SRC.type_ == "az-file-in"
 
 
 def test_azureblob_dest_def_wires_plugin_and_explorer():
@@ -198,7 +198,7 @@ def test_azureblob_dest_def_wires_plugin_and_explorer():
     assert plugin.AZURE_BLOB_DEST.dest is AzureBlobDest
     assert plugin.AZURE_BLOB_DEST.plugin is plugin.AzureBlobDestPlugin
     assert plugin.AZURE_BLOB_DEST.explorer is plugin.AzureBlobDestExplorer
-    assert plugin.AZURE_BLOB_DEST.dest_type == "azureBlob"
+    assert plugin.AZURE_BLOB_DEST.type_ == "az-file-out"
 
 
 def test_azureblob_cardinality_uses_paths_length():

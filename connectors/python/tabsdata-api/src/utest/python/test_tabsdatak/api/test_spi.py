@@ -197,7 +197,8 @@ class _SDExplorer(Explorer[_Conn]):
 def test_src_def_constructs_with_valid_fields():
     SrcDef(
         conn=_Conn,
-        src_type="ok",
+        type_="ok",
+        system="Test",
         src_version="v1",
         src=_SDSrc,
         table_mode=TableMode.SINGLE,
@@ -210,7 +211,8 @@ def test_src_def_constructs_with_valid_fields():
 def test_stream_src_def_constructs_with_valid_fields():
     StreamSrcDef(
         conn=_Conn,
-        src_type="ok",
+        type_="ok",
+        system="Test",
         src_version="v1",
         src=_SDStreamSrc,
         cardinality=lambda s: 1,
@@ -223,7 +225,8 @@ def test_stream_src_def_constructs_with_valid_fields():
 def test_dest_def_constructs_with_valid_fields():
     DestDef(
         conn=_Conn,
-        dest_type="ok",
+        type_="ok",
+        system="Test",
         dest_version="v1",
         dest=_SDDest,
         cardinality=lambda d: 1,
@@ -287,7 +290,8 @@ def test_src_def_rejects_plugin_with_mismatched_src_param():
     with pytest.raises(ApiException) as excinfo:
         SrcDef(
             conn=_Conn,
-            src_type="bad",
+            type_="bad",
+            system="Test",
             src_version="v1",
             src=_SDSrc,
             table_mode=TableMode.SINGLE,
@@ -302,7 +306,8 @@ def test_src_def_rejects_plugin_with_mismatched_conn_param():
     with pytest.raises(ApiException) as excinfo:
         SrcDef(
             conn=_Conn,
-            src_type="bad",
+            type_="bad",
+            system="Test",
             src_version="v1",
             src=_SDSrc,
             table_mode=TableMode.SINGLE,
@@ -317,7 +322,8 @@ def test_stream_src_def_rejects_plugin_with_mismatched_stream_src_param():
     with pytest.raises(ApiException) as excinfo:
         StreamSrcDef(
             conn=_Conn,
-            src_type="bad",
+            type_="bad",
+            system="Test",
             src_version="v1",
             src=_SDStreamSrc,
             cardinality=lambda s: 1,
@@ -332,7 +338,8 @@ def test_dest_def_rejects_plugin_with_mismatched_dest_param():
     with pytest.raises(ApiException) as excinfo:
         DestDef(
             conn=_Conn,
-            dest_type="bad",
+            type_="bad",
+            system="Test",
             dest_version="v1",
             dest=_SDDest,
             cardinality=lambda d: 1,
@@ -356,7 +363,8 @@ def test_src_def_rejects_explorer_with_mismatched_conn():
     with pytest.raises(ApiException) as excinfo:
         SrcDef(
             conn=_Conn,
-            src_type="bad",
+            type_="bad",
+            system="Test",
             src_version="v1",
             src=_SDSrc,
             table_mode=TableMode.SINGLE,
@@ -378,7 +386,8 @@ def test_dest_def_rejects_explorer_with_mismatched_conn():
     with pytest.raises(ApiException) as excinfo:
         DestDef(
             conn=_Conn,
-            dest_type="bad",
+            type_="bad",
+            system="Test",
             dest_version="v1",
             dest=_SDDest,
             cardinality=lambda d: 1,
@@ -393,7 +402,8 @@ def test_src_def_explorer_none_skips_explorer_check():
     # plugin / src checks still run.
     SrcDef(
         conn=_Conn,
-        src_type="ok",
+        type_="ok",
+        system="Test",
         src_version="v1",
         src=_SDSrc,
         table_mode=TableMode.SINGLE,
@@ -415,7 +425,8 @@ def test_src_def_accepts_explorer_with_loose_conn_annotation():
 
     SrcDef(
         conn=_Conn,
-        src_type="ok",
+        type_="ok",
+        system="Test",
         src_version="v1",
         src=_SDSrc,
         table_mode=TableMode.SINGLE,

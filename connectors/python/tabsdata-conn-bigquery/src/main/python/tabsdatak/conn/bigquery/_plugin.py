@@ -235,7 +235,8 @@ class _BigQueryExplorer(Explorer[BigQueryDestConn]):
 
 BIGQUERY_DEST = DestDef(
     conn=BigQueryDestConn,
-    dest_type="bigquery",
+    type_="bigquery-bulk-out",
+    system="Google BigQuery",
     dest_version="v1",
     dest=BigQueryDest,
     cardinality=lambda dest: len(dest.tables) if dest.tables is not None else 0,

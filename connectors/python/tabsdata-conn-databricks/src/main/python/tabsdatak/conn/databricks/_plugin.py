@@ -274,7 +274,8 @@ class _DatabricksDestExplorer(Explorer[DatabricksDestConn]):
 
 DATABRICKS_SRC = SrcDef(
     conn=DatabricksSrcConn,
-    src_type="databricks",
+    type_="databricks-bulk-in",
+    system="Databricks",
     src_version="v1",
     src=DatabricksSrc,
     table_mode=TableMode.SINGLE,
@@ -285,7 +286,8 @@ DATABRICKS_SRC = SrcDef(
 
 DATABRICKS_DEST = DestDef(
     conn=DatabricksDestConn,
-    dest_type="databricks",
+    type_="databricks-bulk-out",
+    system="Databricks",
     dest_version="v1",
     dest=DatabricksDest,
     cardinality=lambda dest: len(dest.tables),

@@ -76,20 +76,23 @@ def test_registration(name: str) -> None:
     defx = _load(_ENTRY_POINTS[name])
 
     if isinstance(defx, SrcDef):
-        assert defx.src_type, name
+        assert defx.type_, name
+        assert defx.system, name
         assert issubclass(defx.src, Src), name
         assert isinstance(defx.table_mode, TableMode), name
         assert callable(defx.cardinality), name
         assert issubclass(defx.plugin, SrcPlugin), name
         assert defx.explorer is None or issubclass(defx.explorer, Explorer), name
     elif isinstance(defx, DestDef):
-        assert defx.dest_type, name
+        assert defx.type_, name
+        assert defx.system, name
         assert issubclass(defx.dest, Dest), name
         assert callable(defx.cardinality), name
         assert issubclass(defx.plugin, DestPlugin), name
         assert defx.explorer is None or issubclass(defx.explorer, Explorer), name
     elif isinstance(defx, StreamSrcDef):
-        assert defx.src_type, name
+        assert defx.type_, name
+        assert defx.system, name
         assert issubclass(defx.src, StreamSrc), name
         assert callable(defx.cardinality), name
         assert issubclass(defx.plugin, StreamSrcPlugin), name

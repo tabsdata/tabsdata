@@ -199,7 +199,7 @@ def test_db2_src_def_wires_plugin_and_explorer():
     assert plugin.DB2_SRC.src is Db2Src
     assert plugin.DB2_SRC.plugin is plugin.Db2SrcPlugin
     assert plugin.DB2_SRC.explorer is plugin.Db2SrcExplorer
-    assert plugin.DB2_SRC.src_type == "db2"
+    assert plugin.DB2_SRC.type_ == "db2-sql-in"
 
 
 def test_db2_dest_def_wires_plugin_and_explorer():
@@ -207,7 +207,7 @@ def test_db2_dest_def_wires_plugin_and_explorer():
     assert plugin.DB2_DEST.dest is Db2Dest
     assert plugin.DB2_DEST.plugin is plugin.Db2DestPlugin
     assert plugin.DB2_DEST.explorer is plugin.Db2DestExplorer
-    assert plugin.DB2_DEST.dest_type == "db2"
+    assert plugin.DB2_DEST.type_ == "db2-sql-out"
 
 
 def test_db2_src_cardinality_uses_queries_length():

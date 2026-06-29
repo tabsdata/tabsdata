@@ -204,7 +204,7 @@ def test_postgres_src_def_wires_plugin_and_explorer():
     assert plugin.POSTGRES_SRC.src is PostgresSrc
     assert plugin.POSTGRES_SRC.plugin is plugin.PostgresSrcPlugin
     assert plugin.POSTGRES_SRC.explorer is plugin.PostgresSrcExplorer
-    assert plugin.POSTGRES_SRC.src_type == "postgres"
+    assert plugin.POSTGRES_SRC.type_ == "postgres-sql-in"
 
 
 def test_postgres_dest_def_wires_plugin_and_explorer():
@@ -212,7 +212,7 @@ def test_postgres_dest_def_wires_plugin_and_explorer():
     assert plugin.POSTGRES_DEST.dest is PostgresDest
     assert plugin.POSTGRES_DEST.plugin is plugin.PostgresDestPlugin
     assert plugin.POSTGRES_DEST.explorer is plugin.PostgresDestExplorer
-    assert plugin.POSTGRES_DEST.dest_type == "postgres"
+    assert plugin.POSTGRES_DEST.type_ == "postgres-sql-out"
 
 
 def test_postgres_src_cardinality_uses_queries_length():

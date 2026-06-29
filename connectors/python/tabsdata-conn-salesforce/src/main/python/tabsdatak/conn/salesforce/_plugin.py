@@ -121,7 +121,8 @@ class _SalesforceExplorer(Explorer[SalesforceSrcConn]):
 
 SALESFORCE_SRC = SrcDef(
     conn=SalesforceSrcConn,
-    src_type="salesforce",
+    type_="salesforce-sosql-in",
+    system="Salesforce",
     src_version="v1",
     src=SalesforceSrc,
     table_mode=TableMode.SINGLE,
@@ -133,7 +134,8 @@ SALESFORCE_SRC = SrcDef(
 
 SALESFORCE_REPORT_SRC = SrcDef(
     conn=SalesforceSrcConn,
-    src_type="salesforce_report",
+    type_="salesforce-report-in",
+    system="Salesforce",
     src_version="v1",
     src=SalesforceReportSrc,
     table_mode=TableMode.SINGLE,

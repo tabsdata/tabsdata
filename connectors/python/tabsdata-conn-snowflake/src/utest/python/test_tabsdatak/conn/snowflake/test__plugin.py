@@ -231,7 +231,7 @@ def test_snowflake_dest_def_wires_plugin_and_explorer():
     assert plugin.SNOWFLAKE_DEST.dest is SnowflakeDest
     assert plugin.SNOWFLAKE_DEST.plugin is plugin.SnowflakeDestPlugin
     assert plugin.SNOWFLAKE_DEST.explorer is plugin.SnowflakeExplorer
-    assert plugin.SNOWFLAKE_DEST.dest_type == "snowflake"
+    assert plugin.SNOWFLAKE_DEST.type_ == "snowflake-bulk-out"
     assert plugin.SNOWFLAKE_DEST.dest_version == "v1"
 
 

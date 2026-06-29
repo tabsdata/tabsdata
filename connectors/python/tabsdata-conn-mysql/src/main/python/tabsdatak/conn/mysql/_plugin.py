@@ -266,7 +266,8 @@ class MySQLDestExplorer(Explorer[MySQLDestConn]):
 
 MYSQL_SRC = SrcDef(
     conn=MySQLSrcConn,
-    src_type="mysql",
+    type_="mysql-sql-in",
+    system="MySQL",
     src_version="v1",
     src=MySQLSrc,
     table_mode=TableMode.SINGLE,
@@ -277,7 +278,8 @@ MYSQL_SRC = SrcDef(
 
 MYSQL_DEST = DestDef(
     conn=MySQLDestConn,
-    dest_type="mysql",
+    type_="mysql-sql-out",
+    system="MySQL",
     dest_version="v1",
     dest=MySQLDest,
     cardinality=lambda dest: len(dest.tables),

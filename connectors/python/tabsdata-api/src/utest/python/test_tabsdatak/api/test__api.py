@@ -148,7 +148,8 @@ class _SerdeSrc(m.Src):
 
 _connectors.register_src(spi.SrcDef(
         conn=spi.Conn,
-    src_type="serde_test_src",
+    type_="serde_test_src",
+    system="Test",
     src_version="v1",
     src=_SerdeSrc,
     table_mode=spi.TableMode.SINGLE,
@@ -165,7 +166,8 @@ class _SerdeDest(m.Dest):
 
 _connectors.register_dest(spi.DestDef(
         conn=spi.Conn,
-    dest_type="serde_test_dest",
+    type_="serde_test_dest",
+    system="Test",
     dest_version="v1",
     dest=_SerdeDest,
     cardinality=lambda dest: 1,

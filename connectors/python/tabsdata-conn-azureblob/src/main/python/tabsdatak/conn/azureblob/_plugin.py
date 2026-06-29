@@ -153,7 +153,8 @@ class AzureBlobDestExplorer(Explorer[AzureBlobDestConn]):
 
 AZURE_BLOB_SRC = SrcDef(
     conn=AzureBlobSrcConn,
-    src_type="azureBlob",
+    type_="az-file-in",
+    system="Azure Storage",
     src_version="v1",
     src=AzureBlobSrc,
     table_mode=TableMode.ARRAY,
@@ -164,7 +165,8 @@ AZURE_BLOB_SRC = SrcDef(
 
 AZURE_BLOB_DEST = DestDef(
     conn=AzureBlobDestConn,
-    dest_type="azureBlob",
+    type_="az-file-out",
+    system="Azure Storage",
     dest_version="v1",
     dest=AzureBlobDest,
     cardinality=lambda dest: len(dest.paths),

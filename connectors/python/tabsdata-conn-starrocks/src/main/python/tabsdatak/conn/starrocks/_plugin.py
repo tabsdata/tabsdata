@@ -138,7 +138,8 @@ class StarRocksExplorer(Explorer[StarRocksDestConn]):
 
 STARROCKS_DEST = DestDef(
     conn=StarRocksDestConn,
-    dest_type="starrocks",
+    type_="starrocks-bulk-out",
+    system="StarRocks",
     dest_version="v1",
     dest=StarRocksDest,
     cardinality=lambda dest: len(dest.tables),

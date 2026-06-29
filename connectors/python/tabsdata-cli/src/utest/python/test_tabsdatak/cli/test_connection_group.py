@@ -24,7 +24,7 @@ def _installed(type_: str, direction: str) -> bool:
 
 
 def test_template_emits_yaml():
-    result = CliRunner().invoke(cli, ["connection", "template", "-t", "localfile", "-d", "src"])
+    result = CliRunner().invoke(cli, ["connection", "template", "-t", "local-file-in", "-d", "src"])
     assert result.exit_code == 0, result.output
     assert "kind: localFileSrcConn" in result.output
     # YAML, not JSON -- no leading brace.
@@ -32,10 +32,10 @@ def test_template_emits_yaml():
 
 
 @pytest.mark.skipif(
-    not _installed("mysql", "src"), reason="mysql connector not installed"
+    not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
 )
 def test_template_yaml_carries_accepts_comments():
-    result = CliRunner().invoke(cli, ["connection", "template", "-t", "mysql", "-d", "src"])
+    result = CliRunner().invoke(cli, ["connection", "template", "-t", "mysql-sql-in", "-d", "src"])
     assert result.exit_code == 0, result.output
     # uri (str|Secret) carries an "# accepts:" note in union order.
     assert "# accepts: <value> | secret:<value>" in result.output
@@ -43,7 +43,7 @@ def test_template_yaml_carries_accepts_comments():
 
 def test_validate_reads_yaml(tmp_path):
     # Generate a template (YAML), write it, validate it through the CLI.
-    gen = CliRunner().invoke(cli, ["connection", "template", "-t", "localfile", "-d", "src"])
+    gen = CliRunner().invoke(cli, ["connection", "template", "-t", "local-file-in", "-d", "src"])
     assert gen.exit_code == 0, gen.output
     path = tmp_path / "conn.yaml"
     path.write_text(gen.output)

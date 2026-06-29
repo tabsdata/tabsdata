@@ -226,7 +226,8 @@ def _local_path(file_uri: str) -> Path:
 # manifest slot may list more than one parquet file.
 STREAM_STAGE_SRC = SrcDef(
     conn=_StreamStageSrcConn,
-    src_type="streamStage",
+    type_=".stream-stage",
+    system="Tabsdata",
     src_version="v1",
     src=StreamStageSrc,
     table_mode=TableMode.ARRAY,

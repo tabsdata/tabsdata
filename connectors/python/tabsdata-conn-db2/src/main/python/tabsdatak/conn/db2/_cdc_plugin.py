@@ -148,7 +148,8 @@ class Db2CdcExplorer(Explorer[Db2CdcStreamSrcConn]):
 
 DB2_CDC_STREAM_SRC = StreamSrcDef(
     conn=Db2CdcStreamSrcConn,
-    src_type="db2-cdc",
+    type_="db2-cdc",
+    system="IBM Db2",
     src_version="v1",
     src=Db2CdcStreamSrc,
     cardinality=lambda src: len(src.tables),

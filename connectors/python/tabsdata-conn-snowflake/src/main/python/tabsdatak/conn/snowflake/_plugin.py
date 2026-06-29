@@ -141,7 +141,8 @@ class SnowflakeExplorer(Explorer[SnowflakeDestConn]):
 
 SNOWFLAKE_DEST = DestDef(
     conn=SnowflakeDestConn,
-    dest_type="snowflake",
+    type_="snowflake-bulk-out",
+    system="Snowflake",
     dest_version="v1",
     dest=SnowflakeDest,
     cardinality=lambda dest: len(dest.tables),

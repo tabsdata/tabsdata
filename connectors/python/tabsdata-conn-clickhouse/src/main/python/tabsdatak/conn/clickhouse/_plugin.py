@@ -163,7 +163,8 @@ class _ClickHouseExplorer(Explorer[ClickHouseDestConn]):
 
 CLICKHOUSE_DEST = DestDef(
     conn=ClickHouseDestConn,
-    dest_type="clickhouse",
+    type_="clickhouse-bulk-out",
+    system="ClickHouse",
     dest_version="v1",
     dest=ClickHouseDest,
     cardinality=lambda dest: len(dest.tables),

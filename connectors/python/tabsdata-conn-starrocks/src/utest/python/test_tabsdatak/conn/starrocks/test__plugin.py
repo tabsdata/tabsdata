@@ -244,7 +244,7 @@ def test_starrocks_dest_def_wires_plugin_and_explorer():
     assert plugin.STARROCKS_DEST.dest is StarRocksDest
     assert plugin.STARROCKS_DEST.plugin is plugin.StarRocksDestPlugin
     assert plugin.STARROCKS_DEST.explorer is plugin.StarRocksExplorer
-    assert plugin.STARROCKS_DEST.dest_type == "starrocks"
+    assert plugin.STARROCKS_DEST.type_ == "starrocks-bulk-out"
 
 
 def test_starrocks_dest_cardinality_uses_tables_length():

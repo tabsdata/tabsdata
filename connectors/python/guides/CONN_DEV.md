@@ -149,14 +149,14 @@ class _<Name>Explorer(Explorer[<Name>Conn]):
 # `conn=<Name>Conn` binds this source to its connection *type*; the
 # registry/runtime uses it to resolve and inject the connection.
 <NAME>_SRC = SrcDef[<Name>Conn, <Name>Src](
-    src_type="<name>", src_version="v1",
+    type_="<name>-sql-in", src_version="v1",
     conn=<Name>Conn, src=<Name>Src, table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=_<Name>SrcPlugin, explorer=_<Name>Explorer,
 )
 
 <NAME>_DEST = DestDef[<Name>Conn, <Name>Dest](
-    dest_type="<name>", dest_version="v1",
+    type_="<name>-sql-out", dest_version="v1",
     conn=<Name>Conn, dest=<Name>Dest,
     cardinality=lambda dest: len(dest.tables),
     plugin=_<Name>DestPlugin, explorer=_<Name>Explorer,

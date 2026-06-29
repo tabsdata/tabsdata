@@ -153,7 +153,7 @@ break the otherwise-circular relationships):
     @publisher(              # _<name>_plugin.py         PublisherInfo (dataclass)
         source=s,             MYSQL_SRC = SrcDef[          @model_validator
         output_tables=          MySQLConn, MySQLSrc](        _get_src(type(source))
-          [...])                src_type="mysql",            calls
+          [...])                type_="mysql-sql-in",        calls
     def my_pub(...):            cardinality=lambda s:        check_callable_signature
         ...                       len(s.queries),
                                 plugin=_MySQLSrcPlugin,
@@ -169,7 +169,7 @@ break the otherwise-circular relationships):
    `_<name>_plugin.py`:
    ```python
    MYSQL_SRC = SrcDef[MySQLConn, MySQLSrc](
-       src_type="mysql", src_version="v1",
+       type_="mysql-sql-in", src_version="v1",
        src=MySQLSrc, table_mode=TableMode.SINGLE,
        cardinality=lambda src: len(src.queries),
        plugin=_MySQLSrcPlugin, explorer=_MySQLExplorer,

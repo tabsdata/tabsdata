@@ -145,7 +145,8 @@ class MySQLCdcExplorer(Explorer[MySQLCdcStreamSrcConn]):
 
 MYSQL_CDC_STREAM_SRC = StreamSrcDef(
     conn=MySQLCdcStreamSrcConn,
-    src_type="mysql-cdc",
+    type_="mysql-cdc",
+    system="MySQL",
     src_version="v1",
     src=MySQLCdcStreamSrc,
     cardinality=lambda src: len(src.tables),

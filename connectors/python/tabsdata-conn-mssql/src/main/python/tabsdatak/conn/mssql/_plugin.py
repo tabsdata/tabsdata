@@ -251,7 +251,8 @@ class MSSQLDestExplorer(Explorer[MSSQLDestConn]):
 
 MSSQL_SRC = SrcDef(
     conn=MSSQLSrcConn,
-    src_type="mssql",
+    type_="mssql-sql-in",
+    system="MS SQLServer",
     src_version="v1",
     src=MSSQLSrc,
     table_mode=TableMode.SINGLE,
@@ -262,7 +263,8 @@ MSSQL_SRC = SrcDef(
 
 MSSQL_DEST = DestDef(
     conn=MSSQLDestConn,
-    dest_type="mssql",
+    type_="mssql-sql-out",
+    system="MS SQLServer",
     dest_version="v1",
     dest=MSSQLDest,
     cardinality=lambda dest: len(dest.tables),

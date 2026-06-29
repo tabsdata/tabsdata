@@ -42,7 +42,8 @@ from tabsdatak.spi import (
 def test_src_entries_are_well_typed():
     for src_type, defx in avail_srcs().items():
         assert isinstance(defx, SrcDef), src_type
-        assert defx.src_type == src_type
+        assert defx.type_ == src_type
+        assert defx.system, src_type
         assert issubclass(defx.src, Src), src_type
         assert isinstance(defx.table_mode, TableMode), src_type
         assert callable(defx.cardinality), src_type
@@ -53,7 +54,8 @@ def test_src_entries_are_well_typed():
 def test_dest_entries_are_well_typed():
     for dest_type, defx in avail_dests().items():
         assert isinstance(defx, DestDef), dest_type
-        assert defx.dest_type == dest_type
+        assert defx.type_ == dest_type
+        assert defx.system, dest_type
         assert issubclass(defx.dest, Dest), dest_type
         assert callable(defx.cardinality), dest_type
         assert issubclass(defx.plugin, DestPlugin), dest_type
@@ -84,14 +86,14 @@ def test_get_src_resolves_class_to_defx():
     from tabsdatak.conn.localfile import LocalFileSrc
     defx = get_src(LocalFileSrc)
     assert defx.src is LocalFileSrc
-    assert defx.src_type == "localfile"
+    assert defx.type_ == "local-file-in"
 
 
 def test_get_dest_resolves_class_to_defx():
     from tabsdatak.conn.localfile import LocalFileDest
     defx = get_dest(LocalFileDest)
     assert defx.dest is LocalFileDest
-    assert defx.dest_type == "localfile"
+    assert defx.type_ == "local-file-out"
 
 
 def test_get_src_unregistered_class_raises_keyerror():
@@ -116,5 +118,5 @@ def test_reload_rebuilds_registry():
     reload_connectors()
     assert before_srcs <= set(avail_srcs())
     assert before_dests <= set(avail_dests())
-    assert "localfile" in avail_srcs()
-    assert "localfile" in avail_dests()
+    assert "local-file-in" in avail_srcs()
+    assert "local-file-out" in avail_dests()

@@ -560,7 +560,7 @@ def test_mongodb_dest_def_wires_plugin_and_explorer():
     assert plugin.MONGODB_DEST.dest is MongoDBDest
     assert plugin.MONGODB_DEST.plugin is plugin._MongoDBDestPlugin
     assert plugin.MONGODB_DEST.explorer is plugin._MongoDBExplorer
-    assert plugin.MONGODB_DEST.dest_type == "mongodb"
+    assert plugin.MONGODB_DEST.type_ == "mongodb-out"
 
 
 def test_mongodb_dest_cardinality_uses_collections_length():

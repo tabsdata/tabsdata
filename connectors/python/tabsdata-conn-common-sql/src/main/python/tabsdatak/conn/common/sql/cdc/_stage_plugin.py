@@ -214,7 +214,8 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
 # may carry zero files (fully filtered) or one (the collapsed batch).
 CDC_STAGE_SRC = SrcDef(
     conn=_StreamStageSrcConn,
-    src_type="cdcStage",
+    type_=".cdc-stage",
+    system="Tabsdata",
     src_version="v1",
     src=CdcStageSrc,
     table_mode=TableMode.ARRAY,

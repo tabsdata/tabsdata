@@ -207,7 +207,7 @@ def test_mysql_src_def_wires_plugin_and_explorer():
     assert plugin.MYSQL_SRC.src is MySQLSrc
     assert plugin.MYSQL_SRC.plugin is plugin.MySQLSrcPlugin
     assert plugin.MYSQL_SRC.explorer is plugin.MySQLSrcExplorer
-    assert plugin.MYSQL_SRC.src_type == "mysql"
+    assert plugin.MYSQL_SRC.type_ == "mysql-sql-in"
 
 
 def test_mysql_dest_def_wires_plugin_and_explorer():
@@ -215,7 +215,7 @@ def test_mysql_dest_def_wires_plugin_and_explorer():
     assert plugin.MYSQL_DEST.dest is MySQLDest
     assert plugin.MYSQL_DEST.plugin is plugin.MySQLDestPlugin
     assert plugin.MYSQL_DEST.explorer is plugin.MySQLDestExplorer
-    assert plugin.MYSQL_DEST.dest_type == "mysql"
+    assert plugin.MYSQL_DEST.type_ == "mysql-sql-out"
 
 
 def test_mysql_src_cardinality_uses_queries_length():

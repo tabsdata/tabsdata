@@ -409,7 +409,8 @@ class _MongoDBExplorer(Explorer[MongoDBDestConn]):
 
 MONGODB_DEST = DestDef(
     conn=MongoDBDestConn,
-    dest_type="mongodb",
+    type_="mongodb-out",
+    system="MongoDB",
     dest_version="v1",
     dest=MongoDBDest,
     cardinality=lambda dest: len(dest.collections_with_ids),

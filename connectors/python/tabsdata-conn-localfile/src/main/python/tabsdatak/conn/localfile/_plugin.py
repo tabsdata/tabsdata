@@ -122,7 +122,8 @@ class LocalFileDestExplorer(Explorer[LocalFileDestConn]):
 
 LOCALFILE_SRC = SrcDef(
     conn=LocalFileSrcConn,
-    src_type="localfile",
+    type_="local-file-in",
+    system="Local File",
     src_version="v1",
     src=LocalFileSrc,
     table_mode=TableMode.ARRAY,
@@ -134,7 +135,8 @@ LOCALFILE_SRC = SrcDef(
 
 LOCALFILE_DEST = DestDef(
     conn=LocalFileDestConn,
-    dest_type="localfile",
+    type_="local-file-out",
+    system="Local File",
     dest_version="v1",
     dest=LocalFileDest,
     cardinality=lambda dest: len(dest.paths),

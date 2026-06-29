@@ -48,7 +48,7 @@ def _write(tmp_path, text: str) -> str:
 
 
 @pytest.mark.skipif(
-    not _installed("mysql", "src"), reason="mysql connector not installed"
+    not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
 )
 def test_load_connection_document_dehydrates(tmp_path):
     # noinspection PyProtectedMember
@@ -90,7 +90,7 @@ spec:
 
 
 @pytest.mark.skipif(
-    not _installed("mysql", "src"), reason="mysql connector not installed"
+    not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
 )
 def test_load_connection_document_dehydrates_unprefixed_secret_values(tmp_path):
     # noinspection PyProtectedMember
@@ -110,7 +110,7 @@ def test_load_connection_document_dehydrates_unprefixed_secret_values(tmp_path):
 
 
 @pytest.mark.skipif(
-    not _installed("mysql", "src"), reason="mysql connector not installed"
+    not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
 )
 def test_load_connection_document_group_mismatch(tmp_path):
     # kind implies 'sources'; --group says 'destinations'.

@@ -222,7 +222,8 @@ class DruidExplorer(Explorer[DruidDestConn]):
 
 DRUID_DEST = DestDef(
     conn=DruidDestConn,
-    dest_type="druid",
+    type_="druid-bulk-out",
+    system="Apache Druid",
     dest_version="v1",
     dest=DruidDest,
     cardinality=lambda dest: len(dest.tables),

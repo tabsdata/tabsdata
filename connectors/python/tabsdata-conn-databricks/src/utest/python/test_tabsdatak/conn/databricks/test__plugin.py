@@ -385,7 +385,7 @@ def test_databricks_src_def_wires_plugin_and_explorer():
     assert plugin.DATABRICKS_SRC.src is DatabricksSrc
     assert plugin.DATABRICKS_SRC.plugin is plugin._DatabricksSrcPlugin
     assert plugin.DATABRICKS_SRC.explorer is plugin._DatabricksSrcExplorer
-    assert plugin.DATABRICKS_SRC.src_type == "databricks"
+    assert plugin.DATABRICKS_SRC.type_ == "databricks-bulk-in"
 
 
 def test_databricks_dest_def_wires_plugin_and_explorer():
@@ -393,7 +393,7 @@ def test_databricks_dest_def_wires_plugin_and_explorer():
     assert plugin.DATABRICKS_DEST.dest is DatabricksDest
     assert plugin.DATABRICKS_DEST.plugin is plugin._DatabricksDestPlugin
     assert plugin.DATABRICKS_DEST.explorer is plugin._DatabricksDestExplorer
-    assert plugin.DATABRICKS_DEST.dest_type == "databricks"
+    assert plugin.DATABRICKS_DEST.type_ == "databricks-bulk-out"
 
 
 def test_databricks_src_cardinality_uses_queries_length():

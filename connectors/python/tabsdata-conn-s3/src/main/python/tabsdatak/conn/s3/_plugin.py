@@ -142,7 +142,8 @@ class S3DestExplorer(Explorer[S3DestConn]):
 
 S3_SRC = SrcDef(
     conn=S3SrcConn,
-    src_type="s3",
+    type_="s3-file-in",
+    system="AWS S3",
     src_version="v1",
     src=S3Src,
     table_mode=TableMode.ARRAY,
@@ -154,7 +155,8 @@ S3_SRC = SrcDef(
 
 S3_DEST = DestDef(
     conn=S3DestConn,
-    dest_type="s3",
+    type_="s3-file-out",
+    system="AWS S3",
     dest_version="v1",
     dest=S3Dest,
     cardinality=lambda dest: len(dest.paths),

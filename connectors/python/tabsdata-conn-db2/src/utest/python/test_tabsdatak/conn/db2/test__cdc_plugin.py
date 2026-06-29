@@ -55,7 +55,7 @@ def test_stream_src_def_is_for_db2_cdc():
     assert DB2_CDC_STREAM_SRC.conn is Db2CdcStreamSrcConn
     assert DB2_CDC_STREAM_SRC.src is Db2CdcStreamSrc
     assert DB2_CDC_STREAM_SRC.plugin is Db2CdcStreamSrcPlugin
-    assert DB2_CDC_STREAM_SRC.src_type == "db2-cdc"
+    assert DB2_CDC_STREAM_SRC.type_ == "db2-cdc"
     assert DB2_CDC_STREAM_SRC.publisher_src is CdcStageSrc
 
 

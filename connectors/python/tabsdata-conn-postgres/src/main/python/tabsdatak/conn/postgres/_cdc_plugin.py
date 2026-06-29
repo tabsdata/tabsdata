@@ -157,7 +157,8 @@ class PostgresCdcExplorer(Explorer[PostgresCdcStreamSrcConn]):
 
 POSTGRES_CDC_STREAM_SRC = StreamSrcDef(
     conn=PostgresCdcStreamSrcConn,
-    src_type="postgres-cdc",
+    type_="postgres-cdc",
+    system="PostgreSQL",
     src_version="v1",
     src=PostgresCdcStreamSrc,
     cardinality=lambda src: len(src.tables),

@@ -238,7 +238,7 @@ def test_slots_tracked_independently_by_index(tmp_path):
 
 
 def test_entry_point_binding_shape():
-    assert CDC_STAGE_SRC.src_type == "cdcStage"
+    assert CDC_STAGE_SRC.type_ == ".cdc-stage"
     assert CDC_STAGE_SRC.src is CdcStageSrc
     assert CDC_STAGE_SRC.plugin is CdcStageSrcPlugin
     assert CDC_STAGE_SRC.explorer is None

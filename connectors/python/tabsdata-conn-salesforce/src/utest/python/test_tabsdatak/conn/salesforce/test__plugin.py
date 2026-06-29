@@ -333,7 +333,7 @@ def test_salesforce_src_def_wires_plugin_and_explorer():
     assert plugin.SALESFORCE_SRC.src is SalesforceSrc
     assert plugin.SALESFORCE_SRC.plugin is plugin._SalesforceSrcPlugin
     assert plugin.SALESFORCE_SRC.explorer is plugin._SalesforceExplorer
-    assert plugin.SALESFORCE_SRC.src_type == "salesforce"
+    assert plugin.SALESFORCE_SRC.type_ == "salesforce-sosql-in"
 
 
 def test_salesforce_report_src_def_wires_plugin_and_explorer():
@@ -341,7 +341,7 @@ def test_salesforce_report_src_def_wires_plugin_and_explorer():
     assert plugin.SALESFORCE_REPORT_SRC.src is SalesforceReportSrc
     assert plugin.SALESFORCE_REPORT_SRC.plugin is plugin._SalesforceReportSrcPlugin
     assert plugin.SALESFORCE_REPORT_SRC.explorer is plugin._SalesforceExplorer
-    assert plugin.SALESFORCE_REPORT_SRC.src_type == "salesforce_report"
+    assert plugin.SALESFORCE_REPORT_SRC.type_ == "salesforce-report-in"
 
 
 def test_salesforce_src_cardinality_uses_queries_length():

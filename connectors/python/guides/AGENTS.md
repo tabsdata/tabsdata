@@ -71,8 +71,8 @@ warns and is skipped rather than breaking the registry.
 |             | `avail_auto_srcs() -> dict[str, AutoSrcDef]` |
 |             | `avail_dests() -> dict[str, DestDef]` |
 
-Each dict is keyed by ``src_type`` / ``dest_type`` (e.g.
-``"mysql"``, ``"salesforce_report"``). Each binding exposes the
+Each dict is keyed by ``type_``, unique across all plugins (e.g.
+``"mysql-sql-in"``, ``"salesforce-report-in"``). Each binding exposes the
 concrete config class (``.src`` / ``.dest``), ``cardinality``
 helper, ``plugin``, ``explorer``, and ``table_mode`` (for
 ``SrcDef`` / ``AutoSrcDef``).
@@ -302,14 +302,14 @@ class _MyExplorer(Explorer[MyConn]):
 
 # `conn=MyConn` binds the source/destination to its connection type.
 MY_SRC = SrcDef[MyConn, MySrc](
-    src_type="my", src_version="v1",
+    type_="my-sql-in", src_version="v1",
     conn=MyConn, src=MySrc, table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=_MySrcPlugin, explorer=_MyExplorer,
 )
 
 MY_DEST = DestDef[MyConn, MyDest](
-    dest_type="my", dest_version="v1",
+    type_="my-sql-out", dest_version="v1",
     conn=MyConn, dest=MyDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=_MyDestPlugin, explorer=_MyExplorer,

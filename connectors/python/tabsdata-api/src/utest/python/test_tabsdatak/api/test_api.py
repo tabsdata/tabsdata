@@ -32,7 +32,8 @@ class _Src(m.Src):
 _connectors.register_src(
     spi.SrcDef(
         conn=spi.Conn,
-        src_type="fs",
+        type_="fs",
+        system="Test",
         src_version="v1",
         src=_Src,
         table_mode=spi.TableMode.SINGLE,
@@ -51,7 +52,8 @@ class _Dest(m.Dest):
 _connectors.register_dest(
     spi.DestDef(
         conn=spi.Conn,
-        dest_type="fs",
+        type_="fs_dest",
+        system="Test",
         dest_version="v1",
         dest=_Dest,
         cardinality=lambda dest: 1,
@@ -76,7 +78,8 @@ class _StreamSrc(m.StreamSrc):
 
 _STREAM_SRC_DEFX = spi.StreamSrcDef(
     conn=spi.Conn,
-    src_type="watch",
+    type_="watch",
+    system="Test",
     src_version="v1",
     src=_StreamSrc,
     cardinality=lambda src: 1,
@@ -518,7 +521,8 @@ class _Src2(m.Src):
 _connectors.register_src(
     spi.SrcDef(
         conn=spi.Conn,
-        src_type="fs2",
+        type_="fs2",
+        system="Test",
         src_version="v1",
         src=_Src2,
         table_mode=spi.TableMode.SINGLE,
@@ -537,7 +541,8 @@ class _Dest3(m.Dest):
 _connectors.register_dest(
     spi.DestDef(
         conn=spi.Conn,
-        dest_type="fs3",
+        type_="fs3",
+        system="Test",
         dest_version="v1",
         dest=_Dest3,
         cardinality=lambda dest: 3,
@@ -702,7 +707,8 @@ class _SrcArray(m.Src):
 _connectors.register_src(
     spi.SrcDef(
         conn=spi.Conn,
-        src_type="fs_array",
+        type_="fs_array",
+        system="Test",
         src_version="v1",
         src=_SrcArray,
         table_mode=spi.TableMode.ARRAY,
@@ -1267,7 +1273,7 @@ def test_auto_src_defx_resolves_via_registry():
     defx = _connectors.get_stream_src(_StreamSrc)
     assert isinstance(defx, spi.StreamSrcDef)
     assert defx.src is _StreamSrc
-    assert defx.src_type == "watch"
+    assert defx.type_ == "watch"
     assert defx.publisher_src is spi.StreamStageSrc
 
 

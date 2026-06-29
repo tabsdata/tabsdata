@@ -180,7 +180,7 @@ def test_s3_src_def_wires_plugin_and_explorer():
     assert plugin.S3_SRC.src is S3Src
     assert plugin.S3_SRC.plugin is plugin.S3SrcPlugin
     assert plugin.S3_SRC.explorer is plugin.S3SrcExplorer
-    assert plugin.S3_SRC.src_type == "s3"
+    assert plugin.S3_SRC.type_ == "s3-file-in"
 
 
 def test_s3_dest_def_wires_plugin_and_explorer():
@@ -188,7 +188,7 @@ def test_s3_dest_def_wires_plugin_and_explorer():
     assert plugin.S3_DEST.dest is S3Dest
     assert plugin.S3_DEST.plugin is plugin.S3DestPlugin
     assert plugin.S3_DEST.explorer is plugin.S3DestExplorer
-    assert plugin.S3_DEST.dest_type == "s3"
+    assert plugin.S3_DEST.type_ == "s3-file-out"
 
 
 def test_s3_cardinality_uses_paths_length():
