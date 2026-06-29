@@ -78,7 +78,7 @@ class _DestCtx(DestContext):
     def get_attr(self, attr):
         return None
 
-    def store_attr(self, attr, val):
+    def set_attr(self, attr, val):
         pass
 
     def add_metadata(self, attr, val):

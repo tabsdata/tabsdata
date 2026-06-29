@@ -38,7 +38,7 @@ Responsibilities on each :meth:`StreamerPluginCtx.stage` call:
   3. Persist the new resume state, via two branches that match the
      two consumption-loop shapes in the TED:
 
-     * a :class:`tabsdatak.spi.StreamStateDict` (a plain ``dict``) --
+     * a :class:`tabsdatak.api.BasicDictSpec` (a plain ``dict``) --
        Tabsdata owns the external-system offset. We persist the dict
        into the envelope at ``<stage_root>/stream-state.json``.
 
@@ -62,6 +62,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from tabsdatak.api import BasicDictSpec
 from tabsdatak.conn.stream.stage._backend import StageBackend
 from tabsdatak.server._tdrunner.function._lib.request import Location
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromFlowRequestCtx
@@ -81,7 +82,7 @@ from tabsdatak.server._tdrunner.function._lib.stage_manifest import (
     external_uid_from_filename,
     format_manifest_filename,
 )
-from tabsdatak.spi import StreamSrcPluginCtx, StreamStateDict, StreamStateSpec
+from tabsdatak.spi import StreamSrcPluginCtx, StreamStateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +190,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         return self._first_stage
 
     @property
-    def stream_state(self) -> StreamStateDict | None:
+    def stream_state(self) -> BasicDictSpec | None:
         """The inner state dict, or ``None`` if no state file exists.
 
         Note ``{}`` is a meaningful, non-``None`` value: it's the

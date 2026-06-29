@@ -7,7 +7,7 @@ import pytest
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
-from tabsdatak.api import StreamSrc, Conn, Dest, Src
+from tabsdatak.api import BasicDictSpec, StreamSrc, Conn, Dest, Src
 from tabsdatak.error import ApiErrorCode, ApiException
 from tabsdatak.api import TrxCtx
 from tabsdatak.spi import (
@@ -16,7 +16,6 @@ from tabsdatak.spi import (
     StreamSrcDef,
     StreamSrcPlugin,
     StreamStageSrc,
-    StreamStateDict,
     StreamStateSpec,
     DestContext,
     DestDef,
@@ -515,7 +514,7 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
 
     def __init__(self) -> None:
         self.staged: list[tuple[list[list[Path]], StreamStateSpec]] = []
-        self._stream_state: StreamStateDict | None = None
+        self._stream_state: BasicDictSpec | None = None
 
     # PluginCtx surface (unused by these tests, stubbed).
     @property
@@ -548,7 +547,7 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
         return not self.staged
 
     @property
-    def stream_state(self) -> StreamStateDict | None:
+    def stream_state(self) -> BasicDictSpec | None:
         return self._stream_state
 
     @property
@@ -601,11 +600,11 @@ def test_first_stage_flips_after_first_stage_call():
 
 
 def test_stage_with_dict_state_exposes_stream_state():
-    """A :data:`StreamStateDict` commit makes its state readable on the
+    """A :data:`BasicDictSpec` commit makes its state readable on the
     next run via :attr:`stream_state`."""
     ctx = _RecordingStreamCtx()
-    ctx.stage([[Path("a.parquet")]], {"cdc.offset": {"lsn": 9}})
-    assert ctx.stream_state == {"cdc.offset": {"lsn": 9}}
+    ctx.stage([[Path("a.parquet")]], {"cdc.offset": 9, "topic": "people"})
+    assert ctx.stream_state == {"cdc.offset": 9, "topic": "people"}
 
 
 def test_stage_with_plain_callable_keeps_stream_state_none():

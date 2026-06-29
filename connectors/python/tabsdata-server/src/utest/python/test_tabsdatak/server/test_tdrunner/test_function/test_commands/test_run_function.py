@@ -1209,7 +1209,7 @@ _SRC = LocalFileSrc(
 def my_publisher(in_1: TableFramesSpec, ctx: TrxCtx) -> tuple[TableFrameSpec]:
     seen = ctx.get_attr("my-key")
     new = "from-user-fn" if seen is None else "again-after-" + str(seen)
-    ctx.store_attr("my-key", new)
+    ctx.set_attr("my-key", new)
     return (None,)
 """
 
@@ -1314,7 +1314,7 @@ def test_main_ctx_aware_function_hydrates_from_state_in_first_run(
     rc = main()
     assert rc == 0, rc
 
-    # User function called store_attr("my-key", "from-user-fn") because
+    # User function called set_attr("my-key", "from-user-fn") because
     # get_attr returned None on the first run; drain wrote it out.
     out_state = state_dir / "iv-out.parquet"
     assert out_state.is_file()
@@ -1543,7 +1543,7 @@ def my_transformer(
     in_1: TableFrameSpec, ctx: TrxCtx
 ) -> tuple[TableFrameSpec]:
     seen = ctx.get_attr("smoke.last-seen")
-    ctx.store_attr("smoke.last-seen", "tx-after-" + str(seen))
+    ctx.set_attr("smoke.last-seen", "tx-after-" + str(seen))
     return (in_1,)
 """
 
@@ -1565,7 +1565,7 @@ def my_subscriber(
     in_1: TableFrameSpec, ctx: TrxCtx
 ) -> tuple[TableFrameSpec]:
     seen = ctx.get_attr("smoke.last-seen")
-    ctx.store_attr("smoke.last-seen", "sub-after-" + str(seen))
+    ctx.set_attr("smoke.last-seen", "sub-after-" + str(seen))
     return (in_1,)
 """
 

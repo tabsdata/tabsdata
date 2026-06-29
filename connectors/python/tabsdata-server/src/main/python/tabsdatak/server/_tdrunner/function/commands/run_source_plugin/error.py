@@ -147,7 +147,7 @@ class RunSourcePluginErrorCode(ErrorCode):
     )
     # ``drain_ctx_to_state_or_raise`` -- ctx scratch couldn't be
     # persisted (typically a bad value injected past the
-    # ``store_attr`` validator).
+    # ``set_attr`` validator).
 
     RSP_11 = ErrorDef(
         UnsupportedStageSchemeError,

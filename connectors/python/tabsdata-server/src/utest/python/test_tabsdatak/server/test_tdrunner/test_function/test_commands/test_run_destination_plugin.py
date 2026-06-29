@@ -210,11 +210,11 @@ def test_dest_context_get_attr_returns_none_for_unset_key():
     assert _dest_ctx().get_attr("k") is None
 
 
-def test_dest_context_store_attr_round_trips_via_get_attr():
-    """``store_attr`` writes through; a subsequent ``get_attr`` sees
+def test_dest_context_set_attr_round_trips_via_get_attr():
+    """``set_attr`` writes through; a subsequent ``get_attr`` sees
     the value."""
     c = _dest_ctx()
-    c.store_attr("k", "v")
+    c.set_attr("k", "v")
     assert c.get_attr("k") == "v"
 
 

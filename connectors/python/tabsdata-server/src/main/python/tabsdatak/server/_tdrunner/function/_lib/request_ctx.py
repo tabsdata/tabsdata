@@ -43,11 +43,11 @@ State plumbed:
   borrows ``function``.
 * ``exec_plan_id``, ``trx_id``, ``exec_plan_ts`` — trx-ful only.
   ``exec_plan_ts`` is the ISO-8601 form of ``triggered_on``.
-* ``get_attr`` / ``store_attr`` — per-flow scratch state backed by
+* ``get_attr`` / ``set_attr`` — per-flow scratch state backed by
   an in-memory dict. The runtime populates the dict at invocation
   start (:meth:`hydrate`) and reads it back at the end
   (:meth:`drain`) to round-trip through Parquet. Writes via
-  ``store_attr`` are write-through to the in-memory dict; no I/O
+  ``set_attr`` are write-through to the in-memory dict; no I/O
   happens at the call site.
 
 State *not yet* plumbed (falls back to a documented stub):
@@ -73,7 +73,7 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 
-from tabsdatak.api import ContextKeySpec, ContextValueSpec, TrxCtx
+from tabsdatak.api import BasicTypeSpec, ContextKeySpec, TrxCtx
 from tabsdatak.server._tdrunner.function._lib.initial_values import _validate_key
 from tabsdatak.spi import FlowCtx
 
@@ -105,7 +105,7 @@ class FromFlowRequestCtx(FlowCtx):
         self._collection_name = collection_name
         self._function_id = function_id
         self._function_name = function_name
-        self._scratch: dict[str, ContextValueSpec] = {}
+        self._scratch: dict[str, BasicTypeSpec] = {}
 
     @property
     def work_dir(self) -> Path:
@@ -127,14 +127,14 @@ class FromFlowRequestCtx(FlowCtx):
     def function_name(self) -> str:
         return self._function_name
 
-    def get_attr(self, attr: ContextKeySpec) -> ContextValueSpec | None:
+    def get_attr(self, attr: ContextKeySpec) -> BasicTypeSpec | None:
         """Read a per-flow scratch value. Returns ``None`` for keys
         that have never been stored (no `KeyError` — matches the
         ``returns None if unset`` contract on
         :meth:`tabsdatak.api.TrxCtx.get_attr`)."""
         return self._scratch.get(attr)
 
-    def store_attr(self, attr: ContextKeySpec, val: ContextValueSpec | None):
+    def set_attr(self, attr: ContextKeySpec, val: BasicTypeSpec | None):
         """Write a per-flow scratch value. Write-through to the
         in-memory dict; the runtime persists the dict to Parquet at
         the end of the invocation via :meth:`drain`.
@@ -150,7 +150,7 @@ class FromFlowRequestCtx(FlowCtx):
         _validate_key(attr)
         self._scratch[attr] = val
 
-    def add_metadata(self, attr: ContextKeySpec, val: ContextValueSpec | None):
+    def add_metadata(self, attr: ContextKeySpec, val: BasicTypeSpec | None):
         # TODO: wire the trx-level observability sink. No-op for now.
         pass
 
@@ -162,7 +162,7 @@ class FromFlowRequestCtx(FlowCtx):
     # therefore never sees them. The runtime, which holds a concrete
     # ``FromRequestCtx`` reference, is the only caller.
 
-    def hydrate(self, initial: dict[str, ContextValueSpec]) -> None:
+    def hydrate(self, initial: dict[str, BasicTypeSpec]) -> None:
         """Pre-populate the scratch store with values loaded from the
         previous run's persisted dict. Called by the runtime once,
         before the plugin / user function is invoked.
@@ -172,11 +172,10 @@ class FromFlowRequestCtx(FlowCtx):
         """
         self._scratch.update(initial)
 
-    def drain(self) -> dict[str, ContextValueSpec]:
+    def drain(self) -> dict[str, BasicTypeSpec]:
         """Return a deep copy of the current scratch state for the
-        runtime to persist. Deep so nested mutables (e.g. a stored
-        ``dict[str, str]`` value) don't share references between the
-        ctx and the runtime's persistence path."""
+        runtime to persist, so the returned dict never aliases the
+        ctx's own store."""
         return copy.deepcopy(self._scratch)
 
 
@@ -241,11 +240,11 @@ class FromRequestCtx(TrxCtx, FromFlowRequestCtx):
     # Re-export the concrete impls from FromFlowRequestCtx so ABCMeta
     # credits them against TrxCtx's abstract declarations of the same
     # names. With the MRO (TrxCtx, FromFlowRequestCtx) TrxCtx's
-    # abstract get_attr / store_attr / add_metadata is visited first
+    # abstract get_attr / set_attr / add_metadata is visited first
     # at __abstractmethods__ computation, and the resolution machinery
     # does not always credit a non-TrxCtx descendant's concrete impl
     # across the multi-inheritance gap. Explicit aliases short-circuit
     # that.
     get_attr = FromFlowRequestCtx.get_attr
-    store_attr = FromFlowRequestCtx.store_attr
+    set_attr = FromFlowRequestCtx.set_attr
     add_metadata = FromFlowRequestCtx.add_metadata

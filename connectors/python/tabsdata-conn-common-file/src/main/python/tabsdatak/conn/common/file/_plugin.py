@@ -138,7 +138,7 @@ RunEnvBuilder = Callable[[Any], dict[str, str]]
 # regex declared on `ContextKeySpec`.
 #
 # The ``file-lastmod.`` prefix is reserved for this plugin's
-# bookkeeping; see :meth:`tabsdatak.api.TrxCtx.store_attr` for the
+# bookkeeping; see :meth:`tabsdatak.api.TrxCtx.set_attr` for the
 # reserved-prefix convention.
 _LASTMOD_KEY_PREFIX = "file-lastmod.slot"
 
@@ -193,7 +193,7 @@ def import_files(
         # may return ``None`` (no files observed; nothing to track), in
         # which case the prior value stays in effect for the next run.
         if report.lastmod_info is not None:
-            ctx.store_attr(lastmod_key, report.lastmod_info)
+            ctx.set_attr(lastmod_key, report.lastmod_info)
 
         slot_files: list[TableFileSpec] = []
         for f in report.files:

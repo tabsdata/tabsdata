@@ -27,7 +27,6 @@ per-flow scratch state across invocations.
 
 import importlib
 from abc import ABC, abstractmethod
-from decimal import Decimal
 from typing import Annotated, Any, Callable, TypeAlias, Union
 
 from pydantic import Field, GetCoreSchemaHandler, TypeAdapter
@@ -491,20 +490,24 @@ def subscriber[C: Conn](
 
 
 # Per-flow scratch-key identifier. Plain string -- the framework
-# packs all ``store_attr`` entries into a single ``user_namespace``
+# packs all ``set_attr`` entries into a single ``user_namespace``
 # Parquet cell, so the key never appears as a Parquet column name
 # and doesn't need DNS-1123 / column-name constraints.
 ContextKeySpec: TypeAlias = str
 
-# Allowed per-flow scratch-value shapes. Primitives + flat lists /
-# dicts whose values are also primitives. Round-trips through the
-# state Parquet (see the initial-values codec). Heterogeneous values
-# inside the same dict are fine (e.g. ``{"last_modified": "...",
-# "min_id": 1234}``). ``Decimal`` is included so connectors can persist
-# exact arbitrary-precision values (e.g. a decimal128 CDC cursor)
-# without lossy promotion to ``float``.
-_PRIM: TypeAlias = Union[str, int, float, bool, Decimal]
-ContextValueSpec: TypeAlias = Union[_PRIM, list[_PRIM], dict[str, _PRIM]]
+# The framework's basic scalar value type: the JSON-scalar set shared by
+# the per-flow scratch store (``get_attr`` / ``set_attr``), connector
+# seed dicts, and stream resume state. Deliberately excludes ``Decimal``
+# and any nested (list / dict) shape -- a scratch value is a single
+# scalar. A connector that needs arbitrary precision serialises it to
+# ``str`` itself (see the CDC ``(seg, ord)`` cursor). Round-trips
+# losslessly through the state Parquet (see the initial-values codec).
+BasicTypeSpec: TypeAlias = Union[str, int, float, bool]
+
+# A flat ``str``-keyed dict of :data:`BasicTypeSpec` values -- the shape
+# used for ``{name: value}`` seed dicts (e.g. a SQL connector's
+# ``initial_values``) and for stream resume state.
+BasicDictSpec: TypeAlias = dict[str, BasicTypeSpec]
 
 
 class TrxCtx(ABC):
@@ -514,7 +517,7 @@ class TrxCtx(ABC):
     Carries trx-level identifiers (``exec_plan_id``, ``trx_id``,
     ``exec_plan_ts``) plus a per-flow scratch store for state that
     needs to survive across invocations (``get_attr`` /
-    ``store_attr``) and a metadata sink for trx-side observability
+    ``set_attr``) and a metadata sink for trx-side observability
     (``add_metadata``).
     """
 
@@ -534,12 +537,12 @@ class TrxCtx(ABC):
         """ISO-8601 timestamp of when the plan started."""
 
     @abstractmethod
-    def get_attr(self, attr: ContextKeySpec) -> ContextValueSpec | None:
+    def get_attr(self, attr: ContextKeySpec) -> BasicTypeSpec | None:
         """Read a per-flow scratch value (returns ``None`` if
         unset)."""
 
     @abstractmethod
-    def store_attr(self, attr: ContextKeySpec, val: ContextValueSpec | None):
+    def set_attr(self, attr: ContextKeySpec, val: BasicTypeSpec | None):
         """Write a per-flow scratch value -- persists across trx
         invocations within the same flow.
 
@@ -551,6 +554,6 @@ class TrxCtx(ABC):
         """
 
     @abstractmethod
-    def add_metadata(self, attr: ContextKeySpec, val: ContextValueSpec | None):
+    def add_metadata(self, attr: ContextKeySpec, val: BasicTypeSpec | None):
         """Attach trx-level metadata for observability / lineage.
         Not durable across trx invocations."""

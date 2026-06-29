@@ -21,7 +21,7 @@ The plugin abstracts (:class:`SrcPlugin`, :class:`StreamSrcPlugin`,
 :class:`DestContext`) are what plugin code consumes. The remaining
 pieces -- :data:`TableFileSpec`, :class:`TableFileInput`
 (:data:`MetadataSpec`), :class:`TableMode`, :data:`StreamStateSpec`
-(:data:`StreamStateDict` | :data:`CommitStateFn`) -- are the data-shape
+(:data:`BasicDictSpec` | :data:`CommitStateFn`) -- are the data-shape
 contracts that travel between framework and plugin during a trx.
 """
 
@@ -46,6 +46,7 @@ from pydantic import ConfigDict, model_validator
 
 import tabsdatak._api as _api
 from tabsdatak.api import (
+    BasicDictSpec,
     Conn,
     Dest,
     Src,
@@ -190,13 +191,6 @@ FilesSpec: TypeAlias = Annotated[list[TableFileSpec], _api.NON_EMPTY_LIST_CONSTR
 # that pydantic validates via issubclass / isinstance.
 _ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
 
-# Per-flow resume state that *Tabsdata* owns: hand it to
-# :meth:`StreamSrcPluginCtx.stage` and the runtime persists it
-# (atomically with the staged batch) and replays it on the next run via
-# :attr:`StreamSrcPluginCtx.stream_state`. Values stay JSON scalars so
-# the dict round-trips through the on-disk state envelope.
-StreamStateDict: TypeAlias = dict[str, str]
-
 # Commit callback for the case where the *external* system owns the
 # resume offset. Hand it to :meth:`StreamSrcPluginCtx.stage` and the
 # runtime invokes it when it commits the staged batch, so the plugin can
@@ -206,9 +200,13 @@ StreamStateDict: TypeAlias = dict[str, str]
 CommitStateFn: TypeAlias = Callable[[], None]
 
 # What :meth:`StreamSrcPluginCtx.stage` accepts as a batch's new resume
-# state: either a :data:`StreamStateDict` (Tabsdata persists it) or a
-# :data:`CommitStateFn` (the external system owns the offset).
-StreamStateSpec: TypeAlias = Union[StreamStateDict, CommitStateFn]
+# state:
+#   * a :data:`BasicDictSpec` -- a flat ``{str: scalar}`` dict of resume
+#     state *Tabsdata* owns; the runtime persists it (atomically with the
+#     staged batch) and replays it on the next run via
+#     :attr:`StreamSrcPluginCtx.stream_state`; or
+#   * a :data:`CommitStateFn` -- the *external* system owns the offset.
+StreamStateSpec: TypeAlias = Union[BasicDictSpec, CommitStateFn]
 
 
 class StreamSrcPluginCtx(PluginCtx, ABC):
@@ -219,7 +217,7 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
     * :attr:`first_stage` -- whether nothing has been staged yet, so the
       plugin seeds from config rather than from :attr:`stream_state`.
     * :attr:`stream_state` -- the per-flow resume state persisted by the
-      last :data:`StreamStateDict` handed to :meth:`stage`.
+      last :data:`BasicDictSpec` handed to :meth:`stage`.
     * :attr:`flush_interval_mins` -- max minutes the plugin may buffer
       before it must :meth:`stage`.
     * :meth:`stage` -- publish a batch and commit its new resume state.
@@ -244,13 +242,13 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
 
     @property
     @abstractmethod
-    def stream_state(self) -> StreamStateDict | None:
+    def stream_state(self) -> BasicDictSpec | None:
         """The per-flow resume state persisted by the most recent
-        :data:`StreamStateDict` handed to :meth:`stage`.
+        :data:`BasicDictSpec` handed to :meth:`stage`.
 
         ``None`` when the last commit handed :meth:`stage` a
         :data:`CommitStateFn` callable (a ``lambda``) instead of a
-        :data:`StreamStateDict` -- i.e. the *external* system owns the
+        :data:`BasicDictSpec` -- i.e. the *external* system owns the
         offset and Tabsdata keeps no state. Distinguish "first run"
         (nothing staged yet) via :attr:`first_stage`, not by this being
         ``None``."""
@@ -273,7 +271,7 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
         ``i`` -> table ``i``; an empty inner list means no files for that
         table this batch); files must live under :attr:`work_dir`. The
         runtime stages + commits the files, then commits ``new_state``:
-        persisting it when ``new_state`` is a :data:`StreamStateDict`, or
+        persisting it when ``new_state`` is a :data:`BasicDictSpec`, or
         invoking it for its side effect when it is a :data:`CommitStateFn`."""
 
 
@@ -415,7 +413,7 @@ class FunctionCtx(TrxCtx, FlowCtx, ABC):
     :class:`tabsdatak.api.TrxCtx` subclass).
 
     Combines :class:`tabsdatak.api.TrxCtx` (trx identifiers + per-flow
-    scratch state via ``get_attr`` / ``store_attr``) with
+    scratch state via ``get_attr`` / ``set_attr``) with
     :class:`FlowCtx` (flow identifiers). The user function uses it to
     read state from the previous run and persist new state for the
     next.

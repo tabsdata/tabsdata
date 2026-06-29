@@ -130,7 +130,7 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
         # Advance the cursor so the next trigger picks up the next manifest.
         # ``None`` means nothing was observed; leave the prior cursor in place.
         if report.lastmod_info is not None:
-            ctx.store_attr(_MANIFEST_LASTMOD_KEY, report.lastmod_info)
+            ctx.set_attr(_MANIFEST_LASTMOD_KEY, report.lastmod_info)
 
         targets = [f["to"] for f in report.files if isinstance(f, dict) and f.get("to")]
         if not targets:

@@ -23,8 +23,8 @@ import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 from tabsdatak.api import (
+    BasicDictSpec,
     Conn,
-    ContextValueSpec,
     Dest,
     Secret,
     Src,
@@ -183,13 +183,13 @@ class DatabricksSrc(Src):
         ``ctx.get_attr(bind_name)`` per bind, and falls back to
         this field when the ctx scratch store has no entry for that
         name. User functions persist new values for the next run
-        with ``ctx.store_attr(bind_name, new_value)``.
+        with ``ctx.set_attr(bind_name, new_value)``.
     :param src_cfg: Optional ``Mapping`` over
         ``databricks.logging_level``.
     """
 
     queries: QueriesSpec
-    initial_values: dict[str, ContextValueSpec] | None = None
+    initial_values: BasicDictSpec | None = None
     src_cfg: SrcCfgSpec | None = None
 
 

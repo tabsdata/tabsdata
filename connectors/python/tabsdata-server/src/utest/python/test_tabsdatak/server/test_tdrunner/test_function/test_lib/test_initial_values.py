@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 from pathlib import Path
 
 import polars as pl
@@ -52,49 +51,21 @@ def test_roundtrip_heterogeneous_dict(tmp_path):
     assert read_initial_values(p) == values
 
 
-def test_roundtrip_list_of_str(tmp_path):
+def test_write_list_value_rejected(tmp_path):
+    """A ``list`` value is not a ``BasicTypeSpec`` (scalar only) -- a
+    connector that needs a sequence serialises it to a ``str`` itself."""
     p = tmp_path / "iv.parquet"
-    write_initial_values({"tags": ["alpha", "beta", "gamma"]}, p)
-    assert read_initial_values(p) == {"tags": ["alpha", "beta", "gamma"]}
+    with pytest.raises(InvalidInitialValuesError, match="BasicTypeSpec"):
+        write_initial_values({"tags": ["alpha", "beta"]}, p)
+    assert not p.exists()
 
 
-def test_roundtrip_dict_of_primitives_value(tmp_path):
-    """A single scratch entry whose value is a ``dict[str, primitive]``
-    (one ContextValueSpec arm)."""
+def test_write_dict_value_rejected(tmp_path):
+    """A ``dict`` value is not a ``BasicTypeSpec`` (scalar only)."""
     p = tmp_path / "iv.parquet"
-    write_initial_values({"labels": {"env": "prod", "team": "data"}}, p)
-    assert read_initial_values(p) == {"labels": {"env": "prod", "team": "data"}}
-
-
-def test_roundtrip_decimal_value(tmp_path):
-    """``Decimal`` is a ContextValueSpec arm so connectors can persist
-    exact values (e.g. a decimal128 CDC cursor). It must round-trip as a
-    ``Decimal``, not be promoted to ``float`` -- strict validation keeps
-    it off the ``float`` arm."""
-    p = tmp_path / "iv.parquet"
-    write_initial_values({"cursor": Decimal("42")}, p)
-    back = read_initial_values(p)
-    assert back == {"cursor": Decimal("42")}
-    assert isinstance(back["cursor"], Decimal)
-
-
-def test_roundtrip_list_of_decimal(tmp_path):
-    """The CDC ``(seg, ord)`` cursor shape: a ``list[Decimal]``."""
-    p = tmp_path / "iv.parquet"
-    write_initial_values({"cursor": [Decimal("5"), Decimal("3")]}, p)
-    back = read_initial_values(p)
-    assert back == {"cursor": [Decimal("5"), Decimal("3")]}
-    assert all(isinstance(value, Decimal) for value in back["cursor"])
-
-
-def test_roundtrip_decimal_beyond_int64(tmp_path):
-    """A Decimal past 2**63 - 1 survives losslessly -- the reason the
-    cursor is kept as Decimal rather than down-cast to int (which could
-    overflow Int64 inference at persist time)."""
-    p = tmp_path / "iv.parquet"
-    big = Decimal(2**63 + 7)
-    write_initial_values({"cursor": big}, p)
-    assert read_initial_values(p) == {"cursor": big}
+    with pytest.raises(InvalidInitialValuesError, match="BasicTypeSpec"):
+        write_initial_values({"labels": {"env": "prod"}}, p)
+    assert not p.exists()
 
 
 def test_roundtrip_empty_dict(tmp_path):
@@ -177,24 +148,9 @@ def test_write_non_str_key_raises(tmp_path):
 
 def test_write_unsupported_value_type_raises(tmp_path):
     p = tmp_path / "iv.parquet"
-    with pytest.raises(InvalidInitialValuesError, match="ContextValueSpec"):
+    with pytest.raises(InvalidInitialValuesError, match="BasicTypeSpec"):
         write_initial_values({"k": object()}, p)
     assert not p.exists()
-
-
-def test_write_list_with_unsupported_item_raises(tmp_path):
-    p = tmp_path / "iv.parquet"
-    with pytest.raises(InvalidInitialValuesError, match="ContextValueSpec"):
-        write_initial_values({"k": ["a", object(), "c"]}, p)
-
-
-def test_write_nested_dict_value_rejected(tmp_path):
-    """``ContextValueSpec`` allows ``dict[str, primitive]`` but NOT
-    a recursive ``dict[str, dict[...]]`` -- the latter wouldn't fit
-    a single ``user_namespace`` Struct cell with primitive fields."""
-    p = tmp_path / "iv.parquet"
-    with pytest.raises(InvalidInitialValuesError, match="ContextValueSpec"):
-        write_initial_values({"k": {"inner": {"too-deep": "v"}}}, p)
 
 
 def test_write_validates_before_io(tmp_path):
@@ -288,10 +244,10 @@ def test_write_crash_after_partial_tmp_cleans_up_orphan(tmp_path, monkeypatch):
 # --- drift-prevention regression: pydantic-backed validators ------------
 
 
-def test_value_validator_uses_pydantic_against_context_value_spec():
+def test_value_validator_uses_pydantic_against_basic_type_spec():
     """If anyone replaces the pydantic-backed validator with a
     hand-rolled isinstance ladder, that ladder will diverge from
-    ``ContextValueSpec`` over time. This test pins the
+    ``BasicTypeSpec`` over time. This test pins the
     pydantic-based approach in place by verifying the validator
     chains a ``pydantic.ValidationError``."""
     from pydantic import ValidationError

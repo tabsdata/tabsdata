@@ -52,7 +52,7 @@ class _Ctx:
 
     Exposes ``work_dir`` plus a minimal in-memory scratch store so
     tests for the ctx-vs-Src-field fallback (see ``_resolve_initial_values``)
-    can drive ``get_attr`` / ``store_attr`` without instantiating
+    can drive ``get_attr`` / ``set_attr`` without instantiating
     a real :class:`tabsdatak.spi.SrcPluginCtx`.
     """
 
@@ -67,7 +67,7 @@ class _Ctx:
     def get_attr(self, key):
         return self._scratch.get(key)
 
-    def store_attr(self, key, val) -> None:
+    def set_attr(self, key, val) -> None:
         self._scratch[key] = val
 
 

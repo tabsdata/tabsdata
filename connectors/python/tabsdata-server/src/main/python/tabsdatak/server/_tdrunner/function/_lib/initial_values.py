@@ -18,9 +18,11 @@ to and whether a write is needed are concerns of the caller.
 Validation:
 
   * Keys are plain strings (``ContextKeySpec``).
-  * Values must match ``ContextValueSpec``: a primitive (``str``,
-    ``int``, ``float``, ``bool``, ``Decimal``), a ``list[primitive]``,
-    or a flat ``dict[str, primitive]``.
+  * Values must match ``BasicTypeSpec`` -- a single scalar
+    (``str`` / ``int`` / ``float`` / ``bool``); lists, dicts and other
+    objects are rejected. ``Decimal`` is not a member: a connector that
+    needs exact precision serialises it to ``str`` itself (see the CDC
+    ``(seg, ord)`` cursor) rather than let it collapse into ``float``.
 
 Bad input is rejected before any I/O: a malformed value never reaches
 disk, and a malformed on-disk file never silently round-trips through.
@@ -36,7 +38,7 @@ from typing import TYPE_CHECKING, Any
 import polars as pl
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 
-from tabsdatak.api import ContextKeySpec, ContextValueSpec
+from tabsdatak.api import BasicTypeSpec, ContextKeySpec
 from tabsdatak.error import ErrorCode
 
 if TYPE_CHECKING:
@@ -53,25 +55,23 @@ logger = logging.getLogger(__name__)
 
 # Validate keys and values against the canonical type aliases via
 # pydantic ``TypeAdapter``. Single source of truth -- if
-# ``ContextKeySpec`` / ``ContextValueSpec`` change shape upstream,
+# ``ContextKeySpec`` / ``BasicTypeSpec`` change shape upstream,
 # this validator tracks automatically and no drift is possible
 # between what the SPI says and what we accept.
 #
 # ``strict=True`` disables pydantic's coercion, so ``"1"`` is not
-# silently promoted to ``int``, ``True`` stays a ``bool`` rather than
+# silently promoted to ``int`` and ``True`` stays a ``bool`` rather than
 # matching the ``int`` arm (since ``bool`` is an ``int`` subclass in
-# Python), and a ``Decimal`` stays a ``Decimal`` rather than collapsing
-# into the ``float`` arm (which would silently lose precision). All
-# matter for the round-trip: the value we accept here is the same value
-# Parquet stores and round-trips back.
+# Python). This matters for the round-trip: the value we accept here is
+# the same value Parquet stores and round-trips back.
 _STRICT = ConfigDict(strict=True)
 _KEY_ADAPTER: TypeAdapter[ContextKeySpec] = TypeAdapter(ContextKeySpec, config=_STRICT)
-_VALUE_ADAPTER: TypeAdapter[ContextValueSpec] = TypeAdapter(
-    ContextValueSpec, config=_STRICT
+_VALUE_ADAPTER: TypeAdapter[BasicTypeSpec] = TypeAdapter(
+    BasicTypeSpec, config=_STRICT
 )
 
 # Reserved Parquet column name carrying the entire scratch dict as a
-# Struct cell. The user's flat ``store_attr`` / ``get_attr`` keys are
+# Struct cell. The user's flat ``set_attr`` / ``get_attr`` keys are
 # the fields *inside* that Struct -- they don't appear as Parquet
 # columns themselves, so they're free of column-name constraints.
 USER_NAMESPACE_COLUMN = "user_namespace"
@@ -95,8 +95,8 @@ def _validate_value(key: str, value: Any) -> None:
         _VALUE_ADAPTER.validate_python(value)
     except ValidationError as exc:
         raise InvalidInitialValuesError(
-            f"value for key {key!r} is not a valid ContextValueSpec shape "
-            f"(got type {type(value).__name__!r})"
+            f"value for key {key!r} is not a valid BasicTypeSpec "
+            f"(str/int/float/bool; got type {type(value).__name__!r})"
         ) from exc
 
 
@@ -151,7 +151,7 @@ def write_initial_values(values: dict[str, Any], path: Path) -> None:
 
     Raises:
         InvalidInitialValuesError: if any key isn't a str or any
-            value isn't a ContextValueSpec shape.
+            value isn't a BasicTypeSpec shape.
         OSError: on write errors (missing parent dir, permission, etc.).
     """
     for key, value in values.items():

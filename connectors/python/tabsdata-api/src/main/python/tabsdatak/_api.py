@@ -395,7 +395,7 @@ def check_tz_aware_datetime(obj: Any) -> Any:
 #   - An optional final positional parameter may be annotated as
 #     ``TrxCtx`` (or a subclass). When present the framework passes a
 #     transaction-context instance at call time; the function uses
-#     ``ctx.get_attr`` / ``ctx.store_attr`` to read state from the
+#     ``ctx.get_attr`` / ``ctx.set_attr`` to read state from the
 #     previous transaction and stage state for the next one. The
 #     return shape is unaffected -- ctx flows out via in-place updates
 #     on the context object, never via the return tuple.

@@ -311,7 +311,7 @@ class CdcIngester(ABC):
     def commit_state(self, offset: CdcOffset) -> StreamStateSpec:
         """The :data:`~tabsdatak.spi.StreamStateSpec` to hand
         ``ctx.stage`` for this batch. Default: a
-        :data:`~tabsdatak.spi.StreamStateDict` that Tabsdata persists,
+        :data:`~tabsdatak.api.BasicDictSpec` that Tabsdata persists,
         keyed under :data:`CDC_OFFSET_STATE_KEY`. External-owned
         ingesters override this to return a
         :data:`~tabsdatak.spi.CommitStateFn` instead."""

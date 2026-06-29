@@ -39,6 +39,7 @@ Bind it to a flow by pointing a CDC :class:`~tabsdatak.spi.StreamSrcDef`'s
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 
 from tabsdatak.conn.common.sql.cdc.constants import CDC_META_ORD, CDC_META_SEG
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
@@ -56,15 +57,20 @@ from tabsdatak.spi import (
 
 logger = logging.getLogger(__name__)
 
-# Per-slot key under the per-flow scratch store holding the highest CDC
-# ``(seg, ord)`` pair published so far. Suffixed with the slot's positional
-# index so a multi-table CDC flow tracks each output slot (table)
-# independently.
+# Per-slot keys under the per-flow scratch store holding the highest CDC
+# ``(seg, ord)`` pair published so far. The pair is two scalar scratch
+# entries (seg and ord stored separately, since the scratch store holds
+# only scalars). Both are suffixed with the slot's positional index so a
+# multi-table CDC flow tracks each output slot (table) independently.
 _TABLE_PREFIX = "cdc-table"
 
 
-def _table_key(index: int) -> str:
-    return f"{_TABLE_PREFIX}.{index}"
+def _seg_key(index: int) -> str:
+    return f"{_TABLE_PREFIX}.{index}.seg"
+
+
+def _ord_key(index: int) -> str:
+    return f"{_TABLE_PREFIX}.{index}.ord"
 
 
 class CdcStageSrc(StreamStageSrc):
@@ -90,7 +96,7 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
         per-slot ``(seg, ord)`` cursor in ``ctx`` (none stored -> no
         filtering), and written to a single parquet under ``ctx.work_dir``;
         the new high-water ``(seg, ord)`` is persisted via
-        ``ctx.store_attr``. An empty input slot yields an empty output
+        ``ctx.set_attr``. An empty input slot yields an empty output
         slot. Returns the per-slot file lists to publish (see module
         docstring for the full contract)."""
         import polars as pl
@@ -130,7 +136,16 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                 .sort([CDC_META_SEG, CDC_META_ORD])
             )
 
-            prior = ctx.get_attr(_table_key(index))
+            # The cursor is stored as two scalar scratch entries (seg and
+            # ord), each the ``str`` of a decimal128(38,0) value -- the
+            # scratch store holds scalars, and ``str`` keeps the pair exact
+            # across the full range. They are written together, so both are
+            # present or both absent; restore to ``Decimal`` for comparison.
+            prior_seg_str = ctx.get_attr(_seg_key(index))
+            prior_ord_str = ctx.get_attr(_ord_key(index))
+            prior: tuple[Decimal, Decimal] | None = None
+            if prior_seg_str is not None and prior_ord_str is not None:
+                prior = (Decimal(str(prior_seg_str)), Decimal(str(prior_ord_str)))
             if prior is not None:
                 prior_seg, prior_ord = prior
                 # ord is the order within seg, so a segment may be split
@@ -174,15 +189,17 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                 )
 
             if high_water.height:
-                # seg/ord are decimal128, so ``row`` hands them back as
-                # ``Decimal`` -- stored as-is (the scratch store accepts
-                # ``Decimal``) to keep the cursor exact across the full
-                # decimal128(38, 0) range. ``prior`` was stored the same way,
-                # so ``max`` compares two ``[Decimal, Decimal]`` pairs.
+                # seg/ord come from decimal128(38,0) columns, so ``row``
+                # hands them back as ``Decimal``. ``max`` compares the
+                # ``(seg, ord)`` tuples lexicographically (``prior`` was
+                # restored to ``Decimal`` above, so the compare is exact).
+                # Persist each as ``str`` -- the scratch store holds scalars
+                # and ``str`` preserves the full decimal128(38,0) range.
                 seg, ordinal = high_water.row(0)
-                batch_max = [seg, ordinal]
-                new_cursor = batch_max if prior is None else max(prior, batch_max)
-                ctx.store_attr(_table_key(index), new_cursor)
+                batch_max = (seg, ordinal)
+                new_seg, new_ord = batch_max if prior is None else max(prior, batch_max)
+                ctx.set_attr(_seg_key(index), str(new_seg))
+                ctx.set_attr(_ord_key(index), str(new_ord))
 
             results.append([out_path])
 

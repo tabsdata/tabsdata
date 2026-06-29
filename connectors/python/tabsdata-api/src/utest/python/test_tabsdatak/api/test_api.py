@@ -781,7 +781,7 @@ def test_has_trx_ctx_param_accepts_trx_ctx_subclass():
         @property
         def exec_plan_ts(self) -> str: return "x"
         def get_attr(self, attr): return None
-        def store_attr(self, attr, val): pass
+        def set_attr(self, attr, val): pass
         def add_metadata(self, attr, val): pass
 
     def f(t1: tableframe.TableFrame | None, ctx: _MyCtx) -> tuple[

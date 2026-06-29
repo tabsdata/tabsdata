@@ -62,7 +62,7 @@ class _Ctx:
     def get_attr(self, key):
         return self._store.get(key)
 
-    def store_attr(self, key, val):
+    def set_attr(self, key, val):
         self._store[key] = val
 
 

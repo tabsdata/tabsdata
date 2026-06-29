@@ -47,8 +47,8 @@ from pydantic import StringConstraints
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.api import (
+    BasicDictSpec,
     Conn,
-    ContextValueSpec,
     Dest,
     Secret,
     Src,
@@ -169,7 +169,7 @@ class Db2Src(Src):
         ``ctx.get_attr(bind_name)`` per bind, and falls back to this
         field when the ctx scratch store has no entry for that name.
         User functions persist new values for the next run with
-        ``ctx.store_attr(bind_name, new_value)``.
+        ``ctx.set_attr(bind_name, new_value)``.
     :param src_cfg: Optional ``Mapping`` over the literal cfg key
         set (logging_level, readEngine, chunkSize).
     """
@@ -177,7 +177,7 @@ class Db2Src(Src):
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
-    initial_values: dict[str, ContextValueSpec] | None = None
+    initial_values: BasicDictSpec | None = None
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:

@@ -376,11 +376,11 @@ def test_src_context_get_attr_returns_none_for_unset_key():
     assert _ctx().get_attr("k") is None
 
 
-def test_src_context_store_attr_round_trips_via_get_attr():
-    """``store_attr`` writes through; a subsequent ``get_attr`` sees
+def test_src_context_set_attr_round_trips_via_get_attr():
+    """``set_attr`` writes through; a subsequent ``get_attr`` sees
     the value."""
     c = _ctx()
-    c.store_attr("k", "v")
+    c.set_attr("k", "v")
     assert c.get_attr("k") == "v"
 
 
@@ -971,7 +971,7 @@ def test_hydrate_malformed_state_file_raises_bad_initial_values(tmp_path):
 
 def test_drain_noop_when_system_output_empty(tmp_path):
     ctx = _bare_ctx()
-    ctx.store_attr("foo", "bar")  # has state but nowhere to send it.
+    ctx.set_attr("foo", "bar")  # has state but nowhere to send it.
     drain_ctx_to_state_or_raise(
         ctx, _bare_request(), tmp_path, error_code=RunSourcePluginErrorCode.RSP_10
     )
@@ -980,7 +980,7 @@ def test_drain_noop_when_system_output_empty(tmp_path):
 
 def test_drain_noop_when_slot_has_no_location(tmp_path):
     ctx = _bare_ctx()
-    ctx.store_attr("foo", "bar")
+    ctx.set_attr("foo", "bar")
     # OutputTable.location is required by pydantic; bypass validation
     # with model_construct to exercise the drain function's defensive
     # ``if slot.location is None: return`` branch.
@@ -1003,7 +1003,7 @@ def test_drain_noop_when_slot_has_no_location(tmp_path):
 
 def test_drain_writes_state_file_when_slot_present(tmp_path):
     ctx = _bare_ctx()
-    ctx.store_attr("last-modified", "2026-05-28T00:00:00Z")
+    ctx.set_attr("last-modified", "2026-05-28T00:00:00Z")
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
@@ -1034,7 +1034,7 @@ def test_drain_creates_state_dir_if_missing(tmp_path):
     state_dir = tmp_path / "fresh"
     assert not state_dir.exists()
     ctx = _bare_ctx()
-    ctx.store_attr("k", "v")
+    ctx.set_attr("k", "v")
     req = _bare_request(
         system_output=(_output_table("iv", location=Location(uri="file:///x")),),
     )
@@ -1045,10 +1045,10 @@ def test_drain_creates_state_dir_if_missing(tmp_path):
 
 
 def test_drain_bad_value_raises_bad_initial_values(tmp_path, monkeypatch):
-    """If something poisons the ctx with a non-ContextValueSpec value,
+    """If something poisons the ctx with a non-BasicTypeSpec value,
     the codec rejects it and the command surfaces BadStateOutError."""
     ctx = _bare_ctx()
-    # Bypass store_attr's type-friendly surface to inject a bad value
+    # Bypass set_attr's type-friendly surface to inject a bad value
     # directly into the underlying scratch dict.
     ctx._scratch["k"] = object()  # type: ignore[assignment]
     req = _bare_request(
