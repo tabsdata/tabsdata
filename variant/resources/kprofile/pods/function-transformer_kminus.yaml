@@ -309,6 +309,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+          envFrom:
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
           volumeMounts:
             - name: config-localize-fn-bundle
               mountPath: /tabsdata/config
@@ -431,6 +435,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+          envFrom:
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
           volumeMounts:
             - name: config-run-transporter-localize
               mountPath: /tabsdata/config
@@ -612,6 +620,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+          envFrom:
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
           volumeMounts:
             - name: config-run-transporter-state-upload
               mountPath: /tabsdata/config
@@ -728,6 +740,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+          envFrom:
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
           volumeMounts:
             - name: config-run-transporter-tables-upload
               mountPath: /tabsdata/config

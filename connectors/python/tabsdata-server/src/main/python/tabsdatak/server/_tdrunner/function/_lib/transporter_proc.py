@@ -42,10 +42,11 @@ Used by the ``run-transporter`` command to actually copy parquet files.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import threading
 from pathlib import Path
-from typing import IO, Sequence
+from typing import IO, Mapping, Sequence
 
 from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
 from tabsdatak.common._interpreter.python.venv import PythonEnvironment
@@ -53,6 +54,40 @@ from tabsdatak.common._interpreter.python.venv import PythonEnvironment
 logger = logging.getLogger(__name__)
 
 TRANSPORTER_BINARY_NAME = "td_transporter"
+
+SECRETS_MOUNT_OPTION_PREFIX = "SECRETS__STORAGE__MOUNTS__"
+OPTIONS_INFIX = "__OPTIONS__"
+
+OPTION_KEY_TO_TRANSPORTER_FIELD = {
+    "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",
+    "AWS_REGION": "AWS_REGION",
+    "AZURE_STORAGE_ACCOUNT_NAME": "AZURE_ACCOUNT_NAME",
+    "AZURE_STORAGE_ACCOUNT_KEY": "AZURE_ACCOUNT_KEY",
+    "GOOGLE_SERVICE_ACCOUNT_KEY": "GCP_SERVICE_ACCOUNT_KEY",
+}
+
+
+def transporter_environment(source: Mapping[str, str]) -> dict[str, str]:
+    environment = dict(source)
+    for name, value in source.items():
+        if not name.startswith(SECRETS_MOUNT_OPTION_PREFIX):
+            continue
+        remainder = name[len(SECRETS_MOUNT_OPTION_PREFIX) :]
+        separator = remainder.find(OPTIONS_INFIX)
+        if separator == -1:
+            continue
+        mount_id = remainder[:separator]
+        option_key = remainder[separator + len(OPTIONS_INFIX) :]
+        transporter_field = OPTION_KEY_TO_TRANSPORTER_FIELD.get(option_key)
+        if transporter_field is None:
+            logger.warning(
+                f"No transporter field mapping for storage option '{option_key}' "
+                f"on mount '{mount_id}'; leaving it unmapped."
+            )
+            continue
+        environment.setdefault(f"{mount_id}_{transporter_field}", value)
+    return environment
 
 
 class TransporterNotFoundError(FileNotFoundError):
@@ -122,6 +157,7 @@ def _run(cmd: Sequence[str]) -> int:
         stderr=subprocess.PIPE,
         bufsize=1,
         text=True,
+        env=transporter_environment(os.environ),
     )
 
     assert proc.stdout is not None

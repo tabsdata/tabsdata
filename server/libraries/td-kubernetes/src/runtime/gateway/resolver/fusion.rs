@@ -8,13 +8,19 @@ use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::Path;
 
+use serde_yaml::Value;
+
 use crate::base::constants::{KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY};
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::fusion::resolve::resolve_config_file;
 use crate::runtime::gateway::resolver::placeholder::SystemValues;
+use crate::runtime::gateway::resolver::schema::Schema;
 use crate::runtime::gateway::resolver::walker::SecretEntry;
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{Profile, RenderedConfigmap};
+
+const CONFIG_EXTENSION: &str = ".yaml";
+const SCHEMA_EXTENSION: &str = ".yamls";
 
 pub struct FusedSecrets {
     pub by_file: Vec<(String, Vec<SecretEntry>)>,
@@ -63,6 +69,9 @@ fn resolve_configs_files(
     create_folder(&stage_configs)?;
     let mut by_file = Vec::new();
     for (file, template) in &profile.configs {
+        if file.ends_with(SCHEMA_EXTENSION) {
+            continue;
+        }
         let init_file = init_configs.join(file);
         let init_content = fs::read_to_string(&init_file).map_err(|cause| {
             ResolverError::InitializationReadFailed {
@@ -70,13 +79,46 @@ fn resolve_configs_files(
                 cause: cause.to_string(),
             }
         })?;
-        let outcome = resolve_config_file(template, &init_content, system, auto)?;
+        let template = bake_schema_secrets(file, template, &profile.configs)?;
+        let outcome = resolve_config_file(&template, &init_content, system, auto)?;
         write_staged(&stage_configs.join(file), &outcome.rendered)?;
         if !outcome.secrets.is_empty() {
             by_file.push((file.clone(), outcome.secrets));
         }
     }
     Ok(FusedSecrets { by_file })
+}
+
+fn bake_schema_secrets(
+    file: &str,
+    config: &str,
+    configs: &RenderedConfigmap,
+) -> Result<String, ResolverError> {
+    let Some(stem) = file.strip_suffix(CONFIG_EXTENSION) else {
+        return Ok(config.to_owned());
+    };
+    let Some(schema_text) = configs.get(&format!("{stem}{SCHEMA_EXTENSION}")) else {
+        return Ok(config.to_owned());
+    };
+    let schema = Schema::parse(file, schema_text)
+        .map_err(|cause| ResolverError::SchemaParseFailed {
+            path: file.to_owned(),
+            cause: cause.to_string(),
+        })?;
+    if schema.is_empty() {
+        return Ok(config.to_owned());
+    }
+    let mut value: Value = serde_yaml::from_str(config).map_err(|cause| {
+        ResolverError::ParseFailed {
+            path: file.to_owned(),
+            cause: cause.to_string(),
+        }
+    })?;
+    schema.rewrite_secrets(&mut value);
+    serde_yaml::to_string(&value).map_err(|cause| ResolverError::ParseFailed {
+        path: file.to_owned(),
+        cause: cause.to_string(),
+    })
 }
 
 fn stage_pods_files(profile: &Profile, stage: &Path) -> Result<(), ResolverError> {

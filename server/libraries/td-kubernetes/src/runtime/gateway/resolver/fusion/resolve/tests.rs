@@ -42,6 +42,38 @@ database:
 }
 
 #[test]
+fn schema_baked_template_harvests_value_from_init() {
+    let template = "\
+storage:
+  mounts:
+  - id: S3
+    options:
+      aws_region: ${{secret}}
+";
+    let init = "\
+storage:
+  mounts:
+  - id: S3
+    options:
+      aws_region: eu-west-1
+";
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let outcome = resolve_config_file(template, init, &system, &auto).expect("resolve");
+
+    let by_key: std::collections::BTreeMap<_, _> = outcome
+        .secrets
+        .iter()
+        .map(|entry| (entry.key.as_str(), entry.value.as_str()))
+        .collect();
+    let region = by_key
+        .get("STORAGE__MOUNTS__S3__OPTIONS__AWS_REGION")
+        .expect("aws_region secret harvested from init");
+    assert_eq!(*region, "eu-west-1");
+    assert!(outcome.rendered.contains("${{secret}}"));
+}
+
+#[test]
 fn connection_envfrom_secret_ref_resolves_without_identity_error() {
     let config = "\
 envFrom:

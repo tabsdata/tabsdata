@@ -125,4 +125,6 @@ pub enum ResolverError {
         generator: String,
         supported: String,
     } = 5033,
+    #[error("Could not parse schema for '{path}': {cause}.")]
+    SchemaParseFailed { path: String, cause: String } = 5034,
 }

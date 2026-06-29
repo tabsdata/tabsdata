@@ -10,6 +10,31 @@ use super::*;
 use crate::runtime::instance::manifest::Manifest;
 
 #[test]
+fn normalize_schema_extension_rewrites_schema_yaml_to_yamls() {
+    assert_eq!(
+        normalize_schema_extension("apiserver.storage.schema.yaml"),
+        "apiserver.storage.yamls"
+    );
+}
+
+#[test]
+fn normalize_schema_extension_preserves_axis_tokens() {
+    assert_eq!(
+        normalize_schema_extension("apiserver_docker.storage.schema.yaml"),
+        "apiserver_docker.storage.yamls"
+    );
+}
+
+#[test]
+fn normalize_schema_extension_leaves_plain_configs_untouched() {
+    assert_eq!(
+        normalize_schema_extension("apiserver.storage.yaml"),
+        "apiserver.storage.yaml"
+    );
+    assert_eq!(normalize_schema_extension("apiserver.yaml"), "apiserver.yaml");
+}
+
+#[test]
 fn is_valid_path_component_accepts_alphanumerics_dash_dot() {
     assert!(is_valid_path_component("foo"));
     assert!(is_valid_path_component("foo-bar"));

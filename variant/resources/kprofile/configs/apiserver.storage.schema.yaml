@@ -1,0 +1,7 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+directives:
+  - at: storage.mounts[*].options.*
+    treat: secret

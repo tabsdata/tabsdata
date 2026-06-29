@@ -37,6 +37,16 @@ pub struct Profile {
 
 const CONFIGMAP_FAMILIES: &[&Family] = &[&KPROFILE_PODS_FAMILY, &KPROFILE_CONFIGS_FAMILY];
 
+const SCHEMA_EXTENSION: &str = ".yamls";
+const SCHEMA_SOURCE_EXTENSION: &str = ".schema.yaml";
+
+fn normalize_schema_extension(file_name: &str) -> String {
+    match file_name.strip_suffix(SCHEMA_SOURCE_EXTENSION) {
+        Some(stem) => format!("{stem}{SCHEMA_EXTENSION}"),
+        None => file_name.to_owned(),
+    }
+}
+
 pub fn resolve_kprofile_path(verbose: bool) -> Result<PathBuf, ProfileError> {
     let resolver = resolve_python_binary(PROGRAM_TD_RESOURCE).map_err(|error| {
         ProfileError::ResourceBinaryNotFound(PROGRAM_TD_RESOURCE.to_owned(), error.to_string())
@@ -151,7 +161,7 @@ fn load_configmap_folder(
         if !file_type.is_file() {
             continue;
         }
-        let parsed = parse_filename(file_name);
+        let parsed = parse_filename(&normalize_schema_extension(file_name));
         let content = fs::read_to_string(&path).map_err(|error| {
             ProfileError::ReadFailed(path.display().to_string(), error.to_string())
         })?;
