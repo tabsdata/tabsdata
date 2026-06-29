@@ -22,7 +22,7 @@ from pydantic import StringConstraints
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, Secret
+from tabsdatak.api import Dest, Secret
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -31,6 +31,7 @@ from tabsdatak.conn.common.types import CfgSpec, UserPassword
 # noinspection PyProtectedMember
 from tabsdatak.conn.mongodb import _validation
 from tabsdatak.conn.mongodb.error import MongodbErrorCode
+from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
 

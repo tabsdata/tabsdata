@@ -24,7 +24,6 @@ import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 from tabsdatak.api import (
-    Conn,
     Dest,
     Secret,
 )
@@ -48,6 +47,7 @@ from tabsdatak.conn.common.types import (
 # noinspection PyProtectedMember
 from tabsdatak.conn.druid import _validation
 from tabsdatak.conn.druid.error import DruidErrorCode
+from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
 

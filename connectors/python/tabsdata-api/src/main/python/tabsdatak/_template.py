@@ -19,7 +19,7 @@ Introspects the connectors registered through the SPI registry
       credentials:           # ... nested userPasswordCredentials envelope ...
         ...
 
-The ``spec`` mirrors the connection :class:`~tabsdatak.api.Conn` dataclass's
+The ``spec`` mirrors the connection :class:`~tabsdatak.spi.Conn` dataclass's
 pydantic fields. Each field's sample is generated from the **first** member of
 its type union:
 
@@ -62,7 +62,8 @@ from ruamel.yaml.comments import CommentedMap
 # noinspection PyProtectedMember
 from tabsdatak._api import DescriptorBase, qualified_class, resolve_class
 from tabsdatak._connectors import avail_dests, avail_srcs, avail_stream_srcs
-from tabsdatak.api import Conn, Secret
+from tabsdatak.api import Secret
+from tabsdatak.spi import Conn
 
 # pydantic marks a required field's default with a sentinel; treat it as unset.
 try:
@@ -85,7 +86,7 @@ class TemplateError(Exception):
 @dataclass(frozen=True)
 class ConnectorInfo:
     """One registered connector binding: its wire type, direction, version and
-    the concrete :class:`~tabsdatak.api.Conn` subclass to introspect."""
+    the concrete :class:`~tabsdatak.spi.Conn` subclass to introspect."""
 
     type: str
     direction: Direction

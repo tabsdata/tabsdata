@@ -24,7 +24,6 @@ from pydantic import StringConstraints
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.api import (
-    Conn,
     Dest,
     Secret,
     Src,
@@ -52,6 +51,7 @@ from tabsdatak.conn.common.types import (
     full_path,
 )
 from tabsdatak.conn.gcs.error import GcsErrorCode
+from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
 

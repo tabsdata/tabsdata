@@ -26,7 +26,6 @@ import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 from tabsdatak.api import (
-    Conn,
     Dest,
     Secret,
 )
@@ -51,6 +50,7 @@ from tabsdatak.conn.common.types import (
 # noinspection PyProtectedMember
 from tabsdatak.conn.starrocks import _validation
 from tabsdatak.conn.starrocks.error import StarRocksErrorCode
+from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
 

@@ -147,7 +147,7 @@ class _SerdeSrc(m.Src):
 
 
 _connectors.register_src(spi.SrcDef(
-        conn=m.Conn,
+        conn=spi.Conn,
     src_type="serde_test_src",
     src_version="v1",
     src=_SerdeSrc,
@@ -164,7 +164,7 @@ class _SerdeDest(m.Dest):
 
 
 _connectors.register_dest(spi.DestDef(
-        conn=m.Conn,
+        conn=spi.Conn,
     dest_type="serde_test_dest",
     dest_version="v1",
     dest=_SerdeDest,
@@ -224,18 +224,18 @@ from pydantic.dataclasses import dataclass as _pdc
 
 
 @_stdlib_dc.dataclass
-class _StdlibConn(m.Conn):
+class _StdlibConn(spi.Conn):
     host: str
     port: int = 5432
 
 
 @_pdc
-class _PdcConn(m.Conn):
+class _PdcConn(spi.Conn):
     host: str
     port: int = 5432
 
 
-class _BmConn(m.Conn, BaseModel):
+class _BmConn(spi.Conn, BaseModel):
     host: str
     port: int = 5432
 
@@ -358,7 +358,7 @@ def test_conn_base_resolves_to_concrete_subclass():
     c = _StdlibConn(host="db.example")
     d = c.to_dict()
     # Reconstruct via the base class -- it must dispatch to _StdlibConn.
-    back = m.Conn.from_dict(d)
+    back = spi.Conn.from_dict(d)
     assert isinstance(back, _StdlibConn)
     assert back == c
 
@@ -368,7 +368,7 @@ def test_kind_mismatch_rejected():
     d = c.to_dict()
     d["kind"] = m.KIND_SOURCE_DEF  # tampered
     with pytest.raises(Exception, match="kind"):
-        m.Conn.from_dict(d)
+        spi.Conn.from_dict(d)
 
 
 def test_secret_rejects_envelope_dict():
@@ -552,7 +552,7 @@ def test_on_tables_action_polymorphic_load_via_base():
 def test_conn_round_trip_for_each_authoring_style(conn_cls):
     c = conn_cls(host="db.example", port=6543)
     s = c.to_json()
-    back = m.Conn.from_json(s)  # via the abstract base -- polymorphic dispatch
+    back = spi.Conn.from_json(s)  # via the abstract base -- polymorphic dispatch
     assert isinstance(back, conn_cls)
     assert back.host == "db.example"
     assert back.port == 6543
@@ -637,7 +637,7 @@ def test_cron_trigger_round_trips():
 
 
 @_api.dataclass(ApiErrorCode.API_14)
-class _PortRequiresHostConn(m.Conn):
+class _PortRequiresHostConn(spi.Conn):
     host: str | None = None
     port: int | None = None
 

@@ -23,7 +23,7 @@ from pydantic import StringConstraints
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Dest, Secret
+from tabsdatak.api import Dest, Secret
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation
@@ -41,6 +41,7 @@ from tabsdatak.conn.common.types import (
     GCSBucketSpec,
     full_path,
 )
+from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
 

@@ -24,7 +24,7 @@ from pydantic import Field, StringConstraints
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn, Secret, Src
+from tabsdatak.api import Secret, Src
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -35,6 +35,7 @@ from tabsdatak.conn.common.types import CfgSpec, Credentials, EntityWhitelistSpe
 # noinspection PyProtectedMember
 from tabsdatak.conn.salesforce import _validation
 from tabsdatak.conn.salesforce.error import SalesforceErrorCode
+from tabsdatak.spi import Conn
 
 # --- Credentials -----------------------------------------------------
 

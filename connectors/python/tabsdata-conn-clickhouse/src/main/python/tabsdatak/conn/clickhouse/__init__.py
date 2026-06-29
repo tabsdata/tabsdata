@@ -25,7 +25,6 @@ import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
 from tabsdatak.api import (
-    Conn,
     Dest,
     Secret,
 )
@@ -51,6 +50,7 @@ from tabsdatak.conn.common.types import (
     UserPassword,
     full_path,
 )
+from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
 

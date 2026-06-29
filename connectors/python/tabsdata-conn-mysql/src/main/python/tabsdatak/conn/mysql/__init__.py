@@ -46,7 +46,6 @@ from pydantic import StringConstraints
 import tabsdatak._api as _api
 from tabsdatak.api import (
     BasicDictSpec,
-    Conn,
     Dest,
     Secret,
     Src,
@@ -61,6 +60,7 @@ from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPasswo
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql import _validation
 from tabsdatak.conn.mysql.error import MysqlErrorCode
+from tabsdatak.spi import Conn
 
 # --- CDC public primitives ------------------------------------------
 #

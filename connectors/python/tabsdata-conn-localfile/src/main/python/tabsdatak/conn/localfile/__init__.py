@@ -22,7 +22,6 @@ from typing import Annotated, Any, Literal, TypeAlias
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.api import (
-    Conn,
     Dest,
     Src,
 )
@@ -43,6 +42,7 @@ from tabsdatak.conn.common.file.typing_ import (
 )
 from tabsdatak.conn.common.types import BasePathSpec, CfgSpec, full_path
 from tabsdatak.conn.localfile.error import LocalFileErrorCode
+from tabsdatak.spi import Conn
 
 # --- LocalFileSrc.src_cfg keys --------------------------------------
 SrcCfgKey: TypeAlias = Literal["tabsdata.file.chunkSize"]

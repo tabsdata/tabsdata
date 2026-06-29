@@ -5,10 +5,9 @@ from typing import Any, Mapping
 
 from sqlalchemy import Engine
 
-from tabsdatak.api import Conn
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec
-from tabsdatak.spi import TableFileSpec
+from tabsdatak.spi import Conn, TableFileSpec
 
 
 @dataclass(kw_only=True)

@@ -11,10 +11,9 @@ from urllib.parse import urlparse
 
 from sqlalchemy import Engine, create_engine, make_url
 
-from tabsdatak.api import Conn
-
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import UserPassword, _convert
+from tabsdatak.spi import Conn
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

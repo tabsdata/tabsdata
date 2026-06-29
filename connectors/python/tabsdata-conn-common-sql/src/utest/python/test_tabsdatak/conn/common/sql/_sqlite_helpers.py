@@ -25,11 +25,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Conn
-# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.reader import SqlReadCfg
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine.writer import SqlWriteCfg
+
+# noinspection PyProtectedMember
+from tabsdatak.spi import Conn
 
 
 # ``SqlReadCfg`` / ``SqlWriteCfg`` are generic in the ``Conn``

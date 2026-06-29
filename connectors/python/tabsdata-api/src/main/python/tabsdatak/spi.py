@@ -47,13 +47,32 @@ from pydantic import ConfigDict, model_validator
 import tabsdatak._api as _api
 from tabsdatak.api import (
     BasicDictSpec,
-    Conn,
     Dest,
     Src,
     StreamSrc,
     TrxCtx,
 )
 from tabsdatak.error import ApiErrorCode
+
+
+class _Conn(ABC, _api.DescriptorBase):
+    __kind__ = "connectionDef"
+
+
+class Conn(_Conn, ABC):
+    """Abstract base for every connection.
+
+    Concrete subclasses live in the per-database connector
+    packages (e.g. ``MySQLConn``, ``MySQLCdcConn``) and declare
+    their own ``uri`` / ``credentials`` / ``conn_cfg`` fields.
+
+    A connection is never declared on a flow function; it is registered
+    on the function's collection and the runtime resolves it and hands
+    it to the connector's plugin (``read_in`` / ``write_out`` / ``run``)
+    at run time."""
+
+    __kind__ = "connectionDef"
+
 
 # The on-disk transport for one in-flight table: a single Parquet file as
 # a plain ``pathlib.Path``. Plugins materialise rows to these paths during
@@ -429,7 +448,7 @@ class FunctionCtx(TrxCtx, FlowCtx, ABC):
 
 class Explorer[C: Conn](ABC):
     """Optional connector capability for ad-hoc inspection of a
-    live :class:`tabsdatak.api.Conn`: catalog metadata and arbitrary
+    live :class:`tabsdatak.spi.Conn`: catalog metadata and arbitrary
     query execution. Used by tooling (UIs, schema diff), not by the
     flow runtime."""
 

@@ -24,7 +24,6 @@ from pydantic import StringConstraints
 import tabsdatak._api as _api
 from tabsdatak.api import (
     BasicDictSpec,
-    Conn,
     Dest,
     Secret,
     Src,
@@ -38,6 +37,7 @@ from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPasswo
 # noinspection PyProtectedMember
 from tabsdatak.conn.oracle import _validation
 from tabsdatak.conn.oracle.error import OracleErrorCode
+from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
 

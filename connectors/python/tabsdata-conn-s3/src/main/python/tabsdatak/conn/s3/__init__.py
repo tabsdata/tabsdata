@@ -22,7 +22,6 @@ from typing import Annotated, Any, Literal, TypeAlias
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.api import (
-    Conn,
     Dest,
     Src,
 )
@@ -50,6 +49,7 @@ from tabsdatak.conn.common.types import (
     full_path,
 )
 from tabsdatak.conn.s3.error import S3ErrorCode
+from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
 

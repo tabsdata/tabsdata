@@ -24,7 +24,6 @@ import tabsdatak._api as _api
 # noinspection PyProtectedMember
 from tabsdatak.api import (
     BasicDictSpec,
-    Conn,
     Dest,
     Secret,
     Src,
@@ -39,6 +38,7 @@ from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import _validation
 from tabsdatak.conn.databricks.error import DatabricksErrorCode
+from tabsdatak.spi import Conn
 
 # --- Type aliases ----------------------------------------------------
 

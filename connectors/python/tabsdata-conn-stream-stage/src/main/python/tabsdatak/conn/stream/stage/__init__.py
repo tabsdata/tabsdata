@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-from tabsdatak.api import Conn, Src
+from tabsdatak.api import Src
 from tabsdatak.conn.azureblob import AzureBlobSrcConn
 from tabsdatak.conn.common.file import _input, _output, _transporter
 from tabsdatak.conn.gcs import GCSSrcConn
@@ -19,6 +19,7 @@ from tabsdatak.conn.stream.stage._backend import StageBackend, backend_for_conn
 from tabsdatak.conn.stream.stage.error import ManifestStageErrorCode
 from tabsdatak.error import ApiException
 from tabsdatak.spi import (
+    Conn,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,

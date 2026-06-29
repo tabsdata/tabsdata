@@ -30,7 +30,7 @@ from pydantic import StringConstraints
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
-from tabsdatak.api import Conn, Secret, StreamSrc
+from tabsdatak.api import Secret, StreamSrc
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -41,6 +41,7 @@ from tabsdatak.conn.common.types import (
     UserPassword,
 )
 from tabsdatak.conn.kafka.error import KafkaErrorCode
+from tabsdatak.spi import Conn
 
 # --- Credential aliases ---------------------------------------------
 

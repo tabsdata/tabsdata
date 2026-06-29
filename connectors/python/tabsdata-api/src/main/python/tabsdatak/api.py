@@ -265,20 +265,6 @@ class Secret:
         )
 
 
-class _Conn(ABC, _api.DescriptorBase):
-    __kind__ = "connectionDef"
-
-
-class Conn(_Conn, ABC):
-    """Abstract base for every connection.
-
-    Concrete subclasses live in the per-database connector
-    packages (e.g. ``MySQLConn``, ``MySQLCdcConn``) and declare
-    their own ``uri`` / ``credentials`` / ``conn_cfg`` fields."""
-
-    __kind__ = "connectionDef"
-
-
 # `__kind__` discriminator values for the descriptor-base JsonSerde
 # envelopes. Centralised here so consumers (server-side dispatch,
 # tests, migration tooling) compare against named constants instead
@@ -461,9 +447,7 @@ def subscriber(
     """
 
     def _subscriber(func):
-        return _info_cls("SubscriberInfo")(
-            func, destination, input_tables, trigger_by
-        )
+        return _info_cls("SubscriberInfo")(func, destination, input_tables, trigger_by)
 
     return _subscriber
 

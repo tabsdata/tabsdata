@@ -7,26 +7,26 @@ import pytest
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
-from tabsdatak.api import BasicDictSpec, StreamSrc, Conn, Dest, Src
+from tabsdatak.api import BasicDictSpec, Dest, Src, StreamSrc, TrxCtx
 from tabsdatak.error import ApiErrorCode, ApiException
-from tabsdatak.api import TrxCtx
 from tabsdatak.spi import (
-    FilesSpec,
-    StreamSrcPluginCtx,
-    StreamSrcDef,
-    StreamSrcPlugin,
-    StreamStageSrc,
-    StreamStateSpec,
+    Conn,
     DestContext,
     DestDef,
     DestPlugin,
     Explorer,
+    FilesSpec,
     FlowCtx,
     FunctionCtx,
     PluginCtx,
-    SrcPluginCtx,
     SrcDef,
     SrcPlugin,
+    SrcPluginCtx,
+    StreamSrcDef,
+    StreamSrcPlugin,
+    StreamSrcPluginCtx,
+    StreamStageSrc,
+    StreamStateSpec,
     TableFileInput,
     TableFileSpec,
     TableMode,
@@ -35,12 +35,12 @@ from tabsdatak.spi import (
 
 
 # A concrete Conn subclass we use throughout this module for binding.
-@_api.dataclass(ApiErrorCode.API_13)
+@_api.dataclass(ApiErrorCode.API_14)
 class _Conn(Conn):
     pass
 
 
-@_api.dataclass(ApiErrorCode.API_13)
+@_api.dataclass(ApiErrorCode.API_14)
 class _OtherConn(Conn):
     pass
 

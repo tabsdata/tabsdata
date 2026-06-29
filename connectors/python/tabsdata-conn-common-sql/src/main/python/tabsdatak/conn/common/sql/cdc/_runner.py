@@ -35,7 +35,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from tabsdatak.api import Conn, StreamSrc
+from tabsdatak.api import StreamSrc
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
 from tabsdatak.conn.common.sql.cdc._sentinel.buffer import BufferSentinel
 from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
@@ -49,7 +49,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_TRIGGER_MAX_SECS,
 )
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
-from tabsdatak.spi import StreamSrcPlugin, StreamSrcPluginCtx
+from tabsdatak.spi import Conn, StreamSrcPlugin, StreamSrcPluginCtx
 
 logger = logging.getLogger(__name__)
 

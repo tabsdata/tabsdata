@@ -31,7 +31,7 @@ class _Src(m.Src):
 
 _connectors.register_src(
     spi.SrcDef(
-        conn=m.Conn,
+        conn=spi.Conn,
         src_type="fs",
         src_version="v1",
         src=_Src,
@@ -50,7 +50,7 @@ class _Dest(m.Dest):
 
 _connectors.register_dest(
     spi.DestDef(
-        conn=m.Conn,
+        conn=spi.Conn,
         dest_type="fs",
         dest_version="v1",
         dest=_Dest,
@@ -75,7 +75,7 @@ class _StreamSrc(m.StreamSrc):
 
 
 _STREAM_SRC_DEFX = spi.StreamSrcDef(
-    conn=m.Conn,
+    conn=spi.Conn,
     src_type="watch",
     src_version="v1",
     src=_StreamSrc,
@@ -517,7 +517,7 @@ class _Src2(m.Src):
 
 _connectors.register_src(
     spi.SrcDef(
-        conn=m.Conn,
+        conn=spi.Conn,
         src_type="fs2",
         src_version="v1",
         src=_Src2,
@@ -536,7 +536,7 @@ class _Dest3(m.Dest):
 
 _connectors.register_dest(
     spi.DestDef(
-        conn=m.Conn,
+        conn=spi.Conn,
         dest_type="fs3",
         dest_version="v1",
         dest=_Dest3,
@@ -701,7 +701,7 @@ class _SrcArray(m.Src):
 
 _connectors.register_src(
     spi.SrcDef(
-        conn=m.Conn,
+        conn=spi.Conn,
         src_type="fs_array",
         src_version="v1",
         src=_SrcArray,
