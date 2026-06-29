@@ -34,6 +34,8 @@ from typing import Generator, List, Union
 import polars as pl
 import requests
 
+# noinspection PyProtectedMember
+from tabsdatak import _connectors
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
     KIND_STREAM_PUBLISHER_DEF,
@@ -5384,10 +5386,38 @@ def _source_or_destination_name(info: FunctionInfo) -> str | None:
 
 def _connection_kind(info: FunctionInfo) -> str | None:
     """The connection kind a publisher/subscriber uses (e.g.
-    ``"mysqlSrcConn"``), read from its declared ``conn``. ``None`` for
-    transformers (no external connection)."""
-    conn = getattr(info, "conn", None)
-    return getattr(conn, "__kind__", None) if conn is not None else None
+    ``"mysqlSrcConn"``), resolved from the connector registry by the
+    source/destination the function binds to -- *not* from the ``conn``
+    declared on the decorator.
+
+    The bound source/destination type authoritatively determines the
+    connection kind via its registered ``SrcDef`` / ``StreamSrcDef`` /
+    ``DestDef`` (``def.conn`` is the concrete :class:`Conn` subclass,
+    whose ``__kind__`` is the wire kind). ``None`` for transformers
+    (no external connection)."""
+    kind = getattr(info, "__kind__", None)
+    if kind == KIND_PUBLISHER_DEF:
+        source = getattr(info, "source", None)
+        conn_cls = (
+            _connectors.get_src(type(source)).conn if source is not None else None
+        )
+    elif kind == KIND_STREAM_PUBLISHER_DEF:
+        source = getattr(info, "source", None)
+        conn_cls = (
+            _connectors.get_stream_src(type(source)).conn
+            if source is not None
+            else None
+        )
+    elif kind == KIND_SUBSCRIBER_DEF:
+        destination = getattr(info, "destination", None)
+        conn_cls = (
+            _connectors.get_dest(type(destination)).conn
+            if destination is not None
+            else None
+        )
+    else:
+        conn_cls = None
+    return getattr(conn_cls, "__kind__", None) if conn_cls is not None else None
 
 
 def _input_tables(info: FunctionInfo) -> list[str]:

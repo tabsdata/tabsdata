@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+
 from tabsdatak.api import (
     AllTablesTrigger,
     CronTrigger,
@@ -25,7 +26,6 @@ from tabsdatak.api import (
 
 # noinspection PyProtectedMember
 from tabsdatak.sdk import tabsdata_server as ts
-
 
 # ---------------------------------------------------------------------------
 # Duck-typed FunctionInfo stand-ins for the metadata extractor tests.
@@ -56,6 +56,44 @@ class _FakeDest:
 class _FakeConn:
     def __init__(self, kind: str):
         self.__kind__ = kind
+
+
+# Connection classes the *registry* binds ``_FakeSrc`` / ``_FakeDest``
+# to. ``_connection_kind`` reports ``def.conn.__kind__`` from the
+# registry lookup, so these -- not the decorator's ``conn`` -- decide
+# the surfaced kind.
+class _FakeSrcConn:
+    __kind__ = "mysqlSrcConn"
+
+
+class _FakeDestConn:
+    __kind__ = "mysqlDestConn"
+
+
+@pytest.fixture(autouse=True)
+def _stub_connector_registry(monkeypatch):
+    """``_connection_kind`` resolves the connection kind from the
+    connector registry by the source/destination type (not the
+    decorator ``conn``). Map the duck-typed fakes to stub defs whose
+    ``conn`` carries the expected ``__kind__``."""
+    from types import SimpleNamespace
+
+    def get_src(cls):
+        if cls is _FakeSrc:
+            return SimpleNamespace(conn=_FakeSrcConn)
+        raise KeyError(cls)
+
+    def get_dest(cls):
+        if cls is _FakeDest:
+            return SimpleNamespace(conn=_FakeDestConn)
+        raise KeyError(cls)
+
+    def get_stream_src(cls):
+        raise KeyError(cls)
+
+    monkeypatch.setattr(ts._connectors, "get_src", get_src)
+    monkeypatch.setattr(ts._connectors, "get_dest", get_dest)
+    monkeypatch.setattr(ts._connectors, "get_stream_src", get_stream_src)
 
 
 def _decorated(name: str):
@@ -90,7 +128,10 @@ def _publisher_info(
         kind=KIND_PUBLISHER_DEF,
         func=_decorated(func_name),
         source=_FakeSrc(),
-        conn=_FakeConn("mysqlSrcConn"),
+        # Deliberately a *different* kind than the registry binds the
+        # source to: the reported kind must come from the registry
+        # (``_FakeSrcConn`` -> ``mysqlSrcConn``), not this conn.
+        conn=_FakeConn("decoratorConnIgnored"),
         output_tables=output_tables or ["t1"],
         trigger_by=trigger_by,
         on_tables=None,
@@ -128,7 +169,9 @@ def _subscriber_info(
         kind=KIND_SUBSCRIBER_DEF,
         func=_decorated(func_name),
         destination=_FakeDest(),
-        conn=_FakeConn("mysqlDestConn"),
+        # See ``_publisher_info``: the registry, not this conn, decides
+        # the reported kind (``_FakeDestConn`` -> ``mysqlDestConn``).
+        conn=_FakeConn("decoratorConnIgnored"),
         input_tables=input_tables or ["coll/x"],
         trigger_by=trigger_by,
     )
@@ -188,11 +231,13 @@ def test_source_or_destination_name_for_transformer_is_none():
     assert ts._source_or_destination_name(_transformer_info()) is None
 
 
-def test_connection_kind_for_publisher_returns_conn_kind():
+def test_connection_kind_for_publisher_comes_from_registry_not_decorator():
+    # Decorator conn is "decoratorConnIgnored"; the registry binds the
+    # source to a conn whose kind is "mysqlSrcConn" -- that one wins.
     assert ts._connection_kind(_publisher_info()) == "mysqlSrcConn"
 
 
-def test_connection_kind_for_subscriber_returns_conn_kind():
+def test_connection_kind_for_subscriber_comes_from_registry_not_decorator():
     assert ts._connection_kind(_subscriber_info()) == "mysqlDestConn"
 
 
