@@ -83,19 +83,36 @@ class TemplateError(Exception):
     verbatim by the CLI."""
 
 
+# Human-readable rendering of a connector's direction, shown by
+# ``tdk connection types`` as the "Mode" column.
+_MODE_BY_DIRECTION = {
+    "src": "Source",
+    "stream-src": "Stream Source",
+    "dest": "Destination",
+}
+
+
 @dataclass(frozen=True)
 class ConnectorInfo:
-    """One registered connector binding: its wire type, direction, version and
-    the concrete :class:`~tabsdatak.spi.Conn` subclass to introspect."""
+    """One registered connector binding: its wire type, direction, version,
+    target system and the concrete :class:`~tabsdatak.spi.Conn` subclass to
+    introspect."""
 
     type: str
     direction: Direction
     version: str
+    system: str
     conn_cls: type
 
     @property
     def kind(self) -> str:
         return self.conn_cls.__kind__
+
+    @property
+    def mode(self) -> str:
+        """Human-readable direction (``Source`` / ``Destination`` /
+        ``Stream Source``)."""
+        return _MODE_BY_DIRECTION[self.direction]
 
 
 # ---------------------------------------------------------------------------
@@ -117,11 +134,11 @@ def list_connectors() -> list[ConnectorInfo]:
     registries."""
     rows: list[ConnectorInfo] = []
     for type_, d in avail_srcs().items():
-        rows.append(ConnectorInfo(type_, "src", d.src_version, d.conn))
+        rows.append(ConnectorInfo(type_, "src", d.src_version, d.system, d.conn))
     for type_, d in avail_stream_srcs().items():
-        rows.append(ConnectorInfo(type_, "stream-src", d.src_version, d.conn))
+        rows.append(ConnectorInfo(type_, "stream-src", d.src_version, d.system, d.conn))
     for type_, d in avail_dests().items():
-        rows.append(ConnectorInfo(type_, "dest", d.dest_version, d.conn))
+        rows.append(ConnectorInfo(type_, "dest", d.dest_version, d.system, d.conn))
     rows = [r for r in rows if _user_facing(r.conn_cls)]
     rows.sort(key=lambda r: (r.type, r.direction))
     return rows

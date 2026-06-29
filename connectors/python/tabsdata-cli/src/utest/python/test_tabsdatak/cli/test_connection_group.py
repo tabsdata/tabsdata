@@ -23,8 +23,18 @@ def _installed(type_: str, direction: str) -> bool:
         return False
 
 
+def test_types_lists_mode_and_system():
+    result = CliRunner().invoke(cli, ["connection", "types"])
+    assert result.exit_code == 0, result.output
+    # New columns + a known reference connector (localfile always installed).
+    assert "Mode" in result.output
+    assert "System" in result.output
+    assert "local-file-in" in result.output
+    assert "Source" in result.output
+
+
 def test_template_emits_yaml():
-    result = CliRunner().invoke(cli, ["connection", "template", "-t", "local-file-in", "-d", "src"])
+    result = CliRunner().invoke(cli, ["connection", "template", "-t", "local-file-in"])
     assert result.exit_code == 0, result.output
     assert "kind: connectionDef" in result.output
     # YAML, not JSON -- no leading brace.
@@ -35,7 +45,7 @@ def test_template_emits_yaml():
     not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
 )
 def test_template_yaml_carries_accepts_comments():
-    result = CliRunner().invoke(cli, ["connection", "template", "-t", "mysql-sql-in", "-d", "src"])
+    result = CliRunner().invoke(cli, ["connection", "template", "-t", "mysql-sql-in"])
     assert result.exit_code == 0, result.output
     # uri (str|Secret) carries an "# accepts:" note in union order.
     assert "# accepts: <value> | secret:<value>" in result.output
@@ -43,14 +53,14 @@ def test_template_yaml_carries_accepts_comments():
 
 def test_validate_reads_yaml(tmp_path):
     # Generate a template (YAML), write it, validate it through the CLI.
-    gen = CliRunner().invoke(cli, ["connection", "template", "-t", "local-file-in", "-d", "src"])
+    gen = CliRunner().invoke(cli, ["connection", "template", "-t", "local-file-in"])
     assert gen.exit_code == 0, gen.output
     path = tmp_path / "conn.yaml"
     path.write_text(gen.output)
 
     result = CliRunner().invoke(cli, ["connection", "validate", "-f", str(path)])
     assert result.exit_code == 0, result.output
-    assert "is valid (connectionDef)" in result.output
+    assert "Connection document is valid" in result.output
 
 
 def test_validate_rejects_malformed_yaml(tmp_path):

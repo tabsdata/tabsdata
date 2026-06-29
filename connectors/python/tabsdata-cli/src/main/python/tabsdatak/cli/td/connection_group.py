@@ -34,12 +34,11 @@ def types():
 
     table = Table(title="Available connectors")
     table.add_column("Type", style="cyan", no_wrap=True)
-    table.add_column("Direction")
-    table.add_column("Version")
-    table.add_column("Kind")
+    table.add_column("Mode")
+    table.add_column("System")
 
     for row in rows:
-        table.add_row(row.type, row.direction, row.version, row.kind)
+        table.add_row(row.type, row.mode, row.system)
 
     click.echo()
     Console().print(table)
@@ -47,28 +46,21 @@ def types():
     click.echo()
 
 
-def _direction_option(fn):
-    return click.option(
-        "--direction",
-        "-d",
-        type=click.Choice(["src", "stream-src", "dest"]),
-        help="Connector direction; inferred when the type is unambiguous.",
-    )(fn)
-
-
 def _type_option(fn):
     return click.option(
         "--type",
         "-t",
         "type_",
-        help="Connector type, e.g. 'postgres', 's3'. See 'tdk connection types'.",
+        help="Connector type, e.g. 'mysql-sql-in', 's3-file-out'. "
+        "See 'tdk connection types'.",
     )(fn)
 
 
-def _resolve(ctx, type_, direction):
+def _resolve(ctx, type_):
     type_ = type_ or logical_prompt(ctx, "Connector type (see 'tdk connection types')")
     try:
-        return template.resolve_conn(type_, direction)
+        # Types are globally unique, so the direction is always inferred.
+        return template.resolve_conn(type_, None)
     except template.TemplateError as e:
         raise click.ClickException(str(e))
 
@@ -86,60 +78,14 @@ def _emit(document, output):
 # shadowing the imported engine module.
 @connection.command("template")
 @_type_option
-@_direction_option
-@click.option(
-    "--all-fields",
-    is_flag=True,
-    help="Include optional fields (omitted by default).",
-)
 @click.option(
     "--output", "-o", help="Write the template to this file instead of stdout."
 )
 @click.pass_context
-def template_(ctx, type_, direction, all_fields, output):
+def template_(ctx, type_, output):
     """Print a fill-in connection template for a connector type"""
-    info = _resolve(ctx, type_, direction)
-    _emit(template.build_template(info.conn_cls, all_fields=all_fields), output)
-
-
-@connection.command()
-@_type_option
-@_direction_option
-@click.option(
-    "--output",
-    "-o",
-    help="Write the completed connection document to this file instead of stdout.",
-)
-@click.pass_context
-def init(ctx, type_, direction, output):
-    """Interactively build a connection document for a connector type"""
-    info = _resolve(ctx, type_, direction)
-
-    def prompt(path, *, secret, optional, default, pattern, choices):
-        if choices:
-            label = f"{path} -- choose one of: {', '.join(choices)}"
-            return logical_prompt(ctx, label, default_value=choices[0])
-        if secret:
-            label = f"{path} (secret; blank = resolve from the secret store at runtime)"
-            value = logical_prompt(ctx, label, default_value="", hide_input=True)
-            return value or None
-        label = path
-        if pattern:
-            label += f" (pattern: {pattern})"
-        if optional:
-            label += " (optional, blank to skip)"
-        value = logical_prompt(
-            ctx, label, default_value="" if optional else default, hide_input=False
-        )
-        return None if (optional and not value) else value
-
-    document = template.build_template_interactive(info.conn_cls, prompt)
-    try:
-        template.validate(document)
-    except template.TemplateError as e:
-        raise click.ClickException(str(e))
-    click.echo()
-    _emit(document, output)
+    info = _resolve(ctx, type_)
+    _emit(template.build_template(info.conn_cls), output)
 
 
 @connection.command()
@@ -158,7 +104,7 @@ def validate(file):
     except Exception as e:  # noqa: BLE001 -- any YAML parse failure
         raise click.ClickException(f"not valid YAML: {e}")
     try:
-        kind = template.validate(document)
+        template.validate(document)
     except template.TemplateError as e:
         raise click.ClickException(str(e))
-    click.echo(f"Connection document is valid ({kind}).")
+    click.echo("Connection document is valid")
