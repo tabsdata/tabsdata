@@ -28,7 +28,6 @@ from tabsdatak.api import (  # noqa: F401, E402
 )
 from tabsdatak.conn.kafka import (  # noqa: E402
     KafkaStreamSrc as _KafkaStreamSrc,
-    KafkaStreamSrcConn as _KafkaStreamSrcConn,
 )
 from tabsdatak.server._tdrunner.function.commands.run_streamer import (
     _load_function_def,
@@ -46,7 +45,6 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
 @_stream_publisher_decorator(
-    conn=_KafkaStreamSrcConn(servers="x:9092", group_id="g"),
     source=_KafkaStreamSrc(data_format="json", schema="{}", topic="t"),
     flush_interval_mins=1,
     output_tables=["t"],

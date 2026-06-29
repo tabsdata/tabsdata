@@ -67,19 +67,25 @@ from __future__ import annotations
 from typing import Annotated, TypeAlias, Union
 
 import tabsdatak._api as _api
-from tabsdatak.api import Conn, Dest, NamedConn, Src, ValRef
+from tabsdatak.api import Dest, Secret, Src
 from tabsdatak.conn. < name >._validation
 import URI_VALIDATOR  # noqa
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn. < name >.error
 import < Name > ErrorCode
+from tabsdatak.spi import Conn
 
-__all__ = ["<Name>Conn", "<Name>Src", "<Name>Dest", "ConnSpec",
+__all__ = ["<Name>Conn", "<Name>Src", "<Name>Dest",
            "CredentialsSpec", "UriSpec", ...]
 
 CredentialsSpec: TypeAlias = UserPassword
-UriValueSpec: TypeAlias = Annotated[str, URI_VALIDATOR]
-UriSpec: TypeAlias = Union[UriValueSpec, ValRef]
+# A value-string field that accepts a literal or a `Secret`. There is
+# no `ValRef` base any more; secret-bearing fields union the literal
+# shape with `Secret` directly.
+UriSpec: TypeAlias = Union[
+    Annotated[str, URI_VALIDATOR],
+    Annotated[Secret, _api.SecretValueConstraints(...)],
+]
 
 
 @_api.dataclass( < Name > ErrorCode. < NAME > _1
@@ -91,14 +97,11 @@ class <Name > Conn(Conn):
     credentials: CredentialsSpec
 
 
-ConnSpec: TypeAlias = Union[NamedConn, < Name > Conn]
-
 @_api.dataclass( < Name > ErrorCode. < NAME > _2
 
 , kw_only = True)
 
 class <Name > Src(Src):
-    conn: ConnSpec
     queries: list[str]
 
 
@@ -107,9 +110,16 @@ class <Name > Src(Src):
 , kw_only = True)
 
 class <Name > Dest(Dest):
-    conn: ConnSpec
     tables: list[str]
 ```
+
+`<Name>Src` / `<Name>Dest` carry **only their own config** — no
+`conn` field. The connection is registered on the function's
+collection; the runtime resolves it and passes the `<Name>Conn`
+instance to the plugin's `read_in` / `write_out` (see `_plugin.py`).
+The source/destination is *bound* to its connection type in the
+`SrcDef(conn=<Name>Conn, ...)` / `DestDef(conn=<Name>Conn, ...)`
+binding, not via a field on the descriptor.
 
 Dest-only / src-only connectors omit the side they don't ship.
 
@@ -123,27 +133,31 @@ from tabsdatak.spi import (
 )
 
 
+# The runtime resolves the connection from the function's collection
+# and passes the `<Name>Conn` instance to every plugin method.
 class _<Name>SrcPlugin(SrcPlugin[<Name>Conn, <Name>Src]):
-    def read_in(self, ctx, src): ...
+    def read_in(self, ctx, conn, src): ...
 
 class _<Name>DestPlugin(DestPlugin[<Name>Conn, <Name>Dest]):
-    def write_out(self, ctx, dest, tables): ...
+    def write_out(self, ctx, conn, dest, tables): ...
 
 class _<Name>Explorer(Explorer[<Name>Conn]):
     def metadata(self, conn): ...
     def data(self, conn, query): ...
 
 
+# `conn=<Name>Conn` binds this source to its connection *type*; the
+# registry/runtime uses it to resolve and inject the connection.
 <NAME>_SRC = SrcDef[<Name>Conn, <Name>Src](
     src_type="<name>", src_version="v1",
-    src=<Name>Src, table_mode=TableMode.SINGLE,
+    conn=<Name>Conn, src=<Name>Src, table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=_<Name>SrcPlugin, explorer=_<Name>Explorer,
 )
 
 <NAME>_DEST = DestDef[<Name>Conn, <Name>Dest](
     dest_type="<name>", dest_version="v1",
-    dest=<Name>Dest,
+    conn=<Name>Conn, dest=<Name>Dest,
     cardinality=lambda dest: len(dest.tables),
     plugin=_<Name>DestPlugin, explorer=_<Name>Explorer,
 )
@@ -191,10 +205,10 @@ ship just `dest_<name>`.
 
 | Concept                | Name                                              | Where               |
 | ---------------------- | ------------------------------------------------- | ------------------- |
-| Connection             | `<Name>Conn(Conn)`                                | `<name>/__init__.py`   |
-| Source                 | `<Name>Src(Src)`                                  | `<name>/__init__.py`   |
-| Destination            | `<Name>Dest(Dest)`                                | `<name>/__init__.py`   |
-| Conn-field type        | `ConnSpec = Union[NamedConn, <Name>Conn]`         | `<name>/__init__.py`   |
+| Connection             | `<Name>Conn(Conn)` (`Conn` from `tabsdatak.spi`)  | `<name>/__init__.py`   |
+| Source                 | `<Name>Src(Src)` (no `conn` field)                | `<name>/__init__.py`   |
+| Destination            | `<Name>Dest(Dest)` (no `conn` field)              | `<name>/__init__.py`   |
+| Conn ↔ Src/Dest binding | `SrcDef(conn=<Name>Conn, ...)` / `DestDef(conn=<Name>Conn, ...)` | `<name>/_plugin.py` |
 | Src plugin             | `_<Name>SrcPlugin(SrcPlugin[<Name>Conn, <Name>Src])`   | `<name>/_plugin.py` |
 | Dest plugin            | `_<Name>DestPlugin(DestPlugin[<Name>Conn, <Name>Dest])` | `<name>/_plugin.py` |
 | Explorer               | `_<Name>Explorer(Explorer[<Name>Conn])`           | `<name>/_plugin.py`    |

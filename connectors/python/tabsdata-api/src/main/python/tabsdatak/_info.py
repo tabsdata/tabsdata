@@ -21,7 +21,6 @@ from pydantic import ConfigDict, field_serializer, field_validator, model_valida
 
 import tabsdatak._api as _api
 import tabsdatak.api as api
-from tabsdatak.api import Conn
 from tabsdatak.error import ApiErrorCode
 from tabsdatak.spi import TableMode
 
@@ -96,7 +95,6 @@ class PublisherInfo(_api.JsonSerde):
     __kind__ = KIND_PUBLISHER_DEF
 
     func: Callable
-    conn: Conn
     source: api.Src
     output_tables: api.TableNamesSpec
     trigger_by: api.PublisherTriggerBySpec | None
@@ -140,7 +138,6 @@ class StreamPublisherInfo(_api.JsonSerde):
     __kind__ = KIND_STREAM_PUBLISHER_DEF
 
     func: Callable
-    conn: Conn
     source: api.StreamSrc
     fallback_rollover_mins: api.FlushIntervalSpec
     output_tables: api.TableNamesSpec
@@ -233,7 +230,6 @@ class SubscriberInfo(_api.JsonSerde):
     __kind__ = KIND_SUBSCRIBER_DEF
 
     func: Callable
-    conn: Conn
     destination: api.Dest
     input_tables: api.CollTableVersionsNamesSpec
     trigger_by: api.SubscriberTriggerBySpec | None

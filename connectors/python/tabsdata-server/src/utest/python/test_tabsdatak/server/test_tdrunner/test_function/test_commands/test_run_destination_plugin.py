@@ -65,7 +65,7 @@ _USER_SUBSCRIBER_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, subscriber
-from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileDest
+from tabsdatak.conn.localfile import LocalFileDest
 
 _DEST = LocalFileDest(
     paths=["sink.parquet"],
@@ -73,7 +73,6 @@ _DEST = LocalFileDest(
 
 
 @subscriber(
-    conn=LocalFileDestConn(base_path={base_path!r}),
     destination=_DEST,
     input_tables=["c1/t_in"],
 )
@@ -92,9 +91,7 @@ def user_project(tmp_path, monkeypatch) -> Path:
     pkg = project / "sub_pkg"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("")
-    (pkg / "subscriber.py").write_text(
-        _USER_SUBSCRIBER_SRC.format(base_path=str(dest_out))
-    )
+    (pkg / "subscriber.py").write_text(_USER_SUBSCRIBER_SRC)
     monkeypatch.syspath_prepend(str(project))
     importlib.invalidate_caches()
     yield project

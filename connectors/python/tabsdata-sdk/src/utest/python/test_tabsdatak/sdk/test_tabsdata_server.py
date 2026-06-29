@@ -53,11 +53,6 @@ class _FakeDest:
     pass
 
 
-class _FakeConn:
-    def __init__(self, kind: str):
-        self.__kind__ = kind
-
-
 # Connection classes the *registry* binds ``_FakeSrc`` / ``_FakeDest``
 # to. ``_connection_kind`` reports ``def.conn.__kind__`` from the
 # registry lookup, so these -- not the decorator's ``conn`` -- decide
@@ -127,11 +122,10 @@ def _publisher_info(
     return _InfoStub(
         kind=KIND_PUBLISHER_DEF,
         func=_decorated(func_name),
+        # The reported connection kind comes from the registry
+        # (``_FakeSrcConn`` -> ``mysqlSrcConn``), keyed by the source
+        # type -- the function descriptor no longer carries a conn.
         source=_FakeSrc(),
-        # Deliberately a *different* kind than the registry binds the
-        # source to: the reported kind must come from the registry
-        # (``_FakeSrcConn`` -> ``mysqlSrcConn``), not this conn.
-        conn=_FakeConn("decoratorConnIgnored"),
         output_tables=output_tables or ["t1"],
         trigger_by=trigger_by,
         on_tables=None,
@@ -169,9 +163,9 @@ def _subscriber_info(
         kind=KIND_SUBSCRIBER_DEF,
         func=_decorated(func_name),
         destination=_FakeDest(),
-        # See ``_publisher_info``: the registry, not this conn, decides
-        # the reported kind (``_FakeDestConn`` -> ``mysqlDestConn``).
-        conn=_FakeConn("decoratorConnIgnored"),
+        # See ``_publisher_info``: the registry, keyed by the destination
+        # type, decides the reported kind (``_FakeDestConn`` ->
+        # ``mysqlDestConn``).
         input_tables=input_tables or ["coll/x"],
         trigger_by=trigger_by,
     )

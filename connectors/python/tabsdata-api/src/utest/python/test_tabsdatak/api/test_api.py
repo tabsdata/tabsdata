@@ -1,44 +1,24 @@
 from abc import ABC
-
-import pytest
-
-from tabsdatak import _api
-from tabsdatak.error import ApiErrorCode, ApiException, ApiInternalException
-from tabsdatak import api as m, tableframe
-from tabsdatak import _connectors as _connectors
-from tabsdatak import spi
-from tabsdatak import _info
-import json
 from typing import Annotated, Union
 
+import pytest
 from pydantic import StringConstraints
 
+from tabsdatak import _api, _connectors as _connectors, _info, api as m, spi, tableframe
 from tabsdatak.api import (
-    Conn,
     Secret,
     Src,
 )
+from tabsdatak.error import ApiErrorCode, ApiException, ApiInternalException
 
 
 # Test-only SPI plugins. SrcDef / DestDef require a concrete
 # `plugin` class; the framework never instantiates these in tests, they
 # exist only to satisfy the field contract.
-class _TestSrcPlugin(spi.SrcPlugin):
-    ...
+class _TestSrcPlugin(spi.SrcPlugin): ...
 
 
-class _TestDestPlugin(spi.DestPlugin):
-    ...
-
-
-# Concrete connection fixture. ``conn`` is no longer a field on
-# ``Src`` / ``Dest`` / ``StreamSrc`` -- it is passed to the decorators
-# (``@publisher`` ...) and threaded to the plugin entry methods. The
-# decorators take a ``Conn`` *instance*, so the tests need a concrete
-# (non-abstract) subclass to construct.
-@_api.dataclass(ApiErrorCode.API_13)
-class _Conn(m.Conn):
-    pass
+class _TestDestPlugin(spi.DestPlugin): ...
 
 
 # Concrete fixtures. Each source / destination kind is registered via
@@ -49,16 +29,18 @@ class _Src(m.Src):
     pass
 
 
-_connectors.register_src(spi.SrcDef(
+_connectors.register_src(
+    spi.SrcDef(
         conn=m.Conn,
-    src_type="fs",
-    src_version="v1",
-    src=_Src,
-    table_mode=spi.TableMode.SINGLE,
-    cardinality=lambda src: 1,
-    plugin=_TestSrcPlugin,
-    explorer=None,
-))
+        src_type="fs",
+        src_version="v1",
+        src=_Src,
+        table_mode=spi.TableMode.SINGLE,
+        cardinality=lambda src: 1,
+        plugin=_TestSrcPlugin,
+        explorer=None,
+    )
+)
 
 
 @_api.dataclass(ApiErrorCode.API_14)
@@ -66,15 +48,17 @@ class _Dest(m.Dest):
     pass
 
 
-_connectors.register_dest(spi.DestDef(
+_connectors.register_dest(
+    spi.DestDef(
         conn=m.Conn,
-    dest_type="fs",
-    dest_version="v1",
-    dest=_Dest,
-    cardinality=lambda dest: 1,
-    plugin=_TestDestPlugin,
-    explorer=None,
-))
+        dest_type="fs",
+        dest_version="v1",
+        dest=_Dest,
+        cardinality=lambda dest: 1,
+        plugin=_TestDestPlugin,
+        explorer=None,
+    )
+)
 
 
 # Stream-source fixture: same shape as _Src above but on the
@@ -82,8 +66,7 @@ _connectors.register_dest(spi.DestDef(
 # carries no ``table_mode`` -- stream sources do not declare one --
 # and its plugin uses ``run(ctx, stream_src)`` (validated by
 # ``StreamSrcDef._validate``) rather than batch-mode ``read_in``.
-class _TestStreamSrcPlugin(spi.StreamSrcPlugin):
-    ...
+class _TestStreamSrcPlugin(spi.StreamSrcPlugin): ...
 
 
 @_api.dataclass(ApiErrorCode.API_14)
@@ -112,7 +95,9 @@ class _OnTab(m.OnTablesAction):
 # (SINGLE-mode src/dest table_count=1, one element in
 # output_tables / input_tables). One positional input parameter typed as
 # `TableFrame` (auto-nullable) and a `tuple[TableFrame]` return.
-def _good_1in_1out(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
+def _good_1in_1out(
+    t1: tableframe.TableFrame | None,
+) -> tuple[tableframe.TableFrame | None]:
     return (t1,)
 
 
@@ -129,6 +114,7 @@ def _good_1in_1out_stream(
 # ---------------------------------------------------------------------------
 # Triggers
 # ---------------------------------------------------------------------------
+
 
 def test_trigger_is_abc_subclass():
     assert issubclass(m.Trigger, ABC)
@@ -180,6 +166,7 @@ def test_all_tables_trigger_constructs_with_no_args():
 # PublisherInfo _api.dataclass
 # ---------------------------------------------------------------------------
 
+
 def _src() -> _Src:
     return _Src()
 
@@ -194,7 +181,7 @@ def _auto_src() -> _StreamSrc:
 
 def test_publisher_dataclass_constructs_ok():
     src = _src()
-    p = _info.PublisherInfo(_good_1in_1out, _Conn(), src, ["t1"], None, None)
+    p = _info.PublisherInfo(_good_1in_1out, src, ["t1"], None, None)
     assert p.source is src
     assert p.output_tables == ["t1"]
     assert p.trigger_by is None
@@ -205,7 +192,7 @@ def test_publisher_dataclass_empty_tables_raises_api_4():
     # Field-level failure on TableNamesSpec min_length short-circuits before the
     # model_validator that checks `func` signature, so any callable is fine.
     with pytest.raises(ApiException) as excinfo:
-        _info.PublisherInfo(_good_1in_1out, _Conn(), _src(), [], None, None)
+        _info.PublisherInfo(_good_1in_1out, _src(), [], None, None)
     assert excinfo.value.api_error is ApiErrorCode.API_17
 
 
@@ -213,8 +200,9 @@ def test_publisher_dataclass_empty_tables_raises_api_4():
 # @publisher decorator factory
 # ---------------------------------------------------------------------------
 
+
 def test_publisher_decorator_returns_publisher_instance():
-    @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"])
+    @m.publisher(source=_src(), output_tables=["t1"])
     def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
 
@@ -223,7 +211,7 @@ def test_publisher_decorator_returns_publisher_instance():
 
 
 def test_publisher_descriptor_call_raises_typeerror_pointing_at_func():
-    @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"])
+    @m.publisher(source=_src(), output_tables=["t1"])
     def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
 
@@ -241,9 +229,11 @@ def test_signature_error_includes_expected_signature_block():
     # spelled-out signature, so an LLM iterating against the error
     # knows what to write.
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"])
+
+        @m.publisher(source=_src(), output_tables=["t1"])
         def _bad() -> tuple[tableframe.TableFrame | None]:  # zero params, expects 1
             return (None,)
+
     msg = str(excinfo.value)
     assert "Expected signature" in msg
     assert "TableFrame" in msg
@@ -251,16 +241,18 @@ def test_signature_error_includes_expected_signature_block():
 
 def test_publisher_decorator_rejects_empty_tables_with_api_4():
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=_src(), output_tables=[])
+
+        @m.publisher(source=_src(), output_tables=[])
         def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
 
 
 def test_publisher_decorator_accepts_cron_trigger():
     cron = m.CronTrigger(mask="*/5 * * * *")
 
-    @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"], trigger_by=cron)
+    @m.publisher(source=_src(), output_tables=["t1"], trigger_by=cron)
     def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
 
@@ -271,7 +263,7 @@ def test_publisher_decorator_accepts_tables_trigger():
     # Typed wrapper around the bare-list shortcut.
     trig = m.TablesTrigger(tables=["users", "orders"])
 
-    @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"], trigger_by=trig)
+    @m.publisher(source=_src(), output_tables=["t1"], trigger_by=trig)
     def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
 
@@ -283,16 +275,20 @@ def test_publisher_decorator_rejects_bare_table_list():
     # are accepted (TablesTrigger / CronTrigger). The framework
     # tags the type-mismatch as API_17 (publisher validation).
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"],
-                     trigger_by=["users", "orders"])
+
+        @m.publisher(
+            source=_src(), output_tables=["t1"], trigger_by=["users", "orders"]
+        )
         def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
 
 
 # ---------------------------------------------------------------------------
 # @transformer decorator factory
 # ---------------------------------------------------------------------------
+
 
 def test_transformer_decorator_wraps_with_all_tables_trigger():
     trig = m.AllTablesTrigger()
@@ -314,19 +310,25 @@ def test_transformer_decorator_rejects_bare_wildcard():
     # The bare-"*" shortcut was removed; AllTablesTrigger() is now
     # the only way to express "fire on any upstream table change".
     with pytest.raises(ApiException) as excinfo:
+
         @m.transformer(
-            input_tables=["in1"], output_tables=["out1"], trigger_by="*",
+            input_tables=["in1"],
+            output_tables=["out1"],
+            trigger_by="*",
         )
         def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_19
 
 
 def test_transformer_decorator_rejects_empty_input_tables_with_api_5():
     with pytest.raises(ApiException) as excinfo:
+
         @m.transformer(input_tables=[], output_tables=["out"])
         def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_19
 
 
@@ -345,7 +347,9 @@ def test_transformer_decorator_accepts_all_tables_trigger():
     trig = m.AllTablesTrigger()
 
     @m.transformer(
-        input_tables=["a"], output_tables=["b"], trigger_by=trig,
+        input_tables=["a"],
+        output_tables=["b"],
+        trigger_by=trig,
     )
     def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
@@ -357,7 +361,9 @@ def test_transformer_decorator_accepts_tables_trigger():
     trig = m.TablesTrigger(tables=["src/orders"])
 
     @m.transformer(
-        input_tables=["a"], output_tables=["b"], trigger_by=trig,
+        input_tables=["a"],
+        output_tables=["b"],
+        trigger_by=trig,
     )
     def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
@@ -369,11 +375,12 @@ def test_transformer_decorator_accepts_tables_trigger():
 # @subscriber decorator factory
 # ---------------------------------------------------------------------------
 
+
 def test_subscriber_decorator_wraps_with_all_tables_trigger():
     dest = _dest()
     trig = m.AllTablesTrigger()
 
-    @m.subscriber(conn=_Conn(), destination=dest, input_tables=["in1"], trigger_by=trig)
+    @m.subscriber(destination=dest, input_tables=["in1"], trigger_by=trig)
     def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
 
@@ -384,14 +391,16 @@ def test_subscriber_decorator_wraps_with_all_tables_trigger():
 
 def test_subscriber_decorator_rejects_empty_input_tables_with_api_6():
     with pytest.raises(ApiException) as excinfo:
-        @m.subscriber(conn=_Conn(), destination=_dest(), input_tables=[])
+
+        @m.subscriber(destination=_dest(), input_tables=[])
         def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_20
 
 
 def test_subscriber_decorator_allows_default_none_trigger():
-    @m.subscriber(conn=_Conn(), destination=_dest(), input_tables=["in1"])
+    @m.subscriber(destination=_dest(), input_tables=["in1"])
     def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
 
@@ -402,8 +411,10 @@ def test_subscriber_decorator_allows_default_none_trigger():
 def test_subscriber_decorator_accepts_all_tables_trigger():
     trig = m.AllTablesTrigger()
 
-    @m.subscriber(conn=_Conn(), 
-        destination=_dest(), input_tables=["in1"], trigger_by=trig,
+    @m.subscriber(
+        destination=_dest(),
+        input_tables=["in1"],
+        trigger_by=trig,
     )
     def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
@@ -414,8 +425,10 @@ def test_subscriber_decorator_accepts_all_tables_trigger():
 def test_subscriber_decorator_accepts_tables_trigger():
     trig = m.TablesTrigger(tables=["src/orders", "src/users"])
 
-    @m.subscriber(conn=_Conn(), 
-        destination=_dest(), input_tables=["in1"], trigger_by=trig,
+    @m.subscriber(
+        destination=_dest(),
+        input_tables=["in1"],
+        trigger_by=trig,
     )
     def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
@@ -426,6 +439,7 @@ def test_subscriber_decorator_accepts_tables_trigger():
 # ---------------------------------------------------------------------------
 # ApiError + ApiException shape
 # ---------------------------------------------------------------------------
+
 
 def test_api_validation_error_carries_tag_and_cause():
     try:
@@ -442,41 +456,50 @@ def test_api_validation_error_carries_tag_and_cause():
 # Pattern constraints: TableNameSpec, CollTableNameSpec, CronMaskSpec
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
-    "name", ["t1", "foo_bar", "A", "a_1_b", "X" * 64],
+    "name",
+    ["t1", "foo_bar", "A", "a_1_b", "X" * 64],
 )
 def test_table_name_accepts_valid_identifier(name):
     src = _src()
-    m.publisher(conn=_Conn(), source=src, output_tables=[name])  # no error
+    m.publisher(source=src, output_tables=[name])  # no error
 
 
 @pytest.mark.parametrize(
-    "name", ["", "1foo", "foo bar", "foo-bar", "X" * 65, "_foo"],
+    "name",
+    ["", "1foo", "foo bar", "foo-bar", "X" * 65, "_foo"],
 )
 def test_table_name_rejects_invalid(name):
     src = _src()
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=[name])
+
+        @m.publisher(source=src, output_tables=[name])
         def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
 
 
 @pytest.mark.parametrize(
-    "name", ["foo", "foo_bar", "ns/table", "ns_1/table_2"],
+    "name",
+    ["foo", "foo_bar", "ns/table", "ns_1/table_2"],
 )
 def test_coll_table_name_accepts_valid(name):
     m.transformer(input_tables=[name], output_tables=["out"])
 
 
 @pytest.mark.parametrize(
-    "name", ["foo/bar/baz", "ns / table", "/table", "ns/", "1foo/bar"],
+    "name",
+    ["foo/bar/baz", "ns / table", "/table", "ns/", "1foo/bar"],
 )
 def test_coll_table_name_rejects_invalid(name):
     with pytest.raises(ApiException) as excinfo:
+
         @m.transformer(input_tables=[name], output_tables=["out"])
         def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_19
 
 
@@ -486,21 +509,24 @@ def test_coll_table_name_rejects_invalid(name):
 # by @src / @dest and the output_tables / input_tables length.
 # ---------------------------------------------------------------------------
 
+
 @_api.dataclass(ApiErrorCode.API_14)
 class _Src2(m.Src):
     pass
 
 
-_connectors.register_src(spi.SrcDef(
+_connectors.register_src(
+    spi.SrcDef(
         conn=m.Conn,
-    src_type="fs2",
-    src_version="v1",
-    src=_Src2,
-    table_mode=spi.TableMode.SINGLE,
-    cardinality=lambda src: 2,
-    plugin=_TestSrcPlugin,
-    explorer=None,
-))
+        src_type="fs2",
+        src_version="v1",
+        src=_Src2,
+        table_mode=spi.TableMode.SINGLE,
+        cardinality=lambda src: 2,
+        plugin=_TestSrcPlugin,
+        explorer=None,
+    )
+)
 
 
 @_api.dataclass(ApiErrorCode.API_14)
@@ -508,15 +534,17 @@ class _Dest3(m.Dest):
     pass
 
 
-_connectors.register_dest(spi.DestDef(
+_connectors.register_dest(
+    spi.DestDef(
         conn=m.Conn,
-    dest_type="fs3",
-    dest_version="v1",
-    dest=_Dest3,
-    cardinality=lambda dest: 3,
-    plugin=_TestDestPlugin,
-    explorer=None,
-))
+        dest_type="fs3",
+        dest_version="v1",
+        dest=_Dest3,
+        cardinality=lambda dest: 3,
+        plugin=_TestDestPlugin,
+        explorer=None,
+    )
+)
 
 
 def _src2() -> _Src2:
@@ -530,9 +558,10 @@ def _dest3() -> _Dest3:
 def test_publisher_signature_ok_for_2in_2out():
     src = _src2()
 
-    @m.publisher(conn=_Conn(), source=src, output_tables=["a", "b"])
+    @m.publisher(source=src, output_tables=["a", "b"])
     def my_pub(
-        t1: tableframe.TableFrame | None, t2: tableframe.TableFrame | None,
+        t1: tableframe.TableFrame | None,
+        t2: tableframe.TableFrame | None,
     ) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None]:
         return (t1, t2)
 
@@ -543,9 +572,15 @@ def test_publisher_signature_rejects_wrong_input_arity():
     src = _src2()  # expects 2 input slots
 
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=["a", "b"])
-        def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None]:  # only 1
+
+        @m.publisher(source=src, output_tables=["a", "b"])
+        def my_pub(
+            t1: tableframe.TableFrame | None,
+        ) -> tuple[
+            tableframe.TableFrame | None, tableframe.TableFrame | None
+        ]:  # only 1
             return (t1, t1)
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
     assert "at least 2 parameter" in str(excinfo.value)
 
@@ -554,9 +589,13 @@ def test_publisher_signature_rejects_wrong_output_arity():
     src = _src()  # table_count=1
 
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=["a", "b"])  # expects 2
-        def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:  # returns 1
+
+        @m.publisher(source=src, output_tables=["a", "b"])  # expects 2
+        def my_pub(
+            t1: tableframe.TableFrame | None,
+        ) -> tuple[tableframe.TableFrame | None]:  # returns 1
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
 
 
@@ -564,9 +603,11 @@ def test_publisher_signature_rejects_missing_return_annotation():
     src = _src()
 
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=["a"])
+
+        @m.publisher(source=src, output_tables=["a"])
         def my_pub(t1: tableframe.TableFrame | None):
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
     assert "return type must be annotated" in str(excinfo.value)
 
@@ -575,9 +616,13 @@ def test_publisher_signature_rejects_variable_length_tuple():
     src = _src()
 
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=["a"])
-        def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None, ...]:  # variable-length
+
+        @m.publisher(source=src, output_tables=["a"])
+        def my_pub(
+            t1: tableframe.TableFrame | None,
+        ) -> tuple[tableframe.TableFrame | None, ...]:  # variable-length
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
 
 
@@ -587,8 +632,13 @@ def test_transformer_signature_ok_with_matching_input_and_output():
         output_tables=["x", "y", "z"],
     )
     def my_xf(
-        t1: tableframe.TableFrame | None, t2: tableframe.TableFrame | None,
-    ) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None, tableframe.TableFrame | None]:
+        t1: tableframe.TableFrame | None,
+        t2: tableframe.TableFrame | None,
+    ) -> tuple[
+        tableframe.TableFrame | None,
+        tableframe.TableFrame | None,
+        tableframe.TableFrame | None,
+    ]:
         return (t1, t2, t1)
 
     assert isinstance(my_xf, _info.TransformerInfo)
@@ -596,19 +646,27 @@ def test_transformer_signature_ok_with_matching_input_and_output():
 
 def test_transformer_signature_rejects_mismatched_output_arity():
     with pytest.raises(ApiException) as excinfo:
+
         @m.transformer(input_tables=["a"], output_tables=["x", "y"])
-        def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:  # only 1, expected 2
+        def my_xf(
+            t1: tableframe.TableFrame | None,
+        ) -> tuple[tableframe.TableFrame | None]:  # only 1, expected 2
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_19
 
 
 def test_subscriber_signature_uses_destination_table_count_for_output():
     dest = _dest3()  # table_count=3
 
-    @m.subscriber(conn=_Conn(), destination=dest, input_tables=["a"])
+    @m.subscriber(destination=dest, input_tables=["a"])
     def my_sub(
         t1: tableframe.TableFrame | None,
-    ) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None, tableframe.TableFrame | None]:
+    ) -> tuple[
+        tableframe.TableFrame | None,
+        tableframe.TableFrame | None,
+        tableframe.TableFrame | None,
+    ]:
         return (t1, t1, t1)
 
     assert isinstance(my_sub, _info.SubscriberInfo)
@@ -618,9 +676,13 @@ def test_subscriber_signature_rejects_mismatched_output_arity():
     dest = _dest3()
 
     with pytest.raises(ApiException) as excinfo:
-        @m.subscriber(conn=_Conn(), destination=dest, input_tables=["a"])
-        def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:  # only 1, dest wants 3
+
+        @m.subscriber(destination=dest, input_tables=["a"])
+        def my_sub(
+            t1: tableframe.TableFrame | None,
+        ) -> tuple[tableframe.TableFrame | None]:  # only 1, dest wants 3
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_20
 
 
@@ -631,21 +693,24 @@ def test_subscriber_signature_rejects_mismatched_output_arity():
 # Transformer / subscriber inputs are mode "any" -- both forms accepted.
 # ---------------------------------------------------------------------------
 
+
 @_api.dataclass(ApiErrorCode.API_14)
 class _SrcArray(m.Src):
     pass
 
 
-_connectors.register_src(spi.SrcDef(
+_connectors.register_src(
+    spi.SrcDef(
         conn=m.Conn,
-    src_type="fs_array",
-    src_version="v1",
-    src=_SrcArray,
-    table_mode=spi.TableMode.ARRAY,
-    cardinality=lambda src: 2,
-    plugin=_TestSrcPlugin,
-    explorer=None,
-))
+        src_type="fs_array",
+        src_version="v1",
+        src=_SrcArray,
+        table_mode=spi.TableMode.ARRAY,
+        cardinality=lambda src: 2,
+        plugin=_TestSrcPlugin,
+        explorer=None,
+    )
+)
 
 
 def _src_array() -> _SrcArray:
@@ -655,9 +720,10 @@ def _src_array() -> _SrcArray:
 def test_publisher_input_accepts_list_elements_when_mode_is_array():
     src = _src_array()  # ARRAY, 2 slots
 
-    @m.publisher(conn=_Conn(), source=src, output_tables=["a"])
+    @m.publisher(source=src, output_tables=["a"])
     def my_pub(
-        t1: list[tableframe.TableFrame | None] | None, t2: list[tableframe.TableFrame | None] | None,
+        t1: list[tableframe.TableFrame | None] | None,
+        t2: list[tableframe.TableFrame | None] | None,
     ) -> tuple[tableframe.TableFrame | None]:
         return (None,)
 
@@ -668,12 +734,15 @@ def test_publisher_input_rejects_single_element_when_mode_is_array():
     src = _src_array()  # ARRAY, 2 slots
 
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=["a"])
+
+        @m.publisher(source=src, output_tables=["a"])
         def my_pub(
             # wrong: TableFrame where list[TableFrame] expected
-            t1: tableframe.TableFrame | None, t2: tableframe.TableFrame | None,
+            t1: tableframe.TableFrame | None,
+            t2: tableframe.TableFrame | None,
         ) -> tuple[tableframe.TableFrame | None]:
             return (None,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
     assert "array-mode slot" in str(excinfo.value)
 
@@ -682,12 +751,14 @@ def test_publisher_input_rejects_list_element_when_mode_is_single():
     src = _src()  # SINGLE, 1 slot
 
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=["a"])
+
+        @m.publisher(source=src, output_tables=["a"])
         def my_pub(
             # wrong: list where TableFrame expected
             t1: list[tableframe.TableFrame | None] | None,
         ) -> tuple[tableframe.TableFrame | None]:
             return (None,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
     assert "single-mode slot" in str(excinfo.value)
 
@@ -697,11 +768,14 @@ def test_publisher_output_rejects_list_element_regardless_of_mode():
     src = _src_array()
 
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=["a"])
+
+        @m.publisher(source=src, output_tables=["a"])
         def my_pub(
-            t1: list[tableframe.TableFrame | None] | None, t2: list[tableframe.TableFrame | None] | None,
+            t1: list[tableframe.TableFrame | None] | None,
+            t2: list[tableframe.TableFrame | None] | None,
         ) -> tuple[list[tableframe.TableFrame | None] | None]:  # wrong output
             return ([],)
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
     assert "return tuple element" in str(excinfo.value)
 
@@ -714,7 +788,8 @@ def test_publisher_signature_rejects_extra_non_ctx_params_after_input_slots():
     src = _src()  # table_count=1
 
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=["t"])
+
+        @m.publisher(source=src, output_tables=["t"])
         def _my_pub(
             t1: tableframe.TableFrame | None,
             config: dict[str, str],
@@ -728,7 +803,7 @@ def test_publisher_signature_rejects_extra_non_ctx_params_after_input_slots():
 def test_publisher_signature_allows_optional_trailing_trx_ctx():
     src = _src()  # table_count=1
 
-    @m.publisher(conn=_Conn(), source=src, output_tables=["t"])
+    @m.publisher(source=src, output_tables=["t"])
     def my_pub(
         t1: tableframe.TableFrame | None,
         ctx: m.TrxCtx,
@@ -745,7 +820,8 @@ def test_publisher_signature_rejects_trailing_non_trx_ctx_param():
     src = _src()
 
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=["t"])
+
+        @m.publisher(source=src, output_tables=["t"])
         def _my_pub(
             t1: tableframe.TableFrame | None,
             ctx: dict,
@@ -756,9 +832,9 @@ def test_publisher_signature_rejects_trailing_non_trx_ctx_param():
 
 
 def test_has_trx_ctx_param_detects_trailing_ctx():
-    def f(t1: tableframe.TableFrame | None, ctx: m.TrxCtx) -> tuple[
-        tableframe.TableFrame | None
-    ]:
+    def f(
+        t1: tableframe.TableFrame | None, ctx: m.TrxCtx
+    ) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
 
     assert _api.has_trx_ctx_param(f) is True
@@ -775,18 +851,29 @@ def test_has_trx_ctx_param_accepts_trx_ctx_subclass():
     # Subclasses of TrxCtx (e.g. plugin contexts) also count.
     class _MyCtx(m.TrxCtx):
         @property
-        def exec_plan_id(self) -> str: return "x"
-        @property
-        def trx_id(self) -> str: return "x"
-        @property
-        def exec_plan_ts(self) -> str: return "x"
-        def get_attr(self, attr): return None
-        def set_attr(self, attr, val): pass
-        def add_metadata(self, attr, val): pass
+        def exec_plan_id(self) -> str:
+            return "x"
 
-    def f(t1: tableframe.TableFrame | None, ctx: _MyCtx) -> tuple[
-        tableframe.TableFrame | None
-    ]:
+        @property
+        def trx_id(self) -> str:
+            return "x"
+
+        @property
+        def exec_plan_ts(self) -> str:
+            return "x"
+
+        def get_attr(self, attr):
+            return None
+
+        def set_attr(self, attr, val):
+            pass
+
+        def add_metadata(self, attr, val):
+            pass
+
+    def f(
+        t1: tableframe.TableFrame | None, ctx: _MyCtx
+    ) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
 
     assert _api.has_trx_ctx_param(f) is True
@@ -795,7 +882,7 @@ def test_has_trx_ctx_param_accepts_trx_ctx_subclass():
 def test_publisher_signature_accepts_explicit_table_frame_or_none():
     src = _src()
 
-    @m.publisher(conn=_Conn(), source=src, output_tables=["t"])
+    @m.publisher(source=src, output_tables=["t"])
     def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
         return (t1,)
 
@@ -810,9 +897,9 @@ def test_publisher_signature_accepts_explicit_table_frame_or_none():
         "0 8,12,17 * * *",
         "0 0-23/2 * * *",
         "* * * * *",
-        "0 0 * * MON",         # named DOW
-        "0 0 * JAN *",         # named month
-        "0 0 * * MON-FRI",     # DOW range
+        "0 0 * * MON",  # named DOW
+        "0 0 * JAN *",  # named month
+        "0 0 * * MON-FRI",  # DOW range
         # --- K8s descriptors ---
         "@yearly",
         "@annually",
@@ -831,25 +918,25 @@ def test_cron_mask_accepts_valid(mask):
     "mask",
     [
         "",
-        "0 0 * *",              # 4 fields
-        "0 0 * * * *",          # 6 fields (seconds precision -- not K8s)
+        "0 0 * *",  # 4 fields
+        "0 0 * * * *",  # 6 fields (seconds precision -- not K8s)
         "garbage",
-        "60 0 * * *",           # minute out of range (semantic)
-        "0 24 * * *",           # hour out of range
-        "0 0 32 * *",           # dom out of range
-        "0 0 * 13 *",           # month out of range
-        "0 0 * * 8",            # dow out of range (>7)
+        "60 0 * * *",  # minute out of range (semantic)
+        "0 24 * * *",  # hour out of range
+        "0 0 32 * *",  # dom out of range
+        "0 0 * 13 *",  # month out of range
+        "0 0 * * 8",  # dow out of range (>7)
         # --- descriptors NOT supported by K8s ---
         "@reboot",
         "@every 5m",
         "@EVERY 1h",
-        "@YEARLY",              # case-sensitive (docs are lowercase)
+        "@YEARLY",  # case-sensitive (docs are lowercase)
         # --- Quartz / Jenkins extensions -- not K8s ---
-        "L * * * *",            # Quartz L (last)
-        "? * * * *",            # Quartz ? (no-care)
-        "15W * * * *",          # Quartz W (nearest weekday)
-        "0 0 * * 5#3",          # Quartz # (nth DOW)
-        "H * * * *",            # Jenkins H (hash)
+        "L * * * *",  # Quartz L (last)
+        "? * * * *",  # Quartz ? (no-care)
+        "15W * * * *",  # Quartz W (nearest weekday)
+        "0 0 * * 5#3",  # Quartz # (nth DOW)
+        "H * * * *",  # Jenkins H (hash)
         "LW * * * *",
     ],
 )
@@ -867,7 +954,11 @@ def test_cron_mask_rejects_invalid(mask):
 def test_auto_publisher_dataclass_constructs_ok():
     src = _auto_src()
     p = _info.StreamPublisherInfo(
-        _good_1in_1out_stream, _Conn(), src, 5, ["t1"], None,
+        _good_1in_1out_stream,
+        src,
+        5,
+        ["t1"],
+        None,
     )
     assert p.source is src
     assert p.fallback_rollover_mins == 5
@@ -880,7 +971,11 @@ def test_auto_publisher_dataclass_rollover_below_one_raises_api_10():
     # AutoPublisherInfo's @_api.dataclass tag.
     with pytest.raises(ApiException) as excinfo:
         _info.StreamPublisherInfo(
-            _good_1in_1out, _Conn(), _auto_src(), 0, ["t1"], None,
+            _good_1in_1out,
+            _auto_src(),
+            0,
+            ["t1"],
+            None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_18
 
@@ -888,7 +983,11 @@ def test_auto_publisher_dataclass_rollover_below_one_raises_api_10():
 def test_auto_publisher_dataclass_negative_rollover_raises_api_10():
     with pytest.raises(ApiException) as excinfo:
         _info.StreamPublisherInfo(
-            _good_1in_1out, _Conn(), _auto_src(), -1, ["t1"], None,
+            _good_1in_1out,
+            _auto_src(),
+            -1,
+            ["t1"],
+            None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_18
 
@@ -897,7 +996,11 @@ def test_auto_publisher_dataclass_empty_output_tables_raises_api_10():
     # TableNamesSpec min_length=1 invariant inherited from regular publishers.
     with pytest.raises(ApiException) as excinfo:
         _info.StreamPublisherInfo(
-            _good_1in_1out, _Conn(), _auto_src(), 1, [], None,
+            _good_1in_1out,
+            _auto_src(),
+            1,
+            [],
+            None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_18
 
@@ -905,23 +1008,31 @@ def test_auto_publisher_dataclass_empty_output_tables_raises_api_10():
 def test_auto_publisher_dataclass_signature_mismatch_raises_api_10():
     # output_tables has 1 entry, but the function returns a 2-element
     # tuple -- the after-validator catches this. Tag is still API_18.
-    def bad_outputs(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None]:
+    def bad_outputs(
+        t1: tableframe.TableFrame | None,
+    ) -> tuple[tableframe.TableFrame | None, tableframe.TableFrame | None]:
         return (t1, t1)
 
     with pytest.raises(ApiException) as excinfo:
         _info.StreamPublisherInfo(
-            bad_outputs, _Conn(), _auto_src(), 1, ["t1"], None,
+            bad_outputs,
+            _auto_src(),
+            1,
+            ["t1"],
+            None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_18
 
 
 def test_auto_publisher_decorator_returns_auto_publisher_instance():
-    @m.stream_publisher(conn=_Conn(), 
+    @m.stream_publisher(
         source=_auto_src(),
         flush_interval_mins=10,
         output_tables=["t1"],
     )
-    def my_pub(t1: list[tableframe.TableFrame | None] | None) -> tuple[tableframe.TableFrame | None]:
+    def my_pub(
+        t1: list[tableframe.TableFrame | None] | None,
+    ) -> tuple[tableframe.TableFrame | None]:
         return (None,)
 
     assert isinstance(my_pub, _info.StreamPublisherInfo)
@@ -933,24 +1044,28 @@ def test_auto_publisher_decorator_rejects_rollover_below_one_with_api_10():
     # AutoPublisherInfo _api.dataclass is constructed (i.e. when the
     # factory's returned decorator is applied to a function).
     with pytest.raises(ApiException) as excinfo:
-        @m.stream_publisher(conn=_Conn(), 
+
+        @m.stream_publisher(
             source=_auto_src(),
             flush_interval_mins=0,
             output_tables=["t1"],
         )
         def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
             return (t1,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_18
 
 
 def test_auto_publisher_decorator_accepts_on_tables_hooks():
-    @m.stream_publisher(conn=_Conn(), 
+    @m.stream_publisher(
         source=_auto_src(),
         flush_interval_mins=15,
         output_tables=["t1"],
         on_tables=[_OnTab()],
     )
-    def my_pub(t1: list[tableframe.TableFrame | None] | None) -> tuple[tableframe.TableFrame | None]:
+    def my_pub(
+        t1: list[tableframe.TableFrame | None] | None,
+    ) -> tuple[tableframe.TableFrame | None]:
         return (None,)
 
     assert my_pub.on_tables is not None
@@ -958,12 +1073,14 @@ def test_auto_publisher_decorator_accepts_on_tables_hooks():
 
 
 def test_auto_publisher_decorator_default_none_on_tables():
-    @m.stream_publisher(conn=_Conn(), 
+    @m.stream_publisher(
         source=_auto_src(),
         flush_interval_mins=1,
         output_tables=["t1"],
     )
-    def my_pub(t1: list[tableframe.TableFrame | None] | None) -> tuple[tableframe.TableFrame | None]:
+    def my_pub(
+        t1: list[tableframe.TableFrame | None] | None,
+    ) -> tuple[tableframe.TableFrame | None]:
         return (None,)
 
     assert my_pub.on_tables is None
@@ -975,7 +1092,8 @@ def test_stream_publisher_rejects_trailing_trx_ctx_param():
     # inside the runtime's long-lived plugin loop, not per-trx, so
     # no ``TrxCtx`` is available at the call boundary.
     with pytest.raises(ApiException) as excinfo:
-        @m.stream_publisher(conn=_Conn(), 
+
+        @m.stream_publisher(
             source=_auto_src(),
             flush_interval_mins=1,
             output_tables=["t1"],
@@ -985,6 +1103,7 @@ def test_stream_publisher_rejects_trailing_trx_ctx_param():
             ctx: m.TrxCtx,
         ) -> tuple[tableframe.TableFrame | None]:
             return (None,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_18
 
 
@@ -994,7 +1113,8 @@ def test_stream_publisher_rejects_any_extra_trailing_param():
     # "TrxCtx required" rule that applies to the other three
     # decorators.
     with pytest.raises(ApiException) as excinfo:
-        @m.stream_publisher(conn=_Conn(), 
+
+        @m.stream_publisher(
             source=_auto_src(),
             flush_interval_mins=1,
             output_tables=["t1"],
@@ -1004,12 +1124,13 @@ def test_stream_publisher_rejects_any_extra_trailing_param():
             extra: dict,
         ) -> tuple[tableframe.TableFrame | None]:
             return (None,)
+
     assert excinfo.value.api_error is ApiErrorCode.API_18
     assert "trailing TrxCtx parameter is not supported here" in str(excinfo.value)
 
 
 def test_subscriber_signature_allows_optional_trailing_trx_ctx():
-    @m.subscriber(conn=_Conn(), destination=_dest(), input_tables=["coll/t1"])
+    @m.subscriber(destination=_dest(), input_tables=["coll/t1"])
     def my_sub(
         t1: tableframe.TableFrame | None,
         ctx: m.TrxCtx,
@@ -1037,7 +1158,7 @@ def test_transformer_signature_allows_optional_trailing_trx_ctx():
 
 
 def test_publisher_signature_allows_bare_tableframe_return():
-    @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"])
+    @m.publisher(source=_src(), output_tables=["t1"])
     def my_pub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
         return t1
 
@@ -1054,7 +1175,7 @@ def test_transformer_signature_allows_bare_tableframe_return():
 
 def test_subscriber_signature_allows_bare_tableframe_return():
     # `_dest()` has cardinality 1, so a single bare output is valid.
-    @m.subscriber(conn=_Conn(), destination=_dest(), input_tables=["coll/t1"])
+    @m.subscriber(destination=_dest(), input_tables=["coll/t1"])
     def my_sub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
         return t1
 
@@ -1062,7 +1183,7 @@ def test_subscriber_signature_allows_bare_tableframe_return():
 
 
 def test_stream_publisher_signature_allows_bare_tableframe_return():
-    @m.stream_publisher(conn=_Conn(),
+    @m.stream_publisher(
         source=_auto_src(),
         flush_interval_mins=10,
         output_tables=["t1"],
@@ -1094,11 +1215,14 @@ def test_bare_return_rejected_when_multiple_outputs():
     src = _src2()  # 2 input slots
 
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=src, output_tables=["a", "b"])  # 2 outputs
+
+        @m.publisher(source=src, output_tables=["a", "b"])  # 2 outputs
         def my_pub(
-            t1: tableframe.TableFrame | None, t2: tableframe.TableFrame | None,
+            t1: tableframe.TableFrame | None,
+            t2: tableframe.TableFrame | None,
         ) -> tableframe.TableFrame | None:  # bare, but 2 outputs expected
             return t1
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
     assert "must be a tuple of 2" in str(excinfo.value)
 
@@ -1107,11 +1231,13 @@ def test_bare_return_rejects_wrong_slot_type():
     # A non-tuple return with a single output must still be a valid
     # single-mode slot -- a bare list is rejected.
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"])
+
+        @m.publisher(source=_src(), output_tables=["t1"])
         def my_pub(
             t1: tableframe.TableFrame | None,
         ) -> list[tableframe.TableFrame | None] | None:  # not a single slot
             return None
+
     assert excinfo.value.api_error is ApiErrorCode.API_17
 
 
@@ -1120,9 +1246,11 @@ def test_signature_error_block_mentions_bare_return_for_single_output():
     # surface the bare-return alternative so an iterating caller knows
     # it is allowed.
     with pytest.raises(ApiException) as excinfo:
-        @m.publisher(conn=_Conn(), source=_src(), output_tables=["t1"])
+
+        @m.publisher(source=_src(), output_tables=["t1"])
         def _bad() -> tuple[tableframe.TableFrame | None]:  # zero params, expects 1
             return (None,)
+
     msg = str(excinfo.value)
     assert "returned bare" in msg
     assert "-> TableFrameSpec" in msg
@@ -1135,6 +1263,7 @@ def test_signature_error_block_mentions_bare_return_for_single_output():
 
 def test_auto_src_defx_resolves_via_registry():
     from tabsdatak import _connectors
+
     defx = _connectors.get_stream_src(_StreamSrc)
     assert isinstance(defx, spi.StreamSrcDef)
     assert defx.src is _StreamSrc

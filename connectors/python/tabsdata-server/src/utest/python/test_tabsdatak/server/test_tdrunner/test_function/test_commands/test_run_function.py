@@ -81,15 +81,14 @@ _USER_PUBLISHER_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
-from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileSrc
 
-_CONN = LocalFileSrcConn(base_path={base_path!r})
 _SRC = LocalFileSrc(
     paths=["*.parquet"],
 )
 
 
-@publisher(conn=_CONN, source=_SRC, output_tables=["my_table", "untouched"])
+@publisher(source=_SRC, output_tables=["my_table", "untouched"])
 def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec, TableFrameSpec]:
     # Append a marker column to the first input frame; second output
     # is None to exercise the "not modified" branch of the outputs
@@ -135,9 +134,7 @@ def user_project(tmp_path, monkeypatch) -> Path:
     pkg = project / "my_pkg"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text(
-        _USER_PUBLISHER_SRC.format(base_path=str(srcdata))
-    )
+    (pkg / "publisher.py").write_text(_USER_PUBLISHER_SRC)
     monkeypatch.syspath_prepend(str(project))
     importlib.invalidate_caches()
     yield project
@@ -212,15 +209,14 @@ _USER_SUBSCRIBER_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, subscriber
-from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileDest
+from tabsdatak.conn.localfile import LocalFileDest
 
-_CONN = LocalFileDestConn(base_path="/tmp/sub_out")
 _DEST = LocalFileDest(
     paths=["sink.parquet"],
 )
 
 
-@subscriber(conn=_CONN, destination=_DEST, input_tables=["c1/t_in"])
+@subscriber(destination=_DEST, input_tables=["c1/t_in"])
 def my_subscriber(in_1: TableFrameSpec) -> tuple[TableFrameSpec]:
     return (in_1,)
 """
@@ -262,11 +258,10 @@ _USER_STREAM_PUBLISHER_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, stream_publisher
-from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
+from tabsdatak.conn.kafka import KafkaStreamSrc
 
 
 @stream_publisher(
-    conn=KafkaStreamSrcConn(servers="x:9092", group_id="g"),
     source=KafkaStreamSrc(data_format="json", schema="{}", topic="people"),
     flush_interval_mins=1,
     output_tables=["people_streamed"],
@@ -310,15 +305,14 @@ _USER_PUBLISHER_MULTI_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
-from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileSrc
 
-_CONN = LocalFileSrcConn(base_path={base_path!r})
 _SRC = LocalFileSrc(
     paths=["a.parquet", "b.parquet"],
 )
 
 
-@publisher(conn=_CONN, source=_SRC, output_tables=["concat"])
+@publisher(source=_SRC, output_tables=["concat"])
 def multi_publisher(
     in_a: TableFramesSpec, in_b: TableFramesSpec
 ) -> tuple[TableFrameSpec]:
@@ -347,9 +341,7 @@ def multi_publisher_bundle(tmp_path, monkeypatch) -> Path:
     pkg = project / "mp_pkg"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text(
-        _USER_PUBLISHER_MULTI_SRC.format(base_path=str(srcdata))
-    )
+    (pkg / "publisher.py").write_text(_USER_PUBLISHER_MULTI_SRC)
     monkeypatch.syspath_prepend(str(project))
     importlib.invalidate_caches()
 
@@ -1197,15 +1189,14 @@ _CTX_PUBLISHER_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, TrxCtx, publisher
-from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileSrc
 
-_CONN = LocalFileSrcConn(base_path={base_path!r})
 _SRC = LocalFileSrc(
     paths=["*.parquet"],
 )
 
 
-@publisher(conn=_CONN, source=_SRC, output_tables=["my_table"])
+@publisher(source=_SRC, output_tables=["my_table"])
 def my_publisher(in_1: TableFramesSpec, ctx: TrxCtx) -> tuple[TableFrameSpec]:
     seen = ctx.get_attr("my-key")
     new = "from-user-fn" if seen is None else "again-after-" + str(seen)
@@ -1226,7 +1217,7 @@ def ctx_aware_built_bundle(tmp_path, monkeypatch) -> Path:
     pkg = project / "my_pkg"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text(_CTX_PUBLISHER_SRC.format(base_path=str(srcdata)))
+    (pkg / "publisher.py").write_text(_CTX_PUBLISHER_SRC)
     monkeypatch.syspath_prepend(str(project))
     importlib.invalidate_caches()
 
@@ -1460,19 +1451,18 @@ def test_main_creates_out_dir_before_invoking_user_function(
     pkg = project / "my_pkg"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text(f"""\
+    (pkg / "publisher.py").write_text("""\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, TrxCtx, publisher
-from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileSrc
 
-_CONN = LocalFileSrcConn(base_path={str(srcdata)!r})
 _SRC = LocalFileSrc(
     paths=["*.parquet"],
 )
 
 
-@publisher(conn=_CONN, source=_SRC, output_tables=["my_table"])
+@publisher(source=_SRC, output_tables=["my_table"])
 def my_publisher(
     in_1: TableFramesSpec, ctx: TrxCtx
 ) -> tuple[TableFrameSpec]:
@@ -1481,7 +1471,7 @@ def my_publisher(
     # by the time the user function runs, so a body that writes a
     # sidecar / probes the directory doesn't crash.
     assert os.path.isdir(ctx.work_dir), (
-        f"ctx.work_dir {{ctx.work_dir}} does not exist; runtime "
+        f"ctx.work_dir {ctx.work_dir} does not exist; runtime "
         f"created out_dir too late"
     )
     return (None,)
@@ -1552,15 +1542,14 @@ _CTX_SUBSCRIBER_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TrxCtx, subscriber
-from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileDest
+from tabsdatak.conn.localfile import LocalFileDest
 
-_CONN = LocalFileDestConn(base_path={base_path!r})
 _DEST = LocalFileDest(
     paths=["sink.parquet"],
 )
 
 
-@subscriber(conn=_CONN, destination=_DEST, input_tables=["c1/t_in"])
+@subscriber(destination=_DEST, input_tables=["c1/t_in"])
 def my_subscriber(
     in_1: TableFrameSpec, ctx: TrxCtx
 ) -> tuple[TableFrameSpec]:
@@ -1670,7 +1659,7 @@ def test_main_ctx_aware_subscriber_hydrates_and_drains(
         request,
         pkg_name="sub_ctx_pkg",
         module_name="subscriber",
-        source=_CTX_SUBSCRIBER_SRC.format(base_path=str(dest_out)),
+        source=_CTX_SUBSCRIBER_SRC,
         decorated_name="my_subscriber",
     )
 

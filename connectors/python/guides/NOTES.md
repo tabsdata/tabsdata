@@ -1,49 +1,28 @@
-# Resolving ConnRefs (named connections)
+# Connections come from the collection
 
-Traverse the Json with a `connectionRef` resolver replacing the entry with a resolved connection (loading similar
-how it is done in tabsdata 1.x).
+There is no by-name `connectionRef` resolution any more. A flow
+function never declares or names a connection: the connection is
+registered on the function's *collection*, and the runtime resolves
+it and hands the concrete `<Name>Conn` instance to the connector's
+plugin (`read_in(ctx, conn, src)` / `write_out(ctx, conn, dest,
+tables)` / `run(ctx, conn, stream_src)`) at run time.
 
-Then you need to resolve ValRefs (see next).
+Consequences:
 
-# Resolving ValRefs (secrets,envs)
+- `Src` / `StreamSrc` / `Dest` descriptors carry no `conn` field, so
+  there is nothing on a serialized flow to resolve to a connection.
+- The `NamedConn` wrapper and the bare-string→`NamedConn` promotion
+  are gone; there is no JSON traversal that swaps a `connectionRef`
+  entry for a resolved connection.
+- A source/destination is bound to its connection *type* in its
+  `SrcDef(conn=<Name>Conn, ...)` / `DestDef(conn=<Name>Conn, ...)`
+  binding; the runtime uses that binding to know which collection
+  connection to inject.
 
-On ConnRefs are resolved, traverse the Json with a secret/env resolver and go replacing SecretRef and EnvRef with the 
-actual values.
+## Secret hydration
 
-Then you need to do revalidation (see next) to ensure the resolved values are OK.
-
-# Revalidation after resolving NameRefs
-
-For a deeply nested pydantic-dataclass-based structure, the cleanest way to clone-with-revalidation is to **round-trip
-through dict** and re-construct via a `TypeAdapter`. That forces validation at every level, unlike
-`dataclasses.replace` (which skips validation entirely) or the dataclass constructor on a pre-built instance (which only
-validates the top level).
-
-## The recommended pattern
-
-```python
-from pydantic import TypeAdapter
-from pydantic.dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class Inner:
-    x: int
-
-
-@dataclass(frozen=True)
-class Outer:
-    inner: Inner
-    name: str
-
-
-original = Outer(inner=Inner(x=1), name="foo")
-
-adapter = TypeAdapter(Outer)
-clone = adapter.validate_python(adapter.dump_python(original))
-```
-
-`dump_python` recursively converts the whole tree to plain dicts/primitives; `validate_python` re-constructs it, running
-every validator at every level. The clone is a fully independent deep copy and is guaranteed to be valid by the current
-schema — useful if validators have changed, if you mutated something through a backdoor, or if you just want defensive
-certainty.
+`Secret` values still resolve at run time: a `Secret` serializes to
+the dehydrated marker `":secret:"` and is hydrated with its actual
+value by the runtime before the connector uses it. This is value
+hydration, not connection resolution — there is no separate
+`connectionRef` pass to run first.

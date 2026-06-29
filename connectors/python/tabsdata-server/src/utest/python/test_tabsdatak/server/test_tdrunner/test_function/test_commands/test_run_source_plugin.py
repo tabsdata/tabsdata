@@ -88,14 +88,10 @@ _MOD = "tabsdatak.server._tdrunner.function.commands.run_source_plugin"
 # Used by ``test_load_function_def_accepts_stream_publisher_kind``.
 
 from tabsdatak.api import stream_publisher as _stream_publisher_decorator  # noqa: E402
-from tabsdatak.conn.kafka import (  # noqa: E402
-    KafkaStreamSrc as _KafkaStreamSrc,
-    KafkaStreamSrcConn as _KafkaStreamSrcConn,
-)
+from tabsdatak.conn.kafka import KafkaStreamSrc as _KafkaStreamSrc  # noqa: E402
 
 
 @_stream_publisher_decorator(
-    conn=_KafkaStreamSrcConn(servers="x:9092", group_id="g"),
     source=_KafkaStreamSrc(data_format="json", schema="{}", topic="t"),
     flush_interval_mins=1,
     output_tables=["t"],
@@ -111,7 +107,7 @@ _USER_PUBLISHER_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
-from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileSrc
 
 _SRC = LocalFileSrc(
     paths=["*.parquet"],
@@ -119,7 +115,6 @@ _SRC = LocalFileSrc(
 
 
 @publisher(
-    conn=LocalFileSrcConn(base_path={base_path!r}),
     source=_SRC,
     output_tables=["my_table"],
 )
@@ -154,9 +149,7 @@ def user_project(tmp_path, monkeypatch) -> Path:
     pkg = project / "my_pkg"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text(
-        _USER_PUBLISHER_SRC.format(base_path=str(srcdata))
-    )
+    (pkg / "publisher.py").write_text(_USER_PUBLISHER_SRC)
     monkeypatch.syspath_prepend(str(project))
     importlib.invalidate_caches()
 
@@ -233,6 +226,19 @@ def _write_request(path: Path, bundle_uri: str = "file:///bundle.tgz") -> Path:
     return path
 
 
+def _write_connection_file(path: Path, base_path: Path) -> Path:
+    """Write the connection.yaml the command loads via --connection-file.
+
+    The connection is no longer carried on the function descriptor; the
+    runtime reads it from this file (the collection's connection)."""
+    from tabsdatak.conn.localfile import LocalFileSrcConn
+
+    path.write_text(
+        yaml.safe_dump(LocalFileSrcConn(base_path=str(base_path)).to_dict())
+    )
+    return path
+
+
 def _set_argv(
     monkeypatch,
     request_path: Path,
@@ -241,6 +247,7 @@ def _set_argv(
     inputs_manifest: Path,
     liveness: Path,
     *,
+    connection_file: Path,
     responder_url: str,
     responder_method: str = "POST",
     responder_authorization: str = "Bearer tok",
@@ -264,6 +271,8 @@ def _set_argv(
             str(out_dir),
             "--inputs-manifest",
             str(inputs_manifest),
+            "--connection-file",
+            str(connection_file),
             "--liveness",
             str(liveness),
             "--state-dir",
@@ -431,24 +440,29 @@ def test_load_function_def_unresolvable_func_raises_bad_user_code(
 # --- unit: _resolve_plugin -----------------------------------------------
 
 
-def test_resolve_plugin_and_io_publisher_passthrough(fixture_publisher):
+def test_resolve_plugin_and_io_publisher_passthrough(tmp_path, fixture_publisher):
     """For a regular ``@publisher``, ``_resolve_plugin_and_io`` returns
-    the plugin + the user-declared conn/source verbatim."""
+    the plugin + user-declared source verbatim, and the conn loaded from
+    the connection file."""
+    from tabsdatak.conn.localfile import LocalFileSrcConn
     from tabsdatak.spi import SrcPlugin
 
     # function_stage is unused on the PublisherInfo path; pass a stub.
     stub_stage = Location(uri="file:///unused")
+    conn_file = _write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "srcdata"
+    )
     plugin, conn, src, cardinality = _resolve_plugin_and_io(
-        fixture_publisher, stub_stage
+        fixture_publisher, stub_stage, conn_file
     )
     assert isinstance(plugin, SrcPlugin)
-    assert conn is fixture_publisher.conn
+    assert isinstance(conn, LocalFileSrcConn)
     assert src is fixture_publisher.source
     assert cardinality == 1  # LocalFileSrc with one path
 
 
 def test_resolve_plugin_and_io_unknown_source_raises_no_plugin(
-    fixture_publisher, monkeypatch
+    tmp_path, fixture_publisher, monkeypatch
 ):
     """When `get_src` raises `KeyError`, the runner surfaces
     `NoPluginError`."""
@@ -458,7 +472,13 @@ def test_resolve_plugin_and_io_unknown_source_raises_no_plugin(
 
     monkeypatch.setattr(f"{_MOD}.get_src", _raise)
     with pytest.raises(NoPluginError):
-        _resolve_plugin_and_io(fixture_publisher, Location(uri="file:///unused"))
+        # `get_src` raises before the connection file is read, so a
+        # non-existent path is fine for the 3rd arg.
+        _resolve_plugin_and_io(
+            fixture_publisher,
+            Location(uri="file:///unused"),
+            tmp_path / "no-connection.yaml",
+        )
 
 
 # --- unit: _build_manifest_stage_conn (stream-publisher substitution) --
@@ -514,20 +534,21 @@ def test_build_manifest_stage_conn_rejects_unsupported_scheme():
         _build_manifest_stage_conn(Location(uri="gcs://bucket/stage"))
 
 
-def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage():
+def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage(
+    tmp_path,
+):
     """For a ``@stream_publisher``, ``_resolve_plugin_and_io`` swaps
-    the user-declared Kafka source/conn for the publisher-side
+    the user-declared Kafka source for the publisher-side
     StreamStageSrc + a SimpleNamespace duck-type of ManifestStageConn
     that ``ManifestStageSrcPlugin`` knows how to read. Cardinality
     drops to ``-1`` because the manifest decides slot count at read
     time."""
     from tabsdatak.api import stream_publisher
-    from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
+    from tabsdatak.conn.kafka import KafkaStreamSrc
     from tabsdatak.conn.localfile import LocalFileSrcConn
     from tabsdatak.spi import StreamStageSrc, StreamStageSrcPlugin
 
     @stream_publisher(
-        conn=KafkaStreamSrcConn(servers="example:9092", group_id="g"),
         source=KafkaStreamSrc(data_format="json", schema="{}", topic="t"),
         flush_interval_mins=1,
         output_tables=["t"],
@@ -535,8 +556,10 @@ def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage():
     def _my_stream_pub(t: TableFramesSpec) -> tuple[TableFrameSpec]:
         return (None,)
 
+    # The stream-publisher path substitutes the conn from function_stage
+    # and never reads the connection file, so a stub path is fine here.
     plugin, conn, src, cardinality = _resolve_plugin_and_io(
-        _my_stream_pub, Location(uri="file:///stage/dir")
+        _my_stream_pub, Location(uri="file:///stage/dir"), tmp_path / "unused.yaml"
     )
     # Plugin substituted to StreamStageSrcPlugin (which delegates to
     # ManifestStageSrcPlugin internally on read_in).
@@ -747,6 +770,7 @@ def test_main_missing_request_returns_bad_request(tmp_path, monkeypatch, http_ok
         tmp_path / "out",
         tmp_path / "manifest.yaml",
         tmp_path / "live",
+        connection_file=tmp_path / "connection.yaml",
         responder_url=http_ok_url,
     )
     assert main() == BadRequestError.exit_code
@@ -761,6 +785,7 @@ def test_main_missing_bundle_returns_bad_bundle(tmp_path, monkeypatch, http_ok_u
         tmp_path / "out",
         tmp_path / "manifest.yaml",
         tmp_path / "live",
+        connection_file=tmp_path / "connection.yaml",
         responder_url=http_ok_url,
     )
     assert main() == BadBundleError.exit_code
@@ -787,6 +812,11 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     out_dir.mkdir()
     manifest = tmp_path / "manifest.yaml"
     liveness = tmp_path / "live"
+    # The source connection's base_path is the srcdata dir the
+    # `user_project` fixture wrote `rows.parquet` into.
+    conn_file = _write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "srcdata"
+    )
 
     _set_argv(
         monkeypatch,
@@ -795,6 +825,7 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
         out_dir,
         manifest,
         liveness,
+        connection_file=conn_file,
         responder_url=http_ok_url,
     )
 
@@ -1107,6 +1138,10 @@ def test_main_hydrates_and_drains_initial_values(
     )
     manifest = tmp_path / "manifest.yaml"
     liveness = tmp_path / "live"
+    # base_path is the srcdata dir the `user_project` fixture populated.
+    conn_file = _write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "srcdata"
+    )
     _set_argv(
         monkeypatch,
         req_path,
@@ -1114,6 +1149,7 @@ def test_main_hydrates_and_drains_initial_values(
         out_dir,
         manifest,
         liveness,
+        connection_file=conn_file,
         responder_url=http_ok_url,
         state_dir=state_dir,
     )

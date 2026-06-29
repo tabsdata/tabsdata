@@ -25,8 +25,7 @@ Three modules. Everything an end user ever types comes from one of them.
 from tabsdatak.api import (
     publisher, stream_publisher, transformer, subscriber,  # entry points
     CronTrigger,  # firing rule
-    NamedConn,  # ref by name
-    Var, Secret,  # ValRef subclasses
+    Secret,  # secret value ref
     # function-signature slot
 )
 from tabsdatak.tableframe import TableFrame
@@ -39,7 +38,10 @@ from tabsdatak.conn.common.types import (
 )
 
 # 3. The vendor connector you need (one of ~17). Example:
-from tabsdatak.conn.mysql import MySQLSrc, MySQLDest, MySQLConn
+from tabsdatak.conn.mysql import MySQLSrc, MySQLDest
+# (The `<Vendor>Conn` class is NOT imported in flow code: the
+#  connection is registered on the function's collection and the
+#  runtime resolves it and hands it to the connector at run time.)
 
 # 4. (Optional) Errors — only if you need to react to them.
 from tabsdatak.error import ApiException
@@ -96,26 +98,24 @@ LLM authoring traps #12" below for the full asymmetry rundown.
 | GCS | `tabsdatak.conn.gcs` | src + dest | `path: list[str]` | `path: list[str]` |
 | Azure Blob | `tabsdatak.conn.azureblob` | src + dest | `path: list[str]` | `path: list[str]` |
 
-Class naming is uniform: `<Vendor>Src` / `<Vendor>Dest` /
-`<Vendor>Conn` (a single connection class used on both sides).
+Class naming is uniform: `<Vendor>Src` / `<Vendor>Dest`.
 Source-only or dest-only connectors omit the missing `Src`/`Dest`.
+
+**Flow code never declares a connection.** A `Src` / `Dest` carries
+only its own config (`queries` / `path` / `tables` / ...) — there is
+no `conn` field and no `conn=` argument anywhere in user flow code.
+The connection (the `<Vendor>Conn`) is registered on the function's
+*collection*; the runtime resolves it and hands it to the
+connector's plugin at run time.
 
 ### Canonical user code
 
 ```python
-from tabsdatak.api import publisher, CronTrigger, Var
+from tabsdatak.api import publisher, CronTrigger
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.mysql import MySQLSrc, MySQLConn
+from tabsdatak.conn.mysql import MySQLSrc
 
 src = MySQLSrc(
-  conn=MySQLConn(
-    uri="mysql://db.example.com/app",
-    credentials=UserPassword(
-      user="etl",
-      password=Var(name="DB_PASSWORD"),
-    ),
-  ),
   queries=["SELECT id, email FROM users"],
 )
 
@@ -129,12 +129,15 @@ def my_pub(users: TableFrame) -> tuple[TableFrame]:
   return (users,)
 ```
 
-Three pieces, in order: build a `Src` (or `Dest`); decorate a
-function whose first `N` positional parameters match the source's
+Three pieces, in order: build a `Src` (or `Dest`) from its own
+config only (no connection — that lives on the collection); decorate
+a function whose first `N` positional parameters match the source's
 slot count -- the connector's `SrcDef.cardinality(src)` -- (each
 typed `TableFrame` for SINGLE-mode sources or `list[TableFrame]`
 for ARRAY-mode sources) and whose return is a fixed-length
-`tuple[TableFrame, ...]` of length `len(output_tables)`.
+`tuple[TableFrame, ...]` of length `len(output_tables)`. The MySQL
+connection itself is registered on the function's collection and
+resolved by the runtime; it is never named or built in flow code.
 
 ---
 
@@ -158,11 +161,11 @@ Once you've seen one, you've seen all four.
 
 ### 2. Connector class names are predictable
 
-`<Vendor>Conn`, `<Vendor>Src`, `<Vendor>Dest`. Generation by
-template works. Two pieces to remember per vendor: how to build
-the connection (`<V>Conn(...)`) and how to wrap it
-(`<V>Src(conn=..., queries=[...])`). The same `<V>Conn` is used
-on both src and dest sides.
+`<Vendor>Src`, `<Vendor>Dest`. Generation by template works. One
+piece to remember per vendor: how to build the source / destination
+from its own config (`<V>Src(queries=[...])`,
+`<V>Dest(tables=[...])`). There is no connection to wire — it is
+registered on the collection and resolved by the runtime.
 
 ### 3. Type aliases are descriptive
 
@@ -210,18 +213,17 @@ is self-describing:
 You can dump a `MySQLSrc(...)` to JSON and reload it later without
 plumbing.
 
-### 7. `NamedConn` lets you defer the connection
+### 7. The connection is not your problem
 
-If you don't have credentials at authoring time, you can use a named
-reference and resolve it at deploy:
+You never declare, name, or build a connection in flow code. The
+`<Vendor>Conn` is registered on the function's collection and the
+runtime resolves it and hands it to the connector at run time. A
+`Src` / `Dest` carries only its own config, so generated flow code
+has nothing to guess about credentials or URIs:
 
 ```python
-src = MySQLSrc(conn=NamedConn(name="prod_mysql"), queries=["SELECT 1"])
+src = MySQLSrc(queries=["SELECT 1"])   # no conn anywhere
 ```
-
-The actual `MySQLConn` lives elsewhere (typically a deployment
-config). Useful when generating code for environments you don't
-control.
 
 ---
 
@@ -332,36 +334,30 @@ def make_pub():
     return my_pub
 ```
 
-### 5. `conn` slots: bare strings auto-promote to `NamedConn`
+### 5. There is no `conn` argument on a `Src` / `Dest`
 
-The `conn` field is a union of `NamedConn` and the connector's own
-`<V>Conn`. A bare string at a `conn` slot is auto-promoted to
-`NamedConn(name=<str>)`, so all three forms below are equivalent
-for the framework:
+Flow code never wires a connection. A `Src` / `Dest` has no `conn`
+field; passing `conn=...` (a string, a `<V>Conn`, anything) is a
+`TypeError`. The connection is registered on the function's
+collection and resolved by the runtime:
 
 ```python
-# bare string -- promoted to NamedConn(name="prod_mysql"):
+# rejected -- no such field:
 src = MySQLSrc(conn="prod_mysql", queries=["SELECT 1"])
+src = MySQLSrc(conn=MySQLConn(...), queries=["SELECT 1"])
 
-# named reference (explicit):
-src = MySQLSrc(conn=NamedConn(name="prod_mysql"), queries=["SELECT 1"])
-
-# inline connection (full credentials):
-src = MySQLSrc(
-    conn=MySQLConn(uri="...", credentials=UserPassword(...)),
-    queries=["SELECT 1"],
-)
+# correct -- config only:
+src = MySQLSrc(queries=["SELECT 1"])
 ```
-
-The promoted string still goes through the `ConnectionNameSpec`
-validator (1-64 chars, starts with a letter, identifier-shaped); a
-malformed name like `"1bad-name"` is rejected at construction time.
 
 ### 6. Cloud destinations need an explicit staging location
 
 ClickHouse, Druid, StarRocks — and any other destination that
-bulk-loads via object storage — require a `staging:
-CloudLocation`:
+bulk-loads via object storage — require a `staging: CloudLocation`
+on their **connection**. The connection (with its staging block) is
+registered on the collection, not built in flow code, so this is a
+connection-configuration concern rather than something the `Dest`
+carries. The connection looks like:
 
 ```python
 from tabsdatak.conn.common.types import (
@@ -383,7 +379,7 @@ dc = ClickHouseConn(
 
 The `S3Location` itself needs `bucket`, `region`, `base_path` (must
 end with `/`), and `credentials`. Omitting any of those throws the
-load failure to the user, not the connector.
+load failure at run time.
 
 ### 7. Source-only / destination-only connectors
 
@@ -403,10 +399,10 @@ they look symmetric. They don't exist.
 
 ```python
 # rejected:
-src = MySQLSrc(conn=..., queries="SELECT 1")
+src = MySQLSrc(queries="SELECT 1")
 
 # accepted:
-src = MySQLSrc(conn=..., queries=["SELECT 1"])
+src = MySQLSrc(queries=["SELECT 1"])
 ```
 
 One element per output slot. SalesforceSrc currently restricts
@@ -416,10 +412,10 @@ One element per output slot. SalesforceSrc currently restricts
 
 ```python
 # rejected:
-dest = MySQLDest(conn=..., tables="my_table")
+dest = MySQLDest(tables="my_table")
 
 # accepted:
-dest = MySQLDest(conn=..., tables=["my_table"])
+dest = MySQLDest(tables=["my_table"])
 ```
 
 The single-string-or-list union was deliberately removed for
@@ -470,17 +466,17 @@ the same shorthand does **not** work everywhere:
 
 ```python
 # fine -- SQL dest:
-MySQLDest(conn=..., tables=["users_out", "orders_out"])
+MySQLDest(tables=["users_out", "orders_out"])
 
 # fine -- file dest:
-S3Dest(conn=..., path=["out/users/", "out/orders/"])
+S3Dest(path=["out/users/", "out/orders/"])
 
 # rejected -- MongoDB doesn't take 'tables':
-MongoDBDest(conn=..., tables=["users", "orders"])
+MongoDBDest(tables=["users", "orders"])
 #   -> use collections_with_ids=[("users", "_id"), ("orders", None)]
 
 # rejected -- file dest doesn't take 'tables':
-S3Dest(conn=..., tables=["out/users.csv"])
+S3Dest(tables=["out/users.csv"])
 #   -> use path=["out/users.csv"]
 ```
 
@@ -613,8 +609,8 @@ than they removed.
 #### Diagnosis 3: Many `*Spec` aliases that look similar  **[Implemented]**
 
 **Problem.** `TableNameSpec`, `TableNamesSpec`, `CollTableNameSpec`,
-`CollTableNamesSpec`, `InlineConnectionNameSpec`, `ConnSpec`,
-`OperatorSpec`, `ApiNameSpec`, `ApiVersionSpec`, etc.
+`CollTableNamesSpec`, `OperatorSpec`, `ApiNameSpec`,
+`ApiVersionSpec`, etc.
 Some are validated `str`; some are
 `Annotated[list[…], Field(min_length=1)]`; some are `Union[…]`. From
 the alias name alone an LLM couldn't always tell which.
@@ -634,22 +630,22 @@ convention"):
 
 Connector packages follow the same convention (``UriSpec``,
 ``CredentialsSpec``, ``QueriesSpec``, ``MySQLTableNameSpec`` /
-``MySQLTableNamesSpec``, ...). The single legacy offender
-(``ConnectionNameSpec`` -- a Union despite the ``*Name*`` suffix)
-was removed; ``NamedConn.name`` now spells the union out at the
-use site as ``InlineConnectionNameSpec | Var``.
+``MySQLTableNamesSpec``, ...).
 
-#### Diagnosis 4: `NamedConn(name="prod_mysql")` vs `"prod_mysql"`  **[Implemented]**
+#### Diagnosis 4: Connections are resolved from the collection, not declared in flow code  **[Implemented]**
 
-**Problem.** LLM training data is full of `conn="prod"` shorthand.
-Earlier versions of the framework required the wrapper class.
+**Problem.** LLM training data is full of `conn="prod"` /
+`conn=<V>Conn(...)` shorthand wired directly onto a source or
+destination. Earlier versions of the framework did take a `conn`
+field (and a `NamedConn` wrapper for by-name references).
 
-**Mitigation in place.** A `@model_validator(mode="before")` on
-`NamedConn` (see `api.py::_accept_bare_str`) auto-promotes a bare
-`str` at any `conn` slot into `NamedConn(name=<str>)`. The
-promoted name still goes through `ConnectionNameSpec` validation,
-so a malformed name (`"1bad-name"`) is still rejected. The
-explicit form continues to work unchanged.
+**Mitigation in place.** The `conn` field — and the `NamedConn`
+by-name wrapper, and the bare-string auto-promotion — were removed
+entirely. A `Src` / `Dest` carries only its own config; the
+connection is registered on the function's *collection* and the
+runtime resolves it and hands it to the connector at run time. Flow
+code that passes `conn=...` fails with an "unexpected keyword"
+`TypeError`, which steers the LLM to drop the argument.
 
 #### Diagnosis 5: Cloud-staging boilerplate is heavy for an LLM  **[Implemented]**
 

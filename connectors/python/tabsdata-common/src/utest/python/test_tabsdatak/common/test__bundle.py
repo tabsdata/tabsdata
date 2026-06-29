@@ -13,6 +13,8 @@ import pytest
 import yaml
 import zstandard
 
+from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo
+from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
 from tabsdatak.common._archive.bundle import (
     BUNDLE_LOCAL_PACKAGES_DIRNAME,
     BUNDLE_MANIFEST_FILENAME,
@@ -25,10 +27,8 @@ from tabsdatak.common._archive.bundle import (
     write_function_def,
     write_requirements,
 )
-from tabsdatak._info import KIND_PUBLISHER_DEF, PublisherInfo
-from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
-from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
 from tabsdatak.common._error import CommonErrorCode, CommonRuntimeException
+from tabsdatak.conn.localfile import LocalFileSrc
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -50,13 +50,12 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 # regresses that unwrap, the round-trip test in this file will fail.
 
 
-_CONN = LocalFileSrcConn(base_path="/tmp")
 _SRC = LocalFileSrc(
     paths=["data/*.csv"],
 )
 
 
-@publisher(conn=_CONN, source=_SRC, output_tables=["t"])
+@publisher(source=_SRC, output_tables=["t"])
 def _fixture_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec]:
     """Docstring for the test fixture publisher."""
     return (None,)
@@ -109,7 +108,6 @@ def test_capture_source_snippet_returns_placeholder_on_failure():
     fake = PublisherInfo(
         # unwrap to the bare function for valid construction
         func=_fixture_publisher.func,
-        conn=_CONN,
         source=_SRC,
         output_tables=["t"],
         trigger_by=None,

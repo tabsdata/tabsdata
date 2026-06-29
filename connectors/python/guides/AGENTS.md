@@ -22,10 +22,14 @@ user-facing decorators:
 - `@subscriber(destination, input_tables, ...)` — reads tables,
   writes to a `Dest`.
 
-`Src` / `AutoSrc` / `Dest` / `Conn` are abstract bases. Connector
+`Src` / `AutoSrc` / `Dest` are abstract bases in `tabsdatak.api`;
+`Conn` is the abstract connection base in `tabsdatak.spi`. Connector
 packages (`tabsdata-conn-mysql`, etc.) ship concrete subclasses —
-a single `<Vendor>Conn` per connector, plus `<Vendor>Src` /
-`<Vendor>Dest`.
+a `<Vendor>Conn` per connector, plus `<Vendor>Src` / `<Vendor>Dest`.
+A `Src` / `Dest` carries only its own config and has **no `conn`
+field**: the connection is registered on the function's collection
+and the runtime resolves it and hands the `<Vendor>Conn` instance to
+the connector's plugin at run time.
 
 ## Public symbols — where to import each from
 
@@ -39,11 +43,10 @@ and must not be imported.
 | ----------- | ------- |
 | Decorators  | `publisher`, `auto_publisher`, `transformer`, `subscriber` |
 | Triggers    | `Trigger` (abstract), `CronTrigger`, `TablesTrigger`, `AllTablesTrigger` |
-| Connections | `Conn` (abstract), `NamedConn` |
-| Value refs  | `ValRef` (abstract), `Var`, `Secret` |
+| Value refs  | `Secret` |
 | Bases       | `Src` (abstract), `AutoSrc` (abstract), `Dest` (abstract), `OnTablesAction` (abstract), `TableFrame` |
-| Specs (validated string types) | `TableNameSpec`, `TableNamesSpec`, `CollTableNameSpec`, `CollTableNamesSpec`, `CronMaskSpec`, `VarNameSpec`, `SecretRefSpec`, `InlineConnectionNameSpec` |
-| Specs (composed) | `ValOrRefSpec` (`str \| ValRef`), `PublisherTriggerBySpec`, `TransformerTriggerBySpec`, `SubscriberTriggerBySpec`, `OnTablesActionSpec`, `FallbackRolloverMinsSpec` (`Annotated[int, ge=1]`) |
+| Specs (validated string types) | `TableNameSpec`, `TableNamesSpec`, `CollTableNameSpec`, `CollTableNamesSpec`, `CronMaskSpec`, `SecretRefSpec` |
+| Specs (composed) | `PublisherTriggerBySpec`, `TransformerTriggerBySpec`, `SubscriberTriggerBySpec`, `OnTablesActionSpec`, `FallbackRolloverMinsSpec` (`Annotated[int, ge=1]`) |
 
 `ErrorCategory`, `ErrorDef`, `ErrorCode`, `ApiErrorCode`,
 `TabsdataException`, `ApiException`, `ApiParamTypeException`,
@@ -119,7 +122,8 @@ also need `Src` / `AutoSrc` / `Dest`, import them from
 
 | Kind          | Symbols |
 | ------------- | ------- |
-| Kind bindings | `SrcDef[C, S]`, `AutoSrcDef[C, AS]`, `DestDef[C, D]` (frozen pydantic dataclasses; instantiate one per concrete `Src` / `AutoSrc` / `Dest` subclass and expose it via the `tabsdatak.connectors` entry-point group) |
+| Connection    | `Conn` (abstract; subclass as `<Name>Conn`). Connections are not declared in user flow code — they are registered on the function's collection and resolved by the runtime; the descriptor (`Src` / `Dest`) carries no `conn` field. |
+| Kind bindings | `SrcDef[C, S]`, `AutoSrcDef[C, AS]`, `DestDef[C, D]` (frozen pydantic dataclasses; instantiate one per concrete `Src` / `AutoSrc` / `Dest` subclass and expose it via the `tabsdatak.connectors` entry-point group; `conn=<Name>Conn` on each binds it to its connection type) |
 | Plugins       | `SrcPlugin[C, S]`, `AutoSrcPlugin[C, AS]`, `DestPlugin[C, D]` (abstract; subclass and implement `read_in` / `write_out`) |
 | Contexts      | `SrcContext`, `AutoSrcContext`, `DestContext` (per-call handles passed to plugins; expose `work_dir()` etc.) |
 | Helper        | `Explorer[C]` (abstract — schema / metadata extractor) |
@@ -132,7 +136,7 @@ Vendor-specific concrete classes. Example for MySQL:
 
 | Symbols (from `tabsdatak.conn.mysql`) |
 | --- |
-| `MySQLConn`, `MySQLSrc`, `MySQLDest`, `ConnSpec` (`NamedConn \| MySQLConn`), `QueriesSpec`, `MySQLTableNamesSpec` |
+| `MySQLConn`, `MySQLSrc`, `MySQLDest`, `QueriesSpec`, `MySQLTableNamesSpec` |
 
 Cross-cutting types live in `tabsdatak.conn.common_typing`
 (credentials, cloud locations, `ConnCfgSpec`),
@@ -144,19 +148,14 @@ s3 / gcs / azureblob connectors).
 ## How to author code (end user)
 
 ```python
-from tabsdatak.api import publisher, CronTrigger, Var
+from tabsdatak.api import publisher, CronTrigger
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.mysql import MySQLSrc, MySQLConn
+from tabsdatak.conn.mysql import MySQLSrc
 
+# No connection here: the MySQL connection is registered on the
+# function's collection and resolved by the runtime. The source
+# carries only its own config.
 src = MySQLSrc(
-    conn=MySQLConn(
-        uri="mysql://db.example.com/app",
-        credentials=UserPassword(
-            user="etl",
-            password=Var(name="DB_PASSWORD"),  # value from env var
-        ),
-    ),
     queries=["SELECT * FROM users"],
 )
 
@@ -236,12 +235,17 @@ from typing import Annotated, TypeAlias, Union
 
 from pydantic.dataclasses import dataclass
 
-from tabsdatak.api import Conn, Dest, NamedConn, Src, ValRef
+from tabsdatak.api import Dest, Secret, Src
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
 from tabsdatak.conn.my._validation import URI_VALIDATOR  # AfterValidator
+from tabsdatak.spi import Conn
 
-UriValueSpec: TypeAlias = Annotated[str, URI_VALIDATOR]
-UriSpec: TypeAlias = Union[UriValueSpec, ValRef]
+# Secret-bearing fields union the literal shape with `Secret`
+# directly — there is no `ValRef` base.
+UriSpec: TypeAlias = Union[
+    Annotated[str, URI_VALIDATOR],
+    Secret,
+]
 
 
 @dataclass(kw_only=True)
@@ -251,20 +255,21 @@ class MyConn(Conn):
     conn_cfg: CfgSpec = None
 
 
-ConnSpec: TypeAlias = Union[NamedConn, MyConn]
-
-
 @dataclass(kw_only=True)
 class MySrc(Src):
-    conn: ConnSpec
     queries: list[str]
 
 
 @dataclass(kw_only=True)
 class MyDest(Dest):
-    conn: ConnSpec
     tables: list[str]
 ```
+
+`MySrc` / `MyDest` have **no `conn` field**. The connection is
+registered on the function's collection; the runtime resolves it and
+passes the `MyConn` instance to the plugin. The source/destination is
+bound to its connection *type* in the `SrcDef(conn=MyConn, ...)` /
+`DestDef(conn=MyConn, ...)` binding below.
 
 `_plugin.py` — runtime wiring. Subclass `SrcPlugin` /
 `DestPlugin` / `Explorer` and instantiate one `SrcDef` / `DestDef`
@@ -279,12 +284,14 @@ from tabsdatak.spi import (
 )
 
 
+# The runtime resolves the connection from the collection and passes
+# the `MyConn` instance to each plugin method as `conn`.
 class _MySrcPlugin(SrcPlugin[MyConn, MySrc]):
-    def read_in(self, ctx: SrcPluginCtx, src: MySrc) -> list[list[TableFileSpec]]: ...
+    def read_in(self, ctx: SrcPluginCtx, conn: MyConn, src: MySrc) -> list[list[TableFileSpec]]: ...
 
 
 class _MyDestPlugin(DestPlugin[MyConn, MyDest]):
-    def write_out(self, ctx, dest: MyDest, tables: list[TableFileSpec]) -> None: ...
+    def write_out(self, ctx, conn: MyConn, dest: MyDest, tables: list[TableFileSpec]) -> None: ...
 
 
 class _MyExplorer(Explorer[MyConn]):
@@ -293,16 +300,17 @@ class _MyExplorer(Explorer[MyConn]):
     def data(self, conn: MyConn, query: str): ...
 
 
+# `conn=MyConn` binds the source/destination to its connection type.
 MY_SRC = SrcDef[MyConn, MySrc](
     src_type="my", src_version="v1",
-    src=MySrc, table_mode=TableMode.SINGLE,
+    conn=MyConn, src=MySrc, table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=_MySrcPlugin, explorer=_MyExplorer,
 )
 
 MY_DEST = DestDef[MyConn, MyDest](
     dest_type="my", dest_version="v1",
-    dest=MyDest,
+    conn=MyConn, dest=MyDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=_MyDestPlugin, explorer=_MyExplorer,
 )
@@ -356,12 +364,15 @@ Key decisions:
   `ConnParamTypeException` tagged with the connector's `PARAM_TYPE`
   code. The single `code.exception(...)` factory dispatches via
   `<Name>ErrorCode.exception_classes()`.
-- `ValOrRefSpec` is `Union[str, ValRef]`: a literal string or any
-  `ValRef` subclass (currently `Var` for env vars, `Secret` for K8s
-  secrets). New `ValRef` subclasses don't require touching the spec.
-- Polymorphic field types (`source: Src`, `destination: Dest`,
-  `conn: Conn`) "just work" — no `SerializeAsAny` annotation
-  needed; the JsonSerde schema dispatches by actual class.
+- Secret-bearing fields union the literal shape with `Secret`
+  directly (e.g. `Union[Annotated[str, URI_VALIDATOR], Secret]`).
+  There is no `ValRef` base or `ValOrRefSpec` alias any more; a
+  field that accepts a secret just lists `Secret` as a union member.
+- Polymorphic field types (`source: Src`, `destination: Dest`) "just
+  work" — no `SerializeAsAny` annotation needed; the JsonSerde schema
+  dispatches by actual class. `Conn` subclasses round-trip the same
+  way (`Conn.from_json(...)` returns the right subclass), even though
+  a connection is no longer carried as a field on a `Src` / `Dest`.
 
 ## JSON serde
 
@@ -398,7 +409,7 @@ The envelope:
 Polymorphic load works through any abstract base:
 
 ```python
-from tabsdatak.api import Conn
+from tabsdatak.spi import Conn
 back = Conn.from_json(some_envelope_str)   # returns the right subclass
 ```
 
@@ -433,12 +444,12 @@ the tag (and catching the broadest applicable parent so either
 leaf type matches):
 
 ```python
-from tabsdatak.api import NamedConn
+from tabsdatak.api import CronTrigger
 from tabsdatak.error import ApiErrorCode, ApiException
 
 with pytest.raises(ApiException) as excinfo:
-  NamedConn(name="1bad")
-assert excinfo.value.api_error is ApiErrorCode.API_9
+  CronTrigger(mask="not a cron mask")
+assert excinfo.value.api_error is ApiErrorCode.API_2
 ```
 
 ### Field-value rules on descriptor subclasses
@@ -489,9 +500,10 @@ installed sibling packages via `pkgutil.extend_path`.
 
 - Don't import from `tabsdatak._info` or `tabsdatak._api` in user
   code. They're framework-internal and the interface is not stable.
-  The public bases (`Conn` / `Src` / `AutoSrc` / `Dest` / `Trigger`
-  / `OnTablesAction` / `ValRef`) provide everything user code
-  needs, including JSON serde via inheritance.
+  The public bases (`Src` / `AutoSrc` / `Dest` / `Trigger` /
+  `OnTablesAction`, plus `Conn` on the connector-implementer `spi`
+  surface) provide everything you need, including JSON serde via
+  inheritance.
 - Don't add `SerializeAsAny` annotations. The `JsonSerde` schema handles
   polymorphic dispatch directly; the annotation is unnecessary and
   actively breaks stdlib-dataclass nesting.

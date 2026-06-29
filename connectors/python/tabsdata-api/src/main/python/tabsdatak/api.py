@@ -16,9 +16,10 @@ Each decorator wraps the user function in an ``*Info`` descriptor
 / ``SubscriberInfo``) and the framework picks the descriptor up
 during flow registration. Triggers (``CronTrigger`` /
 ``TablesTrigger`` / ``AllTablesTrigger``) declare *when* a function
-fires; connections (:class:`Conn` / :class:`NamedConn`) and value
-references (:class:`Secret`) declare the *where*
-and the *credentials*.
+fires; the ``source`` / ``destination`` declares the *where*. The
+*connection* (and its credentials) is not declared on the function
+-- it is the connection registered on the function's collection,
+which the runtime resolves and hands to the connector at run time.
 
 The :class:`TrxCtx` interface is what the runtime hands to every
 decorated function so it can read trx identifiers and persist
@@ -313,7 +314,7 @@ KIND_ON_TABLES_ACTION = "onTablesAction"
 # framework dataclasses that reference these bases as field types
 # (`PublisherInfo.source: Src`, ...) opt into
 # `arbitrary_types_allowed=True` so pydantic validates via isinstance.
-class Src[C: Conn](ABC, _api.DescriptorBase):
+class Src(ABC, _api.DescriptorBase):
     """Abstract batch source. Used as the ``source`` argument of
     ``@publisher``.
     """
@@ -321,7 +322,7 @@ class Src[C: Conn](ABC, _api.DescriptorBase):
     __kind__ = KIND_SOURCE_DEF
 
 
-class StreamSrc[C: Conn](ABC, _api.DescriptorBase):
+class StreamSrc(ABC, _api.DescriptorBase):
     """Abstract stream source. Used as the ``source`` argument of
     ``@stream_publisher``.
     """
@@ -329,7 +330,7 @@ class StreamSrc[C: Conn](ABC, _api.DescriptorBase):
     __kind__ = KIND_STREAM_SOURCE_DEF
 
 
-class Dest[C: Conn](ABC, _api.DescriptorBase):
+class Dest(ABC, _api.DescriptorBase):
     """Abstract destination. Used as the ``destination`` argument
     of ``@subscriber``.
     """
@@ -355,9 +356,8 @@ def _info_cls(name: str):
     return getattr(importlib.import_module("tabsdatak._info"), name)
 
 
-def publisher[C: Conn](
-    conn: C,
-    source: Src[C],
+def publisher(
+    source: Src,
     output_tables: TableNamesSpec,
     trigger_by: PublisherTriggerBySpec | None = None,
     on_tables: OnTablesActionSpec | None = None,
@@ -384,15 +384,14 @@ def publisher[C: Conn](
 
     def _publisher(func):
         return _info_cls("PublisherInfo")(
-            func, conn, source, output_tables, trigger_by, on_tables
+            func, source, output_tables, trigger_by, on_tables
         )
 
     return _publisher
 
 
-def stream_publisher[C: Conn](
-    conn: C,
-    source: StreamSrc[C],
+def stream_publisher(
+    source: StreamSrc,
     flush_interval_mins: FlushIntervalSpec,
     output_tables: TableNamesSpec,
     on_tables: OnTablesActionSpec | None = None,
@@ -419,7 +418,6 @@ def stream_publisher[C: Conn](
     def _stream_publisher(func):
         return _info_cls("StreamPublisherInfo")(
             func,
-            conn,
             source,
             flush_interval_mins,
             output_tables,
@@ -460,9 +458,8 @@ def transformer(
     return _transformer
 
 
-def subscriber[C: Conn](
-    conn: C,
-    destination: Dest[C],
+def subscriber(
+    destination: Dest,
     input_tables: CollTableVersionsNamesSpec,
     trigger_by: SubscriberTriggerBySpec | None = None,
 ) -> Callable:
@@ -483,7 +480,7 @@ def subscriber[C: Conn](
 
     def _subscriber(func):
         return _info_cls("SubscriberInfo")(
-            func, conn, destination, input_tables, trigger_by
+            func, destination, input_tables, trigger_by
         )
 
     return _subscriber

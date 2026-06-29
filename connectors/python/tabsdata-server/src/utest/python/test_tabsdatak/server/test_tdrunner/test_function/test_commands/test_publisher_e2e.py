@@ -68,7 +68,7 @@ _USER_PUBLISHER_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
-from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileSrc
 
 _SRC = LocalFileSrc(
     paths=["*.parquet"],
@@ -76,8 +76,7 @@ _SRC = LocalFileSrc(
 
 
 @publisher(
-    conn=LocalFileSrcConn(base_path={base_path!r}),
-    source=_SRC, 
+    source=_SRC,
     output_tables=["my_table", "my_table2"]
 )
 def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec, TableFrameSpec]:
@@ -120,9 +119,7 @@ def user_project(tmp_path, monkeypatch) -> Path:
     pkg = project / "my_pkg"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text(
-        _USER_PUBLISHER_SRC.format(base_path=str(srcdata))
-    )
+    (pkg / "publisher.py").write_text(_USER_PUBLISHER_SRC)
     monkeypatch.syspath_prepend(str(project))
     importlib.invalidate_caches()
     yield project
@@ -157,7 +154,7 @@ _USER_PUBLISHER_MULTI_SRC = """\
 from __future__ import annotations
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
-from tabsdatak.conn.localfile import LocalFileSrcConn, LocalFileSrc
+from tabsdatak.conn.localfile import LocalFileSrc
 
 _SRC = LocalFileSrc(
     paths=["a.parquet", "b.parquet"],
@@ -165,7 +162,6 @@ _SRC = LocalFileSrc(
 
 
 @publisher(
-    conn=LocalFileSrcConn(base_path={base_path!r}),
     source=_SRC,
     output_tables=["concat_all", "first_only", "skipped"],
 )
@@ -203,9 +199,7 @@ def multi_user_project(tmp_path, monkeypatch) -> Path:
     pkg = project / "multi_pkg"
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text(
-        _USER_PUBLISHER_MULTI_SRC.format(base_path=str(srcdata))
-    )
+    (pkg / "publisher.py").write_text(_USER_PUBLISHER_MULTI_SRC)
     monkeypatch.syspath_prepend(str(project))
     importlib.invalidate_caches()
     yield project
@@ -468,8 +462,20 @@ def test_publisher_full_chain(
     assert rc == 0
 
     # --- 4. run-source-plugin ------------------------------------------
+    from tabsdatak.conn.localfile import LocalFileSrcConn
     from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
         main as rsp_main,
+    )
+
+    # The source connection (with the base_path the plugin reads from)
+    # now comes from the connection file the runtime loads, not from the
+    # function descriptor. base_path is the srcdata dir the `user_project`
+    # fixture populated.
+    connection_yaml = tmp_path / "connection.yaml"
+    connection_yaml.write_text(
+        yaml.safe_dump(
+            LocalFileSrcConn(base_path=str(tmp_path / "srcdata")).to_dict()
+        )
     )
 
     rc = _invoke(
@@ -485,6 +491,8 @@ def test_publisher_full_chain(
             str(out_dir),
             "--inputs-manifest",
             str(inputs_manifest),
+            "--connection-file",
+            str(connection_yaml),
             "--state-dir",
             str(state_dir),
             "--liveness",
@@ -896,8 +904,18 @@ def test_publisher_full_chain_multi_input_path(
     assert rc == 0
 
     # --- 4. run-source-plugin ------------------------------------------
+    from tabsdatak.conn.localfile import LocalFileSrcConn
     from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
         main as rsp_main,
+    )
+
+    # base_path is the multi_srcdata dir the `multi_user_project` fixture
+    # populated; the connection now comes from the connection file.
+    connection_yaml = tmp_path / "connection.yaml"
+    connection_yaml.write_text(
+        yaml.safe_dump(
+            LocalFileSrcConn(base_path=str(tmp_path / "multi_srcdata")).to_dict()
+        )
     )
 
     rc = _invoke(
@@ -913,6 +931,8 @@ def test_publisher_full_chain_multi_input_path(
             str(out_dir),
             "--inputs-manifest",
             str(inputs_manifest),
+            "--connection-file",
+            str(connection_yaml),
             "--state-dir",
             str(state_dir),
             "--liveness",
