@@ -23,8 +23,8 @@ use crate::kube::api::pod::{create_pod, delete_pod};
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::kit::{
     FunctionRunKit, build_cron_run_kit, build_function_run_kit, build_stream_run_kit,
-    inject_connection_envfrom_into_job, inject_connection_envfrom_into_pod,
-    inject_common_envfrom_into_job, inject_common_envfrom_into_pod, inject_labels_into_job,
+    inject_common_envfrom_into_job, inject_common_envfrom_into_pod,
+    inject_connection_envfrom_into_job, inject_connection_envfrom_into_pod, inject_labels_into_job,
     inject_labels_into_pod,
 };
 use crate::runtime::gateway::messaging::messenger::template::{
@@ -291,7 +291,10 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             Some(kit) => {
                                 inject_common_envfrom_into_pod(&mut pod, &kit.common_envfrom);
                                 if let Some(connection_envfrom) = &kit.connection_envfrom {
-                                    inject_connection_envfrom_into_pod(&mut pod, connection_envfrom);
+                                    inject_connection_envfrom_into_pod(
+                                        &mut pod,
+                                        connection_envfrom,
+                                    );
                                 }
                                 inject_labels_into_pod(&mut pod, &kit.labels);
                                 (
@@ -314,7 +317,10 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             Some(kit) => {
                                 inject_common_envfrom_into_job(&mut job, &kit.common_envfrom);
                                 if let Some(connection_envfrom) = &kit.connection_envfrom {
-                                    inject_connection_envfrom_into_job(&mut job, connection_envfrom);
+                                    inject_connection_envfrom_into_job(
+                                        &mut job,
+                                        connection_envfrom,
+                                    );
                                 }
                                 inject_labels_into_job(&mut job, &kit.labels);
                                 (

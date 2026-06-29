@@ -141,6 +141,9 @@ impl StagedConvert {
         })
         .await?;
 
-        Ok(StagedOutcome { bytes_written, rows })
+        Ok(StagedOutcome {
+            bytes_written,
+            rows,
+        })
     }
 }

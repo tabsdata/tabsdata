@@ -19,13 +19,13 @@
 //! Formats: `parquet`, `csv` (with options), `ndjson`, `avro`, and `text`
 //! (read-only — valid only as a `source_format`).
 
+use crate::transporter::api::CompressionAlgorithmSpec;
 use crate::transporter2::error::Result;
 use crate::transporter2::factory::execute_pair;
 use crate::transporter2::lastmod::LastMod;
 use crate::transporter2::schedule::Scheduler;
 use crate::transporter2::spec::{CopyOptions, Format, FormatSpec, Location};
 use crate::transporter2::{codec, find, io};
-use crate::transporter::api::CompressionAlgorithmSpec;
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use futures::stream;
@@ -200,7 +200,10 @@ pub async fn run_find(req: FindRequest) -> Result<FindResponse> {
         Some(c) => Some(c.encode()?),
         None => None,
     };
-    Ok(FindResponse { files, lastmod_info })
+    Ok(FindResponse {
+        files,
+        lastmod_info,
+    })
 }
 
 /// `find-copy`: find files under the source wildcard and copy each into
@@ -270,7 +273,10 @@ pub async fn run_find_copy(req: FindCopyRequest, opts: &CopyOptions) -> Result<C
         Some(c) => Some(c.encode()?),
         None => None,
     };
-    Ok(CopyResponse { files, lastmod_info })
+    Ok(CopyResponse {
+        files,
+        lastmod_info,
+    })
 }
 
 /// `copy`: execute every pair (convert or byte-move, per the request's formats)
@@ -283,33 +289,34 @@ pub async fn run_copy(req: CopyRequest, opts: &CopyOptions) -> Result<CopyRespon
     let (scheduler, req_ref) = (&scheduler, &req);
 
     // `buffered` preserves request order; the scheduler is the real limiter.
-    let results: Vec<Result<CopiedFile>> = stream::iter(req_ref.pairs.iter().map(|pair| async move {
-        let started_at = Utc::now();
-        let outcome = execute_pair(
-            &pair.from,
-            &pair.to,
-            req_ref.source_format.as_ref(),
-            req_ref.target_format.as_ref(),
-            req_ref.decompress,
-            req_ref.compress,
-            opts,
-            scheduler,
-        )
-        .await?;
-        let ended_at = Utc::now();
-        Ok(CopiedFile {
-            from: outcome.from_uri,
-            to: outcome.to_uri,
-            size: outcome.size,
-            rows: outcome.rows,
-            last_modified: ended_at,
-            started_at,
-            ended_at,
-        })
-    }))
-    .buffered(cap)
-    .collect()
-    .await;
+    let results: Vec<Result<CopiedFile>> =
+        stream::iter(req_ref.pairs.iter().map(|pair| async move {
+            let started_at = Utc::now();
+            let outcome = execute_pair(
+                &pair.from,
+                &pair.to,
+                req_ref.source_format.as_ref(),
+                req_ref.target_format.as_ref(),
+                req_ref.decompress,
+                req_ref.compress,
+                opts,
+                scheduler,
+            )
+            .await?;
+            let ended_at = Utc::now();
+            Ok(CopiedFile {
+                from: outcome.from_uri,
+                to: outcome.to_uri,
+                size: outcome.size,
+                rows: outcome.rows,
+                last_modified: ended_at,
+                started_at,
+                ended_at,
+            })
+        }))
+        .buffered(cap)
+        .collect()
+        .await;
 
     let mut files = Vec::with_capacity(results.len());
     for r in results {
@@ -357,7 +364,10 @@ fn sample_s3(uri: &str) -> Location {
         uri: uri.to_string(),
         configs: HashMap::from([
             ("region".to_string(), "us-east-1".to_string()),
-            ("access_key_id".to_string(), "env:AWS_ACCESS_KEY_ID".to_string()),
+            (
+                "access_key_id".to_string(),
+                "env:AWS_ACCESS_KEY_ID".to_string(),
+            ),
             (
                 "secret_access_key".to_string(),
                 "env:AWS_SECRET_ACCESS_KEY".to_string(),
@@ -418,7 +428,9 @@ pub fn samples() -> String {
         &FindCopyRequest {
             source: sample_s3("s3://my-bucket/in/data-*.csv.gz"),
             target_dir: sample_local("file:///data/in"),
-            source_format: Some(FormatSpec::csv_with(crate::transporter2::spec::CsvOptions::default())),
+            source_format: Some(FormatSpec::csv_with(
+                crate::transporter2::spec::CsvOptions::default(),
+            )),
             target_format: Some(FormatSpec::of(Format::Parquet)),
             decompress: Some(CompressionAlgorithmSpec::Auto),
             compress: None,
@@ -468,7 +480,9 @@ pub fn samples() -> String {
                 to: sample_s3("s3://my-bucket/out/data-001.csv"),
             }],
             source_format: Some(FormatSpec::of(Format::Parquet)),
-            target_format: Some(FormatSpec::csv_with(crate::transporter2::spec::CsvOptions::default())),
+            target_format: Some(FormatSpec::csv_with(
+                crate::transporter2::spec::CsvOptions::default(),
+            )),
             decompress: None,
             compress: None,
         },
@@ -513,7 +527,10 @@ mod test {
         // option-free formats: `{ format: parquet }`, no YAML tags, no options key
         let parquet = serde_yaml::to_string(&FormatSpec::of(Format::Parquet)).unwrap();
         assert_eq!(parquet.trim(), "format: parquet");
-        assert!(!parquet.contains('!') && !parquet.contains("options"), "{parquet}");
+        assert!(
+            !parquet.contains('!') && !parquet.contains("options"),
+            "{parquet}"
+        );
         // csv carries its options under `options:`
         let csv = serde_yaml::to_string(&FormatSpec::csv_with(CsvOptions {
             has_header: false,
@@ -564,7 +581,14 @@ max_files: 100
         assert_eq!(req.target_format, Some(FormatSpec::of(Format::Parquet)));
         assert_eq!(req.decompress, Some(CompressionAlgorithmSpec::Auto));
         assert_eq!(req.max_files, Some(100));
-        assert!(req.source_format.as_ref().unwrap().csv().unwrap().has_header);
+        assert!(
+            req.source_format
+                .as_ref()
+                .unwrap()
+                .csv()
+                .unwrap()
+                .has_header
+        );
 
         // re-serialize and re-parse: stable contract
         let out = serde_yaml::to_string(&req).unwrap();
@@ -591,7 +615,8 @@ max_files: 100
 
     #[tokio::test]
     async fn run_copy_converts_then_pure_moves_via_dtos() {
-        let d = std::env::temp_dir().join(format!("transporter-cmd-{}", uuid::Uuid::new_v4().simple()));
+        let d =
+            std::env::temp_dir().join(format!("transporter-cmd-{}", uuid::Uuid::new_v4().simple()));
         std::fs::create_dir_all(&d).unwrap();
         let csv = d.join("in.csv");
         std::fs::write(&csv, CSV).unwrap();
@@ -621,7 +646,10 @@ max_files: 100
         .unwrap();
         let resp2 = run_copy(req2, &CopyOptions::default()).await.unwrap();
         assert_eq!(resp2.files[0].rows, None); // byte move -> no row count
-        assert_eq!(std::fs::read(&parquet).unwrap(), std::fs::read(&parquet2).unwrap());
+        assert_eq!(
+            std::fs::read(&parquet).unwrap(),
+            std::fs::read(&parquet2).unwrap()
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 

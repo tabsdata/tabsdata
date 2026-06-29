@@ -114,10 +114,15 @@ def build_bundle() -> Path:
                 console.print(
                     f"🧺 Staged {staged} file(s) for '{subfolder}' from {source}."
                 )
+            elif not source.exists():
+                console.print(
+                    f"🫙 No files were staged for '{subfolder}' because the source "
+                    f"does not exist: {source}."
+                )
             else:
                 console.print(
                     f"🫙 No files were staged for '{subfolder}' because the source "
-                    f"is missing or empty: {source}."
+                    f"contains no matching files: {source}."
                 )
         with zipfile.ZipFile(
             bundle_path, "w", compression=zipfile.ZIP_DEFLATED

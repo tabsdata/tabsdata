@@ -11,18 +11,20 @@
 //! the download→convert→upload leg machine with resume is the Phase-2 refinement
 //! that slots in here behind the `Staged` arm).
 
+use crate::transporter::api::CompressionAlgorithmSpec;
 use crate::transporter2::byte_copy::{ByteCopyJob, byte_copy_one};
 use crate::transporter2::codec;
 use crate::transporter2::convert::{ConvertJob, convert_one};
-use crate::transporter2::error::{TransporterError, Result};
+use crate::transporter2::error::{Result, TransporterError};
 use crate::transporter2::format::{DecodeOptions, EncodeOptions};
 use crate::transporter2::io;
 use crate::transporter2::plan::{Strategy, plan};
 use crate::transporter2::schedule::Scheduler;
-use crate::transporter2::spec::{CopyOptions, CopySpec, Endpoint, FormatSpec, Location, SchemaSource};
+use crate::transporter2::spec::{
+    CopyOptions, CopySpec, Endpoint, FormatSpec, Location, SchemaSource,
+};
 use crate::transporter2::staged::StagedConvert;
 use crate::transporter2::task::{RetryConfig, retry};
-use crate::transporter::api::CompressionAlgorithmSpec;
 
 /// The trailing path segment of a uri (its file name).
 fn basename(uri: &str) -> String {
@@ -62,6 +64,7 @@ pub struct PairOutcome {
 /// `source_format` + `target_format` are either both present (convert) or both
 /// absent (pure byte move); exactly one is an error. `decompress` / `compress`
 /// are the orthogonal file codecs (applied on read / write either way).
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_pair(
     from: &Location,
     to: &Location,
@@ -228,7 +231,10 @@ mod test {
 
     #[tokio::test]
     async fn staged_convert_runs_the_leg_machine_locally() {
-        let d = std::env::temp_dir().join(format!("transporter-stage-{}", uuid::Uuid::new_v4().simple()));
+        let d = std::env::temp_dir().join(format!(
+            "transporter-stage-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
         std::fs::create_dir_all(&d).unwrap();
         let csv = d.join("in.csv");
         std::fs::write(&csv, CSV).unwrap();
@@ -281,9 +287,18 @@ mod test {
         };
         let cfg = || {
             HashMap::from([
-                ("region".to_string(), "env:TRANSPORTER_AWS_REGION".to_string()),
-                ("access_key_id".to_string(), "env:TRANSPORTER_AWS_ACCESS_KEY_ID".to_string()),
-                ("secret_access_key".to_string(), "env:TRANSPORTER_AWS_SECRET_ACCESS_KEY".to_string()),
+                (
+                    "region".to_string(),
+                    "env:TRANSPORTER_AWS_REGION".to_string(),
+                ),
+                (
+                    "access_key_id".to_string(),
+                    "env:TRANSPORTER_AWS_ACCESS_KEY_ID".to_string(),
+                ),
+                (
+                    "secret_access_key".to_string(),
+                    "env:TRANSPORTER_AWS_SECRET_ACCESS_KEY".to_string(),
+                ),
             ])
         };
         let token = uuid::Uuid::new_v4().simple().to_string();
@@ -328,7 +343,11 @@ mod test {
         assert!(out.size > 0);
 
         // verify the uploaded parquet reads back as 3 rows
-        let back = io::resolve(&s3("out.parquet")).unwrap().read_all().await.unwrap();
+        let back = io::resolve(&s3("out.parquet"))
+            .unwrap()
+            .read_all()
+            .await
+            .unwrap();
         let (_s, batches) = crate::transporter2::format::decode(
             Format::Parquet,
             "out.parquet",

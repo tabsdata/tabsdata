@@ -15,10 +15,10 @@
 //! wrappers from [`crate::transporter::compression`] (a format-agnostic utility);
 //! transporter owns only the policy on top.
 
-use crate::transporter2::error::{TransporterError, Result};
-use crate::transporter2::spec::Codec;
 use crate::transporter::api::CompressionAlgorithmSpec;
 use crate::transporter::compression::{CompressionAlgorithm, async_reader, async_writer};
+use crate::transporter2::error::{Result, TransporterError};
+use crate::transporter2::spec::Codec;
 use bytes::Bytes;
 use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
@@ -68,7 +68,12 @@ pub fn extension(codec: Codec) -> Option<&'static str> {
 /// Infer a codec from a file's trailing extension. A non-compression extension
 /// (`.csv`, none, ...) maps to [`Codec::None`].
 pub fn from_extension(filename: &str) -> Codec {
-    match filename.rsplit('.').next().map(str::to_ascii_lowercase).as_deref() {
+    match filename
+        .rsplit('.')
+        .next()
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
         Some("br") => Codec::Brotli,
         Some("bz2") => Codec::Bzip,
         Some("gz" | "z") => Codec::Gzip,
@@ -109,7 +114,10 @@ pub async fn decompress_all(codec: Codec, data: Bytes) -> Result<Bytes> {
     let reader = async_reader(&algo, "", BufReader::new(data.as_ref()));
     tokio::pin!(reader);
     let mut out = Vec::new();
-    reader.read_to_end(&mut out).await.map_err(TransporterError::from)?;
+    reader
+        .read_to_end(&mut out)
+        .await
+        .map_err(TransporterError::from)?;
     Ok(Bytes::from(out))
 }
 
@@ -123,7 +131,10 @@ pub async fn compress_all(codec: Codec, data: Bytes) -> Result<Bytes> {
     {
         let writer = async_writer(&algo, "", &mut out);
         tokio::pin!(writer);
-        writer.write_all(&data).await.map_err(TransporterError::from)?;
+        writer
+            .write_all(&data)
+            .await
+            .map_err(TransporterError::from)?;
         writer.shutdown().await.map_err(TransporterError::from)?;
     }
     Ok(Bytes::from(out))
@@ -131,24 +142,38 @@ pub async fn compress_all(codec: Codec, data: Bytes) -> Result<Bytes> {
 
 /// Stream-decompress a local file `src` → `dst` with `codec` (bounded memory).
 pub async fn decompress_file(codec: Codec, src: &Path, dst: &Path) -> Result<()> {
-    let input = tokio::fs::File::open(src).await.map_err(TransporterError::from)?;
+    let input = tokio::fs::File::open(src)
+        .await
+        .map_err(TransporterError::from)?;
     let algo = Some(to_algorithm(codec));
     let reader = async_reader(&algo, "", BufReader::new(input));
     tokio::pin!(reader);
-    let mut out = tokio::fs::File::create(dst).await.map_err(TransporterError::from)?;
-    tokio::io::copy(&mut reader, &mut out).await.map_err(TransporterError::from)?;
+    let mut out = tokio::fs::File::create(dst)
+        .await
+        .map_err(TransporterError::from)?;
+    tokio::io::copy(&mut reader, &mut out)
+        .await
+        .map_err(TransporterError::from)?;
     out.shutdown().await.map_err(TransporterError::from)?;
     Ok(())
 }
 
 /// Stream-compress a local file `src` → `dst` with `codec` (bounded memory).
 pub async fn compress_file(codec: Codec, src: &Path, dst: &Path) -> Result<()> {
-    let mut input = BufReader::new(tokio::fs::File::open(src).await.map_err(TransporterError::from)?);
+    let mut input = BufReader::new(
+        tokio::fs::File::open(src)
+            .await
+            .map_err(TransporterError::from)?,
+    );
     let algo = Some(to_algorithm(codec));
-    let out = tokio::fs::File::create(dst).await.map_err(TransporterError::from)?;
+    let out = tokio::fs::File::create(dst)
+        .await
+        .map_err(TransporterError::from)?;
     let writer = async_writer(&algo, "", out);
     tokio::pin!(writer);
-    tokio::io::copy(&mut input, &mut writer).await.map_err(TransporterError::from)?;
+    tokio::io::copy(&mut input, &mut writer)
+        .await
+        .map_err(TransporterError::from)?;
     writer.shutdown().await.map_err(TransporterError::from)?;
     Ok(())
 }
@@ -177,17 +202,38 @@ mod test {
     #[test]
     fn resolve_none_and_explicit() {
         assert_eq!(resolve(None, "x.gz"), Codec::None);
-        assert_eq!(resolve(Some(CompressionAlgorithmSpec::Gzip), "x"), Codec::Gzip);
-        assert_eq!(resolve(Some(CompressionAlgorithmSpec::Zip), "x"), Codec::Zlib);
-        assert_eq!(resolve(Some(CompressionAlgorithmSpec::Deflate), "x"), Codec::Gzip);
+        assert_eq!(
+            resolve(Some(CompressionAlgorithmSpec::Gzip), "x"),
+            Codec::Gzip
+        );
+        assert_eq!(
+            resolve(Some(CompressionAlgorithmSpec::Zip), "x"),
+            Codec::Zlib
+        );
+        assert_eq!(
+            resolve(Some(CompressionAlgorithmSpec::Deflate), "x"),
+            Codec::Gzip
+        );
     }
 
     #[test]
     fn resolve_auto_from_extension() {
-        assert_eq!(resolve(Some(CompressionAlgorithmSpec::Auto), "a.csv.gz"), Codec::Gzip);
-        assert_eq!(resolve(Some(CompressionAlgorithmSpec::Auto), "a.parquet.zstd"), Codec::Zstd);
-        assert_eq!(resolve(Some(CompressionAlgorithmSpec::Auto), "a.csv"), Codec::None);
-        assert_eq!(resolve(Some(CompressionAlgorithmSpec::Auto), "a.BZ2"), Codec::Bzip);
+        assert_eq!(
+            resolve(Some(CompressionAlgorithmSpec::Auto), "a.csv.gz"),
+            Codec::Gzip
+        );
+        assert_eq!(
+            resolve(Some(CompressionAlgorithmSpec::Auto), "a.parquet.zstd"),
+            Codec::Zstd
+        );
+        assert_eq!(
+            resolve(Some(CompressionAlgorithmSpec::Auto), "a.csv"),
+            Codec::None
+        );
+        assert_eq!(
+            resolve(Some(CompressionAlgorithmSpec::Auto), "a.BZ2"),
+            Codec::Bzip
+        );
     }
 
     #[test]

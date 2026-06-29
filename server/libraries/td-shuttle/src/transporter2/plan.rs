@@ -83,7 +83,7 @@ pub fn plan(spec: &CopySpec) -> Strategy {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::transporter2::spec::{Codec, Endpoint, Location, Locality, SchemaSource};
+    use crate::transporter2::spec::{Codec, Endpoint, Locality, Location, SchemaSource};
     use std::collections::HashMap;
 
     const THRESHOLD: u64 = 256 * 1024 * 1024;
@@ -441,7 +441,10 @@ mod test {
                     SchemaSource::Infer { sample_rows: 1024 },
                     true,
                 );
-                assert!(!has_ranged(&plan(&s)), "csv must never be ranged ({loc:?}, {size})");
+                assert!(
+                    !has_ranged(&plan(&s)),
+                    "csv must never be ranged ({loc:?}, {size})"
+                );
             }
         }
     }

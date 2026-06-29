@@ -15,7 +15,7 @@
 //! byte-bounded streaming + multipart upload is a documented refinement (the
 //! convert pipeline already bounds memory per-file via staging on large files).
 
-use crate::transporter2::error::{TransporterError, Result};
+use crate::transporter2::error::{Result, TransporterError};
 use crate::transporter2::spec::Location;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
@@ -99,7 +99,10 @@ fn friendly_keys(kind: CloudKind) -> &'static [(&'static str, &'static str)] {
             ("session_token", "aws_session_token"),
             ("region", "aws_region"),
             ("endpoint", "aws_endpoint"),
-            ("virtual_hosted_style_request", "aws_virtual_hosted_style_request"),
+            (
+                "virtual_hosted_style_request",
+                "aws_virtual_hosted_style_request",
+            ),
             ("allow_http", "aws_allow_http"),
             ("anonymous", "aws_skip_signature"),
             ("skip_signature", "aws_skip_signature"),
@@ -133,10 +136,10 @@ fn canonical_key(kind: CloudKind, key: &str) -> Result<String> {
     if let Some((_, canonical)) = friendly_keys(kind).iter().find(|(f, _)| *f == key) {
         return Ok((*canonical).to_string());
     }
-    if let Some(prefix) = canonical_prefix(kind) {
-        if key.starts_with(prefix) {
-            return Ok(key.to_string());
-        }
+    if let Some(prefix) = canonical_prefix(kind)
+        && key.starts_with(prefix)
+    {
+        return Ok(key.to_string());
     }
     Err(TransporterError::UnknownConfigKey(
         kind.label().to_string(),
@@ -160,13 +163,19 @@ fn normalize_configs(
 fn validate_required(kind: CloudKind, canonical: &HashMap<String, String>) -> Result<()> {
     let scheme = kind.label().to_string();
     let missing = |what: &str| {
-        Err(TransporterError::MissingConfigKeys(scheme.clone(), what.to_string()))
+        Err(TransporterError::MissingConfigKeys(
+            scheme.clone(),
+            what.to_string(),
+        ))
     };
     match kind {
         CloudKind::S3 => {
-            let anonymous = canonical.get("aws_skip_signature").map(|v| v == "true").unwrap_or(false);
-            if !anonymous
-                && !(canonical.contains_key("aws_access_key_id")
+            let anonymous = canonical
+                .get("aws_skip_signature")
+                .map(|v| v == "true")
+                .unwrap_or(false);
+            if !(anonymous
+                || canonical.contains_key("aws_access_key_id")
                     && canonical.contains_key("aws_secret_access_key"))
             {
                 return missing("access_key_id + secret_access_key (or anonymous)");
@@ -264,7 +273,10 @@ impl Store {
     pub async fn write_all(&self, data: Bytes) -> Result<u64> {
         let len = data.len() as u64;
         self.store
-            .put(&OsPath::from(self.path.as_str()), PutPayload::from_bytes(data))
+            .put(
+                &OsPath::from(self.path.as_str()),
+                PutPayload::from_bytes(data),
+            )
             .await?;
         Ok(len)
     }
@@ -342,9 +354,18 @@ mod test {
 
     #[test]
     fn canonical_key_maps_friendly_and_passes_through_native() {
-        assert_eq!(canonical_key(CloudKind::S3, "access_key_id").unwrap(), "aws_access_key_id");
-        assert_eq!(canonical_key(CloudKind::S3, "region").unwrap(), "aws_region");
-        assert_eq!(canonical_key(CloudKind::S3, "aws_endpoint").unwrap(), "aws_endpoint");
+        assert_eq!(
+            canonical_key(CloudKind::S3, "access_key_id").unwrap(),
+            "aws_access_key_id"
+        );
+        assert_eq!(
+            canonical_key(CloudKind::S3, "region").unwrap(),
+            "aws_region"
+        );
+        assert_eq!(
+            canonical_key(CloudKind::S3, "aws_endpoint").unwrap(),
+            "aws_endpoint"
+        );
         assert_eq!(
             canonical_key(CloudKind::Azure, "account_name").unwrap(),
             "azure_storage_account_name"

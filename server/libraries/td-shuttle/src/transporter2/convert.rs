@@ -12,7 +12,7 @@
 //! (it slots in behind this same `convert_one` entry point).
 
 use crate::transporter2::codec;
-use crate::transporter2::error::{TransporterError, Result};
+use crate::transporter2::error::{Result, TransporterError};
 use crate::transporter2::format::{self, DecodeOptions, EncodeOptions};
 use crate::transporter2::io::Store;
 use crate::transporter2::plan::ReadMode;
@@ -88,7 +88,10 @@ pub async fn convert_one(job: ConvertJob) -> Result<ConvertOutcome> {
 
     let out = codec::compress_all(job.compress, Bytes::from(encoded)).await?;
     let bytes_written = job.target.write_all(out).await?;
-    Ok(ConvertOutcome { bytes_written, rows })
+    Ok(ConvertOutcome {
+        bytes_written,
+        rows,
+    })
 }
 
 /// One-pass decode→encode on a single blocking worker.
@@ -170,6 +173,7 @@ async fn ranged_convert(
 /// staging convert leg. Optional codecs are applied as streamed file passes
 /// (decompress the input, compress the output) around the arrow file convert,
 /// using sibling temp files that are cleaned up afterward.
+#[allow(clippy::too_many_arguments)]
 pub async fn convert_files(
     src_path: &std::path::Path,
     src_name: &str,
@@ -275,7 +279,8 @@ mod test {
     }
 
     fn workdir() -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("transporter-it-{}", uuid::Uuid::new_v4().simple()));
+        let d =
+            std::env::temp_dir().join(format!("transporter-it-{}", uuid::Uuid::new_v4().simple()));
         std::fs::create_dir_all(&d).unwrap();
         d
     }
@@ -372,7 +377,9 @@ mod test {
         let seq = d.join("seq.csv");
         let rng = d.join("rng.csv");
         let o_seq = convert_one(job(&seq, ReadMode::Sequential)).await.unwrap();
-        let o_rng = convert_one(job(&rng, ReadMode::ConcurrentRanged)).await.unwrap();
+        let o_rng = convert_one(job(&rng, ReadMode::ConcurrentRanged))
+            .await
+            .unwrap();
 
         assert_eq!(o_seq.rows, 5000);
         assert_eq!(o_rng.rows, 5000);
@@ -454,7 +461,10 @@ mod test {
         let d = workdir();
         let token = uuid::Uuid::new_v4().simple().to_string();
         let cloud = |name: &str| Location {
-            uri: format!("{}/transporter-it/{token}/{name}", base_uri.trim_end_matches('/')),
+            uri: format!(
+                "{}/transporter-it/{token}/{name}",
+                base_uri.trim_end_matches('/')
+            ),
             configs: configs.clone(),
         };
 
@@ -504,11 +514,20 @@ mod test {
             .unwrap();
         let back = String::from_utf8(back.to_vec()).unwrap();
         assert!(back.starts_with("id,name"), "got: {back}");
-        assert!(back.contains("alice") && back.contains("carol"), "got: {back}");
+        assert!(
+            back.contains("alice") && back.contains("carol"),
+            "got: {back}"
+        );
 
         // cleanup
-        let _ = crate::transporter2::io::resolve(&cloud("in.csv")).unwrap().delete().await;
-        let _ = crate::transporter2::io::resolve(&cloud("out.csv")).unwrap().delete().await;
+        let _ = crate::transporter2::io::resolve(&cloud("in.csv"))
+            .unwrap()
+            .delete()
+            .await;
+        let _ = crate::transporter2::io::resolve(&cloud("out.csv"))
+            .unwrap()
+            .delete()
+            .await;
         let _ = std::fs::remove_dir_all(&d);
     }
 
@@ -526,8 +545,14 @@ mod test {
         let _ = (ak, sk, region);
         let configs = HashMap::from([
             ("region".into(), "env:TRANSPORTER_AWS_REGION".into()),
-            ("access_key_id".into(), "env:TRANSPORTER_AWS_ACCESS_KEY_ID".into()),
-            ("secret_access_key".into(), "env:TRANSPORTER_AWS_SECRET_ACCESS_KEY".into()),
+            (
+                "access_key_id".into(),
+                "env:TRANSPORTER_AWS_ACCESS_KEY_ID".into(),
+            ),
+            (
+                "secret_access_key".into(),
+                "env:TRANSPORTER_AWS_SECRET_ACCESS_KEY".into(),
+            ),
         ]);
         cloud_round_trip(&uri, configs).await;
     }
@@ -559,8 +584,14 @@ mod test {
             return;
         };
         let configs = HashMap::from([
-            ("account_name".into(), "env:TRANSPORTER_AZURE_ACCOUNT_NAME".into()),
-            ("account_key".into(), "env:TRANSPORTER_AZURE_ACCOUNT_KEY".into()),
+            (
+                "account_name".into(),
+                "env:TRANSPORTER_AZURE_ACCOUNT_NAME".into(),
+            ),
+            (
+                "account_key".into(),
+                "env:TRANSPORTER_AZURE_ACCOUNT_KEY".into(),
+            ),
         ]);
         cloud_round_trip(&base, configs).await;
     }

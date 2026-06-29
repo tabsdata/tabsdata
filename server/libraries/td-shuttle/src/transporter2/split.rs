@@ -78,7 +78,9 @@ pub fn decode_span(span: Span, opts: &DecodeOptions) -> Result<Vec<RecordBatch>>
                 .with_row_groups(groups)
                 .with_batch_size(opts.batch_size)
                 .build()?;
-            reader.map(|r| r.map_err(crate::transporter2::error::TransporterError::from)).collect()
+            reader
+                .map(|r| r.map_err(crate::transporter2::error::TransporterError::from))
+                .collect()
         }
     }
 }
@@ -326,23 +328,39 @@ mod test {
         let opts = DecodeOptions::default();
         spans
             .into_iter()
-            .map(|s| decode_span(s, &opts).unwrap().iter().map(RecordBatch::num_rows).sum::<usize>())
+            .map(|s| {
+                decode_span(s, &opts)
+                    .unwrap()
+                    .iter()
+                    .map(RecordBatch::num_rows)
+                    .sum::<usize>()
+            })
             .sum()
     }
 
     #[test]
     fn csv_never_splits() {
         let data = Bytes::from_static(b"id\n1\n2\n3\n");
-        assert!(split(Format::Csv, "x.csv", &data, 4, &DecodeOptions::default()).unwrap().is_none());
+        assert!(
+            split(Format::Csv, "x.csv", &data, 4, &DecodeOptions::default())
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
     fn ndjson_splits_into_line_aligned_spans_preserving_all_rows() {
         let lines: String = (0..100).map(|i| format!("{{\"id\":{i}}}\n")).collect();
         let data = Bytes::from(lines.into_bytes());
-        let spans = split(Format::Ndjson, "x.ndjson", &data, 4, &DecodeOptions::default())
-            .unwrap()
-            .expect("ndjson should split");
+        let spans = split(
+            Format::Ndjson,
+            "x.ndjson",
+            &data,
+            4,
+            &DecodeOptions::default(),
+        )
+        .unwrap()
+        .expect("ndjson should split");
         assert!(spans.len() >= 2);
         assert_eq!(decode_all(spans), 100); // every row accounted for, no dup/loss
     }
@@ -366,14 +384,21 @@ mod test {
             .set_max_row_group_row_count(Some(1000))
             .build();
         {
-            let mut w = parquet::arrow::ArrowWriter::try_new(&mut buf, schema, Some(props)).unwrap();
+            let mut w =
+                parquet::arrow::ArrowWriter::try_new(&mut buf, schema, Some(props)).unwrap();
             w.write(&batch).unwrap();
             w.close().unwrap();
         }
         let data = Bytes::from(buf);
-        let spans = split(Format::Parquet, "x.parquet", &data, 4, &DecodeOptions::default())
-            .unwrap()
-            .expect("multi-row-group parquet should split");
+        let spans = split(
+            Format::Parquet,
+            "x.parquet",
+            &data,
+            4,
+            &DecodeOptions::default(),
+        )
+        .unwrap()
+        .expect("multi-row-group parquet should split");
         assert!(spans.len() >= 2);
         assert_eq!(decode_all(spans), 10_000);
     }
@@ -402,8 +427,7 @@ mod test {
             None => {
                 // single-block OCF: sequential fallback still decodes all rows.
                 let opts = DecodeOptions::default();
-                let (_s, it) =
-                    format::decode(Format::Avro, "x.avro", data, &opts).unwrap();
+                let (_s, it) = format::decode(Format::Avro, "x.avro", data, &opts).unwrap();
                 let rows: usize = it.map(|b| b.unwrap().num_rows()).sum();
                 assert_eq!(rows, 1000);
             }

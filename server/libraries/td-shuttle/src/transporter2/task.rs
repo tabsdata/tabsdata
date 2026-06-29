@@ -10,7 +10,7 @@
 //! network/5xx, transient IO) are retried; data/config/format errors and
 //! everything else fail fast.
 
-use crate::transporter2::error::{TransporterError, Result};
+use crate::transporter2::error::{Result, TransporterError};
 use std::future::Future;
 use std::time::Duration;
 
@@ -29,10 +29,8 @@ pub fn classify(error: &TransporterError) -> ErrorClass {
         // object_store surfaces network / 5xx / timeouts as `Generic`; every
         // other (named) variant is a permanent condition. `#[non_exhaustive]`
         // ⇒ an unknown future variant is treated as terminal.
-        TransporterError::ObjectStore(e) => match e {
-            object_store::Error::Generic { .. } => ErrorClass::Transient,
-            _ => ErrorClass::Terminal,
-        },
+        TransporterError::ObjectStore(object_store::Error::Generic { .. }) => ErrorClass::Transient,
+        TransporterError::ObjectStore(_) => ErrorClass::Terminal,
         TransporterError::Io(e) => match e.kind() {
             std::io::ErrorKind::TimedOut
             | std::io::ErrorKind::Interrupted
@@ -102,14 +100,19 @@ mod test {
     #[test]
     fn classify_data_and_config_errors_terminal() {
         assert_eq!(
-            classify(&TransporterError::UnsupportedTarget(crate::transporter2::spec::Format::Text)),
+            classify(&TransporterError::UnsupportedTarget(
+                crate::transporter2::spec::Format::Text
+            )),
             ErrorClass::Terminal
         );
         assert_eq!(
             classify(&TransporterError::EnvVarNotFound("X".into())),
             ErrorClass::Terminal
         );
-        assert_eq!(classify(&TransporterError::other("???")), ErrorClass::Terminal);
+        assert_eq!(
+            classify(&TransporterError::other("???")),
+            ErrorClass::Terminal
+        );
     }
 
     #[test]
@@ -138,10 +141,12 @@ mod test {
             let n = calls.get();
             async move {
                 if n < 3 {
-                    Err(TransporterError::ObjectStore(object_store::Error::Generic {
-                        store: "s3",
-                        source: "blip".into(),
-                    }))
+                    Err(TransporterError::ObjectStore(
+                        object_store::Error::Generic {
+                            store: "s3",
+                            source: "blip".into(),
+                        },
+                    ))
                 } else {
                     Ok(42)
                 }

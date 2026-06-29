@@ -12,11 +12,11 @@
 //! without being held in memory, and the target object appears only on the
 //! atomic multipart `complete` (a partial output is never exposed).
 
+use crate::transporter::compression::{async_reader, async_writer};
 use crate::transporter2::codec;
-use crate::transporter2::error::{TransporterError, Result};
+use crate::transporter2::error::{Result, TransporterError};
 use crate::transporter2::io::Store;
 use crate::transporter2::spec::Codec;
-use crate::transporter::compression::{async_reader, async_writer};
 use tokio::io::AsyncWriteExt;
 
 pub struct ByteCopyJob {

@@ -12,7 +12,7 @@
 //! invariant 3); object-store streaming and (de)compression live in `io` /
 //! `codec`. Phase 1 is sequential — no range splits (`format::Split` is Phase 2).
 
-use crate::transporter2::error::{TransporterError, Result};
+use crate::transporter2::error::{Result, TransporterError};
 use crate::transporter2::spec::Format;
 use arrow::array::{ArrayRef, RecordBatch, StringArray};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
@@ -160,12 +160,13 @@ pub fn infer_schema(format: Format, data: &Bytes, opts: &DecodeOptions) -> Resul
             let fmt = arrow::csv::reader::Format::default()
                 .with_header(opts.csv_has_header)
                 .with_delimiter(opts.csv_delimiter);
-            let (s, _) = fmt.infer_schema(&mut Cursor::new(data.as_ref()), Some(opts.sample_rows))?;
+            let (s, _) =
+                fmt.infer_schema(&mut Cursor::new(data.as_ref()), Some(opts.sample_rows))?;
             Ok(Arc::new(s))
         }
-        Format::Parquet => {
-            Ok(ParquetRecordBatchReaderBuilder::try_new(data.clone())?.schema().clone())
-        }
+        Format::Parquet => Ok(ParquetRecordBatchReaderBuilder::try_new(data.clone())?
+            .schema()
+            .clone()),
         Format::Avro => {
             let reader = arrow_avro::reader::ReaderBuilder::new()
                 .build(BufReader::new(Cursor::new(data.clone())))?;
@@ -274,7 +275,10 @@ pub fn decode_file(
             let builder = ParquetRecordBatchReaderBuilder::try_new(File::open(path)?)?;
             let schema = builder.schema().clone();
             let reader = builder.with_batch_size(opts.batch_size).build()?;
-            Ok((schema, Box::new(reader.map(|r| r.map_err(TransporterError::from)))))
+            Ok((
+                schema,
+                Box::new(reader.map(|r| r.map_err(TransporterError::from))),
+            ))
         }
         Format::Csv => {
             let fmt = arrow::csv::reader::Format::default()
@@ -287,7 +291,10 @@ pub fn decode_file(
                 .with_delimiter(opts.csv_delimiter)
                 .with_batch_size(opts.batch_size)
                 .build(File::open(path)?)?;
-            Ok((schema, Box::new(reader.map(|r| r.map_err(TransporterError::from)))))
+            Ok((
+                schema,
+                Box::new(reader.map(|r| r.map_err(TransporterError::from))),
+            ))
         }
         Format::Ndjson => {
             let (schema, _) = arrow::json::reader::infer_json_schema(
@@ -298,7 +305,10 @@ pub fn decode_file(
             let reader = arrow::json::ReaderBuilder::new(schema.clone())
                 .with_batch_size(opts.batch_size)
                 .build(BufReader::new(File::open(path)?))?;
-            Ok((schema, Box::new(reader.map(|r| r.map_err(TransporterError::from)))))
+            Ok((
+                schema,
+                Box::new(reader.map(|r| r.map_err(TransporterError::from))),
+            ))
         }
         Format::Avro => {
             let reader = arrow_avro::reader::ReaderBuilder::new()
@@ -307,7 +317,9 @@ pub fn decode_file(
             let schema = reader.schema();
             Ok((
                 schema,
-                Box::new(reader.map(|r| r.map_err(|e| TransporterError::other(format!("avro: {e}"))))),
+                Box::new(
+                    reader.map(|r| r.map_err(|e| TransporterError::other(format!("avro: {e}")))),
+                ),
             ))
         }
         // Text is line-oriented and modest; reuse the in-memory shaping.
@@ -480,7 +492,13 @@ mod test {
     }
 
     fn enc(dst: Format, schema: SchemaRef, batch: RecordBatch) -> Vec<u8> {
-        encode(dst, schema, std::iter::once(Ok(batch)), &EncodeOptions::default()).unwrap()
+        encode(
+            dst,
+            schema,
+            std::iter::once(Ok(batch)),
+            &EncodeOptions::default(),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -496,7 +514,11 @@ mod test {
     fn csv_round_trip_infers_types() {
         let (schema, batch) = sample();
         let bytes = enc(Format::Csv, schema, batch);
-        assert!(String::from_utf8(bytes.clone()).unwrap().starts_with("id,name"));
+        assert!(
+            String::from_utf8(bytes.clone())
+                .unwrap()
+                .starts_with("id,name")
+        );
         let back = collect(Format::Csv, "x.csv", bytes);
         assert_eq!(ids(&back), vec![1, 2, 3]); // "1","2","3" inferred as Int64
     }
@@ -523,8 +545,13 @@ mod test {
         let (schema, batch) = sample();
         let csv = enc(Format::Csv, schema, batch);
         // csv -> parquet
-        let (sch2, it) =
-            decode(Format::Csv, "x.csv", Bytes::from(csv), &DecodeOptions::default()).unwrap();
+        let (sch2, it) = decode(
+            Format::Csv,
+            "x.csv",
+            Bytes::from(csv),
+            &DecodeOptions::default(),
+        )
+        .unwrap();
         let parquet = encode(Format::Parquet, sch2, it, &EncodeOptions::default()).unwrap();
         // parquet -> csv
         let back = collect(Format::Parquet, "x.parquet", parquet);
@@ -539,11 +566,7 @@ mod test {
         let b = &back[0];
         assert_eq!(b.schema().field(0).name(), "file");
         assert_eq!(b.schema().field(1).name(), "message");
-        let files = b
-            .column(0)
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .unwrap();
+        let files = b.column(0).as_any().downcast_ref::<StringArray>().unwrap();
         let msgs = b.column(1).as_any().downcast_ref::<StringArray>().unwrap();
         assert_eq!(files.value(0), "app.log");
         assert_eq!(msgs.value(0), "first line");
@@ -560,6 +583,9 @@ mod test {
             &EncodeOptions::default(),
         )
         .unwrap_err();
-        assert!(matches!(err, TransporterError::UnsupportedTarget(Format::Text)));
+        assert!(matches!(
+            err,
+            TransporterError::UnsupportedTarget(Format::Text)
+        ));
     }
 }

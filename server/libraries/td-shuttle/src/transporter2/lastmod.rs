@@ -9,7 +9,7 @@
 //! files already returned. Serialized as base64(JSON) to travel as an opaque
 //! `lastmod_info` string between calls.
 
-use crate::transporter2::error::{TransporterError, Result};
+use crate::transporter2::error::{Result, TransporterError};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD_NO_PAD;
 use chrono::{DateTime, Utc};

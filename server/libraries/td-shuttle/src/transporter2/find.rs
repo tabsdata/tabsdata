@@ -5,7 +5,7 @@
 //! Wildcard listing (filename-only) + lastmod filtering, plus the `find-copy`
 //! output-naming rule. Backend-agnostic — it only uses [`io::Store::list`].
 
-use crate::transporter2::error::{TransporterError, Result};
+use crate::transporter2::error::{Result, TransporterError};
 use crate::transporter2::io::{FileMeta, Store};
 use crate::transporter2::lastmod::LastMod;
 use crate::transporter2::spec::Format;
@@ -117,7 +117,9 @@ pub async fn find(
 // --------------------------------------------------------------------------
 
 const COMPRESSION_EXTS: &[&str] = &["br", "bz2", "gz", "z", "lz4", "xz", "zlib", "zstd"];
-const DATA_EXTS: &[&str] = &["parquet", "pq", "csv", "json", "jsonl", "ndjson", "avro", "log", "txt"];
+const DATA_EXTS: &[&str] = &[
+    "parquet", "pq", "csv", "json", "jsonl", "ndjson", "avro", "log", "txt",
+];
 
 fn canonical_data_ext(format: Format) -> &'static str {
     match format {
@@ -172,21 +174,33 @@ mod test {
     #[test]
     fn output_name_convert_strips_and_reextends() {
         // csv.gz -> parquet
-        assert_eq!(output_name("data-001.csv.gz", Some(Format::Parquet), None), "data-001.parquet");
+        assert_eq!(
+            output_name("data-001.csv.gz", Some(Format::Parquet), None),
+            "data-001.parquet"
+        );
         // parquet -> csv
-        assert_eq!(output_name("part.parquet", Some(Format::Csv), None), "part.csv");
+        assert_eq!(
+            output_name("part.parquet", Some(Format::Csv), None),
+            "part.csv"
+        );
         // csv -> parquet, output gzipped
         assert_eq!(
             output_name("x.csv", Some(Format::Parquet), Some("gz")),
             "x.parquet.gz"
         );
         // no recognizable data ext: just append
-        assert_eq!(output_name("weird", Some(Format::Ndjson), None), "weird.ndjson");
+        assert_eq!(
+            output_name("weird", Some(Format::Ndjson), None),
+            "weird.ndjson"
+        );
     }
 
     #[test]
     fn output_name_pure_move_keeps_name() {
-        assert_eq!(output_name("data-001.parquet", None, None), "data-001.parquet");
+        assert_eq!(
+            output_name("data-001.parquet", None, None),
+            "data-001.parquet"
+        );
         assert_eq!(output_name("blob.bin", None, None), "blob.bin");
     }
 
