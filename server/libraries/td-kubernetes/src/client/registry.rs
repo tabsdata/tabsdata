@@ -10,9 +10,14 @@ use td_common::env::TABSDATA_HOME_DIR;
 use td_common::settings::INSTANCES_FOLDER;
 use td_error::TdError;
 
+use td_python::python::get_python_scripts_folder;
+
+#[cfg(feature = "enterprise")]
+use crate::base::constants::FOLDER_PYENV_AG;
 use crate::base::constants::{
-    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, INIT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE,
-    SETTINGS_FILE, STAGE_FOLDER,
+    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_RUNTIMES,
+    INIT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE, SETTINGS_FILE, STAGE_FOLDER, TRASH_FOLDER,
+    VENV_ACTIVATE_FILE,
 };
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
@@ -34,6 +39,14 @@ pub fn instance_folder(name: &str) -> CommandResult<PathBuf> {
     Ok(instances_root()?.join(name))
 }
 
+pub fn trash_root() -> CommandResult<PathBuf> {
+    let home = homedir::my_home()
+        .ok()
+        .flatten()
+        .ok_or(ProviderError::HomeDirNotFound)?;
+    Ok(home.join(TABSDATA_HOME_DIR).join(TRASH_FOLDER))
+}
+
 pub fn instance_init_folder(name: &str) -> CommandResult<PathBuf> {
     Ok(instance_folder(name)?.join(INIT_FOLDER))
 }
@@ -48,6 +61,31 @@ pub fn instance_settings_file(name: &str) -> CommandResult<PathBuf> {
 
 pub fn instance_kube_folder(name: &str) -> CommandResult<PathBuf> {
     Ok(instance_folder(name)?.join(KUBE_FOLDER))
+}
+
+fn venv_activate_file(venv_root: &Path) -> CommandResult<PathBuf> {
+    let scripts_folder = get_python_scripts_folder()?;
+    let scripts_name = scripts_folder.file_name().ok_or_else(|| {
+        ProviderError::PythonScriptsFolderNameInvalid(scripts_folder.display().to_string())
+    })?;
+    Ok(venv_root.join(scripts_name).join(VENV_ACTIVATE_FILE))
+}
+
+pub fn td_venv_activate_file(name: &str) -> CommandResult<PathBuf> {
+    let venv_root = instance_folder(name)?
+        .join(FOLDER_RUNTIMES)
+        .join(FOLDER_PYTHON)
+        .join(FOLDER_PYENV_TD);
+    venv_activate_file(&venv_root)
+}
+
+#[cfg(feature = "enterprise")]
+pub fn ag_venv_activate_file(name: &str) -> CommandResult<PathBuf> {
+    let venv_root = instance_folder(name)?
+        .join(FOLDER_RUNTIMES)
+        .join(FOLDER_PYTHON)
+        .join(FOLDER_PYENV_AG);
+    venv_activate_file(&venv_root)
 }
 
 pub fn kminus_kubeconfig_file(name: &str) -> CommandResult<PathBuf> {

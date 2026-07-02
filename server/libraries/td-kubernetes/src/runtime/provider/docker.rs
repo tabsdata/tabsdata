@@ -22,6 +22,7 @@ use crate::base::constants::{
 use crate::base::error::provider::ProviderError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::base::reporter::Reporter;
+use crate::client::registry::ClusterViews;
 use crate::client::session::pin::{DockerInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::core::system::exit::{CommandResult, abort_with};
@@ -202,6 +203,10 @@ impl Provider for DockerProvider {
             cluster: Some(self.cluster_name.clone()),
             url: Some(self.config.cluster_url.to_string()),
         })
+    }
+
+    fn refresh_cluster_views(&self, current: ClusterViews) -> CommandResult<ClusterViews> {
+        Ok(current)
     }
 
     async fn ensure_pinnable_server(&self) -> CommandResult {

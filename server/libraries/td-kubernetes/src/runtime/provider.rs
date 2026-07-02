@@ -24,7 +24,7 @@ use td_common::settings::DEFAULT_INSTANCE;
 use crate::base::constants::KMINUS_MIN_NOFILE;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
-use crate::client::registry::{InstanceSettings, InstanceState};
+use crate::client::registry::{ClusterViews, InstanceSettings, InstanceState};
 use crate::client::session::pin::Session;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::runtime::instance::ports::kminus_api_port;
@@ -223,6 +223,7 @@ pub trait Provider: Send + Sync {
 
     fn cluster_settings(&self, provided: ClusterProperties) -> CommandResult<ClusterSettings>;
     fn cluster_descriptor(&self, settings: ClusterSettings) -> CommandResult<ClusterDescriptor>;
+    fn refresh_cluster_views(&self, current: ClusterViews) -> CommandResult<ClusterViews>;
 
     async fn ensure_pinnable_server(&self) -> CommandResult;
     async fn ensure_creatable_server(&self) -> CommandResult;

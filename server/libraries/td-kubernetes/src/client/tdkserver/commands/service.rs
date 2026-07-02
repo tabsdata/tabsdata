@@ -3,6 +3,7 @@
 //
 
 pub mod create;
+pub mod info;
 pub mod init;
 pub mod list;
 pub mod quickstart;
@@ -11,6 +12,7 @@ pub mod restart;
 pub mod start;
 pub mod status;
 pub mod stop;
+pub mod trash;
 pub mod unregister;
 
 use clap_derive::Args;

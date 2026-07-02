@@ -3,7 +3,7 @@
 //
 
 pub mod cluster;
-mod common;
+pub(crate) mod common;
 pub mod instance;
 pub mod secret;
 pub mod server;

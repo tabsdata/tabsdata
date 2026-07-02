@@ -2,12 +2,66 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::path::Path;
+
 use tracing::{info, warn};
 
-use crate::client::registry::InstanceSettings;
+#[cfg(feature = "enterprise")]
+use crate::client::registry::ag_venv_activate_file;
+use crate::client::registry::{InstanceSettings, td_venv_activate_file};
 use crate::client::tdkserver::render::preview::render_summary_lines;
-use crate::client::tdkserver::render::report::common::render_session_lines;
+use crate::client::tdkserver::render::report::common::{
+    activation_command, kubeconfig_export_command, render_session_lines,
+};
 use crate::runtime::provider::summary::Summary;
+
+const RUNNING_STATUS: &str = "running";
+const STOPPED_STATUS: &str = "stopped";
+const UNKNOWN_STATUS: &str = "unknown";
+
+pub fn instance_info(settings: &InstanceSettings, folder: &Path, alive: Option<bool>) {
+    let resolved = &settings.cluster.resolved;
+    let summary = Summary {
+        provider: settings.provider,
+        instance_name: Some(settings.name.clone()),
+        instance_path: Some(folder.to_path_buf()),
+        kubeconfig_path: resolved.kubeconfig.clone(),
+        context: resolved.context.clone(),
+        cluster_url: resolved.url.clone(),
+        cluster_name: resolved.cluster.clone(),
+        namespace: resolved.namespace.clone(),
+    };
+
+    let status = match alive {
+        Some(true) => RUNNING_STATUS,
+        Some(false) => STOPPED_STATUS,
+        None => UNKNOWN_STATUS,
+    };
+
+    info!("Tabsdata instance '{}'.", settings.name);
+    info!("  - state........: {}", settings.state.as_str());
+    info!("  - status.......: {status}");
+    info!("  - locality.....: {}", settings.locality.as_str());
+    render_summary_lines(&summary);
+    info!("Assigned ports:");
+    for entry in &settings.ports {
+        info!("  - {}: {}", entry.caption, entry.port);
+    }
+
+    if let Ok(td_activate) = td_venv_activate_file(&settings.name) {
+        info!("To activate the environments:");
+        info!("  td: {}", activation_command(&td_activate));
+        #[cfg(feature = "enterprise")]
+        if let Ok(ag_activate) = ag_venv_activate_file(&settings.name) {
+            info!("  ai: {}", activation_command(&ag_activate));
+        }
+    }
+
+    if let Some(kubeconfig) = &summary.kubeconfig_path {
+        info!("To use kubectl against this cluster, run:");
+        info!("  {}", kubeconfig_export_command(kubeconfig));
+    }
+}
 
 pub fn started_service(summary: &Summary) {
     if let Some(name) = &summary.instance_name {
@@ -24,7 +78,7 @@ pub fn started_service(summary: &Summary) {
     render_session_lines(summary);
     if let Some(kubeconfig) = &summary.kubeconfig_path {
         info!("To use kubectl against this cluster, run:");
-        info!("  export KUBECONFIG={}", kubeconfig.display());
+        info!("  {}", kubeconfig_export_command(kubeconfig));
     }
 }
 

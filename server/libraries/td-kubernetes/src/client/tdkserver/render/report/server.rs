@@ -4,7 +4,9 @@
 
 use tracing::{info, warn};
 
-use crate::client::tdkserver::render::report::common::render_session_lines;
+use crate::client::tdkserver::render::report::common::{
+    kubeconfig_export_command, render_session_lines,
+};
 use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::summary::Summary;
 
@@ -78,7 +80,7 @@ pub fn started_server(summary: &Summary) {
     render_session_lines(summary);
     if let Some(kubeconfig) = &summary.kubeconfig_path {
         info!("To use kubectl against this cluster, run:");
-        info!("  export KUBECONFIG={}", kubeconfig.display());
+        info!("  {}", kubeconfig_export_command(kubeconfig));
     }
 }
 

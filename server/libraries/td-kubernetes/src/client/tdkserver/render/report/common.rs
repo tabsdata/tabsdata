@@ -2,9 +2,27 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::path::Path;
+
 use tracing::info;
 
 use crate::runtime::provider::summary::Summary;
+
+pub(crate) fn activation_command(activate: &Path) -> String {
+    if cfg!(target_os = "windows") {
+        activate.display().to_string()
+    } else {
+        format!("source {}", activate.display())
+    }
+}
+
+pub(crate) fn kubeconfig_export_command(kubeconfig: &Path) -> String {
+    if cfg!(target_os = "windows") {
+        format!("set KUBECONFIG={}", kubeconfig.display())
+    } else {
+        format!("export KUBECONFIG={}", kubeconfig.display())
+    }
+}
 
 pub(super) fn render_session_lines(summary: &Summary) {
     if let Some(kubeconfig) = &summary.kubeconfig_path {

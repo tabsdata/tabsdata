@@ -5,19 +5,24 @@
 use std::collections::HashMap;
 
 use clap_derive::Args;
+use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::Cancelled;
+use tracing::warn;
 
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
+use crate::client::registry::instance_folder;
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments};
 use crate::client::tdkserver::commands::service::create::create_instance;
 use crate::client::tdkserver::commands::service::init::{InitArguments, command_init};
 use crate::client::tdkserver::commands::service::start::{StartArguments, command_start};
+use crate::client::tdkserver::commands::service::trash::trash_instance_folder;
 use crate::client::tdkserver::commands::service::{
     resolved_instance, resolved_preview, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::core::system::exit::{CommandResult, abort};
+use crate::cwarn;
 use crate::runtime::instance::ports::DEFAULT_BASE_PORT;
 
 #[derive(Debug, Clone, Args)]
@@ -128,6 +133,50 @@ pub async fn command_quickstart(
         return abort(Cancelled);
     }
 
+    let pins = PinContext::pins();
+    let name = resolved_instance(instance.clone(), &pins)
+        .value
+        .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
+    let folder = instance_folder(&name)?;
+    let preexisting = folder.exists();
+
+    let outcome = run_quickstart(
+        instance, cluster, port, save, preview, yes, &overrides, globals,
+    )
+    .await;
+
+    if outcome.is_err() && !preexisting && folder.exists() {
+        match trash_instance_folder(&name, &folder) {
+            Ok(destination) => {
+                warn!(
+                    "Warning: Command 'quickstart' failed; moved the partially created \
+                     instance to trash: {}",
+                    destination.display()
+                );
+            }
+            Err(cleanup_error) => {
+                cwarn!(
+                    "Command 'quickstart' failed and the partially created instance could \
+                     not be trashed: {cleanup_error:?}"
+                );
+            }
+        }
+    }
+
+    outcome
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_quickstart(
+    instance: Option<String>,
+    cluster: ClusterArguments,
+    port: u16,
+    save: Option<bool>,
+    preview: Option<bool>,
+    yes: Option<bool>,
+    overrides: &HashMap<String, String>,
+    globals: &GlobalArguments,
+) -> CommandResult {
     command_init(
         InitArguments {
             instance: instance.clone(),
@@ -153,7 +202,7 @@ pub async fn command_quickstart(
         resolved_preview_value.value,
         resolved_yes_value.value,
         resolved_verbose_value,
-        &overrides,
+        overrides,
     )
     .await?;
 

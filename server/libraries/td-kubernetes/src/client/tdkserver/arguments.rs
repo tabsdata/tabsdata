@@ -20,6 +20,7 @@ use crate::client::tdkserver::commands::service::register::RegisterArguments;
 use crate::client::tdkserver::commands::service::restart::RestartArguments;
 use crate::client::tdkserver::commands::service::start::StartArguments;
 use crate::client::tdkserver::commands::service::stop::StopArguments;
+use crate::client::tdkserver::commands::service::trash::TrashArguments;
 use crate::client::tdkserver::commands::session::pin::PinArguments;
 use crate::client::tdkserver::commands::session::show::ShowArguments;
 use crate::client::tdkserver::commands::session::unpin::UnpinArguments;
@@ -82,10 +83,14 @@ pub enum Commands {
     Restart(RestartArguments),
     #[command(about = "Show the status of a tabsdata instance")]
     Status(InstanceNameArguments),
+    #[command(about = "Show detailed information about a tabsdata instance")]
+    Info(InstanceNameArguments),
     #[command(about = "Register an existing tabsdata instance")]
     Register(RegisterArguments),
     #[command(about = "Unregister a tabsdata instance")]
     Unregister(InstanceNameArguments),
+    #[command(about = "Trash a local kminus tabsdata instance")]
+    Trash(TrashArguments),
     #[command(about = "Pin default values used when commands omit them")]
     Pin(PinArguments),
     #[command(about = "Unpin default values")]

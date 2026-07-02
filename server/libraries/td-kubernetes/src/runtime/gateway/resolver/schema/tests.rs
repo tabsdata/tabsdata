@@ -41,7 +41,10 @@ fn rewrite_bakes_secret_token_into_matched_option_leaves() {
         .expect("S3 mount");
     let options = &s3["options"];
     assert_eq!(options["aws_access_key_id"].as_str(), Some("${{secret}}"));
-    assert_eq!(options["aws_secret_access_key"].as_str(), Some("${{secret}}"));
+    assert_eq!(
+        options["aws_secret_access_key"].as_str(),
+        Some("${{secret}}")
+    );
 
     let root = mounts
         .iter()
@@ -71,7 +74,13 @@ fn parses_storage_options_rule() {
 #[test]
 fn matches_option_leaf_under_any_mount_and_key() {
     let schema = Schema::parse("apiserver.storage.yamls", STORAGE_SCHEMA).expect("parse");
-    assert!(schema.secret_at(&path(&["storage", "mounts", "ROOT", "options", "secret_key"])));
+    assert!(schema.secret_at(&path(&[
+        "storage",
+        "mounts",
+        "ROOT",
+        "options",
+        "secret_key"
+    ])));
     assert!(schema.secret_at(&path(&["storage", "mounts", "ANY", "options", "token"])));
 }
 
@@ -112,7 +121,10 @@ fn empty_pattern_is_rejected() {
 fn unsupported_treatment_is_rejected() {
     let text = "directives:\n  - at: a.b\n    treat: config\n";
     let result = Schema::parse("x.yamls", text);
-    assert!(matches!(result, Err(SchemaError::UnsupportedTreatment { .. })));
+    assert!(matches!(
+        result,
+        Err(SchemaError::UnsupportedTreatment { .. })
+    ));
 }
 
 #[test]

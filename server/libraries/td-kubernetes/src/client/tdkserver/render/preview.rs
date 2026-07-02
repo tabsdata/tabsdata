@@ -119,6 +119,13 @@ pub fn restart_service(summary: &Summary, markers: &PinnedMarkers) {
     render_marked_summary_lines(summary, markers);
 }
 
+pub fn trash_service(instance: &str, source: &str, trash: &str) {
+    info!("About to trash tabsdata instance:");
+    info!("  - instance name..: {instance}");
+    info!("  - instance folder: {source}");
+    info!("  - trash folder...: {trash}");
+}
+
 pub fn apply_config(summary: &Summary) {
     info!("About to apply tabsdata configs and restart the instance:");
     render_summary_lines(summary);

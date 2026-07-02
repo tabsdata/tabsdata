@@ -31,7 +31,10 @@ fn normalize_schema_extension_leaves_plain_configs_untouched() {
         normalize_schema_extension("apiserver.storage.yaml"),
         "apiserver.storage.yaml"
     );
-    assert_eq!(normalize_schema_extension("apiserver.yaml"), "apiserver.yaml");
+    assert_eq!(
+        normalize_schema_extension("apiserver.yaml"),
+        "apiserver.yaml"
+    );
 }
 
 #[test]

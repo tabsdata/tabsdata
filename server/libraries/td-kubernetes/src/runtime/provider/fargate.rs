@@ -7,6 +7,7 @@ use kube::Config;
 
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
+use crate::client::registry::ClusterViews;
 use crate::client::session::pin::Session;
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::core::system::exit::CommandResult;
@@ -70,6 +71,10 @@ impl Provider for FargateProvider {
     }
 
     fn cluster_descriptor(&self, _settings: ClusterSettings) -> CommandResult<ClusterDescriptor> {
+        unreachable!("The fargate provider is not yet implemented.")
+    }
+
+    fn refresh_cluster_views(&self, _current: ClusterViews) -> CommandResult<ClusterViews> {
         unreachable!("The fargate provider is not yet implemented.")
     }
 

@@ -2,6 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::net::{Ipv4Addr, TcpListener};
+
 use serde::{Deserialize, Serialize};
 
 use crate::runtime::gateway::resolver::SystemValues;
@@ -68,6 +70,14 @@ pub fn assign_ports(base: u16) -> Vec<AssignedPort> {
             port: base + offset as u16,
         })
         .collect()
+}
+
+pub fn port_available(port: u16) -> bool {
+    TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok()
+}
+
+pub fn first_unavailable_port(assigned: &[AssignedPort]) -> Option<&AssignedPort> {
+    assigned.iter().find(|entry| !port_available(entry.port))
 }
 
 pub fn kminus_api_port(assigned: &[AssignedPort]) -> Option<u16> {

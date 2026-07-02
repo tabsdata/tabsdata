@@ -100,20 +100,19 @@ fn bake_schema_secrets(
     let Some(schema_text) = configs.get(&format!("{stem}{SCHEMA_EXTENSION}")) else {
         return Ok(config.to_owned());
     };
-    let schema = Schema::parse(file, schema_text)
-        .map_err(|cause| ResolverError::SchemaParseFailed {
+    let schema =
+        Schema::parse(file, schema_text).map_err(|cause| ResolverError::SchemaParseFailed {
             path: file.to_owned(),
             cause: cause.to_string(),
         })?;
     if schema.is_empty() {
         return Ok(config.to_owned());
     }
-    let mut value: Value = serde_yaml::from_str(config).map_err(|cause| {
-        ResolverError::ParseFailed {
+    let mut value: Value =
+        serde_yaml::from_str(config).map_err(|cause| ResolverError::ParseFailed {
             path: file.to_owned(),
             cause: cause.to_string(),
-        }
-    })?;
+        })?;
     schema.rewrite_secrets(&mut value);
     serde_yaml::to_string(&value).map_err(|cause| ResolverError::ParseFailed {
         path: file.to_owned(),

@@ -44,6 +44,11 @@ pub enum ProviderError {
     InstanceFolderCreateFailed(String, String) = 5000,
     #[error("Could not start kminus cluster: {0}.")]
     KminusStartFailed(String) = 5001,
+    #[error(
+        "Port {port} ({caption}) is already in use. Stop the service currently using it, or \
+         configure the instance with different ports."
+    )]
+    PortInUse { port: u16, caption: String } = 5111,
     #[error("Could not stop kminus cluster: {0}.")]
     KminusStopFailed(String) = 5002,
     #[error("Could not remove staging folder '{0}': {1}.")]
@@ -125,6 +130,11 @@ pub enum ProviderError {
          Run 'tdkserver init --instance {name} ...' first."
     )]
     InstanceNotInitialized { name: String, reason: String } = 6004,
+    #[error(
+        "The 'trash' command is only available for local kminus instances. \
+         The instance '{name}' uses the '{provider}' provider."
+    )]
+    TrashNotSupportedForProvider { name: String, provider: String } = 6005,
     #[error(
         "The cluster is not running. \
          Start it with `tdkserver cluster start ...` and try again."

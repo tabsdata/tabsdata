@@ -4,13 +4,13 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-#[cfg(feature = "enterprise")]
-use crate::base::constants::FOLDER_PYENV_AG;
 use crate::base::constants::SECRET_FAMILY_CONFIG;
-use crate::base::constants::{FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_RUNTIMES};
 use crate::base::reporter::{InteractiveReporter, Reporter};
+#[cfg(feature = "enterprise")]
+use crate::client::registry::ag_venv_activate_file;
 use crate::client::registry::{
-    InstanceSettings, InstanceState, instance_folder, instance_init_folder, instance_stage_folder,
+    InstanceSettings, InstanceState, instance_init_folder, instance_stage_folder,
+    td_venv_activate_file,
 };
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
@@ -19,6 +19,7 @@ use crate::client::tdkserver::commands::service::{
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::preview;
+use crate::client::tdkserver::render::report::common::activation_command;
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::api::secret::upsert_secret;
 use crate::kube::context::KubeContext;
@@ -193,6 +194,7 @@ pub async fn create_instance(
     provider.stop_cluster(&reporter).await?;
     tx.commit();
 
+    settings.cluster = provider.refresh_cluster_views(settings.cluster)?;
     settings.state = InstanceState::Created;
     settings.save()?;
 
@@ -202,19 +204,15 @@ pub async fn create_instance(
 }
 
 fn report_venv_activation(name: &str) -> CommandResult {
-    let python = instance_folder(name)?
-        .join(FOLDER_RUNTIMES)
-        .join(FOLDER_PYTHON);
-
     let mut message = String::from("To activate the created environments:");
 
-    let td_activate = python.join(FOLDER_PYENV_TD).join("bin").join("activate");
-    message.push_str(&format!("\n  td: source {}", td_activate.display()));
+    let td_activate = td_venv_activate_file(name)?;
+    message.push_str(&format!("\n  td: {}", activation_command(&td_activate)));
 
     #[cfg(feature = "enterprise")]
     {
-        let ag_activate = python.join(FOLDER_PYENV_AG).join("bin").join("activate");
-        message.push_str(&format!("\n  ai: source {}", ag_activate.display()));
+        let ag_activate = ag_venv_activate_file(name)?;
+        message.push_str(&format!("\n  ai: {}", activation_command(&ag_activate)));
     }
 
     warn!("{message}");

@@ -19,13 +19,13 @@ use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_PYENV_AG,
-    FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE,
-    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, STAGE_FOLDER,
+    CONFIGMAP_TABSDATA_MANIFEST, DEFAULT_NAMESPACE, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES,
+    FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES,
+    FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, STAGE_FOLDER,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
-use crate::client::registry::{InstanceSettings, instances_root};
+use crate::client::registry::{ClusterViews, InstanceSettings, instances_root};
 use crate::client::session::pin::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
@@ -43,7 +43,7 @@ use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::launcher::{provision_database, start_database, stop_database};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
-use crate::runtime::instance::ports::apply_ports;
+use crate::runtime::instance::ports::{apply_ports, first_unavailable_port};
 use crate::runtime::instance::profile::{
     Profile, load_profile, parse_from_configmaps, read_family_configmaps, render_for_configmaps,
     resolve_kprofile_path,
@@ -211,8 +211,8 @@ impl KminusProvider {
         let context = resolve_current_context(Some(&kubefile)).unwrap_or_default();
         let cluster = resolve_cluster_name(Some(&kubefile), Some(&context)).unwrap_or_default();
         let cluster_url = resolve_cluster_url(Some(&kubefile), Some(&context)).unwrap_or_default();
-        let namespace =
-            resolve_namespace(Some(&kubefile), Some(&context)).unwrap_or_else(|| "default".into());
+        let namespace = resolve_namespace(Some(&kubefile), Some(&context))
+            .unwrap_or_else(|| DEFAULT_NAMESPACE.to_owned());
         KubeSummary {
             kubefile,
             context,
@@ -220,6 +220,18 @@ impl KminusProvider {
             cluster_url,
             namespace,
         }
+    }
+
+    fn ensure_ports_available(&self) -> CommandResult {
+        let settings = InstanceSettings::load(&self.name)?;
+        if let Some(entry) = first_unavailable_port(&settings.ports) {
+            return Err(ProviderError::PortInUse {
+                port: entry.port,
+                caption: entry.caption.clone(),
+            }
+            .into());
+        }
+        Ok(())
     }
 }
 
@@ -289,7 +301,11 @@ impl Provider for KminusProvider {
     }
 
     fn cluster_settings(&self, _provided: ClusterProperties) -> CommandResult<ClusterSettings> {
-        Ok(ClusterSettings::default())
+        Ok(ClusterSettings {
+            kubeconfig: Some(self.cluster.kubefile()),
+            context: None,
+            namespace: Some(DEFAULT_NAMESPACE.to_owned()),
+        })
     }
 
     fn cluster_descriptor(&self, settings: ClusterSettings) -> CommandResult<ClusterDescriptor> {
@@ -299,6 +315,27 @@ impl Provider for KminusProvider {
             namespace: settings.namespace,
             cluster: None,
             url: None,
+        })
+    }
+
+    fn refresh_cluster_views(&self, current: ClusterViews) -> CommandResult<ClusterViews> {
+        let kube = self.kube_summary();
+        let adjusted = ClusterSettings {
+            kubeconfig: Some(kube.kubefile.clone()),
+            context: Some(kube.context.clone()),
+            namespace: Some(kube.namespace.clone()),
+        };
+        let resolved = ClusterDescriptor {
+            kubeconfig: Some(kube.kubefile),
+            context: Some(kube.context),
+            namespace: Some(kube.namespace),
+            cluster: Some(kube.cluster),
+            url: Some(kube.cluster_url),
+        };
+        Ok(ClusterViews {
+            provided: current.provided,
+            adjusted,
+            resolved,
         })
     }
 
@@ -441,6 +478,7 @@ impl Provider for KminusProvider {
     }
 
     async fn start_cluster_hook(&self, reporter: &dyn Reporter) -> CommandResult {
+        self.ensure_ports_available()?;
         let step = reporter.step("Starting kminus cluster");
         self.cluster.start().await?;
         step.done("Kminus cluster started");
