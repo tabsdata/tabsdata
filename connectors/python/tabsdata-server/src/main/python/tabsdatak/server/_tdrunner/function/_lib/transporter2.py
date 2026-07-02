@@ -5,10 +5,15 @@
 from __future__ import annotations
 
 import logging
+import subprocess
+import threading
 from pathlib import Path
+from typing import IO, Sequence
 
 import yaml
 
+from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+from tabsdatak.common._interpreter.python.venv import PythonEnvironment
 from tabsdatak.conn.common.file import _transporter2
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.mounts import secret_env_name
@@ -26,6 +31,8 @@ from tabsdatak.server._tdrunner.function._lib.request import (
 )
 
 logger = logging.getLogger(__name__)
+
+TRANSPORTER_BINARY_NAME = "td_transporter2"
 
 
 class OutputTableNotInManifestError(ValueError):
@@ -167,20 +174,48 @@ def write_transporter_request(request: _transporter2.CopyRequest, path: Path) ->
 
 
 def run_transporter(request_yaml: Path, response_yaml: Path) -> int:
-    response_yaml.parent.mkdir(parents=True, exist_ok=True)
     try:
-        _transporter2.run_binary(
-            _transporter2._COPY,
-            request_yaml,
-            response_yaml,
-            env=None,
-            binary_path=None,
-        )
-    except _transporter2.TransporterBinaryNotFoundError as error:
+        binary = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
+    except BinaryNotFoundError as error:
         raise TransporterNotFoundError() from error
-    except _transporter2.TransporterRunError as error:
-        logger.warning(
-            "td_transporter2 exited %d: %s", error.returncode, error.stderr.strip()
-        )
-        return error.returncode
-    return 0
+    response_yaml.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        str(binary),
+        _transporter2._COPY,
+        "--request",
+        str(request_yaml),
+        "--response",
+        str(response_yaml),
+    ]
+    return run_command(command)
+
+
+def stream_reader(stream: IO[str], level: int) -> threading.Thread:
+    def loop() -> None:
+        try:
+            for line in stream:
+                logger.log(level, line.rstrip(), extra={"noformat": True})
+        finally:
+            stream.close()
+
+    thread = threading.Thread(target=loop, daemon=True)
+    thread.start()
+    return thread
+
+
+def run_command(command: Sequence[str]) -> int:
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=1,
+        text=True,
+    )
+    assert process.stdout is not None
+    assert process.stderr is not None
+    stdout_reader = stream_reader(process.stdout, logging.INFO)
+    stderr_reader = stream_reader(process.stderr, logging.WARNING)
+    return_code = process.wait()
+    stdout_reader.join()
+    stderr_reader.join()
+    return return_code
