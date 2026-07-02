@@ -84,7 +84,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
 
     let reporter = InteractiveReporter::new();
     provider.start_service(&reporter).await?;
-    report::service::started_service(&provider.summary());
+    report::component::service::started_service(&provider.summary());
 
     Ok(())
 }

@@ -70,7 +70,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
 
     let reporter = InteractiveReporter::new();
     match provider.start_cluster(&reporter).await? {
-        ClusterStartOutcome::Started => report::cluster::started_cluster(&provider.summary()),
+        ClusterStartOutcome::Started => report::component::cluster::started_cluster(&provider.summary()),
         ClusterStartOutcome::AlreadyRunning => cwarn!("Cluster is already started."),
     }
 

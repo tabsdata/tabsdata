@@ -70,7 +70,7 @@ pub async fn command_create(
     provider.create_runtimes(&reporter).await?;
     provider.create_images(&reporter).await?;
     tx.commit();
-    report::server::created_server(&provider.summary());
+    report::component::server::created_server(&provider.summary());
 
     Ok(())
 }

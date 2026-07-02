@@ -91,7 +91,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     {
         cwarn!("Instance is already stopped.");
     } else {
-        report::service::stopped_service(&provider.summary());
+        report::component::service::stopped_service(&provider.summary());
     }
 
     Ok(())

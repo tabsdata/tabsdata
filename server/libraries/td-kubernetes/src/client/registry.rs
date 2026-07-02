@@ -219,3 +219,40 @@ impl InstanceSettings {
         .into())
     }
 }
+
+pub struct InstanceListing {
+    pub name: String,
+    pub folder: PathBuf,
+    pub settings: Option<InstanceSettings>,
+}
+
+pub fn list_instances() -> CommandResult<Vec<InstanceListing>> {
+    let root = instances_root()?;
+    let mut listings = Vec::new();
+    if !root.exists() {
+        return Ok(listings);
+    }
+    let entries = fs::read_dir(&root).map_err(|error| {
+        TdError::from(CliError::FileReadFailed {
+            file: root.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    for entry in entries.flatten() {
+        let folder = entry.path();
+        if !folder.is_dir() {
+            continue;
+        }
+        let Some(name) = folder.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let settings = InstanceSettings::load(name).ok();
+        listings.push(InstanceListing {
+            name: name.to_owned(),
+            folder,
+            settings,
+        });
+    }
+    listings.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(listings)
+}

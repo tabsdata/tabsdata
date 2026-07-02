@@ -21,7 +21,7 @@ use crate::client::tdkserver::commands::service::{
     resolved_instance, resolved_preview, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
-use crate::core::system::exit::{CommandResult, abort};
+use crate::core::system::exit::{CommandResult, abort, render_error};
 use crate::cwarn;
 use crate::runtime::instance::ports::DEFAULT_BASE_PORT;
 
@@ -155,9 +155,13 @@ pub async fn command_quickstart(
                 );
             }
             Err(cleanup_error) => {
+                let detail = match cleanup_error.source() {
+                    Some(source) => render_error(source, globals.verbose),
+                    None => cleanup_error.status().to_string(),
+                };
                 cwarn!(
                     "Command 'quickstart' failed and the partially created instance could \
-                     not be trashed: {cleanup_error:?}"
+                     not be trashed: {detail}"
                 );
             }
         }

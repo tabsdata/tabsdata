@@ -14,7 +14,7 @@ use crate::base::constants::SECRET_FAMILY_CONFIG;
 use crate::base::error::cli::CliError;
 use crate::base::error::secret::SecretError;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::client::tdkserver::render::report::secret::{
+use crate::client::tdkserver::render::report::component::secret::{
     ReportContext, ReportInput, reconciliation,
 };
 use crate::core::system::exit::{CommandResult, abort_with};

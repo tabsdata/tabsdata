@@ -87,6 +87,20 @@ pub fn kminus_api_port(assigned: &[AssignedPort]) -> Option<u16> {
         .map(|entry| entry.port)
 }
 
+pub fn apiserver_public_port(assigned: &[AssignedPort]) -> Option<u16> {
+    assigned
+        .iter()
+        .find(|entry| entry.role == PortRole::ApiserverPublic.as_str())
+        .map(|entry| entry.port)
+}
+
+pub fn database_port(assigned: &[AssignedPort]) -> Option<u16> {
+    assigned
+        .iter()
+        .find(|entry| entry.role == PortRole::Database.as_str())
+        .map(|entry| entry.port)
+}
+
 pub fn apply_ports(values: &mut SystemValues, assigned: &[AssignedPort]) {
     for entry in assigned {
         let port = entry.port.to_string();

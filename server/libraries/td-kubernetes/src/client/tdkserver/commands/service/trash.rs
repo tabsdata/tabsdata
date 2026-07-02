@@ -22,7 +22,7 @@ use crate::client::tdkserver::commands::service::{
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::preview;
-use crate::core::system::exit::CommandResult;
+use crate::core::system::exit::{CommandError, CommandResult, render_error};
 use crate::cwarn;
 use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::provider_for_instance;
@@ -138,7 +138,7 @@ async fn stop_if_possible(name: &str, verbose: bool) {
     let settings = match InstanceSettings::load(name) {
         Ok(settings) => settings,
         Err(error) => {
-            cwarn!("Skipping stop; could not read instance settings: {error:?}");
+            cwarn!("Skipping stop; could not read instance settings: {}", render(&error, verbose));
             return;
         }
     };
@@ -151,13 +151,28 @@ async fn stop_if_possible(name: &str, verbose: bool) {
     let provider = match provider_for_instance(Some(name.to_owned()), verbose).await {
         Ok(provider) => provider,
         Err(error) => {
-            cwarn!("Skipping stop; could not prepare the instance to stop it: {error:?}");
+            cwarn!(
+                "Skipping stop; could not prepare the instance to stop it: {}",
+                render(&error, verbose)
+            );
             return;
         }
     };
 
+    if provider.service_dead().await {
+        cwarn!("Skipping stop; instance is already stopped.");
+        return;
+    }
+
     let reporter = InteractiveReporter::new();
     if let Err(error) = provider.stop_service(&reporter).await {
-        cwarn!("Could not stop instance before trashing it: {error:?}");
+        cwarn!("Could not stop instance before trashing it: {}", render(&error, verbose));
+    }
+}
+
+fn render(error: &CommandError, verbose: bool) -> String {
+    match error.source() {
+        Some(source) => render_error(source, verbose),
+        None => error.status().to_string(),
     }
 }

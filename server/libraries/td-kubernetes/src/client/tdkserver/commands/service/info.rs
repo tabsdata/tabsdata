@@ -22,18 +22,17 @@ pub async fn command_info(
 
     let name = instance
         .value
-        .clone()
         .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
 
     let settings = InstanceSettings::load(&name)?;
     let folder = instance_folder(&name)?;
 
-    let alive = match provider_for_instance(instance.value, verbose).await {
+    let alive = match provider_for_instance(Some(name.clone()), verbose).await {
         Ok(provider) => Some(provider.service_alive().await),
         Err(_) => None,
     };
 
-    report::service::instance_info(&settings, &folder, alive);
+    report::component::service::instance_info(&settings, &folder, alive);
 
     Ok(())
 }

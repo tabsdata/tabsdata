@@ -2,6 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+pub mod status;
+
 use std::path::Path;
 
 use tracing::{info, warn};
@@ -10,14 +12,103 @@ use tracing::{info, warn};
 use crate::client::registry::ag_venv_activate_file;
 use crate::client::registry::{InstanceSettings, td_venv_activate_file};
 use crate::client::tdkserver::render::preview::render_summary_lines;
-use crate::client::tdkserver::render::report::common::{
+use crate::client::tdkserver::render::report::helper::common::{
     activation_command, kubeconfig_export_command, render_session_lines,
 };
+use crate::client::tdkserver::render::report::helper::table::{
+    ReportColumn, ReportTable, STATUS_COLOR_SCHEME, render_tables,
+};
+use crate::core::system::exit::CommandResult;
+use crate::runtime::instance::ports::{AssignedPort, apiserver_public_port, database_port};
 use crate::runtime::provider::summary::Summary;
 
 const RUNNING_STATUS: &str = "running";
 const STOPPED_STATUS: &str = "stopped";
 const UNKNOWN_STATUS: &str = "unknown";
+
+const LIST_RUNNING_STATUS: &str = "Running";
+const LIST_STOPPED_STATUS: &str = "Stopped";
+const ABSENT_CELL: &str = "-";
+const UNGATHERED_CELL: &str = "?";
+
+fn list_columns() -> [ReportColumn<'static>; 8] {
+    [
+        ReportColumn { header: "Name", color_scheme: None },
+        ReportColumn { header: "Folder", color_scheme: None },
+        ReportColumn { header: "Provider", color_scheme: None },
+        ReportColumn { header: "State", color_scheme: None },
+        ReportColumn { header: "Status", color_scheme: Some(STATUS_COLOR_SCHEME) },
+        ReportColumn { header: "Apiserver Port", color_scheme: None },
+        ReportColumn { header: "Database Port", color_scheme: None },
+        ReportColumn { header: "Apiserver URL", color_scheme: None },
+    ]
+}
+
+pub struct InstanceRow<'a> {
+    pub name: &'a str,
+    pub folder: &'a Path,
+    pub settings: Option<&'a InstanceSettings>,
+    pub alive: Option<bool>,
+    pub url: Option<String>,
+}
+
+pub fn instance_list(instances: &[InstanceRow]) -> CommandResult {
+    let rows = instances.iter().map(instance_row).collect();
+    let columns = list_columns();
+    render_tables(&[ReportTable {
+        title: "Instances",
+        columns: &columns,
+        rows,
+    }])
+}
+
+fn instance_row(row: &InstanceRow) -> Vec<String> {
+    let provider = row
+        .settings
+        .map(|settings| settings.provider.as_str().to_owned())
+        .unwrap_or_else(|| UNGATHERED_CELL.to_owned());
+    let state = row
+        .settings
+        .map(|settings| settings.state.as_str().to_owned())
+        .unwrap_or_else(|| UNGATHERED_CELL.to_owned());
+
+    let status = match row.alive {
+        Some(true) => LIST_RUNNING_STATUS.to_owned(),
+        Some(false) => LIST_STOPPED_STATUS.to_owned(),
+        None => UNGATHERED_CELL.to_owned(),
+    };
+
+    let public_port = port_cell(row.settings, apiserver_public_port);
+    let database = port_cell(row.settings, database_port);
+
+    let url = match row.alive {
+        Some(true) => row.url.clone().unwrap_or_else(|| UNGATHERED_CELL.to_owned()),
+        Some(false) | None => UNGATHERED_CELL.to_owned(),
+    };
+
+    vec![
+        row.name.to_owned(),
+        row.folder.display().to_string(),
+        provider,
+        state,
+        status,
+        public_port,
+        database,
+        url,
+    ]
+}
+
+fn port_cell(
+    settings: Option<&InstanceSettings>,
+    select: fn(&[AssignedPort]) -> Option<u16>,
+) -> String {
+    match settings {
+        None => UNGATHERED_CELL.to_owned(),
+        Some(settings) => select(&settings.ports)
+            .map(|port| port.to_string())
+            .unwrap_or_else(|| ABSENT_CELL.to_owned()),
+    }
+}
 
 pub fn instance_info(settings: &InstanceSettings, folder: &Path, alive: Option<bool>) {
     let resolved = &settings.cluster.resolved;
@@ -38,7 +129,7 @@ pub fn instance_info(settings: &InstanceSettings, folder: &Path, alive: Option<b
         None => UNKNOWN_STATUS,
     };
 
-    info!("Tabsdata instance '{}'.", settings.name);
+    info!("Tabsdata instance '{}':", settings.name);
     info!("  - state........: {}", settings.state.as_str());
     info!("  - status.......: {status}");
     info!("  - locality.....: {}", settings.locality.as_str());
@@ -49,7 +140,7 @@ pub fn instance_info(settings: &InstanceSettings, folder: &Path, alive: Option<b
     }
 
     if let Ok(td_activate) = td_venv_activate_file(&settings.name) {
-        info!("To activate the environments:");
+        info!("Environment activation:");
         info!("  td: {}", activation_command(&td_activate));
         #[cfg(feature = "enterprise")]
         if let Ok(ag_activate) = ag_venv_activate_file(&settings.name) {
@@ -58,7 +149,7 @@ pub fn instance_info(settings: &InstanceSettings, folder: &Path, alive: Option<b
     }
 
     if let Some(kubeconfig) = &summary.kubeconfig_path {
-        info!("To use kubectl against this cluster, run:");
+        info!("Kubectl access:");
         info!("  {}", kubeconfig_export_command(kubeconfig));
     }
 }

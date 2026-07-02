@@ -11,7 +11,7 @@ pub mod widgets;
 use clap::{CommandFactory, Parser};
 
 use crate::cerror;
-use crate::client::tdkserver::arguments::{Arguments, Commands};
+use crate::client::tdkserver::arguments::{Arguments, Commands, GlobalArguments};
 // use crate::client::tdkserver::commands::cluster::command_cluster;
 // use crate::client::tdkserver::commands::config::command_config;
 // use crate::client::tdkserver::commands::instance::command_instance;
@@ -35,17 +35,29 @@ use crate::client::tdkserver::commands::session::unpin::command_unpin;
 // use crate::client::tdkserver::commands::session::command_session;
 use crate::client::tdkserver::commands::shell::command_shell;
 // use crate::client::tdkserver::commands::template::command_template;
-use crate::core::system::exit::{CommandError, CommandResult};
+use crate::core::system::exit::{CommandError, CommandResult, render_error};
 use td_common::crypto::install_crypto_provider;
 use td_common::status::ExitStatus;
 
 pub struct TabsDataKubernetesClient;
 
 impl TabsDataKubernetesClient {
-    async fn run(&self) -> CommandResult {
+    async fn run(&self) -> ExitStatus {
         let arguments = Arguments::parse();
         let globals = arguments.globals;
-        match arguments.command {
+        let verbose = globals.verbose;
+        match self.dispatch(arguments.command, globals).await {
+            Ok(()) => ExitStatus::Success,
+            Err(error) => {
+                let status = *error.status();
+                report_command_termination(&error, verbose);
+                status
+            }
+        }
+    }
+
+    async fn dispatch(&self, command: Option<Commands>, globals: GlobalArguments) -> CommandResult {
+        match command {
             None => {
                 Arguments::command().print_help().ok();
                 println!();
@@ -83,25 +95,25 @@ pub async fn start() {
     let _ = colored::control::set_virtual_terminal(true);
 
     install_crypto_provider();
-    if let Err(error) = TabsDataKubernetesClient.run().await {
-        report_command_termination(&error);
-        std::process::exit(error.status().code());
+    let status = TabsDataKubernetesClient.run().await;
+    if status != ExitStatus::Success {
+        std::process::exit(status.code());
     }
 }
 
-fn report_command_termination(error: &CommandError) {
+fn report_command_termination(error: &CommandError, verbose: bool) {
     match error.status() {
         ExitStatus::Cancelled => match error.source() {
-            Some(source) => tracing::info!("Operation cancelled: {source}"),
+            Some(source) => tracing::info!("Operation cancelled: {}", render_error(source, verbose)),
             None => tracing::info!("Operation cancelled."),
         },
         ExitStatus::NoAction => {
             if let Some(source) = error.source() {
-                tracing::info!("{source}");
+                tracing::info!("{}", render_error(source, verbose));
             }
         }
         _ => match error.source() {
-            Some(source) => cerror!("Command aborted: {source}"),
+            Some(source) => cerror!("Command aborted: {}", render_error(source, verbose)),
             None => cerror!("Command aborted."),
         },
     }

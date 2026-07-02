@@ -4,7 +4,7 @@
 
 use tracing::info;
 
-use crate::client::tdkserver::render::report::common::render_session_lines;
+use crate::client::tdkserver::render::report::helper::common::render_session_lines;
 use crate::runtime::provider::summary::Summary;
 
 pub fn pinned_server(summary: &Summary) {

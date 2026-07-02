@@ -199,7 +199,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     }
     step.done("Wrote tabsdata instance settings");
 
-    report::service::initialized_service(&settings);
+    report::component::service::initialized_service(&settings);
 
     Ok(())
 }

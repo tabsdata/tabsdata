@@ -2,7 +2,9 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
-#[derive(Debug)]
+use std::fmt::{Display, Formatter};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExitStatus {
     Success,
     NoAction,
@@ -28,6 +30,23 @@ impl ExitStatus {
             ExitStatus::TabsDataSigKill => 204,
             ExitStatus::TabsDataSigTerm => 205,
         }
+    }
+}
+
+impl Display for ExitStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let label = match self {
+            ExitStatus::Success => "Success",
+            ExitStatus::NoAction => "No Action",
+            ExitStatus::Cancelled => "Cancelled",
+            ExitStatus::Aborted => "Aborted",
+            ExitStatus::GeneralError => "General Error",
+            ExitStatus::TabsDataError => "Tabsdata Error",
+            ExitStatus::TabsDataSigInt => "Interrupted",
+            ExitStatus::TabsDataSigKill => "Killed",
+            ExitStatus::TabsDataSigTerm => "Terminated",
+        };
+        write!(f, "{label}")
     }
 }
 

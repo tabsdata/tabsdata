@@ -4,7 +4,7 @@
 
 use tracing::{info, warn};
 
-use crate::client::tdkserver::render::report::common::{
+use crate::client::tdkserver::render::report::helper::common::{
     kubeconfig_export_command, render_session_lines,
 };
 use crate::runtime::provider::ClusterProvider;

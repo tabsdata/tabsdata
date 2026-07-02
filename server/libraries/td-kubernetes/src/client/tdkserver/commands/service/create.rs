@@ -19,7 +19,7 @@ use crate::client::tdkserver::commands::service::{
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::preview;
-use crate::client::tdkserver::render::report::common::activation_command;
+use crate::client::tdkserver::render::report::helper::common::activation_command;
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::api::secret::upsert_secret;
 use crate::kube::context::KubeContext;

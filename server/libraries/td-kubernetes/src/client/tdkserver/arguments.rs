@@ -81,9 +81,9 @@ pub enum Commands {
     Stop(StopArguments),
     #[command(about = "Restart a tabsdata instance")]
     Restart(RestartArguments),
-    #[command(about = "Show the status of a tabsdata instance")]
+    #[command(about = "Show the running workloads of a tabsdata instance")]
     Status(InstanceNameArguments),
-    #[command(about = "Show detailed information about a tabsdata instance")]
+    #[command(about = "Show the configuration and state of a tabsdata instance")]
     Info(InstanceNameArguments),
     #[command(about = "Register an existing tabsdata instance")]
     Register(RegisterArguments),

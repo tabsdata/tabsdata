@@ -71,7 +71,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
 
     let reporter = InteractiveReporter::new();
     match provider.stop_cluster(&reporter).await? {
-        ClusterStopOutcome::Stopped => report::cluster::stopped_cluster(&provider.summary()),
+        ClusterStopOutcome::Stopped => report::component::cluster::stopped_cluster(&provider.summary()),
         ClusterStopOutcome::AlreadyStopped => cwarn!("Nothing to stop."),
     }
 

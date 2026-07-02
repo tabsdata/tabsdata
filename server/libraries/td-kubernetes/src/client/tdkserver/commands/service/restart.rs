@@ -103,14 +103,14 @@ pub async fn restart_service(
         {
             cwarn!("Instance was already stopped.");
         } else {
-            report::service::stopped_service(&provider.summary());
+            report::component::service::stopped_service(&provider.summary());
         }
     } else {
         cwarn!("Instance was already stopped; starting it.");
     }
 
     provider.start_service(reporter).await?;
-    report::service::restarted_service(&provider.summary());
+    report::component::service::restarted_service(&provider.summary());
 
     Ok(())
 }

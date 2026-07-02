@@ -49,6 +49,8 @@ pub enum ProviderError {
          configure the instance with different ports."
     )]
     PortInUse { port: u16, caption: String } = 5111,
+    #[error("Could not render the report table: {0}.")]
+    TableRenderFailed(String) = 5112,
     #[error("Could not stop kminus cluster: {0}.")]
     KminusStopFailed(String) = 5002,
     #[error("Could not remove staging folder '{0}': {1}.")]

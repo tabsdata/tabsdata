@@ -2,6 +2,8 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::error::Error;
+
 use td_common::status::ExitStatus;
 use td_error::{TdDomainError, TdError};
 
@@ -40,6 +42,17 @@ impl CommandError {
 
     pub fn source(&self) -> Option<&TdError> {
         self.source.as_ref()
+    }
+}
+
+pub fn render_error(error: &TdError, verbose: bool) -> String {
+    if verbose {
+        format!("{error:?}")
+    } else {
+        match error.source() {
+            Some(inner) => format!("[{}] {}", error.code(), inner),
+            None => format!("[{}] {}", error.code(), error),
+        }
     }
 }
 

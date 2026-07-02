@@ -24,7 +24,7 @@ pub(crate) fn kubeconfig_export_command(kubeconfig: &Path) -> String {
     }
 }
 
-pub(super) fn render_session_lines(summary: &Summary) {
+pub(crate) fn render_session_lines(summary: &Summary) {
     if let Some(kubeconfig) = &summary.kubeconfig_path {
         info!("  - kubeconfig...: {}", kubeconfig.display());
     }

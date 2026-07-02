@@ -22,6 +22,6 @@ pub async fn command_status(
     let context = provider.kube_context().await?;
     let pods = list_pods(&context).await?;
     let jobs = list_jobs(&context).await?;
-    report::status::cluster_status(&pods, &jobs);
+    report::component::service::status::cluster_status(&pods, &jobs)?;
     Ok(())
 }
