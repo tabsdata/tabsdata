@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use k8s_openapi::ByteString;
-use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
     ConfigMap, ConfigMapEnvSource, Container, EnvFromSource, Pod, Secret, SecretEnvSource,
 };
@@ -190,6 +190,49 @@ pub fn inject_common_envfrom_into_job(job: &mut Job, envfrom: &[EnvFromSource]) 
     };
     inject_envfrom_into_all_containers(template.init_containers.as_mut(), envfrom);
     inject_envfrom_into_all_containers(Some(&mut template.containers), envfrom);
+}
+
+// CronJob variants reach the pod template one level deeper than Job:
+// `cronjob.spec.job_template.spec.template.spec` vs `job.spec.template.spec`.
+pub fn inject_labels_into_cronjob(cronjob: &mut CronJob, labels: &[(String, String)]) {
+    apply_labels(&mut cronjob.metadata, labels);
+    if let Some(job_spec) = cronjob
+        .spec
+        .as_mut()
+        .and_then(|spec| spec.job_template.spec.as_mut())
+    {
+        let template_metadata = job_spec
+            .template
+            .metadata
+            .get_or_insert_with(ObjectMeta::default);
+        apply_labels(template_metadata, labels);
+    }
+}
+
+pub fn inject_common_envfrom_into_cronjob(cronjob: &mut CronJob, envfrom: &[EnvFromSource]) {
+    let Some(template) = cronjob
+        .spec
+        .as_mut()
+        .and_then(|spec| spec.job_template.spec.as_mut())
+        .and_then(|job_spec| job_spec.template.spec.as_mut())
+    else {
+        return;
+    };
+    inject_envfrom_into_all_containers(template.init_containers.as_mut(), envfrom);
+    inject_envfrom_into_all_containers(Some(&mut template.containers), envfrom);
+}
+
+pub fn inject_connection_envfrom_into_cronjob(cronjob: &mut CronJob, envfrom: &EnvFromSource) {
+    let Some(template) = cronjob
+        .spec
+        .as_mut()
+        .and_then(|spec| spec.job_template.spec.as_mut())
+        .and_then(|job_spec| job_spec.template.spec.as_mut())
+    else {
+        return;
+    };
+    inject_envfrom_into_marked_containers(template.init_containers.as_mut(), envfrom);
+    inject_envfrom_into_marked_containers(Some(&mut template.containers), envfrom);
 }
 
 fn inject_envfrom_into_all_containers(

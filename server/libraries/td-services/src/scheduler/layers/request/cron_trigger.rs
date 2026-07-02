@@ -14,7 +14,7 @@ use td_common::id;
 use td_common::worker::{Callback, MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::TaggedExt;
-use td_objects::dxo::worker::WorkerDBWithNames;
+use td_objects::dxo::worker::{CronTriggerConfig, WorkerDBWithNames};
 use td_objects::dxo::yaml::cron_trigger::CronTriggerInput;
 use td_objects::dxo::yaml::{WorkerInput, cron_trigger};
 use td_objects::rest_urls::internal::{FUNCTION_VERSION_EXECUTE, RESOLVE_WORKER, UPDATE_WORKER};
@@ -83,6 +83,26 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                         RESOLVE_WORKER,
                         &[("project", proj.as_str()), ("worker_id", &worker_id)],
                     )?;
+                    // k8s owns the cron ticking, so the schedule must travel in
+                    // the start request. The mask lives in the worker's config
+                    // (a serialized `CronTriggerConfig`).
+                    let cron_config: CronTriggerConfig = cron_trigger_worker
+                        .worker_config
+                        .as_ref()
+                        .ok_or_else(|| {
+                            api_error!(
+                                ApiError::InternalError,
+                                "Cron trigger worker '{worker_id}' is missing its worker config"
+                            )
+                        })
+                        .and_then(|config| {
+                            serde_json::from_str(config.as_str()).map_err(|e| {
+                                api_error!(
+                                    ApiError::InternalError,
+                                    "Could not parse cron trigger worker config for '{worker_id}': {e}"
+                                )
+                            })
+                        })?;
                     OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(
                         CronRequest::Start(CronStartRequest {
                             worker: WorkerName::CronTrigger,
@@ -96,6 +116,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                             connection_id: cron_trigger_worker.connection_id,
                             function_version_id: cron_trigger_worker.function_version_id.clone(),
                             function: cron_trigger_worker.function.clone(),
+                            schedule: cron_config.mask,
                         }),
                     )
                 } else {

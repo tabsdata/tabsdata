@@ -123,6 +123,7 @@ pub const HTTP_STATUS_CONFLICT: u16 = 409;
 
 pub const POD_YAML_KIND_POD: &str = "Pod";
 pub const POD_YAML_KIND_JOB: &str = "Job";
+pub const POD_YAML_KIND_CRONJOB: &str = "CronJob";
 pub const POD_YAML_FIELD_KIND: &str = "kind";
 pub const POD_YAML_FIELD_METADATA: &str = "metadata";
 pub const POD_YAML_FIELD_LABELS: &str = "labels";

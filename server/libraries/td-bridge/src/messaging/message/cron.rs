@@ -5,8 +5,8 @@
 use serde::{Deserialize, Serialize};
 use td_common::worker::{Callback, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, ConnectionId, FunctionName, FunctionVersionId, ProjectId,
-    WorkerId,
+    CollectionId, CollectionName, ConnectionId, CronMask, FunctionName, FunctionVersionId,
+    ProjectId, WorkerId,
 };
 
 /// A kubernetes cron-trigger request, modeled as a per-action enum (the
@@ -48,6 +48,10 @@ pub struct CronStartRequest {
     pub function_version_id: FunctionVersionId,
     /// Function name of the function being run.
     pub function: FunctionName,
+    /// Cron schedule (5-field UTC mask) the kubernetes gateway stamps onto the
+    /// `CronJob`'s `spec.schedule`. k8s owns the ticking, so the schedule must
+    /// travel in the start request rather than being resolved by the worker.
+    pub schedule: CronMask,
 }
 
 /// Routing identity for stopping a cron-trigger worker: enough for the

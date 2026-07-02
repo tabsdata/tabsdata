@@ -13,7 +13,8 @@ use td_bridge::messaging::{
 };
 use td_common::worker::{Callback, Decorator, HttpRequest, MessageAction, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, ProjectId, WorkerId,
+    CollectionId, CollectionName, CronMask, FunctionId, FunctionName, FunctionVersionId, ProjectId,
+    WorkerId,
 };
 use url::Url;
 
@@ -174,6 +175,7 @@ fn cron_publisher_start_routes_by_worker_name() {
                 connection_id: None,
                 function_version_id: FunctionVersionId::try_from("FV20260101.0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
+                schedule: CronMask::try_from("* * * * *").unwrap(),
             },
         ));
     let routing = derive_routing("task", &payload).unwrap();

@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use serde_yaml::Value;
 use td_bridge::messaging::{
@@ -18,14 +18,16 @@ use tracing::error;
 use crate::base::constants::{CONTAINER_ROOT_ENV, CONTAINER_SETTINGS_RELATIVE};
 use crate::base::naming::{to_fn_pod_name, worker_pod_stem};
 use crate::client::registry::{InstanceSettings, instance_folder};
+use crate::kube::api::cronjob::{create_cronjob, delete_cronjob};
 use crate::kube::api::job::{create_job, delete_job};
 use crate::kube::api::pod::{create_pod, delete_pod};
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::kit::{
     FunctionRunKit, build_cron_run_kit, build_function_run_kit, build_stream_run_kit,
-    inject_common_envfrom_into_job, inject_common_envfrom_into_pod,
-    inject_connection_envfrom_into_job, inject_connection_envfrom_into_pod, inject_labels_into_job,
-    inject_labels_into_pod,
+    inject_common_envfrom_into_cronjob, inject_common_envfrom_into_job,
+    inject_common_envfrom_into_pod, inject_connection_envfrom_into_cronjob,
+    inject_connection_envfrom_into_job, inject_connection_envfrom_into_pod,
+    inject_labels_into_cronjob, inject_labels_into_job, inject_labels_into_pod,
 };
 use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
@@ -288,6 +290,43 @@ impl KubernetesOrchestratorMessageQueue {
         job.metadata.namespace = Some(self.context.namespace().to_owned());
         Ok(job)
     }
+
+    async fn manifest_cronjob(
+        &self,
+        template: &PodTemplate,
+        name: &str,
+        kit: Option<&FunctionRunKit>,
+        schedule: &str,
+    ) -> Result<CronJob, QueueError> {
+        let materialized = self.materialize(&template.manifest, kit).await?;
+        let mut cronjob: CronJob = serde_yaml::from_str(&materialized)?;
+        cronjob.metadata.name = Some(name.to_owned());
+        cronjob.metadata.namespace = Some(self.context.namespace().to_owned());
+        // k8s owns the ticking, so the schedule is stamped from the request's
+        // cron mask rather than baked into the static profile.
+        if let Some(spec) = cronjob.spec.as_mut() {
+            spec.schedule = schedule.to_owned();
+        }
+        Ok(cronjob)
+    }
+}
+
+/// Extract the cron schedule (mask) from a cron start payload. Routed only when
+/// the template kind is `CronJob`, so a non-cron payload here is a routing bug.
+fn cron_schedule_from_payload(
+    id: &str,
+    payload: &OrchestratorMessagePayload<Value>,
+) -> Result<String, QueueError> {
+    match payload {
+        OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Start(
+            start,
+        )) => Ok(start.schedule.to_string()),
+        _ => Err(unexpected(
+            id,
+            "non-cron payload for CronJob template",
+            payload,
+        )),
+    }
 }
 
 #[async_trait]
@@ -356,6 +395,38 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                                 cause: error.to_string(),
                             })?;
                     }
+                    TemplateKind::CronJob => {
+                        let schedule = cron_schedule_from_payload(&id, &payload)?;
+                        let mut cronjob = self
+                            .manifest_cronjob(template, &name, kit.as_ref(), &schedule)
+                            .await?;
+                        let (configmaps, secrets, latch) = match kit {
+                            Some(kit) => {
+                                inject_common_envfrom_into_cronjob(
+                                    &mut cronjob,
+                                    &kit.common_envfrom,
+                                );
+                                if let Some(connection_envfrom) = &kit.connection_envfrom {
+                                    inject_connection_envfrom_into_cronjob(
+                                        &mut cronjob,
+                                        connection_envfrom,
+                                    );
+                                }
+                                inject_labels_into_cronjob(&mut cronjob, &kit.labels);
+                                (
+                                    vec![kit.main_configmap],
+                                    vec![kit.main_secret],
+                                    Some(kit.latch_configmap),
+                                )
+                            }
+                            None => (Vec::new(), Vec::new(), None),
+                        };
+                        create_cronjob(&self.context, &cronjob, configmaps, secrets, latch)
+                            .await
+                            .map_err(|error| QueueError::BackendError {
+                                cause: error.to_string(),
+                            })?;
+                    }
                 }
             }
             MessageAction::Stop => match template.kind {
@@ -372,6 +443,13 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             cause: error.to_string(),
                         }
                     })?;
+                }
+                TemplateKind::CronJob => {
+                    delete_cronjob(&self.context, &name)
+                        .await
+                        .map_err(|error| QueueError::BackendError {
+                            cause: error.to_string(),
+                        })?;
                 }
             },
             MessageAction::Notify => return Err(unsupported(&id, "Notify")),
@@ -402,6 +480,13 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                         cause: error.to_string(),
                     }
                 })?;
+            }
+            TemplateKind::CronJob => {
+                delete_cronjob(&self.context, &name)
+                    .await
+                    .map_err(|error| QueueError::BackendError {
+                        cause: error.to_string(),
+                    })?;
             }
         }
         Ok(())

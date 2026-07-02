@@ -36,6 +36,7 @@ pub struct ProjectName;
 pub struct Connector;
 
 #[ta_objects::typed(string(parser = CronMask::parse_cron))]
+#[derive(Eq, PartialEq)]
 pub struct CronMask;
 
 impl CronMask {

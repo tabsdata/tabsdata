@@ -29,6 +29,7 @@ pub mod client;
 pub mod cluster;
 pub mod companions;
 pub mod configmap;
+pub mod cronjob;
 pub mod helpers;
 pub mod job;
 pub mod namespace;
@@ -38,7 +39,7 @@ pub mod secret;
 use std::collections::BTreeMap;
 
 use k8s_openapi::Resource;
-use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::core::{Expression, Selector};
@@ -138,6 +139,34 @@ pub fn owner_ref_for_job(job: &Job) -> Result<OwnerReference, NamingError> {
     Ok(OwnerReference {
         api_version: <Job as Resource>::API_VERSION.to_owned(),
         kind: <Job as Resource>::KIND.to_owned(),
+        name,
+        uid,
+        controller: Some(true),
+        block_owner_deletion: Some(false),
+    })
+}
+
+// CronJob is a batch resource like Job; it reuses `NamingError::JobMissingOwnerMetadata`
+// for the missing-metadata case rather than introducing a parallel variant.
+pub fn owner_ref_for_cronjob(cronjob: &CronJob) -> Result<OwnerReference, NamingError> {
+    let name =
+        cronjob
+            .metadata
+            .name
+            .clone()
+            .ok_or_else(|| NamingError::JobMissingOwnerMetadata {
+                field: KUBE_METADATA_FIELD_NAME.to_owned(),
+            })?;
+    let uid = cronjob
+        .metadata
+        .uid
+        .clone()
+        .ok_or_else(|| NamingError::JobMissingOwnerMetadata {
+            field: KUBE_METADATA_FIELD_UID.to_owned(),
+        })?;
+    Ok(OwnerReference {
+        api_version: <CronJob as Resource>::API_VERSION.to_owned(),
+        kind: <CronJob as Resource>::KIND.to_owned(),
         name,
         uid,
         controller: Some(true),

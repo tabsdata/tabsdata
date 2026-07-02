@@ -9,7 +9,8 @@ use tracing::{info, warn};
 
 use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, KPROFILE_PODS_FAMILY, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND,
-    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA, POD_YAML_KIND_JOB, POD_YAML_KIND_POD,
+    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA, POD_YAML_KIND_CRONJOB, POD_YAML_KIND_JOB,
+    POD_YAML_KIND_POD,
 };
 use crate::base::error::kubernetes::{KubeMessagingError, KubernetesError};
 use crate::kube::api::{LabelFilter, get_configmaps};
@@ -19,6 +20,7 @@ use crate::kube::context::KubeContext;
 pub enum TemplateKind {
     Pod,
     Job,
+    CronJob,
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +97,7 @@ fn parse_template(manifest: &str) -> Result<Option<PodTemplate>, KubernetesError
     let kind = match kind_text.as_str() {
         POD_YAML_KIND_POD => TemplateKind::Pod,
         POD_YAML_KIND_JOB => TemplateKind::Job,
+        POD_YAML_KIND_CRONJOB => TemplateKind::CronJob,
         other => {
             return Err(KubeMessagingError::UnsupportedTemplateKind {
                 component,
