@@ -33,7 +33,7 @@ from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
 from tabsdatak.common._fileformat.taxonomy import DestFileFormat
-from tabsdatak.common._transporter.facade import make_handler
+from tabsdatak.common._transporter.facade import TRANSPORTER_MODE, make_handler
 from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.common._transporter.invoker.transporter1 import (
     TransporterRunError as TransporterRunErrorV1,
@@ -45,14 +45,19 @@ from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
+    AzureConfigs,
     AzureEndpoint,
     Endpoint,
     EnvRef,
+    GcsConfigs,
     GcsEndpoint,
     LocalFileEndpoint,
+    S3Configs,
     S3Endpoint,
     endpoint_from_location,
 )
+from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
+from tabsdatak.server._tdrunner.function._lib.mounts import secret_env_name
 from tabsdatak.server._tdrunner.function._lib.request import Location
 
 # Baseline handed to the transporter so last-modified tracking activates on the
@@ -106,18 +111,69 @@ def location_from_endpoint(endpoint: Endpoint, rel: str, handler: TransporterHan
     raise TypeError(f"unsupported endpoint type: {type(endpoint).__name__}")
 
 
-class _EndpointStageBackend(StageBackend):
-    """:class:`StageBackend` backed by an :mod:`endpoint` ``Endpoint``."""
+def _mount_endpoint(endpoint: Endpoint, mount: str) -> Endpoint:
+    """Re-key an endpoint's credential refs onto the mounts scheme (mode 2).
 
-    def __init__(self, endpoint: Endpoint) -> None:
+    The credential env vars become
+    ``SECRETS__STORAGE__MOUNTS__<mount>__OPTIONS__<KEY>`` (built from the
+    storage mount's ``object_store`` option keys, supplied by the storage
+    secret), so the shared :func:`location_from_endpoint` builder emits the
+    mounts-scheme location -- the same credential encoding the batch
+    commands use, rather than the legacy ``<env_prefix>_*`` names."""
+
+    def ref(option_key: str) -> EnvRef:
+        return EnvRef(name=secret_env_name(mount, option_key))
+
+    if isinstance(endpoint, S3Endpoint):
+        return S3Endpoint(
+            url=endpoint.url,
+            configs=S3Configs(
+                access_key=ref("aws_access_key_id"),
+                secret_key=ref("aws_secret_access_key"),
+                region=ref("aws_region"),
+            ),
+        )
+    if isinstance(endpoint, AzureEndpoint):
+        return AzureEndpoint(
+            url=endpoint.url,
+            configs=AzureConfigs(
+                account_name=ref("azure_storage_account_name"),
+                account_key=ref("azure_storage_account_key"),
+            ),
+        )
+    if isinstance(endpoint, GcsEndpoint):
+        return GcsEndpoint(
+            url=endpoint.url,
+            configs=GcsConfigs(service_account_key=ref("google_service_account_key")),
+        )
+    return endpoint  # LocalFileEndpoint: no credentials to re-key.
+
+
+class _EndpointStageBackend(StageBackend):
+    """:class:`StageBackend` backed by an :mod:`endpoint` ``Endpoint``.
+
+    Credentials follow the transporter mode, mirroring the batch
+    :mod:`transporter` facade: mode 1 uses the endpoint scheme
+    (``<env_prefix>_*`` env refs), mode 2 uses the mounts scheme
+    (:func:`_mount_endpoint` -> ``SECRETS__STORAGE__MOUNTS__*``)."""
+
+    def __init__(self, endpoint: Endpoint, mount: str | None) -> None:
         self._endpoint = endpoint
+        self._mount = mount
 
     @property
     def is_object_store(self) -> bool:
         return not isinstance(self._endpoint, LocalFileEndpoint)
 
     def build_location(self, rel: str, handler: TransporterHandler):
-        return location_from_endpoint(self._endpoint, rel, handler)
+        match TRANSPORTER_MODE:
+            case 1:
+                return location_from_endpoint(self._endpoint, rel, handler)
+            case 2:
+                endpoint = _mount_endpoint(self._endpoint, self._mount)
+                return location_from_endpoint(endpoint, rel, handler)
+            case _:
+                raise CommandErrorCode.CMD_5.exception(mode=TRANSPORTER_MODE)
 
     def credential_env(self, handler: TransporterHandler) -> dict[str, str] | None:
         # Credential env-var refs are baked into each location; their
@@ -206,4 +262,4 @@ def stage_backend_from_location(location: Location) -> StageBackend:
     parsed = urlparse(location.uri)
     if parsed.scheme == "file":
         return _LocalStageBackend(LocalFileSrcConn(base_path=url2pathname(parsed.path)))
-    return _EndpointStageBackend(endpoint_from_location(location))
+    return _EndpointStageBackend(endpoint_from_location(location), location.env_prefix)

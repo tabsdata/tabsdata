@@ -99,7 +99,12 @@ def test_stage_backend_from_s3_location():
     loc = backend.build_location("manifests/m.json", HANDLER)
     assert isinstance(loc, transporter1.TransporterS3)
     assert loc.url == "s3://bkt/stage/f/manifests/m.json"
-    assert loc.access_key == transporter1.TransporterEnv("PFX_AWS_ACCESS_KEY_ID")
+    # Mode 2 (current): credentials use the mounts scheme, keyed off the
+    # location's env_prefix (the storage mount id) and the object_store
+    # option keys -- the same env vars the storage secret provides.
+    assert loc.access_key == transporter1.TransporterEnv(
+        "SECRETS__STORAGE__MOUNTS__PFX__OPTIONS__AWS_ACCESS_KEY_ID"
+    )
 
 
 def test_stage_backend_from_file_location_is_not_object_store():

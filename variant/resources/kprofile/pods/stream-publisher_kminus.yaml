@@ -291,6 +291,10 @@ spec:
               value: "${{system:tdk_instance_name}}"
             - name: TD_LOG_CONFIG
               value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+          envFrom:
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
           volumeMounts:
             - name: config-manifest-trigger
               mountPath: /tabsdata/config
@@ -356,6 +360,9 @@ spec:
           envFrom:
             - secretRef:
                 name: ${{system:tdk_connection_secret_name}}
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
           volumeMounts:
             - name: config-run-streamer
               mountPath: /tabsdata/config
