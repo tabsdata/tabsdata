@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import pytest
 
+from tabsdatak.common._transporter.handler.handler import TransporterReport
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
+from tabsdatak.common._transporter.handler.handler2 import TransporterHandler2
 from tabsdatak.common._transporter.invoker import transporter1
+from tabsdatak.server._tdrunner.function._lib import stage_backend
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureConfigs,
     AzureEndpoint,
@@ -21,9 +24,12 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
     S3Configs,
     S3Endpoint,
     UnsupportedSchemeError,
+    endpoint_from_location,
 )
+from tabsdatak.server._tdrunner.function._lib.errors import UnexpectedError
 from tabsdatak.server._tdrunner.function._lib.request import Location
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (
+    _mount_endpoint,
     location_from_endpoint,
     stage_backend_from_location,
 )
@@ -128,3 +134,191 @@ def test_cloud_backend_delete_is_a_typed_seam_until_prereq():
     )
     with pytest.raises(NotImplementedError):
         backend.delete(["manifests/x.json"])
+
+
+# --- credential scheme follows the transporter mode (regression) ----------
+#
+# The cloud-stage regression (TD-2635): mode 2 must key credentials onto the
+# mounts scheme the storage secret provides
+# (SECRETS__STORAGE__MOUNTS__<mount>__OPTIONS__<OBJECT_STORE_KEY>), not the
+# legacy endpoint scheme (<env_prefix>_*). The object_store option keys also
+# rename for azure/gcs vs the endpoint names -- that rename is part of what we
+# pin here so a regression to the endpoint scheme fails loudly.
+
+_MOUNT = "ROOT"
+
+
+def _env(name: str) -> transporter1.TransporterEnv:
+    return transporter1.TransporterEnv(name)
+
+
+def _build_for_mode(uri: str, mode: int, monkeypatch):
+    monkeypatch.setattr(stage_backend, "TRANSPORTER_MODE", mode)
+    backend = stage_backend_from_location(Location(uri=uri, env_prefix=_MOUNT))
+    # HANDLER (v1) pins the asserted location types; build_location only
+    # varies the credential env-var *names* by mode, not the handler.
+    return backend.build_location("manifests/m.json", HANDLER)
+
+
+def test_s3_credentials_use_endpoint_scheme_in_mode_1(monkeypatch):
+    loc = _build_for_mode("s3://bkt/stage", 1, monkeypatch)
+    assert isinstance(loc, transporter1.TransporterS3)
+    assert loc.access_key == _env("ROOT_AWS_ACCESS_KEY_ID")
+    assert loc.secret_key == _env("ROOT_AWS_SECRET_ACCESS_KEY")
+    assert loc.region == _env("ROOT_AWS_REGION")
+
+
+def test_s3_credentials_use_mounts_scheme_in_mode_2(monkeypatch):
+    loc = _build_for_mode("s3://bkt/stage", 2, monkeypatch)
+    assert isinstance(loc, transporter1.TransporterS3)
+    assert loc.access_key == _env(
+        "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID"
+    )
+    assert loc.secret_key == _env(
+        "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_SECRET_ACCESS_KEY"
+    )
+    assert loc.region == _env("SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_REGION")
+
+
+def test_azure_credentials_follow_transporter_mode(monkeypatch):
+    legacy = _build_for_mode("az://c/x", 1, monkeypatch)
+    assert isinstance(legacy, transporter1.TransporterAzure)
+    assert legacy.account_name == _env("ROOT_AZURE_ACCOUNT_NAME")
+    assert legacy.account_key == _env("ROOT_AZURE_ACCOUNT_KEY")
+
+    mounts = _build_for_mode("az://c/x", 2, monkeypatch)
+    assert mounts.account_name == _env(
+        "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AZURE_STORAGE_ACCOUNT_NAME"
+    )
+    assert mounts.account_key == _env(
+        "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AZURE_STORAGE_ACCOUNT_KEY"
+    )
+
+
+def test_gcs_credentials_follow_transporter_mode(monkeypatch):
+    legacy = _build_for_mode("gs://b/x", 1, monkeypatch)
+    assert isinstance(legacy, transporter1.TransporterGCS)
+    assert legacy.service_account_key == _env("ROOT_GCP_SERVICE_ACCOUNT_KEY")
+
+    mounts = _build_for_mode("gs://b/x", 2, monkeypatch)
+    assert mounts.service_account_key == _env(
+        "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__GOOGLE_SERVICE_ACCOUNT_KEY"
+    )
+
+
+def test_build_location_rejects_unknown_transporter_mode(monkeypatch):
+    monkeypatch.setattr(stage_backend, "TRANSPORTER_MODE", 99)
+    backend = stage_backend_from_location(
+        Location(uri="s3://bkt/stage", env_prefix=_MOUNT)
+    )
+    with pytest.raises(UnexpectedError) as excinfo:
+        backend.build_location("manifests/m.json", HANDLER)
+    assert "99" in str(excinfo.value)
+
+
+def test_mount_endpoint_rekeys_each_provider_to_mounts_scheme():
+    s3 = _mount_endpoint(
+        endpoint_from_location(Location(uri="s3://b/x", env_prefix=_MOUNT)), _MOUNT
+    )
+    assert s3.configs.access_key == EnvRef(
+        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID"
+    )
+    assert s3.configs.secret_key == EnvRef(
+        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_SECRET_ACCESS_KEY"
+    )
+    assert s3.configs.region == EnvRef(
+        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_REGION"
+    )
+
+    az = _mount_endpoint(
+        endpoint_from_location(Location(uri="az://c/x", env_prefix=_MOUNT)), _MOUNT
+    )
+    assert az.configs.account_name == EnvRef(
+        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AZURE_STORAGE_ACCOUNT_NAME"
+    )
+    assert az.configs.account_key == EnvRef(
+        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AZURE_STORAGE_ACCOUNT_KEY"
+    )
+
+    gcs = _mount_endpoint(
+        endpoint_from_location(Location(uri="gs://b/x", env_prefix=_MOUNT)), _MOUNT
+    )
+    assert gcs.configs.service_account_key == EnvRef(
+        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__GOOGLE_SERVICE_ACCOUNT_KEY"
+    )
+
+    # LocalFileEndpoint has no credentials to re-key -> returned unchanged.
+    local = LocalFileEndpoint(url="file:///s")
+    assert _mount_endpoint(local, _MOUNT) is local
+
+
+# --- credentials reach the transporter request (regression) ---------------
+#
+# Beyond the env-var *names*: drive the real upload / next_after paths with a
+# stubbed transporter execute() and assert the request that would be handed to
+# td_transporter2 actually carries the mounts-scheme creds as ``env:`` refs.
+# This is the exact failure that bit cloud staging -- credentials not reaching
+# the transporter invocation -- caught here without a binary or real cloud.
+
+
+def _capturing_handler2(monkeypatch) -> dict:
+    """Install a mode-2 handler whose execute() records the request instead of
+    spawning td_transporter2. Returns the ``captured`` dict, populated on the
+    first execute() call with the request and the env handed to it."""
+    handler = TransporterHandler2()
+    captured: dict = {}
+
+    def fake_execute(request, work_dir, environment=None, extra_args=()):
+        captured["request"] = request
+        captured["env"] = environment
+        return TransporterReport(files=[], lastmod_info=None)
+
+    monkeypatch.setattr(handler, "execute", fake_execute)
+    monkeypatch.setattr(stage_backend, "make_handler", lambda *a, **k: handler)
+    return captured
+
+
+def test_upload_request_carries_mounts_scheme_creds(tmp_path, monkeypatch):
+    captured = _capturing_handler2(monkeypatch)
+    backend = stage_backend_from_location(
+        Location(uri="s3://bkt/stage", env_prefix=_MOUNT)
+    )
+
+    backend.upload(tmp_path / "local.parquet", "manifests/m.json")
+
+    # CopyRequest: the cloud stage is the copy target; creds ride as env: refs
+    # the binary resolves from the pod env (so no resolved-values dict).
+    target = captured["request"].pairs[0].to
+    assert target.uri == "s3://bkt/stage/manifests/m.json"
+    assert (
+        target.configs["access_key_id"]
+        == "env:SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID"
+    )
+    assert (
+        target.configs["secret_access_key"]
+        == "env:SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_SECRET_ACCESS_KEY"
+    )
+    assert (
+        target.configs["region"]
+        == "env:SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_REGION"
+    )
+    assert captured["env"] is None
+
+
+def test_next_after_request_carries_mounts_scheme_creds(tmp_path, monkeypatch):
+    captured = _capturing_handler2(monkeypatch)
+    backend = stage_backend_from_location(
+        Location(uri="s3://bkt/stage", env_prefix=_MOUNT)
+    )
+
+    result = backend.next_after("manifests/stream-*.json", None, tmp_path)
+
+    assert result is None  # stubbed execute reports no matching files
+    # FindCopyRequest: the cloud glob is the source.
+    source = captured["request"].source
+    assert source.uri == "s3://bkt/stage/manifests/stream-*.json"
+    assert (
+        source.configs["access_key_id"]
+        == "env:SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID"
+    )
+    assert captured["env"] is None
