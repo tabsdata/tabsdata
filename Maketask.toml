@@ -657,6 +657,7 @@ script = [
     packages_filter = set ""
     modules_filter = set ""
     preview = set false
+    collect = set false
     help = set false
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -670,6 +671,9 @@ script = [
         end
         if eq ${argument} "--preview"
             preview = set true
+        end
+        if eq ${argument} "--collect"
+            collect = set true
         end
         if eq ${argument} "--help"
             help = set true
@@ -695,6 +699,7 @@ script = [
         info "                      The leading segment is resolved against its 'test_' counterpart, so 'tabsdata/api' matches the 'test_tabsdata/api' folder; pass a 'test_' prefix to opt out."
         info "                      Paths that do not exist are silently skipped."
         info "   --preview          List the test folders (packages and modules) that would be selected, then exit without running any test."
+        info "   --collect          Run pytest in collect-only mode (no test execution, no parallelism, no coverage) to surface collection/import errors early."
         info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting."
         info "   --skipe            Report test failures as a diagnostic summary instead of failing the task."
         info "   -h, --help         Show this help and exit."
@@ -937,12 +942,18 @@ script = [
         info "🚀 Coverage disabled for package(s) run"
     end
 
-    if eq ${verbose} "false"
-        debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
-        exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"
+    if ${collect}
+        info "🔎 Collect-only run (no test execution, no parallelism, no coverage)."
+        debug "🚀 pytest --collect-only -q -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" %{ignore_args} %{pytest_tests_folders} -m \"${markers}\""
+        exit_code = exec --get-exit-code pytest --collect-only -q -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" %{ignore_args} %{pytest_tests_folders} -m "${markers}"
     else
-        debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -v --full-trace --log-level=DEBUG --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
-        exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -v --full-trace --log-level=DEBUG --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"
+        if eq ${verbose} "false"
+            debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
+            exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"
+        else
+            debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -v --full-trace --log-level=DEBUG --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
+            exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -v --full-trace --log-level=DEBUG --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"
+        end
     end
 
     is_zero = eq ${exit_code} "0"
@@ -1008,11 +1019,15 @@ script = [
         end
     end
 
-    if is_empty ${packages_filter}
-        exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coveragex/json/coverage.json .
-    end
+    if ${collect}
+        info "🔎 Collect-only run finished with exit code: '${exit_code}'\n"
+    else
+        if is_empty ${packages_filter}
+            exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coveragex/json/coverage.json .
+        end
 
-    info "📊 Pytest report generated at: 👉 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/reports/pytest/tabsdata/pytest.html\n"
+        info "📊 Pytest report generated at: 👉 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/reports/pytest/tabsdata/pytest.html\n"
+    end
     ''']
 
 [tasks.outdated]
