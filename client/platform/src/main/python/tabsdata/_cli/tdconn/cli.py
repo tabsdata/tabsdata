@@ -6,7 +6,7 @@
 Manages connections through the tabsdata apiserver: every verb maps onto the
 ``/collections/{name}/connection`` endpoints (the collection's name is the
 connection's name). Business logic lives in
-:mod:`tabsdata._cli.tdconn._internal.os.logic`; this module only wires Click
+:mod:`tabsdata._cli.tdconn._internal.store.logic`; this module only wires Click
 commands to the logic + UX layers, reusing the ``td`` CLI's saved login
 session (``td login``).
 """
@@ -22,8 +22,8 @@ from tabsdata._cli.cli_utils import (
     initialise_tabsdata_server_connection,
     load_pinned_objects,
 )
-from tabsdata._cli.tdconn._internal.os import ApiConnStore, BaseLogic
-from tabsdata._cli.tdconn._internal.ux import UXTerminal
+from tabsdata._cli.tdconn._internal.store import ApiConnStore, BaseLogic
+from tabsdata._cli.tdconn._internal.interface import UXTerminal
 from tabsdata._cli.tdconn.conn_group import conn_commands
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])

@@ -46,7 +46,7 @@ from typing import Any
 from tabsdata import NamedConn
 from tabsdata._cli.tdconn._internal._debug import log_call
 from tabsdata._cli.tdconn._internal.extractor.registry import extractor_for
-from tabsdata._cli.tdconn._internal.os.conn_store import ConnStore
+from tabsdata._cli.tdconn._internal.store.conn_store import ConnStore
 from tabsdata._io.connections.named_connection.named_connection import _ConnDef
 
 # Inside classes that define a ``list`` method, ``list[...]`` in

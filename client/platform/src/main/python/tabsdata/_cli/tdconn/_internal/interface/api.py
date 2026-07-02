@@ -4,7 +4,7 @@
 """Abstract UX surface the CLI funnels through.
 
 :class:`UX` is the adapter every CLI verb goes through; each method
-wraps one or more :class:`~tabsdata._cli.tdconn._internal.os.logic.Logic` calls and
+wraps one or more :class:`~tabsdata._cli.tdconn._internal.store.logic.Logic` calls and
 is responsible for presenting the outcome to the user. Concrete
 implementations (see :mod:`terminal`) decide *how* to render — a
 terminal with ``rich`` tables today, a JSON wire protocol or web UI
@@ -17,7 +17,7 @@ from __future__ import annotations
 import abc
 from pathlib import Path
 
-from tabsdata._cli.tdconn._internal.os.logic import Logic
+from tabsdata._cli.tdconn._internal.store.logic import Logic
 from tabsdata._io.connections.named_connection.named_connection import _ConnDef
 
 
