@@ -98,7 +98,11 @@ def create(
         raise click.ClickException(f"Failed to create collection: {e}")
 
 
-_DIRECTION_TO_GROUP = {"src": "sources", "stream-src": "sources", "dest": "destinations"}
+_DIRECTION_TO_GROUP = {
+    "src": "sources",
+    "stream-src": "sources",
+    "dest": "destinations",
+}
 
 
 def _group_for_conn(conn_cls) -> str:

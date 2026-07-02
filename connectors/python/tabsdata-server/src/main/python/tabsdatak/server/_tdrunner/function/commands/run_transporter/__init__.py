@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
+from tabsdatak.server._tdrunner.function._lib.transporter import (
     TransporterNotFoundError,
     run_transporter,
 )

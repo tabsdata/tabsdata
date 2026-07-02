@@ -192,6 +192,8 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shuttle/request/bundle-fetch.yaml
             - --transporter-response
             - $(CONTAINER_ROOT)/tabsdata/shuttle/response/bundle-fetch.yaml
+            - --storage-config
+            - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
           resources:
             requests:
               cpu: "50m"
@@ -307,6 +309,8 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared
             - --work-dir
             - $(CONTAINER_ROOT)/tabsdata/work
+            - --connection-file
+            - $(CONTAINER_ROOT)/tabsdata/connection/connection.yaml
             - --log-config
             - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
             - --liveness
@@ -325,8 +329,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --out-dir
             - $(CONTAINER_ROOT)/tabsdata/shared/out
-            - --connection-file
-            - $(CONTAINER_ROOT)/tabsdata/connection/connection.yaml
           resources:
             requests:
               cpu: "100m"
@@ -387,6 +389,8 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
         - name: config-manifest-trigger
           projected:
             sources:

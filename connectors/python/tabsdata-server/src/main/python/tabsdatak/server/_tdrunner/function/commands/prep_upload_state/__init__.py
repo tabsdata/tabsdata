@@ -17,9 +17,8 @@ import logging
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
-from tabsdatak.server._tdrunner.function._lib.transporter_request import (
+from tabsdatak.server._tdrunner.function._lib.transporter import (
     build_upload_state_request,
     write_transporter_request,
 )
@@ -62,6 +61,12 @@ def _build_parser():
         required=True,
         help="Path to write the transporter request YAML",
     )
+    parser.add_argument(
+        "--storage-config",
+        required=True,
+        dest="storage_config",
+        help="Path to the storage configuration file.",
+    )
     return parser
 
 
@@ -70,6 +75,7 @@ def main(args: argparse.Namespace) -> int:
     request_path = Path(args.request)
     state_dir = Path(args.state_dir)
     out_path = Path(args.out)
+    storage_config = Path(args.storage_config)
 
     logger.info("Preparing upload-state transporter request")
     request = load_request_or_raise(request_path, PrepUploadStateErrorCode.PUS_1)
@@ -80,10 +86,7 @@ def main(args: argparse.Namespace) -> int:
         state_dir,
     )
 
-    try:
-        copy_req = build_upload_state_request(request, state_dir)
-    except UnsupportedSchemeError as exc:
-        raise PrepUploadStateErrorCode.PUS_2.exception(cause=exc, detail=str(exc))
+    copy_req = build_upload_state_request(request, state_dir, storage_config)
     if not copy_req.pairs:
         logger.debug(
             "Upload-state request has no pairs (no state files present on "

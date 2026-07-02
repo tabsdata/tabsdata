@@ -30,12 +30,10 @@ import zstandard
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.request import load_any_request_or_raise
-from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
+from tabsdatak.server._tdrunner.function._lib.transporter import (
     TransporterNotFoundError,
-    run_transporter,
-)
-from tabsdatak.server._tdrunner.function._lib.transporter_request import (
     build_bundle_fetch_request,
+    run_transporter,
     write_transporter_request,
 )
 from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle.error import (
@@ -89,6 +87,12 @@ def _build_parser():
         required=True,
         help="Path to write the transporter response yaml.",
     )
+    parser.add_argument(
+        "--storage-config",
+        required=True,
+        dest="storage_config",
+        help="Path to the storage configuration file.",
+    )
     return parser
 
 
@@ -97,8 +101,9 @@ def _fetch_via_transporter(
     bundle_archive: Path,
     transporter_request: Path,
     transporter_response: Path,
+    storage_config: Path,
 ) -> None:
-    copy_req = build_bundle_fetch_request(request, bundle_archive)
+    copy_req = build_bundle_fetch_request(request, bundle_archive, storage_config)
     logger.debug(
         "Bundle fetch transporter request: %d pair(s): %s -> %s",
         len(copy_req.pairs),
@@ -133,6 +138,7 @@ def main(args: argparse.Namespace) -> int:
     bundle_archive = Path(args.bundle_archive)
     transporter_request = Path(args.transporter_request)
     transporter_response = Path(args.transporter_response)
+    storage_config = Path(args.storage_config)
 
     logger.info("Localizing function bundle")
     request = load_any_request_or_raise(request_path, LocalizeFnBundleErrorCode.LFB_1)
@@ -143,7 +149,11 @@ def main(args: argparse.Namespace) -> int:
         bundle_dir,
     )
     _fetch_via_transporter(
-        request, bundle_archive, transporter_request, transporter_response
+        request,
+        bundle_archive,
+        transporter_request,
+        transporter_response,
+        storage_config,
     )
     logger.info("Extracting bundle archive into %s", bundle_dir)
     _extract(bundle_archive, bundle_dir)

@@ -45,6 +45,7 @@ EXIT_UNDEFINED_ENV: int = 2
 EXIT_UNEXPECTED: int = 3
 EXIT_INCONSISTENT: int = 4
 EXIT_PREMATURE: int = 5
+EXIT_BAD_CONFIG: int = 6
 COMMAND_SPECIFIC_MIN_EXIT_CODE: int = 10
 
 
@@ -189,6 +190,13 @@ class BadEndpointSchemeError(CommandRuntimeException):
     know how to fetch from / upload to."""
 
 
+class BadStorageConfigError(CommandRuntimeException):
+    """The staged storage config could not be read, or a cloud location
+    references a mount absent from it."""
+
+    exit_code = EXIT_BAD_CONFIG
+
+
 class NoPluginError(CommandRuntimeException):
     """No plugin (Src / Dest / ...) is registered for the resolved
     class -- the connector package isn't installed in the runtime."""
@@ -234,3 +242,24 @@ class CommandErrorCode(ErrorCode):
     )
     # Raised by ``_lib.cli.resolve_value`` when an ``env:<VAR>`` reference
     # resolves to an unset variable.
+
+    CMD_3 = ErrorDef(
+        BadStorageConfigError,
+        "The storage configuration at '{path}' could not be read: {detail}.",
+    )
+    # Raised by ``_lib.mounts.load_mount_option_keys`` on read / parse failure.
+
+    CMD_4 = ErrorDef(
+        BadStorageConfigError,
+        "The cloud location '{uri}' references the mount '{mount}', which is "
+        "not present in the storage configuration.",
+    )
+    # Raised by ``_lib.transporter2`` when a location's mount id has no entry
+    # in the storage config.
+
+    CMD_5 = ErrorDef(
+        UnexpectedError,
+        "The transporter mode '{mode}' is not supported.",
+    )
+    # Raised by ``_lib.transporter`` when TRANSPORTER_MODE is neither the
+    # legacy nor the current implementation.

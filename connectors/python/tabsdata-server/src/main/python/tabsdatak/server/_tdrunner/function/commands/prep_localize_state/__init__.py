@@ -29,7 +29,6 @@ import logging
 from pathlib import Path
 
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
-from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     build_entry,
     build_table_record,
@@ -46,7 +45,7 @@ from tabsdatak.server._tdrunner.function._lib.state_manifest import (
     MANIFEST_NAME_KEY,
     write_state_manifest,
 )
-from tabsdatak.server._tdrunner.function._lib.transporter_request import (
+from tabsdatak.server._tdrunner.function._lib.transporter import (
     build_localize_state_request,
     localized_input_files,
     write_transporter_request,
@@ -119,6 +118,12 @@ def _build_parser():
             "request.system_input table, pointing at the localized "
             "state-in parquets)"
         ),
+    )
+    parser.add_argument(
+        "--storage-config",
+        required=True,
+        dest="storage_config",
+        help="Path to the storage configuration file.",
     )
     return parser
 
@@ -200,6 +205,7 @@ def main(args: argparse.Namespace) -> int:
     out_path = Path(args.out)
     inputs_manifest_path = Path(args.inputs_manifest)
     state_manifest_path = Path(args.state_manifest)
+    storage_config = Path(args.storage_config)
 
     logger.info("Preparing localize-state transporter request and manifests")
     request = load_request_or_raise(request_path, PrepLocalizeStateErrorCode.PLS_1)
@@ -211,10 +217,7 @@ def main(args: argparse.Namespace) -> int:
         request.system_input,
     )
 
-    try:
-        copy_req = build_localize_state_request(request, in_dir, state_dir)
-    except UnsupportedSchemeError as exc:
-        raise PrepLocalizeStateErrorCode.PLS_2.exception(cause=exc, detail=str(exc))
+    copy_req = build_localize_state_request(request, in_dir, state_dir, storage_config)
     logger.debug(
         "Localize-state copy request has %d pair(s): %s; writing to %s",
         len(copy_req.pairs),

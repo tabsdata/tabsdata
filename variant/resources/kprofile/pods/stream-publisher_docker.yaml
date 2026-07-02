@@ -290,6 +290,8 @@ spec:
             - /tabsdata/shared
             - --work-dir
             - /tabsdata/work
+            - --connection-file
+            - /tabsdata/connection/connection.yaml
             - --log-config
             - /tabsdata/config/tabsdata.log.py.yaml
             - --liveness
@@ -308,8 +310,6 @@ spec:
             - /tabsdata/shared/bundle/folder
             - --out-dir
             - /tabsdata/shared/out
-            - --connection-file
-            - /tabsdata/connection/connection.yaml
           resources:
             requests:
               cpu: "100m"
