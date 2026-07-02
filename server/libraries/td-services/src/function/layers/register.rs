@@ -93,25 +93,25 @@ pub async fn ensure_connection_kind_matches(
     }
     match &function.decorator {
         Decorator::Publisher | Decorator::Subscriber => {
-            let connection_kind = function.connection_kind.as_ref().ok_or_else(|| {
+            let function_connection = function.connection.as_ref().ok_or_else(|| {
                 RegisterFunctionError::ConnectionKindRequired(function.decorator.clone())
             })?;
             let connection_id = collection.connection_id.ok_or_else(|| {
                 RegisterFunctionError::CollectionHasNoConnection(collection.name.clone())
             })?;
             let connection: ConnectionDB = conn.live().fetch_one(connection_id).await?;
-            if *connection_kind != connection.kind {
+            if *function_connection != connection.kind {
                 Err(RegisterFunctionError::ConnectionKindMismatch(
-                    connection_kind.clone(),
+                    function_connection.clone(),
                     connection.kind.clone(),
                     collection.name.clone(),
                 ))?
             }
         }
         Decorator::Transformer => {
-            if let Some(connection_kind) = function.connection_kind.as_ref() {
+            if let Some(connection) = function.connection.as_ref() {
                 Err(RegisterFunctionError::ConnectionKindNotAllowed(
-                    connection_kind.clone(),
+                    connection.clone(),
                 ))?
             }
         }

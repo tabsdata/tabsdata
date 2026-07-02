@@ -36,6 +36,9 @@ import requests
 
 # noinspection PyProtectedMember
 from tabsdatak import _connectors
+
+# noinspection PyProtectedMember
+from tabsdatak._api import qualified_class
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
     KIND_STREAM_PUBLISHER_DEF,
@@ -272,9 +275,14 @@ class Collection:
             next_step = data.get("next")
             raw_functions = data.get("data") or []
             for raw_function in raw_functions:
+                # The server payload carries a `connection` field (the Conn
+                # FQN); set it to the APIServer here so it does not collide with
+                # the `connection` positional when splatting (matches the
+                # `get_function` pattern above).
+                raw_function["connection"] = self.connection
                 if "collection" not in raw_function:
                     raw_function["collection"] = self
-                yield Function(self.connection, **raw_function)
+                yield Function(**raw_function)
             first_page = False
 
     def list_tables(
@@ -499,8 +507,8 @@ class Collection:
             runtime_values=runtime_values,
             reuse_frozen_tables=reuse_tables,
             decorator=archive.function_type,
-            plugin_name=archive.source_or_destination,
-            connection_kind=archive.connection_kind,
+            connector=archive.connector,
+            connection=archive.connection,
             workers=archive.workers,
             enabled=enabled,
             base_path=base_path,
@@ -705,8 +713,8 @@ class Collection:
             bundle_id=bundle_id,
             runtime_values=runtime_values,
             reuse_frozen_tables=reuse_tables,
-            plugin_name=archive.source_or_destination,
-            connection_kind=archive.connection_kind,
+            connector=archive.connector,
+            connection=archive.connection,
             workers=archive.workers,
             enabled=enabled,
             base_path=base_path,
@@ -1391,11 +1399,12 @@ class Function:
             next_step = data.get("next")
             raw_functions = data.get("data") or []
             for raw_function in raw_functions:
+                # See list_functions: set `connection` to the APIServer so the
+                # server's `connection` (Conn FQN) field doesn't collide with
+                # the positional when splatting.
+                raw_function["connection"] = self.connection
                 raw_function["collection"] = self.collection
-                built_function = Function(
-                    self.connection,
-                    **raw_function,
-                )
+                built_function = Function(**raw_function)
                 yield built_function
             first_page = False
 
@@ -5294,8 +5303,8 @@ class _FunctionArchive:
     context_location: str
     function_name: str
     function_type: str
-    source_or_destination: str | None
-    connection_kind: str | None
+    connector: str | None
+    connection: str | None
     workers: dict[str, str] | None
 
 
@@ -5368,34 +5377,34 @@ def _trigger_string_list(info: FunctionInfo) -> list[str] | None:
     return None
 
 
-def _source_or_destination_name(info: FunctionInfo) -> str | None:
-    """Return the plugin name the server stores alongside the
-    registered function (e.g. ``"MySQLSrc"``).
+def _connector(info: FunctionInfo) -> str | None:
+    """The function's source/destination class FQN -- the ``Src`` /
+    ``StreamSrc`` / ``Dest`` the function binds to -- as a
+    ``"module:qualname"`` string (e.g. ``"tabsdatak.conn.mysql:MySQLSrc"``).
 
     Discriminates on ``info.__kind__`` rather than ``isinstance`` so
-    duck-typed Info objects (used in tests) work the same way.
+    duck-typed Info objects (used in tests) work the same way. ``None`` for
+    transformers (no connector).
     """
     kind = getattr(info, "__kind__", None)
     if kind in (KIND_PUBLISHER_DEF, KIND_STREAM_PUBLISHER_DEF):
         source = getattr(info, "source", None)
-        return type(source).__name__ if source is not None else None
+        return qualified_class(type(source)) if source is not None else None
     if kind == KIND_SUBSCRIBER_DEF:
         destination = getattr(info, "destination", None)
-        return type(destination).__name__ if destination is not None else None
+        return qualified_class(type(destination)) if destination is not None else None
     return None
 
 
-def _connection_kind(info: FunctionInfo) -> str | None:
-    """The connection kind a publisher/subscriber uses, resolved from the
-    connector registry by the source/destination the function binds to --
-    *not* from the ``conn`` declared on the decorator.
+def _connection(info: FunctionInfo) -> str | None:
+    """The function's connection class FQN -- the concrete :class:`Conn`
+    subclass its source/destination binds to -- as a ``"module:qualname"``
+    string (e.g. ``"tabsdatak.conn.mysql:MySQLSrcConn"``).
 
-    The bound source/destination type determines the connection class via
-    its registered ``SrcDef`` / ``StreamSrcDef`` / ``DestDef``
-    (``def.conn`` is the concrete :class:`Conn` subclass). Every connection
-    now shares the uniform ``"connectionDef"`` kind, so this returns that
-    for any connection-bearing function and ``None`` for transformers (no
-    external connection)."""
+    Resolved from the connector registry by the source/destination type
+    (``def.conn``), *not* from a ``conn`` declared on the decorator. The
+    server matches it against the collection's connection on register/update.
+    ``None`` for transformers (no connection)."""
     kind = getattr(info, "__kind__", None)
     if kind == KIND_PUBLISHER_DEF:
         source = getattr(info, "source", None)
@@ -5418,7 +5427,7 @@ def _connection_kind(info: FunctionInfo) -> str | None:
         )
     else:
         conn_cls = None
-    return getattr(conn_cls, "__kind__", None) if conn_cls is not None else None
+    return qualified_class(conn_cls) if conn_cls is not None else None
 
 
 def _input_tables(info: FunctionInfo) -> list[str]:
@@ -5505,8 +5514,8 @@ def _create_archive(
         context_location=str(bundle_path),
         function_name=function_name,
         function_type=function_type,
-        source_or_destination=_source_or_destination_name(info),
-        connection_kind=_connection_kind(info),
+        connector=_connector(info),
+        connection=_connection(info),
         # ``_workers`` emits ``CT`` for ``CronTrigger`` and ``ST`` for
         # ``@stream_publisher``; ``None`` otherwise. The ``ST`` branch
         # is what makes the apiserver enqueue the long-running

@@ -2417,7 +2417,7 @@ mod tests {
             .bundle_id(BundleId::default())
             .try_snippet("s")?
             .decorator(Decorator::Publisher)
-            .connection_kind(Some(ConnectionKind::try_from("mysqlSrcConn")?))
+            .connection(Some(ConnectionKind::try_from("mysqlSrcConn")?))
             .dependencies(None)
             .triggers(None)
             .tables(None)
@@ -2441,7 +2441,7 @@ mod tests {
         let update = FunctionUpdate::builder()
             .bundle_id(BundleId::default())
             .snippet(Some("s2".try_into()?))
-            .connection_kind(Some(ConnectionKind::try_from("postgresSrcConn")?))
+            .connection(Some(ConnectionKind::try_from("postgresSrcConn")?))
             .build()?;
         let update_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(

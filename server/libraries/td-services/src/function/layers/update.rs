@@ -73,8 +73,8 @@ pub async fn update_function_db_builder(
     if let Some(connector) = &update.connector {
         builder.connector(connector.clone());
     }
-    if let Some(connection_kind) = &update.connection_kind {
-        builder.connection_kind(connection_kind.clone());
+    if let Some(connection) = &update.connection {
+        builder.connection(connection.clone());
     }
     if let Some(runtime_values) = &update.runtime_values {
         builder.runtime_values(runtime_values);

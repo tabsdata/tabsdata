@@ -242,9 +242,14 @@ class Collection:
             next_step = data.get("next")
             raw_functions = data.get("data") or []
             for raw_function in raw_functions:
+                # The server payload carries a `connection` field (the Conn
+                # FQN); set it to the APIServer here so it does not collide with
+                # the `connection` positional when splatting (matches the
+                # `get_function` pattern above).
+                raw_function["connection"] = self.connection
                 if "collection" not in raw_function:
                     raw_function["collection"] = self
-                yield Function(self.connection, **raw_function)
+                yield Function(**raw_function)
             first_page = False
 
     def list_tables(
@@ -1400,11 +1405,12 @@ class Function:
             next_step = data.get("next")
             raw_functions = data.get("data") or []
             for raw_function in raw_functions:
+                # See list_functions: set `connection` to the APIServer so the
+                # server's `connection` (Conn FQN) field doesn't collide with
+                # the positional when splatting.
+                raw_function["connection"] = self.connection
                 raw_function["collection"] = self.collection
-                built_function = Function(
-                    self.connection,
-                    **raw_function,
-                )
+                built_function = Function(**raw_function)
                 yield built_function
             first_page = False
 

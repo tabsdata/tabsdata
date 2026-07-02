@@ -246,11 +246,12 @@ pub async fn seed_dev_user(db: &TdPool) -> UserId {
 }
 
 /// The canonical valid document: name = `name`, opaque `conn_configs`.
-pub fn document(name: &str, kind: &str) -> serde_json::Value {
+pub fn document(name: &str, conn_type: &str) -> serde_json::Value {
     json!({
-        "kind": kind,
+        "kind": "connectionDef",
         "apiVersion": "1.0",
         "name": name,
+        "type": conn_type,
         "conn_configs": {"host": "h", "env:password": "CREDENTIALS_PASSWORD"},
     })
 }

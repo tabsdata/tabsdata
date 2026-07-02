@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+# noinspection PyProtectedMember
+from tabsdatak._api import qualified_class
 from tabsdatak.api import (
     AllTablesTrigger,
     CronTrigger,
@@ -43,8 +45,8 @@ from tabsdatak.sdk import tabsdata_server as ts
 
 
 class _FakeSrc:
-    """A class whose ``type(...).__name__`` is what the test expects
-    to surface as the ``plugin_name`` in the register payload."""
+    """A source class whose FQN (``qualified_class(...)``) is what the test
+    expects to surface as the ``connector`` in the register payload."""
 
     pass
 
@@ -53,24 +55,23 @@ class _FakeDest:
     pass
 
 
-# Connection classes the *registry* binds ``_FakeSrc`` / ``_FakeDest``
-# to. ``_connection_kind`` reports ``def.conn.__kind__`` from the
-# registry lookup, so these -- not the decorator's ``conn`` -- decide
-# the surfaced kind.
+# Connection (Conn) classes the *registry* binds ``_FakeSrc`` / ``_FakeDest``
+# to. ``_connection`` reports the Conn class FQN (``qualified_class(def.conn)``)
+# from the registry lookup, so these -- not the decorator's ``conn`` -- decide
+# the surfaced connection.
 class _FakeSrcConn:
-    __kind__ = "mysqlSrcConn"
+    pass
 
 
 class _FakeDestConn:
-    __kind__ = "mysqlDestConn"
+    pass
 
 
 @pytest.fixture(autouse=True)
 def _stub_connector_registry(monkeypatch):
-    """``_connection_kind`` resolves the connection kind from the
-    connector registry by the source/destination type (not the
-    decorator ``conn``). Map the duck-typed fakes to stub defs whose
-    ``conn`` carries the expected ``__kind__``."""
+    """``_connector`` / ``_connection`` resolve from the connector registry by
+    the source/destination type (not the decorator ``conn``). Map the
+    duck-typed fakes to stub defs whose ``conn`` is the expected Conn class."""
     from types import SimpleNamespace
 
     def get_src(cls):
@@ -213,30 +214,30 @@ def test_output_tables_returns_empty_for_subscriber():
     assert ts._output_tables(_subscriber_info()) == []
 
 
-def test_source_or_destination_name_for_publisher_returns_source_class_name():
-    assert ts._source_or_destination_name(_publisher_info()) == "_FakeSrc"
+def test_connector_for_publisher_returns_source_class_fqn():
+    assert ts._connector(_publisher_info()) == qualified_class(_FakeSrc)
 
 
-def test_source_or_destination_name_for_subscriber_returns_destination_class_name():
-    assert ts._source_or_destination_name(_subscriber_info()) == "_FakeDest"
+def test_connector_for_subscriber_returns_destination_class_fqn():
+    assert ts._connector(_subscriber_info()) == qualified_class(_FakeDest)
 
 
-def test_source_or_destination_name_for_transformer_is_none():
-    assert ts._source_or_destination_name(_transformer_info()) is None
+def test_connector_for_transformer_is_none():
+    assert ts._connector(_transformer_info()) is None
 
 
-def test_connection_kind_for_publisher_comes_from_registry_not_decorator():
-    # Decorator conn is "decoratorConnIgnored"; the registry binds the
-    # source to a conn whose kind is "mysqlSrcConn" -- that one wins.
-    assert ts._connection_kind(_publisher_info()) == "mysqlSrcConn"
+def test_connection_for_publisher_comes_from_registry_not_decorator():
+    # The registry binds the source to ``_FakeSrcConn``; ``_connection``
+    # reports that Conn class's FQN, not anything from the decorator.
+    assert ts._connection(_publisher_info()) == qualified_class(_FakeSrcConn)
 
 
-def test_connection_kind_for_subscriber_comes_from_registry_not_decorator():
-    assert ts._connection_kind(_subscriber_info()) == "mysqlDestConn"
+def test_connection_for_subscriber_comes_from_registry_not_decorator():
+    assert ts._connection(_subscriber_info()) == qualified_class(_FakeDestConn)
 
 
-def test_connection_kind_for_transformer_is_none():
-    assert ts._connection_kind(_transformer_info()) is None
+def test_connection_for_transformer_is_none():
+    assert ts._connection(_transformer_info()) is None
 
 
 def test_cron_workers_returns_ct_payload_for_cron_trigger():
@@ -371,8 +372,8 @@ def test_create_archive_publisher_cron_extracts_metadata(project_root, _no_op_bu
     assert archive.string_dependencies == []
     assert archive.trigger_string_list is None  # cron -> workers
     assert archive.workers is not None and "CT" in archive.workers
-    assert archive.source_or_destination == "_FakeSrc"
-    assert archive.connection_kind == "mysqlSrcConn"
+    assert archive.connector == qualified_class(_FakeSrc)
+    assert archive.connection == qualified_class(_FakeSrcConn)
     assert archive.table_types == {}
     assert archive.function_snippet == "<source>"
 
@@ -391,8 +392,8 @@ def test_create_archive_transformer_tables_trigger(project_root, _no_op_bundle):
     assert archive.tables == ["out"]
     assert archive.trigger_string_list == ["coll/trig"]
     assert archive.workers is None
-    assert archive.source_or_destination is None  # transformers have no plugin name
-    assert archive.connection_kind is None
+    assert archive.connector is None  # transformers have no connector
+    assert archive.connection is None
 
 
 def test_create_archive_subscriber_no_outputs(project_root, _no_op_bundle):
@@ -402,8 +403,8 @@ def test_create_archive_subscriber_no_outputs(project_root, _no_op_bundle):
     assert archive.function_type == "S"
     assert archive.tables == []
     assert archive.string_dependencies == ["coll/x", "coll/y"]
-    assert archive.source_or_destination == "_FakeDest"
-    assert archive.connection_kind == "mysqlDestConn"
+    assert archive.connector == qualified_class(_FakeDest)
+    assert archive.connection == qualified_class(_FakeDestConn)
 
 
 def test_create_archive_accepts_temporary_directory_object(project_root, _no_op_bundle):

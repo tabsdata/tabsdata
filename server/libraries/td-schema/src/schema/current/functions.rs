@@ -39,7 +39,7 @@ pub enum Functions {
     DefinedById,
     Status,
     Connector,
-    ConnectionKind,
+    Connection,
     Enabled,
 }
 
@@ -74,7 +74,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Functions::DefinedById).text().not_null())
                 .col(ColumnDef::new(Functions::Status).text().not_null())
                 .col(ColumnDef::new(Functions::Connector).text().null())
-                .col(ColumnDef::new(Functions::ConnectionKind).text().null())
+                .col(ColumnDef::new(Functions::Connection).text().null())
                 .col(ColumnDef::new(Functions::Enabled).boolean().default(true))
                 .foreign_key(
                     ForeignKey::create()

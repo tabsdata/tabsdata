@@ -29,7 +29,7 @@ mod definitions {
         #[builder(default)]
         pub connector: Option<Connector>,
         #[builder(default)]
-        pub connection_kind: Option<ConnectionKind>,
+        pub connection: Option<ConnectionKind>,
         // Optional storage-prefix override for this function's output table data.
         #[serde(default)]
         #[builder(default)]
@@ -69,7 +69,7 @@ mod definitions {
         pub snippet: Option<Snippet>,
         pub decorator: Option<Decorator>,
         pub connector: Option<Option<Connector>>,
-        pub connection_kind: Option<Option<ConnectionKind>>,
+        pub connection: Option<Option<ConnectionKind>>,
         #[dxo(extractor)]
         pub dependencies: Option<Vec<TableDependencyDto>>,
         #[dxo(extractor)]
@@ -164,7 +164,7 @@ mod definitions {
         #[dxo(builder(include))]
         pub connector: Option<Connector>,
         #[dxo(builder(include))]
-        pub connection_kind: Option<ConnectionKind>,
+        pub connection: Option<ConnectionKind>,
         #[dxo(builder(include))]
         pub runtime_values: FunctionRuntimeValues,
         #[builder(default)]
@@ -332,7 +332,7 @@ mod definitions {
         #[dto(list(filter, filter_like, order_by))]
         pub connector: Option<Connector>,
         #[dto(list(filter, filter_like, order_by))]
-        pub connection_kind: Option<ConnectionKind>,
+        pub connection: Option<ConnectionKind>,
         #[dto(list(filter, order_by))]
         pub defined_on: AtTime,
         #[dto(list(filter, order_by))]

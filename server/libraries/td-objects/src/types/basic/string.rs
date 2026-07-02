@@ -81,8 +81,10 @@ pub struct BasePath;
 #[derive(Eq, PartialEq)]
 pub struct Description;
 
-/// Top-level connector kind of a connection (e.g. `mysqlSrcConn`). Stored on
-/// the connection row so the connector type cannot change across upserts.
+/// Fully-qualified Conn class of a connection (`<module>:<qualname>`, e.g.
+/// `tabsdatak.conn.mysql:MySqlConn`). Stored on the connection row so the
+/// connector type cannot change across upserts, and matched against a
+/// publisher/subscriber function's own Conn class at register/update.
 #[ta_objects::typed(string(min_len = 1, max_len = 200))]
 #[derive(Eq, PartialEq)]
 pub struct ConnectionKind;

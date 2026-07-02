@@ -1538,7 +1538,7 @@ mod tests {
     fn pubsub_register(
         name: &str,
         decorator: Decorator,
-        connection_kind: Option<&str>,
+        connection: Option<&str>,
     ) -> Result<FunctionRegister, TdError> {
         let mut builder = FunctionRegister::builder();
         builder
@@ -1552,8 +1552,8 @@ mod tests {
             .tables(None)
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false);
-        if let Some(connection_kind) = connection_kind {
-            builder.connection_kind(Some(ConnectionKind::try_from(connection_kind)?));
+        if let Some(connection) = connection {
+            builder.connection(Some(ConnectionKind::try_from(connection)?));
         }
         Ok(builder.build()?)
     }
@@ -1617,7 +1617,7 @@ mod tests {
         let function = active_function(&db, &FunctionName::try_from("pub_fn")?).await?;
         assert_eq!(function.decorator, Decorator::Publisher);
         assert_eq!(
-            function.connection_kind,
+            function.connection,
             Some(ConnectionKind::try_from("mysqlSrcConn")?)
         );
         Ok(())
@@ -1632,7 +1632,7 @@ mod tests {
         let function = active_function(&db, &FunctionName::try_from("sub_fn")?).await?;
         assert_eq!(function.decorator, Decorator::Subscriber);
         assert_eq!(
-            function.connection_kind,
+            function.connection,
             Some(ConnectionKind::try_from("mysqlDestConn")?)
         );
         Ok(())
@@ -1708,7 +1708,7 @@ mod tests {
 
         let function = active_function(&db, &FunctionName::try_from("legacy_pub_fn")?).await?;
         assert_eq!(function.decorator, Decorator::Publisher);
-        assert_eq!(function.connection_kind, None);
+        assert_eq!(function.connection, None);
         Ok(())
     }
 

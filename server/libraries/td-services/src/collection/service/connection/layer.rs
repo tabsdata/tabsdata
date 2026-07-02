@@ -109,13 +109,17 @@ pub async fn validate_document(
 
 /// The only field the server reads off a dehydrated document; the rest stays
 /// opaque (no `deny_unknown_fields`) — forwarded to the store and resolved by
-/// the worker. `kind` is required — a missing one fails deserialization. The
-/// connection carries no name: it is 1:1 with its collection and named by it
-/// (the server already has the collection name).
+/// the worker. `type` is required — a missing one fails deserialization. It is
+/// the connection's fully-qualified Conn class (`<module>:<qualname>`); the
+/// collection is keyed by it and the function register/update check matches it
+/// against the function's own Conn class. The connection carries no name: it is
+/// 1:1 with its collection and named by it (the server already has the
+/// collection name).
 #[derive(Deserialize)]
-#[serde(expecting = "a dehydrated connection object with a 'kind'")]
+#[serde(expecting = "a dehydrated connection object with a 'type'")]
 struct RawConnectionDocument {
-    kind: String,
+    #[serde(rename = "type")]
+    type_: String,
 }
 
 /// Validates a dehydrated document and the payload's internal consistency:
@@ -133,7 +137,7 @@ pub fn validate_connection_document(
 ) -> Result<ConnectionDocument, TdError> {
     let raw = RawConnectionDocument::deserialize(document)
         .map_err(|e| api_error!(ApiError::InputError, "invalid dehydrated connection: {e}"))?;
-    let kind = ConnectionKind::try_from(raw.kind.as_str())?;
+    let kind = ConnectionKind::try_from(raw.type_.as_str())?;
 
     let mut seen: HashSet<&str> = HashSet::new();
     let mut duplicated: Vec<&str> = Vec::new();
