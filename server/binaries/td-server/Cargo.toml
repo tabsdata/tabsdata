@@ -50,7 +50,7 @@ name = "td_supervisor"
 path = "src/supervisor.rs"
 
 [[bin]]
-name = "td_transporter"
+name = "td_transporter1"
 path = "src/transporter.rs"
 
 [[bin]]

@@ -317,7 +317,7 @@ def test_load_report_yaml_non_mapping_raises(tmp_path):
 
 
 def test_find_binary_via_env_override(monkeypatch, tmp_path):
-    bin_path = tmp_path / "td_transporter"
+    bin_path = tmp_path / "td_transporter1"
     bin_path.write_text("#!/bin/sh\nexit 0\n")
     bin_path.chmod(0o755)
 
@@ -334,7 +334,7 @@ def test_find_binary_env_override_not_executable(monkeypatch, tmp_path):
 
 def test_find_binary_via_which(monkeypatch, tmp_path):
     monkeypatch.delenv("TD_TRANSPORTER_BIN", raising=False)
-    fake_bin = tmp_path / "td_transporter"
+    fake_bin = tmp_path / "td_transporter1"
     fake_bin.write_text("#!/bin/sh\n")
     fake_bin.chmod(0o755)
     monkeypatch.setattr(_transporter, "shutil", _ShutilStub(str(fake_bin)))
@@ -482,9 +482,9 @@ def test_import_one_uses_explicit_binary_path(monkeypatch, tmp_path):
         source=_transporter1.TransporterLocalFile("file:///x"),
         target_dir=tmp_path,
         format=_transporter1.TransporterParquetFormat(),
-        binary_path="/explicit/td_transporter",
+        binary_path="/explicit/td_transporter1",
     )
-    assert captured["bin"] == "/explicit/td_transporter"
+    assert captured["bin"] == "/explicit/td_transporter1"
 
 
 def test_import_one_run_error_on_nonzero_exit(monkeypatch, tmp_path):

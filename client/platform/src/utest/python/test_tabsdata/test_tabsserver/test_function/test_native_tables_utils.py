@@ -264,7 +264,7 @@ class TestTransportCloudFileToLocal:
 
             mock_subprocess_run.assert_called_once()
             cmd = mock_subprocess_run.call_args[0][0]
-            assert cmd[0] in ("td_transporter", "td_transporter.exe")
+            assert cmd[0] in ("td_transporter1", "td_transporter1.exe")
             assert "--request" in cmd
             assert "--report" in cmd
 

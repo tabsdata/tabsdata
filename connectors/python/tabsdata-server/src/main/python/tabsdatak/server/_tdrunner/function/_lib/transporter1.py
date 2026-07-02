@@ -33,7 +33,7 @@ from tabsdatak.server._tdrunner.function._lib.request import (
 
 logger = logging.getLogger(__name__)
 
-TRANSPORTER_BINARY_NAME = "td_transporter"
+TRANSPORTER_BINARY_NAME = "td_transporter1"
 
 SECRETS_MOUNT_OPTION_PREFIX = "SECRETS__STORAGE__MOUNTS__"
 OPTIONS_INFIX = "__OPTIONS__"

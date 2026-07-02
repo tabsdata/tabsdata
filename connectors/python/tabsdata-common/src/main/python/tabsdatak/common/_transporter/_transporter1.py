@@ -39,7 +39,7 @@ class UnresolvedCredentialError(RuntimeError):
 # --- Binary lookup --------------------------------------------------
 
 
-_BINARY_NAME = "td_transporter.exe" if sys.platform == "win32" else "td_transporter"
+_BINARY_NAME = "td_transporter1.exe" if sys.platform == "win32" else "td_transporter1"
 _BINARY_ENV_VAR = "TD_TRANSPORTER_BIN"
 
 

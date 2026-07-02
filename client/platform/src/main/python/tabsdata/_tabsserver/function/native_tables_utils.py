@@ -164,7 +164,7 @@ def _run_transporter_copy(
     yaml_request_file = os.path.join(destination_dir, f"request_{uuid.uuid4()}.yaml")
     store_copy_as_yaml(V1CopyFormat(copy_pairs), yaml_request_file)
 
-    binary = "td_transporter.exe" if CURRENT_PLATFORM.is_windows() else "td_transporter"
+    binary = "td_transporter1.exe" if CURRENT_PLATFORM.is_windows() else "td_transporter1"
     report_file = os.path.join(destination_dir, f"report_{uuid.uuid4()}.yaml")
     logger.debug(
         f"Running transporter with {len(copy_pairs)} copy pair(s): "

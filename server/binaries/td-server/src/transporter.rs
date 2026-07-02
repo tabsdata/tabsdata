@@ -10,7 +10,7 @@ use td_shuttle::transporter::cli;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[attach(signal = "td_transporter")]
+#[attach(signal = "td_transporter1")]
 fn main() {
     hooks::panic();
 

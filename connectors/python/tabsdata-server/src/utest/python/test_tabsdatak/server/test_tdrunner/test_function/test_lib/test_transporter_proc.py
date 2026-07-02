@@ -62,7 +62,7 @@ class _FakePopen:
         return self._returncode
 
 
-_FAKE_BINARY_PATH = Path("/fake/scripts/td_transporter")
+_FAKE_BINARY_PATH = Path("/fake/scripts/td_transporter1")
 
 
 def _install_fake_popen(monkeypatch, *, stdout_lines=(), stderr_lines=(), returncode=0):
@@ -96,7 +96,7 @@ def test_binary_name_constant():
     """The module-level constant carries just the basename; the platform
     suffix is appended by ``PythonEnvironment.binary`` via sysconfig
     (covered in ``test_venv.py``)."""
-    assert TRANSPORTER_BINARY_NAME == "td_transporter"
+    assert TRANSPORTER_BINARY_NAME == "td_transporter1"
 
 
 # --- command shape -------------------------------------------------------

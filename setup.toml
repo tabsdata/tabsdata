@@ -33,7 +33,7 @@ names = [
     "td_crontrigger",
     "td_dbmanager",
     "td_supervisor",
-    "td_transporter",
+    "td_transporter1",
     "td_transporter2",
     "tdkserver",
     "tdserver",
