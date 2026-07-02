@@ -77,17 +77,8 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
         "the command will fail."
     ),
 )
-@click.option(
-    "--project",
-    "-P",
-    help=(
-        "Project to target for project-scoped commands (collection, fn, table, "
-        "exe, ...). Overrides the pinned project for this invocation. See "
-        "'td pin set --proj'."
-    ),
-)
 @click.pass_context
-def cli(ctx: click.Context, no_prompt: bool, project: str):
+def cli(ctx: click.Context, no_prompt: bool):
     """Main CLI for the Tabsdata system"""
     try:
         os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
@@ -98,19 +89,13 @@ def cli(ctx: click.Context, no_prompt: bool, project: str):
         initialise_tabsdata_server_connection(ctx)
         load_pinned_objects(ctx)
         load_cli_options(ctx)
-        # The active project rides on the connection: the `--project` override
-        # wins, else the pinned project. Project-scoped commands never thread
-        # it -- the connection injects it into every tenant path.
+        # The active project rides on the connection: it defaults to the pinned
+        # project, and a per-command `--proj` overrides it for that invocation.
+        # Project-scoped commands never thread it -- the connection injects it
+        # into every tenant path.
         server = ctx.obj.get("tabsdataserver")
         if server is not None:
-            active_project = project or ctx.obj["pinned_objects"].get("project")
-            server.connection.project = active_project
-            # Surface an explicit `--project` override so a project-scoped
-            # command can't silently run against the wrong tenant. Pinned-project
-            # use stays quiet (matching pinned-collection behavior); printed to
-            # stderr so stdout-parsing callers are unaffected.
-            if project is not None:
-                click.echo(f"Targeting project: {active_project}", err=True)
+            server.connection.project = ctx.obj["pinned_objects"].get("project")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to initialize CLI: {e}")

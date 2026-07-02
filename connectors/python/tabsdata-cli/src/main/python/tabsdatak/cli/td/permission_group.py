@@ -27,7 +27,7 @@ def _validate_permission(perm: str, project: str) -> None:
     """Client-side validation matching the server's facade rules.
 
     - The org-wide read/develop wildcards are RBAC Mode View only.
-    - Project-scoped permissions require ``--project``; system-scoped
+    - Project-scoped permissions require ``--proj``; system-scoped
       permissions forbid it.
     """
     perm = perm.lower()
@@ -40,16 +40,16 @@ def _validate_permission(perm: str, project: str) -> None:
         )
     if perm in SIMPLE_PROJECT_PERMISSION_TYPES and not project:
         raise click.ClickException(
-            f"Permission '{perm}' is project-scoped and requires --project. "
+            f"Permission '{perm}' is project-scoped and requires --proj. "
             "The project-scoped permissions are: "
             f"{', '.join(SIMPLE_PROJECT_PERMISSION_TYPES)}."
         )
     if perm in SIMPLE_SYSTEM_PERMISSION_TYPES and project:
         raise click.ClickException(
             f"Permission '{perm}' is system-scoped and does not take a "
-            "--project. The system-scoped permissions are: "
+            "--proj. The system-scoped permissions are: "
             f"{', '.join(SIMPLE_SYSTEM_PERMISSION_TYPES)}. "
-            "Please remove the --project option."
+            "Please remove the --proj option."
         )
 
 
@@ -70,13 +70,14 @@ def permission():
         "Permission to grant. Valid values are "
         f"{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}. The project-scoped "
         "permissions ("
-        f"{', '.join(SIMPLE_PROJECT_PERMISSION_TYPES)}) require --project; the "
+        f"{', '.join(SIMPLE_PROJECT_PERMISSION_TYPES)}) require --proj; the "
         "system-scoped ones ("
-        f"{', '.join(SIMPLE_SYSTEM_PERMISSION_TYPES)}) must not carry --project."
+        f"{', '.join(SIMPLE_SYSTEM_PERMISSION_TYPES)}) must not carry --proj."
     ),
 )
 @click.option(
-    "--project",
+    "--proj",
+    "project",
     help=(
         "Project the permission applies to. Required for project-scoped "
         "permissions, forbidden for system-scoped ones."
@@ -122,13 +123,14 @@ def grant(ctx: click.Context, user: str, permission: str, project: str):
         "Permission to revoke. Valid values are "
         f"{', '.join(VALID_SIMPLE_PERMISSION_TYPES)}. The project-scoped "
         "permissions ("
-        f"{', '.join(SIMPLE_PROJECT_PERMISSION_TYPES)}) require --project; the "
+        f"{', '.join(SIMPLE_PROJECT_PERMISSION_TYPES)}) require --proj; the "
         "system-scoped ones ("
-        f"{', '.join(SIMPLE_SYSTEM_PERMISSION_TYPES)}) must not carry --project."
+        f"{', '.join(SIMPLE_SYSTEM_PERMISSION_TYPES)}) must not carry --proj."
     ),
 )
 @click.option(
-    "--project",
+    "--proj",
+    "project",
     help=(
         "Project the permission applies to. Required for project-scoped "
         "permissions, forbidden for system-scoped ones."
@@ -171,7 +173,8 @@ def revoke(ctx: click.Context, user: str, permission: str, project: str):
     mutually_exclusive=["project"],
 )
 @click.option(
-    "--project",
+    "--proj",
+    "project",
     help="List everyone with authority on this project.",
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["user"],
@@ -183,7 +186,7 @@ def list_permissions(ctx: click.Context, user: str, project: str):
     if not user and not project:
         raise click.ClickException(
             "Provide either --user (a user's effective permissions) or "
-            "--project (everyone with authority on a project)."
+            "--proj (everyone with authority on a project)."
         )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]

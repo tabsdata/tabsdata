@@ -11,6 +11,7 @@ from rich.live import Live
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
+    proj_option,
     beautify_list,
     beautify_time,
     get_currently_pinned_object,
@@ -40,6 +41,7 @@ def fn():
 
 
 @fn.command()
+@proj_option
 @click.option(
     "--name",
     "-n",
@@ -86,6 +88,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
 
 
 @fn.command()
+@proj_option
 @click.option(
     "--name",
     "-n",
@@ -178,6 +181,7 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
 
 
 @fn.command()
+@proj_option
 @click.option(
     "--coll",
     "-c",
@@ -226,6 +230,7 @@ def list(ctx: click.Context, coll: str):
 
 
 @fn.command()
+@proj_option
 @click.option(
     "--coll",
     "-c",
@@ -476,6 +481,7 @@ def register(
 
 
 @fn.command()
+@proj_option
 @click.option(
     "--name",
     "-n",
@@ -638,6 +644,7 @@ def _monitor_execution_or_transaction(
 
 
 @fn.command()
+@proj_option
 @click.option(
     "--name",
     "-n",
@@ -785,6 +792,7 @@ def update(
 
 
 @fn.command()
+@proj_option
 @click.option(
     "--name",
     "-n",
@@ -825,6 +833,7 @@ def enable(
 
 
 @fn.command()
+@proj_option
 @click.option(
     "--name",
     "-n",
@@ -864,6 +873,7 @@ def disable(
 
 
 @fn.command()
+@proj_option
 @click.option(
     "--name",
     "-n",
@@ -979,6 +989,7 @@ def patch(
 
 
 @fn.command("list-patches")
+@proj_option
 @click.option(
     "--name",
     "-n",

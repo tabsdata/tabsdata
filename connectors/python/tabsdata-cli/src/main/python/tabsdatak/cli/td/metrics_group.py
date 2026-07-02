@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
+    proj_option,
     hint_common_solutions,
     verify_login_or_prompt,
 )
@@ -125,6 +126,7 @@ def metrics():
 
 
 @metrics.command()
+@proj_option
 @click.option(
     "--dim",
     type=click.Choice(["collection", "group"], case_sensitive=False),
@@ -242,6 +244,7 @@ def show(
 
 
 @metrics.command()
+@proj_option
 @click.option(
     "--collection",
     default=None,

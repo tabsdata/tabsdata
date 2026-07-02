@@ -154,14 +154,14 @@ class NoProjectSelectedError(Exception):
 
     Tenant resources (collections, functions, tables, executions, ...) live
     under ``/projects/{project}/...``. The active project rides on the
-    connection, set from the pinned project or the ``--project`` override;
-    when neither is present there is no tenant to target.
+    connection, set from the pinned project or a command's ``--proj``
+    override; when neither is present there is no tenant to target.
     """
 
     def __init__(self):
         super().__init__(
             "No project selected. Run 'td pin set --proj <name>' or pass "
-            "'--project <name>'."
+            "'--proj <name>' to the command."
         )
 
 
@@ -211,7 +211,7 @@ class APIServer:
         self.expiration_time = None
         self.credentials_file = credentials_file
         # Active project for tenant-scoped requests. Set once per CLI run from
-        # the pinned project or the `--project` override; the connection then
+        # the pinned project or a command's `--proj` override; the connection then
         # carries it into every tenant path, so callers never thread it.
         self.project = None
 

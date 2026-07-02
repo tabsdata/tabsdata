@@ -2350,14 +2350,14 @@ PERMISSION_TYPES_WITH_ENTITY = [
 # `simple_permission` table. See `server/.../dxo/simple_permission.rs` and
 # `server/.../types/basic/typed_enum.rs::SimplePermissionType`.
 
-# Project-scoped permissions: require `--project`.
+# Project-scoped permissions: require `--proj`.
 SIMPLE_PROJECT_PERMISSION_TYPES = [
     "view_project",
     "develop_project",
     "manage_project",
 ]
 
-# System-scoped permissions: must not carry `--project`. `manage_system` is full
+# System-scoped permissions: must not carry `--proj`. `manage_system` is full
 # system admin (sys_admin): user/role administration plus authority over all
 # projects.
 SIMPLE_SYSTEM_PERMISSION_TYPES = [
@@ -2403,7 +2403,7 @@ class SimplePermission:
 
 class SimpleProjectAccess:
     """One row of "who has access to a project"
-    (`td permission list --project P`).
+    (`td permission list --proj P`).
 
     `source` records what conferred the access: ``project (<rolename>)`` for
     per-project role memberships, ``system (manage_system)`` for system admins.

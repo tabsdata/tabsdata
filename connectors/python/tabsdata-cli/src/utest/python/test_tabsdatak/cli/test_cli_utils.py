@@ -272,3 +272,44 @@ def test_current_platform_predicates_are_mutually_exclusive():
     # ``is_unix()`` overlaps with both linux and mac so it isn't part
     # of this exclusivity check.
     assert sum(truths) <= 1
+
+
+# ---------------------------------------------------------------------------
+# proj_option / _apply_proj (per-command --proj override)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_proj_overrides_active_project():
+    from types import SimpleNamespace
+
+    server = SimpleNamespace(connection=SimpleNamespace(project="pinned"))
+    ctx = SimpleNamespace(obj={"tabsdataserver": server})
+
+    # A value overrides the active project on the connection.
+    cli_utils._apply_proj(ctx, None, "explicit")
+    assert server.connection.project == "explicit"
+
+    # No value leaves the active project untouched (pinned default stays).
+    cli_utils._apply_proj(ctx, None, None)
+    assert server.connection.project == "explicit"
+
+
+def test_apply_proj_is_a_noop_without_a_server():
+    from types import SimpleNamespace
+
+    ctx = SimpleNamespace(obj={"tabsdataserver": None})
+    # Must not raise when logged out (no server on the context).
+    assert cli_utils._apply_proj(ctx, None, "whatever") == "whatever"
+
+
+def test_proj_option_decorator_adds_proj_flag():
+    import rich_click as click
+
+    @click.command()
+    @cli_utils.proj_option
+    @click.pass_context
+    def cmd(ctx):
+        pass
+
+    opts = [o for p in cmd.params for o in p.opts]
+    assert "--proj" in opts and "-P" in opts

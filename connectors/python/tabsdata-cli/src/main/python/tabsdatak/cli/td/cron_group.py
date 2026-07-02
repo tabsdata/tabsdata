@@ -5,6 +5,7 @@
 import rich_click as click
 
 import tabsdatak.cli.td.worker_utils as worker
+from tabsdatak.cli.cli_utils import proj_option
 from tabsdatak.sdk.status_utils.worker import (
     WORKER_VALID_USER_PROVIDED_STATUSES,
 )
@@ -16,6 +17,7 @@ def cron():
 
 
 @cron.command()
+@proj_option
 @click.option(
     "--name",
     "-n",
@@ -33,6 +35,7 @@ def start(ctx: click.Context, name: str, coll: str):
 
 
 @cron.command()
+@proj_option
 @click.option(
     "--name",
     "-n",
@@ -50,6 +53,7 @@ def stop(ctx: click.Context, name: str, coll: str):
 
 
 @cron.command()
+@proj_option
 @click.option(
     "--status",
     type=str,

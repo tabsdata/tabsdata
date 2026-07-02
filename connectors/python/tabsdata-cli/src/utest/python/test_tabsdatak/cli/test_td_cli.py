@@ -145,9 +145,19 @@ def test_project_group_has_crud_only():
     ]
 
 
-def test_root_has_project_override_option():
+def test_root_has_no_project_option():
+    # The active project is targeted per-command via `--proj`, never as a
+    # global root option.
     opts = [o for p in cli.params for o in p.opts]
-    assert "--project" in opts and "-P" in opts
+    assert "--project" not in opts and "-P" not in opts
+
+
+def test_project_scoped_command_exposes_proj():
+    # Project-scoped subcommands carry the per-command `--proj`/`-P`.
+    collection = cli.commands.get("collection")
+    list_cmd = collection.commands.get("list")
+    opts = [o for p in list_cmd.params for o in p.opts]
+    assert "--proj" in opts and "-P" in opts
 
 
 class TestPinSurface:

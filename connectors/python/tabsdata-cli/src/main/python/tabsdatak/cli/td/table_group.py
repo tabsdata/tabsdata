@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
+    proj_option,
     MutuallyExclusiveOption,
     get_currently_pinned_object,
     hint_common_solutions,
@@ -25,6 +26,7 @@ def table():
 
 
 @table.command()
+@proj_option
 @click.option(
     "--name",
     "-n",
@@ -66,6 +68,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
 
 
 @table.command()
+@proj_option
 @click.option(
     "--name",
     help="Name of the table.",
@@ -160,6 +163,7 @@ def download(
 
 
 @table.command()
+@proj_option
 @click.option(
     "--coll",
     "-c",
@@ -240,6 +244,7 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
 
 
 @table.command()
+@proj_option
 @click.option(
     "--name",
     help="Name of the table.",
@@ -354,6 +359,7 @@ def sample(
 
 
 @table.command()
+@proj_option
 @click.option(
     "--name",
     help="Name of the table.",
@@ -444,6 +450,7 @@ def schema(
 
 
 @table.command()
+@proj_option
 @click.option(
     "--coll",
     "-c",

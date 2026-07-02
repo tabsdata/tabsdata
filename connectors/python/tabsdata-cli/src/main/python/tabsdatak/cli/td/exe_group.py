@@ -12,6 +12,7 @@ from rich.live import Live
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
+    proj_option,
     MutuallyExclusiveOption,
     beautify_time,
     get_currently_pinned_object,
@@ -54,6 +55,7 @@ def exe():
 
 
 @exe.command()
+@proj_option
 @click.option(
     "--plan",
     help="ID of the plan to cancel. Either this or --trx must be provided.",
@@ -99,6 +101,7 @@ def cancel(ctx: click.Context, plan: str, trx: str):
 
 
 @exe.command()
+@proj_option
 @click.option(
     "--status",
     type=str,
@@ -255,6 +258,7 @@ def obtain_list_fn_run_filters(
 
 
 @exe.command()
+@proj_option
 @click.option(
     "--status",
     type=str,
@@ -438,6 +442,7 @@ def obtain_list_exec_filters(
 
 
 @exe.command()
+@proj_option
 @click.option(
     "--status",
     type=str,
@@ -632,6 +637,7 @@ def obtain_list_trx_filters(
 
 
 @exe.command()
+@proj_option
 @click.option(
     "--status",
     type=str,
@@ -811,6 +817,7 @@ def obtain_list_worker_filters(
 
 
 @exe.command()
+@proj_option
 @click.option("--plan", help="ID of the plan to display.")
 @click.pass_context
 def info(ctx: click.Context, plan: str):
@@ -848,6 +855,7 @@ def info(ctx: click.Context, plan: str):
 
 
 @exe.command()
+@proj_option
 @click.option(
     "--worker",
     help="ID of the worker that generated the logs.",
@@ -1058,6 +1066,7 @@ def obtain_worker_list_from_filters(
 
 
 @exe.command()
+@proj_option
 @click.option(
     "--plan",
     help="ID of the plan to monitor. Either this or --trx must be provided.",
@@ -1100,6 +1109,7 @@ def monitor(ctx: click.Context, plan: str, trx: str):
 
 
 @exe.command()
+@proj_option
 @click.option(
     "--plan",
     help="ID of the plan to recover. Either this or --trx must be provided.",
@@ -1147,6 +1157,7 @@ def recover(ctx: click.Context, plan: str, trx: str):
 
 
 @exe.command()
+@proj_option
 @click.option(
     "--coll",
     "-c",

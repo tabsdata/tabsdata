@@ -13,6 +13,7 @@ from rich.table import Table
 # noinspection PyProtectedMember
 from tabsdatak import _template as template
 from tabsdatak.cli.cli_utils import (
+    proj_option,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
@@ -30,6 +31,7 @@ def collection():
 
 
 @collection.command()
+@proj_option
 @click.option("--name", "-n", help="Name of the collection to create.")
 @click.option("--description", help="Description of the collection.")
 @click.option(
@@ -167,6 +169,7 @@ def _load_connection_document(conn_file, group):
 
 
 @collection.command()
+@proj_option
 @click.option("--name", "-n", help="Name of the collection to delete.")
 @click.option(
     "--confirm",
@@ -198,6 +201,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 
 @collection.command()
+@proj_option
 @click.option("--name", "-n", help="Name of the collection to display.")
 @click.pass_context
 def info(ctx: click.Context, name: str):
@@ -235,6 +239,7 @@ def info(ctx: click.Context, name: str):
 
 
 @collection.command()
+@proj_option
 @click.pass_context
 def list(ctx: click.Context):
     """List all collections"""
@@ -268,6 +273,7 @@ def list(ctx: click.Context):
 
 
 @collection.command()
+@proj_option
 @click.option("--name", "-n", help="Name of the collection to update.")
 @click.option("--new-name", help="New name for the collection.")
 @click.option("--description", help="New description for the collection.")

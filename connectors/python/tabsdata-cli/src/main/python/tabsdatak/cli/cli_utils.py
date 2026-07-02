@@ -238,6 +238,33 @@ def get_currently_pinned_object(ctx: click.Context, object: str) -> str | None:
     return currently_pinned
 
 
+def _apply_proj(ctx: click.Context, param, value):
+    """``--proj`` option callback: target a project for this command.
+
+    The active project rides on the server connection. The root group seeds it
+    from the pinned project; a per-command ``--proj`` overrides it for this
+    invocation. The connection injects the active project into every
+    tenant-scoped request, so commands never thread it any further."""
+    if value:
+        server = ctx.obj.get("tabsdataserver")
+        if server is not None:
+            server.connection.project = value
+    return value
+
+
+def proj_option(fn):
+    """Decorator adding a per-command ``--proj`` that targets a project,
+    overriding the pinned project for that invocation."""
+    return click.option(
+        "--proj",
+        "-P",
+        "proj",
+        expose_value=False,
+        callback=_apply_proj,
+        help="Project to target; overrides the pinned project.",
+    )(fn)
+
+
 def load_pinned_objects(ctx: click.Context):
     try:
         with open(get_pinned_objects_file_path(ctx)) as f:

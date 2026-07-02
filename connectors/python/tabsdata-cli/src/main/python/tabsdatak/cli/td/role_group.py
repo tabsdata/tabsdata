@@ -45,7 +45,8 @@ def role():
     ),
 )
 @click.option(
-    "--project",
+    "--proj",
+    "project",
     help=(
         "Project to which the permission will apply. If '"
         f"{ALL_ENTITIES_REPRESENTATION}' is provided, it will "
@@ -76,7 +77,7 @@ def add_perm(ctx: click.Context, name: str, perm: str, project: str):
                 f"Permission '{perm}' does not require an entity. The permissions "
                 "that require an entity are: "
                 f"{', '.join(str(p) for p in PERMISSION_TYPES_WITH_ENTITY)}. "
-                "Please remove the --project option."
+                "Please remove the --proj option."
             )
         if project == ALL_ENTITIES_REPRESENTATION:
             project = None
@@ -220,7 +221,8 @@ def delete(ctx: click.Context, name: str, confirm: str):
     mutually_exclusive=["id"],
 )
 @click.option(
-    "--project",
+    "--proj",
+    "project",
     help=(
         "Project to which the permission applies. "
         "This option is only allowed for permissions that require an entity, which are "
@@ -285,7 +287,7 @@ def _obtain_project_for_perm(perm: str, project: str, ctx: click.Context):
                 f"Permission '{perm}' does not require an entity. The permissions "
                 "that require an entity are: "
                 f"{', '.join(str(p) for p in PERMISSION_TYPES_WITH_ENTITY)}. "
-                "Please remove the --project option."
+                "Please remove the --proj option."
             )
         if project == ALL_ENTITIES_REPRESENTATION:
             project = None

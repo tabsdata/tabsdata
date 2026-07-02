@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
+    proj_option,
     hint_common_solutions,
     logical_prompt,
     verify_login_or_prompt,
@@ -21,6 +22,7 @@ def group():
 
 
 @group.command()
+@proj_option
 @click.option("--name", "-n", help="Name of the group to create.")
 @click.option("--description", help="Description of the group.")
 @click.pass_context
@@ -41,6 +43,7 @@ def create(ctx: click.Context, name: str, description: str):
 
 
 @group.command()
+@proj_option
 @click.option("--name", "-n", help="Name of the group to delete.")
 @click.option(
     "--confirm",
@@ -68,6 +71,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 
 @group.command()
+@proj_option
 @click.option("--name", "-n", help="Name of the group to display.")
 @click.pass_context
 def info(ctx: click.Context, name: str):
@@ -104,6 +108,7 @@ def info(ctx: click.Context, name: str):
 
 
 @group.command()
+@proj_option
 @click.pass_context
 def list(ctx: click.Context):
     """List all groups"""
@@ -138,6 +143,7 @@ def list(ctx: click.Context):
 
 
 @group.command()
+@proj_option
 @click.option("--name", "-n", help="Name of the group to update.")
 @click.option("--new-name", help="New name for the group.")
 @click.option("--description", help="New description for the group.")
