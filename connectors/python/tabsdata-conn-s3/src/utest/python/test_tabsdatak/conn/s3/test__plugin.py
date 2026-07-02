@@ -9,7 +9,7 @@ from tabsdatak.api import Secret
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _transporter
+from tabsdatak.common._transporter import _transporter1
 from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 from tabsdatak.spi import TableFileInput
@@ -55,16 +55,16 @@ def _dest_conn(**overrides) -> S3DestConn:
 
 def test_build_location_emits_transporter_s3_with_env_credentials():
     loc = plugin.build_location(_src_conn(), "raw/users.parquet")
-    assert isinstance(loc, _transporter.TransporterS3)
+    assert isinstance(loc, _transporter1.TransporterS3)
     assert loc.url == "s3://my-bucket/raw/users.parquet"
-    assert loc.access_key == _transporter.TransporterEnv(
-        _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID,
+    assert loc.access_key == _transporter1.TransporterEnv(
+        _transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID,
     )
-    assert loc.secret_key == _transporter.TransporterEnv(
-        _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY,
+    assert loc.secret_key == _transporter1.TransporterEnv(
+        _transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY,
     )
-    assert loc.region == _transporter.TransporterEnv(
-        _transporter.SERVER_SIDE_AWS_REGION,
+    assert loc.region == _transporter1.TransporterEnv(
+        _transporter1.SERVER_SIDE_AWS_REGION,
     )
 
 
@@ -86,9 +86,9 @@ def test_build_location_preserves_explicit_s3_uri():
 def test_run_env_resolves_credentials_to_server_side_env_var_names():
     env = plugin.run_env(_src_conn())
     assert env == {
-        _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: "AKIA0000000000000000",
-        _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: "secret-value",
-        _transporter.SERVER_SIDE_AWS_REGION: "us-east-1",
+        _transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID: "AKIA0000000000000000",
+        _transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: "secret-value",
+        _transporter1.SERVER_SIDE_AWS_REGION: "us-east-1",
     }
 
 

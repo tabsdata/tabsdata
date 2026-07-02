@@ -73,25 +73,7 @@ class FileCommonErrorCode(ErrorCode):
         ConnInitException,
         "format_cfg side must be 'src' or 'dest', got '{side}'",
     )  # validate_format_cfg -- invalid side
-    FILE_COMMON_14 = ErrorDef(
-        ConnInitException,
-        "Unsupported source file format: '{format}'",
-    )  # src_format_to_transporter -- unhandled SrcFileFormat
-    FILE_COMMON_15 = ErrorDef(
-        ConnInitException,
-        "Unsupported destination file format: '{format}'",
-    )  # dest_format_to_transporter -- unhandled DestFileFormat
     FILE_COMMON_16 = ErrorDef(
         FileRuntimeException,
         "Slot/path count mismatch: {tables} parquet files vs {paths} target paths",
     )  # run_write_out -- pre-flight check
-    FILE_COMMON_17 = ErrorDef(
-        ConnInitException,
-        "Source format=AUTO could not be inferred from paths {paths}: {reason}. "
-        "Set ``format=SrcFileFormat.<...>`` explicitly.",
-    )  # resolve_auto_src_format -- AUTO inference failure
-    FILE_COMMON_18 = ErrorDef(
-        ConnInitException,
-        "Destination format=AUTO could not be inferred from paths {paths}: {reason}. "
-        "Set ``format=DestFileFormat.<...>`` explicitly.",
-    )  # resolve_auto_dest_format -- AUTO inference failure

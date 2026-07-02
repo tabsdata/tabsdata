@@ -12,8 +12,8 @@ from typing import Any, Callable, Iterable
 
 import yaml
 
-from tabsdatak.conn.common.file.error import FileCommonErrorCode
-from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
+from tabsdatak.common._fileformat.error import FileFormatErrorCode
+from tabsdatak.common._fileformat.taxonomy import DestFileFormat, SrcFileFormat
 
 # --- Driver-level exception types -----------------------------------
 
@@ -610,7 +610,7 @@ def resolve_auto_src_format(fmt: SrcFileFormat, paths: list[str]) -> SrcFileForm
     every path's extension is matched against
     :data:`_SRC_EXTENSION_FORMAT`; if all paths resolve to the same
     concrete format that format is returned. If extensions are missing,
-    unknown, or mismatched the caller gets a ``FILE_COMMON_17``
+    unknown, or mismatched the caller gets a ``FILE_FORMAT_3``
     ``ConnInitException`` pointing at the offending paths.
 
     The error is raised at config-build time (``ReaderConf.from_src``)
@@ -622,12 +622,12 @@ def resolve_auto_src_format(fmt: SrcFileFormat, paths: list[str]) -> SrcFileForm
     detected_real = {d for d in detected if d is not None}
     if None in detected:
         unknown = [p for p in paths if _SRC_EXTENSION_FORMAT.get(_extension(p)) is None]
-        raise FileCommonErrorCode.FILE_COMMON_17.exception(
+        raise FileFormatErrorCode.FILE_FORMAT_3.exception(
             paths=paths,
             reason=f"no recognised extension on {unknown!r}",
         )
     if len(detected_real) > 1:
-        raise FileCommonErrorCode.FILE_COMMON_17.exception(
+        raise FileFormatErrorCode.FILE_FORMAT_3.exception(
             paths=paths,
             reason=f"mixed formats inferred ({sorted(d.value for d in detected_real)})",
         )
@@ -637,7 +637,7 @@ def resolve_auto_src_format(fmt: SrcFileFormat, paths: list[str]) -> SrcFileForm
 def resolve_auto_dest_format(fmt: DestFileFormat, paths: list[str]) -> DestFileFormat:
     """Resolve ``DestFileFormat.AUTO`` to a concrete format via path
     extension inspection. Mirrors :func:`resolve_auto_src_format` but
-    against the dest-side enum + extension map. Raises ``FILE_COMMON_18``
+    against the dest-side enum + extension map. Raises ``FILE_FORMAT_4``
     on missing / unknown / mismatched extensions.
     """
     if fmt is not DestFileFormat.AUTO:
@@ -648,12 +648,12 @@ def resolve_auto_dest_format(fmt: DestFileFormat, paths: list[str]) -> DestFileF
         unknown = [
             p for p in paths if _DEST_EXTENSION_FORMAT.get(_extension(p)) is None
         ]
-        raise FileCommonErrorCode.FILE_COMMON_18.exception(
+        raise FileFormatErrorCode.FILE_FORMAT_4.exception(
             paths=paths,
             reason=f"no recognised extension on {unknown!r}",
         )
     if len(detected_real) > 1:
-        raise FileCommonErrorCode.FILE_COMMON_18.exception(
+        raise FileFormatErrorCode.FILE_FORMAT_4.exception(
             paths=paths,
             reason=f"mixed formats inferred ({sorted(d.value for d in detected_real)})",
         )
@@ -686,7 +686,7 @@ def src_format_to_transporter(
     # here -- the previous behaviour silently returned Parquet, which
     # masked CSV/JSON/AVRO mismatches as parquet-magic-byte failures.
     # noinspection PyProtectedMember
-    raise FileCommonErrorCode.FILE_COMMON_14.exception(format=fmt)
+    raise FileFormatErrorCode.FILE_FORMAT_1.exception(format=fmt)
 
 
 def dest_format_to_transporter(
@@ -704,4 +704,4 @@ def dest_format_to_transporter(
     # AUTO must be resolved by ``resolve_auto_dest_format`` before
     # reaching here -- see the matching note on the src-side function.
     # noinspection PyProtectedMember
-    raise FileCommonErrorCode.FILE_COMMON_15.exception(format=fmt)
+    raise FileFormatErrorCode.FILE_FORMAT_2.exception(format=fmt)

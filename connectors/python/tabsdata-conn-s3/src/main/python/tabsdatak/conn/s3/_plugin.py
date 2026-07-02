@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from tabsdatak.conn.common.file import _plugin, _transporter
+from tabsdatak.common._transporter import _transporter1
+from tabsdatak.conn.common.file import _plugin
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -35,31 +36,31 @@ def _s3_uri(bucket: str, path_entry: str) -> str:
     return f"s3://{bucket}/{key}"
 
 
-def build_location(conn: _AnyS3Conn, path_entry: str) -> _transporter.TransporterS3:
-    return _transporter.TransporterS3(
+def build_location(conn: _AnyS3Conn, path_entry: str) -> _transporter1.TransporterS3:
+    return _transporter1.TransporterS3(
         url=_s3_uri(_convert(conn.bucket, str), path_entry),
-        access_key=_transporter.TransporterEnv(
-            _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID
+        access_key=_transporter1.TransporterEnv(
+            _transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID
         ),
-        secret_key=_transporter.TransporterEnv(
-            _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY
+        secret_key=_transporter1.TransporterEnv(
+            _transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY
         ),
-        region=_transporter.TransporterEnv(_transporter.SERVER_SIDE_AWS_REGION),
+        region=_transporter1.TransporterEnv(_transporter1.SERVER_SIDE_AWS_REGION),
     )
 
 
 def run_env(conn: _AnyS3Conn) -> dict[str, str]:
     creds = conn.credentials
     return {
-        _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(
+        _transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(
             creds.access_key_id,
             str,
         ),
-        _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(
+        _transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(
             creds.secret_access_key,
             str,
         ),
-        _transporter.SERVER_SIDE_AWS_REGION: _convert(conn.region, str),
+        _transporter1.SERVER_SIDE_AWS_REGION: _convert(conn.region, str),
     }
 
 

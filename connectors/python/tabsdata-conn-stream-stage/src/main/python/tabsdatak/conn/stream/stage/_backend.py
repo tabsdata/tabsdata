@@ -32,7 +32,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from tabsdatak.conn.azureblob import AzureBlobSrcConn, _plugin as _azureblob_plugin
-from tabsdatak.conn.common.file import _transporter
+from tabsdatak.common._transporter import _transporter1
 from tabsdatak.conn.gcs import GCSSrcConn, _plugin as _gcs_plugin
 from tabsdatak.conn.localfile import LocalFileSrcConn, _plugin as _localfile_plugin
 from tabsdatak.conn.s3 import S3SrcConn, _plugin as _s3_plugin
@@ -57,7 +57,7 @@ class StageBackend(ABC):
         stage with real directories."""
 
     @abstractmethod
-    def build_location(self, rel: str) -> _transporter.TransporterLocation:
+    def build_location(self, rel: str) -> _transporter1.TransporterLocation:
         """Resolve a stage-root-relative path into a transporter
         location."""
 
@@ -107,7 +107,7 @@ class _LocalStageBackend(StageBackend):
     def is_object_store(self) -> bool:
         return False
 
-    def build_location(self, rel: str) -> _transporter.TransporterLocation:
+    def build_location(self, rel: str) -> _transporter1.TransporterLocation:
         return _localfile_plugin.build_location(self._conn, rel)
 
     def credential_env(self) -> dict[str, str] | None:
@@ -160,7 +160,7 @@ class _CloudStageBackend(StageBackend):
     def is_object_store(self) -> bool:
         return True
 
-    def build_location(self, rel: str) -> _transporter.TransporterLocation:
+    def build_location(self, rel: str) -> _transporter1.TransporterLocation:
         return self._plugin.build_location(self._conn, self._conn.full_path(rel))
 
     def credential_env(self) -> dict[str, str] | None:

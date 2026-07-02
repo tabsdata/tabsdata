@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdatak.conn.common.file import _transporter
+from tabsdatak.common._transporter import _transporter1
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureConfigs,
     AzureEndpoint,
@@ -44,11 +44,11 @@ def test_s3_endpoint_appends_rel_and_maps_env_creds():
         ),
     )
     loc = transporter_location_from_endpoint(ep, "manifests/stream-manifest-*.json")
-    assert isinstance(loc, _transporter.TransporterS3)
+    assert isinstance(loc, _transporter1.TransporterS3)
     assert loc.url == "s3://bkt/stage/f/manifests/stream-manifest-*.json"
-    assert loc.access_key == _transporter.TransporterEnv("PFX_AWS_ACCESS_KEY_ID")
-    assert loc.secret_key == _transporter.TransporterEnv("PFX_AWS_SECRET_ACCESS_KEY")
-    assert loc.region == _transporter.TransporterEnv("PFX_AWS_REGION")
+    assert loc.access_key == _transporter1.TransporterEnv("PFX_AWS_ACCESS_KEY_ID")
+    assert loc.secret_key == _transporter1.TransporterEnv("PFX_AWS_SECRET_ACCESS_KEY")
+    assert loc.region == _transporter1.TransporterEnv("PFX_AWS_REGION")
 
 
 def test_literal_credential_maps_to_transporter_literal():
@@ -60,7 +60,7 @@ def test_literal_credential_maps_to_transporter_literal():
         ),
     )
     loc = transporter_location_from_endpoint(ep, "a")
-    assert loc.access_key == _transporter.TransporterLiteral("AKIAEXAMPLE")
+    assert loc.access_key == _transporter1.TransporterLiteral("AKIAEXAMPLE")
 
 
 def test_azure_gcs_local_endpoints_build_their_locations():
@@ -73,7 +73,7 @@ def test_azure_gcs_local_endpoints_build_their_locations():
         ),
         "m",
     )
-    assert isinstance(az, _transporter.TransporterAzure)
+    assert isinstance(az, _transporter1.TransporterAzure)
     assert az.url == "az://c/x/m"
 
     gcs = transporter_location_from_endpoint(
@@ -82,11 +82,11 @@ def test_azure_gcs_local_endpoints_build_their_locations():
         ),
         "m",
     )
-    assert isinstance(gcs, _transporter.TransporterGCS)
+    assert isinstance(gcs, _transporter1.TransporterGCS)
     assert gcs.url == "gs://b/x/m"
 
     local = transporter_location_from_endpoint(LocalFileEndpoint(url="file:///s"), "m")
-    assert isinstance(local, _transporter.TransporterLocalFile)
+    assert isinstance(local, _transporter1.TransporterLocalFile)
     assert local.url == "file:///s/m"
 
 
@@ -102,16 +102,16 @@ def test_stage_backend_from_s3_location():
     # inherits the pod env, so no resolved-values dict is handed over.
     assert backend.credential_env() is None
     loc = backend.build_location("manifests/m.json")
-    assert isinstance(loc, _transporter.TransporterS3)
+    assert isinstance(loc, _transporter1.TransporterS3)
     assert loc.url == "s3://bkt/stage/f/manifests/m.json"
-    assert loc.access_key == _transporter.TransporterEnv("PFX_AWS_ACCESS_KEY_ID")
+    assert loc.access_key == _transporter1.TransporterEnv("PFX_AWS_ACCESS_KEY_ID")
 
 
 def test_stage_backend_from_file_location_is_not_object_store():
     backend = stage_backend_from_location(Location(uri="file:///stage"))
     assert backend.is_object_store is False
     loc = backend.build_location("files/x.parquet")
-    assert isinstance(loc, _transporter.TransporterLocalFile)
+    assert isinstance(loc, _transporter1.TransporterLocalFile)
     assert loc.url == "file:///stage/files/x.parquet"
 
 

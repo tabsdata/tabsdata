@@ -23,27 +23,12 @@ from __future__ import annotations
 from enum import Enum
 from typing import Annotated, Any, Literal, TypeAlias
 
+from tabsdatak.common._fileformat.taxonomy import DestFileFormat, SrcFileFormat
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _validation
 
 # --- Format enums ---------------------------------------------------
-
-
-class SrcFileFormat(Enum):
-    AUTO = "AUTO"
-    CSV = "CSV"
-    JSON = "JSON"
-    AVRO = "AVRO"
-    PARQUET = "PARQUET"
-    LOG = "LOG"
-
-
-class DestFileFormat(Enum):
-    AUTO = "AUTO"
-    CSV = "CSV"
-    JSON = "JSON"
-    AVRO = "AVRO"
-    PARQUET = "PARQUET"
 
 
 class FileInfo(Enum):

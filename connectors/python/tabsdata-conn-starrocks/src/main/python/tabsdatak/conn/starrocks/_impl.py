@@ -180,7 +180,7 @@ def transporter_target(staging: CloudLocation, key: str):
     parquet upload to *staging* under the relative *key*."""
     # Local imports keep the conn-common-file dependency optional for
     # plain Conn-construction users who never call write_out.
-    from tabsdatak.conn.common.file import _transporter as t
+    from tabsdatak.common._transporter import _transporter1 as t
 
     rel = staging.full_path(key) if hasattr(staging, "full_path") else key.lstrip("/")
     if isinstance(staging, S3Location):
@@ -214,7 +214,7 @@ def transporter_target(staging: CloudLocation, key: str):
 def transporter_env(staging: CloudLocation) -> dict[str, str]:
     """Resolve the credentials on *staging* into env vars the
     transporter binary reads at runtime."""
-    from tabsdatak.conn.common.file import _transporter as t
+    from tabsdatak.common._transporter import _transporter1 as t
 
     if isinstance(staging, S3Location):
         creds = staging.credentials
@@ -290,7 +290,8 @@ def upload_parquet(
     Returns the same URI shape that :func:`build_files_function` /
     :func:`staged_uri` expect.
     """
-    from tabsdatak.conn.common.file import _output, _transporter as t
+    from tabsdatak.common._transporter import _transporter1 as t
+    from tabsdatak.conn.common.file import _output
 
     rel = f"{upload_id}/{table_key}/{parquet_path.name}"
     target_loc = transporter_target(staging, rel)

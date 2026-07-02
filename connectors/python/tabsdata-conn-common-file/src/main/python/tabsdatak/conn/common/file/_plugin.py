@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, cast
 
-from tabsdatak.conn.common.file import _input, _output, _transporter
+from tabsdatak.common._transporter import _transporter1
+from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     EXEC_PLAN_ID,
@@ -60,7 +61,7 @@ class ReaderConf:
     # the connector-specific Conn class.
     conn: Any
     paths: list[str]
-    format: _transporter.TransporterFormat
+    format: _transporter1.TransporterFormat
     initial_lastmod: str | None = None
     file_info: str | None = None
 
@@ -73,11 +74,11 @@ class ReaderConf:
         # back to Parquet for AUTO, which masks CSV/JSON/AVRO
         # mismatches as parquet-magic-byte failures inside the
         # transporter binary.
-        resolved_fmt = _transporter.resolve_auto_src_format(src.format, paths)
+        resolved_fmt = _transporter1.resolve_auto_src_format(src.format, paths)
         return cls(
             conn=conn,
             paths=paths,
-            format=_transporter.src_format_to_transporter(
+            format=_transporter1.src_format_to_transporter(
                 resolved_fmt,
                 src.format_cfg.get(resolved_fmt) if src.format_cfg else None,
             ),
@@ -90,7 +91,7 @@ class ReaderConf:
 class WriterConf:
     conn: Any
     paths: list[str]
-    format: _transporter.TransporterFormat
+    format: _transporter1.TransporterFormat
 
     @classmethod
     def from_dest(cls, conn: Any, dest: Any) -> "WriterConf":
@@ -98,11 +99,11 @@ class WriterConf:
         # Resolve ``format=AUTO`` from the paths' extensions before
         # mapping to a transporter format -- see the mirroring note
         # on :meth:`ReaderConf.from_src`.
-        resolved_fmt = _transporter.resolve_auto_dest_format(dest.format, paths)
+        resolved_fmt = _transporter1.resolve_auto_dest_format(dest.format, paths)
         return cls(
             conn=conn,
             paths=paths,
-            format=_transporter.dest_format_to_transporter(
+            format=_transporter1.dest_format_to_transporter(
                 resolved_fmt,
                 dest.format_cfg.get(resolved_fmt) if dest.format_cfg else None,
             ),
@@ -121,7 +122,7 @@ class FilePluginErrors:
     cred_resolution: ErrorCode | None = None  # None when the connector has no creds
 
 
-LocationBuilder = Callable[[Any, str], _transporter.TransporterLocation]
+LocationBuilder = Callable[[Any, str], _transporter1.TransporterLocation]
 RunEnvBuilder = Callable[[Any], dict[str, str]]
 
 
@@ -182,11 +183,11 @@ def import_files(
                 file_info=cfg.file_info,
                 env=env,
             )
-        except _transporter.TransporterBinaryNotFoundError as e:
+        except _transporter1.TransporterBinaryNotFoundError as e:
             raise errors.binary_not_found.exception(cause=e)
-        except _transporter.TransporterRunError as e:
+        except _transporter1.TransporterRunError as e:
             raise errors.read_failed.exception(cause=e, path=entry)
-        except _transporter.TransporterReportError as e:
+        except _transporter1.TransporterReportError as e:
             raise errors.report_invalid.exception(cause=e, path=entry)
 
         # Stage this slot's fresh cursor for the next trx. The transporter
@@ -241,8 +242,8 @@ def copy_out(
     for i, (parquet_path, entry) in enumerate(zip(tables, cfg.paths), 1):
         logger.info("file-writer: writing path %d/%d: %r", i, total, entry)
         resolved_entry = resolve_dest_tokens(entry, ctx)
-        source_loc = _transporter.TransporterLocalFile(
-            _transporter.path_to_file_uri(parquet_path)
+        source_loc = _transporter1.TransporterLocalFile(
+            _transporter1.path_to_file_uri(parquet_path)
         )
         target_loc = build_location(conn, resolved_entry)
         pairs.append((source_loc, target_loc))
@@ -254,14 +255,14 @@ def copy_out(
             format=cfg.format,
             env=env,
         )
-    except _transporter.TransporterBinaryNotFoundError as e:
+    except _transporter1.TransporterBinaryNotFoundError as e:
         raise errors.binary_not_found.exception(cause=e)
-    except _transporter.TransporterRunError as e:
+    except _transporter1.TransporterRunError as e:
         raise errors.write_failed.exception(
             cause=e,
             target=", ".join(cfg.paths),
         )
-    except _transporter.TransporterReportError as e:
+    except _transporter1.TransporterReportError as e:
         raise errors.report_invalid.exception(
             cause=e,
             path=", ".join(cfg.paths),

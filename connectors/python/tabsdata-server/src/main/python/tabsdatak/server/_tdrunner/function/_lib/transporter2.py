@@ -14,7 +14,7 @@ import yaml
 
 from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
 from tabsdatak.common._interpreter.python.venv import PythonEnvironment
-from tabsdatak.conn.common.file import _transporter2
+from tabsdatak.common._transporter import _transporter2
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.mounts import secret_env_name
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (

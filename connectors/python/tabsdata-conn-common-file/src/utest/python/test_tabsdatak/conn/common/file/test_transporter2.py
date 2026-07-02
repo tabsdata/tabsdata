@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 import yaml
 
-from tabsdatak.conn.common.file import _transporter2 as t
+from tabsdatak.common._transporter import _transporter2 as t
 from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
 
 

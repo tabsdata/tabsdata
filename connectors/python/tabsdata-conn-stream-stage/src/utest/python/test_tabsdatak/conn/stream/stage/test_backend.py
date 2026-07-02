@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from tabsdatak.conn.common.error import ConnInitException
-from tabsdatak.conn.common.file import _transporter
+from tabsdatak.common._transporter import _transporter1
 from tabsdatak.conn.localfile import LocalFileSrcConn
 
 # noinspection PyProtectedMember
@@ -80,7 +80,7 @@ def test_backend_for_conn_multiple_slots_raises():
 def test_local_backend_build_location_resolves_under_base_path():
     backend = _LocalStageBackend(LocalFileSrcConn(base_path="/stage"))
     loc = backend.build_location("files/x.parquet")
-    assert isinstance(loc, _transporter.TransporterLocalFile)
+    assert isinstance(loc, _transporter1.TransporterLocalFile)
     # The localfile connector applies base_path itself, so the resolved
     # url carries both the base path and the relative entry.
     assert "stage" in loc.url
@@ -121,7 +121,7 @@ class _FakePlugin:
 
     def build_location(self, conn, path):
         self.seen_path = path
-        return _transporter.TransporterLocalFile("file:///fake")
+        return _transporter1.TransporterLocalFile("file:///fake")
 
     def run_env(self, conn):
         return {"AWS_ACCESS_KEY_ID": "k", "AWS_SECRET_ACCESS_KEY": "s"}

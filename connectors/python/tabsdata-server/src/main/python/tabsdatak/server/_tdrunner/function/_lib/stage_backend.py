@@ -30,7 +30,8 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
-from tabsdatak.conn.common.file import _input, _output, _transporter
+from tabsdatak.common._transporter import _transporter1
+from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
@@ -45,7 +46,7 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
 )
 from tabsdatak.server._tdrunner.function._lib.request import Location
 
-_TransporterCred = _transporter.TransporterEnv | _transporter.TransporterLiteral
+_TransporterCred = _transporter1.TransporterEnv | _transporter1.TransporterLiteral
 
 # Baseline handed to the transporter so last-modified tracking activates on the
 # first fetch (no cursor yet): epoch means every object is a candidate.
@@ -65,8 +66,8 @@ def _cred(ref: CredRef | None) -> _TransporterCred | None:
     if ref is None:
         return None
     if isinstance(ref, EnvRef):
-        return _transporter.TransporterEnv(ref.name)
-    return _transporter.TransporterLiteral(ref.value)  # LiteralRef
+        return _transporter1.TransporterEnv(ref.name)
+    return _transporter1.TransporterLiteral(ref.value)  # LiteralRef
 
 
 def _join(url: str, rel: str) -> str:
@@ -76,12 +77,12 @@ def _join(url: str, rel: str) -> str:
 
 def transporter_location_from_endpoint(
     endpoint: Endpoint, rel: str
-) -> _transporter.TransporterLocation:
+) -> _transporter1.TransporterLocation:
     """Resolve ``endpoint`` + a stage-relative path into a
     ``TransporterLocation`` for the ``_input`` / ``_output`` helpers."""
     url = _join(endpoint.url, rel)
     if isinstance(endpoint, S3Endpoint):
-        return _transporter.TransporterS3(
+        return _transporter1.TransporterS3(
             url=url,
             access_key=_cred(endpoint.configs.access_key),
             secret_key=_cred(endpoint.configs.secret_key),
@@ -89,20 +90,20 @@ def transporter_location_from_endpoint(
             extra_configs=dict(endpoint.configs.extra_configs),
         )
     if isinstance(endpoint, AzureEndpoint):
-        return _transporter.TransporterAzure(
+        return _transporter1.TransporterAzure(
             url=url,
             account_name=_cred(endpoint.configs.account_name),
             account_key=_cred(endpoint.configs.account_key),
             extra_configs=dict(endpoint.configs.extra_configs),
         )
     if isinstance(endpoint, GcsEndpoint):
-        return _transporter.TransporterGCS(
+        return _transporter1.TransporterGCS(
             url=url,
             service_account_key=_cred(endpoint.configs.service_account_key),
             extra_configs=dict(endpoint.configs.extra_configs),
         )
     if isinstance(endpoint, LocalFileEndpoint):
-        return _transporter.TransporterLocalFile(url=url)
+        return _transporter1.TransporterLocalFile(url=url)
     raise TypeError(f"unsupported endpoint type: {type(endpoint).__name__}")
 
 
@@ -116,7 +117,7 @@ class _EndpointStageBackend(StageBackend):
     def is_object_store(self) -> bool:
         return not isinstance(self._endpoint, LocalFileEndpoint)
 
-    def build_location(self, rel: str) -> _transporter.TransporterLocation:
+    def build_location(self, rel: str) -> _transporter1.TransporterLocation:
         return transporter_location_from_endpoint(self._endpoint, rel)
 
     def credential_env(self) -> dict[str, str] | None:
@@ -128,31 +129,31 @@ class _EndpointStageBackend(StageBackend):
     def upload(self, local_path: Path, rel: str) -> None:
         # Raw byte-copy (TransporterParquetFormat skips transcoding), so
         # both parquet data and JSON control files upload verbatim.
-        source = _transporter.TransporterLocalFile(
-            _transporter.path_to_file_uri(local_path)
+        source = _transporter1.TransporterLocalFile(
+            _transporter1.path_to_file_uri(local_path)
         )
         with tempfile.TemporaryDirectory() as work_dir:
             _output.copy_one(
                 source_target_pairs=[(source, self.build_location(rel))],
                 work_dir=Path(work_dir),
-                format=_transporter.TransporterParquetFormat(),
+                format=_transporter1.TransporterParquetFormat(),
                 env=self.credential_env(),
             )
 
     def read_text(self, rel: str) -> str | None:
         with tempfile.TemporaryDirectory() as work_dir:
             dst_path = Path(work_dir) / "download"
-            target = _transporter.TransporterLocalFile(
-                _transporter.path_to_file_uri(dst_path)
+            target = _transporter1.TransporterLocalFile(
+                _transporter1.path_to_file_uri(dst_path)
             )
             try:
                 _output.copy_one(
                     source_target_pairs=[(self.build_location(rel), target)],
                     work_dir=Path(work_dir),
-                    format=_transporter.TransporterParquetFormat(),
+                    format=_transporter1.TransporterParquetFormat(),
                     env=self.credential_env(),
                 )
-            except _transporter.TransporterRunError:
+            except _transporter1.TransporterRunError:
                 # Missing/unreadable object -> treat as absent. The streamer's
                 # state read tolerates this (falls back to first-run), matching
                 # the local "file does not exist" path.

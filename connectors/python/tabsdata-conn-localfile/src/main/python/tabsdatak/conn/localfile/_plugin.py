@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from tabsdatak.conn.common.file import _plugin as _file_plugin, _transporter
+from tabsdatak.common._transporter import _transporter1
+from tabsdatak.conn.common.file import _plugin as _file_plugin
 from tabsdatak.conn.localfile import (
     LocalFileDest,
     LocalFileDestConn,
@@ -37,13 +38,13 @@ _AnyLocalFileConn = LocalFileSrcConn | LocalFileDestConn
 
 def build_location(
     conn: _AnyLocalFileConn, entry: str
-) -> _transporter.TransporterLocalFile:
+) -> _transporter1.TransporterLocalFile:
     resolved = "/" + conn.full_path(entry)
     if "*" in resolved:
         head, sep, basename = resolved.rpartition("/")
-        head_uri = _transporter.path_to_file_uri(head + sep)
-        return _transporter.TransporterLocalFile(head_uri + basename)
-    return _transporter.TransporterLocalFile(_transporter.path_to_file_uri(resolved))
+        head_uri = _transporter1.path_to_file_uri(head + sep)
+        return _transporter1.TransporterLocalFile(head_uri + basename)
+    return _transporter1.TransporterLocalFile(_transporter1.path_to_file_uri(resolved))
 
 
 # --- Error-code bundle (no creds → no cred_resolution code) --------

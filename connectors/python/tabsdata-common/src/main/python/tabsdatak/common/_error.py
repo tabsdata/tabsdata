@@ -16,6 +16,11 @@ class CommonRuntimeException(CommonException):
     JSONPath walker)."""
 
 
+class CommonInitException(CommonException):
+    """Configuration / construction-time failure in shared helpers (e.g.
+    a format that cannot be resolved before any work starts)."""
+
+
 class CommonErrorCode(ErrorCode):
     # --- JSONPath parsing (tabsdatak.common._json_serde) ------------
     COMMON_1 = ErrorDef(

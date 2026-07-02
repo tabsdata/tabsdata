@@ -9,7 +9,8 @@ from tabsdatak.conn.azureblob import (
     AzureBlobSrcConn,
 )
 from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
-from tabsdatak.conn.common.file import _plugin, _transporter
+from tabsdatak.common._transporter import _transporter1
+from tabsdatak.conn.common.file import _plugin
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import AzureAccountKey, _convert
@@ -42,15 +43,15 @@ def _az_uri(container: str, path_entry: str) -> str:
 
 def build_location(
     conn: _AnyAzureBlobConn, path_entry: str
-) -> _transporter.TransporterAzure:
+) -> _transporter1.TransporterAzure:
     container = _convert(conn.container, str)
-    return _transporter.TransporterAzure(
+    return _transporter1.TransporterAzure(
         url=_az_uri(container, path_entry),
-        account_name=_transporter.TransporterEnv(
-            _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME
+        account_name=_transporter1.TransporterEnv(
+            _transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME
         ),
-        account_key=_transporter.TransporterEnv(
-            _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY
+        account_key=_transporter1.TransporterEnv(
+            _transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY
         ),
     )
 
@@ -69,8 +70,8 @@ def credentials(conn: _AnyAzureBlobConn) -> AzureAccountKey:
 def run_env(conn: _AnyAzureBlobConn) -> dict[str, str]:
     c = credentials(conn)
     return {
-        _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(c.account_name, str),
-        _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(c.account_key, str),
+        _transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(c.account_name, str),
+        _transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(c.account_key, str),
     }
 
 

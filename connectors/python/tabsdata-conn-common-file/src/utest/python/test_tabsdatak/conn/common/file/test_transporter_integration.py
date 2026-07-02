@@ -27,7 +27,7 @@ from tabsdatak.conn.common.file import _output as _output_module
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _transporter
+from tabsdatak.common._transporter import _transporter1
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
@@ -184,14 +184,14 @@ def test_import_one_local_parquet_round_trip(tmp_path: Path):
     )
 
     report = _input_module.import_one(
-        source=_transporter.TransporterLocalFile(
-            _transporter.path_to_file_uri(src_dir / "users.parquet"),
+        source=_transporter1.TransporterLocalFile(
+            _transporter1.path_to_file_uri(src_dir / "users.parquet"),
         ),
         target_dir=out_dir,
-        format=_transporter.TransporterParquetFormat(),
+        format=_transporter1.TransporterParquetFormat(),
     )
 
-    assert isinstance(report, _transporter.TransporterReport)
+    assert isinstance(report, _transporter1.TransporterReport)
     assert report.files, "transporter report must reference at least one file"
     target_path = report.files[0].get("to")
     assert target_path, f"no 'to' field in report.files entry: {report.files[0]!r}"
@@ -213,11 +213,11 @@ def test_import_one_glob_pattern_in_basename(tmp_path: Path):
     _write_input_parquet(src_dir / "b.parquet", [{"id": 2}])
 
     report = _input_module.import_one(
-        source=_transporter.TransporterLocalFile(
-            _transporter.path_to_file_uri(src_dir) + "*.parquet",
+        source=_transporter1.TransporterLocalFile(
+            _transporter1.path_to_file_uri(src_dir) + "*.parquet",
         ),
         target_dir=out_dir,
-        format=_transporter.TransporterParquetFormat(),
+        format=_transporter1.TransporterParquetFormat(),
     )
 
     targets = [f["to"] for f in report.files if isinstance(f, dict) and f.get("to")]
@@ -244,8 +244,8 @@ def test_wildcard_copy_one_max_files_drains_one_at_a_time(tmp_path: Path):
         stamp = 1_700_000_000 + i
         _os.utime(src_dir / name, (stamp, stamp))
 
-    source = _transporter.TransporterLocalFile(
-        _transporter.path_to_file_uri(src_dir) + "*.parquet",
+    source = _transporter1.TransporterLocalFile(
+        _transporter1.path_to_file_uri(src_dir) + "*.parquet",
     )
     # A baseline older than every file so all three are candidates.
     initial_lastmod = "2020-01-01T00:00:00.000000+00:00"
@@ -289,20 +289,20 @@ def test_copy_one_local_to_local(tmp_path: Path):
         [{"id": 100, "name": "carol"}],
     )
 
-    src_loc = _transporter.TransporterLocalFile(
-        _transporter.path_to_file_uri(src_dir / "in.parquet"),
+    src_loc = _transporter1.TransporterLocalFile(
+        _transporter1.path_to_file_uri(src_dir / "in.parquet"),
     )
-    tgt_loc = _transporter.TransporterLocalFile(
-        _transporter.path_to_file_uri(out_dir / "out.parquet"),
+    tgt_loc = _transporter1.TransporterLocalFile(
+        _transporter1.path_to_file_uri(out_dir / "out.parquet"),
     )
 
     report = _output_module.copy_one(
         source_target_pairs=[(src_loc, tgt_loc)],
         work_dir=tmp_path,
-        format=_transporter.TransporterParquetFormat(),
+        format=_transporter1.TransporterParquetFormat(),
     )
 
-    assert isinstance(report, _transporter.TransporterReport)
+    assert isinstance(report, _transporter1.TransporterReport)
     assert (out_dir / "out.parquet").exists()
     df = pl.read_parquet(out_dir / "out.parquet")
     assert df.to_dicts() == [{"id": 100, "name": "carol"}]
@@ -321,8 +321,8 @@ _INTEG_ERRORS = _plugin.FilePluginErrors(
 )
 
 
-def _local_location(_conn, entry: str) -> _transporter.TransporterLocalFile:
-    return _transporter.TransporterLocalFile(_transporter.path_to_file_uri(entry))
+def _local_location(_conn, entry: str) -> _transporter1.TransporterLocalFile:
+    return _transporter1.TransporterLocalFile(_transporter1.path_to_file_uri(entry))
 
 
 def test_run_read_in_end_to_end_against_real_binary(tmp_path: Path):
@@ -338,7 +338,7 @@ def test_run_read_in_end_to_end_against_real_binary(tmp_path: Path):
     cfg = _plugin.ReaderConf(
         conn=object(),
         paths=[str(src_dir / "users.parquet")],
-        format=_transporter.TransporterParquetFormat(),
+        format=_transporter1.TransporterParquetFormat(),
     )
     out = _plugin.import_files(
         ctx=_SrcCtx(work_dir),
@@ -369,7 +369,7 @@ def test_run_write_out_end_to_end_against_real_binary(tmp_path: Path):
     cfg = _plugin.WriterConf(
         conn=object(),
         paths=[str(out_dir / "data.parquet")],
-        format=_transporter.TransporterParquetFormat(),
+        format=_transporter1.TransporterParquetFormat(),
     )
     _plugin.copy_out(
         ctx=_DestCtx(work_dir),

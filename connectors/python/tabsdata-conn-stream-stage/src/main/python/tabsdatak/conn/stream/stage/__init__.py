@@ -11,7 +11,8 @@ from typing import Any, cast
 
 from tabsdatak.api import Src
 from tabsdatak.conn.azureblob import AzureBlobSrcConn
-from tabsdatak.conn.common.file import _input, _output, _transporter
+from tabsdatak.common._transporter import _transporter1
+from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.gcs import GCSSrcConn
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.s3 import S3SrcConn
@@ -117,13 +118,13 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
                 max_files=1,
                 env=env,
             )
-        except _transporter.TransporterBinaryNotFoundError as e:
+        except _transporter1.TransporterBinaryNotFoundError as e:
             raise ManifestStageErrorCode.MANIFEST_STAGE_3.exception(cause=e)
-        except _transporter.TransporterRunError as e:
+        except _transporter1.TransporterRunError as e:
             raise ManifestStageErrorCode.MANIFEST_STAGE_4.exception(
                 cause=e, pattern=_STREAM_MANIFEST_FILE_WILDCARD
             )
-        except _transporter.TransporterReportError as e:
+        except _transporter1.TransporterReportError as e:
             raise ManifestStageErrorCode.MANIFEST_STAGE_5.exception(
                 cause=e, pattern=_STREAM_MANIFEST_FILE_WILDCARD
             )
@@ -165,7 +166,7 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
         slots: list[list[str]],
     ) -> list[list[TableFileSpec]]:
         pairs: list[
-            tuple[_transporter.TransporterLocation, _transporter.TransporterLocation]
+            tuple[_transporter1.TransporterLocation, _transporter1.TransporterLocation]
         ] = []
         results: list[list[TableFileSpec]] = []
         for slot_idx, slot in enumerate(slots):
@@ -176,8 +177,8 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
                 source = backend.build_location(rel)
                 name = Path(rel).name or f"file{file_idx}"
                 target_path = slot_dir / f"{file_idx:04d}-{name}"
-                target = _transporter.TransporterLocalFile(
-                    _transporter.path_to_file_uri(target_path)
+                target = _transporter1.TransporterLocalFile(
+                    _transporter1.path_to_file_uri(target_path)
                 )
                 pairs.append((source, target))
                 slot_targets.append(target_path)
@@ -188,16 +189,16 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
                 _output.copy_one(
                     source_target_pairs=pairs,
                     work_dir=ctx.work_dir,
-                    format=_transporter.TransporterParquetFormat(),
+                    format=_transporter1.TransporterParquetFormat(),
                     env=env,
                 )
-            except _transporter.TransporterBinaryNotFoundError as e:
+            except _transporter1.TransporterBinaryNotFoundError as e:
                 raise ManifestStageErrorCode.MANIFEST_STAGE_3.exception(cause=e)
-            except _transporter.TransporterRunError as e:
+            except _transporter1.TransporterRunError as e:
                 raise ManifestStageErrorCode.MANIFEST_STAGE_8.exception(
                     cause=e, path=str(manifest_path)
                 )
-            except _transporter.TransporterReportError as e:
+            except _transporter1.TransporterReportError as e:
                 raise ManifestStageErrorCode.MANIFEST_STAGE_9.exception(
                     cause=e, path=str(manifest_path)
                 )

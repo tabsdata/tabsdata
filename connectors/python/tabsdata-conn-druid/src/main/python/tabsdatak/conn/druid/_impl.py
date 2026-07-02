@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from tabsdatak.conn.common.file import _transporter
+from tabsdatak.common._transporter import _transporter1
 from tabsdatak.conn.common.file._output import copy_one as _transporter_copy_one
 
 # noinspection PyProtectedMember
@@ -112,7 +112,7 @@ def staged_uri(location: CloudLocation, key: str) -> str:
 
 def _transporter_target(
     location: CloudLocation, key: str
-) -> _transporter.TransporterLocation:
+) -> _transporter1.TransporterLocation:
     """Build the ``TransporterLocation`` target for a staged file.
 
     The cloud-side credentials are passed via the transporter env (so
@@ -121,33 +121,33 @@ def _transporter_target(
     """
     if isinstance(location, S3Location):
         bucket = _convert(location.bucket, str)
-        return _transporter.TransporterS3(
+        return _transporter1.TransporterS3(
             url=f"s3://{bucket}/{key}",
-            access_key=_transporter.TransporterEnv(
-                _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID
+            access_key=_transporter1.TransporterEnv(
+                _transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID
             ),
-            secret_key=_transporter.TransporterEnv(
-                _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY
+            secret_key=_transporter1.TransporterEnv(
+                _transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY
             ),
-            region=_transporter.TransporterEnv(_transporter.SERVER_SIDE_AWS_REGION),
+            region=_transporter1.TransporterEnv(_transporter1.SERVER_SIDE_AWS_REGION),
         )
     if isinstance(location, GCSLocation):
         bucket = _convert(location.bucket, str)
-        return _transporter.TransporterGCS(
+        return _transporter1.TransporterGCS(
             url=f"gs://{bucket}/{key}",
-            service_account_key=_transporter.TransporterEnv(
-                _transporter.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON
+            service_account_key=_transporter1.TransporterEnv(
+                _transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON
             ),
         )
     if isinstance(location, AzBlobLocation):
         container = _convert(location.container, str)
-        return _transporter.TransporterAzure(
+        return _transporter1.TransporterAzure(
             url=f"az://{container}/{key}",
-            account_name=_transporter.TransporterEnv(
-                _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME
+            account_name=_transporter1.TransporterEnv(
+                _transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME
             ),
-            account_key=_transporter.TransporterEnv(
-                _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY
+            account_key=_transporter1.TransporterEnv(
+                _transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY
             ),
         )
     # noinspection PyProtectedMember
@@ -163,18 +163,18 @@ def _transporter_env(location: CloudLocation) -> dict[str, str]:
     if isinstance(location, S3Location):
         creds = location.credentials
         return {
-            _transporter.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(
+            _transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(
                 creds.access_key_id, str
             ),
-            _transporter.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(
+            _transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(
                 creds.secret_access_key,
                 str,
             ),
-            _transporter.SERVER_SIDE_AWS_REGION: _convert(location.region, str),
+            _transporter1.SERVER_SIDE_AWS_REGION: _convert(location.region, str),
         }
     if isinstance(location, GCSLocation):
         return {
-            _transporter.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: _convert(
+            _transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: _convert(
                 location.credentials.json,
                 str,
             ),
@@ -182,10 +182,10 @@ def _transporter_env(location: CloudLocation) -> dict[str, str]:
     if isinstance(location, AzBlobLocation):
         creds = location.credentials
         return {
-            _transporter.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(
+            _transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(
                 creds.account_name, str
             ),
-            _transporter.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(
+            _transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(
                 creds.account_key, str
             ),
         }
@@ -209,7 +209,7 @@ def upload_staged_files(
     cloud-native URIs Druid will see in the ingestion ``inputSource``.
     """
     pairs: list[
-        tuple[_transporter.TransporterLocation, _transporter.TransporterLocation]
+        tuple[_transporter1.TransporterLocation, _transporter1.TransporterLocation]
     ] = []
     uris: list[str] = []
     base_path = getattr(staging, "base_path", "") or ""
@@ -217,8 +217,8 @@ def upload_staged_files(
         name = f"part-{idx:05d}-{Path(src_path).name}"
         key = _join_path(base_path, subdir, name)
         target = _transporter_target(staging, key)
-        source = _transporter.TransporterLocalFile(
-            _transporter.path_to_file_uri(Path(src_path))
+        source = _transporter1.TransporterLocalFile(
+            _transporter1.path_to_file_uri(Path(src_path))
         )
         pairs.append((source, target))
         uris.append(staged_uri(staging, key))
@@ -227,7 +227,7 @@ def upload_staged_files(
     _transporter_copy_one(
         source_target_pairs=pairs,
         work_dir=work_dir,
-        format=_transporter.TransporterParquetFormat(),
+        format=_transporter1.TransporterParquetFormat(),
         env=env,
     )
     return uris

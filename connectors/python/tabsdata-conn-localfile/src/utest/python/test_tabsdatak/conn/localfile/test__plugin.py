@@ -8,7 +8,7 @@ import pytest
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.file import _transporter
+from tabsdatak.common._transporter import _transporter1
 from tabsdatak.conn.localfile import LocalFileDest, LocalFileDestConn, LocalFileSrc, LocalFileSrcConn
 from tabsdatak.spi import TableFileInput
 # noinspection PyProtectedMember
@@ -27,7 +27,7 @@ pytestmark = pytest.mark.localfile
 def test_build_location_joins_base_path_with_entry():
     conn = LocalFileSrcConn(base_path="/data/")
     loc = plugin.build_location(conn, "users.csv")
-    assert isinstance(loc, _transporter.TransporterLocalFile)
+    assert isinstance(loc, _transporter1.TransporterLocalFile)
     assert loc.url.startswith("file:///")
     assert loc.url.endswith("/data/users.csv")
 
