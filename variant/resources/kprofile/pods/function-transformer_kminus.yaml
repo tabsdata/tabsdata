@@ -314,6 +314,7 @@ spec:
           envFrom:
             - secretRef:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
+                optional: true
               prefix: SECRETS__
           volumeMounts:
             - name: config-localize-fn-bundle
@@ -442,6 +443,7 @@ spec:
           envFrom:
             - secretRef:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
+                optional: true
               prefix: SECRETS__
           volumeMounts:
             - name: config-run-transporter-localize
@@ -629,6 +631,7 @@ spec:
           envFrom:
             - secretRef:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
+                optional: true
               prefix: SECRETS__
           volumeMounts:
             - name: config-run-transporter-state-upload
@@ -751,6 +754,7 @@ spec:
           envFrom:
             - secretRef:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
+                optional: true
               prefix: SECRETS__
           volumeMounts:
             - name: config-run-transporter-tables-upload
