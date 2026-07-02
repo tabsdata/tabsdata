@@ -41,7 +41,7 @@ class LocalFileErrorCode(ErrorCode):
     )  # LocalFileDest.validate()
     LOCALFILE_6 = ErrorDef(
         LocalFileRuntimeException,
-        "td_transporter binary not found (set $TD_TRANSPORTER_BIN or install on PATH)",
+        "td_transporter binary not found in the runtime environment.",
     )  # _LocalFileSrcPlugin / _LocalFileDestPlugin: binary lookup
     LOCALFILE_7 = ErrorDef(
         LocalFileRuntimeException,

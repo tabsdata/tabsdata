@@ -13,8 +13,8 @@ import pytest
 import yaml
 import zstandard
 
-from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
-    TransporterNotFoundError,
+from tabsdatak.common._transporter.invoker.transporter1 import (
+    TransporterBinaryNotFoundError,
 )
 from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle import main
 from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle.error import (
@@ -41,6 +41,9 @@ def _set_argv(
     liveness,
     responder_url,
 ):
+    storage_config = Path(transporter_request).parent / "storage.yaml"
+    storage_config.parent.mkdir(parents=True, exist_ok=True)
+    storage_config.write_text("storage:\n  mounts:\n    - id: ROOT\n      options: {}\n")
     monkeypatch.setattr(
         sys,
         "argv",
@@ -58,6 +61,8 @@ def _set_argv(
             str(transporter_response),
             "--liveness",
             str(liveness),
+            "--storage-config",
+            str(storage_config),
             "--responder-url",
             responder_url,
             "--responder-method",
@@ -182,7 +187,7 @@ def test_main_transporter_not_found_returns_transporter_failed(
     _write_request(paths.request)
 
     def fake(yaml_path, report, liveness=None):
-        raise TransporterNotFoundError("no binary")
+        raise TransporterBinaryNotFoundError("no binary")
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
     _set_argv(

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
-import sys
 import types
 import uuid
 from abc import ABC
@@ -20,11 +18,10 @@ from tabsdatak.common._fileformat.taxonomy import DestFileFormat, SrcFileFormat
 # ===================================================================
 # ``td_transporter2`` Python shim.
 #
-# Drop-in replacement for :mod:`_transporter` that drives the new
-# ``td_transporter2`` binary. The connector-facing API (the
-# ``Transporter*`` location / format types, the binary lookup, the
-# format mappers) is identical to :mod:`_transporter`; only the wire
-# layer changes:
+# Sibling of :mod:`transporter1` that drives the ``td_transporter2``
+# binary. The connector-facing API (the ``Transporter*`` location /
+# format types, the format mappers) mirrors :mod:`transporter1`; only the
+# wire layer changes:
 #
 #   * ``td_transporter2`` is a multi-command CLI -- ``find`` /
 #     ``find-copy`` / ``copy`` / ``delete``, each ``--request <in.yaml>
@@ -72,33 +69,6 @@ class TransporterReportError(RuntimeError):
     pass
 
 
-# --- Binary lookup --------------------------------------------------
-
-
-# The override env var keeps its generic name (it points at "the transporter
-# binary"); only the default PATH name moves to the td_transporter2 build.
-_BINARY_NAME = "td_transporter2.exe" if sys.platform == "win32" else "td_transporter2"
-_BINARY_ENV_VAR = "TD_TRANSPORTER_BIN"
-
-
-def find_transporter_binary() -> str:
-    override = os.environ.get(_BINARY_ENV_VAR)
-    if override:
-        if os.path.isfile(override) and os.access(override, os.X_OK):
-            return override
-        raise TransporterBinaryNotFoundError(
-            f"${_BINARY_ENV_VAR}={override!r} does not point to an executable file"
-        )
-    found = shutil.which(_BINARY_NAME)
-    if found:
-        return found
-    raise TransporterBinaryNotFoundError(
-        f"td_transporter2 binary not found on PATH and "
-        f"${_BINARY_ENV_VAR} is not set; install the binary or set "
-        f"the env var to its absolute path"
-    )
-
-
 # --- Subcommands ----------------------------------------------------
 #
 # ``td_transporter2`` is a multi-command CLI; each request is one
@@ -132,16 +102,15 @@ def run_binary(
     response_path: Path,
     *,
     env: dict[str, str] | None,
-    binary_path: str | None,
+    binary_path: str,
     extra_args: tuple[str, ...] = (),
 ) -> None:
-    binary = binary_path or find_transporter_binary()
     proc_env = dict(os.environ)
     if env:
         proc_env.update(env)
     completed = subprocess.run(
         [
-            binary,
+            binary_path,
             subcommand,
             "--request",
             str(request_path),
@@ -203,7 +172,7 @@ SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON = "LOCATION_GCS_SERVICE_ACCOUNT_JSON"
 # --- Connector-facing domain dataclasses ---------------------------
 #
 # The natural Python shape callers (the per-connector ``build_location``
-# builders) construct. Identical to :mod:`_transporter`. These are
+# builders) construct. Identical to :mod:`transporter1`. These are
 # mapped onto the td_transporter2 wire dataclasses by :func:`to_location`
 # / :func:`to_format_spec` below.
 
@@ -415,7 +384,7 @@ class CopyResponse:
 
 # Connector-facing alias: the read (find-copy) and write (copy) paths
 # both return this report shape, named ``TransporterReport`` to match
-# the :mod:`_transporter` API.
+# the :mod:`transporter1` API.
 TransporterReport = CopyResponse
 
 
@@ -614,7 +583,7 @@ def _run(
     response_cls: type,
     *,
     env: dict[str, str] | None,
-    binary_path: str | None,
+    binary_path: str,
     extra_args: tuple[str, ...] = (),
 ) -> Any:
     """Write ``request`` (a request dataclass) as a flat YAML file, run
@@ -640,7 +609,7 @@ def find(
     *,
     alpha_suborder: bool = False,
     env: dict[str, str] | None = None,
-    binary_path: str | None = None,
+    binary_path: str,
 ) -> FindResponse:
     """List files matching the (wildcard) source. No conversion.
 
@@ -668,7 +637,7 @@ def find_copy(
     *,
     alpha_suborder: bool = False,
     env: dict[str, str] | None = None,
-    binary_path: str | None = None,
+    binary_path: str,
 ) -> TransporterReport:
     """Find files under the (wildcard) source and copy / convert each
     into ``target_dir`` (byte move when both formats are absent).
@@ -694,7 +663,7 @@ def copy(
     work_dir: Path,
     *,
     env: dict[str, str] | None = None,
-    binary_path: str | None = None,
+    binary_path: str,
 ) -> TransporterReport:
     """Copy / convert an explicit list of (from, to) pairs."""
     return _run(
@@ -707,7 +676,7 @@ def delete(
     work_dir: Path,
     *,
     env: dict[str, str] | None = None,
-    binary_path: str | None = None,
+    binary_path: str,
 ) -> DeleteResponse:
     """Delete a list of files (per-file failures are recorded in the
     response's ``failed`` list, not raised)."""
@@ -718,7 +687,7 @@ def delete(
 
 # --- Format mappers ------------------------------------------------
 #
-# Identical to :mod:`_transporter`. Only the keys td_transporter2
+# Identical to :mod:`transporter1`. Only the keys td_transporter2
 # understands (``separator`` -> delimiter, ``has_header`` /
 # ``include_header``) take effect today; the rest are accepted for
 # forward-compatibility and layered under the user's ``format_cfg``.

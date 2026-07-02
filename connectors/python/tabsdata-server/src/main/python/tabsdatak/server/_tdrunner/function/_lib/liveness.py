@@ -22,7 +22,8 @@ its records to count.
 
 For external work that doesn't naturally log from the Python side
 (subprocess output), pipe it through ``logging`` — see
-``transporter_proc.run_transporter`` for the canonical pattern.
+``TransporterHandler.run`` (in :mod:`tabsdatak.common._transporter.handler`)
+for the canonical pattern.
 
 User-defined plugin code (``SrcPlugin.read_in`` / ``DestPlugin.write_out``
 and the user transformer body) that doesn't log AND doesn't use any

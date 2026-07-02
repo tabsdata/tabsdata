@@ -7,8 +7,8 @@
 A `Location` (a URI + optional credential env-var prefix, as it appears
 in `request.yaml`) is mapped to a typed `Endpoint` carrying explicit
 credential references. The transporter binary's YAML on-wire shape is
-defined elsewhere (`transporter_request.py`); this module is concerned
-only with the cloud-storage abstraction and the per-scheme dispatch.
+owned by the common transporter handler; this module is concerned only
+with the cloud-storage abstraction and the per-scheme dispatch.
 
 Credentials are referenced via env vars. When `Location.env_prefix` is
 set, each credential's env-var name is `<env_prefix>_<CRED>`; otherwise

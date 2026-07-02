@@ -6,15 +6,17 @@
 
 The stream-stage publisher -- and, later, the streamer + sidecar -- need a
 backend for an arbitrary ``function_stage`` ``Location``, including cloud
-schemes. :mod:`endpoint` already maps a ``Location`` to a typed
-``Endpoint`` with ``env_prefix``-derived credential references; this module
-turns that ``Endpoint`` into the ``TransporterLocation`` a
-:class:`~tabsdatak.conn.stream.stage._backend.StageBackend` hands to the
-``_input`` / ``_output`` transporter helpers.
+schemes. :mod:`endpoint` maps a ``Location`` to a typed ``Endpoint`` with
+``env_prefix``-derived credential references; this module turns that
+``Endpoint`` into the provider location built by the transporter handler
+that a :class:`~tabsdatak.conn.stream.stage._backend.StageBackend` drives
+through the ``_input`` / ``_output`` helpers.
 
-This is the first interop point between the runner's ``Endpoint`` model
-and the connector ecosystem's ``TransporterLocation`` model; collapsing
-the two onto one shared model is tracked separately (TD-2585).
+Request building and wire serialization are single-sourced in the common
+transporter handler, so the runner's ``Endpoint`` model and the connector
+ecosystem's location model share one encoder: ``endpoint`` is a thin
+``Location`` -> ``Endpoint`` scheme dispatcher, and the handler owns the
+provider-location construction for both callers.
 
 Credentials travel as env-var *references* baked into each
 ``TransporterLocation`` (``!Env <env_prefix>_AWS_ACCESS_KEY_ID`` etc.); the
@@ -30,13 +32,20 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 from urllib.request import url2pathname
 
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._fileformat.taxonomy import DestFileFormat
+from tabsdatak.common._transporter.facade import make_handler
+from tabsdatak.common._transporter.handler.handler import TransporterHandler
+from tabsdatak.common._transporter.invoker.transporter1 import (
+    TransporterRunError as TransporterRunErrorV1,
+)
+from tabsdatak.common._transporter.invoker.transporter2 import (
+    TransporterRunError as TransporterRunErrorV2,
+)
 from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureEndpoint,
-    CredRef,
     Endpoint,
     EnvRef,
     GcsEndpoint,
@@ -45,8 +54,6 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
     endpoint_from_location,
 )
 from tabsdatak.server._tdrunner.function._lib.request import Location
-
-_TransporterCred = _transporter1.TransporterEnv | _transporter1.TransporterLiteral
 
 # Baseline handed to the transporter so last-modified tracking activates on the
 # first fetch (no cursor yet): epoch means every object is a candidate.
@@ -61,13 +68,10 @@ def _local_path(file_uri: str) -> Path:
     return Path(file_uri)
 
 
-def _cred(ref: CredRef | None) -> _TransporterCred | None:
-    """Map an endpoint credential reference to the transporter's form."""
-    if ref is None:
-        return None
-    if isinstance(ref, EnvRef):
-        return _transporter1.TransporterEnv(ref.name)
-    return _transporter1.TransporterLiteral(ref.value)  # LiteralRef
+def _env_name(ref: EnvRef | None) -> str | None:
+    """The env-var name of an endpoint credential reference. Endpoints
+    built by ``endpoint_from_location`` only ever carry ``EnvRef``."""
+    return ref.name if ref is not None else None
 
 
 def _join(url: str, rel: str) -> str:
@@ -75,35 +79,30 @@ def _join(url: str, rel: str) -> str:
     return f"{url.rstrip('/')}/{rel}"
 
 
-def transporter_location_from_endpoint(
-    endpoint: Endpoint, rel: str
-) -> _transporter1.TransporterLocation:
-    """Resolve ``endpoint`` + a stage-relative path into a
-    ``TransporterLocation`` for the ``_input`` / ``_output`` helpers."""
+def location_from_endpoint(endpoint: Endpoint, rel: str, handler: TransporterHandler):
+    """Resolve ``endpoint`` + a stage-relative path into the handler's
+    transporter location for the ``_input`` / ``_output`` helpers."""
     url = _join(endpoint.url, rel)
     if isinstance(endpoint, S3Endpoint):
-        return _transporter1.TransporterS3(
-            url=url,
-            access_key=_cred(endpoint.configs.access_key),
-            secret_key=_cred(endpoint.configs.secret_key),
-            region=_cred(endpoint.configs.region),
-            extra_configs=dict(endpoint.configs.extra_configs),
+        return handler.s3_location(
+            uri=url,
+            access_key_env=_env_name(endpoint.configs.access_key),
+            secret_key_env=_env_name(endpoint.configs.secret_key),
+            region_env=_env_name(endpoint.configs.region),
         )
     if isinstance(endpoint, AzureEndpoint):
-        return _transporter1.TransporterAzure(
-            url=url,
-            account_name=_cred(endpoint.configs.account_name),
-            account_key=_cred(endpoint.configs.account_key),
-            extra_configs=dict(endpoint.configs.extra_configs),
+        return handler.azure_location(
+            uri=url,
+            account_name_env=_env_name(endpoint.configs.account_name),
+            account_key_env=_env_name(endpoint.configs.account_key),
         )
     if isinstance(endpoint, GcsEndpoint):
-        return _transporter1.TransporterGCS(
-            url=url,
-            service_account_key=_cred(endpoint.configs.service_account_key),
-            extra_configs=dict(endpoint.configs.extra_configs),
+        return handler.gcs_location(
+            uri=url,
+            service_account_key_env=_env_name(endpoint.configs.service_account_key),
         )
     if isinstance(endpoint, LocalFileEndpoint):
-        return _transporter1.TransporterLocalFile(url=url)
+        return handler.local_location(url)
     raise TypeError(f"unsupported endpoint type: {type(endpoint).__name__}")
 
 
@@ -117,46 +116,47 @@ class _EndpointStageBackend(StageBackend):
     def is_object_store(self) -> bool:
         return not isinstance(self._endpoint, LocalFileEndpoint)
 
-    def build_location(self, rel: str) -> _transporter1.TransporterLocation:
-        return transporter_location_from_endpoint(self._endpoint, rel)
+    def build_location(self, rel: str, handler: TransporterHandler):
+        return location_from_endpoint(self._endpoint, rel, handler)
 
-    def credential_env(self) -> dict[str, str] | None:
+    def credential_env(self, handler: TransporterHandler) -> dict[str, str] | None:
         # Credential env-var refs are baked into each location; their
         # values come from the pod env, so the transporter inherits the
         # process env rather than receiving a resolved-values dict.
         return None
 
     def upload(self, local_path: Path, rel: str) -> None:
-        # Raw byte-copy (TransporterParquetFormat skips transcoding), so
-        # both parquet data and JSON control files upload verbatim.
-        source = _transporter1.TransporterLocalFile(
-            _transporter1.path_to_file_uri(local_path)
-        )
+        handler = make_handler()
+        source = handler.local_path_location(local_path)
         with tempfile.TemporaryDirectory() as work_dir:
             _output.copy_one(
-                source_target_pairs=[(source, self.build_location(rel))],
+                handler=handler,
+                source_target_pairs=[(source, self.build_location(rel, handler))],
                 work_dir=Path(work_dir),
-                format=_transporter1.TransporterParquetFormat(),
-                env=self.credential_env(),
+                file_format=DestFileFormat.PARQUET,
+                paths=[rel],
+                env=self.credential_env(handler),
             )
 
     def read_text(self, rel: str) -> str | None:
+        handler = make_handler()
         with tempfile.TemporaryDirectory() as work_dir:
             dst_path = Path(work_dir) / "download"
-            target = _transporter1.TransporterLocalFile(
-                _transporter1.path_to_file_uri(dst_path)
-            )
+            target = handler.local_path_location(dst_path)
             try:
                 _output.copy_one(
-                    source_target_pairs=[(self.build_location(rel), target)],
+                    handler=handler,
+                    source_target_pairs=[(self.build_location(rel, handler), target)],
                     work_dir=Path(work_dir),
-                    format=_transporter1.TransporterParquetFormat(),
-                    env=self.credential_env(),
+                    file_format=DestFileFormat.PARQUET,
+                    paths=[str(dst_path)],
+                    env=self.credential_env(handler),
                 )
-            except _transporter1.TransporterRunError:
+            except (TransporterRunErrorV1, TransporterRunErrorV2):
                 # Missing/unreadable object -> treat as absent. The streamer's
                 # state read tolerates this (falls back to first-run), matching
-                # the local "file does not exist" path.
+                # the local "file does not exist" path. Either transporter
+                # version may raise, depending on the active handler.
                 return None
             return dst_path.read_text(encoding="utf-8") if dst_path.is_file() else None
 
@@ -167,13 +167,15 @@ class _EndpointStageBackend(StageBackend):
         # matching the glob whose last-modified is after the cursor, downloaded
         # into scratch_dir (basename preserved). The report's lastmod_info is
         # the watermark to pass back as the next cursor.
+        handler = make_handler()
         report = _input.wildcard_copy_one(
-            source=self.build_location(glob),
+            handler=handler,
+            source=self.build_location(glob, handler),
             target_dir=scratch_dir,
             initial_lastmod=_EPOCH_LASTMOD,
             lastmod_info=cursor,
             max_files=1,
-            env=self.credential_env(),
+            env=self.credential_env(handler),
         )
         targets = [f["to"] for f in report.files if isinstance(f, dict) and f.get("to")]
         if not targets:

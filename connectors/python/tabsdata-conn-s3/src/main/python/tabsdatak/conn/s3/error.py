@@ -41,7 +41,7 @@ class S3ErrorCode(ErrorCode):
     )  # S3Dest.validate()
     S3_6 = ErrorDef(
         S3RuntimeException,
-        "td_transporter binary not found (set $TD_TRANSPORTER_BIN or install on PATH)",
+        "td_transporter binary not found in the runtime environment.",
     )  # _S3SrcPlugin / _S3DestPlugin: binary lookup
     S3_7 = ErrorDef(
         S3RuntimeException,

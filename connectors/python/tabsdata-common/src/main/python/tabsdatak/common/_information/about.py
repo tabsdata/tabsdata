@@ -3,14 +3,24 @@
 #
 
 import os
-import shutil
 import subprocess
 from importlib.metadata import metadata as get_package_metadata
 
 import yaml
 
 from tabsdatak.common._constants import TABSDATA_MODULE_NAME
+from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+from tabsdatak.common._interpreter.python.venv import PythonEnvironment
 from tabsdatak.common._resources.reader import td_resource
+
+TDABOUT_BINARY_NAME = "td_about"
+
+
+def resolve_tdabout_binary() -> str | None:
+    try:
+        return str(PythonEnvironment().binary(TDABOUT_BINARY_NAME))
+    except BinaryNotFoundError:
+        return None
 
 
 def load_repositories():
@@ -43,9 +53,9 @@ def tdabout_from_metadata(package_name=TABSDATA_MODULE_NAME):
         print(f"Error: Could not load tabsdata package metadata: {exception}.")
         return
 
-    tdabout_binary = shutil.which("td_about")
+    tdabout_binary = resolve_tdabout_binary()
     if not tdabout_binary:
-        print("Error: tdabout binary not found in PATH.")
+        print("Error: tdabout binary not found in the runtime environment.")
         return
 
     env = os.environ.copy()
@@ -181,9 +191,9 @@ def tdabout_from_build(package_name=TABSDATA_MODULE_NAME):  # noqa: C901
     except Exception:
         version = "-"
 
-    tdabout_binary = shutil.which("td_about")
+    tdabout_binary = resolve_tdabout_binary()
     if not tdabout_binary:
-        print("Error: tdabout binary not found in PATH.")
+        print("Error: tdabout binary not found in the runtime environment.")
         return
 
     env = os.environ.copy()

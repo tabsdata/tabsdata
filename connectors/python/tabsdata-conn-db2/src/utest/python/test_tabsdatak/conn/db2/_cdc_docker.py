@@ -120,8 +120,8 @@ def ensure_container(
     remove: bool = False,
     message: str | None = None,
 ) -> tuple[Container, int, bool]:
-    """Reuse-or-create a container, returning ``(container, host_port,
-    created)``. Mirrors the legacy CDC-common helper of the same name."""
+    """Reuse-or-create a container, returning ``(container, host_port, created)``.
+    Mirrors the legacy CDC-common helper of the same name."""
     client = docker.from_env()
     forwarded_port_key = next(iter(forwarded_ports))
 

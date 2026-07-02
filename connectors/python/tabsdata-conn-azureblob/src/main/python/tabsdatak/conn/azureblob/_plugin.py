@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.azureblob import (
     AzureBlobDest,
     AzureBlobDestConn,
@@ -9,7 +10,6 @@ from tabsdatak.conn.azureblob import (
     AzureBlobSrcConn,
 )
 from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
-from tabsdatak.common._transporter import _transporter1
 from tabsdatak.conn.common.file import _plugin
 
 # noinspection PyProtectedMember
@@ -42,17 +42,15 @@ def _az_uri(container: str, path_entry: str) -> str:
 
 
 def build_location(
-    conn: _AnyAzureBlobConn, path_entry: str
-) -> _transporter1.TransporterAzure:
+    conn: _AnyAzureBlobConn, path_entry: str, handler: TransporterHandler
+) -> Any:
     container = _convert(conn.container, str)
-    return _transporter1.TransporterAzure(
-        url=_az_uri(container, path_entry),
-        account_name=_transporter1.TransporterEnv(
-            _transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME
-        ),
-        account_key=_transporter1.TransporterEnv(
-            _transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY
-        ),
+    if not (path_entry.startswith("az://") or path_entry.startswith("abfss://")):
+        path_entry = conn.full_path(path_entry)
+    return handler.azure_location(
+        uri=_az_uri(container, path_entry),
+        account_name_env=handler.azure_account_name_env,
+        account_key_env=handler.azure_account_key_env,
     )
 
 
@@ -67,11 +65,11 @@ def credentials(conn: _AnyAzureBlobConn) -> AzureAccountKey:
     return creds
 
 
-def run_env(conn: _AnyAzureBlobConn) -> dict[str, str]:
+def run_env(conn: _AnyAzureBlobConn, handler: TransporterHandler) -> dict[str, str]:
     c = credentials(conn)
     return {
-        _transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(c.account_name, str),
-        _transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(c.account_key, str),
+        handler.azure_account_name_env: _convert(c.account_name, str),
+        handler.azure_account_key_env: _convert(c.account_key, str),
     }
 
 

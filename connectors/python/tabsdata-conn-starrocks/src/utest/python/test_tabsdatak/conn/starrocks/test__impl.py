@@ -20,6 +20,7 @@ from tabsdatak.conn.starrocks import (
 )
 
 # noinspection PyProtectedMember
+from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.conn.starrocks import _impl as impl
 from tabsdatak.conn.starrocks.error import (
     StarRocksErrorCode,
@@ -28,6 +29,8 @@ from tabsdatak.conn.starrocks.error import (
 
 
 pytestmark = pytest.mark.starrocks
+
+HANDLER = TransporterHandler1()
 
 
 # ---------------------------------------------------------------------------
@@ -236,20 +239,20 @@ def test_qualify_preserves_existing_backtick_quotes():
 
 
 def test_transporter_env_s3():
-    env = impl.transporter_env(_s3_staging())
+    env = impl.transporter_env(_s3_staging(), HANDLER)
     assert env["LOCATION_AWS_ACCESS_KEY_ID"] == "AKIA..."
     assert env["LOCATION_AWS_SECRET_ACCESS_KEY"] == "secret"
     assert env["LOCATION_AWS_REGION"] == "us-east-1"
 
 
 def test_transporter_env_azure():
-    env = impl.transporter_env(_az_staging())
+    env = impl.transporter_env(_az_staging(), HANDLER)
     assert env["LOCATION_ACCOUNT_NAME"] == "acct"
     assert env["LOCATION_ACCOUNT_KEY"] == "azkey"
 
 
 def test_transporter_env_gcs_uses_json_credentials():
-    env = impl.transporter_env(_gcs_staging())
+    env = impl.transporter_env(_gcs_staging(), HANDLER)
     assert env["LOCATION_GCS_SERVICE_ACCOUNT_JSON"] == "{}"
 
 

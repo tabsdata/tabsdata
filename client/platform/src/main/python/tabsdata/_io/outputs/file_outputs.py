@@ -1589,7 +1589,9 @@ def _store_result_using_transporter(
         V1CopyFormat(copy_pair),
         yaml_request_file,
     )
-    binary = "td_transporter1.exe" if CURRENT_PLATFORM.is_windows() else "td_transporter1"
+    binary = (
+        "td_transporter1.exe" if CURRENT_PLATFORM.is_windows() else "td_transporter1"
+    )
     report_file = os.path.join(output_folder, f"report_{current_timestamp}.yaml")
     arguments = f"--request {yaml_request_file} --report {report_file}"
     logger.debug(f"Exporting files with command: {binary} {arguments}")

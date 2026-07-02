@@ -10,15 +10,21 @@ from pathlib import Path
 
 import pytest
 
-from tabsdatak.server._tdrunner.function._lib import transporter_proc
-from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
-    TRANSPORTER_BINARY_NAME,
-    TransporterNotFoundError,
-    run_transporter,
-)
 from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+from tabsdatak.common._transporter.handler import handler as handler_module
+from tabsdatak.common._transporter.handler.handler1 import (
+    TRANSPORTER_BINARY_NAME,
+    TransporterHandler1,
+)
+from tabsdatak.common._transporter.invoker.transporter1 import (
+    TransporterBinaryNotFoundError as TransporterNotFoundError,
+)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
+
+
+def run_transporter(request: Path, report: Path) -> int:
+    return TransporterHandler1().run(request, report)
 
 
 # --- helpers --------------------------------------------------------------
@@ -81,9 +87,9 @@ def _install_fake_popen(monkeypatch, *, stdout_lines=(), stderr_lines=(), return
             **kwargs,
         )
 
-    monkeypatch.setattr(subprocess, "Popen", _factory)
+    monkeypatch.setattr(handler_module.subprocess, "Popen", _factory)
     monkeypatch.setattr(
-        transporter_proc.PythonEnvironment,
+        handler_module.PythonEnvironment,
         "binary",
         lambda self, name: _FAKE_BINARY_PATH,
     )
@@ -103,8 +109,8 @@ def test_binary_name_constant():
 
 
 def test_command_shape(monkeypatch, tmp_path):
-    """The exec'd argv starts with the absolute path resolved by
-    _resolve_binary, not the bare basename."""
+    """The exec'd argv starts with the absolute path resolved via
+    PythonEnvironment.binary, not the bare basename."""
     _install_fake_popen(monkeypatch, returncode=0)
     request = tmp_path / "transporter.yaml"
     report = tmp_path / "transporter-report.yaml"
@@ -158,7 +164,7 @@ def test_missing_binary_raises_typed_error_before_popen(monkeypatch, tmp_path):
     def _missing(self, name):
         raise BinaryNotFoundError(name=name, scripts=tmp_path)
 
-    monkeypatch.setattr(transporter_proc.PythonEnvironment, "binary", _missing)
+    monkeypatch.setattr(handler_module.PythonEnvironment, "binary", _missing)
 
     popen_invocations: list = []
 
@@ -166,7 +172,7 @@ def test_missing_binary_raises_typed_error_before_popen(monkeypatch, tmp_path):
         popen_invocations.append(cmd)
         raise AssertionError("Popen should not be reached when binary is missing")
 
-    monkeypatch.setattr(subprocess, "Popen", _spy_popen)
+    monkeypatch.setattr(handler_module.subprocess, "Popen", _spy_popen)
 
     with pytest.raises(TransporterNotFoundError) as exc_info:
         run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
@@ -188,13 +194,13 @@ def test_stdout_lines_forwarded_at_info(monkeypatch, tmp_path, caplog):
         stdout_lines=["copying file 1/3\n", "copying file 2/3\n"],
         returncode=0,
     )
-    with caplog.at_level(logging.DEBUG, logger=transporter_proc.__name__):
+    with caplog.at_level(logging.DEBUG, logger=handler_module.__name__):
         run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
 
     info_msgs = [
         r.getMessage()
         for r in caplog.records
-        if r.levelno == logging.INFO and r.name == transporter_proc.__name__
+        if r.levelno == logging.INFO and r.name == handler_module.__name__
     ]
     assert any("copying file 1/3" in m for m in info_msgs)
     assert any("copying file 2/3" in m for m in info_msgs)
@@ -206,13 +212,13 @@ def test_stderr_lines_forwarded_at_warning(monkeypatch, tmp_path, caplog):
         stderr_lines=["slow source detected\n"],
         returncode=0,
     )
-    with caplog.at_level(logging.DEBUG, logger=transporter_proc.__name__):
+    with caplog.at_level(logging.DEBUG, logger=handler_module.__name__):
         run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
 
     warn_msgs = [
         r.getMessage()
         for r in caplog.records
-        if r.levelno == logging.WARNING and r.name == transporter_proc.__name__
+        if r.levelno == logging.WARNING and r.name == handler_module.__name__
     ]
     assert any("slow source detected" in m for m in warn_msgs)
 
@@ -237,7 +243,7 @@ def test_lines_logged_without_trailing_newline(monkeypatch, tmp_path, caplog):
         stdout_lines=["pretty output\n"],
         returncode=0,
     )
-    with caplog.at_level(logging.DEBUG, logger=transporter_proc.__name__):
+    with caplog.at_level(logging.DEBUG, logger=handler_module.__name__):
         run_transporter(tmp_path / "x.yaml", tmp_path / "r.yaml")
     msgs = [r.getMessage() for r in caplog.records]
     assert any(m.endswith("pretty output") for m in msgs)

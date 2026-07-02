@@ -41,7 +41,7 @@ class AzureBlobErrorCode(ErrorCode):
     )  # AzureBlobDest.validate()
     AZURE_BLOB_6 = ErrorDef(
         AzureBlobRuntimeException,
-        "td_transporter binary not found (set $TD_TRANSPORTER_BIN or install on PATH)",
+        "td_transporter binary not found in the runtime environment.",
     )  # _AzureBlobSrcPlugin / _AzureBlobDestPlugin: binary lookup
     AZURE_BLOB_7 = ErrorDef(
         AzureBlobRuntimeException,

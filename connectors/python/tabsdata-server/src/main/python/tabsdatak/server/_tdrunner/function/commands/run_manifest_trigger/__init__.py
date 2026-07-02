@@ -9,7 +9,7 @@ Long-running sidecar entrypoint of the streamer pod. Walks
 ``fn_trigger`` per manifest, and drains a deletion queue between polls.
 Works against a local *or* cloud stage via the resolved ``StageBackend``.
 
-apiserver response semantics (`skip_if_running=true`, gates run in order):
+apiserver response semantics (``skip_if_running=true``, gates run in order):
 
   * ``2xx``  -- newly scheduled.
   * ``425``  -- the function's execution is still running (gate 1,
@@ -23,9 +23,8 @@ apiserver response semantics (`skip_if_running=true`, gates run in order):
 Main loop (per poll), driven by ``next_after(cursor)``:
 
   * Fetch the oldest manifest after the cursor; POST ``fn_trigger`` with
-    ``{"skip_if_running": true, "external_uid": <TS>, "trigger_type":
-    "ST", ...}`` (the ``ExecutionRequestInternal`` shape the cron trigger
-    also sends).
+    ``{"skip_if_running": true, "external_uid": <TS>, "trigger_type": "ST", ...}``
+    (the ``ExecutionRequestInternal`` shape the cron trigger also sends).
   * On ``409`` (completed) -> queue the manifest + its files for deletion
     and **advance the cursor past it**, then fetch the next.
   * On ``2xx`` / ``425`` / other transient -> **stop**, leaving the cursor
@@ -38,7 +37,7 @@ The cursor advances only on completion, so each manifest is re-triggered
 across its ``200 -> 425… -> 409`` lifetime; that parking is what gives the
 publisher time to consume, and keeps per-poll triggers O(1) (no ``425``
 storm). The cursor is in-memory and resets to epoch on restart -- the
-already-completed front just re-``409``s and is re-deleted (idempotent).
+already-completed front re-issues a ``409`` and is re-deleted (idempotent).
 
 Lifecycle (Q5 decision): the sidecar exits when the streamer's main
 container exits. K8s native sidecar semantics (init container with
@@ -376,7 +375,7 @@ def _trigger_pending(
     Returns the advanced cursor. The cursor is in-memory and backend-
     internal (filename for local, last-modified for cloud); on a sidecar
     restart it resets to ``None`` (epoch) and the already-completed front
-    just re-``409``s and is re-deleted -- idempotent, crash-safe.
+    re-issues a ``409`` and is re-deleted -- idempotent, crash-safe.
     """
     with tempfile.TemporaryDirectory() as scratch:
         scratch_dir = Path(scratch)

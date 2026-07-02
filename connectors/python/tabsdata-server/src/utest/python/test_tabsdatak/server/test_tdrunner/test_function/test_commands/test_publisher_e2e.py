@@ -322,8 +322,31 @@ def _write_multi_request(path: Path, *, bundle_uri: str, uploaded_dir: Path) -> 
 
 def _invoke(monkeypatch, main_fn, argv: list[str]) -> int:
     """Set sys.argv and call a command's main(). Restore argv on exit."""
+    argv = _with_storage_config(argv)
     monkeypatch.setattr(sys, "argv", argv)
     return main_fn()
+
+
+_STORAGE_CONFIG_COMMANDS = {
+    "prep-localize-state",
+    "prep-upload-state",
+    "prep-upload-tables",
+    "localize-fn-bundle",
+}
+
+
+def _with_storage_config(argv: list[str]) -> list[str]:
+    """Append a ``--storage-config`` pointing at a config that declares the
+    ``ROOT`` mount (matching the ``env_prefix`` the e2e request locations
+    use) for the transporter-prep commands that now require it."""
+    if not argv or argv[0] not in _STORAGE_CONFIG_COMMANDS:
+        return argv
+    if "--storage-config" in argv:
+        return argv
+    request_path = Path(argv[argv.index("--request") + 1])
+    storage_config = request_path.parent / "e2e-storage.yaml"
+    storage_config.write_text("storage:\n  mounts:\n    - id: ROOT\n      options: {}\n")
+    return [*argv, "--storage-config", str(storage_config)]
 
 
 # --- end-to-end test ------------------------------------------------------
@@ -429,7 +452,7 @@ def test_publisher_full_chain(
     )
     assert rc == 0
     # Empty pairs — no inputs and no system_input declared.
-    assert "source_target_pairs: []" in localize_state_req.read_text()
+    assert "pairs: []" in localize_state_req.read_text()
     # Both manifests are empty (publishers have no request.input or
     # request.system_input).
     assert yaml.safe_load(prep_loc_inputs_manifest.read_text()) == {"inputs": []}
@@ -696,7 +719,7 @@ def test_publisher_full_chain(
         ],
     )
     assert rc == 0
-    assert "source_target_pairs: []" in upload_state_req.read_text()
+    assert "pairs: []" in upload_state_req.read_text()
 
     # --- 10. run-transporter (upload-state, empty) ---------------------
     rc = _invoke(

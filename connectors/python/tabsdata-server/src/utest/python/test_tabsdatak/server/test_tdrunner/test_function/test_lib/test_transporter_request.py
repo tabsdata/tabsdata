@@ -9,9 +9,10 @@ from typing import Any
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function._lib.endpoint import (
+from tabsdatak.common._transporter.handler.handler1 import (
     AzureConfigs,
     AzureEndpoint,
+    CopyPair,
     EnvRef,
     GcsConfigs,
     GcsEndpoint,
@@ -19,7 +20,9 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
     LocalFileEndpoint,
     S3Configs,
     S3Endpoint,
+    TransporterCopyRequest,
     UnsupportedSchemeError,
+    make_dumper,
 )
 from tabsdatak.server._tdrunner.function._lib.request import (
     Info,
@@ -28,15 +31,16 @@ from tabsdatak.server._tdrunner.function._lib.request import (
     OutputTable,
     Request,
 )
-from tabsdatak.server._tdrunner.function._lib.transporter_request import (
-    CopyPair,
-    TransporterCopyRequest,
+from tabsdatak.server._tdrunner.function._lib.transporter1 import (
     build_bundle_fetch_request,
     build_localize_state_request,
     build_upload_state_request,
-    dump_transporter_request,
     write_transporter_request,
 )
+
+
+def dump_transporter_request(request: TransporterCopyRequest) -> str:
+    return yaml.dump(request, Dumper=make_dumper(), sort_keys=False)
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 

@@ -33,6 +33,7 @@ from tabsdatak._info import PublisherInfo
 # @stream_publisher fixtures resolve via ``get_type_hints``.
 from tabsdatak.api import TableFrameSpec, TableFramesSpec  # noqa: F401
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
+from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
     drain_ctx_to_state_or_raise,
@@ -75,6 +76,8 @@ from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
+
+HANDLER = TransporterHandler1()
 
 
 _MOD = "tabsdatak.server._tdrunner.function.commands.run_source_plugin"
@@ -509,7 +512,7 @@ def test_build_manifest_stage_conn_s3_resolves_to_object_store_backend():
     backend = conn.stage_backend
     assert backend is not None
     assert backend.is_object_store is True
-    loc = backend.build_location("manifests/stream-manifest-*.json")
+    loc = backend.build_location("manifests/stream-manifest-*.json", HANDLER)
     assert loc.url == "s3://bucket/stage/manifests/stream-manifest-*.json"
 
 

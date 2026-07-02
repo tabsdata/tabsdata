@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.common.file import _plugin
 
 # noinspection PyProtectedMember
@@ -36,31 +36,25 @@ def _s3_uri(bucket: str, path_entry: str) -> str:
     return f"s3://{bucket}/{key}"
 
 
-def build_location(conn: _AnyS3Conn, path_entry: str) -> _transporter1.TransporterS3:
-    return _transporter1.TransporterS3(
-        url=_s3_uri(_convert(conn.bucket, str), path_entry),
-        access_key=_transporter1.TransporterEnv(
-            _transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID
-        ),
-        secret_key=_transporter1.TransporterEnv(
-            _transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY
-        ),
-        region=_transporter1.TransporterEnv(_transporter1.SERVER_SIDE_AWS_REGION),
+def build_location(
+    conn: _AnyS3Conn, path_entry: str, handler: TransporterHandler
+) -> Any:
+    if not path_entry.startswith("s3://"):
+        path_entry = conn.full_path(path_entry)
+    return handler.s3_location(
+        uri=_s3_uri(_convert(conn.bucket, str), path_entry),
+        access_key_env=handler.aws_access_key_id_env,
+        secret_key_env=handler.aws_secret_access_key_env,
+        region_env=handler.aws_region_env,
     )
 
 
-def run_env(conn: _AnyS3Conn) -> dict[str, str]:
+def run_env(conn: _AnyS3Conn, handler: TransporterHandler) -> dict[str, str]:
     creds = conn.credentials
     return {
-        _transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(
-            creds.access_key_id,
-            str,
-        ),
-        _transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(
-            creds.secret_access_key,
-            str,
-        ),
-        _transporter1.SERVER_SIDE_AWS_REGION: _convert(conn.region, str),
+        handler.aws_access_key_id_env: _convert(creds.access_key_id, str),
+        handler.aws_secret_access_key_env: _convert(creds.secret_access_key, str),
+        handler.aws_region_env: _convert(conn.region, str),
     }
 
 

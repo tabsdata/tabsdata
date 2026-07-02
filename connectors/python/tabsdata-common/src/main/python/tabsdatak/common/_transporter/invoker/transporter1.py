@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
-import sys
 import uuid
 from abc import ABC
 from dataclasses import dataclass, field
@@ -36,31 +33,6 @@ class UnresolvedCredentialError(RuntimeError):
     pass
 
 
-# --- Binary lookup --------------------------------------------------
-
-
-_BINARY_NAME = "td_transporter1.exe" if sys.platform == "win32" else "td_transporter1"
-_BINARY_ENV_VAR = "TD_TRANSPORTER_BIN"
-
-
-def find_transporter_binary() -> str:
-    override = os.environ.get(_BINARY_ENV_VAR)
-    if override:
-        if os.path.isfile(override) and os.access(override, os.X_OK):
-            return override
-        raise TransporterBinaryNotFoundError(
-            f"${_BINARY_ENV_VAR}={override!r} does not point to an executable file"
-        )
-    found = shutil.which(_BINARY_NAME)
-    if found:
-        return found
-    raise TransporterBinaryNotFoundError(
-        f"td_transporter binary not found on PATH and "
-        f"${_BINARY_ENV_VAR} is not set; install the binary or set "
-        f"the env var to its absolute path"
-    )
-
-
 # --- Driver helpers (used by _input / _output) ------------------
 
 
@@ -68,37 +40,6 @@ def new_request_paths(work_dir: Path) -> tuple[Path, Path]:
     work_dir.mkdir(parents=True, exist_ok=True)
     token = uuid.uuid4().hex
     return work_dir / f"request_{token}.yaml", work_dir / f"report_{token}.yaml"
-
-
-def run_binary(
-    request_path: Path,
-    report_path: Path,
-    *,
-    env: dict[str, str] | None,
-    binary_path: str | None,
-) -> None:
-    binary = binary_path or find_transporter_binary()
-    proc_env = dict(os.environ)
-    if env:
-        proc_env.update(env)
-    completed = subprocess.run(
-        [
-            binary,
-            "--request",
-            str(request_path),
-            "--report",
-            str(report_path),
-        ],
-        capture_output=True,
-        text=True,
-        env=proc_env,
-    )
-    if completed.returncode != 0:
-        raise TransporterRunError(
-            completed.returncode,
-            completed.stdout,
-            completed.stderr,
-        )
 
 
 # --- URI helpers ----------------------------------------------------

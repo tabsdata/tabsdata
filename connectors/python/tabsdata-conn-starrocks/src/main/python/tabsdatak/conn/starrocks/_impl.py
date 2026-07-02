@@ -175,34 +175,30 @@ def staged_uri(staging: CloudLocation, key: str) -> str:
 # happens in the caller and is passed in through ``env``.
 
 
-def transporter_target(staging: CloudLocation, key: str):
-    """Build the :class:`TransporterLocation` *destination* for a
-    parquet upload to *staging* under the relative *key*."""
-    # Local imports keep the conn-common-file dependency optional for
-    # plain Conn-construction users who never call write_out.
-    from tabsdatak.common._transporter import _transporter1 as t
-
+def transporter_target(staging: CloudLocation, key: str, handler):
+    """Build the transporter location *destination* for a parquet upload
+    to *staging* under the relative *key*."""
     rel = staging.full_path(key) if hasattr(staging, "full_path") else key.lstrip("/")
     if isinstance(staging, S3Location):
         bucket = _convert(staging.bucket, str)
-        return t.TransporterS3(
-            url=f"s3://{bucket}/{rel}",
-            access_key=t.TransporterEnv(t.SERVER_SIDE_AWS_ACCESS_KEY_ID),
-            secret_key=t.TransporterEnv(t.SERVER_SIDE_AWS_SECRET_ACCESS_KEY),
-            region=t.TransporterEnv(t.SERVER_SIDE_AWS_REGION),
+        return handler.s3_location(
+            uri=f"s3://{bucket}/{rel}",
+            access_key_env=handler.aws_access_key_id_env,
+            secret_key_env=handler.aws_secret_access_key_env,
+            region_env=handler.aws_region_env,
         )
     if isinstance(staging, AzBlobLocation):
         container = _convert(staging.container, str)
-        return t.TransporterAzure(
-            url=f"az://{container}/{rel}",
-            account_name=t.TransporterEnv(t.SERVER_SIDE_AZURE_ACCOUNT_NAME),
-            account_key=t.TransporterEnv(t.SERVER_SIDE_AZURE_ACCOUNT_KEY),
+        return handler.azure_location(
+            uri=f"az://{container}/{rel}",
+            account_name_env=handler.azure_account_name_env,
+            account_key_env=handler.azure_account_key_env,
         )
     if isinstance(staging, GCSLocation):
         bucket = _convert(staging.bucket, str)
-        return t.TransporterGCS(
-            url=f"gs://{bucket}/{rel}",
-            credentials=t.TransporterEnv(t.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON),
+        return handler.gcs_location(
+            uri=f"gs://{bucket}/{rel}",
+            service_account_key_env=handler.gcp_service_account_json_env,
         )
     from tabsdatak.conn.starrocks.error import StarRocksErrorCode
 
@@ -211,28 +207,26 @@ def transporter_target(staging: CloudLocation, key: str):
     )
 
 
-def transporter_env(staging: CloudLocation) -> dict[str, str]:
+def transporter_env(staging: CloudLocation, handler) -> dict[str, str]:
     """Resolve the credentials on *staging* into env vars the
     transporter binary reads at runtime."""
-    from tabsdatak.common._transporter import _transporter1 as t
-
     if isinstance(staging, S3Location):
         creds = staging.credentials
         return {
-            t.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(creds.access_key_id, str),
-            t.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(creds.secret_access_key, str),
-            t.SERVER_SIDE_AWS_REGION: _convert(staging.region, str),
+            handler.aws_access_key_id_env: _convert(creds.access_key_id, str),
+            handler.aws_secret_access_key_env: _convert(creds.secret_access_key, str),
+            handler.aws_region_env: _convert(staging.region, str),
         }
     if isinstance(staging, AzBlobLocation):
         creds = staging.credentials
         return {
-            t.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(creds.account_name, str),
-            t.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(creds.account_key, str),
+            handler.azure_account_name_env: _convert(creds.account_name, str),
+            handler.azure_account_key_env: _convert(creds.account_key, str),
         }
     if isinstance(staging, GCSLocation):
         creds = staging.credentials
         return {
-            t.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: _convert(creds.json, str),
+            handler.gcp_service_account_json_env: _convert(creds.json, str),
         }
     from tabsdatak.conn.starrocks.error import StarRocksErrorCode
 
@@ -290,18 +284,22 @@ def upload_parquet(
     Returns the same URI shape that :func:`build_files_function` /
     :func:`staged_uri` expect.
     """
-    from tabsdatak.common._transporter import _transporter1 as t
+    from tabsdatak.common._fileformat.taxonomy import DestFileFormat
+    from tabsdatak.common._transporter.facade import make_handler
     from tabsdatak.conn.common.file import _output
 
+    handler = make_handler()
     rel = f"{upload_id}/{table_key}/{parquet_path.name}"
-    target_loc = transporter_target(staging, rel)
-    source_loc = t.TransporterLocalFile(t.path_to_file_uri(parquet_path))
-    env = transporter_env(staging)
+    target_loc = transporter_target(staging, rel, handler)
+    source_loc = handler.local_path_location(parquet_path)
+    env = transporter_env(staging, handler)
 
     _output.copy_one(
+        handler=handler,
         source_target_pairs=[(source_loc, target_loc)],
         work_dir=work_dir,
-        format=t.TransporterParquetFormat(),
+        file_format=DestFileFormat.PARQUET,
+        paths=[rel],
         env=env,
     )
 

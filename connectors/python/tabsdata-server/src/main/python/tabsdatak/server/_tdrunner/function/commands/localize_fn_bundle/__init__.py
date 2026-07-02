@@ -27,11 +27,13 @@ from pathlib import Path
 
 import zstandard
 
+from tabsdatak.common._transporter.invoker.transporter1 import (
+    TransporterBinaryNotFoundError,
+)
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.request import load_any_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.transporter import (
-    TransporterNotFoundError,
     build_bundle_fetch_request,
     run_transporter,
     write_transporter_request,
@@ -113,7 +115,7 @@ def _fetch_via_transporter(
     write_transporter_request(copy_req, transporter_request)
     try:
         rc = run_transporter(transporter_request, transporter_response)
-    except TransporterNotFoundError as exc:
+    except TransporterBinaryNotFoundError as exc:
         raise LocalizeFnBundleErrorCode.LFB_2.exception(cause=exc, detail=str(exc))
     if rc != 0:
         raise LocalizeFnBundleErrorCode.LFB_3.exception(rc=rc)

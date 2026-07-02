@@ -1,55 +1,50 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._transporter.handler.handler import (
+    TransporterHandler,
+    TransporterReport,
+)
 
 
 def import_one(
     *,
-    source: _transporter1.TransporterLocation,
+    handler: TransporterHandler,
+    source,
     target_dir: Path,
-    format: _transporter1.TransporterFormat,
+    file_format,
+    paths: Sequence[str],
+    format_cfg: dict | None = None,
     initial_lastmod: str | None = None,
     lastmod_info: str | None = None,
     file_info: str | None = None,
     env: dict[str, str] | None = None,
-    binary_path: str | None = None,
-) -> _transporter1.TransporterReport:
-    request_path, report_path = _transporter1.new_request_paths(target_dir)
-    target = _transporter1.TransporterLocalFile(
-        _transporter1.path_to_file_uri(target_dir)
-    )
-    envelope = _transporter1.V1ImportFormat(
+) -> TransporterReport:
+    request = handler.import_request(
         source=source,
-        format=format,
-        target=target,
+        target_dir=target_dir,
+        file_format=file_format,
+        paths=paths,
+        format_cfg=format_cfg,
         initial_lastmod=initial_lastmod,
         lastmod_info=lastmod_info,
         file_info=file_info,
     )
-    _transporter1.dump_request_yaml(
-        envelope, request_path, dumper_cls=_transporter1.INPUT_DUMPER
-    )
-    _transporter1.run_binary(
-        request_path,
-        report_path,
-        env=env,
-        binary_path=binary_path,
-    )
-    return _transporter1.load_report_yaml(report_path)
+    return handler.execute(request, target_dir, env)
 
 
 def wildcard_copy_one(
     *,
-    source: _transporter1.TransporterLocation,
+    handler: TransporterHandler,
+    source,
     target_dir: Path,
     initial_lastmod: str | None = None,
     lastmod_info: str | None = None,
     max_files: int | None = None,
     env: dict[str, str] | None = None,
-    binary_path: str | None = None,
-) -> _transporter1.TransporterReport:
+) -> TransporterReport:
     """Copy files matching ``source`` (a wildcard location) into
     ``target_dir`` verbatim -- no format transcoding -- via the
     transporter's wildcard-copy operation.
@@ -60,24 +55,11 @@ def wildcard_copy_one(
     consumption exactly as for :func:`import_one`; the returned report's
     ``lastmod_info`` is the cursor to feed back on the next call.
     """
-    request_path, report_path = _transporter1.new_request_paths(target_dir)
-    target = _transporter1.TransporterLocalFile(
-        _transporter1.path_to_file_uri(target_dir)
-    )
-    envelope = _transporter1.V1WildcardCopyFormat(
+    request = handler.wildcard_request(
         source=source,
-        target=target,
+        target_dir=target_dir,
         initial_lastmod=initial_lastmod,
         lastmod_info=lastmod_info,
         max_files=max_files,
     )
-    _transporter1.dump_request_yaml(
-        envelope, request_path, dumper_cls=_transporter1.WILDCARD_COPY_DUMPER
-    )
-    _transporter1.run_binary(
-        request_path,
-        report_path,
-        env=env,
-        binary_path=binary_path,
-    )
-    return _transporter1.load_report_yaml(report_path)
+    return handler.execute(request, target_dir, env)

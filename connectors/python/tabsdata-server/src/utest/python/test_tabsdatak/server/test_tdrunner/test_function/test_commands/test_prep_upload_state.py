@@ -34,6 +34,9 @@ def _set_argv(
     responder_method="POST",
     responder_authorization="Bearer tok",
 ):
+    storage_config = Path(out).parent / "storage.yaml"
+    storage_config.parent.mkdir(parents=True, exist_ok=True)
+    storage_config.write_text("storage:\n  mounts:\n    - id: ROOT\n      options: {}\n")
     monkeypatch.setattr(
         sys,
         "argv",
@@ -47,6 +50,8 @@ def _set_argv(
             str(out),
             "--liveness",
             str(liveness),
+            "--storage-config",
+            str(storage_config),
             "--responder-url",
             responder_url,
             "--responder-method",
@@ -134,9 +139,7 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path, http_ok_url):
     )
     assert rc == 0
     text = out.read_text()
-    assert text.startswith("!CopyV1")
-    assert "!LocalFile" in text
-    assert "!S3" in text
+    assert text.startswith("pairs:")
     assert "s3://bucket/state-out.parquet" in text
     assert (tmp_path / "live").exists()
 
@@ -153,7 +156,7 @@ def test_main_handles_empty_system_output(monkeypatch, tmp_path, http_ok_url):
         responder_url=http_ok_url,
     )
     assert rc == 0
-    assert "source_target_pairs: []" in out.read_text()
+    assert "pairs: []" in out.read_text()
 
 
 # --- error paths ---
@@ -185,6 +188,11 @@ def test_main_malformed_request_returns_bad_request(monkeypatch, tmp_path, http_
     assert rc == BadRequestError.exit_code
 
 
+@pytest.mark.skip(
+    reason="v1-only: the td_transporter2 path builds the Location from the URI "
+    "without client-side scheme validation, so an unsupported scheme is no longer "
+    "rejected here (the binary handles/validates it). Kept for v1 reference."
+)
 def test_main_unsupported_scheme_returns_unsupported_scheme(
     monkeypatch, tmp_path, http_ok_url
 ):

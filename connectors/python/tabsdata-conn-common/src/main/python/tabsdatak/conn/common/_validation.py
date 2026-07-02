@@ -51,10 +51,11 @@ class FqnDef:
     dataclass captures:
 
     - **Per-part quoting** (Databricks, ANSI SQL):
-      ``FqnDef(separator='.', quote='`')`` -> ```a`.`b`.`c```
+      ``FqnDef(separator='.', quote='`')`` quotes each part with backticks
+      and joins them with dots (a, b, c -> backtick-a-backtick . ...).
     - **Outer-only quoting** (BigQuery):
-      ``FqnDef(separator='.', quote='`', outer_only=True)``
-      -> ```a.b.c```
+      ``FqnDef(separator='.', quote='`', outer_only=True)`` wraps the whole
+      dotted name in a single pair of backticks.
     - **Asymmetric quoting** (MSSQL / SQL Server):
       ``FqnDef(separator='.', quote='[', close_quote=']', escape=']')``
       -> ``[a].[b].[c]``
@@ -210,7 +211,7 @@ def fqn_complete(
             not exceed ``total_parts``; ``None`` entries are only
             permitted in the leading run.
         total_parts: target length of the returned list.
-        *defaults: replacement values, in order, for the leading
+        ``*defaults``: replacement values, in order, for the leading
             ``None`` slots. The number of ``defaults`` must equal the
             number of leading ``None`` entries after normalization.
 

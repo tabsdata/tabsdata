@@ -31,8 +31,8 @@ import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.azureblob import AzureBlobSrcConn, _plugin as _azureblob_plugin
-from tabsdatak.common._transporter import _transporter1
 from tabsdatak.conn.gcs import GCSSrcConn, _plugin as _gcs_plugin
 from tabsdatak.conn.localfile import LocalFileSrcConn, _plugin as _localfile_plugin
 from tabsdatak.conn.s3 import S3SrcConn, _plugin as _s3_plugin
@@ -57,12 +57,12 @@ class StageBackend(ABC):
         stage with real directories."""
 
     @abstractmethod
-    def build_location(self, rel: str) -> _transporter1.TransporterLocation:
+    def build_location(self, rel: str, handler: TransporterHandler):
         """Resolve a stage-root-relative path into a transporter
-        location."""
+        location built by ``handler``."""
 
     @abstractmethod
-    def credential_env(self) -> dict[str, str] | None:
+    def credential_env(self, handler: TransporterHandler) -> dict[str, str] | None:
         """The transporter binary's credential env for this backend, or
         ``None`` when none is required (local)."""
 
@@ -107,10 +107,10 @@ class _LocalStageBackend(StageBackend):
     def is_object_store(self) -> bool:
         return False
 
-    def build_location(self, rel: str) -> _transporter1.TransporterLocation:
-        return _localfile_plugin.build_location(self._conn, rel)
+    def build_location(self, rel: str, handler: TransporterHandler):
+        return _localfile_plugin.build_location(self._conn, rel, handler)
 
-    def credential_env(self) -> dict[str, str] | None:
+    def credential_env(self, handler: TransporterHandler) -> dict[str, str] | None:
         return None
 
     def upload(self, local_path: Path, rel: str) -> None:
@@ -160,11 +160,13 @@ class _CloudStageBackend(StageBackend):
     def is_object_store(self) -> bool:
         return True
 
-    def build_location(self, rel: str) -> _transporter1.TransporterLocation:
-        return self._plugin.build_location(self._conn, self._conn.full_path(rel))
+    def build_location(self, rel: str, handler: TransporterHandler):
+        return self._plugin.build_location(
+            self._conn, self._conn.full_path(rel), handler
+        )
 
-    def credential_env(self) -> dict[str, str] | None:
-        return self._plugin.run_env(self._conn)
+    def credential_env(self, handler: TransporterHandler) -> dict[str, str] | None:
+        return self._plugin.run_env(self._conn, handler)
 
 
 def backend_for_conn(conn) -> StageBackend:

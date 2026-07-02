@@ -534,8 +534,8 @@ def _grant_replication(cfg: "DBConfig") -> None:
 
 
 def _seed_cdc_schema(cfg: "DBConfig") -> None:
-    """Single tracked table for CDC tests, with ``replica identity
-    full`` so UPDATE / DELETE events carry the pre-image values."""
+    """Single tracked table for CDC tests, with ``replica identity full``
+    so UPDATE / DELETE events carry the pre-image values."""
     from sqlalchemy import create_engine, text
 
     engine = create_engine(cfg.uri_with_credentials)

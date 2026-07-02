@@ -9,7 +9,8 @@ from tabsdatak.api import Secret
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin
 # noinspection PyProtectedMember
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
+from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
 from tabsdatak.spi import TableFileInput
@@ -19,6 +20,8 @@ import tabsdatak.conn.gcs._plugin as plugin
 
 
 pytestmark = pytest.mark.gcs
+
+HANDLER = TransporterHandler1()
 
 
 def _gcp_creds() -> GCPJson:
@@ -49,21 +52,21 @@ def _dest_conn(**overrides) -> GCSDestConn:
 
 
 def test_build_location_emits_transporter_gcs_with_env_credentials():
-    loc = plugin.build_location(_src_conn(), "raw/users.parquet")
-    assert isinstance(loc, _transporter1.TransporterGCS)
+    loc = plugin.build_location(_src_conn(), "raw/users.parquet", HANDLER)
+    assert isinstance(loc, transporter1.TransporterGCS)
     assert loc.url == "gs://my-bucket/raw/users.parquet"
-    assert loc.service_account_key == _transporter1.TransporterEnv(
-        _transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON,
+    assert loc.service_account_key == transporter1.TransporterEnv(
+        transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON,
     )
 
 
 def test_build_location_strips_leading_slash_on_path_entry():
-    loc = plugin.build_location(_src_conn(), "/raw/users.parquet")
+    loc = plugin.build_location(_src_conn(), "/raw/users.parquet", HANDLER)
     assert loc.url == "gs://my-bucket/raw/users.parquet"
 
 
 def test_build_location_preserves_explicit_gs_uri():
-    loc = plugin.build_location(_src_conn(), "gs://other-bucket/x/y.parquet")
+    loc = plugin.build_location(_src_conn(), "gs://other-bucket/x/y.parquet", HANDLER)
     assert loc.url == "gs://other-bucket/x/y.parquet"
 
 
@@ -73,9 +76,9 @@ def test_build_location_preserves_explicit_gs_uri():
 
 
 def test_run_env_resolves_credentials_to_server_side_env_var_names():
-    env = plugin.run_env(_src_conn())
+    env = plugin.run_env(_src_conn(), HANDLER)
     assert env == {
-        _transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: '{"type":"service_account"}',
+        transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: '{"type":"service_account"}',
     }
 
 

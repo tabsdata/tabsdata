@@ -28,6 +28,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 def _set_argv(
     monkeypatch, request_path, manifest_path, out, liveness, *, responder_url
 ):
+    storage_config = Path(out).parent / "storage.yaml"
+    storage_config.parent.mkdir(parents=True, exist_ok=True)
+    storage_config.write_text("storage:\n  mounts:\n    - id: ROOT\n      options: {}\n")
     monkeypatch.setattr(
         sys,
         "argv",
@@ -41,6 +44,8 @@ def _set_argv(
             str(out),
             "--liveness",
             str(liveness),
+            "--storage-config",
+            str(storage_config),
             "--responder-url",
             responder_url,
             "--responder-method",
@@ -132,9 +137,7 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path, http_ok_url):
     )
     assert rc == 0
     text = out.read_text()
-    assert text.startswith("!CopyV1")
-    assert "!LocalFile" in text
-    assert "!S3" in text
+    assert text.startswith("pairs:")
     assert "s3://bucket/t1.parquet" in text
     assert "/data/slot0/t1.parquet" in text
     assert (tmp_path / "live").exists()
@@ -192,7 +195,7 @@ def test_main_skips_location_none(monkeypatch, tmp_path, http_ok_url):
         responder_url=http_ok_url,
     )
     assert rc == 0
-    assert "source_target_pairs: []" in out.read_text()
+    assert "pairs: []" in out.read_text()
 
 
 def test_main_handles_empty_output_and_manifest(monkeypatch, tmp_path, http_ok_url):
@@ -208,7 +211,7 @@ def test_main_handles_empty_output_and_manifest(monkeypatch, tmp_path, http_ok_u
         responder_url=http_ok_url,
     )
     assert rc == 0
-    assert "source_target_pairs: []" in out.read_text()
+    assert "pairs: []" in out.read_text()
 
 
 def test_main_preserves_request_order(monkeypatch, tmp_path, http_ok_url):
@@ -323,6 +326,11 @@ def test_main_table_missing_from_manifest_returns_mismatch(
     assert rc == ManifestMismatchError.exit_code
 
 
+@pytest.mark.skip(
+    reason="v1-only: the td_transporter2 path builds the Location from the URI "
+    "without client-side scheme validation, so an unsupported scheme is no longer "
+    "rejected here (the binary handles/validates it). Kept for v1 reference."
+)
 def test_main_unsupported_scheme_returns_unsupported_scheme(
     monkeypatch, tmp_path, http_ok_url
 ):

@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._fileformat.taxonomy import DestFileFormat
+from tabsdatak.common._transporter.facade import make_handler
+from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.common.file._output import copy_one as _transporter_copy_one
 
 # noinspection PyProtectedMember
@@ -111,9 +113,9 @@ def staged_uri(location: CloudLocation, key: str) -> str:
 
 
 def _transporter_target(
-    location: CloudLocation, key: str
-) -> _transporter1.TransporterLocation:
-    """Build the ``TransporterLocation`` target for a staged file.
+    location: CloudLocation, key: str, handler: TransporterHandler
+) -> Any:
+    """Build the transporter location target for a staged file.
 
     The cloud-side credentials are passed via the transporter env (so
     they don't leak into request YAML on disk); the URL identifies the
@@ -121,40 +123,32 @@ def _transporter_target(
     """
     if isinstance(location, S3Location):
         bucket = _convert(location.bucket, str)
-        return _transporter1.TransporterS3(
-            url=f"s3://{bucket}/{key}",
-            access_key=_transporter1.TransporterEnv(
-                _transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID
-            ),
-            secret_key=_transporter1.TransporterEnv(
-                _transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY
-            ),
-            region=_transporter1.TransporterEnv(_transporter1.SERVER_SIDE_AWS_REGION),
+        return handler.s3_location(
+            uri=f"s3://{bucket}/{key}",
+            access_key_env=handler.aws_access_key_id_env,
+            secret_key_env=handler.aws_secret_access_key_env,
+            region_env=handler.aws_region_env,
         )
     if isinstance(location, GCSLocation):
         bucket = _convert(location.bucket, str)
-        return _transporter1.TransporterGCS(
-            url=f"gs://{bucket}/{key}",
-            service_account_key=_transporter1.TransporterEnv(
-                _transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON
-            ),
+        return handler.gcs_location(
+            uri=f"gs://{bucket}/{key}",
+            service_account_key_env=handler.gcp_service_account_json_env,
         )
     if isinstance(location, AzBlobLocation):
         container = _convert(location.container, str)
-        return _transporter1.TransporterAzure(
-            url=f"az://{container}/{key}",
-            account_name=_transporter1.TransporterEnv(
-                _transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME
-            ),
-            account_key=_transporter1.TransporterEnv(
-                _transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY
-            ),
+        return handler.azure_location(
+            uri=f"az://{container}/{key}",
+            account_name_env=handler.azure_account_name_env,
+            account_key_env=handler.azure_account_key_env,
         )
     # noinspection PyProtectedMember
     raise DruidErrorCode.DRUID_11.exception(kind=type(location).__name__)
 
 
-def _transporter_env(location: CloudLocation) -> dict[str, str]:
+def _transporter_env(
+    location: CloudLocation, handler: TransporterHandler
+) -> dict[str, str]:
     """Build the env dict the transporter binary needs for ``location``.
 
     Mirrors the per-flavor ``run_env`` helpers in the cloud-side
@@ -163,31 +157,21 @@ def _transporter_env(location: CloudLocation) -> dict[str, str]:
     if isinstance(location, S3Location):
         creds = location.credentials
         return {
-            _transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID: _convert(
-                creds.access_key_id, str
-            ),
-            _transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY: _convert(
-                creds.secret_access_key,
-                str,
-            ),
-            _transporter1.SERVER_SIDE_AWS_REGION: _convert(location.region, str),
+            handler.aws_access_key_id_env: _convert(creds.access_key_id, str),
+            handler.aws_secret_access_key_env: _convert(creds.secret_access_key, str),
+            handler.aws_region_env: _convert(location.region, str),
         }
     if isinstance(location, GCSLocation):
         return {
-            _transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: _convert(
-                location.credentials.json,
-                str,
+            handler.gcp_service_account_json_env: _convert(
+                location.credentials.json, str
             ),
         }
     if isinstance(location, AzBlobLocation):
         creds = location.credentials
         return {
-            _transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME: _convert(
-                creds.account_name, str
-            ),
-            _transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY: _convert(
-                creds.account_key, str
-            ),
+            handler.azure_account_name_env: _convert(creds.account_name, str),
+            handler.azure_account_key_env: _convert(creds.account_key, str),
         }
     # noinspection PyProtectedMember
     raise DruidErrorCode.DRUID_11.exception(kind=type(location).__name__)
@@ -208,26 +192,27 @@ def upload_staged_files(
     parallel writes never overlap. The function returns the list of
     cloud-native URIs Druid will see in the ingestion ``inputSource``.
     """
-    pairs: list[
-        tuple[_transporter1.TransporterLocation, _transporter1.TransporterLocation]
-    ] = []
+    handler = make_handler()
+    pairs: list[tuple[Any, Any]] = []
     uris: list[str] = []
+    keys: list[str] = []
     base_path = getattr(staging, "base_path", "") or ""
     for idx, src_path in enumerate(parquet_files):
         name = f"part-{idx:05d}-{Path(src_path).name}"
         key = _join_path(base_path, subdir, name)
-        target = _transporter_target(staging, key)
-        source = _transporter1.TransporterLocalFile(
-            _transporter1.path_to_file_uri(Path(src_path))
-        )
+        target = _transporter_target(staging, key, handler)
+        source = handler.local_path_location(Path(src_path))
         pairs.append((source, target))
         uris.append(staged_uri(staging, key))
+        keys.append(key)
 
-    env = _transporter_env(staging)
+    env = _transporter_env(staging, handler)
     _transporter_copy_one(
+        handler=handler,
         source_target_pairs=pairs,
         work_dir=work_dir,
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=DestFileFormat.PARQUET,
+        paths=keys,
         env=env,
     )
     return uris

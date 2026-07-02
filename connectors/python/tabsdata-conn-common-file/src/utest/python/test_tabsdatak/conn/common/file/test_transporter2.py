@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 import yaml
 
-from tabsdatak.common._transporter import _transporter2 as t
+from tabsdatak.common._transporter.invoker import transporter2 as t
 from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
 
 
@@ -380,57 +380,6 @@ def test_load_response_error_only_raises(tmp_path):
         t._load_response(p, t.CopyResponse)
 
 
-# --- Binary lookup -----------------------------------------------
-
-
-class _ShutilStub:
-    def __init__(self, value):
-        self._value = value
-
-    def which(self, _name):
-        return self._value
-
-
-def test_find_binary_via_env_override(monkeypatch, tmp_path):
-    bin_path = tmp_path / "td_transporter2"
-    bin_path.write_text("#!/bin/sh\nexit 0\n")
-    bin_path.chmod(0o755)
-    monkeypatch.setenv("TD_TRANSPORTER_BIN", str(bin_path))
-    assert t.find_transporter_binary() == str(bin_path)
-
-
-def test_find_binary_env_override_not_executable(monkeypatch, tmp_path):
-    monkeypatch.setenv("TD_TRANSPORTER_BIN", str(tmp_path / "missing"))
-    with pytest.raises(t.TransporterBinaryNotFoundError, match="executable"):
-        t.find_transporter_binary()
-
-
-def test_find_binary_via_which_uses_td_transporter2_name(monkeypatch, tmp_path):
-    monkeypatch.delenv("TD_TRANSPORTER_BIN", raising=False)
-    fake_bin = tmp_path / "td_transporter2"
-    fake_bin.write_text("#!/bin/sh\n")
-    fake_bin.chmod(0o755)
-    stub = _ShutilStub(str(fake_bin))
-    captured = {}
-    orig_which = stub.which
-
-    def which(name):
-        captured["name"] = name
-        return orig_which(name)
-
-    stub.which = which
-    monkeypatch.setattr(t, "shutil", stub)
-    assert t.find_transporter_binary() == str(fake_bin)
-    assert captured["name"] == "td_transporter2"
-
-
-def test_find_binary_not_found(monkeypatch):
-    monkeypatch.delenv("TD_TRANSPORTER_BIN", raising=False)
-    monkeypatch.setattr(t, "shutil", _ShutilStub(None))
-    with pytest.raises(t.TransporterBinaryNotFoundError, match="not found on PATH"):
-        t.find_transporter_binary()
-
-
 # --- TransporterRunError -----------------------------------------
 
 
@@ -673,29 +622,6 @@ def test_delete_subcommand_and_parse(monkeypatch, tmp_path):
     assert isinstance(resp, t.DeleteResponse)
     assert resp.deleted == ["s3://b/a"]
     assert resp.failed[0].error == "nope"
-
-
-def test_driver_uses_find_transporter_binary_when_no_path(monkeypatch, tmp_path):
-    captured: dict[str, Any] = {}
-    monkeypatch.setattr(t, "find_transporter_binary", lambda: "/looked/up/td_transporter2")
-
-    def fake(args, **kwargs):
-        captured["bin"] = args[0]
-        Path(args[args.index("--response") + 1]).write_text(yaml.safe_dump({"files": []}))
-
-        class _C:
-            returncode = 0
-            stdout = ""
-            stderr = ""
-
-        return _C()
-
-    monkeypatch.setattr(t.subprocess, "run", fake)
-    t.find_copy(
-        t.FindCopyRequest(source=t.Location("file:///x"), target_dir=t.Location("file:///y/")),
-        tmp_path,
-    )
-    assert captured["bin"] == "/looked/up/td_transporter2"
 
 
 def test_driver_run_error_propagates(monkeypatch, tmp_path):

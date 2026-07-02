@@ -14,9 +14,11 @@ import argparse
 import logging
 from pathlib import Path
 
+from tabsdatak.common._transporter.invoker.transporter1 import (
+    TransporterBinaryNotFoundError,
+)
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
 from tabsdatak.server._tdrunner.function._lib.transporter import (
-    TransporterNotFoundError,
     run_transporter,
 )
 from tabsdatak.server._tdrunner.function.commands.run_transporter.error import (
@@ -67,7 +69,7 @@ def main(args: argparse.Namespace) -> int:
     logger.debug("Request: %s  Report: %s", request_yaml, report)
     try:
         rc = run_transporter(request_yaml, report)
-    except TransporterNotFoundError as exc:
+    except TransporterBinaryNotFoundError as exc:
         raise RunTransporterErrorCode.RUN_TR_1.exception(cause=exc, detail=str(exc))
     if rc == 0:
         logger.info("td_transporter completed successfully")

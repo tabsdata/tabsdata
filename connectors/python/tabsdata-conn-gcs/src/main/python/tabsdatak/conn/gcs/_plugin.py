@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.common.file import _plugin
 
 # noinspection PyProtectedMember
@@ -36,13 +36,15 @@ def _gcs_uri(bucket: str, path_entry: str) -> str:
     return f"gs://{bucket}/{key}"
 
 
-def build_location(conn: _AnyGCSConn, path_entry: str) -> _transporter1.TransporterGCS:
+def build_location(
+    conn: _AnyGCSConn, path_entry: str, handler: TransporterHandler
+) -> Any:
     bucket = _convert(conn.bucket, str)
-    return _transporter1.TransporterGCS(
-        url=_gcs_uri(bucket, path_entry),
-        service_account_key=_transporter1.TransporterEnv(
-            _transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON
-        ),
+    if not path_entry.startswith("gs://"):
+        path_entry = conn.full_path(path_entry)
+    return handler.gcs_location(
+        uri=_gcs_uri(bucket, path_entry),
+        service_account_key_env=handler.gcp_service_account_json_env,
     )
 
 
@@ -57,11 +59,9 @@ def credentials(conn: _AnyGCSConn) -> GCPJson:
     return creds
 
 
-def run_env(conn: _AnyGCSConn) -> dict[str, str]:
+def run_env(conn: _AnyGCSConn, handler: TransporterHandler) -> dict[str, str]:
     return {
-        _transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON: _convert(
-            credentials(conn).json, str
-        ),
+        handler.gcp_service_account_json_env: _convert(credentials(conn).json, str),
     }
 
 

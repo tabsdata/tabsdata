@@ -29,4 +29,4 @@ class RunTransporterErrorCode(ErrorCode):
         "td_transporter not found: {detail}",
     )
     # Raised by ``main()`` when the transporter subprocess can't be
-    # launched (``TransporterNotFoundError`` from ``_lib.transporter_proc``).
+    # launched (``TransporterNotFoundError`` from ``_lib.transporter``).

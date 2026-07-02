@@ -7,7 +7,7 @@ import pytest
 
 from tabsdatak.common._error import CommonInitException
 from tabsdatak.common._fileformat.error import FileFormatErrorCode
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._transporter.invoker import transporter1, transporter2
 from tabsdatak.conn.common.error import ConnException
 from tabsdatak.conn.common.file import _plugin
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
@@ -18,7 +18,7 @@ from tabsdatak.conn.common.file.typing_ import (
 )
 from tabsdatak.spi import DestContext
 
-# --- _transporter1.src_format_to_transporter ----------------------------------
+# --- transporter1.src_format_to_transporter ----------------------------------
 
 
 @pytest.mark.parametrize(
@@ -32,7 +32,7 @@ from tabsdatak.spi import DestContext
     ],
 )
 def test_src_format_to_transporter_picks_right_class(fmt, expected_cls):
-    out = _transporter1.src_format_to_transporter(fmt, None)
+    out = transporter1.src_format_to_transporter(fmt, None)
     assert type(out).__name__ == expected_cls
 
 
@@ -41,17 +41,17 @@ def test_src_format_to_transporter_rejects_auto():
     reaching the transporter mapping; reaching this function with AUTO
     is a programming error."""
     with pytest.raises(CommonInitException):
-        _transporter1.src_format_to_transporter(SrcFileFormat.AUTO, None)
+        transporter1.src_format_to_transporter(SrcFileFormat.AUTO, None)
 
 
 def test_src_format_csv_carries_options():
-    out = _transporter1.src_format_to_transporter(SrcFileFormat.CSV, {"separator": 59})
+    out = transporter1.src_format_to_transporter(SrcFileFormat.CSV, {"separator": 59})
     # User option layered on top of the binary-required defaults.
     assert out.options["separator"] == 59
     assert "has_header" in out.options
 
 
-# --- _transporter1.resolve_auto_src_format ------------------------------------
+# --- transporter1.resolve_auto_src_format ------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -66,7 +66,7 @@ def test_src_format_csv_carries_options():
 )
 def test_resolve_auto_src_format_passes_explicit_through(fmt):
     """An already-concrete format is returned unchanged regardless of paths."""
-    assert _transporter1.resolve_auto_src_format(fmt, ["whatever.bin"]) is fmt
+    assert transporter1.resolve_auto_src_format(fmt, ["whatever.bin"]) is fmt
 
 
 @pytest.mark.parametrize(
@@ -86,12 +86,12 @@ def test_resolve_auto_src_format_passes_explicit_through(fmt):
     ],
 )
 def test_resolve_auto_src_format_infers_from_single_path(path, expected):
-    assert _transporter1.resolve_auto_src_format(SrcFileFormat.AUTO, [path]) is expected
+    assert transporter1.resolve_auto_src_format(SrcFileFormat.AUTO, [path]) is expected
 
 
 def test_resolve_auto_src_format_accepts_multiple_paths_with_same_ext():
     """Multiple paths whose extensions agree resolve to that one format."""
-    out = _transporter1.resolve_auto_src_format(
+    out = transporter1.resolve_auto_src_format(
         SrcFileFormat.AUTO, ["a.csv", "b.csv", "nested/c.csv"]
     )
     assert out is SrcFileFormat.CSV
@@ -99,24 +99,24 @@ def test_resolve_auto_src_format_accepts_multiple_paths_with_same_ext():
 
 def test_resolve_auto_src_format_raises_on_mixed_extensions():
     with pytest.raises(CommonInitException) as ei:
-        _transporter1.resolve_auto_src_format(SrcFileFormat.AUTO, ["a.csv", "b.parquet"])
+        transporter1.resolve_auto_src_format(SrcFileFormat.AUTO, ["a.csv", "b.parquet"])
     msg = str(ei.value)
     assert "mixed" in msg.lower()
 
 
 def test_resolve_auto_src_format_raises_on_unknown_extension():
     with pytest.raises(CommonInitException) as ei:
-        _transporter1.resolve_auto_src_format(SrcFileFormat.AUTO, ["data.bin"])
+        transporter1.resolve_auto_src_format(SrcFileFormat.AUTO, ["data.bin"])
     assert "no recognised extension" in str(ei.value)
 
 
 def test_resolve_auto_src_format_raises_on_extensionless_path():
     """A path with no extension can't be inferred."""
     with pytest.raises(CommonInitException):
-        _transporter1.resolve_auto_src_format(SrcFileFormat.AUTO, ["data/"])
+        transporter1.resolve_auto_src_format(SrcFileFormat.AUTO, ["data/"])
 
 
-# --- _transporter1.dest_format_to_transporter ---------------------------------
+# --- transporter1.dest_format_to_transporter ---------------------------------
 
 
 @pytest.mark.parametrize(
@@ -129,16 +129,16 @@ def test_resolve_auto_src_format_raises_on_extensionless_path():
     ],
 )
 def test_dest_format_to_transporter_picks_right_class(fmt, expected_cls):
-    out = _transporter1.dest_format_to_transporter(fmt, None)
+    out = transporter1.dest_format_to_transporter(fmt, None)
     assert type(out).__name__ == expected_cls
 
 
 def test_dest_format_to_transporter_rejects_auto():
     with pytest.raises(CommonInitException):
-        _transporter1.dest_format_to_transporter(DestFileFormat.AUTO, None)
+        transporter1.dest_format_to_transporter(DestFileFormat.AUTO, None)
 
 
-# --- _transporter1.resolve_auto_dest_format -----------------------------------
+# --- transporter1.resolve_auto_dest_format -----------------------------------
 
 
 @pytest.mark.parametrize(
@@ -151,7 +151,7 @@ def test_dest_format_to_transporter_rejects_auto():
     ],
 )
 def test_resolve_auto_dest_format_passes_explicit_through(fmt):
-    assert _transporter1.resolve_auto_dest_format(fmt, ["whatever.bin"]) is fmt
+    assert transporter1.resolve_auto_dest_format(fmt, ["whatever.bin"]) is fmt
 
 
 @pytest.mark.parametrize(
@@ -167,24 +167,24 @@ def test_resolve_auto_dest_format_passes_explicit_through(fmt):
 )
 def test_resolve_auto_dest_format_infers_from_single_path(path, expected):
     assert (
-        _transporter1.resolve_auto_dest_format(DestFileFormat.AUTO, [path]) is expected
+        transporter1.resolve_auto_dest_format(DestFileFormat.AUTO, [path]) is expected
     )
 
 
 def test_resolve_auto_dest_format_raises_on_mixed_extensions():
     with pytest.raises(CommonInitException):
-        _transporter1.resolve_auto_dest_format(
+        transporter1.resolve_auto_dest_format(
             DestFileFormat.AUTO, ["out.csv", "out.parquet"]
         )
 
 
 def test_resolve_auto_dest_format_raises_on_unknown_extension():
     with pytest.raises(CommonInitException):
-        _transporter1.resolve_auto_dest_format(DestFileFormat.AUTO, ["weird.bin"])
+        transporter1.resolve_auto_dest_format(DestFileFormat.AUTO, ["weird.bin"])
 
 
 def test_dest_format_csv_carries_options():
-    out = _transporter1.dest_format_to_transporter(
+    out = transporter1.dest_format_to_transporter(
         DestFileFormat.CSV, {"include_header": True}
     )
     assert out.options["include_header"] is True
@@ -237,7 +237,7 @@ def test_resolve_dest_tokens_leaves_unknown_tokens():
     assert resolved == "out/${UNKNOWN}/x.csv"
 
 
-# --- src/_transporter1.dest_format_to_transporter unhandled-format raises -----
+# --- src/transporter1.dest_format_to_transporter unhandled-format raises -----
 
 
 class _BogusFormat:
@@ -252,13 +252,13 @@ class _BogusFormat:
 
 def test_src_format_to_transporter_unhandled_raises():
     with pytest.raises(CommonInitException) as ei:
-        _transporter1.src_format_to_transporter(_BogusFormat(), None)  # type: ignore[arg-type]
+        transporter1.src_format_to_transporter(_BogusFormat(), None)  # type: ignore[arg-type]
     assert ei.value.api_error is FileFormatErrorCode.FILE_FORMAT_1
 
 
 def test_dest_format_to_transporter_unhandled_raises():
     with pytest.raises(CommonInitException) as ei:
-        _transporter1.dest_format_to_transporter(_BogusFormat(), None)  # type: ignore[arg-type]
+        transporter1.dest_format_to_transporter(_BogusFormat(), None)  # type: ignore[arg-type]
     assert ei.value.api_error is FileFormatErrorCode.FILE_FORMAT_2
 
 
@@ -311,7 +311,7 @@ class _DestCtx(DestContext):
         pass
 
 
-def _stub_build_location(_conn, _entry):  # pragma: no cover - never reached
+def _stub_build_location(_conn, _entry, _handler):  # pragma: no cover - never reached
     raise AssertionError("build_location should not be called on slot-mismatch path")
 
 
@@ -343,9 +343,10 @@ class _StubSrc:
 def test_reader_conf_from_src_translates_fields():
     rc = _plugin.ReaderConf.from_src(object(), _StubSrc())
     assert rc.paths == ["a.csv", "b.csv"]
-    assert isinstance(rc.format, _transporter1.TransporterCSVFormat)
-    assert rc.format.options["separator"] == ","
-    assert "has_header" in rc.format.options
+    # The conf carries the raw format enum + cfg; the handler resolves
+    # AUTO and maps it to a transporter format at request-build time.
+    assert rc.file_format is SrcFileFormat.CSV
+    assert rc.format_cfg == {SrcFileFormat.CSV: {"separator": ","}}
     assert rc.initial_lastmod == "2026-01-01T00:00:00.000000+00:00"
     assert rc.file_info == "FILENAME"
 
@@ -354,10 +355,8 @@ def test_reader_conf_from_src_handles_none_format_cfg():
     src = _StubSrc()
     src.format_cfg = None
     rc = _plugin.ReaderConf.from_src(object(), src)
-    assert isinstance(rc.format, _transporter1.TransporterCSVFormat)
-    # No user options -> binary-required defaults only.
-    assert "has_header" in rc.format.options
-    assert "separator" in rc.format.options
+    assert rc.file_format is SrcFileFormat.CSV
+    assert rc.format_cfg is None
 
 
 class _StubDest:
@@ -372,23 +371,21 @@ class _StubDest:
 def test_writer_conf_from_dest_translates_fields():
     wc = _plugin.WriterConf.from_dest(object(), _StubDest())
     assert wc.paths == ["out/x.csv"]
-    assert isinstance(wc.format, _transporter1.TransporterCSVFormat)
-    assert wc.format.options["include_header"] is True
-    assert "separator" in wc.format.options
+    assert wc.file_format is DestFileFormat.CSV
+    assert wc.format_cfg == {DestFileFormat.CSV: {"include_header": True}}
 
 
 def test_writer_conf_from_dest_handles_none_format_cfg():
     dest = _StubDest()
     dest.format_cfg = None
     wc = _plugin.WriterConf.from_dest(object(), dest)
-    assert isinstance(wc.format, _transporter1.TransporterCSVFormat)
-    assert "include_header" in wc.format.options
-    assert "separator" in wc.format.options
+    assert wc.file_format is DestFileFormat.CSV
+    assert wc.format_cfg is None
 
 
 def test_run_write_out_slot_count_mismatch_raises_file_common_16(tmp_path):
     cfg = _plugin.WriterConf(
-        conn=None, paths=["a", "b"], format=_transporter1.TransporterParquetFormat()
+        conn=None, paths=["a", "b"], file_format=DestFileFormat.PARQUET
     )
     parquet = Path(tmp_path / "x.parquet")
     with pytest.raises(ConnException) as ei:
@@ -487,8 +484,8 @@ class _RecordingSrcCtx(_SrcCtx):
         self.attrs[attr] = val
 
 
-def _location_builder(_conn, entry):
-    return _transporter1.TransporterLocalFile(f"file:///srv/{entry}")
+def _location_builder(_conn, entry, _handler):
+    return transporter2.TransporterLocalFile(f"file:///srv/{entry}")
 
 
 _RUN_ERRORS = _plugin.FilePluginErrors(
@@ -500,9 +497,9 @@ _RUN_ERRORS = _plugin.FilePluginErrors(
 )
 
 
-def _stub_report(targets: list[str]) -> _transporter1.TransporterReport:
+def _stub_report(targets: list[str]) -> transporter1.TransporterReport:
     files = [{"to": t} for t in targets]
-    return _transporter1.TransporterReport(
+    return transporter1.TransporterReport(
         files=files,
         lastmod_info=None,
         raw={"files": files, "lastmod_info": None},
@@ -525,7 +522,7 @@ def test_run_read_in_per_slot_dir_and_parquet_collection(monkeypatch, tmp_path):
     cfg = _plugin.ReaderConf(
         conn=object(),
         paths=["a/in.csv", "b/in.csv"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=SrcFileFormat.PARQUET,
     )
     out = _plugin.import_files(
         ctx=_SrcCtx(tmp_path),
@@ -558,21 +555,21 @@ def test_run_read_in_run_env_called_once_and_passed_through(monkeypatch, tmp_pat
     cfg = _plugin.ReaderConf(
         conn=object(),
         paths=["a", "b"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=SrcFileFormat.PARQUET,
     )
     _plugin.import_files(
         ctx=_SrcCtx(tmp_path),
         cfg=cfg,
         build_location=_location_builder,
         errors=_RUN_ERRORS,
-        run_env=lambda _c: {"X": "1"},
+        run_env=lambda _c, _h: {"X": "1"},
     )
     # Same env dict reused across slots
     assert captured_env == [{"X": "1"}, {"X": "1"}]
 
 
 def test_run_read_in_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp_path):
-    def bad_run_env(_c):
+    def bad_run_env(_c, _h):
         raise ApiErrorCode.API_6.exception(name="X")
 
     monkeypatch.setattr(_input_module, "import_one", lambda **_kw: _stub_report([]))
@@ -580,7 +577,7 @@ def test_run_read_in_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp_p
     cfg = _plugin.ReaderConf(
         conn=object(),
         paths=["a"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=SrcFileFormat.PARQUET,
     )
     with pytest.raises(ConnException) as ei:
         _plugin.import_files(
@@ -596,7 +593,7 @@ def test_run_read_in_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp_p
 def _make_exc(exc_cls):
     """``TransporterRunError`` takes ``(returncode, stdout, stderr)``;
     the other two take a single message string."""
-    if exc_cls is _transporter1.TransporterRunError:
+    if exc_cls is transporter1.TransporterRunError:
         return exc_cls(1, "", "boom")
     return exc_cls("boom")
 
@@ -605,15 +602,15 @@ def _make_exc(exc_cls):
     ("exc_cls", "expected_code"),
     [
         (
-            _transporter1.TransporterBinaryNotFoundError,
+            transporter1.TransporterBinaryNotFoundError,
             FileCommonErrorCode.FILE_COMMON_1,
         ),
         (
-            _transporter1.TransporterRunError,
+            transporter1.TransporterRunError,
             FileCommonErrorCode.FILE_COMMON_3,
         ),
         (
-            _transporter1.TransporterReportError,
+            transporter1.TransporterReportError,
             FileCommonErrorCode.FILE_COMMON_4,
         ),
     ],
@@ -632,7 +629,7 @@ def test_run_read_in_wraps_transporter_failures(
     cfg = _plugin.ReaderConf(
         conn=object(),
         paths=["a"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=SrcFileFormat.PARQUET,
     )
     with pytest.raises(ConnException) as ei:
         _plugin.import_files(
@@ -657,7 +654,7 @@ def test_run_read_in_skips_report_entries_without_to_field(monkeypatch, tmp_path
     cfg = _plugin.ReaderConf(
         conn=object(),
         paths=["a"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=SrcFileFormat.PARQUET,
     )
     out = _plugin.import_files(
         ctx=_SrcCtx(tmp_path),
@@ -694,7 +691,7 @@ def test_run_read_in_passes_prior_lastmod_from_ctx_per_slot(monkeypatch, tmp_pat
     cfg = _plugin.ReaderConf(
         conn=object(),
         paths=["a", "b"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=SrcFileFormat.PARQUET,
     )
     _plugin.import_files(
         ctx=ctx,
@@ -721,7 +718,7 @@ def test_run_read_in_no_prior_lastmod_passes_none(monkeypatch, tmp_path):
     cfg = _plugin.ReaderConf(
         conn=object(),
         paths=["a"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=SrcFileFormat.PARQUET,
         initial_lastmod="2026-01-01T00:00:00.000000+00:00",
     )
     _plugin.import_files(
@@ -741,7 +738,7 @@ def test_run_read_in_stores_report_lastmod_back_to_ctx(monkeypatch, tmp_path):
         target = str(kw["target_dir"] / "out.parquet")
         slot_name = kw["target_dir"].name  # slot0 / slot1 / ...
         files = [{"to": target}]
-        return _transporter1.TransporterReport(
+        return transporter1.TransporterReport(
             files=files,
             lastmod_info=f"cursor-{slot_name}-fresh",
             raw={},
@@ -753,7 +750,7 @@ def test_run_read_in_stores_report_lastmod_back_to_ctx(monkeypatch, tmp_path):
     cfg = _plugin.ReaderConf(
         conn=object(),
         paths=["a", "b"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=SrcFileFormat.PARQUET,
     )
     _plugin.import_files(
         ctx=ctx,
@@ -785,7 +782,7 @@ def test_run_read_in_skips_store_when_report_has_no_lastmod(monkeypatch, tmp_pat
     cfg = _plugin.ReaderConf(
         conn=object(),
         paths=["a"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=SrcFileFormat.PARQUET,
     )
     _plugin.import_files(
         ctx=ctx,
@@ -803,7 +800,16 @@ def test_run_read_in_skips_store_when_report_has_no_lastmod(monkeypatch, tmp_pat
 def test_run_write_out_passes_source_target_pairs(monkeypatch, tmp_path):
     captured: dict = {}
 
-    def fake_copy_one(*, source_target_pairs, work_dir, format, env=None):
+    def fake_copy_one(
+        *,
+        handler,
+        source_target_pairs,
+        work_dir,
+        file_format,
+        paths,
+        format_cfg=None,
+        env=None,
+    ):
         captured["pairs"] = source_target_pairs
         captured["work_dir"] = work_dir
         captured["env"] = env
@@ -815,7 +821,7 @@ def test_run_write_out_passes_source_target_pairs(monkeypatch, tmp_path):
     cfg = _plugin.WriterConf(
         conn=object(),
         paths=["x/y", "z"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=DestFileFormat.PARQUET,
     )
     _plugin.copy_out(
         ctx=_DestCtx(tmp_path),
@@ -829,14 +835,23 @@ def test_run_write_out_passes_source_target_pairs(monkeypatch, tmp_path):
     assert len(captured["pairs"]) == 2
     # Each pair is (source_local_file, target_location)
     for src_loc, tgt_loc in captured["pairs"]:
-        assert isinstance(src_loc, _transporter1.TransporterLocalFile)
-        assert isinstance(tgt_loc, _transporter1.TransporterLocalFile)
+        assert isinstance(src_loc, transporter2.TransporterLocalFile)
+        assert isinstance(tgt_loc, transporter2.TransporterLocalFile)
 
 
 def test_run_write_out_run_env_propagates_to_copy_one(monkeypatch, tmp_path):
     captured: dict = {}
 
-    def fake_copy_one(*, source_target_pairs, work_dir, format, env=None):
+    def fake_copy_one(
+        *,
+        handler,
+        source_target_pairs,
+        work_dir,
+        file_format,
+        paths,
+        format_cfg=None,
+        env=None,
+    ):
         captured["env"] = env
 
     monkeypatch.setattr(_output_module, "copy_one", fake_copy_one)
@@ -844,7 +859,7 @@ def test_run_write_out_run_env_propagates_to_copy_one(monkeypatch, tmp_path):
     cfg = _plugin.WriterConf(
         conn=object(),
         paths=["x"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=DestFileFormat.PARQUET,
     )
     _plugin.copy_out(
         ctx=_DestCtx(tmp_path),
@@ -852,13 +867,13 @@ def test_run_write_out_run_env_propagates_to_copy_one(monkeypatch, tmp_path):
         tables=[Path(tmp_path / "a.parquet")],
         build_location=_location_builder,
         errors=_RUN_ERRORS,
-        run_env=lambda _c: {"K": "V"},
+        run_env=lambda _c, _h: {"K": "V"},
     )
     assert captured["env"] == {"K": "V"}
 
 
 def test_run_write_out_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp_path):
-    def bad_run_env(_c):
+    def bad_run_env(_c, _h):
         raise ApiErrorCode.API_6.exception(name="X")
 
     monkeypatch.setattr(_output_module, "copy_one", lambda **_kw: None)
@@ -866,7 +881,7 @@ def test_run_write_out_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp
     cfg = _plugin.WriterConf(
         conn=object(),
         paths=["x"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=DestFileFormat.PARQUET,
     )
     with pytest.raises(ConnException) as ei:
         _plugin.copy_out(
@@ -884,15 +899,15 @@ def test_run_write_out_run_env_failure_wraps_as_cred_resolution(monkeypatch, tmp
     ("exc_cls", "expected_code"),
     [
         (
-            _transporter1.TransporterBinaryNotFoundError,
+            transporter1.TransporterBinaryNotFoundError,
             FileCommonErrorCode.FILE_COMMON_1,
         ),
         (
-            _transporter1.TransporterRunError,
+            transporter1.TransporterRunError,
             FileCommonErrorCode.FILE_COMMON_8,
         ),
         (
-            _transporter1.TransporterReportError,
+            transporter1.TransporterReportError,
             FileCommonErrorCode.FILE_COMMON_4,
         ),
     ],
@@ -911,7 +926,7 @@ def test_run_write_out_wraps_transporter_failures(
     cfg = _plugin.WriterConf(
         conn=object(),
         paths=["x"],
-        format=_transporter1.TransporterParquetFormat(),
+        file_format=DestFileFormat.PARQUET,
     )
     with pytest.raises(ConnException) as ei:
         _plugin.copy_out(

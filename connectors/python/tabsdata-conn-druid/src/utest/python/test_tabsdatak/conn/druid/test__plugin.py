@@ -14,7 +14,8 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
+from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AzureAccountKey,
@@ -41,6 +42,8 @@ from tabsdatak.conn.druid.error import (
 
 
 pytestmark = pytest.mark.druid
+
+HANDLER = TransporterHandler1()
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +160,7 @@ def test_dest_plugin_wraps_transporter_run_error_as_druid_7(
     monkeypatch, work_dir,
 ):
     def boom(*args, **kwargs):
-        raise _transporter1.TransporterRunError(1, "", "upload failed")
+        raise transporter1.TransporterRunError(1, "", "upload failed")
 
     monkeypatch.setattr(impl, "upload_staged_files", boom)
     parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
@@ -173,7 +176,7 @@ def test_dest_plugin_wraps_transporter_binary_not_found_as_druid_7(
     monkeypatch, work_dir,
 ):
     def boom(*args, **kwargs):
-        raise _transporter1.TransporterBinaryNotFoundError("missing binary")
+        raise transporter1.TransporterBinaryNotFoundError("missing binary")
 
     monkeypatch.setattr(impl, "upload_staged_files", boom)
     parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
@@ -418,23 +421,23 @@ def test_staged_uri_for_each_flavor():
 
 def test_transporter_env_s3():
     # noinspection PyProtectedMember
-    env = impl._transporter_env(_s3_staging())
-    assert env[_transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID] == "AKIA..."
-    assert env[_transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY] == "secret"
-    assert env[_transporter1.SERVER_SIDE_AWS_REGION] == "us-east-1"
+    env = impl._transporter_env(_s3_staging(), HANDLER)
+    assert env[transporter1.SERVER_SIDE_AWS_ACCESS_KEY_ID] == "AKIA..."
+    assert env[transporter1.SERVER_SIDE_AWS_SECRET_ACCESS_KEY] == "secret"
+    assert env[transporter1.SERVER_SIDE_AWS_REGION] == "us-east-1"
 
 
 def test_transporter_env_gcs():
     # noinspection PyProtectedMember
-    env = impl._transporter_env(_gcs_staging())
-    assert _transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON in env
+    env = impl._transporter_env(_gcs_staging(), HANDLER)
+    assert transporter1.SERVER_SIDE_GCP_SERVICE_ACCOUNT_JSON in env
 
 
 def test_transporter_env_azure():
     # noinspection PyProtectedMember
-    env = impl._transporter_env(_az_staging())
-    assert env[_transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME] == "acct"
-    assert env[_transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY] == "key"
+    env = impl._transporter_env(_az_staging(), HANDLER)
+    assert env[transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME] == "acct"
+    assert env[transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY] == "key"
 
 
 # ---------------------------------------------------------------------------

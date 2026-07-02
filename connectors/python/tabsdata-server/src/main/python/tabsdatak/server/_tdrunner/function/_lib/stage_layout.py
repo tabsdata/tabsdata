@@ -88,8 +88,8 @@ class InvalidStateEnvelopeError(ValueError):
     """Raised when ``stream-state.json`` doesn't match the expected schema.
 
     Wraps :class:`pydantic.ValidationError` so callers can catch
-    envelope-specific failures without catching unrelated ``ValueError``s
-    from surrounding JSON parsing.
+    envelope-specific failures without catching unrelated ``ValueError``
+    instances from surrounding JSON parsing.
     """
 
 

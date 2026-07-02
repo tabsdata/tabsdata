@@ -8,7 +8,8 @@ import pytest
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin
 # noinspection PyProtectedMember
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
+from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.localfile import LocalFileDest, LocalFileDestConn, LocalFileSrc, LocalFileSrcConn
 from tabsdatak.spi import TableFileInput
 # noinspection PyProtectedMember
@@ -18,6 +19,8 @@ import tabsdatak.conn.localfile._plugin as plugin
 
 pytestmark = pytest.mark.localfile
 
+HANDLER = TransporterHandler1()
+
 
 # ---------------------------------------------------------------------------
 # _build_location
@@ -26,8 +29,8 @@ pytestmark = pytest.mark.localfile
 
 def test_build_location_joins_base_path_with_entry():
     conn = LocalFileSrcConn(base_path="/data/")
-    loc = plugin.build_location(conn, "users.csv")
-    assert isinstance(loc, _transporter1.TransporterLocalFile)
+    loc = plugin.build_location(conn, "users.csv", HANDLER)
+    assert isinstance(loc, transporter1.TransporterLocalFile)
     assert loc.url.startswith("file:///")
     assert loc.url.endswith("/data/users.csv")
 
@@ -36,14 +39,14 @@ def test_build_location_treats_absolute_path_as_relative_to_base_path():
     # ``full_path`` strips the leading slash from the entry, so
     # ``"/sub/x"`` and ``"sub/x"`` produce the same location.
     conn = LocalFileSrcConn(base_path="/data/")
-    abs_loc = plugin.build_location(conn, "/sub/users.csv")
-    rel_loc = plugin.build_location(conn, "sub/users.csv")
+    abs_loc = plugin.build_location(conn, "/sub/users.csv", HANDLER)
+    rel_loc = plugin.build_location(conn, "sub/users.csv", HANDLER)
     assert abs_loc.url == rel_loc.url
 
 
 def test_build_location_empty_base_path_uses_root():
     conn = LocalFileSrcConn(base_path="")
-    loc = plugin.build_location(conn, "users.csv")
+    loc = plugin.build_location(conn, "users.csv", HANDLER)
     assert loc.url == "file:///users.csv"
 
 

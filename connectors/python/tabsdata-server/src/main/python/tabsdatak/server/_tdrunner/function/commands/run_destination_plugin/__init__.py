@@ -4,19 +4,19 @@
 
 """run-destination-plugin command.
 
-The subscriber chain's counterpart to `run-source-plugin`. Reads the
+The subscriber chain's counterpart to ``run-source-plugin``. Reads the
 function definition from the extracted bundle (must be a
-`SubscriberInfo`), reads the outputs manifest produced by
-`run-function`, resolves the matching `DestPlugin` via the connector
-registry, and calls `write_out()` with the list of parquet paths the
+``SubscriberInfo``), reads the outputs manifest produced by
+``run-function``, resolves the matching ``DestPlugin`` via the connector
+registry, and calls ``write_out()`` with the list of parquet paths the
 function produced.
 
 The destination plugin consumes the parquets positionally — one entry
-per slot, in `info.destination.cardinality(info.destination)` order.
-Null entries (the user function returned `None` for that slot)
-surface as `BadManifestError` since the `DestPlugin.write_out` API
-takes `list[TableFileSpec]` (no `None`s); subscribers must return
-concrete frames for every output slot.
+per slot, in ``info.destination.cardinality(info.destination)`` order.
+Null entries (the user function returned ``None`` for that slot)
+surface as ``BadManifestError`` since the ``DestPlugin.write_out`` API
+takes ``list[TableFileSpec]`` (no ``None`` values); subscribers must
+return concrete frames for every output slot.
 """
 
 from __future__ import annotations

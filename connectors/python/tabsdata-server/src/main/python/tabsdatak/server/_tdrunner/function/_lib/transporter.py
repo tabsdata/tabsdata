@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from tabsdatak.common._transporter.facade import TRANSPORTER_MODE
 from tabsdatak.server._tdrunner.function._lib import transporter1, transporter2
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.mounts import load_mount_option_keys
@@ -15,19 +16,11 @@ from tabsdatak.server._tdrunner.function._lib.request import (
     Request,
 )
 
-TRANSPORTER_MODE_LEGACY = 1
-TRANSPORTER_MODE_CURRENT = 2
-
-TRANSPORTER_MODE = TRANSPORTER_MODE_CURRENT
-
-
 match TRANSPORTER_MODE:
     case 1:
-        TransporterNotFoundError = transporter1.TransporterNotFoundError
         OutputTableNotInManifestError = transporter1.OutputTableNotInManifestError
         localized_input_files = transporter1.localized_input_files
     case 2:
-        TransporterNotFoundError = transporter2.TransporterNotFoundError
         OutputTableNotInManifestError = transporter2.OutputTableNotInManifestError
         localized_input_files = transporter2.localized_input_files
     case _:

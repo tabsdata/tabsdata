@@ -10,8 +10,15 @@ from pathlib import Path
 from typing import Any, cast
 
 from tabsdatak.api import Src
+from tabsdatak.common._fileformat.taxonomy import DestFileFormat
+from tabsdatak.common._transporter.facade import make_handler
+from tabsdatak.common._transporter.handler.handler import TransporterHandler
+from tabsdatak.common._transporter.invoker.transporter1 import (
+    TransporterBinaryNotFoundError,
+    TransporterReportError,
+    TransporterRunError,
+)
 from tabsdatak.conn.azureblob import AzureBlobSrcConn
-from tabsdatak.common._transporter import _transporter1
 from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.gcs import GCSSrcConn
 from tabsdatak.conn.localfile import LocalFileSrcConn
@@ -77,15 +84,16 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
         src: ManifestStageSrc,
     ) -> list[list[TableFileInput]]:
         backend = backend_for_conn(conn)
+        handler = make_handler()
 
         try:
-            env = backend.credential_env()
+            env = backend.credential_env(handler)
         except (ApiException, TypeError, ValueError) as e:
             raise ManifestStageErrorCode.MANIFEST_STAGE_2.exception(
                 cause=e, reason=str(e)
             )
 
-        manifest_path = self._fetch_manifest(ctx, backend, env)
+        manifest_path = self._fetch_manifest(ctx, backend, handler, env)
         if manifest_path is None:
             # No new manifest matched this trigger; nothing to materialise.
             logger.info("manifest-stage: no new manifest matched; producing 0 slots")
@@ -93,7 +101,7 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
 
         slots = self._parse_manifest(manifest_path)
         return to_table_file_inputs(
-            self._fetch_data_files(ctx, backend, env, manifest_path, slots)
+            self._fetch_data_files(ctx, backend, handler, env, manifest_path, slots)
         )
 
     # -- steps ------------------------------------------------------
@@ -102,15 +110,17 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
         self,
         ctx: SrcPluginCtx,
         backend: StageBackend,
+        handler: TransporterHandler,
         env: dict[str, str] | None,
     ) -> Path | None:
         manifest_dir = ctx.work_dir / "_manifest"
         manifest_dir.mkdir(parents=True, exist_ok=True)
-        source = backend.build_location(_STREAM_MANIFEST_FILE_WILDCARD)
+        source = backend.build_location(_STREAM_MANIFEST_FILE_WILDCARD, handler)
 
         prior = cast(str | None, ctx.get_attr(_MANIFEST_LASTMOD_KEY))
         try:
             report = _input.wildcard_copy_one(
+                handler=handler,
                 source=source,
                 target_dir=manifest_dir,
                 initial_lastmod=_MANIFEST_INITIAL_LASTMOD,
@@ -118,13 +128,13 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
                 max_files=1,
                 env=env,
             )
-        except _transporter1.TransporterBinaryNotFoundError as e:
+        except TransporterBinaryNotFoundError as e:
             raise ManifestStageErrorCode.MANIFEST_STAGE_3.exception(cause=e)
-        except _transporter1.TransporterRunError as e:
+        except TransporterRunError as e:
             raise ManifestStageErrorCode.MANIFEST_STAGE_4.exception(
                 cause=e, pattern=_STREAM_MANIFEST_FILE_WILDCARD
             )
-        except _transporter1.TransporterReportError as e:
+        except TransporterReportError as e:
             raise ManifestStageErrorCode.MANIFEST_STAGE_5.exception(
                 cause=e, pattern=_STREAM_MANIFEST_FILE_WILDCARD
             )
@@ -161,44 +171,45 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
         self,
         ctx: SrcPluginCtx,
         backend: StageBackend,
+        handler: TransporterHandler,
         env: dict[str, str] | None,
         manifest_path: Path,
         slots: list[list[str]],
     ) -> list[list[TableFileSpec]]:
-        pairs: list[
-            tuple[_transporter1.TransporterLocation, _transporter1.TransporterLocation]
-        ] = []
+        pairs: list[tuple[Any, Any]] = []
+        paths: list[str] = []
         results: list[list[TableFileSpec]] = []
         for slot_idx, slot in enumerate(slots):
             slot_dir = ctx.work_dir / f"slot{slot_idx}"
             slot_dir.mkdir(parents=True, exist_ok=True)
             slot_targets: list[TableFileSpec] = []
             for file_idx, rel in enumerate(slot):
-                source = backend.build_location(rel)
+                source = backend.build_location(rel, handler)
                 name = Path(rel).name or f"file{file_idx}"
                 target_path = slot_dir / f"{file_idx:04d}-{name}"
-                target = _transporter1.TransporterLocalFile(
-                    _transporter1.path_to_file_uri(target_path)
-                )
+                target = handler.local_path_location(target_path)
                 pairs.append((source, target))
+                paths.append(str(target_path))
                 slot_targets.append(target_path)
             results.append(slot_targets)
 
         if pairs:
             try:
                 _output.copy_one(
+                    handler=handler,
                     source_target_pairs=pairs,
                     work_dir=ctx.work_dir,
-                    format=_transporter1.TransporterParquetFormat(),
+                    file_format=DestFileFormat.PARQUET,
+                    paths=paths,
                     env=env,
                 )
-            except _transporter1.TransporterBinaryNotFoundError as e:
+            except TransporterBinaryNotFoundError as e:
                 raise ManifestStageErrorCode.MANIFEST_STAGE_3.exception(cause=e)
-            except _transporter1.TransporterRunError as e:
+            except TransporterRunError as e:
                 raise ManifestStageErrorCode.MANIFEST_STAGE_8.exception(
                     cause=e, path=str(manifest_path)
                 )
-            except _transporter1.TransporterReportError as e:
+            except TransporterReportError as e:
                 raise ManifestStageErrorCode.MANIFEST_STAGE_9.exception(
                     cause=e, path=str(manifest_path)
                 )

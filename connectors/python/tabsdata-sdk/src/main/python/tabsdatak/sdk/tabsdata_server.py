@@ -4379,11 +4379,12 @@ class TabsdataServer:
         status: List[str] | None = None,
         raise_for_status: bool = True,
     ) -> dict:
-        """Consolidated `/metrics` endpoint.
+        """Consolidated ``/metrics`` endpoint.
 
-        Returns the raw response data (``{dim, unit, start_ms, end_ms,
-        nodes, edges}``). All parameters are optional; the server
-        defaults to ``dim=collection, unit=day, span=1, align=calendar``.
+        Returns the raw response data
+        (``{dim, unit, start_ms, end_ms, nodes, edges}``). All parameters
+        are optional; the server defaults to
+        ``dim=collection, unit=day, span=1, align=calendar``.
 
         Args:
             dim: ``"collection"`` (default) or ``"group"``.
@@ -4395,8 +4396,8 @@ class TabsdataServer:
                 window ending exactly at ``from``.
             from_ms: right edge of the window (UTC epoch ms, exclusive).
                 Defaults to server-now. Sent on the wire as ``from``.
-            span: window width in ``unit``s — also the number of rows
-                returned (``unit=hour&span=24`` → 24 rows).
+            span: window width in ``unit`` increments — also the number of
+                rows returned (``unit=hour&span=24`` → 24 rows).
             collection: include filter on collection ids.
             collection_exclude: exclude filter on collection ids.
             group: include filter on group ids.

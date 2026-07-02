@@ -4,7 +4,11 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._transporter.invoker.transporter1 import (
+    TransporterBinaryNotFoundError,
+    TransporterReportError,
+    TransporterRunError,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -147,9 +151,9 @@ class DruidDestPlugin(DestPlugin[DruidDestConn, DruidDest]):
                         work_dir=ctx.work_dir,
                     )
                 except (
-                    _transporter1.TransporterRunError,
-                    _transporter1.TransporterReportError,
-                    _transporter1.TransporterBinaryNotFoundError,
+                    TransporterRunError,
+                    TransporterReportError,
+                    TransporterBinaryNotFoundError,
                 ) as e:
                     # noinspection PyProtectedMember
                     raise DruidErrorCode.DRUID_7.exception(

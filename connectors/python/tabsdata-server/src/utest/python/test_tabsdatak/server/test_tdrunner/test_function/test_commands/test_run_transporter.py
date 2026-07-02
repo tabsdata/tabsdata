@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from tabsdatak.server._tdrunner.function._lib.transporter_proc import (
-    TransporterNotFoundError,
+from tabsdatak.common._transporter.invoker.transporter1 import (
+    TransporterBinaryNotFoundError,
 )
 from tabsdatak.server._tdrunner.function.commands.run_transporter import main
 from tabsdatak.server._tdrunner.function.commands.run_transporter.error import (
@@ -92,7 +92,7 @@ def test_main_propagates_nonzero_exit(monkeypatch, tmp_path, http_ok_url, rc):
 
 def test_main_missing_binary_returns_command_specific(monkeypatch, tmp_path, http_ok_url):
     def fake(req, report):
-        raise TransporterNotFoundError("nope")
+        raise TransporterBinaryNotFoundError("nope")
 
     monkeypatch.setattr(f"{_MOD}.run_transporter", fake)
     _set_argv(

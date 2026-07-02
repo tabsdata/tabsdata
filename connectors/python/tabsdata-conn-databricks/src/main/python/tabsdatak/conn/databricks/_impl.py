@@ -419,7 +419,7 @@ def _fully_qualify_table(conn: _AnyDatabricksConn, table: str) -> str:
     """Resolve ``table`` to a 3-part bare ``catalog.schema.table`` name,
     drawing from ``conn.catalog`` / ``conn.schema`` to fill in the
     missing leading parts. Accepts parts that are bare or backtick-
-    quoted (with ```` `` ```` to escape an embedded backtick).
+    quoted (a doubled backtick escapes an embedded backtick).
 
     The result is BARE -- callers re-apply quoting via
     :func:`_fq_for_sql` when feeding the value back into SQL, and use

@@ -6,7 +6,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, cast
 
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._fileformat.taxonomy import DestFileFormat, SrcFileFormat
+from tabsdatak.common._transporter.facade import make_handler
+from tabsdatak.common._transporter.handler.handler import TransporterHandler
+from tabsdatak.common._transporter.invoker.transporter1 import (
+    TransporterBinaryNotFoundError,
+    TransporterReportError,
+    TransporterRunError,
+)
 from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
@@ -58,30 +65,23 @@ def resolve_dest_tokens(target_path: str, ctx: DestContext) -> str:
 class ReaderConf:
     # The Conn instance the orchestrator hands to ``build_location``
     # / ``run_env``.  Typed Any so this module stays decoupled from
-    # the connector-specific Conn class.
+    # the connector-specific Conn class. ``file_format`` is the raw
+    # (possibly AUTO) format enum; the handler resolves AUTO against
+    # ``paths`` and maps it to its own transporter format object.
     conn: Any
     paths: list[str]
-    format: _transporter1.TransporterFormat
+    file_format: SrcFileFormat
+    format_cfg: dict | None = None
     initial_lastmod: str | None = None
     file_info: str | None = None
 
     @classmethod
     def from_src(cls, conn: Any, src: Any) -> "ReaderConf":
-        paths = list(src.paths)
-        # Resolve ``format=AUTO`` from the paths' extensions before
-        # mapping to a transporter format. Without this step
-        # ``src_format_to_transporter`` would have silently fallen
-        # back to Parquet for AUTO, which masks CSV/JSON/AVRO
-        # mismatches as parquet-magic-byte failures inside the
-        # transporter binary.
-        resolved_fmt = _transporter1.resolve_auto_src_format(src.format, paths)
         return cls(
             conn=conn,
-            paths=paths,
-            format=_transporter1.src_format_to_transporter(
-                resolved_fmt,
-                src.format_cfg.get(resolved_fmt) if src.format_cfg else None,
-            ),
+            paths=list(src.paths),
+            file_format=src.format,
+            format_cfg=src.format_cfg,
             initial_lastmod=initial_lastmod_to_iso(src.initial_last_modified),
             file_info=file_info_to_str(src.file_info),
         )
@@ -91,22 +91,16 @@ class ReaderConf:
 class WriterConf:
     conn: Any
     paths: list[str]
-    format: _transporter1.TransporterFormat
+    file_format: DestFileFormat
+    format_cfg: dict | None = None
 
     @classmethod
     def from_dest(cls, conn: Any, dest: Any) -> "WriterConf":
-        paths = list(dest.paths)
-        # Resolve ``format=AUTO`` from the paths' extensions before
-        # mapping to a transporter format -- see the mirroring note
-        # on :meth:`ReaderConf.from_src`.
-        resolved_fmt = _transporter1.resolve_auto_dest_format(dest.format, paths)
         return cls(
             conn=conn,
-            paths=paths,
-            format=_transporter1.dest_format_to_transporter(
-                resolved_fmt,
-                dest.format_cfg.get(resolved_fmt) if dest.format_cfg else None,
-            ),
+            paths=list(dest.paths),
+            file_format=dest.format,
+            format_cfg=dest.format_cfg,
         )
 
 
@@ -122,8 +116,8 @@ class FilePluginErrors:
     cred_resolution: ErrorCode | None = None  # None when the connector has no creds
 
 
-LocationBuilder = Callable[[Any, str], _transporter1.TransporterLocation]
-RunEnvBuilder = Callable[[Any], dict[str, str]]
+LocationBuilder = Callable[[Any, str, TransporterHandler], Any]
+RunEnvBuilder = Callable[[Any, TransporterHandler], dict[str, str]]
 
 
 # --- Orchestrators -------------------------------------------------
@@ -153,11 +147,12 @@ def import_files(
     run_env: RunEnvBuilder | None = None,
 ) -> list[list[TableFileSpec]]:
     conn = cfg.conn
+    handler = make_handler()
 
     env: dict[str, str] | None = None
     if run_env is not None:
         try:
-            env = run_env(conn)
+            env = run_env(conn, handler)
         except ApiException as e:
             raise errors.cred_resolution.exception(cause=e, reason=str(e))
 
@@ -168,26 +163,29 @@ def import_files(
         logger.info("file-reader: importing path %d/%d: %r", slot_idx + 1, total, entry)
         slot_dir = ctx.work_dir / f"slot{slot_idx}"
         slot_dir.mkdir(parents=True, exist_ok=True)
-        location = build_location(conn, entry)
+        location = build_location(conn, entry, handler)
         lastmod_key = f"{_LASTMOD_KEY_PREFIX}{slot_idx}"
         # Resume from the prior trx's cursor if one was stored; otherwise
         # fall back to the Src's baseline (the first-run seed).
         prior_lastmod = cast(str | None, ctx.get_attr(lastmod_key))
         try:
             report = _input.import_one(
+                handler=handler,
                 source=location,
                 target_dir=slot_dir,
-                format=cfg.format,
+                file_format=cfg.file_format,
+                paths=cfg.paths,
+                format_cfg=cfg.format_cfg,
                 initial_lastmod=cfg.initial_lastmod,
                 lastmod_info=prior_lastmod,
                 file_info=cfg.file_info,
                 env=env,
             )
-        except _transporter1.TransporterBinaryNotFoundError as e:
+        except TransporterBinaryNotFoundError as e:
             raise errors.binary_not_found.exception(cause=e)
-        except _transporter1.TransporterRunError as e:
+        except TransporterRunError as e:
             raise errors.read_failed.exception(cause=e, path=entry)
-        except _transporter1.TransporterReportError as e:
+        except TransporterReportError as e:
             raise errors.report_invalid.exception(cause=e, path=entry)
 
         # Stage this slot's fresh cursor for the next trx. The transporter
@@ -228,11 +226,12 @@ def copy_out(
         )
 
     conn = cfg.conn
+    handler = make_handler()
 
     env: dict[str, str] | None = None
     if run_env is not None:
         try:
-            env = run_env(conn)
+            env = run_env(conn, handler)
         except ApiException as e:
             raise errors.cred_resolution.exception(cause=e, reason=str(e))
 
@@ -242,27 +241,28 @@ def copy_out(
     for i, (parquet_path, entry) in enumerate(zip(tables, cfg.paths), 1):
         logger.info("file-writer: writing path %d/%d: %r", i, total, entry)
         resolved_entry = resolve_dest_tokens(entry, ctx)
-        source_loc = _transporter1.TransporterLocalFile(
-            _transporter1.path_to_file_uri(parquet_path)
-        )
-        target_loc = build_location(conn, resolved_entry)
+        source_loc = handler.local_path_location(Path(parquet_path))
+        target_loc = build_location(conn, resolved_entry, handler)
         pairs.append((source_loc, target_loc))
 
     try:
         _output.copy_one(
+            handler=handler,
             source_target_pairs=pairs,
             work_dir=ctx.work_dir,
-            format=cfg.format,
+            file_format=cfg.file_format,
+            paths=cfg.paths,
+            format_cfg=cfg.format_cfg,
             env=env,
         )
-    except _transporter1.TransporterBinaryNotFoundError as e:
+    except TransporterBinaryNotFoundError as e:
         raise errors.binary_not_found.exception(cause=e)
-    except _transporter1.TransporterRunError as e:
+    except TransporterRunError as e:
         raise errors.write_failed.exception(
             cause=e,
             target=", ".join(cfg.paths),
         )
-    except _transporter1.TransporterReportError as e:
+    except TransporterReportError as e:
         raise errors.report_invalid.exception(
             cause=e,
             path=", ".join(cfg.paths),

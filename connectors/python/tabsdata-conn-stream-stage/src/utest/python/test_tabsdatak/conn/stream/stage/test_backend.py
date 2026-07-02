@@ -16,7 +16,8 @@ from types import SimpleNamespace
 import pytest
 
 from tabsdatak.conn.common.error import ConnInitException
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
+from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.localfile import LocalFileSrcConn
 
 # noinspection PyProtectedMember
@@ -27,6 +28,8 @@ from tabsdatak.conn.stream.stage._backend import (
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
+
+HANDLER = TransporterHandler1()
 
 
 def _conn(**slots):
@@ -44,7 +47,7 @@ def test_backend_for_conn_local_returns_local_backend():
     backend = backend_for_conn(_conn(local=LocalFileSrcConn(base_path="/stage")))
     assert isinstance(backend, _LocalStageBackend)
     assert backend.is_object_store is False
-    assert backend.credential_env() is None
+    assert backend.credential_env(HANDLER) is None
 
 
 def test_backend_for_conn_cloud_slot_returns_object_store_backend():
@@ -79,8 +82,8 @@ def test_backend_for_conn_multiple_slots_raises():
 
 def test_local_backend_build_location_resolves_under_base_path():
     backend = _LocalStageBackend(LocalFileSrcConn(base_path="/stage"))
-    loc = backend.build_location("files/x.parquet")
-    assert isinstance(loc, _transporter1.TransporterLocalFile)
+    loc = backend.build_location("files/x.parquet", HANDLER)
+    assert isinstance(loc, transporter1.TransporterLocalFile)
     # The localfile connector applies base_path itself, so the resolved
     # url carries both the base path and the relative entry.
     assert "stage" in loc.url
@@ -119,18 +122,18 @@ class _FakePlugin:
     def __init__(self) -> None:
         self.seen_path: str | None = None
 
-    def build_location(self, conn, path):
+    def build_location(self, conn, path, handler):
         self.seen_path = path
-        return _transporter1.TransporterLocalFile("file:///fake")
+        return transporter1.TransporterLocalFile("file:///fake")
 
-    def run_env(self, conn):
+    def run_env(self, conn, handler):
         return {"AWS_ACCESS_KEY_ID": "k", "AWS_SECRET_ACCESS_KEY": "s"}
 
 
 def test_cloud_backend_applies_full_path_before_building_location():
     plugin = _FakePlugin()
     backend = _CloudStageBackend(_FakeCloudConn(), plugin)
-    backend.build_location("files/x.parquet")
+    backend.build_location("files/x.parquet", HANDLER)
     # The cloud connectors' build_location does NOT apply base_path, so
     # the backend must resolve through conn.full_path first.
     assert plugin.seen_path == "bucket-prefix/files/x.parquet"
@@ -139,7 +142,7 @@ def test_cloud_backend_applies_full_path_before_building_location():
 def test_cloud_backend_credential_env_delegates_to_run_env():
     backend = _CloudStageBackend(_FakeCloudConn(), _FakePlugin())
     assert backend.is_object_store is True
-    assert backend.credential_env() == {
+    assert backend.credential_env(HANDLER) == {
         "AWS_ACCESS_KEY_ID": "k",
         "AWS_SECRET_ACCESS_KEY": "s",
     }

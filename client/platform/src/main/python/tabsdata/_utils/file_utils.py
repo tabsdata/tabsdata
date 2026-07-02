@@ -217,7 +217,9 @@ def _execute_single_file_copy(
         yaml_request_file,
     )
 
-    binary = "td_transporter1.exe" if CURRENT_PLATFORM.is_windows() else "td_transporter1"
+    binary = (
+        "td_transporter1.exe" if CURRENT_PLATFORM.is_windows() else "td_transporter1"
+    )
     report_file = os.path.join(destination_folder, f"report_{uuid.uuid4()}.yaml")
     arguments = f"--request {yaml_request_file} --report {report_file}"
     logger.debug(f"Copying files with command: {binary} {arguments}")

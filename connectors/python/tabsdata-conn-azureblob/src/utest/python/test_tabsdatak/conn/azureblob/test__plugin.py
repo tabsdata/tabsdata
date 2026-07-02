@@ -9,7 +9,8 @@ from tabsdatak.api import Secret
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin
 # noinspection PyProtectedMember
-from tabsdatak.common._transporter import _transporter1
+from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
+from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.common.types import AzureAccountKey
 from tabsdatak.conn.azureblob import AzureBlobDest, AzureBlobDestConn, AzureBlobSrc, AzureBlobSrcConn
 from tabsdatak.spi import TableFileInput
@@ -19,6 +20,8 @@ import tabsdatak.conn.azureblob._plugin as plugin
 
 
 pytestmark = pytest.mark.azureblob
+
+HANDLER = TransporterHandler1()
 
 
 def _az_creds() -> AzureAccountKey:
@@ -52,30 +55,32 @@ def _dest_conn(**overrides) -> AzureBlobDestConn:
 
 
 def test_build_location_emits_transporter_azure_with_env_credentials():
-    loc = plugin.build_location(_src_conn(), "raw/users.parquet")
-    assert isinstance(loc, _transporter1.TransporterAzure)
+    loc = plugin.build_location(_src_conn(), "raw/users.parquet", HANDLER)
+    assert isinstance(loc, transporter1.TransporterAzure)
     assert loc.url == "az://my-container/raw/users.parquet"
-    assert loc.account_name == _transporter1.TransporterEnv(
-        _transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME,
+    assert loc.account_name == transporter1.TransporterEnv(
+        transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME,
     )
-    assert loc.account_key == _transporter1.TransporterEnv(
-        _transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY,
+    assert loc.account_key == transporter1.TransporterEnv(
+        transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY,
     )
 
 
 def test_build_location_strips_leading_slash_on_path_entry():
-    loc = plugin.build_location(_src_conn(), "/raw/users.parquet")
+    loc = plugin.build_location(_src_conn(), "/raw/users.parquet", HANDLER)
     assert loc.url == "az://my-container/raw/users.parquet"
 
 
 def test_build_location_preserves_explicit_az_uri():
-    loc = plugin.build_location(_src_conn(), "az://other-container/x/y.parquet")
+    loc = plugin.build_location(
+        _src_conn(), "az://other-container/x/y.parquet", HANDLER
+    )
     assert loc.url == "az://other-container/x/y.parquet"
 
 
 def test_build_location_preserves_explicit_abfss_uri():
     loc = plugin.build_location(
-        _src_conn(), "abfss://other@acct.dfs.core.windows.net/x/y.parquet",
+        _src_conn(), "abfss://other@acct.dfs.core.windows.net/x/y.parquet", HANDLER
     )
     assert loc.url == "abfss://other@acct.dfs.core.windows.net/x/y.parquet"
 
@@ -86,10 +91,10 @@ def test_build_location_preserves_explicit_abfss_uri():
 
 
 def test_run_env_resolves_credentials_to_server_side_env_var_names():
-    env = plugin.run_env(_src_conn())
+    env = plugin.run_env(_src_conn(), HANDLER)
     assert env == {
-        _transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME: "acctname",
-        _transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY: "acctkey",
+        transporter1.SERVER_SIDE_AZURE_ACCOUNT_NAME: "acctname",
+        transporter1.SERVER_SIDE_AZURE_ACCOUNT_KEY: "acctkey",
     }
 
 
