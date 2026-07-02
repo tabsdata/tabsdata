@@ -57,9 +57,12 @@ use crate::router::tables::TablesRouter;
 use crate::router::transactions::TransactionsRouter;
 use crate::router::user_roles::UserRolesRouter;
 use crate::router::users::UsersRouter;
+use crate::router::resources::{ResourcesDir, ResourcesRouter};
 use crate::router::workers::WorkersRouter;
+use axum::Extension;
 use axum::middleware::from_fn_with_state;
 use http::StatusCode;
+use std::sync::Arc;
 use std::time::Duration;
 use ta_apiserver::router::RouterExtension;
 use ta_apiserver::status::error_status::ErrorStatus;
@@ -117,6 +120,16 @@ impl ApiServerV1 {
                         .merge(GlobalMetricsRouter::router(context.services.clone()))
                         .merge(ProjectsRouter::router(context.services.clone()))
                         .merge(ServerStatusRouter::router(context.services.clone()))
+                        // Authenticated, non-scoped, no RBAC: serve files from
+                        // the configured `resources_folder` (the dir rides in as
+                        // an extension; `None` -> 404).
+                        .merge(
+                            ResourcesRouter::router(context.services.clone()).layer(
+                                Extension(ResourcesDir(Arc::new(
+                                    context.config.resources_folder.clone(),
+                                ))),
+                            ),
+                        )
                         .merge(UsersRouter::router(context.services.clone()))
                         // Mount only the active security mode's authz surface;
                         // the other mode's endpoints are dropped — absent from

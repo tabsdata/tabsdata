@@ -21,9 +21,9 @@ mod routes {
     use td_services::system::services::SystemServices;
     use tower::ServiceExt;
 
-    const STATUS_TAG: &str = "Status";
+    const SYSTEM_TAG: &str = "System";
 
-    #[apiserver_path(method = get, path = SERVER_STATUS, tag = STATUS_TAG)]
+    #[apiserver_path(method = get, path = SERVER_STATUS, tag = SYSTEM_TAG)]
     #[doc = "API Server Status"]
     pub async fn status(
         State(status_state): State<Arc<SystemServices>>,
@@ -32,7 +32,7 @@ mod routes {
         Ok(GetStatus::OK(response))
     }
 
-    #[apiserver_path(method = get, path = RUNTIME_INFO, tag = STATUS_TAG)]
+    #[apiserver_path(method = get, path = RUNTIME_INFO, tag = SYSTEM_TAG)]
     #[doc = "Runtime information"]
     pub async fn info(
         State(executions): State<Arc<ExecutionServices>>,

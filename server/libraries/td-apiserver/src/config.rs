@@ -37,6 +37,11 @@ pub struct Config {
     pub database: DatabaseDescriptor,
     #[serde(default)]
     pub storage: Option<StorageConfig>,
+    /// Root directory served by `GET /api/v1/resources/{*path}`. A request for
+    /// `/resources/a/b.svg` returns `<resources_folder>/a/b.svg`. When unset,
+    /// the route returns `404` for every path.
+    #[serde(default)]
+    pub resources_folder: Option<PathBuf>,
     #[serde(default)]
     pub transaction_by: TransactionBy,
     #[serde(default)]
@@ -129,6 +134,7 @@ impl Default for Config {
             ssl_folder: PathBuf::default(),
             database: DatabaseDescriptor::default(),
             storage: Some(StorageConfig::default()),
+            resources_folder: None,
             transaction_by: TransactionBy::default(),
             orchestrator: Orchestrator::default(),
             security_mode: SecurityMode::default(),
@@ -189,6 +195,10 @@ pub struct Params {
     #[clap(long)]
     /// SSL folder path
     ssl_folder: Option<PathBuf>,
+    #[clap(long)]
+    /// Directory served by `GET /api/v1/resources/{*path}`. Overrides the
+    /// config file's `resources_folder`; when unset the route returns 404.
+    resources_folder: Option<PathBuf>,
     #[clap(long)]
     /// JWT Secret
     jwt_secret: Option<String>,
@@ -264,6 +274,7 @@ impl Params {
                 .unwrap_or_else(|| config.ssl_folder.clone()),
             database: config.database,
             storage: resolved_storage,
+            resources_folder: self.resources_folder.clone().or(config.resources_folder),
             transaction_by: self
                 .transaction_by
                 .clone()
@@ -477,6 +488,7 @@ storage:
             address: Some(vec!["127.0.0.1:2457".parse().unwrap()]),
             internal_address: Some(vec!["127.0.0.1:2458".parse().unwrap()]),
             ssl_folder: Some(PathBuf::from("file:///ssl")),
+            resources_folder: Some(PathBuf::from("/srv/resources")),
             jwt_secret: Some(String::from("NEW_SECRET")),
             access_jwt_expiration: Some(7200),
             request_timeout: Some(120),
@@ -519,6 +531,11 @@ storage:
             "file:///storage"
         );
         assert_eq!(resolved_config.request_timeout, 120);
+        // The `--resources-folder` CLI param overrides the config-file value.
+        assert_eq!(
+            resolved_config.resources_folder,
+            Some(PathBuf::from("/srv/resources"))
+        );
 
         // Test with some fields not set in Params
         let partial_params = Params {
@@ -529,6 +546,7 @@ storage:
             address: None,
             internal_address: None,
             ssl_folder: None,
+            resources_folder: None,
             jwt_secret: Some(String::from("NEW_SECRET")),
             access_jwt_expiration: Some(1800),
             request_timeout: None,

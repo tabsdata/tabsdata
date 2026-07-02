@@ -14,6 +14,7 @@ pub(crate) mod metrics;
 pub(crate) mod permissions;
 pub(crate) mod ping;
 pub(crate) mod projects;
+pub(crate) mod resources;
 pub(crate) mod roles;
 pub(crate) mod server_status;
 pub(crate) mod simple_permissions;

@@ -412,6 +412,11 @@ pub const TABLE_DELETE: &str = url!(TABLE);
 pub const SERVER_STATUS: &str = url!("/status");
 pub const RUNTIME_INFO: &str = url!("/runtime-info");
 
+// Static resources served from the apiserver's configured `resources_folder`.
+// `{*path}` is axum's greedy wildcard: `/resources/conns/foo.svg` serves the
+// file `<resources_folder>/conns/foo.svg`.
+pub const RESOURCES: &str = url!("/resources/{*path}");
+
 // Executions (tenant-scoped)
 pub const EXECUTIONS: &str = url!(SCOPED, "/executions");
 pub const EXECUTION: &str = url!(EXECUTIONS, "/{execution}");
