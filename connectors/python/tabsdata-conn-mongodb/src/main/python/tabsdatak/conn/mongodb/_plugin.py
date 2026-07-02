@@ -416,4 +416,5 @@ MONGODB_DEST = DestDef(
     cardinality=lambda dest: len(dest.collections_with_ids),
     plugin=_MongoDBDestPlugin,
     explorer=_MongoDBExplorer,
+    icon="conn/mongodb/resources/mongodb.svg",
 )

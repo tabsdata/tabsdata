@@ -156,4 +156,5 @@ DB2_CDC_STREAM_SRC = StreamSrcDef(
     plugin=Db2CdcStreamSrcPlugin,
     publisher_src=CdcStageSrc,
     explorer=Db2CdcExplorer,
+    icon="conn/db2/resources/db2-cdc.svg",
 )

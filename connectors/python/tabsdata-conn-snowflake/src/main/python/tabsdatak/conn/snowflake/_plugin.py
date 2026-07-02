@@ -148,4 +148,5 @@ SNOWFLAKE_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables),
     plugin=SnowflakeDestPlugin,
     explorer=SnowflakeExplorer,
+    icon="conn/snowflake/resources/snowflake.svg",
 )

@@ -233,4 +233,5 @@ DRUID_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables),
     plugin=DruidDestPlugin,
     explorer=DruidExplorer,
+    icon="conn/druid/resources/druid.svg",
 )

@@ -178,6 +178,12 @@ def build(setup_file: str) -> None:
                         "manifest",
                         "*",
                     ),
+                    # Connector resources (e.g. icon SVGs referenced by
+                    # a plugin def's ``icon=`` relative path).
+                    os.path.join(
+                        "resources",
+                        "*",
+                    ),
                     *yaml_files_tabsdata,
                 ],
                 descriptor.namespace("tabsdatak"): [
@@ -185,6 +191,12 @@ def build(setup_file: str) -> None:
                     os.path.join(
                         "assets",
                         "manifest",
+                        "*",
+                    ),
+                    # Connector resources (e.g. icon SVGs referenced by
+                    # a plugin def's ``icon=`` relative path).
+                    os.path.join(
+                        "resources",
                         "*",
                     ),
                     *yaml_files_tabsdatak,

@@ -259,6 +259,7 @@ MSSQL_SRC = SrcDef(
     cardinality=lambda src: len(src.queries),
     plugin=MSSQLSrcPlugin,
     explorer=MSSQLSrcExplorer,
+    icon="conn/mssql/resources/mssql-server.svg",
 )
 
 MSSQL_DEST = DestDef(
@@ -270,4 +271,5 @@ MSSQL_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables),
     plugin=MSSQLDestPlugin,
     explorer=MSSQLDestExplorer,
+    icon="conn/mssql/resources/mssql-server.svg",
 )

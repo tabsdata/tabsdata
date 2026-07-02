@@ -131,6 +131,7 @@ LOCALFILE_SRC = SrcDef(
     cardinality=lambda src: len(src.paths),
     plugin=LocalFileSrcPlugin,
     explorer=LocalFileSrcExplorer,
+    icon="conn/localfile/resources/local-file.svg",
 )
 
 
@@ -143,4 +144,5 @@ LOCALFILE_DEST = DestDef(
     cardinality=lambda dest: len(dest.paths),
     plugin=LocalFileDestPlugin,
     explorer=LocalFileDestExplorer,
+    icon="conn/localfile/resources/local-file.svg",
 )

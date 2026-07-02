@@ -40,6 +40,7 @@ _connectors.register_src(
         cardinality=lambda src: 1,
         plugin=_TestSrcPlugin,
         explorer=None,
+        icon=None,
     )
 )
 
@@ -59,6 +60,7 @@ _connectors.register_dest(
         cardinality=lambda dest: 1,
         plugin=_TestDestPlugin,
         explorer=None,
+        icon=None,
     )
 )
 
@@ -86,6 +88,7 @@ _STREAM_SRC_DEFX = spi.StreamSrcDef(
     plugin=_TestStreamSrcPlugin,
     publisher_src=spi.StreamStageSrc,
     explorer=None,
+    icon=None,
 )
 _connectors.register_stream_src(_STREAM_SRC_DEFX)
 
@@ -529,6 +532,7 @@ _connectors.register_src(
         cardinality=lambda src: 2,
         plugin=_TestSrcPlugin,
         explorer=None,
+        icon=None,
     )
 )
 
@@ -548,6 +552,7 @@ _connectors.register_dest(
         cardinality=lambda dest: 3,
         plugin=_TestDestPlugin,
         explorer=None,
+        icon=None,
     )
 )
 
@@ -715,6 +720,7 @@ _connectors.register_src(
         cardinality=lambda src: 2,
         plugin=_TestSrcPlugin,
         explorer=None,
+        icon=None,
     )
 )
 

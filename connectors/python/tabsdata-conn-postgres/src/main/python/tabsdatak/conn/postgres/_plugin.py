@@ -264,6 +264,7 @@ POSTGRES_SRC = SrcDef(
     cardinality=lambda src: len(src.queries),
     plugin=PostgresSrcPlugin,
     explorer=PostgresSrcExplorer,
+    icon="conn/postgres/resources/postgresql.svg",
 )
 
 POSTGRES_DEST = DestDef(
@@ -275,4 +276,5 @@ POSTGRES_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables),
     plugin=PostgresDestPlugin,
     explorer=PostgresDestExplorer,
+    icon="conn/postgres/resources/postgresql.svg",
 )

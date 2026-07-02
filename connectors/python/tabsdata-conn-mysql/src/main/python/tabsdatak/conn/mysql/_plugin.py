@@ -274,6 +274,7 @@ MYSQL_SRC = SrcDef(
     cardinality=lambda src: len(src.queries),
     plugin=MySQLSrcPlugin,
     explorer=MySQLSrcExplorer,
+    icon="conn/mysql/resources/mysql.svg",
 )
 
 MYSQL_DEST = DestDef(
@@ -285,4 +286,5 @@ MYSQL_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables),
     plugin=MySQLDestPlugin,
     explorer=MySQLDestExplorer,
+    icon="conn/mysql/resources/mysql.svg",
 )

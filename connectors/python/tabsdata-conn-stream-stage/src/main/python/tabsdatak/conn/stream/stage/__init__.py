@@ -246,4 +246,5 @@ STREAM_STAGE_SRC = SrcDef(
     cardinality=lambda s: -1,
     plugin=StreamStageSrcPlugin,
     explorer=None,
+    icon=None,
 )

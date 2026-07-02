@@ -259,6 +259,7 @@ DB2_SRC = SrcDef(
     cardinality=lambda src: len(src.queries),
     plugin=Db2SrcPlugin,
     explorer=Db2SrcExplorer,
+    icon="conn/db2/resources/db2.svg",
 )
 
 DB2_DEST = DestDef(
@@ -270,4 +271,5 @@ DB2_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables),
     plugin=Db2DestPlugin,
     explorer=Db2DestExplorer,
+    icon="conn/db2/resources/db2.svg",
 )

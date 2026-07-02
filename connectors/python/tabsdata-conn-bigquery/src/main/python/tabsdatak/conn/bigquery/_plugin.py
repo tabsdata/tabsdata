@@ -242,4 +242,5 @@ BIGQUERY_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables) if dest.tables is not None else 0,
     plugin=_BigQueryDestPlugin,
     explorer=_BigQueryExplorer,
+    icon="conn/bigquery/resources/bigquery.svg",
 )

@@ -145,4 +145,5 @@ STARROCKS_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables),
     plugin=StarRocksDestPlugin,
     explorer=StarRocksExplorer,
+    icon="conn/starrocks/resources/starrocks.svg",
 )

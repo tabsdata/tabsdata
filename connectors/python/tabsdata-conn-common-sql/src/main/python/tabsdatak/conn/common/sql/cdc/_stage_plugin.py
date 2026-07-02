@@ -222,4 +222,5 @@ CDC_STAGE_SRC = SrcDef(
     cardinality=lambda s: -1,
     plugin=CdcStageSrcPlugin,
     explorer=None,
+    icon=None,
 )

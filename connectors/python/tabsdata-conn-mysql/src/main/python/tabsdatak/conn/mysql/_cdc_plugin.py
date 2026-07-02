@@ -153,4 +153,5 @@ MYSQL_CDC_STREAM_SRC = StreamSrcDef(
     plugin=MySQLCdcStreamSrcPlugin,
     publisher_src=CdcStageSrc,
     explorer=MySQLCdcExplorer,
+    icon="conn/mysql/resources/mysql-cdc.svg",
 )

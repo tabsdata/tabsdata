@@ -160,6 +160,7 @@ AZURE_BLOB_SRC = SrcDef(
     cardinality=lambda src: len(src.paths),
     plugin=AzureBlobSrcPlugin,
     explorer=AzureBlobSrcExplorer,
+    icon="conn/azureblob/resources/azure.svg",
 )
 
 AZURE_BLOB_DEST = DestDef(
@@ -171,4 +172,5 @@ AZURE_BLOB_DEST = DestDef(
     cardinality=lambda dest: len(dest.paths),
     plugin=AzureBlobDestPlugin,
     explorer=AzureBlobDestExplorer,
+    icon="conn/azureblob/resources/azure.svg",
 )

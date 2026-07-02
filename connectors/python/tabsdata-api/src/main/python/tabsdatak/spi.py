@@ -510,7 +510,7 @@ def check_plugin_param_type(
 
 
 @_api.dataclass(ApiErrorCode.API_14, config=_ARBITRARY)
-class SrcDef[C: Conn, S: Src]:
+class SrcDef[S: Src]:
     """Entry-point registration for a batch :class:`Src` binding.
 
     :param type_: Wire-stable identifier, unique across *all* plugins
@@ -533,17 +533,24 @@ class SrcDef[C: Conn, S: Src]:
         ``read_in``.
     :param explorer: Optional :class:`Explorer` for tooling
         introspection of the connection.
+    :param icon: Path to the connector's icon, relative to the
+        ``tabsdatak`` namespace root so it can be fetched directly with
+        ``td_resource(icon)`` (e.g. ``"conn/mysql/resources/mysql.svg"``).
+        The file lives in the plugin package's ``resources/`` folder.
+        ``None`` when the connector ships no icon; the caller supplies a
+        default.
     """
 
     type_: str
     system: str
     src_version: str
-    conn: Type[C]
+    conn: Type[Conn]
     src: Type[S]
     table_mode: TableMode
     cardinality: Callable[[S], int]
     plugin: Type[SrcPlugin]
     explorer: Type[Explorer] | None
+    icon: str | None
 
     @model_validator(mode="after")
     def _validate(self) -> "SrcDef":
@@ -556,7 +563,7 @@ class SrcDef[C: Conn, S: Src]:
 
 
 @_api.dataclass(ApiErrorCode.API_15, config=_ARBITRARY)
-class StreamSrcDef[C: Conn, S: StreamSrc]:
+class StreamSrcDef[S: StreamSrc]:
     """Entry-point registration for a :class:`StreamSrc` binding.
 
     :param type_: Wire-stable identifier, unique across *all* plugins
@@ -580,17 +587,24 @@ class StreamSrcDef[C: Conn, S: StreamSrc]:
         :class:`StreamStageSrcPlugin`; use :class:`StreamStageSrc`
         itself for the default manifest behaviour.
     :param explorer: Optional :class:`Explorer` for tooling.
+    :param icon: Path to the connector's icon, relative to the
+        ``tabsdatak`` namespace root so it can be fetched directly with
+        ``td_resource(icon)`` (e.g.
+        ``"conn/mysql/resources/mysql-cdc.svg"``). The file lives in the
+        plugin package's ``resources/`` folder. ``None`` when the
+        connector ships no icon; the caller supplies a default.
     """
 
     type_: str
     system: str
     src_version: str
-    conn: Type[C]
+    conn: Type[Conn]
     src: Type[S]
     cardinality: Callable[[S], int]
     plugin: Type[StreamSrcPlugin]
     publisher_src: Type[StreamStageSrc]
     explorer: Type[Explorer] | None
+    icon: str | None
 
     @model_validator(mode="after")
     def _validate(self) -> "StreamSrcDef":
@@ -605,7 +619,7 @@ class StreamSrcDef[C: Conn, S: StreamSrc]:
 
 
 @_api.dataclass(ApiErrorCode.API_16, config=_ARBITRARY)
-class DestDef[C: Conn, D: Dest]:
+class DestDef[D: Dest]:
     """Entry-point registration for a :class:`Dest` binding.
 
     :param type_: Wire-stable identifier, unique across *all* plugins
@@ -624,16 +638,23 @@ class DestDef[C: Conn, D: Dest]:
     :param plugin: :class:`DestPlugin` subclass that implements
         ``write_out``.
     :param explorer: Optional :class:`Explorer` for tooling.
+    :param icon: Path to the connector's icon, relative to the
+        ``tabsdatak`` namespace root so it can be fetched directly with
+        ``td_resource(icon)`` (e.g. ``"conn/mysql/resources/mysql.svg"``).
+        The file lives in the plugin package's ``resources/`` folder.
+        ``None`` when the connector ships no icon; the caller supplies a
+        default.
     """
 
     type_: str
     system: str
     dest_version: str
-    conn: Type[C]
+    conn: Type[Conn]
     dest: Type[D]
     cardinality: Callable[[D], int]
     plugin: Type[DestPlugin]
     explorer: Type[Explorer] | None
+    icon: str | None
 
     @model_validator(mode="after")
     def _validate(self) -> "DestDef":

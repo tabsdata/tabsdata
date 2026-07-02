@@ -152,6 +152,7 @@ GCS_SRC = SrcDef(
     cardinality=lambda src: len(src.paths),
     plugin=GCSSrcPlugin,
     explorer=GCSSrcExplorer,
+    icon="conn/gcs/resources/gcs.svg",
 )
 
 
@@ -164,4 +165,5 @@ GCS_DEST = DestDef(
     cardinality=lambda dest: len(dest.paths),
     plugin=GCSDestPlugin,
     explorer=GCSDestExplorer,
+    icon="conn/gcs/resources/gcs.svg",
 )

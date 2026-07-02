@@ -129,6 +129,7 @@ SALESFORCE_SRC = SrcDef(
     cardinality=lambda src: len(src.queries),
     plugin=_SalesforceSrcPlugin,
     explorer=_SalesforceExplorer,
+    icon="conn/salesforce/resources/salesforce.svg",
 )
 
 
@@ -142,4 +143,5 @@ SALESFORCE_REPORT_SRC = SrcDef(
     cardinality=lambda src: len(src.reports),
     plugin=_SalesforceReportSrcPlugin,
     explorer=_SalesforceExplorer,
+    icon="conn/salesforce/resources/salesforce.svg",
 )

@@ -342,4 +342,5 @@ KAFKA_STREAM_SRC = StreamSrcDef(
     # through the default stream-stage manifest source.
     publisher_src=StreamStageSrc,
     explorer=KafkaExplorer,
+    icon="conn/kafka/resources/kafka.svg",
 )

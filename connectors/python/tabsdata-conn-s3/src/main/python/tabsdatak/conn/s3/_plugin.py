@@ -145,6 +145,7 @@ S3_SRC = SrcDef(
     cardinality=lambda src: len(src.paths),
     plugin=S3SrcPlugin,
     explorer=S3SrcExplorer,
+    icon="conn/s3/resources/s3.svg",
 )
 
 
@@ -157,4 +158,5 @@ S3_DEST = DestDef(
     cardinality=lambda dest: len(dest.paths),
     plugin=S3DestPlugin,
     explorer=S3DestExplorer,
+    icon="conn/s3/resources/s3.svg",
 )

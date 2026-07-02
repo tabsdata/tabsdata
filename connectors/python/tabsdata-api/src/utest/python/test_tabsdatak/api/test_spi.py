@@ -205,6 +205,7 @@ def test_src_def_constructs_with_valid_fields():
         cardinality=lambda s: 1,
         plugin=_SDSrcPlugin,
         explorer=_SDExplorer,
+        icon=None,
     )
 
 
@@ -219,6 +220,7 @@ def test_stream_src_def_constructs_with_valid_fields():
         plugin=_SDStreamSrcPlugin,
         publisher_src=StreamStageSrc,
         explorer=_SDExplorer,
+        icon=None,
     )
 
 
@@ -232,6 +234,7 @@ def test_dest_def_constructs_with_valid_fields():
         cardinality=lambda d: 1,
         plugin=_SDDestPlugin,
         explorer=_SDExplorer,
+        icon=None,
     )
 
 
@@ -298,6 +301,7 @@ def test_src_def_rejects_plugin_with_mismatched_src_param():
             cardinality=lambda s: 1,
             plugin=_MismatchSrcPlugin,
             explorer=None,
+            icon=None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_14
 
@@ -314,6 +318,7 @@ def test_src_def_rejects_plugin_with_mismatched_conn_param():
             cardinality=lambda s: 1,
             plugin=_MismatchConnSrcPlugin,
             explorer=None,
+            icon=None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_14
 
@@ -330,6 +335,7 @@ def test_stream_src_def_rejects_plugin_with_mismatched_stream_src_param():
             plugin=_MismatchStreamSrcPlugin,
             publisher_src=StreamStageSrc,
             explorer=None,
+            icon=None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_15
 
@@ -345,6 +351,7 @@ def test_dest_def_rejects_plugin_with_mismatched_dest_param():
             cardinality=lambda d: 1,
             plugin=_MismatchDestPlugin,
             explorer=None,
+            icon=None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_16
 
@@ -371,6 +378,7 @@ def test_src_def_rejects_explorer_with_mismatched_conn():
             cardinality=lambda s: 1,
             plugin=_SDSrcPlugin,
             explorer=_BadExplorer,
+            icon=None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_14
 
@@ -393,6 +401,7 @@ def test_dest_def_rejects_explorer_with_mismatched_conn():
             cardinality=lambda d: 1,
             plugin=_SDDestPlugin,
             explorer=_BadExplorer,
+            icon=None,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_16
 
@@ -410,6 +419,7 @@ def test_src_def_explorer_none_skips_explorer_check():
         cardinality=lambda s: 1,
         plugin=_SDSrcPlugin,
         explorer=None,
+        icon=None,
     )
 
 
@@ -433,6 +443,7 @@ def test_src_def_accepts_explorer_with_loose_conn_annotation():
         cardinality=lambda s: 1,
         plugin=_SDSrcPlugin,
         explorer=_LooseExplorer,
+        icon=None,
     )
 
 

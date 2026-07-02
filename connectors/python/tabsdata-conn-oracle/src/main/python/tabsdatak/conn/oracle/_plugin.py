@@ -247,6 +247,7 @@ ORACLE_SRC = SrcDef(
     cardinality=lambda src: len(src.queries),
     plugin=OracleSrcPlugin,
     explorer=OracleSrcExplorer,
+    icon="conn/oracle/resources/oracle.svg",
 )
 
 ORACLE_DEST = DestDef(
@@ -258,4 +259,5 @@ ORACLE_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables),
     plugin=OracleDestPlugin,
     explorer=OracleDestExplorer,
+    icon="conn/oracle/resources/oracle.svg",
 )

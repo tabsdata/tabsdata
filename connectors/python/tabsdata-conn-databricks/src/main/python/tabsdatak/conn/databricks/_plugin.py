@@ -282,6 +282,7 @@ DATABRICKS_SRC = SrcDef(
     cardinality=lambda src: len(src.queries),
     plugin=_DatabricksSrcPlugin,
     explorer=_DatabricksSrcExplorer,
+    icon="conn/databricks/resources/databricks.svg",
 )
 
 DATABRICKS_DEST = DestDef(
@@ -293,4 +294,5 @@ DATABRICKS_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables),
     plugin=_DatabricksDestPlugin,
     explorer=_DatabricksDestExplorer,
+    icon="conn/databricks/resources/databricks.svg",
 )

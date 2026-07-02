@@ -170,4 +170,5 @@ CLICKHOUSE_DEST = DestDef(
     cardinality=lambda dest: len(dest.tables),
     plugin=_ClickHouseDestPlugin,
     explorer=_ClickHouseExplorer,
+    icon="conn/clickhouse/resources/clickhouse.svg",
 )

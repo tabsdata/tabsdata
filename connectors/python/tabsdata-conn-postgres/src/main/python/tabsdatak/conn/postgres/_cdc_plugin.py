@@ -165,4 +165,5 @@ POSTGRES_CDC_STREAM_SRC = StreamSrcDef(
     plugin=PostgresCdcStreamSrcPlugin,
     publisher_src=CdcStageSrc,
     explorer=PostgresCdcExplorer,
+    icon="conn/postgres/resources/postgresql-cdc.svg",
 )

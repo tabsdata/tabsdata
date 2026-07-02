@@ -156,6 +156,7 @@ _connectors.register_src(spi.SrcDef(
     cardinality=lambda src: 1,
     plugin=_SerdeSrcPlugin,
     explorer=None,
+    icon=None,
 ))
 
 
@@ -173,6 +174,7 @@ _connectors.register_dest(spi.DestDef(
     cardinality=lambda dest: 1,
     plugin=_SerdeDestPlugin,
     explorer=None,
+    icon=None,
 ))
 
 
