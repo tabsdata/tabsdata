@@ -76,6 +76,40 @@ spec:
         - name: pyenv
           mountPath: /tabsdata/pyenv
           readOnly: true
+    - name: conn-resources-extractor
+      image: /dev/null
+      imagePullPolicy: IfNotPresent
+      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_conn_resources_extractor"]
+      args:
+        - --output-dir
+        - $(CONTAINER_ROOT)/tabsdata/resources/ui/connectors
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      env:
+        - name: CONTAINER_ROOT
+          value: "$(KM_CONTAINER_ROOT)"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_TABSDATA_INSTANCE
+          value: "${{system:tdk_instance_name}}"
+      volumeMounts:
+        - name: pyenv
+          mountPath: /tabsdata/pyenv
+          readOnly: true
+        - name: resources
+          mountPath: /tabsdata/resources
   containers:
     - name: apiserver
       image: /dev/null
@@ -90,6 +124,8 @@ spec:
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
         - --log-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.log.yaml
+        - --resources-folder
+        - $(CONTAINER_ROOT)/tabsdata/resources
       ports:
         - name: public-http
           containerPort: 2457
@@ -115,6 +151,9 @@ spec:
           readOnly: true
         - name: pyenv
           mountPath: /tabsdata/pyenv
+          readOnly: true
+        - name: resources
+          mountPath: /tabsdata/resources
           readOnly: true
       # livenessProbe:
       #   httpGet:
@@ -184,3 +223,8 @@ spec:
     - name: pyenv
       hostPath:
         path: "${{system:tdk_pyenv_td_root}}"
+    # Writable scratch volume: the connector-resources init container extracts
+    # connector icons into <mount>/ui/connectors; the apiserver serves them
+    # via GET /api/v1/resources/{*path} (--resources-folder).
+    - name: resources
+      emptyDir: {}
