@@ -127,4 +127,8 @@ pub enum ResolverError {
     } = 5033,
     #[error("Could not parse schema for '{path}': {cause}.")]
     SchemaParseFailed { path: String, cause: String } = 5034,
+    #[error("Could not parse configmap content as YAML: {cause}.")]
+    ConfigParseFailed { cause: String } = 5035,
+    #[error("Could not serialize revealed configmap content as YAML: {cause}.")]
+    ConfigSerializeFailed { cause: String } = 5036,
 }

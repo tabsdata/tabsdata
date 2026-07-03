@@ -15,7 +15,7 @@ use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::registry::{
-    ClusterViews, InstanceSettings, InstanceState, instance_folder, instance_init_folder,
+    ClusterViews, InstanceSettings, InstanceState, instance_folder, instance_init_input_folder,
     instance_kube_folder,
 };
 use crate::client::session::pin::PinContext;
@@ -158,7 +158,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     }
     let resolved = built.cluster_descriptor(adjusted.clone())?;
 
-    let init_folder = instance_init_folder(&instance)?;
+    let init_folder = instance_init_input_folder(&instance)?;
 
     let reporter = InteractiveReporter::new();
 

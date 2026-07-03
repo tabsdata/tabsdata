@@ -71,7 +71,9 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
 
     let reporter = InteractiveReporter::new();
     match provider.stop_instance(&reporter).await? {
-        InstanceStopOutcome::Stopped => report::component::instance::stopped_instance(&provider.summary()),
+        InstanceStopOutcome::Stopped => {
+            report::component::instance::stopped_instance(&provider.summary())
+        }
         InstanceStopOutcome::AlreadyStopped => cwarn!("Nothing to stop."),
     }
 

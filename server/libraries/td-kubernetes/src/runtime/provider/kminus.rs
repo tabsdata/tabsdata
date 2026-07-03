@@ -21,11 +21,13 @@ use tracing::info;
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, DEFAULT_NAMESPACE, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES,
     FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES,
-    FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, STAGE_FOLDER,
+    FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
-use crate::client::registry::{ClusterViews, InstanceSettings, instances_root};
+use crate::client::registry::{
+    ClusterViews, InstanceSettings, init_stage_folder_in, instances_root,
+};
 use crate::client::session::pin::{KminusInputs, Session};
 use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
@@ -372,7 +374,7 @@ impl Provider for KminusProvider {
         let step = reporter.step("Preparing kminus cluster");
         let result = self.bootstrap_cluster()?;
         step.done("Kminus cluster prepared");
-        let from_stage = self.folder.join(STAGE_FOLDER).is_dir();
+        let from_stage = init_stage_folder_in(&self.folder).is_dir();
         if !from_stage {
             let step = reporter.step("Staging tabsdata configmap");
             self.stage_configmaps().await?;
@@ -716,10 +718,7 @@ impl KminusProvider {
     async fn prepare_dbmanager(
         &self,
     ) -> CommandResult<(Vec<tempfile::NamedTempFile>, Vec<(String, String)>)> {
-        let stage_configs = self
-            .folder
-            .join(STAGE_FOLDER)
-            .join(KPROFILE_CONFIGS_FAMILY.folder);
+        let stage_configs = init_stage_folder_in(&self.folder).join(KPROFILE_CONFIGS_FAMILY.folder);
         let context = self.kube_context().await?;
         auto_fill_generated_secrets(&context).await?;
 

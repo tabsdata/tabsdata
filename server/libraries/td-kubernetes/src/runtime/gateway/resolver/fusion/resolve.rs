@@ -47,11 +47,14 @@ pub(super) fn resolve_config_file(
     let mut path: Vec<String> = Vec::new();
     let rendered_value = session.resolve_node(&template_value, &init_value, &mut path)?;
 
-    let rendered =
+    let rendered = if rendered_value.is_null() {
+        String::new()
+    } else {
         serde_yaml::to_string(&rendered_value).map_err(|cause| ResolverError::ParseFailed {
             path: CONFIG_LABEL.to_owned(),
             cause: cause.to_string(),
-        })?;
+        })?
+    };
     Ok(ResolveOutcome {
         rendered,
         secrets: session.secrets,

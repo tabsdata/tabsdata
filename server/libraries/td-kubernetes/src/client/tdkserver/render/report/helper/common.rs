@@ -8,6 +8,11 @@ use tracing::info;
 
 use crate::runtime::provider::summary::Summary;
 
+pub(crate) const STATUS_RUNNING: &str = "Running";
+pub(crate) const STATUS_STOPPED: &str = "Stopped";
+pub(crate) const UNGATHERED_CELL: &str = "?";
+pub(crate) const ABSENT_CELL: &str = "-";
+
 pub(crate) fn activation_command(activate: &Path) -> String {
     if cfg!(target_os = "windows") {
         activate.display().to_string()

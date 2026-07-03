@@ -45,6 +45,10 @@ fn url_from_service_config(yaml: &str) -> Option<String> {
         .first()?
         .as_str()?;
     let (host, port) = address.rsplit_once(':')?;
-    let host = if host == WILDCARD_HOST { LOCALHOST } else { host };
+    let host = if host == WILDCARD_HOST {
+        LOCALHOST
+    } else {
+        host
+    };
     Some(format!("http://{host}:{port}"))
 }

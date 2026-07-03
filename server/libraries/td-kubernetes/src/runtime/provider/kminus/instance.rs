@@ -13,11 +13,11 @@ use tracing::info;
 use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, CONFIGMAP_TABSDATA_MANIFEST, CONFIGMAP_TABSDATA_SETTINGS,
     FOLDER_PROFILE, Family, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, POD_PHASE_FAILED,
-    POD_PHASE_SUCCEEDED, SETTINGS_FILE, STAGE_FOLDER,
+    POD_PHASE_SUCCEEDED, SETTINGS_FILE,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
-use crate::client::registry::InstanceSettings;
+use crate::client::registry::{InstanceSettings, init_stage_folder_in};
 use crate::core::system::exit::CommandResult;
 use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::pod::list_pods;
@@ -102,7 +102,7 @@ impl KminusInstance {
     }
 
     pub async fn load_stage_to_kube(&self) -> CommandResult {
-        let stage_folder = self.folder.join(STAGE_FOLDER);
+        let stage_folder = init_stage_folder_in(&self.folder);
         let pods = read_staged_family(&stage_folder, &KPROFILE_PODS_FAMILY)?;
         let configs = read_staged_family(&stage_folder, &KPROFILE_CONFIGS_FAMILY)?;
         let manifest = read_staged_manifest(&stage_folder)?;

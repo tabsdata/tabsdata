@@ -15,9 +15,9 @@ use td_python::python::get_python_scripts_folder;
 #[cfg(feature = "enterprise")]
 use crate::base::constants::FOLDER_PYENV_AG;
 use crate::base::constants::{
-    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_RUNTIMES,
-    INIT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE, SETTINGS_FILE, STAGE_FOLDER, TRASH_FOLDER,
-    VENV_ACTIVATE_FILE,
+    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, EDIT_FOLDER, FOLDER_PYENV_TD, FOLDER_PYTHON,
+    FOLDER_RUNTIMES, INIT_FOLDER, INPUT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE, SETTINGS_FILE,
+    STAGE_FOLDER, TRASH_FOLDER, VENV_ACTIVATE_FILE,
 };
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
@@ -47,12 +47,24 @@ pub fn trash_root() -> CommandResult<PathBuf> {
     Ok(home.join(TABSDATA_HOME_DIR).join(TRASH_FOLDER))
 }
 
-pub fn instance_init_folder(name: &str) -> CommandResult<PathBuf> {
-    Ok(instance_folder(name)?.join(INIT_FOLDER))
+pub fn instance_init_input_folder(name: &str) -> CommandResult<PathBuf> {
+    Ok(instance_folder(name)?.join(INIT_FOLDER).join(INPUT_FOLDER))
 }
 
-pub fn instance_stage_folder(name: &str) -> CommandResult<PathBuf> {
-    Ok(instance_folder(name)?.join(STAGE_FOLDER))
+pub fn instance_init_stage_folder(name: &str) -> CommandResult<PathBuf> {
+    Ok(instance_folder(name)?.join(INIT_FOLDER).join(STAGE_FOLDER))
+}
+
+pub fn instance_edit_input_folder(name: &str) -> CommandResult<PathBuf> {
+    Ok(instance_folder(name)?.join(EDIT_FOLDER).join(INPUT_FOLDER))
+}
+
+pub fn instance_edit_stage_folder(name: &str) -> CommandResult<PathBuf> {
+    Ok(instance_folder(name)?.join(EDIT_FOLDER).join(STAGE_FOLDER))
+}
+
+pub fn init_stage_folder_in(instance_root: &Path) -> PathBuf {
+    instance_root.join(INIT_FOLDER).join(STAGE_FOLDER)
 }
 
 pub fn instance_settings_file(name: &str) -> CommandResult<PathBuf> {

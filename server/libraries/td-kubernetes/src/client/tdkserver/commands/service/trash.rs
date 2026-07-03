@@ -138,7 +138,10 @@ async fn stop_if_possible(name: &str, verbose: bool) {
     let settings = match InstanceSettings::load(name) {
         Ok(settings) => settings,
         Err(error) => {
-            cwarn!("Skipping stop; could not read instance settings: {}", render(&error, verbose));
+            cwarn!(
+                "Skipping stop; could not read instance settings: {}",
+                render(&error, verbose)
+            );
             return;
         }
     };
@@ -166,7 +169,10 @@ async fn stop_if_possible(name: &str, verbose: bool) {
 
     let reporter = InteractiveReporter::new();
     if let Err(error) = provider.stop_service(&reporter).await {
-        cwarn!("Could not stop instance before trashing it: {}", render(&error, verbose));
+        cwarn!(
+            "Could not stop instance before trashing it: {}",
+            render(&error, verbose)
+        );
     }
 }
 

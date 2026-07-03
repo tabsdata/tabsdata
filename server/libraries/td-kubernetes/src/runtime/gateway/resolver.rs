@@ -92,6 +92,7 @@
 pub mod fusion;
 mod kind;
 mod placeholder;
+pub(crate) mod reveal;
 pub(crate) mod schema;
 mod walker;
 

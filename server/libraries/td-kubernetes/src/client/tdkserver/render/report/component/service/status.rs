@@ -7,12 +7,11 @@ use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 
+use crate::client::tdkserver::render::report::helper::common::{STATUS_RUNNING, UNGATHERED_CELL};
 use crate::client::tdkserver::render::report::helper::table::{
     ReportColumn, ReportTable, STATUS_COLOR_SCHEME, render_tables,
 };
 use crate::core::system::exit::CommandResult;
-
-const UNKNOWN: &str = "<unknown>";
 
 fn columns() -> [ReportColumn<'static>; 4] {
     [
@@ -94,7 +93,7 @@ fn pod_row(pod: &Pod) -> StatusRow {
             .status
             .as_ref()
             .and_then(|status| status.phase.clone())
-            .unwrap_or_else(|| UNKNOWN.to_owned()),
+            .unwrap_or_else(|| UNGATHERED_CELL.to_owned()),
         ready: pod_ready(pod),
         age: age(pod.metadata.creation_timestamp.as_ref()),
     }
@@ -110,7 +109,7 @@ fn job_row(job: &Job) -> StatusRow {
 }
 
 fn name_of(name: Option<&String>) -> String {
-    name.cloned().unwrap_or_else(|| UNKNOWN.to_owned())
+    name.cloned().unwrap_or_else(|| UNGATHERED_CELL.to_owned())
 }
 
 fn pod_ready(pod: &Pod) -> String {
@@ -141,7 +140,7 @@ fn job_status(job: &Job) -> String {
             }
         }
     }
-    "Running".to_owned()
+    STATUS_RUNNING.to_owned()
 }
 
 fn job_completions(job: &Job) -> String {
@@ -160,7 +159,7 @@ fn job_completions(job: &Job) -> String {
 
 fn age(creation: Option<&Time>) -> String {
     let Some(creation) = creation else {
-        return UNKNOWN.to_owned();
+        return UNGATHERED_CELL.to_owned();
     };
     let seconds = Utc::now()
         .signed_duration_since(creation.0)

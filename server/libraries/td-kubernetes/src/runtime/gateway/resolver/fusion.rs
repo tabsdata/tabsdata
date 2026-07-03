@@ -14,6 +14,7 @@ use crate::base::constants::{KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY};
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::fusion::resolve::resolve_config_file;
 use crate::runtime::gateway::resolver::placeholder::SystemValues;
+use crate::runtime::gateway::resolver::reveal::prefill_secrets;
 use crate::runtime::gateway::resolver::schema::Schema;
 use crate::runtime::gateway::resolver::walker::SecretEntry;
 use crate::runtime::instance::manifest::MANIFEST_FILE;
@@ -24,6 +25,47 @@ const SCHEMA_EXTENSION: &str = ".yamls";
 
 pub struct FusedSecrets {
     pub by_file: Vec<(String, Vec<SecretEntry>)>,
+}
+
+pub struct MergedConfig {
+    pub file: String,
+    pub rendered: String,
+    pub secrets: Vec<SecretEntry>,
+}
+
+pub fn merge(
+    profile: &Profile,
+    system: &SystemValues,
+    input: &Path,
+    server_secrets: &HashMap<String, HashMap<String, String>>,
+) -> Result<Vec<MergedConfig>, ResolverError> {
+    compare_family(input, KPROFILE_CONFIGS_FAMILY.folder, &profile.configs, false)?;
+    let input_configs = input.join(KPROFILE_CONFIGS_FAMILY.folder);
+    let empty_auto: HashMap<String, String> = HashMap::new();
+    let mut merged = Vec::new();
+    for (file, template) in &profile.configs {
+        if file.ends_with(SCHEMA_EXTENSION) {
+            continue;
+        }
+        let input_file = input_configs.join(file);
+        let input_content =
+            fs::read_to_string(&input_file).map_err(|cause| ResolverError::InitializationReadFailed {
+                path: input_file.display().to_string(),
+                cause: cause.to_string(),
+            })?;
+        let prefilled = match server_secrets.get(file) {
+            Some(values) => prefill_secrets(&input_content, values)?,
+            None => input_content,
+        };
+        let template = bake_schema_secrets(file, template, &profile.configs)?;
+        let outcome = resolve_config_file(&template, &prefilled, system, &empty_auto)?;
+        merged.push(MergedConfig {
+            file: file.clone(),
+            rendered: outcome.rendered,
+            secrets: outcome.secrets,
+        });
+    }
+    Ok(merged)
 }
 
 pub fn fuse(

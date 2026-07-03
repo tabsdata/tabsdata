@@ -63,9 +63,10 @@ pub(crate) fn render_tables(tables: &[ReportTable]) -> CommandResult {
         .wait()
         .map_err(|error| ProviderError::TableRenderFailed(error.to_string()))?;
     if !status.success() {
-        return Err(
-            ProviderError::TableRenderFailed(format!("renderer exited with status {status}")).into(),
-        );
+        return Err(ProviderError::TableRenderFailed(format!(
+            "renderer exited with status {status}"
+        ))
+        .into());
     }
     Ok(())
 }

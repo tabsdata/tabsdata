@@ -70,6 +70,8 @@ pub const SINGLETON_ID_TABSDATA: &str = "tabsdata";
 pub const SINGLETON_NAME_MANIFEST: &str = "manifest.yaml";
 
 pub const INIT_FOLDER: &str = "init";
+pub const EDIT_FOLDER: &str = "edit";
+pub const INPUT_FOLDER: &str = "input";
 pub const STAGE_FOLDER: &str = "stage";
 pub const TRASH_FOLDER: &str = "trash";
 pub const SETTINGS_FILE: &str = ".settings.json";

@@ -18,9 +18,11 @@ use crate::client::tdkserver::arguments::{Arguments, Commands, GlobalArguments};
 // use crate::client::tdkserver::commands::secret::command_secret;
 // use crate::client::tdkserver::commands::server::command_server;
 use crate::client::tdkserver::commands::service::create::command_create;
+use crate::client::tdkserver::commands::service::get::command_get;
 use crate::client::tdkserver::commands::service::info::command_info;
 use crate::client::tdkserver::commands::service::init::command_init;
 use crate::client::tdkserver::commands::service::list::command_list;
+use crate::client::tdkserver::commands::service::put::command_put;
 use crate::client::tdkserver::commands::service::quickstart::command_quickstart;
 use crate::client::tdkserver::commands::service::register::command_register;
 use crate::client::tdkserver::commands::service::restart::command_restart;
@@ -29,6 +31,7 @@ use crate::client::tdkserver::commands::service::status::command_status;
 use crate::client::tdkserver::commands::service::stop::command_stop;
 use crate::client::tdkserver::commands::service::trash::command_trash;
 use crate::client::tdkserver::commands::service::unregister::command_unregister;
+use crate::client::tdkserver::commands::service::view::command_view;
 use crate::client::tdkserver::commands::session::pin::command_pin;
 use crate::client::tdkserver::commands::session::show::command_show;
 use crate::client::tdkserver::commands::session::unpin::command_unpin;
@@ -73,6 +76,9 @@ impl TabsDataKubernetesClient {
             Some(Commands::Info(arguments)) => command_info(arguments, &globals).await,
             Some(Commands::Register(arguments)) => command_register(arguments, &globals).await,
             Some(Commands::Unregister(arguments)) => command_unregister(arguments, &globals).await,
+            Some(Commands::Get(arguments)) => command_get(arguments, &globals).await,
+            Some(Commands::Put(arguments)) => command_put(arguments, &globals).await,
+            Some(Commands::View(arguments)) => command_view(arguments, &globals).await,
             Some(Commands::Trash(arguments)) => command_trash(arguments, &globals).await,
             Some(Commands::Shell) => command_shell(&globals).await,
             Some(Commands::Pin(arguments)) => command_pin(arguments, &globals).await,
@@ -104,7 +110,9 @@ pub async fn start() {
 fn report_command_termination(error: &CommandError, verbose: bool) {
     match error.status() {
         ExitStatus::Cancelled => match error.source() {
-            Some(source) => tracing::info!("Operation cancelled: {}", render_error(source, verbose)),
+            Some(source) => {
+                tracing::info!("Operation cancelled: {}", render_error(source, verbose))
+            }
             None => tracing::info!("Operation cancelled."),
         },
         ExitStatus::NoAction => {

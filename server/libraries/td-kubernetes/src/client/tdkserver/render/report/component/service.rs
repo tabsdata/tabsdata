@@ -13,7 +13,8 @@ use crate::client::registry::ag_venv_activate_file;
 use crate::client::registry::{InstanceSettings, td_venv_activate_file};
 use crate::client::tdkserver::render::preview::render_summary_lines;
 use crate::client::tdkserver::render::report::helper::common::{
-    activation_command, kubeconfig_export_command, render_session_lines,
+    ABSENT_CELL, STATUS_RUNNING, STATUS_STOPPED, UNGATHERED_CELL, activation_command,
+    kubeconfig_export_command, render_session_lines,
 };
 use crate::client::tdkserver::render::report::helper::table::{
     ReportColumn, ReportTable, STATUS_COLOR_SCHEME, render_tables,
@@ -22,25 +23,40 @@ use crate::core::system::exit::CommandResult;
 use crate::runtime::instance::ports::{AssignedPort, apiserver_public_port, database_port};
 use crate::runtime::provider::summary::Summary;
 
-const RUNNING_STATUS: &str = "running";
-const STOPPED_STATUS: &str = "stopped";
-const UNKNOWN_STATUS: &str = "unknown";
-
-const LIST_RUNNING_STATUS: &str = "Running";
-const LIST_STOPPED_STATUS: &str = "Stopped";
-const ABSENT_CELL: &str = "-";
-const UNGATHERED_CELL: &str = "?";
-
 fn list_columns() -> [ReportColumn<'static>; 8] {
     [
-        ReportColumn { header: "Name", color_scheme: None },
-        ReportColumn { header: "Folder", color_scheme: None },
-        ReportColumn { header: "Provider", color_scheme: None },
-        ReportColumn { header: "State", color_scheme: None },
-        ReportColumn { header: "Status", color_scheme: Some(STATUS_COLOR_SCHEME) },
-        ReportColumn { header: "Apiserver Port", color_scheme: None },
-        ReportColumn { header: "Database Port", color_scheme: None },
-        ReportColumn { header: "Apiserver URL", color_scheme: None },
+        ReportColumn {
+            header: "Name",
+            color_scheme: None,
+        },
+        ReportColumn {
+            header: "Folder",
+            color_scheme: None,
+        },
+        ReportColumn {
+            header: "Provider",
+            color_scheme: None,
+        },
+        ReportColumn {
+            header: "State",
+            color_scheme: None,
+        },
+        ReportColumn {
+            header: "Status",
+            color_scheme: Some(STATUS_COLOR_SCHEME),
+        },
+        ReportColumn {
+            header: "API Server Port",
+            color_scheme: None,
+        },
+        ReportColumn {
+            header: "Database Port",
+            color_scheme: None,
+        },
+        ReportColumn {
+            header: "API Server URL",
+            color_scheme: None,
+        },
     ]
 }
 
@@ -73,8 +89,8 @@ fn instance_row(row: &InstanceRow) -> Vec<String> {
         .unwrap_or_else(|| UNGATHERED_CELL.to_owned());
 
     let status = match row.alive {
-        Some(true) => LIST_RUNNING_STATUS.to_owned(),
-        Some(false) => LIST_STOPPED_STATUS.to_owned(),
+        Some(true) => STATUS_RUNNING.to_owned(),
+        Some(false) => STATUS_STOPPED.to_owned(),
         None => UNGATHERED_CELL.to_owned(),
     };
 
@@ -82,7 +98,10 @@ fn instance_row(row: &InstanceRow) -> Vec<String> {
     let database = port_cell(row.settings, database_port);
 
     let url = match row.alive {
-        Some(true) => row.url.clone().unwrap_or_else(|| UNGATHERED_CELL.to_owned()),
+        Some(true) => row
+            .url
+            .clone()
+            .unwrap_or_else(|| UNGATHERED_CELL.to_owned()),
         Some(false) | None => UNGATHERED_CELL.to_owned(),
     };
 
@@ -124,9 +143,9 @@ pub fn instance_info(settings: &InstanceSettings, folder: &Path, alive: Option<b
     };
 
     let status = match alive {
-        Some(true) => RUNNING_STATUS,
-        Some(false) => STOPPED_STATUS,
-        None => UNKNOWN_STATUS,
+        Some(true) => STATUS_RUNNING,
+        Some(false) => STATUS_STOPPED,
+        None => UNGATHERED_CELL,
     };
 
     info!("Tabsdata instance '{}':", settings.name);

@@ -9,7 +9,7 @@ use crate::base::reporter::{InteractiveReporter, Reporter};
 #[cfg(feature = "enterprise")]
 use crate::client::registry::ag_venv_activate_file;
 use crate::client::registry::{
-    InstanceSettings, InstanceState, instance_init_folder, instance_stage_folder,
+    InstanceSettings, InstanceState, instance_init_input_folder, instance_init_stage_folder,
     td_venv_activate_file,
 };
 use crate::client::session::pin::PinContext;
@@ -127,8 +127,8 @@ pub async fn create_instance(
 
     let mut settings = InstanceSettings::load_required(&instance, &[InstanceState::Initialized])?;
 
-    let init = instance_init_folder(&settings.name)?;
-    let stage = instance_stage_folder(&settings.name)?;
+    let init = instance_init_input_folder(&settings.name)?;
+    let stage = instance_init_stage_folder(&settings.name)?;
 
     let profile = load_profile(settings.provider, verbose)?;
 

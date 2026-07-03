@@ -20,22 +20,21 @@ pub async fn command_list(globals: &GlobalArguments) -> CommandResult {
 
     let mut rows = Vec::with_capacity(listings.len());
     for listing in &listings {
-        let (alive, url) = match provider_for_instance(Some(listing.name.clone()), globals.verbose)
-            .await
-        {
-            Ok(provider) => {
-                if provider.service_alive().await {
-                    let url = match provider.kube_context().await {
-                        Ok(context) => apiserver_public_url(&context).await,
-                        Err(_) => None,
-                    };
-                    (Some(true), url)
-                } else {
-                    (Some(false), None)
+        let (alive, url) =
+            match provider_for_instance(Some(listing.name.clone()), globals.verbose).await {
+                Ok(provider) => {
+                    if provider.service_alive().await {
+                        let url = match provider.kube_context().await {
+                            Ok(context) => apiserver_public_url(&context).await,
+                            Err(_) => None,
+                        };
+                        (Some(true), url)
+                    } else {
+                        (Some(false), None)
+                    }
                 }
-            }
-            Err(_) => (None, None),
-        };
+                Err(_) => (None, None),
+            };
         rows.push(InstanceRow {
             name: &listing.name,
             folder: &listing.folder,
