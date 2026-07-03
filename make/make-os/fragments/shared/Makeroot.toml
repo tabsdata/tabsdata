@@ -116,6 +116,13 @@ TESTING_SUPERVISORS_CONFIG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/./varian
 TESTING_INSTANCE_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/testing_instance.py", normalize = true }
 TESTING_INSTANCES_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/testing_instances.py", normalize = true }
 
+UTEST_BOOTEST_SCRIPT = { value = "${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python/test_tabsdata/bootest.py", normalize = true }
+ITEST_BOOTEST_SCRIPT = { value = "${PROJECT_PY_TD_TABSDATA_FOLDER}/src/itest/python/testi_tabsdatak/bootest.py", normalize = true }
+
+ITEST_INSTANCES_CONFIG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/config/pytest/kubernetes.yaml", normalize = true }
+ITEST_REGISTRY_FILE = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/target/tdkpytest.yaml", normalize = true }
+ITEST_PORTS_LOCK = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/target/tdkpytest.ports.lock", normalize = true }
+
 [config]
 load_script = [
     '''

@@ -31,11 +31,11 @@ TDLOCAL_FOLDER_NAME = "tdlocal"
 # fmt: off
 TESTING_RESOURCES_PATH = str(
     Path(__file__).absolute()
-    .parent  # test_tabsdatak/
+    .parent  # testi_tabsdatak/
     .parent  # python/
-    .parent  # utest/
+    .parent  # itest/
     / "resources"
-    / "test_tabsdatak"
+    / "testi_tabsdatak"
 )
 # fmt: on
 
@@ -198,7 +198,7 @@ def enrich_sys_path():
                 "client",
                 "platform",
                 "src",
-                "utest",
+                "itest",
                 "python",
             )
         ),
@@ -210,7 +210,7 @@ def enrich_sys_path():
                 "client",
                 "platform",
                 "src",
-                "utest",
+                "itest",
                 "resources",
             )
         ),
@@ -223,7 +223,7 @@ def enrich_sys_path():
                 "libraries",
                 "ta_features",
                 "src",
-                "utest",
+                "itest",
                 "python",
             )
         ),
@@ -236,7 +236,7 @@ def enrich_sys_path():
                 "libraries",
                 "ta_features",
                 "src",
-                "utest",
+                "itest",
                 "resources",
             )
         ),
@@ -249,7 +249,7 @@ def enrich_sys_path():
                 "libraries",
                 "ta_tableframe",
                 "src",
-                "utest",
+                "itest",
                 "python",
             )
         ),
@@ -262,7 +262,7 @@ def enrich_sys_path():
                 "libraries",
                 "ta_tableframe",
                 "src",
-                "utest",
+                "itest",
                 "resources",
             )
         ),
@@ -276,7 +276,7 @@ def enrich_sys_path():
                 "libraries",
                 "te_examples",
                 "src",
-                "utest",
+                "itest",
                 "python",
             )
         ),
@@ -290,7 +290,7 @@ def enrich_sys_path():
                 "libraries",
                 "te_examples",
                 "src",
-                "utest",
+                "itest",
                 "resources",
             )
         ),
@@ -304,7 +304,7 @@ def enrich_sys_path():
                 "libraries",
                 "te_tableframe",
                 "src",
-                "utest",
+                "itest",
                 "python",
             )
         ),
@@ -318,7 +318,7 @@ def enrich_sys_path():
                 "libraries",
                 "te_tableframe",
                 "src",
-                "utest",
+                "itest",
                 "resources",
             )
         ),
@@ -332,7 +332,7 @@ def enrich_sys_path():
                 "libraries",
                 "te_variant",
                 "src",
-                "utest",
+                "itest",
                 "python",
             )
         ),
@@ -346,7 +346,7 @@ def enrich_sys_path():
                 "libraries",
                 "te_variant",
                 "src",
-                "utest",
+                "itest",
                 "resources",
             )
         ),
@@ -361,7 +361,7 @@ def enrich_sys_path():
                 "ty-tableframe",
                 "python",
                 "src",
-                "utest",
+                "itest",
                 "python",
             )
         ),
@@ -376,7 +376,7 @@ def enrich_sys_path():
                 "ty-tableframe",
                 "python",
                 "src",
-                "utest",
+                "itest",
                 "resources",
             )
         ),
@@ -391,7 +391,7 @@ def enrich_sys_path():
                 "tz-tableframe",
                 "python",
                 "src",
-                "utest",
+                "itest",
                 "python",
             )
         ),
@@ -406,7 +406,7 @@ def enrich_sys_path():
                 "tz-tableframe",
                 "python",
                 "src",
-                "utest",
+                "itest",
                 "resources",
             )
         ),
@@ -421,7 +421,7 @@ def enrich_sys_path():
                     "python",
                     connector,
                     "src",
-                    "utest",
+                    "itest",
                     "python",
                 )
             ),
@@ -434,7 +434,7 @@ def enrich_sys_path():
                     "python",
                     connector,
                     "src",
-                    "utest",
+                    "itest",
                     "resources",
                 )
             ),
@@ -462,9 +462,9 @@ def check_assets():
     # fmt: off
     variant_assets_folder = str(
         Path(__file__).absolute()
-        .parent  # test_tabsdatak/
+        .parent  # testi_tabsdatak/
         .parent  # python/
-        .parent  # utest/
+        .parent  # itest/
         .parent  # src/
         .parent  # platform/
         .parent  # client/
@@ -474,9 +474,9 @@ def check_assets():
     )
     client_assets_folder_tabsdata = str(
         Path(__file__).absolute()
-        .parent  # test_tabsdatak/
+        .parent  # testi_tabsdatak/
         .parent  # python/
-        .parent  # utest/
+        .parent  # itest/
         .parent  # src/
         .parent  # platform/
         / "tabsdata"
@@ -484,9 +484,9 @@ def check_assets():
     )
     client_assets_folder_tabsdatak = str(
         Path(__file__).absolute()
-        .parent  # test_tabsdatak/
+        .parent  # testi_tabsdatak/
         .parent  # python/
-        .parent  # utest/
+        .parent  # itest/
         .parent  # src/
         .parent  # platform/
         / "tabsdatak"

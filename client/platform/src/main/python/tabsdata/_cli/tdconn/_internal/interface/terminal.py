@@ -23,8 +23,8 @@ from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
 
-from tabsdata._cli.tdconn._internal.store.logic import Logic
 from tabsdata._cli.tdconn._internal.interface.api import UX, identity
+from tabsdata._cli.tdconn._internal.store.logic import Logic
 from tabsdata._io.connections.named_connection.named_connection import _ConnDef
 
 _NAME_STYLE = "cyan"

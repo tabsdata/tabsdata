@@ -8,9 +8,12 @@ import logging
 import os
 import sys
 
-import pytest
-
-from test_tabsdatak.bootest import check_assets, enrich_sys_path
+from testi_tabsdatak.bootest import check_assets, enrich_sys_path
+from testi_tabsdatak.common.backend import (  # noqa: F401
+    instance,
+    instance_maker,
+    with_instance,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

@@ -74,6 +74,7 @@ script = [
     end
 
     debug "🔷 _____ Generating python binaries..."
+    cm_run_task __os__set_bootest_utest
     cm_run_task __os__setup_context_test_py
 
     td_symlink_polars_libs = get_env TD_SYMLINK_POLARS_LIBS
@@ -121,6 +122,84 @@ script = [
         cm_run_task __os__stop_pytest_tabsdata_servers
     else
         info "🚜 Stopping tabsdata server skipped."
+    end
+    ''']
+
+[tasks.__os__setup_testi_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+dependencies = ["__os__set_mode_test_py", "license"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env TD_INHERIT_TABSDATA_PACKAGES "true"
+    set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
+    set_env TD_BUILD_TIMESTAMP "0"
+
+    debug "🔷 _____ Copying assets..."
+    cm_run_task __os__generate_assets
+
+    with_compile = get_env TD_WITH_COMPILE
+    if eq ${with_compile} "true"
+        debug "🔷 _____ Building..."
+        cm_run_task build
+    else
+        debug "🔷 _____ Not building."
+    end
+
+    debug "🔷 _____ Generating python binaries..."
+    cm_run_task __os__set_bootest_itest
+    cm_run_task __os__setup_context_test_py
+
+    td_symlink_polars_libs = get_env TD_SYMLINK_POLARS_LIBS
+    if eq ${td_symlink_polars_libs} "true"
+        set_env TD_SYMLINK_POLARS_LIBS_PYTEST true
+        info "🔗 Setting TD_SYMLINK_POLARS_LIBS_PYTEST to true as TD_SYMLINK_POLARS_LIBS is also set to true"
+    end
+
+    with_server_start = get_env TD_WITH_SERVER_START
+    if eq ${with_server_start} "true"
+        debug "🔷 _____ Starting tabsdata kubernetes server (itest)..."
+
+        set_env TD_INHERIT_TABSDATA_PACKAGES "true"
+        set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
+        set_env TD_BUILD_TIMESTAMP "0"
+
+        cm_run_task __os__stop_pytest_tabsdatak_servers
+        cm_run_task __os__drop_pytest_tabsdatak_servers
+        cm_run_task __os__start_pytest_tabsdatak_servers
+        cm_run_task __os__status_pytest_tabsdatak_servers
+    else
+        info "🚜 Starting tabsdata kubernetes server skipped."
+    end
+
+    with_server_status = get_env TD_WITH_SERVER_STATUS
+    if eq ${with_server_status} "true"
+        debug "🔷 _____ Reporting tabsdata kubernetes server status (itest)..."
+        cm_run_task __os__ps_pytest_tabsdatak_servers
+    end
+    ''']
+
+[tasks.__os__cleanup_testi_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+dependencies = ["__os__set_mode_test_py"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    with_server_stop = get_env TD_WITH_SERVER_STOP
+    if eq ${with_server_stop} "true"
+        debug "🔷 _____ Stopping tabsdata kubernetes server (itest)..."
+        cm_run_task __os__stop_pytest_tabsdatak_servers
+        cm_run_task __os__drop_pytest_tabsdatak_servers
+    else
+        info "🚜 Stopping tabsdata kubernetes server skipped."
     end
     ''']
 

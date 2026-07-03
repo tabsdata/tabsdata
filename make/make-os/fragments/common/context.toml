@@ -19,6 +19,32 @@ script = [
     fi
     ''']
 
+[tasks.__os__set_bootest_utest]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env BOOTEST_SCRIPT ${UTEST_BOOTEST_SCRIPT}
+    debug "🔅 Using utest bootest: ${UTEST_BOOTEST_SCRIPT}"
+    ''']
+
+[tasks.__os__set_bootest_itest]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env BOOTEST_SCRIPT ${ITEST_BOOTEST_SCRIPT}
+    debug "🔅 Using itest bootest: ${ITEST_BOOTEST_SCRIPT}"
+    ''']
+
 [tasks.__os__setup_context_test_py]
 plugin = "td-task-tracker"
 category = "04 - Test"
@@ -59,8 +85,8 @@ script = [
         exec python -c "import sys; print('\\n'.join(sys.path))"
     end
 
-    debug "🚀 python ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python/test_tabsdata/bootest.py"
-    output = exec --fail-on-error python ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python/test_tabsdata/bootest.py
+    debug "🚀 python ${BOOTEST_SCRIPT}"
+    output = exec --fail-on-error python ${BOOTEST_SCRIPT}
     debug "📦 The received pythonpath is ${output.stdout}"
 
     pythonpath = set ${output.stdout}

@@ -22,8 +22,8 @@ from tabsdata._cli.cli_utils import (
     initialise_tabsdata_server_connection,
     load_pinned_objects,
 )
-from tabsdata._cli.tdconn._internal.store import ApiConnStore, BaseLogic
 from tabsdata._cli.tdconn._internal.interface import UXTerminal
+from tabsdata._cli.tdconn._internal.store import ApiConnStore, BaseLogic
 from tabsdata._cli.tdconn.conn_group import conn_commands
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])

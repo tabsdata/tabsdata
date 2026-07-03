@@ -12,6 +12,7 @@ extend = [
     { path = "./make/make-os/fragments/common/resources.toml", relative = "git" },
     { path = "./make/make-os/fragments/common/scenarios.toml", relative = "git" },
     { path = "./make/make-os/fragments/common/server.toml", relative = "git" },
+    { path = "./make/make-os/fragments/common/serverk.toml", relative = "git" },
     { path = "./make/make-os/fragments/common/status.toml", relative = "git" },
     { path = "./make/make-os/fragments/common/variables.toml", relative = "git" },
 

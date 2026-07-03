@@ -37,6 +37,7 @@ dependencies = [
     "black==26.5.1",
     "colorama==0.4.6",
     "distlib==0.4.0",
+    "filelock==3.25.2",
     "mypy==2.1.0",
     "mypy-extensions==1.1.0",
     "packaging==26.0",
@@ -62,6 +63,7 @@ tdx-harvester = "tabsdatax.pytesting.plugins.harvester.plugin"
 tdkdocker = "tabsdatax.docker.cli:main"
 tdx-gconnector = "tabsdatax.generator.connector.cli:main"
 tdx-gtableframe = "tabsdatax.generator.tableframe.cli:main"
+tdx-itest = "tabsdatax.itest.tdkserver.cli:main"
 tdx-pyoutdated = "tabsdatax.cmake.pyoutdated:main"
 tdx-bundle = "tabsdatax.support.bundle:main"
 tdx-harvester-monitor = "tabsdatax.pytesting.plugins.harvester.client:main"

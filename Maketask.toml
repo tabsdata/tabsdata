@@ -602,6 +602,28 @@ run_task = [
     ] }
 ]
 
+[tasks.testi_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+description = "Task 'integration test' for Python projects"
+dependencies = ["__os__set_mode_test_py"]
+run_task = [
+    { name = [
+        "__os__setup_testi_py",
+        "__os__start_test_py",
+        "__os__stop_test_py",
+        "__os__cleanup_testi_py"
+    ], condition = { env = { "TD_WITH_TESTS_RUN" = "false" } } },
+    { name = [
+        "__os__setup_testi_py",
+        "__os__start_test_py",
+        "__os__check_hydrate_py",
+        "testi_parallel_py",
+        "__os__stop_test_py",
+        "__os__cleanup_testi_py"
+    ] }
+]
+
 [tasks.test_serial_py]
 plugin = "td-task-tracker"
 category = "04 - Test"
@@ -701,7 +723,7 @@ script = [
         info "   --preview          List the test folders (packages and modules) that would be selected, then exit without running any test."
         info "   --collect          Run pytest in collect-only mode (no test execution, no parallelism, no coverage) to surface collection/import errors early."
         info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting."
-        info "   --skipe            Report test failures as a diagnostic summary instead of failing the task."
+        info "   --skipe test_py    Report test failures as a diagnostic summary instead of failing the task."
         info "   -h, --help         Show this help and exit."
         info ""
         info "🛟 Build mode flags (handled before the tests run; they shape the wrapping build):"
@@ -1027,6 +1049,415 @@ script = [
         end
 
         info "📊 Pytest report generated at: 👉 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/reports/pytest/tabsdata/pytest.html\n"
+    end
+    ''']
+
+[tasks.testi_parallel_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/skipe.ds
+
+    fn normalize
+        normalized = set ${1}
+        normalized = replace ${normalized} "\\" "/"
+        normalized = replace ${normalized} "//" "/"
+        normalized = replace ${normalized} "//" "/"
+        return ${normalized}
+    end
+
+    verbose = get_env TD_VERBOSE
+
+    cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
+
+    td_temp = temp_dir
+    set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}
+
+    report_folder = set "./target/reports/pytest/tabsdatai"
+    rm -r ${report_folder}
+    mkdir ${report_folder}
+    report_file = set ${report_folder}/pytest.html
+
+    packages_prefix = set "--packages="
+    modules_prefix = set "--modules="
+    packages_filter = set ""
+    modules_filter = set ""
+    preview = set false
+    collect = set false
+    help = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        is_package = starts_with ${argument} ${packages_prefix}
+        if ${is_package}
+            packages_filter = replace ${argument} ${packages_prefix} ""
+        end
+        is_module = starts_with ${argument} ${modules_prefix}
+        if ${is_module}
+            modules_filter = replace ${argument} ${modules_prefix} ""
+        end
+        if eq ${argument} "--preview"
+            preview = set true
+        end
+        if eq ${argument} "--collect"
+            collect = set true
+        end
+        if eq ${argument} "--help"
+            help = set true
+        end
+        if eq ${argument} "-h"
+            help = set true
+        end
+    end
+
+    if ${help}
+        info ""
+        info "🧪 testi_py — Run the Python test suite in parallel with pytest and xdist."
+        info ""
+        info "🛟 Usage:"
+        info "   cargo make testi_py [-- <options>]"
+        info ""
+        info "🛟 Test options:"
+        info "   --packages=<list>  Comma-separated package names to test."
+        info "                      The 'tabsdata-' prefix is optional, and wildcards are supported (for example, 'conn-*')."
+        info "                      When omitted, every package is tested."
+        info "   --modules=<list>   Comma-separated '/'-delimited paths to narrow the run within the selected packages."
+        info "                      A path can be a folder ('tabsdata/api'), a file ('tabsdata/api/test_x.py'), or a single test ('tabsdata/api/test_x.py::test_case')."
+        info "                      The leading segment is resolved against its 'test_' counterpart, so 'tabsdata/api' matches the 'test_tabsdata/api' folder; pass a 'test_' prefix to opt out."
+        info "                      Paths that do not exist are silently skipped."
+        info "   --preview          List the test folders (packages and modules) that would be selected, then exit without running any test."
+        info "   --collect          Run pytest in collect-only mode (no test execution, no parallelism, no coverage) to surface collection/import errors early."
+        info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting."
+        info "   --skipe testi_py   Report test failures as a diagnostic summary instead of failing the task."
+        info "   --quietk           Silence the tdkserver output while managing the instances, showing it only on failure."
+        info "   -h, --help         Show this help and exit."
+        info ""
+        info "🛟 Build mode flags (handled before the tests run; they shape the wrapping build):"
+        info "   --fast             Shorthand for --no-banners --no-responsive --no-permit --no-license --no-compile --no-deploy."
+        info "                      Use it when your environment is fully functional and you just want to run the tests."
+        info "   --warp             Everything '--fast' implies, plus --no-server."
+        info "                      Use it when you also do not need a running tabsdata server for the tests."
+        info "   --no-banners       Disable terminal output banners (on by default)."
+        info "   --no-responsive    Disable terminal responsive output (on by default)."
+        info "   --no-permit        Skip the proactive dependency check and installation (active by default)."
+        info "   --no-license       Skip the license check and generation (active by default)."
+        info "   --no-compile       Skip compilation and linking of the Rust projects (active by default)."
+        info "   --no-deploy        Skip deployment (hydration) of the tabsdata packages (active by default)."
+        info "   --no-server        Neither start nor stop the supporting tabsdata test servers (both active by default)."
+        info ""
+        info "🛟 Server lifecycle flags (the servers are started before and stopped after the tests by default):"
+        info "   --no-server-start  Do all setup but never start the tabsdata servers (they are still stopped afterwards)."
+        info "   --no-server-stop   Never stop the tabsdata servers afterwards, whether or not this run started them."
+        info "   --no-server        Equivalent to '--no-server-start --no-server-stop'."
+        info "   --start            Do setup and start the tabsdata servers, then exit. No tests, no filtering, no stop."
+        info "   --stop             Only run teardown: setup without starting, then stop the tabsdata servers. No tests."
+        info "   --status           Do setup and report the tabsdata servers status, then exit. No start, no stop, no tests."
+        info "                      '--start', '--stop' and '--status' are mutually exclusive."
+        info ""
+        info "🛟 Examples:"
+        info "   cargo make testi_py"
+        info "   cargo make testi_py --packages=tabsdata,conn-mysql"
+        info "   cargo make testi_py --packages=conn-* --modules=tabsdata/api --preview"
+        info "   cargo make testi_py --packages=tabsdata --modules=tabsdata/api/test_x.py::test_case"
+        info "   cargo make testi_py --fast --tb=short"
+        info "   cargo make testi_py --start"
+        info "   cargo make testi_py --stop"
+        info "   cargo make testi_py --status"
+        info ""
+        exit 0
+    end
+
+    packages_filter_list = split ${packages_filter} ,
+    modules_filter_list = split ${modules_filter} ,
+
+    tests_folders = array
+    packages = array
+
+    array_push ${tests_folders} ${PROJECT_PY_TA_FEATURES_FOLDER}/src/itest/python
+    array_push ${packages} ta_features
+    array_push ${tests_folders} ${PROJECT_PY_TA_TABLEFRAME_FOLDER}/src/itest/python
+    array_push ${packages} ta_tableframe
+    array_push ${tests_folders} ${PROJECT_PY_TE_EXAMPLES_FOLDER}/src/itest/python
+    array_push ${packages} te_examples
+    array_push ${tests_folders} ${PROJECT_PY_TE_TABLEFRAME_FOLDER}/src/itest/python
+    array_push ${packages} te_tableframe
+    array_push ${tests_folders} ${PROJECT_PY_TE_VARIANT_FOLDER}/src/itest/python
+    array_push ${packages} te_variant
+    array_push ${tests_folders} ${PROJECT_PY_TO_FOUNDATION_FOLDER}/src/itest/python
+    array_push ${packages} to_foundation
+    array_push ${tests_folders} ${PROJECT_PY_TY_TABLEFRAME_FOLDER}/src/itest/python
+    array_push ${packages} ty_tableframe
+    array_push ${tests_folders} ${PROJECT_PY_TZ_TABLEFRAME_FOLDER}/src/itest/python
+    array_push ${packages} tz_tableframe
+    array_push ${tests_folders} ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/itest/python
+    array_push ${packages} tabsdata
+
+    connectors = glob_array ${OS_CONNECTORS_PY_ROOT_FOLDER}/tabsdata-*
+    for connector in ${connectors}
+        is_connector = is_dir ${connector}
+        if ${is_connector}
+            connector_test_folder_path = join_path ${connector} src itest python
+            connector_name = basename ${connector}
+            array_push ${tests_folders} ${connector_test_folder_path}
+            array_push ${packages} ${connector_name}
+        end
+    end
+
+    selected_paths = map
+    if not is_empty ${packages_filter}
+        for package_filter in ${packages_filter_list}
+            package_filter_tabsdata = concat "tabsdata-" ${package_filter}
+            matched = array
+            glob_standard = glob_array ${PROJECT_TABSDATA_ROOT_FOLDER}/**/${package_filter}/src/itest/python
+            glob_standard_tabsdata = glob_array ${PROJECT_TABSDATA_ROOT_FOLDER}/**/${package_filter_tabsdata}/src/itest/python
+            glob_special = glob_array ${PROJECT_TABSDATA_ROOT_FOLDER}/**/${package_filter}/python/src/itest/python
+            glob_special_tabsdata = glob_array ${PROJECT_TABSDATA_ROOT_FOLDER}/**/${package_filter_tabsdata}/python/src/itest/python
+            matched = array_concat ${matched} ${glob_standard} ${glob_standard_tabsdata} ${glob_special} ${glob_special_tabsdata}
+            for matched_path in ${matched}
+                normalized = normalize ${matched_path}
+                map_put ${selected_paths} ${normalized} true
+            end
+            is_tabsdata = eq ${package_filter} "tabsdata"
+            if ${is_tabsdata}
+                tabsdata_path = normalize ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/itest/python
+                map_put ${selected_paths} ${tabsdata_path} true
+            end
+            release ${glob_standard}
+            release ${glob_standard_tabsdata}
+            release ${glob_special}
+            release ${glob_special_tabsdata}
+            release ${matched}
+        end
+    end
+
+    selected_tests_folders = array
+    ignore_args = set ""
+    package_known = set false
+    folders_count = array_length ${tests_folders}
+    index = set 0
+    while less_than ${index} ${folders_count}
+        folder = array_get ${tests_folders} ${index}
+        folder = normalize ${folder}
+        package = array_get ${packages} ${index}
+
+        keep = set false
+        if is_empty ${packages_filter}
+            keep = set true
+        else
+            in_selected = map_contains_key ${selected_paths} ${folder}
+            if ${in_selected}
+                keep = set true
+                package_known = set true
+            end
+        end
+
+        if ${keep}
+            array_push ${selected_tests_folders} ${folder}
+            debug "➕ Adding test folder (${package}): ${folder}"
+        else
+            ignore_args = concat ${ignore_args} " --ignore=" ${folder}
+            debug "➖ Skipping test folder (${package}): ${folder}"
+        end
+
+        index = calc ${index} + 1
+    end
+
+    release ${selected_paths}
+
+    if not is_empty ${packages_filter}
+        if not ${package_known}
+            error ""
+            error "🧨 Unknown --packages '${packages_filter}'. No test folders matched."
+            error ""
+            error "🛟 Valid packages:"
+            for valid_package in ${packages}
+                error "   - 📦️ ${valid_package}"
+            end
+            error ""
+            assert ${package_known}
+        end
+    end
+
+    if not is_empty ${modules_filter}
+        module_narrowed_folders = array
+        for selected_tests_folder in ${selected_tests_folders}
+            for module_filter in ${modules_filter_list}
+                module_parts = split ${module_filter} ::
+                module_path = array_get ${module_parts} 0
+                module_parts_count = array_length ${module_parts}
+                module_node = set ""
+                module_has_node = greater_than ${module_parts_count} 1
+                if ${module_has_node}
+                    module_selector = array_get ${module_parts} 1
+                    module_node = concat "::" ${module_selector}
+                end
+                module_has_prefix = starts_with  "test_"
+                if ${module_has_prefix}
+                    module_relative = set ${module_path}
+                else
+                    module_relative = concat "test_" 
+                end
+                module_target = concat ${selected_tests_folder} "/" ${module_relative}
+                module_target = normalize ${module_target}
+                module_exists = is_path_exists ${module_target}
+                if ${module_exists}
+                    module_selection = concat ${module_target} ${module_node}
+                    array_push ${module_narrowed_folders} ${module_selection}
+                end
+                release ${module_parts}
+            end
+        end
+        selected_tests_folders = set ${module_narrowed_folders}
+    end
+
+    no_packages = is_empty ${packages_filter}
+    no_modules = is_empty ${modules_filter}
+    if ${no_packages}
+        if ${no_modules}
+            info "🧪 Running the full test suite (all packages, no module filter)."
+        else
+            info "🧩 Running tests for module(s) '${modules_filter}' across all packages."
+        end
+    else
+        if ${no_modules}
+            info "📦 Running tests for package(s) '${packages_filter}'."
+        else
+            info "📦🧩 Running tests for module(s) '${modules_filter}' within package(s) '${packages_filter}'."
+        end
+    end
+
+    pytest_tests_folders = array_join ${selected_tests_folders} " "
+
+    if not is_empty ${packages_filter}
+        selected_count = array_length ${selected_tests_folders}
+        warn ""
+        warn "👁️ Selected ${selected_count} test source(s):"
+        for selected_test_source in ${selected_tests_folders}
+            warn "   - 🧪 ${selected_test_source}"
+        end
+        warn ""
+    end
+
+    if ${preview}
+        exit 0
+    end
+
+    td_tb = set ""
+    td_fail = set ""
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        is_tb = starts_with ${argument} "--tb="
+        if ${is_tb}
+            td_tb = set ${argument}
+            td_fail = set "--instafail"
+            info "🛟 Using fail option: ${td_tb}"
+            info "📝 Using traceback option: ${td_fail}"
+        end
+    end
+
+    existing_markers = get_env MARKERS
+    if is_empty ${existing_markers}
+        markers = set "not cdc_db2 and not db2_seq"
+    else
+        markers = set "(${existing_markers}) and not cdc_db2 and not db2_seq"
+    end
+    set_env MARKERS ${markers}
+
+    if is_empty ${packages_filter}
+        cov_args = set "--cov-config=.coveragerc --cov --cov-report=html:.coveragex/html --cov-report=json:.coveragex/json/coverage.json --cov-report=lcov:.coveragex/lcov/coverage.lcov"
+    else
+        cov_args = set ""
+        info "🚀 Coverage disabled for package(s) run"
+    end
+
+    if ${collect}
+        info "🔎 Collect-only run (no test execution, no parallelism, no coverage)."
+        debug "🚀 pytest --collect-only -q -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" %{ignore_args} %{pytest_tests_folders} -m \"${markers}\""
+        exit_code = exec --get-exit-code pytest --collect-only -q -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" %{ignore_args} %{pytest_tests_folders} -m "${markers}"
+    else
+        if eq ${verbose} "false"
+            debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
+            exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"
+        else
+            debug "🚀 pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini=\"filterwarnings=ignore\" -v --full-trace --log-level=DEBUG --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m \"${markers}\""
+            exit_code = exec --get-exit-code pytest %{td_tb} %{td_fail} -c pyproject.toml --rootdir=${PROJECT_TABSDATA_ROOT_FOLDER} --import-mode=importlib -W ignore::Warning --override-ini="filterwarnings=ignore" -v --full-trace --log-level=DEBUG --setup-show -n 16 --dist=loadgroup %{ignore_args} %{pytest_tests_folders} --template=html1/index.html --report=${report_file} -ra --durations=8 %{cov_args} -m "${markers}"
+        end
+    end
+
+    is_zero = eq ${exit_code} "0"
+    is_five = eq ${exit_code} "5"
+    if ${is_zero} or ${is_five}
+        info "⌛️ Pytest finished with zero-or-five exit code: '${exit_code}'"
+    else
+        info "⌛️ Pytest finished with non-zero-or-five exit code: '${exit_code}'"
+        skipe_testi_py = get_env skipe_testi_py
+        if not is_empty ${skipe_testi_py}
+            if is_error
+                echo ""
+            end
+            error "🧨🧨🧨🧨"
+
+            error ""
+
+            error "🧨 TASK 'testi_parallel_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
+
+            error ""
+
+            workspace_folder = canonicalize ${PROJECT_TABSDATA_BASE_FOLDER}/..
+            tmp_folder = canonicalize ${TMPDIR}
+            home_folder = canonicalize ${HOME}
+
+            error "🔎 The following files and folders may contain information to help diagnose the failure:"
+
+            error ""
+
+            error "📊 ${workspace_folder}/tabsdata-os/target/reports/pytest/tabsdatai/pytest.html"
+            error "📊 ${workspace_folder}/tabsdata-ee/target/reports/pytest/tabsdatai/pytest.html"
+            error "📊 ${workspace_folder}/tabsdata/target/reports/pytest/tabsdatai/pytest.html"
+
+            error ""
+
+            error "💾 ${workspace_folder}/tabsdata-os/target/tdlocal"
+            error "💾 ${workspace_folder}/tabsdata-ee/target/tdlocal"
+            error "💾 ${workspace_folder}/tabsdata/target/tdlocal"
+
+            error ""
+
+            error "🗂️  ${tmp_folder}/td-temp"
+
+            error ""
+
+            error "🧺 ${home_folder}/.tabsdatax/pytest/harvester"
+
+            error ""
+
+            error "🧨🧨🧨🧨"
+            if is_error
+                echo ""
+            end
+        else
+            TD_FAIL_FAST_PY = get_env TD_FAIL_FAST_PY
+            if not ${TD_FAIL_FAST_PY}
+                info "⌛️ Setting Pytest TD_TESTS_CODE_PY to ${exit_code}..."
+                set_env TD_TESTS_CODE_PY ${exit_code}
+            else
+                info "⌛️ Pytest failing fast..."
+                code = exit ${exit_code}
+            end
+        end
+    end
+
+    if ${collect}
+        info "🔎 Collect-only run finished with exit code: '${exit_code}'\n"
+    else
+        if is_empty ${packages_filter}
+            exec --fail-on-error python ${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/report_coverage.py ./.coveragex/json/coverage.json .
+        end
+
+        info "📊 Pytest report generated at: 👉 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/reports/pytest/tabsdatai/pytest.html\n"
     end
     ''']
 
