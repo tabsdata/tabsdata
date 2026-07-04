@@ -131,4 +131,10 @@ pub enum ResolverError {
     ConfigParseFailed { cause: String } = 5035,
     #[error("Could not serialize revealed configmap content as YAML: {cause}.")]
     ConfigSerializeFailed { cause: String } = 5036,
+    #[error("Could not generate the '{generator}' auto-secret at '{path}': {cause}.")]
+    GeneratorFailed {
+        path: String,
+        generator: String,
+        cause: String,
+    } = 5037,
 }

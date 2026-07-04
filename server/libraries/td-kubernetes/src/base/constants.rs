@@ -97,6 +97,7 @@ pub const SECRET_FAMILY_CONFIG: &str = "secret-config";
 pub const SECRET_GENERATOR_JWT_SIGNING_KEY: &str = "jwt_signing_key";
 pub const SECRET_GENERATOR_POSTGRES_SYSTEM_USER: &str = "postgres_system_user";
 pub const SECRET_GENERATOR_POSTGRES_PASSWORD: &str = "postgres_password";
+pub const SECRET_GENERATOR_SERVICE_TOKEN: &str = "service_token";
 
 pub const PART_OF_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "part-of");
 pub const PART_OF_TABSDATA: &str = "tabsdata";

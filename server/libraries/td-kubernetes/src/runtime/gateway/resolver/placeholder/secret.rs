@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::collections::BTreeMap;
 use std::env;
 
 use crate::base::error::gateway::ResolverError;
@@ -48,9 +49,22 @@ impl SecretResolver {
                 generator: category.to_owned(),
                 supported: Generator::supported().join(", "),
             })?;
+        // Derived generators depend on other secrets (possibly declared in other
+        // configs) and are produced by the dependency-ordered fill at instance
+        // start — not here, where only this config's values are in scope.
+        if generator.is_derived() {
+            return Ok(None);
+        }
+        let value = generator.generate(&BTreeMap::new()).map_err(|cause| {
+            ResolverError::GeneratorFailed {
+                path: context.path.join(PATH_SEPARATOR),
+                generator: category.to_owned(),
+                cause: cause.to_string(),
+            }
+        })?;
         Ok(Some(SecretEntry {
             key,
-            value: generator.generate(),
+            value,
             category: Some(category.to_owned()),
         }))
     }

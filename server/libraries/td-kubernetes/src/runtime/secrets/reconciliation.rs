@@ -104,8 +104,9 @@ async fn fill_generated_keys(
         return Ok(());
     }
     let live = get_secret(context, secret_name).await?;
-    let needs_fill: Vec<(&str, Generator)> = generated
-        .into_iter()
+    let mut needs_fill: Vec<(&str, Generator)> = generated
+        .iter()
+        .copied()
         .filter(
             |(key, _)| match live.as_ref().and_then(|data| data.get(*key)) {
                 None => true,
@@ -119,15 +120,42 @@ async fn fill_generated_keys(
     let mut data: BTreeMap<String, String> = match live {
         Some(existing) => existing
             .into_iter()
-            .map(|(key, bytes)| {
-                let text = String::from_utf8(bytes).unwrap_or_default();
-                (key, text)
-            })
+            .map(|(key, bytes)| (key, String::from_utf8(bytes).unwrap_or_default()))
             .collect(),
         None => BTreeMap::new(),
     };
-    for (key, generator) in needs_fill {
-        data.insert(key.to_owned(), generator.generate());
+    // Values by generator, so a derived generator (e.g. a service token) can read
+    // the sibling it's signed from. Seed with values already present in the secret.
+    let mut resolved: BTreeMap<Generator, String> = generated
+        .iter()
+        .filter_map(|(key, generator)| {
+            data.get(*key)
+                .filter(|value| !value.is_empty())
+                .map(|value| (*generator, value.clone()))
+        })
+        .collect();
+    // Topological fill: each step takes a generator whose deps are all resolved
+    // and produces it. Whatever is left has a missing or cyclic dependency.
+    while let Some(index) = needs_fill
+        .iter()
+        .position(|(_, generator)| generator.deps().iter().all(|dep| resolved.contains_key(dep)))
+    {
+        let (key, generator) = needs_fill.remove(index);
+        let value = generator.generate(&resolved)?;
+        resolved.insert(generator, value.clone());
+        data.insert(key.to_owned(), value);
+    }
+    if let Some((_, generator)) = needs_fill.first() {
+        let dependency = generator
+            .deps()
+            .iter()
+            .copied()
+            .find(|dep| !resolved.contains_key(dep))
+            .unwrap_or(*generator);
+        return Err(SecretError::DerivedSecretMissingDependency {
+            generator: generator.name().to_owned(),
+            dependency: dependency.name().to_owned(),
+        });
     }
     upsert_secret(
         context,

@@ -139,6 +139,16 @@ pub enum SecretError {
         name: String,
         supported: String,
     } = 5015,
+    #[error("Could not sign the '{generator}' service token: {cause}.")]
+    TokenSigningFailed { generator: String, cause: String } = 5016,
+    #[error(
+        "Cannot derive the '{generator}' secret: its dependency '{dependency}' is not declared by \
+         any config (no '${{secretAuto:{dependency}}}' placeholder exists to generate it)."
+    )]
+    DerivedSecretMissingDependency {
+        generator: String,
+        dependency: String,
+    } = 5017,
     #[error(transparent)]
     Profile(#[from] ProfileError) = 5004,
     #[error(transparent)]
