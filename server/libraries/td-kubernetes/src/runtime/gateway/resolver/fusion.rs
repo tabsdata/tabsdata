@@ -275,3 +275,6 @@ fn read_flat_family(family_folder: &Path, family: &str) -> Result<BTreeSet<Strin
     }
     Ok(files)
 }
+
+#[cfg(test)]
+mod tests;

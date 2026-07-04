@@ -178,3 +178,55 @@ async fn resolve_secret_errors_when_env_var_missing() {
     let result = resolver.materialize(yaml).await;
     assert!(result.is_err(), "missing env var should error");
 }
+
+#[tokio::test]
+async fn materialize_still_resolves_system_placeholder() {
+    let resolver = resolver_with_system(SystemValues {
+        connection_secret_name: Some("td-conn-xyz".to_string()),
+        ..SystemValues::default()
+    });
+    let yaml = "name: ${{system:tdk_connection_secret_name}}\n";
+    let resolved = resolver.materialize(yaml).await.expect("materialize");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
+    assert_eq!(parsed["name"].as_str(), Some("td-conn-xyz"));
+}
+
+#[tokio::test]
+async fn materialize_leaves_plain_scalars_untouched() {
+    let resolver = resolver();
+    let yaml = "a: plain\nb: 7\nc: true\n";
+    let resolved = resolver.materialize(yaml).await.expect("materialize");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
+    assert_eq!(parsed["a"].as_str(), Some("plain"));
+    assert_eq!(parsed["b"].as_i64(), Some(7));
+    assert_eq!(parsed["c"].as_bool(), Some(true));
+}
+
+#[tokio::test]
+async fn materialize_env_inside_keyed_sequence_item() {
+    let key = "TD_TEST_RESOLVER_SEQ";
+    unsafe { std::env::set_var(key, "seq-value") };
+
+    let resolver = resolver();
+    let yaml = "\
+mounts:
+- id: DATA
+  uri: ${{env:TD_TEST_RESOLVER_SEQ}}
+";
+    let resolved = resolver.materialize(yaml).await.expect("materialize");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
+    assert_eq!(parsed["mounts"][0]["uri"].as_str(), Some("seq-value"));
+
+    unsafe { std::env::remove_var(key) };
+}
+
+#[tokio::test]
+async fn optional_secret_materializes_to_empty_when_absent() {
+    unsafe { std::env::remove_var("TD_RESOLVE_TEST_OPTIONAL__SECRET") };
+
+    let resolver = resolver();
+    let yaml = "td_resolve_test_optional:\n  secret: ${{secret?}}\n";
+    let resolved = resolver.materialize(yaml).await.expect("materialize");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
+    assert_eq!(parsed["td_resolve_test_optional"]["secret"].as_str(), Some(""));
+}

@@ -81,10 +81,10 @@ fn prefill_node(
             Ok(())
         }
         Value::Sequence(items) => {
-            for index in 0..items.len() {
-                let segment = sequence_segment(&items[index], index);
+            for (index, item) in items.iter_mut().enumerate() {
+                let segment = sequence_segment(item, index);
                 path.push(segment);
-                prefill_node(&mut items[index], path, server_values)?;
+                prefill_node(item, path, server_values)?;
                 path.pop();
             }
             Ok(())
@@ -184,17 +184,10 @@ fn transform_node(
             Ok(())
         }
         Value::Sequence(items) => {
-            for index in 0..items.len() {
-                let segment = sequence_segment(&items[index], index);
+            for (index, item) in items.iter_mut().enumerate() {
+                let segment = sequence_segment(item, index);
                 path.push(segment);
-                transform_node(
-                    &mut items[index],
-                    path,
-                    placeholders,
-                    schema,
-                    values,
-                    secret_values,
-                )?;
+                transform_node(item, path, placeholders, schema, values, secret_values)?;
                 path.pop();
             }
             Ok(())
@@ -287,12 +280,11 @@ fn mapping_key(key: &Value) -> String {
 }
 
 fn sequence_segment(item: &Value, index: usize) -> String {
-    if let Value::Mapping(map) = item {
-        if let Some((_, value)) = map.iter().next() {
-            if let Some(identity) = scalar_as_string(value) {
-                return identity;
-            }
-        }
+    if let Value::Mapping(map) = item
+        && let Some((_, value)) = map.iter().next()
+        && let Some(identity) = scalar_as_string(value)
+    {
+        return identity;
     }
     index.to_string()
 }
@@ -305,3 +297,6 @@ fn scalar_as_string(value: &Value) -> Option<String> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests;

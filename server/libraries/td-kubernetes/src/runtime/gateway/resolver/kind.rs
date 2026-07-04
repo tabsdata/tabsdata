@@ -185,3 +185,6 @@ impl FromStr for PlaceholderKind {
         Ok(kind)
     }
 }
+
+#[cfg(test)]
+mod tests;

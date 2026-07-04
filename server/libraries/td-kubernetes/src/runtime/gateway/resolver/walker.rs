@@ -400,3 +400,6 @@ fn coerce_scalar(rendered: String) -> Value {
         _ => Value::String(rendered),
     }
 }
+
+#[cfg(test)]
+mod tests;

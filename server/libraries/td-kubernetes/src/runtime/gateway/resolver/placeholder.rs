@@ -52,3 +52,6 @@ pub(super) fn resolver_for(
     };
     Ok(resolver)
 }
+
+#[cfg(test)]
+mod tests;

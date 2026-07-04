@@ -132,3 +132,59 @@ fn malformed_yaml_is_rejected() {
     let result = Schema::parse("x.yamls", "directives: : :\n");
     assert!(matches!(result, Err(SchemaError::ParseFailed { .. })));
 }
+
+#[test]
+fn missing_treat_is_rejected() {
+    let text = "directives:\n  - at: a.b\n";
+    let result = Schema::parse("x.yamls", text);
+    assert!(matches!(
+        result,
+        Err(SchemaError::UnsupportedTreatment { .. })
+    ));
+}
+
+#[test]
+fn leading_wildcard_matches_any_first_segment() {
+    let schema = Schema::parse("x.yamls", "directives:\n  - at: '*.token'\n    treat: secret\n")
+        .expect("parse");
+    assert!(schema.secret_at(&path(&["alpha", "token"])));
+    assert!(schema.secret_at(&path(&["beta", "token"])));
+    assert!(!schema.secret_at(&path(&["alpha", "value"])));
+    assert!(!schema.secret_at(&path(&["token"])));
+}
+
+#[test]
+fn mid_path_wildcard_matches_single_segment() {
+    let schema = Schema::parse("x.yamls", "directives:\n  - at: a.*.c\n    treat: secret\n")
+        .expect("parse");
+    assert!(schema.secret_at(&path(&["a", "anything", "c"])));
+    assert!(!schema.secret_at(&path(&["a", "c"])));
+    assert!(!schema.secret_at(&path(&["a", "x", "y", "c"])));
+}
+
+#[test]
+fn pattern_longer_than_path_does_not_full_match() {
+    let schema = Schema::parse("x.yamls", STORAGE_SCHEMA).expect("parse");
+    assert!(!schema.secret_at(&path(&["storage", "mounts", "ROOT", "options"])));
+    assert!(schema.could_match_prefix(&path(&["storage", "mounts", "ROOT", "options"])));
+}
+
+#[test]
+fn list_wildcard_suffix_expands_to_literal_then_wildcard() {
+    let schema = Schema::parse("x.yamls", "directives:\n  - at: items[*].pw\n    treat: secret\n")
+        .expect("parse");
+    assert!(schema.secret_at(&path(&["items", "0", "pw"])));
+    assert!(schema.secret_at(&path(&["items", "NAME", "pw"])));
+    assert!(!schema.secret_at(&path(&["items", "pw"])));
+}
+
+#[test]
+fn multiple_directives_all_apply() {
+    let text = "directives:\n\
+                \x20 - at: a.secret\n    treat: secret\n\
+                \x20 - at: b.token\n    treat: secret\n";
+    let schema = Schema::parse("x.yamls", text).expect("parse");
+    assert!(schema.secret_at(&path(&["a", "secret"])));
+    assert!(schema.secret_at(&path(&["b", "token"])));
+    assert!(!schema.secret_at(&path(&["a", "token"])));
+}

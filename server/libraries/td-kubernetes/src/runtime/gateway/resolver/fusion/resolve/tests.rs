@@ -100,3 +100,230 @@ envFrom:
         outcome.rendered
     );
 }
+
+fn resolve(template: &str, init: &str) -> ResolveOutcome {
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    resolve_config_file(template, init, &system, &auto).expect("resolve")
+}
+
+fn resolve_error(template: &str, init: &str) -> ResolverError {
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    match resolve_config_file(template, init, &system, &auto) {
+        Ok(_) => panic!("expected resolve error"),
+        Err(error) => error,
+    }
+}
+
+#[test]
+fn literal_inlines_the_init_value() {
+    let template = "name: ${{literal:label}}\n";
+    let init = "name: production\n";
+    let outcome = resolve(template, init);
+    assert!(outcome.rendered.contains("name: production"));
+    assert!(outcome.secrets.is_empty());
+}
+
+#[test]
+fn literal_quoted_numeric_init_coerces_to_number() {
+    let template = "count: ${{literal:n}}\n";
+    let init = "count: \"7\"\n";
+    let outcome = resolve(template, init);
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(value["count"], Value::Number(7.into()));
+}
+
+#[test]
+fn non_string_init_scalar_is_structure_mismatch() {
+    let template = "count: ${{literal:n}}\n";
+    let init = "count: 7\n";
+    let error = resolve_error(template, init);
+    assert!(matches!(error, ResolverError::StructureMismatch { .. }));
+}
+
+#[test]
+fn literal_required_missing_value_errors() {
+    let template = "name: ${{literal:label}}\n";
+    let init = "name: ${{literal:label}}\n";
+    let error = resolve_error(template, init);
+    assert!(matches!(error, ResolverError::MissingRequiredValue { .. }));
+}
+
+#[test]
+fn literal_optional_missing_value_renders_empty() {
+    let template = "name: ${{literal:label?}}\n";
+    let init = "name: ${{literal:label?}}\n";
+    let outcome = resolve(template, init);
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(value["name"], Value::String(String::new()));
+}
+
+#[test]
+fn env_placeholder_retains_token_at_creation() {
+    let template = "home: ${{env:HOME}}\n";
+    let init = "home: ${{env:HOME}}\n";
+    let outcome = resolve(template, init);
+    assert!(outcome.rendered.contains("${{env:HOME}}"));
+}
+
+#[test]
+fn embedded_system_placeholder_splices_into_surrounding_text() {
+    let template = "address: 0.0.0.0:${{system:tdk_apiserver_public_port}}\n";
+    let init = "address: 0.0.0.0:${{system:tdk_apiserver_public_port}}\n";
+    let system = SystemValues {
+        apiserver_public_port: Some("2457".to_owned()),
+        ..SystemValues::default()
+    };
+    let auto = HashMap::new();
+    let outcome =
+        resolve_config_file(template, init, &system, &auto).expect("resolve embedded");
+    assert!(outcome.rendered.contains("0.0.0.0:2457"));
+}
+
+#[test]
+fn non_editable_placeholder_modified_in_init_errors() {
+    let template = "port: ${{system:tdk_apiserver_public_port}}\n";
+    let init = "port: \"9999\"\n";
+    let system = SystemValues {
+        apiserver_public_port: Some("2457".to_owned()),
+        ..SystemValues::default()
+    };
+    let auto = HashMap::new();
+    let error = match resolve_config_file(template, init, &system, &auto) {
+        Ok(_) => panic!("modified system value must error"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        ResolverError::NonEditablePlaceholderModified { .. }
+    ));
+}
+
+#[test]
+fn structure_mismatch_when_init_shape_differs() {
+    let template = "database:\n  password: ${{literal:pw}}\n";
+    let init = "database: scalar\n";
+    let error = resolve_error(template, init);
+    assert!(matches!(error, ResolverError::StructureMismatch { .. }));
+}
+
+#[test]
+fn missing_key_in_init_is_structure_mismatch() {
+    let template = "a: ${{literal:x}}\nb: ${{literal:y}}\n";
+    let init = "a: one\n";
+    let error = resolve_error(template, init);
+    assert!(matches!(error, ResolverError::StructureMismatch { .. }));
+}
+
+#[test]
+fn positional_list_length_mismatch_errors() {
+    let template = "hosts:\n- ${{literal:a}}\n- ${{literal:b}}\n";
+    let init = "hosts:\n- one\n";
+    let error = resolve_error(template, init);
+    assert!(matches!(error, ResolverError::StructureMismatch { .. }));
+}
+
+#[test]
+fn positional_scalar_list_inlines_each_item() {
+    let template = "hosts:\n- ${{literal:a}}\n- ${{literal:b}}\n";
+    let init = "hosts:\n- alpha\n- beta\n";
+    let outcome = resolve(template, init);
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    let hosts = value["hosts"].as_sequence().expect("hosts");
+    assert_eq!(hosts[0], Value::String("alpha".to_owned()));
+    assert_eq!(hosts[1], Value::String("beta".to_owned()));
+}
+
+#[test]
+fn keyed_sequence_matches_items_by_identity() {
+    let template = "\
+mounts:
+- id: ROOT
+  uri: ${{literal:root}}
+- id: DATA
+  uri: ${{literal:data}}
+";
+    let init = "\
+mounts:
+- id: DATA
+  uri: /data
+- id: ROOT
+  uri: /
+";
+    let outcome = resolve(template, init);
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    let mounts = value["mounts"].as_sequence().expect("mounts");
+    let data = mounts
+        .iter()
+        .find(|m| m["id"].as_str() == Some("DATA"))
+        .expect("DATA");
+    let root = mounts
+        .iter()
+        .find(|m| m["id"].as_str() == Some("ROOT"))
+        .expect("ROOT");
+    assert_eq!(data["uri"].as_str(), Some("/data"));
+    assert_eq!(root["uri"].as_str(), Some("/"));
+}
+
+#[test]
+fn keyed_sequence_duplicate_identity_in_init_errors() {
+    let template = "\
+mounts:
+- id: ROOT
+  uri: ${{literal:root}}
+";
+    let init = "\
+mounts:
+- id: ROOT
+  uri: /
+- id: ROOT
+  uri: /other
+";
+    let error = resolve_error(template, init);
+    assert!(matches!(
+        error,
+        ResolverError::SequenceDuplicateFirstValues { .. }
+    ));
+}
+
+#[test]
+fn diverging_value_for_same_placeholder_identity_errors() {
+    let template = "a: ${{literal:shared}}\nb: ${{literal:shared}}\n";
+    let init = "a: one\nb: two\n";
+    let error = resolve_error(template, init);
+    assert!(matches!(
+        error,
+        ResolverError::DivergingPlaceholderValue { .. }
+    ));
+}
+
+#[test]
+fn same_value_for_same_placeholder_identity_is_accepted() {
+    let template = "a: ${{literal:shared}}\nb: ${{literal:shared}}\n";
+    let init = "a: same\nb: same\n";
+    let outcome = resolve(template, init);
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(value["a"], Value::String("same".to_owned()));
+    assert_eq!(value["b"], Value::String("same".to_owned()));
+}
+
+#[test]
+fn embedded_retained_placeholder_is_rejected() {
+    let template = "uri: prefix-${{secret}}\n";
+    let init = "uri: prefix-topsecret\n";
+    let error = resolve_error(template, init);
+    assert!(matches!(
+        error,
+        ResolverError::EmbeddedRetainedPlaceholder { .. }
+    ));
+}
+
+#[test]
+fn plain_scalar_without_placeholder_passes_through() {
+    let template = "name: literal-value\n";
+    let init = "name: literal-value\n";
+    let outcome = resolve(template, init);
+    assert!(outcome.rendered.contains("name: literal-value"));
+    assert!(outcome.secrets.is_empty());
+}
