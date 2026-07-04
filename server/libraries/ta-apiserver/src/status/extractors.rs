@@ -11,7 +11,7 @@ use axum::extract::{FromRequest, Request};
 use axum::response::{IntoResponse, Response};
 use std::fmt::Debug;
 use td_error::{TdError, td_error};
-use tracing::{debug, error};
+use tracing::{error, trace};
 
 #[td_error]
 pub enum JsonError {
@@ -34,7 +34,10 @@ where
         <axum::Json<T> as FromRequest<_, _>>::from_request(req, state)
             .await
             .map(|axum::Json(value)| {
-                debug!("JSON request:\n {:#?} \n", value);
+                // Full bodies can carry sensitive payloads (credentials,
+                // conversation content, PII) — log them only at TRACE, which is
+                // off in normal operation, not at the commonly-enabled DEBUG.
+                trace!("JSON request:\n {:#?} \n", value);
                 Json(value)
             })
             .map_err(From::from)
@@ -48,7 +51,8 @@ where
 {
     fn into_response(self) -> Response {
         let Json(value) = self;
-        debug!("JSON response:\n {:#?} \n", value);
+        // See the request path above: bodies are TRACE-only, not DEBUG.
+        trace!("JSON response:\n {:#?} \n", value);
         axum::Json(value).into_response()
     }
 }
