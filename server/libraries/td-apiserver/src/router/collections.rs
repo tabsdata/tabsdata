@@ -164,6 +164,7 @@ mod tests {
     use td_services::Context;
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;
+    use utoipa::openapi::path::{Operation, ParameterIn};
 
     /// Mounts the same layers the real apiserver wraps tenant routes with:
     ///   - `project_resolver_layer` to resolve the `{project}` URL segment
@@ -203,6 +204,59 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    /// The `{project}` segment is resolved in middleware (read as
+    /// `Extension<ProjectId>`, never a `Path<_>`), so the `#[apiserver_path]`
+    /// macro injects it into the OpenAPI `params`. Assert every collections
+    /// operation documents `project` as a path parameter — and that the
+    /// per-route params (e.g. `collection`) still come through alongside it.
+    #[td_test::test(db)]
+    async fn test_openapi_documents_project_path_param(db: TdPool) {
+        let api = CollectionsRouter::router(Arc::new(CollectionServices::build(
+            &Context::with_defaults(db.clone()),
+        )))
+        .into_openapi();
+
+        let has_path_param = |op: &Operation, name: &str| {
+            op.parameters.as_ref().is_some_and(|ps| {
+                ps.iter()
+                    .any(|p| p.name == name && matches!(p.parameter_in, ParameterIn::Path))
+            })
+        };
+
+        let mut ops = 0;
+        for (path, item) in api.paths.paths.iter() {
+            assert!(
+                path.contains("{project}"),
+                "every collections route is project-scoped, got: {path}"
+            );
+            for op in [&item.get, &item.put, &item.post, &item.delete]
+                .into_iter()
+                .flatten()
+            {
+                assert!(
+                    has_path_param(op, "project"),
+                    "missing `project` path parameter on {path}"
+                );
+                ops += 1;
+            }
+        }
+        assert!(
+            ops >= 7,
+            "expected the collections operations, counted {ops}"
+        );
+
+        // GET_COLLECTION = /projects/{project}/collections/{collection}: both
+        // the injected `project` and the handler's own `collection` are present.
+        let get_collection = api
+            .paths
+            .paths
+            .get(GET_COLLECTION)
+            .and_then(|p| p.get.as_ref())
+            .expect("GET collection operation present");
+        assert!(has_path_param(get_collection, "project"));
+        assert!(has_path_param(get_collection, "collection"));
     }
 
     #[td_test::test(db)]

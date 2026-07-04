@@ -187,6 +187,7 @@ impl ApiServerV1 {
 
             #[cfg(feature = "api-docs")]
             {
+                use crate::apiserver::normalize_catch_all_paths;
                 use td_build::version::TABSDATA_VERSION;
                 use td_objects::rest_urls::{DOCS_URL, OPENAPI_JSON_URL};
 
@@ -195,6 +196,7 @@ impl ApiServerV1 {
                 let mut openapi = openapi;
                 openapi.info.title = "Tabsdata API".to_string();
                 openapi.info.version = TABSDATA_VERSION.to_string();
+                normalize_catch_all_paths(&mut openapi);
                 let components: &mut utoipa::openapi::Components =
                     openapi.components.as_mut().unwrap();
                 components.add_security_scheme(

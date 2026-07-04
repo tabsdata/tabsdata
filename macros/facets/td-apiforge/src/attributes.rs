@@ -71,7 +71,19 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
         tag = #tag,
     };
 
+    // The `{project}` segment of `/projects/{project}/...` routes is resolved
+    // in middleware (project_resolver_layer) and read as `Extension<ProjectId>`,
+    // never a `Path<_>` extractor — so utoipa can't see it. Emit it explicitly
+    // (first, matching URL order) whenever the handler reads that extension.
+    let project_scoped = has_project_extension(&input);
+
     let mut params = quote! {};
+
+    if project_scoped {
+        params = quote! {
+            ("project" = String, Path, description = "Project name or id"),
+        };
+    }
 
     for path_param in path_params.iter() {
         params = quote! {
@@ -87,7 +99,7 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
         };
     }
 
-    if !query_params.is_empty() || !path_params.is_empty() {
+    if project_scoped || !query_params.is_empty() || !path_params.is_empty() {
         utoipa_attr = quote! {
             #utoipa_attr
             params(#params),
@@ -167,6 +179,28 @@ fn has_type(input: &ItemFn, method_type: &str) -> bool {
         false
     })
 }
+/// True if the handler takes `Extension<ProjectId>` — the marker the
+/// project_resolver_layer stamps onto every `/projects/{project}/...` (and
+/// `/internal/projects/{project}/...`) route. utoipa can't otherwise see the
+/// `{project}` segment, since it's resolved in middleware, not a `Path<_>`.
+fn has_project_extension(input: &ItemFn) -> bool {
+    input.sig.inputs.iter().any(|arg| {
+        if let FnArg::Typed(pat_type) = arg
+            && let Type::Path(type_path) = &*pat_type.ty
+            && has_generic_attribute(&type_path.path, "Extension")
+            && let Some(Type::Path(inner)) = extract_first_generic_argument(&type_path.path)
+        {
+            return inner
+                .path
+                .segments
+                .last()
+                .map(|s| s.ident == "ProjectId")
+                .unwrap_or(false);
+        }
+        false
+    })
+}
+
 /// Extracts the type of the generic argument in the arguments of a given type signature.
 pub fn extract_type_in_generic_argument(input: &ItemFn, generic_attribute: &str) -> Vec<Type> {
     let mut vec = Vec::new();

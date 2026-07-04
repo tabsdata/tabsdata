@@ -90,6 +90,7 @@ impl InternalServer {
 
             #[cfg(feature = "api-docs")]
             {
+                use crate::apiserver::normalize_catch_all_paths;
                 use td_build::version::TABSDATA_VERSION;
                 use td_objects::rest_urls::{DOCS_URL, OPENAPI_JSON_URL};
 
@@ -98,6 +99,7 @@ impl InternalServer {
                 let mut openapi = openapi;
                 openapi.info.title = "Tabsdata Internal API".to_string();
                 openapi.info.version = TABSDATA_VERSION.to_string();
+                normalize_catch_all_paths(&mut openapi);
                 router = router.merge(axum::Router::from(
                     SwaggerUi::new(DOCS_URL)
                         .url(Url::new("Internal API V1 Docs", OPENAPI_JSON_URL), openapi),

@@ -26,6 +26,53 @@ pub mod internal;
 mod server;
 pub mod v1;
 
+/// axum catch-all segments (`{*name}`) are invalid OpenAPI path templating —
+/// Swagger substitutes parameters by name, finds no `{name}`, and leaves the
+/// literal `{*name}` in the request URL. Rewrite them to `{name}` so the
+/// placeholder matches the declared parameter. Routing is untouched: the axum
+/// Router is built from the raw `{*name}` path before the doc is split off
+/// (`OpenApiRouter::split_for_parts`), so only the served spec changes.
+#[cfg(any(feature = "api-docs", test))]
+pub(crate) fn normalize_catch_all_paths(openapi: &mut utoipa::openapi::OpenApi) {
+    let paths = std::mem::take(&mut openapi.paths.paths);
+    openapi.paths.paths = paths
+        .into_iter()
+        .map(|(path, item)| (path.replace("{*", "{"), item))
+        .collect();
+}
+
+#[cfg(test)]
+mod catch_all_tests {
+    use super::normalize_catch_all_paths;
+    use utoipa::openapi::{OpenApiBuilder, PathItem, PathsBuilder};
+
+    #[test]
+    fn rewrites_catch_all_to_openapi_template() {
+        let paths = PathsBuilder::new()
+            .path("/api/v1/resources/{*path}", PathItem::default())
+            .path(
+                "/projects/{project}/collections/{collection}",
+                PathItem::default(),
+            )
+            .build();
+        let mut openapi = OpenApiBuilder::new().paths(paths).build();
+
+        normalize_catch_all_paths(&mut openapi);
+
+        let keys: Vec<&str> = openapi.paths.paths.keys().map(String::as_str).collect();
+        // Catch-all sigil stripped so Swagger can substitute the `path` param.
+        assert!(
+            keys.contains(&"/api/v1/resources/{path}"),
+            "catch-all not normalized, got: {keys:?}"
+        );
+        // Ordinary single-segment params are left alone.
+        assert!(
+            keys.contains(&"/projects/{project}/collections/{collection}"),
+            "normal params altered, got: {keys:?}"
+        );
+    }
+}
+
 #[allow(dead_code)]
 pub struct ApiServerCtx {
     pub config: Config,
