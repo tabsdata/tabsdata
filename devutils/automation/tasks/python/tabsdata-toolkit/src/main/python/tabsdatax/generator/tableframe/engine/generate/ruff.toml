@@ -41,6 +41,7 @@ fixable = ["ALL"]
 known-first-party = [
     "tabsdata",
     "tabsdatak",
+    "test_tabsdata",
     "test_tabsdatak",
 ]
 combine-as-imports = true

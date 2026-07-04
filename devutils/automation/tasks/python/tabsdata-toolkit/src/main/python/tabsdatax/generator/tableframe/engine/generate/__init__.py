@@ -2,14 +2,14 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-"""Generate the ``.py`` delegation and ``.pyi`` stubs from a signature report.
+"""Generate the ``.py`` delegation and ``.pyi`` stubs from a manifest.
 
 Module kinds:
 
 * functions      -> free functions delegating to ``pl.<name>``.
 * value class    -> ``Expr`` / Expr namespaces: ``_inner`` wrappers (transparent).
 * TableFrame     -> the package ``__init__.py``: subclasses ``EngineFrame`` (the
-                    hand-written engine frame), with transparent ops and augmenting
+                    handwritten engine frame), with transparent ops and augmenting
                     ops
                     (``project``/``join``/``group_by``/``drop``/``rename``) that wrap
                     the result and dispatch ``run_hook(op, ...)``; ``_HOOKABLE_OPS``
@@ -19,7 +19,7 @@ Module kinds:
 Per-op behavior is selected by each symbol's ``hook_name`` from the report
 ("-" = no hook by default; "project"/"join"/"group_by"/"agg"/"drop"/"rename" set
 by the user). The generated code carries NO provenance policy — it only wraps and
-dispatches hooks; column lineage etc. lives in hand-written hook modules that the
+dispatches hooks; column lineage etc. lives in handwritten hook modules that the
 consumer registers via ``set_hook``/``chain``.
 """
 
@@ -32,10 +32,16 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..model.model import Report, Symbol
-from ..scan.spec import datatype_names
-from .pyi import PyiDoc, canonical_signature, parse_pyi
-from .typing_gen import TypingGen
+from tabsdatax.generator.tableframe.engine.generate.annotations import (
+    AnnotationRewriter,
+)
+from tabsdatax.generator.tableframe.engine.generate.stubs import (
+    PyiDoc,
+    canonical_signature,
+    parse_pyi,
+)
+from tabsdatax.generator.tableframe.model.model import Report, Symbol
+from tabsdatax.generator.tableframe.model.spec import datatype_names
 
 _PYI_CHANGED = "#CHANGED SIGNATURE, VALIDATE/FIX PYDOC"
 _PYI_NEW = "#NEW SIGNATURE, CREATE PYDOC"
@@ -109,70 +115,73 @@ class GenResult:
     modules: list[str] = field(default_factory=list)
     symbol_count: int = 0
     deferred: dict[str, int] = field(default_factory=dict)
-    dropped: dict[str, list[str]] = field(
-        default_factory=dict
-    )  # Module -> symbols gone from .pyi.
-    tests: list[str] = field(
-        default_factory=list
-    )  # Generated test files (overwritten on regen).
+    # Module -> symbols that were in the previous .pyi but are no longer emitted.
+    dropped: dict[str, list[str]] = field(default_factory=dict)
+    # Generated test files (overwritten on regeneration).
+    tests: list[str] = field(default_factory=list)
 
 
-def generate(
-    report: Report, root_module: str, root_dir: str, testdir: str | None = None
+def perform(
+    report: Report, module: str, main_root: str, test_root: str | None = None
 ) -> GenResult:
-    base = Path(root_dir).joinpath(*root_module.split("."))
+    base = Path(main_root).joinpath(*module.split("."))
     by_module: dict[str, list[Symbol]] = defaultdict(list)
     result = GenResult()
 
-    whitelisted = [s for s in report.symbols if s.whitelisted]
-    for sym in whitelisted:
-        by_module[sym.target_module].append(sym)
+    whitelisted = [symbol for symbol in report.symbols if symbol.whitelisted]
+    for symbol in whitelisted:
+        by_module[symbol.target_module].append(symbol)
 
-    # Hookable op-names = the method names of hook-dispatching ops (across modules,
-    # e.g. agg is a LazyGroupBy method). Used for TableFrame's _HOOKABLE_OPS manifest.
-    hookable = sorted({_member(s) for s in whitelisted if s.hook_name in _HOOK_NAMES})
-    # (op-name, hook_name) per hookable op -> the per-op hook types in _core/hooks.py.
+    # Hookable op names are the method names of hook-dispatching ops (across
+    # modules, e.g. agg is a LazyGroupBy method). Used for _HOOKABLE_OPS.
+    hookable = sorted({
+        _member(symbol) for symbol in whitelisted if symbol.hook_name in _HOOK_NAMES
+    })
     hook_specs = sorted({
-        (_member(s), s.hook_name) for s in whitelisted if s.hook_name in _HOOK_NAMES
+        (_member(symbol), symbol.hook_name)
+        for symbol in whitelisted
+        if symbol.hook_name in _HOOK_NAMES
     })
 
-    # datatypes.py is always emitted (aliased leaf types); it's not a report module
+    # datatypes.py is always emitted (aliased leaf types); it is not a report module
     # but must be a submodule so the __init__ loop imports it (registers passthrough).
     datatypes = datatype_names()
     submodules = sorted(
-        {m[len(root_module) + 1 :] for m in by_module if m != root_module}
+        {
+            module_name[len(module) + 1 :]
+            for module_name in by_module
+            if module_name != module
+        }
         | {"datatypes"}
     )
 
     # No polars/numpy type names leak into the .pyi stubs: rewrite annotations and
     # redefine the polars type aliases we use into <root>._typing. The datatype
     # names are ours too (aliased in datatypes.py), so keep + import them from there.
-    our_types = (
-        {s.target_class for s in whitelisted if s.target_class}
-        | {"TableFrame"}
-        | set(datatypes)
-    )
-    class_module = {
-        s.target_class: s.target_module for s in whitelisted if s.target_class
-    }
-    class_module["TableFrame"] = root_module
-    for dt in datatypes:
-        class_module[dt] = f"{root_module}.datatypes"
-    typing_gen = TypingGen(our_types, class_module, root_module)
+    class_module: dict[str, str] = {}
+    for symbol in whitelisted:
+        target_class = symbol.target_class
+        if target_class is not None:
+            class_module[target_class] = symbol.target_module
+    our_types = set(class_module) | {"TableFrame"} | set(datatypes)
+    class_module["TableFrame"] = module
+    for datatype in datatypes:
+        class_module[datatype] = f"{module}.datatypes"
+    annotation_rewriter = AnnotationRewriter(our_types, class_module, module)
     all_aliases: set[str] = set()
 
     written: list[Path] = []
     base.mkdir(parents=True, exist_ok=True)
-    written += _write_core(base, root_module, _render_hook_types(hook_specs))
-    written.append(_write_datatypes(base, root_module, datatypes))
-    for module, syms in sorted(by_module.items()):
-        is_root = module == root_module
-        filename = "__init__" if is_root else module[len(root_module) + 1 :]
+    written += _write_core(base, module, _render_hook_types(hook_specs))
+    written.append(_write_datatypes(base, module, datatypes))
+    for module_name, symbols in sorted(by_module.items()):
+        is_root = module_name == module
+        filename = "__init__" if is_root else module_name[len(module) + 1 :]
         py_path = base / f"{filename}.py"
-        py_path.write_text(_render_py(syms, root_module, is_root, hookable, submodules))
+        py_path.write_text(_render_py(symbols, module, is_root, hookable, submodules))
         written.append(py_path)
 
-        # Regenerate the .pyi, preserving hand-written docstrings: rename any
+        # Regenerate the .pyi, preserving handwritten docstrings: rename any
         # existing stub to a transient .pyi-ori, read it, then drop it.
         pyi_path = base / f"{filename}.pyi"
         previous: PyiDoc | None = None
@@ -185,28 +194,31 @@ def generate(
                 previous = None  # a corrupt prior stub shouldn't block regeneration
             finally:
                 ori_path.unlink()
-        text, aliases = _render_pyi(syms, previous, typing_gen, module, root_module)
+        text, aliases = _render_pyi(
+            symbols, previous, annotation_rewriter, module_name, module
+        )
         pyi_path.write_text(text)
         written.append(pyi_path)
         all_aliases |= aliases
         if previous is not None:
-            current = {(s.target_class, _member(s)) for s in syms}
-            dropped = sorted(name for (_, name) in set(previous.funcs) - current)
+            current = {(symbol.target_class, _member(symbol)) for symbol in symbols}
+            dropped = sorted(name for (_, name) in set(previous.functions) - current)
             if dropped:
-                result.dropped[module] = dropped
+                # noinspection PyTypeChecker
+                result.dropped[module_name] = dropped
 
-        result.modules.append(module)
-        result.symbol_count += len(syms)
+        result.modules.append(module_name)
+        result.symbol_count += len(symbols)
 
     typing_pyi = base / "_typing.pyi"
     typing_pyi.write_text(
-        _pyi_header() + "\n" + typing_gen.render_typing_pyi(all_aliases)
+        _pyi_header() + "\n" + annotation_rewriter.render_typing_pyi(all_aliases)
     )
     written.append(typing_pyi)
 
-    # Tests are always generated (default dir derived from --root-dir if not given).
-    test_dir = testdir or _default_testdir(root_dir, root_module)
-    result.tests, test_files = _generate_tests(by_module, root_module, test_dir)
+    # Tests are always generated; the folder is derived from main_root if not given.
+    test_root = test_root or _default_test_root(main_root, module)
+    result.tests, test_files = _generate_tests(by_module, module, test_root)
     written += test_files
 
     _format(written)
@@ -216,7 +228,7 @@ def generate(
 _CORE_MODULES = ("base", "translate", "hooks")
 
 
-def _write_core(base: Path, root_module: str, hook_types: str) -> list[Path]:
+def _write_core(base: Path, module: str, hook_types: str) -> list[Path]:
     """Emit the _core runtime (base/translate/hooks) from bundled templates.
 
     These are the framework runtime, not customization — customization lives in
@@ -231,7 +243,7 @@ def _write_core(base: Path, root_module: str, hook_types: str) -> list[Path]:
         text = (
             (templates / f"{name}.py.tmpl")
             .read_text()
-            .replace("__ROOT_MODULE__", root_module)
+            .replace("__ROOT_MODULE__", module)
             .replace("__HOOK_TYPES__", hook_types)
         )
         path = core_dir / f"{name}.py"
@@ -254,18 +266,18 @@ def _render_hook_types(specs: list[tuple[str, str]]) -> str:
     if not specs:
         return ""
     lines: list[str] = []
-    for hook_name in sorted({hn for _, hn in specs}):
+    for hook_name in sorted({hook_name for _, hook_name in specs}):
         _, fields = _HOOK_SHAPES[hook_name]
         lines += [
             f"class {_pascal(hook_name)}Params(TypedDict):",
             f'    """Params a {hook_name!r} op passes to its hook."""',
             "",
         ]
-        lines += [f"    {field}: {type_str}" for field, type_str in fields]
+        lines += [f"    {field_name}: {type_text}" for field_name, type_text in fields]
         lines += ["", ""]
     for op_name, hook_name in sorted(specs):
-        n_sources, _ = _HOOK_SHAPES[hook_name]
-        sources = ", ".join(['"TableFrame"'] * n_sources)
+        source_count, _ = _HOOK_SHAPES[hook_name]
+        sources = ", ".join(['"TableFrame"'] * source_count)
         lines.append(
             f"{_pascal(op_name)}Hook = "
             f'Callable[["TableFrame", tuple[{sources}], '
@@ -274,7 +286,7 @@ def _render_hook_types(specs: list[tuple[str, str]]) -> str:
     return "\n".join(lines)
 
 
-def _write_datatypes(base: Path, root_module: str, names: list[str]) -> Path:
+def _write_datatypes(base: Path, module: str, names: list[str]) -> Path:
     """Emit datatypes.py: alias the public polars datatypes as ours, register
     DataType as a passthrough leaf type (wrap() returns them unchanged), and an
     editable ``_ALLOWED_TYPES`` allow-list enforced via ``_valid_type``."""
@@ -284,7 +296,7 @@ def _write_datatypes(base: Path, root_module: str, names: list[str]) -> Path:
         "",
         "import polars as pl",
         "",
-        f"from {root_module}._core.translate import "
+        f"from {module}._core.translate import "
         "register_passthrough, register_type_validator",
         "",
     ]
@@ -330,12 +342,12 @@ def _write_datatypes(base: Path, root_module: str, names: list[str]) -> Path:
     return path
 
 
-def _default_testdir(root_dir: str, root_module: str) -> str:
-    parts = list(Path(root_dir).parts)
+def _default_test_root(main_root: str, module: str) -> str:
+    parts = list(Path(main_root).parts)
     if "main" in parts:  # Maven layout: src/main/python -> src/utest/python
         parts[parts.index("main")] = "utest"
-    first, *rest = root_module.split(".")
-    return str(Path(*parts).joinpath("test_" + first, *rest, "generator"))
+    first, *rest = module.split(".")
+    return str(Path(*parts).joinpath(f"test_{first}", *rest, "generator"))
 
 
 def _format(paths: list[Path]) -> None:
@@ -371,8 +383,8 @@ def _format(paths: list[Path]) -> None:
 # --------------------------------------------------------------------------- #
 def _write_test_namespace_inits(base: Path) -> list[Path]:
     template = Path(__file__).parent / "templates" / "namespace_init.py.tmpl"
-    copyright = _copyright().removeprefix("# ")
-    text = template.read_text().replace("__COPYRIGHT__", copyright)
+    copyright_text = _copyright().removeprefix("# ")
+    text = template.read_text().replace("__COPYRIGHT__", copyright_text)
     parts = base.parts
     # Namespace inits belong only to the importable test package, i.e. the
     # folders below the source root (the `.../src/utest/python` segment). Start
@@ -394,24 +406,24 @@ def _write_test_namespace_inits(base: Path) -> list[Path]:
 
 
 def _generate_tests(
-    by_module: dict[str, list[Symbol]], root_module: str, testdir: str
+    by_module: dict[str, list[Symbol]], module: str, test_root: str
 ) -> tuple[list[str], list[Path]]:
-    base = Path(testdir)
+    base = Path(test_root)
     base.mkdir(parents=True, exist_ok=True)
     names: list[str] = []
     paths: list[Path] = _write_test_namespace_inits(base)
-    for module, syms in sorted(by_module.items()):
-        is_root = module == root_module
+    for module_name, symbols in sorted(by_module.items()):
+        is_root = module_name == module
         # Test files mirror the module name; the root (an __init__.py) becomes
         # test_<root package>. Same-named files are overwritten; custom tests
         # (other names) are left untouched.
         filename = (
-            f"test_{root_module.split('.')[0]}"
+            f"test_{module.split('.')[0]}"
             if is_root
-            else module[len(root_module) + 1 :]
+            else module_name[len(module) + 1 :]
         )
         path = base / f"{filename}.py"
-        path.write_text(_render_test_module(syms, root_module, is_root))
+        path.write_text(_render_test_module(symbols, module, is_root))
         names.append(filename)
         paths.append(path)
     return names, paths
@@ -440,20 +452,20 @@ _HOOK_LIVE_ARGS = {
 }
 
 
-def _live_call(receiver: str, sym: Symbol) -> str:
-    name = _member(sym)
-    if sym.is_property:
+def _live_call(receiver: str, symbol: Symbol) -> str:
+    name = _member(symbol)
+    if symbol.is_property:
         return f"{receiver}.{name}"
-    args = _live_call_args(sym)
+    args = _live_call_args(symbol)
     return f"{receiver}.{name}({args})"
 
 
-def _live_call_args(sym: Symbol) -> str:
-    name = _member(sym)
-    if sym.hook_name in _HOOK_SHAPES:
-        source_count, _ = _HOOK_SHAPES[sym.hook_name]
+def _live_call_args(symbol: Symbol) -> str:
+    name = _member(symbol)
+    if symbol.hook_name in _HOOK_SHAPES:
+        source_count, _ = _HOOK_SHAPES[symbol.hook_name]
         parts = ["_live_frame()"] * (source_count - 1)
-        keywords = _HOOK_LIVE_ARGS.get(sym.hook_name, "")
+        keywords = _HOOK_LIVE_ARGS.get(symbol.hook_name, "")
         if keywords:
             parts.append(keywords)
         return ", ".join(parts)
@@ -474,16 +486,16 @@ def _live_test(safe: str, suffix: str, result_stmt: str) -> list[str]:
     ]
 
 
-def _render_test_module(syms: list[Symbol], root: str, is_root: bool) -> str:
-    target_class = syms[0].target_class
+def _render_test_module(symbols: list[Symbol], root: str, is_root: bool) -> str:
+    target_class = symbols[0].target_class
     if target_class is None:
-        text = _render_functions_test(syms, root)
+        text = _render_functions_test(symbols, root)
     elif is_root:
-        text = _render_tableframe_test(syms, root)
+        text = _render_tableframe_test(symbols, root)
     elif target_class == "LazyGroupBy":
-        text = _render_lazygroupby_test(syms, root)
+        text = _render_lazygroupby_test(symbols, root)
     else:
-        text = _render_value_test(syms, root)
+        text = _render_value_test(symbols, root)
     return _with_test_marker(text)
 
 
@@ -499,13 +511,13 @@ def _with_test_marker(text: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_value_test(syms: list[Symbol], root: str) -> str:
-    groups = _group_by_class(syms)
+def _render_value_test(symbols: list[Symbol], root: str) -> str:
+    groups = _group_by_class(symbols)
     multi = (
         len(groups) > 1
     )  # disambiguate test names when a module holds several classes
-    has_live = any(c in _VALUE_LIVE for c in groups)
-    relative = syms[0].target_module[len(root) + 1 :]
+    has_live = any(class_name in _VALUE_LIVE for class_name in groups)
+    relative = symbols[0].target_module[len(root) + 1 :]
     lines = [_test_header(), "from __future__ import annotations", ""]
     if has_live:
         lines += ["import polars as pl", "import pytest"]
@@ -515,31 +527,31 @@ def _render_value_test(syms: list[Symbol], root: str) -> str:
         f"from {root}.{relative} import " + ", ".join(groups),
         "",
     ]
-    for cls_name, cls_syms in groups.items():
-        prefix = f"{cls_name}_" if multi else ""
-        receiver = _VALUE_LIVE.get(cls_name)
-        for sym in cls_syms:
-            name = _member(sym)
+    for class_name, class_symbols in groups.items():
+        prefix = f"{class_name}_" if multi else ""
+        receiver = _VALUE_LIVE.get(class_name)
+        for symbol in class_symbols:
+            name = _member(symbol)
             safe = f"{prefix}{_safe(name)}"
             lines += ["", f"def test_{safe}_delegates():", "    inner = MagicMock()"]
-            if sym.is_property:
+            if symbol.is_property:
                 lines.append(
-                    f"    getattr({cls_name}._wrap(inner), {name!r})"
+                    f"    getattr({class_name}._wrap(inner), {name!r})"
                 )  # accessor wires through
             else:
                 arg = "MagicMock()" if name in ("__eq__", "__ne__") else ""
                 lines += [
-                    f"    getattr({cls_name}._wrap(inner), {name!r})({arg})",
+                    f"    getattr({class_name}._wrap(inner), {name!r})({arg})",
                     f"    getattr(inner, {name!r}).assert_called()",
                 ]
             if receiver is not None:
-                stmt = f"result = {_live_call(receiver, sym)}"
+                stmt = f"result = {_live_call(receiver, symbol)}"
                 lines += _live_test(safe, "runs", stmt)
     return "\n".join(lines) + "\n"
 
 
-def _render_functions_test(syms: list[Symbol], root: str) -> str:
-    relative = syms[0].target_module[len(root) + 1 :]
+def _render_functions_test(symbols: list[Symbol], root: str) -> str:
+    relative = symbols[0].target_module[len(root) + 1 :]
     lines = [
         _test_header(),
         "from __future__ import annotations",
@@ -551,8 +563,8 @@ def _render_functions_test(syms: list[Symbol], root: str) -> str:
         f"from {root} import {relative} as _module",
         "",
     ]
-    for sym in syms:
-        name = _member(sym)
+    for symbol in symbols:
+        name = _member(symbol)
         safe = _safe(name)
         lines += [
             "",
@@ -562,11 +574,11 @@ def _render_functions_test(syms: list[Symbol], root: str) -> str:
             f"    _module.{name}()",
             "    spy.assert_called()",
         ]
-        lines += _live_test(safe, "runs", f"result = {_live_call('_module', sym)}")
+        lines += _live_test(safe, "runs", f"result = {_live_call('_module', symbol)}")
     return "\n".join(lines) + "\n"
 
 
-def _render_tableframe_test(syms: list[Symbol], root: str) -> str:
+def _render_tableframe_test(symbols: list[Symbol], root: str) -> str:
     lines = [
         _test_header(),
         "from __future__ import annotations",
@@ -581,15 +593,15 @@ def _render_tableframe_test(syms: list[Symbol], root: str) -> str:
         "def _live_frame():",
         '    return tableframe_of(pl.LazyFrame({"a": [1.0], "b": [2.0]}))',
     ]
-    for sym in syms:
-        safe = _safe(_member(sym))
-        stmt = f"result = {_live_call('_live_frame()', sym)}"
+    for symbol in symbols:
+        safe = _safe(_member(symbol))
+        stmt = f"result = {_live_call('_live_frame()', symbol)}"
         lines += _live_test(safe, "delegates", stmt)
         lines += _live_test(safe, "runs", stmt)
     return "\n".join(lines) + "\n"
 
 
-def _render_lazygroupby_test(syms: list[Symbol], root: str) -> str:
+def _render_lazygroupby_test(symbols: list[Symbol], root: str) -> str:
     lines = [
         _test_header(),
         "from __future__ import annotations",
@@ -616,8 +628,8 @@ def _render_lazygroupby_test(syms: list[Symbol], root: str) -> str:
         "    return tableframe_of(pl.LazyFrame("
         '{"a": [1.0], "b": [2.0]})).group_by("a")',
     ]
-    for sym in syms:
-        name = _member(sym)
+    for symbol in symbols:
+        name = _member(symbol)
         safe = _safe(name)
         lines += [
             "",
@@ -629,13 +641,13 @@ def _render_lazygroupby_test(syms: list[Symbol], root: str) -> str:
         lines += _live_test(
             safe,
             "runs",
-            f"result = {_live_call('_live_group_by()', sym)}",
+            f"result = {_live_call('_live_group_by()', symbol)}",
         )
     return "\n".join(lines) + "\n"
 
 
 def _safe(name: str) -> str:
-    # dunders -> op_<core> so e.g. __abs__ doesn't collide with the method abs
+    # Map dunders -> op_<core> so e.g. __abs__ doesn't collide with the method abs.
     if name.startswith("__") and name.endswith("__"):
         return "op_" + name.strip("_")
     return name
@@ -645,23 +657,23 @@ def _safe(name: str) -> str:
 # .py rendering — dispatch by module kind.
 # --------------------------------------------------------------------------- #
 def _render_py(
-    syms: list[Symbol],
+    symbols: list[Symbol],
     root: str,
     is_root: bool,
     hookable: list[str],
     submodules: list[str],
 ) -> str:
-    target_class = syms[0].target_class
+    target_class = symbols[0].target_class
     if target_class is None:
-        return _render_functions_py(syms, root)
+        return _render_functions_py(symbols, root)
     if is_root:
-        return _render_tableframe_py(syms, root, hookable, submodules)
+        return _render_tableframe_py(symbols, root, hookable, submodules)
     if target_class == "LazyGroupBy":
-        return _render_lazygroupby_py(syms, root)
-    return _render_value_class_py(syms, root)
+        return _render_lazygroupby_py(symbols, root)
+    return _render_value_class_py(symbols, root)
 
 
-def _render_functions_py(syms: list[Symbol], root: str) -> str:
+def _render_functions_py(symbols: list[Symbol], root: str) -> str:
     lines = [
         _py_header(),
         "from __future__ import annotations",
@@ -671,8 +683,8 @@ def _render_functions_py(syms: list[Symbol], root: str) -> str:
         f"from {root}._core.translate import unwrap, wrap",
         "",
     ]
-    for sym in syms:
-        name = _member(sym)
+    for symbol in symbols:
+        name = _member(symbol)
         lines += [
             "",
             f"def {name}(*args, **kwargs):",
@@ -681,27 +693,28 @@ def _render_functions_py(syms: list[Symbol], root: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_value_class_py(syms: list[Symbol], root: str) -> str:
-    groups = _group_by_class(syms)  # a module may hold several classes (e.g. whenthen)
+def _render_value_class_py(symbols: list[Symbol], root: str) -> str:
+    # A module may hold several classes, e.g. whenthen.
+    groups = _group_by_class(symbols)
     lines = [_py_header(), "from __future__ import annotations", ""]
-    for cls_syms in groups.values():
-        pl_module, pl_class = _polars_class(cls_syms[0])
-        lines.append(f"from {pl_module} import {pl_class} as _Pl{pl_class}")
+    for class_symbols in groups.values():
+        polars_module, polars_class = _polars_class(class_symbols[0])
+        lines.append(f"from {polars_module} import {polars_class} as _Pl{polars_class}")
     lines += [
         f"from {root}._core.base import BaseWrapper",
         f"from {root}._core.translate import register, unwrap, wrap",
     ]
-    for cls_name, cls_syms in groups.items():
-        _, pl_class = _polars_class(cls_syms[0])
+    for class_name, class_symbols in groups.items():
+        _, polars_class = _polars_class(class_symbols[0])
         lines += [
             "",
             "",
-            f"@register(_Pl{pl_class})",
-            f"class {cls_name}(BaseWrapper):",
+            f"@register(_Pl{polars_class})",
+            f"class {class_name}(BaseWrapper):",
         ]
-        for sym in cls_syms:
-            name = _member(sym)
-            if sym.is_property:
+        for symbol in class_symbols:
+            name = _member(symbol)
+            if symbol.is_property:
                 lines += [
                     "    @property",
                     f"    def {name}(self):",
@@ -718,15 +731,18 @@ def _render_value_class_py(syms: list[Symbol], root: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _group_by_class(syms: list[Symbol]) -> "dict[str, list[Symbol]]":
+def _group_by_class(symbols: list[Symbol]) -> "dict[str, list[Symbol]]":
     groups: dict[str, list[Symbol]] = {}
-    for sym in syms:
-        groups.setdefault(sym.target_class, []).append(sym)
+    for symbol in symbols:
+        target_class = symbol.target_class
+        if target_class is None:
+            continue
+        groups.setdefault(target_class, []).append(symbol)
     return groups
 
 
 def _render_tableframe_py(
-    syms: list[Symbol], root: str, hookable: list[str], submodules: list[str]
+    symbols: list[Symbol], root: str, hookable: list[str], submodules: list[str]
 ) -> str:
     lines = [
         _py_header(),
@@ -742,18 +758,18 @@ def _render_tableframe_py(
     if hookable:
         lines.append(f"    _HOOKABLE_OPS = ({', '.join(repr(op) for op in hookable)},)")
         lines.append("")
-    # The from_* / empty / to_* construction and materialization surface is
-    # hand-written on EngineFrame (not generated); TableFrame inherits it, and the
+    # The from_* / empty / to_* construction and materialization API is
+    # handwritten on EngineFrame (not generated); TableFrame inherits it, and the
     # stub's `class TableFrame(EngineFrame)` link lets tooling resolve it from source.
-    for sym in syms:
-        lines += _tableframe_member(sym, root)
+    for symbol in symbols:
+        lines += _tableframe_member(symbol, root)
 
     # Lazy registry population. Importing this package must NOT drag in polars
     # (a heavy import); so the registry-filling loop — importing every submodule
-    # for its @register side-effects, then mapping LazyFrame -> TableFrame so
+    # for its @register side effects, then mapping LazyFrame -> TableFrame so
     # frame-returning ops never leak a raw pl.LazyFrame — is deferred into
     # _load_registry(), which translate calls on first actual use (first wrap miss
-    # / first frame construction). At import we only register the loader (cheap).
+    # / first frame construction). At import, we only register the loader (cheap).
     lines += [
         "",
         "",
@@ -777,7 +793,7 @@ def _render_tableframe_py(
     return "\n".join(lines) + "\n"
 
 
-def _render_lazygroupby_py(syms: list[Symbol], root: str) -> str:
+def _render_lazygroupby_py(symbols: list[Symbol], root: str) -> str:
     lines = [
         _py_header(),
         "from __future__ import annotations",
@@ -793,9 +809,9 @@ def _render_lazygroupby_py(syms: list[Symbol], root: str) -> str:
         "        self._by = by  # (positional, named) group keys, for the agg hook",
         "",
     ]
-    for sym in syms:
-        name = _member(sym)
-        if sym.hook_name == "agg":
+    for symbol in symbols:
+        name = _member(symbol)
+        if symbol.hook_name == "agg":
             lines += _agg_body()
         else:
             # A LazyGroupBy result (e.g. having) re-wraps as our LazyGroupBy with the
@@ -816,24 +832,24 @@ def _render_lazygroupby_py(syms: list[Symbol], root: str) -> str:
 # --------------------------------------------------------------------------- #
 # TableFrame per-op bodies.
 # --------------------------------------------------------------------------- #
-def _tableframe_member(sym: Symbol, root: str) -> list[str]:
-    name = _member(sym)
-    if sym.is_property:
+def _tableframe_member(symbol: Symbol, root: str) -> list[str]:
+    name = _member(symbol)
+    if symbol.is_property:
         return [
             "    @property",
             f"    def {name}(self):",
             f"        return wrap(self._lf.{name})",
             "",
         ]
-    if sym.hook_name == "join":
+    if symbol.hook_name == "join":
         return _join_body()
-    if sym.hook_name == "project":
+    if symbol.hook_name == "project":
         return _project_body(name)
-    if sym.hook_name == "group_by":
+    if symbol.hook_name == "group_by":
         return _group_by_body(name, root)
-    if sym.hook_name == "drop":
+    if symbol.hook_name == "drop":
         return _drop_body()
-    if sym.hook_name == "rename":
+    if symbol.hook_name == "rename":
         return _rename_body()
     # default: transparent. A LazyFrame result is a derived frame (carry hook state
     # via _clone); anything else (Schema, scalar, str, ...) is wrapped as a value.
@@ -928,9 +944,9 @@ def _agg_body() -> list[str]:
 # .pyi rendering (first cut; merge/preserve comes next).
 # --------------------------------------------------------------------------- #
 def _render_pyi(
-    syms: list[Symbol],
+    symbols: list[Symbol],
     previous: PyiDoc | None,
-    typing_gen: TypingGen,
+    annotation_rewriter: AnnotationRewriter,
     module: str,
     root: str,
 ) -> tuple[str, set[str]]:
@@ -938,34 +954,33 @@ def _render_pyi(
     used_our: set[str] = set()
     used_aliases: set[str] = set()
     engine_base = False
-    # module docstring placeholder (preserved if the user filled it)
-    body += _docstring_lines(
-        _preserved(previous.module_doc if previous else None), body_indent=""
-    )
+    # The module docstring placeholder is preserved if the user filled it.
+    module_doc = previous.module_doc if previous is not None else None
+    body += _docstring_lines(_preserved(module_doc), body_indent="")
     body.append("")
-    if syms[0].target_class is None:
-        for sym in syms:
+    if symbols[0].target_class is None:
+        for symbol in symbols:
             entry, our, aliases = _pyi_entry(
-                sym, previous, typing_gen, indent="", cls_name=None
+                symbol, previous, annotation_rewriter, indent="", class_name=None
             )
             body += entry
             used_our |= our
             used_aliases |= aliases
     else:
-        for cls_name, cls_syms in _group_by_class(syms).items():
+        for class_name, class_symbols in _group_by_class(symbols).items():
             class_doc = _preserved(
-                previous.class_docs.get(cls_name) if previous else None
+                previous.class_docs.get(class_name) if previous else None
             )
-            # TableFrame subclasses EngineFrame so the engine surface (the gated
+            # TableFrame subclasses EngineFrame so the engine API (the gated
             # constructor plus _state / _lf / _ACCESS_*) resolves through the real
             # base instead of looking unbound on the stubbed class.
-            if cls_name == "TableFrame":
+            if class_name == "TableFrame":
                 engine_base = True
-                body += ["", f"class {cls_name}(EngineFrame):"]
+                body += ["", f"class {class_name}(EngineFrame):"]
             else:
-                body += ["", f"class {cls_name}:"]
+                body += ["", f"class {class_name}:"]
             body += _docstring_lines(class_doc, body_indent="    ")
-            constructor_parameters = _SCAFFOLD_CONSTRUCTORS.get(cls_name)
+            constructor_parameters = _SCAFFOLD_CONSTRUCTORS.get(class_name)
             if constructor_parameters is not None:
                 signature = f"(self, {', '.join(constructor_parameters)}) -> None"
                 body += _pyi_def(
@@ -973,11 +988,15 @@ def _render_pyi(
                     signature,
                     previous,
                     indent="    ",
-                    cls_name=cls_name,
+                    class_name=class_name,
                 )
-            for sym in cls_syms:
+            for symbol in class_symbols:
                 entry, our, aliases = _pyi_entry(
-                    sym, previous, typing_gen, indent="    ", cls_name=cls_name
+                    symbol,
+                    previous,
+                    annotation_rewriter,
+                    indent="    ",
+                    class_name=class_name,
                 )
                 body += entry
                 used_our |= our
@@ -986,28 +1005,30 @@ def _render_pyi(
     head = [_pyi_header(), "from __future__ import annotations", ""]
     if engine_base:
         head.append(f"from {root}._engine.frame.frame import EngineFrame")
-    head += typing_gen.imports_for(used_our, used_aliases, in_module=module)
+    head += annotation_rewriter.imports_for(used_our, used_aliases, in_module=module)
     head.append("")
     return "\n".join(head + body) + "\n", used_aliases
 
 
 def _pyi_entry(
-    sym: Symbol,
+    symbol: Symbol,
     previous: PyiDoc | None,
-    typing_gen: TypingGen,
+    annotation_rewriter: AnnotationRewriter,
     *,
     indent: str,
-    cls_name: str | None,
+    class_name: str | None,
 ) -> tuple[list[str], set[str], set[str]]:
-    name = _member(sym)
-    signature, used_our, used_aliases = typing_gen.rewrite_signature(sym.signature)
+    name = _member(symbol)
+    signature, used_our, used_aliases = annotation_rewriter.rewrite_signature(
+        symbol.signature
+    )
     lines = _pyi_def(
         name,
         signature,
         previous,
-        is_property=sym.is_property,
+        is_property=symbol.is_property,
         indent=indent,
-        cls_name=cls_name,
+        class_name=class_name,
     )
     return lines, used_our, used_aliases
 
@@ -1019,13 +1040,13 @@ def _pyi_def(
     *,
     is_property: bool = False,
     indent: str,
-    cls_name: str | None,
+    class_name: str | None,
 ) -> list[str]:
     docstring: str | None = None
     lines: list[str] = []
 
     if previous is not None:
-        existing = previous.funcs.get((cls_name, name))
+        existing = previous.functions.get((class_name, name))
         if existing is None:
             lines.append(f"{indent}{_PYI_NEW}")
         elif existing.canonical_signature != canonical_signature(signature):
@@ -1036,7 +1057,7 @@ def _pyi_def(
 
     if is_property:
         lines.append(f"{indent}@property")
-    # every entity gets a docstring placeholder to fill in (preserved if present)
+    # Every entity gets a docstring placeholder to fill in (preserved if present).
     lines.append(f"{indent}def {name}{signature}:")
     lines += _docstring_lines(_preserved(docstring), indent + "    ")
     lines.append("")
@@ -1059,11 +1080,11 @@ def _docstring_lines(docstring: str, body_indent: str) -> list[str]:
 # --------------------------------------------------------------------------- #
 # Helpers.
 # --------------------------------------------------------------------------- #
-def _member(sym: Symbol) -> str:
-    return sym.id.split(".", 1)[1]
+def _member(symbol: Symbol) -> str:
+    return symbol.id.split(".", 1)[1]
 
 
-def _polars_class(sym: Symbol) -> tuple[str, str]:
-    class_path = sym.polars_qualname.rsplit(".", 1)[0]
+def _polars_class(symbol: Symbol) -> tuple[str, str]:
+    class_path = symbol.polars_qualname.rsplit(".", 1)[0]
     module, name = class_path.rsplit(".", 1)
     return module, name

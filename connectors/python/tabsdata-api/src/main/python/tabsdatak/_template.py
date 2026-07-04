@@ -362,7 +362,9 @@ def _placeholder_value(members: list[Any], default: Any, path: str) -> Any:
     return _scalar_placeholder([members[0]], default, path)
 
 
-def _field_comment_lines(name: str, members: list[Any], value: Any) -> Optional[list[str]]:
+def _field_comment_lines(
+    name: str, members: list[Any], value: Any
+) -> Optional[list[str]]:
     """The content lines of the comment block shown above a fill-in field
     (borders are added by :func:`_set_block_comment`)::
 
@@ -381,7 +383,9 @@ def _field_comment_lines(name: str, members: list[Any], value: Any) -> Optional[
     return lines
 
 
-def _set_block_comment(cm: CommentedMap, key: str, lines: list[str], indent: int) -> None:
+def _set_block_comment(
+    cm: CommentedMap, key: str, lines: list[str], indent: int
+) -> None:
     """Attach a comment block before ``key``: a blank-line separator, the
     given comment lines (each ``# <text>``), then a single ``#`` border just
     above the key. Built from low-level ruamel tokens because the high-level

@@ -9,10 +9,10 @@ from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    output_option,
-    render,
     hint_common_solutions,
     logical_prompt,
+    output_option,
+    render,
     verify_login_or_prompt,
 )
 
@@ -142,9 +142,7 @@ def list(ctx: click.Context):
             table.add_column("Email")
             table.add_column("Enabled")
             for user in list_of_users:
-                table.add_row(
-                    user.name, user.full_name, user.email, str(user.enabled)
-                )
+                table.add_row(user.name, user.full_name, user.email, str(user.enabled))
             click.echo()
             Console().print(table)
             click.echo(f"Number of users: {len(list_of_users)}")

@@ -15,6 +15,7 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
+from tabsdatak.cli._registry import collect_cli_commands
 from tabsdatak.cli.cli_utils import (
     get_credentials_file_path,
     hint_common_solutions,
@@ -30,9 +31,7 @@ from tabsdatak.cli.cli_utils import (
     utils_login,
     verify_login_or_prompt,
 )
-from tabsdatak.cli._registry import collect_cli_commands
-from tabsdatak.cli.td import examples_guide
-from tabsdatak.cli.td.config_utils import execute_actions_for_command
+
 # Built-in command groups, imported for their @cli_command side effects: each
 # module registers its top-level group, attached below via collect_cli_commands.
 # TODO: role, cron, and stage management are temporarily removed; reintroduce
@@ -41,6 +40,7 @@ from tabsdatak.cli.td import (  # noqa: F401
     auth_group,
     collection_group,
     connection_group,
+    examples_guide,
     exe_group,
     fn_group,
     group_group,
@@ -51,6 +51,7 @@ from tabsdatak.cli.td import (  # noqa: F401
     table_group,
     user_group,
 )
+from tabsdatak.cli.td.config_utils import execute_actions_for_command
 from tabsdatak.common._compatibility import (
     PackageVersionError,
     check_sticky_version_packages,

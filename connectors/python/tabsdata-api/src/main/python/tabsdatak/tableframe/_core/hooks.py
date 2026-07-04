@@ -91,7 +91,7 @@ def polars_of(instance, polars_type: type[_P]) -> _P:
     """Return the underlying polars object of a delegation instance.
 
     The controlled, type-checked way for hook code to reach polars internals —
-    instead of a misusable ``_pl`` accessor on the wrappers. Raises ``TypeError``
+    instead of an easily-misused ``_pl`` accessor on the wrappers. Raises ``TypeError``
     if the unwrapped object is not an instance of ``polars_type``.
     """
     inner = unwrap(instance)

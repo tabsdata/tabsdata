@@ -7,9 +7,9 @@ import rich_click as click
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    hint_common_solutions,
     output_option,
     render,
-    hint_common_solutions,
     store_pinned_objects,
 )
 

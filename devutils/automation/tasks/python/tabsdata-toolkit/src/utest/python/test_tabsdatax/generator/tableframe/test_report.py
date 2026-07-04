@@ -3,20 +3,20 @@
 import polars as pl
 
 from tabsdatax.generator.tableframe.model.model import Report
-from tabsdatax.generator.tableframe.scan.report import build_report
+from tabsdatax.generator.tableframe.engine.inspect import perform
 
 ROOT = "tabsdatak.tableframe"
 
 
 def test_report_records_env_polars_version():
-    report, _ = build_report(ROOT)
+    report, _ = perform(ROOT)
     assert report.polars_version == pl.__version__
     assert report.root_module == ROOT
     assert len(report.symbols) > 200  # LazyFrame + Expr + namespaces + functions
 
 
 def test_lazyframe_maps_to_root_as_tableframe():
-    report, _ = build_report(ROOT)
+    report, _ = perform(ROOT)
     join = report.by_id()["LazyFrame.join"]
     assert join.target_module == ROOT  # __init__.py
     assert join.target_class == "TableFrame"
@@ -26,7 +26,7 @@ def test_lazyframe_maps_to_root_as_tableframe():
 
 
 def test_report_seeds_kinds_and_denies_leaky_ops():
-    by = build_report(ROOT)[0].by_id()
+    by = perform(ROOT)[0].by_id()
     assert by["LazyGroupBy.agg"].hook_name == "agg"
     assert by["LazyFrame.select"].hook_name == "project"
     # Schema is now wrapped, so schema-returning ops are no longer leaks
@@ -40,7 +40,7 @@ def test_report_seeds_kinds_and_denies_leaky_ops():
 
 
 def test_schema_is_scanned_and_leaky_schema_ops_denied():
-    by = build_report(ROOT)[0].by_id()
+    by = perform(ROOT)[0].by_id()
     # Schema is a wrapped class with a mapping protocol + datatype accessors
     assert by["Schema.names"].target_class == "Schema"
     assert by["Schema.names"].target_module == f"{ROOT}.schema"
@@ -58,7 +58,7 @@ def test_schema_is_scanned_and_leaky_schema_ops_denied():
 
 
 def test_expr_and_functions_map_to_canonical_submodules():
-    by_id = build_report(ROOT)[0].by_id()
+    by_id = perform(ROOT)[0].by_id()
     assert by_id["Expr.alias"].target_module == f"{ROOT}.expr"
     assert by_id["Expr.alias"].target_class == "Expr"
     col = by_id["functions.col"]
@@ -67,7 +67,7 @@ def test_expr_and_functions_map_to_canonical_submodules():
 
 
 def test_expr_namespaces_become_flat_modules():
-    syms = build_report(ROOT)[0].symbols
+    syms = perform(ROOT)[0].symbols
     ns_modules = {
         s.target_module
         for s in syms
@@ -78,7 +78,7 @@ def test_expr_namespaces_become_flat_modules():
 
 
 def test_operator_dunders_captured_on_expr_only():
-    syms = build_report(ROOT)[0]
+    syms = perform(ROOT)[0]
     by = syms.by_id()
     assert "Expr.__mul__" in by
     assert "Expr.__add__" in by
@@ -90,14 +90,14 @@ def test_operator_dunders_captured_on_expr_only():
 
 
 def test_json_roundtrip():
-    report, _ = build_report(ROOT)
+    report, _ = perform(ROOT)
     restored = Report.from_json(report.to_json())
     assert restored == report
 
 
 def test_symbols_grouped_by_target_module():
     # symbols for the same module must be contiguous (drives matching .py/.pyi order)
-    syms = build_report(ROOT)[0].symbols
+    syms = perform(ROOT)[0].symbols
     seen: set[str] = set()
     prev = None
     for s in syms:

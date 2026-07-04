@@ -2,9 +2,9 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-"""The signature-report data model.
+"""The manifest data model.
 
-A report is a snapshot of the delegatable Polars surface for a given Polars
+A manifest is a snapshot of the delegatable Polars API for a given Polars
 version, mapped onto a target root module. It doubles as the whitelist: each
 symbol carries a ``whitelisted`` flag (default ``True``) and a ``hook_name``
 (default ``"-"`` = no hook, transparent wrapping) that the user edits to shape
@@ -48,8 +48,8 @@ class Report:
     @classmethod
     def from_json(cls, text: str) -> "Report":
         data = json.loads(text)
-        symbols = [Symbol(**s) for s in data.pop("symbols", [])]
+        symbols = [Symbol(**entry) for entry in data.pop("symbols", [])]
         return cls(symbols=symbols, **data)
 
     def by_id(self) -> dict[str, Symbol]:
-        return {s.id: s for s in self.symbols}
+        return {symbol.id: symbol for symbol in self.symbols}

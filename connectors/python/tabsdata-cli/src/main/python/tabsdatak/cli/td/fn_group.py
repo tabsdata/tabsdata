@@ -12,15 +12,15 @@ from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    proj_option,
-    output_option,
-    render,
     beautify_list,
     beautify_time,
     get_currently_pinned_object,
     hint_common_solutions,
     load_info_and_project_root,
     logical_prompt,
+    output_option,
+    proj_option,
+    render,
     show_hint,
     verify_login_or_prompt,
 )
@@ -228,8 +228,7 @@ def list(ctx: click.Context, coll: str):
             click.echo()
             Console().print(table)
             click.echo(
-                f"Number of functions in collection '{coll}': "
-                f"{len(list_of_functions)}"
+                f"Number of functions in collection '{coll}': {len(list_of_functions)}"
             )
             click.echo()
 
@@ -1033,9 +1032,7 @@ def list_patches(ctx: click.Context, name: str, coll: str):
         patches = server.list_function_patches(coll, name)
 
         def _table():
-            table = Table(
-                title=f"Patches of function '{name}' in collection '{coll}'"
-            )
+            table = Table(title=f"Patches of function '{name}' in collection '{coll}'")
             table.add_column("Patch id (fvid)", style="cyan", no_wrap=True)
             table.add_column("Patches fvid")
             table.add_column("Description")

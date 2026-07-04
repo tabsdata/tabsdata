@@ -156,7 +156,7 @@ namespaces = true
 
 [tool.setuptools.package-data]
 "*" = ["!.gitkeep", "!*.pyc", "!__pycache__/*"]
-"tabsdatax.generator.tableframe.emit" = ["templates/*.tmpl", "ruff.toml"]
+"tabsdatax.generator.tableframe.engine.generate" = ["templates/*.tmpl", "ruff.toml"]
 
 [tool.tabsdata]
 name = "tabsdata-toolkit"

@@ -9,11 +9,11 @@ from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    output_option,
-    render,
     MutuallyExclusiveOption,
     hint_common_solutions,
     logical_prompt,
+    output_option,
+    render,
     verify_login_or_prompt,
 )
 from tabsdatak.sdk.tabsdata_server import (

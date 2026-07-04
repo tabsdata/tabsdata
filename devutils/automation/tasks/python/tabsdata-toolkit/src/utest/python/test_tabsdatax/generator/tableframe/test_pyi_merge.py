@@ -2,8 +2,8 @@
 
 import pytest
 
-from tabsdatax.generator.tableframe.emit.generate import generate
-from tabsdatax.generator.tableframe.emit.pyi import canonical_signature
+from tabsdatax.generator.tableframe.engine.generate import perform
+from tabsdatax.generator.tableframe.engine.generate.stubs import canonical_signature
 from tabsdatax.generator.tableframe.model.model import Report, Symbol
 
 ROOT = "pkg.wrap"
@@ -38,7 +38,7 @@ def test_canonical_signature_ignores_formatting():
 
 
 def test_first_generation_has_no_markers(root_dir):
-    generate(
+    perform(
         _report([_expr("alias", "(self, name: 'str') -> 'Expr'")]), ROOT, str(root_dir)
     )
     text = (root_dir / "pkg" / "wrap" / "expr.pyi").read_text()
@@ -51,7 +51,7 @@ def test_first_generation_has_no_markers(root_dir):
 
 def test_regeneration_preserves_docstring_and_flags_changes(root_dir):
     base = root_dir / "pkg" / "wrap"
-    generate(
+    perform(
         _report([
             _expr("alias", "(self, name: 'str') -> 'Expr'"),
             _expr("keep", "(self) -> 'Expr'"),
@@ -80,7 +80,7 @@ def test_regeneration_preserves_docstring_and_flags_changes(root_dir):
 
     # Regenerate: alias signature changed, keep unchanged, brand is new,
     # keep removed-check.
-    generate(
+    perform(
         _report([
             _expr("alias", "(self, name: 'str', *, strict: 'bool') -> 'Expr'"),
             _expr("keep", "(self) -> 'Expr'"),
@@ -103,12 +103,12 @@ def test_regeneration_preserves_docstring_and_flags_changes(root_dir):
 
 
 def test_dropped_symbols_reported(root_dir):
-    generate(
+    perform(
         _report([_expr("a", "(self) -> 'Expr'"), _expr("b", "(self) -> 'Expr'")]),
         ROOT,
         str(root_dir),
     )
-    result = generate(_report([_expr("a", "(self) -> 'Expr'")]), ROOT, str(root_dir))
+    result = perform(_report([_expr("a", "(self) -> 'Expr'")]), ROOT, str(root_dir))
     assert result.dropped[f"{ROOT}.expr"] == ["b"]
     # b is gone from the regenerated stub
     assert "def b(" not in (root_dir / "pkg" / "wrap" / "expr.pyi").read_text()

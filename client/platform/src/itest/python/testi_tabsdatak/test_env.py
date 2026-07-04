@@ -4,11 +4,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
-
-import os
 
 from testi_tabsdatak.common.backend.tdkserver import (
     APISERVER_SUPERUSER_NAME,

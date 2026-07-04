@@ -1,6 +1,6 @@
 """Tests for report comparison."""
 
-from tabsdatax.generator.tableframe.model.compare import compute_diff
+from tabsdatax.generator.tableframe.engine.compare import compute_diff
 from tabsdatax.generator.tableframe.model.model import Report, Symbol
 
 

@@ -13,16 +13,16 @@ from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    proj_option,
-    output_option,
-    output_format,
-    render,
     MutuallyExclusiveOption,
     beautify_time,
     get_currently_pinned_object,
     hint_common_solutions,
     is_valid_id,
     logical_prompt,
+    output_format,
+    output_option,
+    proj_option,
+    render,
     show_hint,
     verify_login_or_prompt,
 )
