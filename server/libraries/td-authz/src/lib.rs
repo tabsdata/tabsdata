@@ -23,6 +23,7 @@ use td_tower::extractors::{MutRef, Ref};
 use tracing::instrument;
 
 pub mod rbac;
+pub mod security;
 pub mod session_provider;
 
 /// The authorization context placed in the service context.

@@ -8,7 +8,7 @@
 //! The OS seeds `sys_admin`'s built-in permissions at schema creation
 //! (`td-schema`), which cannot know about extension permissions. Extensions
 //! declare permissions that ride on `sys_admin` via
-//! [`AuthzRegistry::grant_to_sys_admin`](td_authz::rbac::AuthzRegistry::grant_to_sys_admin);
+//! [`AuthzRegistry::grant_to_sys_admin`](crate::rbac::AuthzRegistry::grant_to_sys_admin);
 //! this reconciler — run at apiserver startup with the wired registry — adds
 //! any such rows that are not already present. It is idempotent, so it is safe
 //! to run on every boot, and both this and the RBAC→Simple representability
@@ -38,10 +38,9 @@ pub async fn ensure_sys_admin_permissions(
     }
 
     let sys_admin = RoleId::sys_admin();
-    let existing = conn.live().fetch_all::<PermissionDB>(()).await?;
+    let existing = conn.live().fetch_all::<PermissionDB>(sys_admin).await?;
     let present: HashSet<(String, String)> = existing
         .iter()
-        .filter(|p| p.role_id == sys_admin)
         .map(|p| (p.entity_type.to_string(), p.permission_type.to_string()))
         .collect();
 

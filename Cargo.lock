@@ -9549,7 +9549,6 @@ name = "td-authz"
 version = "2.0.0"
 dependencies = [
  "chrono",
- "jsonwebtoken",
  "openssl",
  "serde",
  "strum 0.28.0",
@@ -9629,6 +9628,7 @@ dependencies = [
  "http",
  "indicatif",
  "itertools 0.14.0",
+ "jsonwebtoken",
  "libc",
  "nix 0.31.3",
  "once_cell",

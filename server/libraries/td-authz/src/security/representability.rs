@@ -70,6 +70,13 @@ fn is_system_row(perm: &PermissionDB) -> bool {
     perm.entity_type == PermissionEntityType::system()
 }
 
+/// Whether this row is one `(entity_type, on __all__?, permission)` composition entry.
+fn row_matches(perm: &PermissionDB, (et, on_all, pt): &(&str, bool, &str)) -> bool {
+    perm.entity_type.as_str() == *et
+        && perm.permission_type.as_str() == *pt
+        && perm.entity_id.is_all_entities() == *on_all
+}
+
 /// Run the RBAC -> Simple representability check against the live `roles` and
 /// `role_permission` tables. Returns the list of reasons the configuration
 /// cannot be represented on the Simple surface (empty = representable).
@@ -175,17 +182,9 @@ fn check_sys_admin(
         .chain(sys_admin_extras.iter().map(|(et, pt)| (*et, true, *pt)))
         .collect();
 
-    let matches_expected = |p: &PermissionDB| {
-        expected.iter().any(|(et, on_all, pt)| {
-            p.entity_type.as_str() == *et
-                && p.permission_type.as_str() == *pt
-                && p.entity_id.is_all_entities() == *on_all
-        })
-    };
-
     // Any row not in the expected set is an unrepresentable modification.
     for p in perms {
-        if !matches_expected(p) {
+        if !expected.iter().any(|e| row_matches(p, e)) {
             reasons.push(format!(
                 "the 'sys_admin' role has been modified from its default composition: \
                  unexpected permission {}",
@@ -194,14 +193,10 @@ fn check_sys_admin(
         }
     }
     // Any expected row missing is also a modification.
-    for (et, on_all, pt) in &expected {
-        let present = perms.iter().any(|p| {
-            p.entity_type.as_str() == *et
-                && p.permission_type.as_str() == *pt
-                && p.entity_id.is_all_entities() == *on_all
-        });
-        if !present {
-            let target = match (*et, *on_all) {
+    for e in &expected {
+        let (et, on_all, pt) = *e;
+        if !perms.iter().any(|p| row_matches(p, e)) {
+            let target = match (et, on_all) {
                 ("system", _) => "system".to_string(),
                 ("project", true) => "project:__all__".to_string(),
                 ("project", false) => "project".to_string(),
@@ -304,39 +299,18 @@ fn check_per_project(
 mod tests {
     use super::*;
     use td_database::pool::TdPool;
-    use td_objects::Buildable;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::permission::PermissionDBBuilder;
     use td_objects::dxo::project::ProjectDB;
-    use td_objects::dxo::role::RoleCreate;
+    use td_objects::dxo::role::{RoleCreate, RoleDBBuilder};
     use td_objects::types::basic::{
-        AccessTokenId, Description, EntityId, ProjectName, RoleName, UserId,
+        AccessTokenId, Description, EntityId, Fixed, ProjectName, RoleName, UserId,
     };
-    use td_queries::LiveEntry;
+    use td_objects::{Buildable, TryUpdater};
     use td_queries::test_utils::SeedEntry;
 
-    use crate::project::service::create::CreateProjectService;
-    use crate::role::services::create::CreateRoleService;
-    use ta_services::service::TdService;
-    use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::project::ProjectCreate;
-    use td_tower::ctx_service::RawOneshot;
-
-    fn admin_ctx() -> RequestContext {
+    fn admin_context() -> RequestContext {
         RequestContext::with(AccessTokenId::default(), UserId::admin())
-    }
-
-    async fn create_project(db: &TdPool, name: &str) -> Result<ProjectDB, TdError> {
-        let create = ProjectCreate::builder()
-            .name(&ProjectName::try_from(name)?)
-            .description(&Description::try_from("d")?)
-            .build()?;
-        CreateProjectService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(admin_ctx().create((), create))
-            .await?;
-        Ok(db
-            .live()
-            .fetch_one::<ProjectDB>(&ProjectName::try_from(name)?)
-            .await?)
     }
 
     async fn role_by_name(db: &TdPool, name: &str) -> Result<RoleDB, TdError> {
@@ -344,6 +318,58 @@ mod tests {
             .live()
             .fetch_one::<RoleDB>(&RoleName::try_from(name)?)
             .await?)
+    }
+
+    /// Mint the three per-project roles (`<name>_admin`/`_dev`/`_view`) for an
+    /// existing project, mirroring the service-layer minting: each is a
+    /// system-managed (`fixed = true`) role of its per-project kind holding
+    /// exactly its one fixed permission on the project. `db.seed().project()`
+    /// only creates the project + system groups, so the per-project roles —
+    /// the subject of condition 5 — must be seeded explicitly here.
+    async fn seed_per_project_roles(db: &TdPool, project: &ProjectDB) -> Result<(), TdError> {
+        let context = admin_context();
+        let entity_id = EntityId::try_from(project.id)?;
+        let specs = [
+            (
+                RoleKind::ProjectAdmin,
+                "admin",
+                PermissionType::manage_project(),
+            ),
+            (
+                RoleKind::ProjectDev,
+                "dev",
+                PermissionType::develop_project(),
+            ),
+            (
+                RoleKind::ProjectView,
+                "view",
+                PermissionType::view_project(),
+            ),
+        ];
+        for (kind, suffix, permission_type) in specs {
+            let role_name = RoleName::try_from(format!("{}_{suffix}", project.name))?;
+            let role_create = RoleCreate::builder()
+                .name(role_name)
+                .description(Description::try_from("per-project role")?)
+                .build()?;
+            let role = RoleDBBuilder::try_from(&role_create)?
+                .try_update_from(&context)?
+                .kind(kind)
+                .project_id(Some(project.id))
+                .fixed(Fixed::from(true))
+                .build()?;
+            let permission = PermissionDBBuilder::default()
+                .try_update_from(&context)?
+                .try_update_from(&role)?
+                .permission_type(permission_type)
+                .entity_type(PermissionEntityType::project())
+                .entity_id(entity_id)
+                .fixed(Fixed::from(true))
+                .build()?;
+            db.live().insert::<RoleDB>(&role).await?;
+            db.live().insert::<PermissionDB>(&permission).await?;
+        }
+        Ok(())
     }
 
     /// A fresh bootstrap (only the built-in roles) is representable.
@@ -360,7 +386,8 @@ mod tests {
     /// A bootstrap with per-project roles minted is still representable.
     #[td_test::test(db)]
     async fn test_with_project_is_representable(db: TdPool) -> Result<(), TdError> {
-        create_project(&db, "foo").await?;
+        let project = db.seed().project(ProjectName::try_from("foo")?).await?;
+        seed_per_project_roles(&db, &project).await?;
         let reasons = check_representability(&db, &[]).await?;
         assert!(
             reasons.is_empty(),
@@ -372,14 +399,15 @@ mod tests {
     /// A custom role makes the configuration unrepresentable (condition 1).
     #[td_test::test(db)]
     async fn test_custom_role_violates(db: TdPool) -> Result<(), TdError> {
-        let create = RoleCreate::builder()
-            .try_name("data_engineers")?
-            .try_description("custom")?
+        let role_create = RoleCreate::builder()
+            .name(RoleName::try_from("data_engineers")?)
+            .description(Description::try_from("custom")?)
             .build()?;
-        CreateRoleService::with_defaults(db.clone())
-            .service()
-            .raw_oneshot(admin_ctx().create((), create))
-            .await?;
+        let role = RoleDBBuilder::try_from(&role_create)?
+            .try_update_from(&admin_context())?
+            .kind(RoleKind::Custom)
+            .build()?;
+        db.live().insert::<RoleDB>(&role).await?;
 
         let reasons = check_representability(&db, &[]).await?;
         assert!(
@@ -394,7 +422,7 @@ mod tests {
     /// A specific-project row on the `default` role violates condition 3.
     #[td_test::test(db)]
     async fn test_default_specific_project_row_violates(db: TdPool) -> Result<(), TdError> {
-        let project = create_project(&db, "foo").await?;
+        let project = db.seed().project(ProjectName::try_from("foo")?).await?;
         let default_role = role_by_name(&db, "default").await?;
 
         // Add (project:foo, view_project) directly onto the `default` role.
@@ -421,7 +449,7 @@ mod tests {
     /// condition 4.
     #[td_test::test(db)]
     async fn test_system_role_specific_project_row_violates(db: TdPool) -> Result<(), TdError> {
-        let project = create_project(&db, "foo").await?;
+        let project = db.seed().project(ProjectName::try_from("foo")?).await?;
         let project_creator = role_by_name(&db, "project_creator").await?;
 
         db.seed()

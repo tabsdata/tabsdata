@@ -50,7 +50,6 @@ pub mod permission;
 pub mod project;
 pub mod role;
 pub mod scheduler;
-pub mod security;
 pub mod simple_permission;
 pub mod system;
 pub mod table;
