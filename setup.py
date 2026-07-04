@@ -237,7 +237,6 @@ console_scripts: list[str] = [
     "td_venv = tabsdata._tabsserver.pyenv_creation:main",
     "tdk_table = tabsdatak.server._tdserver.render.table:main",
     "tdk_yaml = tabsdatak.server._tdserver.render.yaml:main",
-    "tdconn = tabsdata._cli.tdconn.cli:cli",
     "tdorachk = tabsdata._tabsserver.tools.x_oracle_check:cli",
 ]
 console_scripts.extend(load_console_scripts())
