@@ -19,6 +19,8 @@ pub enum NamingError {
     PodMissingOwnerMetadata { field: String } = 2,
     #[error("Job is missing metadata field '{field}'.")]
     JobMissingOwnerMetadata { field: String } = 3,
+    #[error("CronJob is missing metadata field '{field}'.")]
+    CronJobMissingOwnerMetadata { field: String } = 9,
     #[error("Name segment '{segment}' value '{value}' is invalid: {reason}.")]
     InvalidNameSegment {
         segment: NameSegment,

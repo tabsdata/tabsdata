@@ -18,7 +18,7 @@ use crate::client::registry::{InstanceSettings, instance_folder, trash_root};
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
-    resolved_instance, resolved_details, resolved_yes,
+    resolved_details, resolved_instance, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::preview;

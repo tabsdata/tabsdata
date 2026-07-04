@@ -104,7 +104,10 @@ pub enum Commands {
         about = "Replace the configmaps of a tabsdata instance from edited files"
     )]
     Put(PutArguments),
-    #[command(name = "view-cfg", about = "View the configmaps of a tabsdata instance")]
+    #[command(
+        name = "view-cfg",
+        about = "View the configmaps of a tabsdata instance"
+    )]
     View(ViewArguments),
     #[command(about = "Pin default values used when commands omit them")]
     Pin(PinArguments),

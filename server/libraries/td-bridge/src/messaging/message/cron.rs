@@ -48,9 +48,7 @@ pub struct CronStartRequest {
     pub function_version_id: FunctionVersionId,
     /// Function name of the function being run.
     pub function: FunctionName,
-    /// Cron schedule (5-field UTC mask) the kubernetes gateway stamps onto the
-    /// `CronJob`'s `spec.schedule`. k8s owns the ticking, so the schedule must
-    /// travel in the start request rather than being resolved by the worker.
+    /// Cron schedule as a 5-field UTC cron mask.
     pub schedule: CronMask,
 }
 

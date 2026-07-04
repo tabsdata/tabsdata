@@ -100,7 +100,7 @@ use td_error::TdError;
 
 use crate::base::error::gateway::ResolverError;
 
-pub use placeholder::{SystemKey, SystemValues};
+pub use placeholder::{SystemKey, SystemValues, WorkerSettings};
 
 pub struct ConfigurationResolver {
     system: SystemValues,

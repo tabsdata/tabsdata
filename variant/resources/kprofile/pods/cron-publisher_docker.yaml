@@ -21,11 +21,7 @@ metadata:
     tabsdata.com/decorator: cron_publisher
     tabsdata.com/worker: function
 spec:
-  # Kubernetes owns the ticking: the gateway stamps `schedule` from the
-  # function's cron mask at create time, so the value here is only a valid
-  # placeholder and is always overwritten before the CronJob is applied.
-  schedule: "* * * * *"
-  # The trigger job is a quick POST; never overlap two ticks.
+  schedule: "${{system:tdk_cron_schedule}}"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 100
   suspend: false
@@ -69,12 +65,6 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           containers:
-            # One-shot cron trigger: Kubernetes owns the ticking (the gateway
-            # stamps spec.schedule from the function's cron mask), so each fire
-            # runs this once. The trigger triplet is injected from the worker's
-            # TD_TRIGGER_* secret; the command POSTs the execute endpoint and
-            # exits. No request.yaml / stage / loop -- the URL already encodes
-            # the project + function version.
             - name: 1000-cron-publisher
               image: tabsdata/kube/tabsdata:2.0.0
               imagePullPolicy: IfNotPresent

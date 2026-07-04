@@ -9,8 +9,7 @@ use tracing::{info, warn};
 
 use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, KPROFILE_PODS_FAMILY, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND,
-    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA, POD_YAML_KIND_CRONJOB, POD_YAML_KIND_JOB,
-    POD_YAML_KIND_POD,
+    POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA,
 };
 use crate::base::error::kubernetes::{KubeMessagingError, KubernetesError};
 use crate::kube::api::{LabelFilter, get_configmaps};
@@ -21,6 +20,17 @@ pub enum TemplateKind {
     Pod,
     Job,
     CronJob,
+}
+
+impl TemplateKind {
+    fn from_kind(kind: &str) -> Option<Self> {
+        match kind {
+            "Pod" => Some(Self::Pod),
+            "Job" => Some(Self::Job),
+            "CronJob" => Some(Self::CronJob),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -94,18 +104,12 @@ fn parse_template(manifest: &str) -> Result<Option<PodTemplate>, KubernetesError
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_owned();
-    let kind = match kind_text.as_str() {
-        POD_YAML_KIND_POD => TemplateKind::Pod,
-        POD_YAML_KIND_JOB => TemplateKind::Job,
-        POD_YAML_KIND_CRONJOB => TemplateKind::CronJob,
-        other => {
-            return Err(KubeMessagingError::UnsupportedTemplateKind {
-                component,
-                kind: other.to_owned(),
-            }
-            .into());
+    let kind = TemplateKind::from_kind(&kind_text).ok_or_else(|| {
+        KubeMessagingError::UnsupportedTemplateKind {
+            component: component.clone(),
+            kind: kind_text.clone(),
         }
-    };
+    })?;
     Ok(Some(PodTemplate {
         component,
         kind,

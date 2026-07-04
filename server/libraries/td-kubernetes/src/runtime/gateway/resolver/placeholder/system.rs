@@ -62,6 +62,8 @@ pub enum SystemKey {
     ConnectionConfigmapName,
     #[strum(serialize = "tdk_connection_secret_name")]
     ConnectionSecretName,
+    #[strum(serialize = "tdk_cron_schedule")]
+    CronSchedule,
 }
 
 impl SystemKey {
@@ -71,6 +73,13 @@ impl SystemKey {
             .collect::<Vec<_>>()
             .join(", ")
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct WorkerSettings {
+    pub cron_schedule: Option<String>,
+    pub connection_configmap_name: Option<String>,
+    pub connection_secret_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -94,6 +103,7 @@ pub struct SystemValues {
     pub kminus_api_port: Option<String>,
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
+    pub cron_schedule: Option<String>,
 }
 
 impl SystemValues {
@@ -118,7 +128,14 @@ impl SystemValues {
             SystemKey::KminusApiPort => self.kminus_api_port.as_deref(),
             SystemKey::ConnectionConfigmapName => self.connection_configmap_name.as_deref(),
             SystemKey::ConnectionSecretName => self.connection_secret_name.as_deref(),
+            SystemKey::CronSchedule => self.cron_schedule.as_deref(),
         }
+    }
+
+    pub fn apply_worker_settings(&mut self, settings: &WorkerSettings) {
+        self.cron_schedule = settings.cron_schedule.clone();
+        self.connection_configmap_name = settings.connection_configmap_name.clone();
+        self.connection_secret_name = settings.connection_secret_name.clone();
     }
 }
 

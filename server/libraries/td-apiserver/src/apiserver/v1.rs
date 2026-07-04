@@ -50,6 +50,7 @@ use crate::router::metrics::{GlobalMetricsRouter, MetricsRouter};
 use crate::router::permissions::PermissionsRouter;
 use crate::router::ping::ping_router;
 use crate::router::projects::ProjectsRouter;
+use crate::router::resources::{ResourcesDir, ResourcesRouter};
 use crate::router::roles::RolesRouter;
 use crate::router::server_status::ServerStatusRouter;
 use crate::router::simple_permissions::SimplePermissionsRouter;
@@ -57,7 +58,6 @@ use crate::router::tables::TablesRouter;
 use crate::router::transactions::TransactionsRouter;
 use crate::router::user_roles::UserRolesRouter;
 use crate::router::users::UsersRouter;
-use crate::router::resources::{ResourcesDir, ResourcesRouter};
 use crate::router::workers::WorkersRouter;
 use axum::Extension;
 use axum::middleware::from_fn_with_state;
@@ -124,11 +124,9 @@ impl ApiServerV1 {
                         // the configured `resources_folder` (the dir rides in as
                         // an extension; `None` -> 404).
                         .merge(
-                            ResourcesRouter::router(context.services.clone()).layer(
-                                Extension(ResourcesDir(Arc::new(
-                                    context.config.resources_folder.clone(),
-                                ))),
-                            ),
+                            ResourcesRouter::router(context.services.clone()).layer(Extension(
+                                ResourcesDir(Arc::new(context.config.resources_folder.clone())),
+                            )),
                         )
                         .merge(UsersRouter::router(context.services.clone()))
                         // Mount only the active security mode's authz surface;

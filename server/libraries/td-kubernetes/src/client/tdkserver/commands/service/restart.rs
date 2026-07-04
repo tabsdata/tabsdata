@@ -9,7 +9,7 @@ use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
-    instance_markers, resolved_instance, resolved_details, resolved_yes,
+    instance_markers, resolved_details, resolved_instance, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::{preview, report};

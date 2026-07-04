@@ -32,7 +32,7 @@ use crate::runtime::gateway::messaging::messenger::kit::{
 use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
 };
-use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
+use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues, WorkerSettings};
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::provider::kminus::system_values_for;
 
@@ -249,13 +249,10 @@ impl KubernetesOrchestratorMessageQueue {
     async fn materialize(
         &self,
         manifest: &str,
-        kit: Option<&FunctionRunKit>,
+        settings: &WorkerSettings,
     ) -> Result<String, QueueError> {
         let mut system = self.system_values()?;
-        if let Some(kit) = kit {
-            system.connection_configmap_name = kit.connection_configmap_name.clone();
-            system.connection_secret_name = kit.connection_secret_name.clone();
-        }
+        system.apply_worker_settings(settings);
         let resolver = ConfigurationResolver::new(system);
         resolver
             .materialize(manifest)
@@ -271,7 +268,8 @@ impl KubernetesOrchestratorMessageQueue {
         name: &str,
         kit: Option<&FunctionRunKit>,
     ) -> Result<Pod, QueueError> {
-        let materialized = self.materialize(&template.manifest, kit).await?;
+        let settings = worker_settings(kit);
+        let materialized = self.materialize(&template.manifest, &settings).await?;
         let mut pod: Pod = serde_yaml::from_str(&materialized)?;
         pod.metadata.name = Some(name.to_owned());
         pod.metadata.namespace = Some(self.context.namespace().to_owned());
@@ -284,7 +282,8 @@ impl KubernetesOrchestratorMessageQueue {
         name: &str,
         kit: Option<&FunctionRunKit>,
     ) -> Result<Job, QueueError> {
-        let materialized = self.materialize(&template.manifest, kit).await?;
+        let settings = worker_settings(kit);
+        let materialized = self.materialize(&template.manifest, &settings).await?;
         let mut job: Job = serde_yaml::from_str(&materialized)?;
         job.metadata.name = Some(name.to_owned());
         job.metadata.namespace = Some(self.context.namespace().to_owned());
@@ -296,36 +295,21 @@ impl KubernetesOrchestratorMessageQueue {
         template: &PodTemplate,
         name: &str,
         kit: Option<&FunctionRunKit>,
-        schedule: &str,
     ) -> Result<CronJob, QueueError> {
-        let materialized = self.materialize(&template.manifest, kit).await?;
+        let settings = worker_settings(kit);
+        let materialized = self.materialize(&template.manifest, &settings).await?;
         let mut cronjob: CronJob = serde_yaml::from_str(&materialized)?;
         cronjob.metadata.name = Some(name.to_owned());
         cronjob.metadata.namespace = Some(self.context.namespace().to_owned());
-        // k8s owns the ticking, so the schedule is stamped from the request's
-        // cron mask rather than baked into the static profile.
-        if let Some(spec) = cronjob.spec.as_mut() {
-            spec.schedule = schedule.to_owned();
-        }
         Ok(cronjob)
     }
 }
 
-/// Extract the cron schedule (mask) from a cron start payload. Routed only when
-/// the template kind is `CronJob`, so a non-cron payload here is a routing bug.
-fn cron_schedule_from_payload(
-    id: &str,
-    payload: &OrchestratorMessagePayload<Value>,
-) -> Result<String, QueueError> {
-    match payload {
-        OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Start(
-            start,
-        )) => Ok(start.schedule.to_string()),
-        _ => Err(unexpected(
-            id,
-            "non-cron payload for CronJob template",
-            payload,
-        )),
+fn worker_settings(kit: Option<&FunctionRunKit>) -> WorkerSettings {
+    WorkerSettings {
+        cron_schedule: kit.and_then(|kit| kit.cron_schedule.clone()),
+        connection_configmap_name: kit.and_then(|kit| kit.connection_configmap_name.clone()),
+        connection_secret_name: kit.and_then(|kit| kit.connection_secret_name.clone()),
     }
 }
 
@@ -396,10 +380,8 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                             })?;
                     }
                     TemplateKind::CronJob => {
-                        let schedule = cron_schedule_from_payload(&id, &payload)?;
-                        let mut cronjob = self
-                            .manifest_cronjob(template, &name, kit.as_ref(), &schedule)
-                            .await?;
+                        let mut cronjob =
+                            self.manifest_cronjob(template, &name, kit.as_ref()).await?;
                         let (configmaps, secrets, latch) = match kit {
                             Some(kit) => {
                                 inject_common_envfrom_into_cronjob(

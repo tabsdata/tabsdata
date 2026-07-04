@@ -12,6 +12,7 @@
 pub mod client;
 pub mod cluster;
 pub mod configmap;
+pub mod cronjob;
 pub mod job;
 pub mod kubeconfig;
 pub mod messaging;
@@ -28,6 +29,7 @@ use crate::base::error::naming::NamingError;
 pub use client::KubeClientError;
 pub use cluster::KubeClusterError;
 pub use configmap::KubeConfigMapError;
+pub use cronjob::KubeCronJobError;
 pub use job::KubeJobError;
 pub use kubeconfig::KubeconfigError;
 pub use messaging::KubeMessagingError;
@@ -44,6 +46,8 @@ pub enum KubernetesError {
     Cluster(#[from] KubeClusterError),
     #[error(transparent)]
     ConfigMap(#[from] KubeConfigMapError),
+    #[error(transparent)]
+    CronJob(#[from] KubeCronJobError),
     #[error(transparent)]
     Job(#[from] KubeJobError),
     #[error(transparent)]
@@ -68,6 +72,7 @@ impl From<KubernetesError> for TdError {
             KubernetesError::Client(inner) => TdError::new(inner),
             KubernetesError::Cluster(inner) => TdError::new(inner),
             KubernetesError::ConfigMap(inner) => TdError::new(inner),
+            KubernetesError::CronJob(inner) => TdError::new(inner),
             KubernetesError::Job(inner) => TdError::new(inner),
             KubernetesError::Kubeconfig(inner) => TdError::new(inner),
             KubernetesError::Messaging(inner) => TdError::new(inner),

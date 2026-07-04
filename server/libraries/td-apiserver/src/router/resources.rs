@@ -128,7 +128,10 @@ mod tests {
             .headers()
             .get(CONTENT_TYPE)
             .map(|v| v.to_str().unwrap().to_string());
-        let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap().to_vec();
+        let body = to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec();
         (status, ct, body)
     }
 

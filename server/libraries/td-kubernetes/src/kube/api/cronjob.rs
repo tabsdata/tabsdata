@@ -5,15 +5,13 @@
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{ConfigMap, Secret};
 use kube::Api;
-use kube::api::{DeleteParams, PostParams, PropagationPolicy};
+use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
+use kube::runtime::wait::{Condition, await_condition};
 
-use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
+use crate::base::error::kubernetes::{KubeCronJobError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
-use crate::kube::api::{label_tabsdata, owner_ref_for_cronjob};
+use crate::kube::api::{label_tabsdata, owner_ref_for_cronjob, tabsdata_selector};
 use crate::kube::context::KubeContext;
-
-// CronJob is a batch resource like Job; it reuses `KubeJobError` for apply/delete
-// failures rather than introducing a parallel error enum.
 
 pub async fn create_cronjob(
     context: &KubeContext,
@@ -29,7 +27,7 @@ pub async fn create_cronjob(
         .create(&PostParams::default(), &cronjob)
         .await
         .map_err(|error| {
-            KubernetesError::from(KubeJobError::ApplyFailed {
+            KubernetesError::from(KubeCronJobError::ApplyFailed {
                 namespace: context.namespace().to_owned(),
                 cause: error.to_string(),
             })
@@ -52,11 +50,92 @@ pub async fn delete_cronjob(context: &KubeContext, name: &str) -> Result<(), Kub
         .await
         .map(|_| ())
         .map_err(|error| {
-            KubeJobError::DeleteFailed {
+            KubeCronJobError::DeleteFailed {
                 namespace: context.namespace().to_owned(),
                 name: name.to_owned(),
                 cause: error.to_string(),
             }
             .into()
         })
+}
+
+pub async fn delete_cronjobs(context: &KubeContext) -> Result<(), KubernetesError> {
+    let api: Api<CronJob> = Api::namespaced(context.client().clone(), context.namespace());
+    let selector = tabsdata_selector(None);
+    let list_params = ListParams::default().labels_from(&selector);
+    let delete_params = DeleteParams {
+        propagation_policy: Some(PropagationPolicy::Background),
+        ..DeleteParams::default()
+    };
+    api.delete_collection(&delete_params, &list_params)
+        .await
+        .map(|_| ())
+        .map_err(|error| {
+            KubeCronJobError::DeleteCollectionFailed {
+                namespace: context.namespace().to_owned(),
+                label_selector: selector.to_string(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}
+
+pub async fn list_cronjobs(context: &KubeContext) -> Result<Vec<CronJob>, KubernetesError> {
+    let api: Api<CronJob> = Api::namespaced(context.client().clone(), context.namespace());
+    let selector = tabsdata_selector(None);
+    let list_params = ListParams::default().labels_from(&selector);
+    api.list(&list_params)
+        .await
+        .map(|list| list.items)
+        .map_err(|error| {
+            KubeCronJobError::ListFailed {
+                namespace: context.namespace().to_owned(),
+                label_selector: selector.to_string(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}
+
+pub async fn await_cronjob_condition(
+    context: &KubeContext,
+    name: &str,
+    condition: impl Condition<CronJob> + Send + Sync + 'static,
+) -> Result<Option<CronJob>, KubernetesError> {
+    let api: Api<CronJob> = Api::namespaced(context.client().clone(), context.namespace());
+    await_condition(api, name, condition)
+        .await
+        .map_err(|error| {
+            KubeCronJobError::AwaitFailed {
+                namespace: context.namespace().to_owned(),
+                name: name.to_owned(),
+                cause: error.to_string(),
+            }
+            .into()
+        })
+}
+
+pub fn cronjob_scheduled() -> impl Condition<CronJob> {
+    |cronjob: Option<&CronJob>| {
+        cronjob
+            .and_then(|current| current.status.as_ref())
+            .is_some_and(|status| status.last_schedule_time.is_some())
+    }
+}
+
+pub fn cronjob_succeeded() -> impl Condition<CronJob> {
+    |cronjob: Option<&CronJob>| {
+        cronjob
+            .and_then(|current| current.status.as_ref())
+            .is_some_and(|status| status.last_successful_time.is_some())
+    }
+}
+
+pub fn cronjob_active() -> impl Condition<CronJob> {
+    |cronjob: Option<&CronJob>| {
+        cronjob
+            .and_then(|current| current.status.as_ref())
+            .and_then(|status| status.active.as_ref())
+            .is_some_and(|active| !active.is_empty())
+    }
 }

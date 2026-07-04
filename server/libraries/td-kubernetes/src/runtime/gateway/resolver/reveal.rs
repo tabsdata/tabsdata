@@ -187,7 +187,14 @@ fn transform_node(
             for index in 0..items.len() {
                 let segment = sequence_segment(&items[index], index);
                 path.push(segment);
-                transform_node(&mut items[index], path, placeholders, schema, values, secret_values)?;
+                transform_node(
+                    &mut items[index],
+                    path,
+                    placeholders,
+                    schema,
+                    values,
+                    secret_values,
+                )?;
                 path.pop();
             }
             Ok(())

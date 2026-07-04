@@ -83,9 +83,11 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                         RESOLVE_WORKER,
                         &[("project", proj.as_str()), ("worker_id", &worker_id)],
                     )?;
-                    // k8s owns the cron ticking, so the schedule must travel in
-                    // the start request. The mask lives in the worker's config
-                    // (a serialized `CronTriggerConfig`).
+                    // The CronJob's schedule must be known when the gateway
+                    // creates it, so the mask travels in the start request
+                    // rather than being resolved in-pod later. It is not a
+                    // worker row field: it is nested in the worker's serialized
+                    // `CronTriggerConfig`, so deserialize it to reach the mask.
                     let cron_config: CronTriggerConfig = cron_trigger_worker
                         .worker_config
                         .as_ref()

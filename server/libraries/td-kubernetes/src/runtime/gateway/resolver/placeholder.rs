@@ -7,7 +7,7 @@ pub(super) mod literal;
 pub(super) mod secret;
 pub(super) mod system;
 
-pub use system::{SystemKey, SystemValues};
+pub use system::{SystemKey, SystemValues, WorkerSettings};
 
 use std::str::FromStr;
 

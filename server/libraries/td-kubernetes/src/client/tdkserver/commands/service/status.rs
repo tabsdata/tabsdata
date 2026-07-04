@@ -7,6 +7,7 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{InstanceNameArguments, resolved_instance};
 use crate::client::tdkserver::render::report;
 use crate::core::system::exit::CommandResult;
+use crate::kube::api::cronjob::list_cronjobs;
 use crate::kube::api::job::list_jobs;
 use crate::kube::api::pod::list_pods;
 use crate::runtime::provider::provider_for_instance;
@@ -22,6 +23,7 @@ pub async fn command_status(
     let context = provider.kube_context().await?;
     let pods = list_pods(&context).await?;
     let jobs = list_jobs(&context).await?;
-    report::component::service::status::cluster_status(&pods, &jobs)?;
+    let cronjobs = list_cronjobs(&context).await?;
+    report::component::service::status::cluster_status(&pods, &jobs, &cronjobs)?;
     Ok(())
 }

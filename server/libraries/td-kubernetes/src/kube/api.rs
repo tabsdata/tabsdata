@@ -146,24 +146,23 @@ pub fn owner_ref_for_job(job: &Job) -> Result<OwnerReference, NamingError> {
     })
 }
 
-// CronJob is a batch resource like Job; it reuses `NamingError::JobMissingOwnerMetadata`
-// for the missing-metadata case rather than introducing a parallel variant.
 pub fn owner_ref_for_cronjob(cronjob: &CronJob) -> Result<OwnerReference, NamingError> {
     let name =
         cronjob
             .metadata
             .name
             .clone()
-            .ok_or_else(|| NamingError::JobMissingOwnerMetadata {
+            .ok_or_else(|| NamingError::CronJobMissingOwnerMetadata {
                 field: KUBE_METADATA_FIELD_NAME.to_owned(),
             })?;
-    let uid = cronjob
-        .metadata
-        .uid
-        .clone()
-        .ok_or_else(|| NamingError::JobMissingOwnerMetadata {
-            field: KUBE_METADATA_FIELD_UID.to_owned(),
-        })?;
+    let uid =
+        cronjob
+            .metadata
+            .uid
+            .clone()
+            .ok_or_else(|| NamingError::CronJobMissingOwnerMetadata {
+                field: KUBE_METADATA_FIELD_UID.to_owned(),
+            })?;
     Ok(OwnerReference {
         api_version: <CronJob as Resource>::API_VERSION.to_owned(),
         kind: <CronJob as Resource>::KIND.to_owned(),

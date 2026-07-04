@@ -50,6 +50,7 @@ pub struct FunctionRunKit {
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
     pub connection_envfrom: Option<EnvFromSource>,
+    pub cron_schedule: Option<String>,
     pub labels: Vec<(String, String)>,
 }
 
@@ -122,6 +123,7 @@ pub(crate) fn build_worker_run_kit(
         connection_configmap_name,
         connection_secret_name,
         connection_envfrom,
+        cron_schedule: None,
         labels,
     })
 }
@@ -147,7 +149,9 @@ pub fn build_cron_run_kit(
     namespace: &str,
     request: &CronStartRequest,
 ) -> Result<FunctionRunKit, KubeMessagingError> {
-    build_worker_run_kit(pod_name, namespace, request)
+    let mut kit = build_worker_run_kit(pod_name, namespace, request)?;
+    kit.cron_schedule = Some(request.schedule.to_string());
+    Ok(kit)
 }
 
 pub fn inject_labels_into_pod(pod: &mut Pod, labels: &[(String, String)]) {
@@ -192,20 +196,21 @@ pub fn inject_common_envfrom_into_job(job: &mut Job, envfrom: &[EnvFromSource]) 
     inject_envfrom_into_all_containers(Some(&mut template.containers), envfrom);
 }
 
-// CronJob variants reach the pod template one level deeper than Job:
-// `cronjob.spec.job_template.spec.template.spec` vs `job.spec.template.spec`.
 pub fn inject_labels_into_cronjob(cronjob: &mut CronJob, labels: &[(String, String)]) {
     apply_labels(&mut cronjob.metadata, labels);
-    if let Some(job_spec) = cronjob
-        .spec
-        .as_mut()
-        .and_then(|spec| spec.job_template.spec.as_mut())
-    {
-        let template_metadata = job_spec
-            .template
+    if let Some(spec) = cronjob.spec.as_mut() {
+        let job_template_metadata = spec
+            .job_template
             .metadata
             .get_or_insert_with(ObjectMeta::default);
-        apply_labels(template_metadata, labels);
+        apply_labels(job_template_metadata, labels);
+        if let Some(job_spec) = spec.job_template.spec.as_mut() {
+            let template_metadata = job_spec
+                .template
+                .metadata
+                .get_or_insert_with(ObjectMeta::default);
+            apply_labels(template_metadata, labels);
+        }
     }
 }
 

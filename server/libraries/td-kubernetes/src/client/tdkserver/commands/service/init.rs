@@ -21,7 +21,7 @@ use crate::client::registry::{
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::service::{
-    resolved_cluster, resolved_instance, resolved_details, resolved_save, resolved_yes,
+    resolved_cluster, resolved_details, resolved_instance, resolved_save, resolved_yes,
 };
 use crate::client::tdkserver::commands::template::get::get_templates;
 use crate::client::tdkserver::common::prompt_yes_no;

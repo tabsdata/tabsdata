@@ -39,7 +39,12 @@ pub fn merge(
     input: &Path,
     server_secrets: &HashMap<String, HashMap<String, String>>,
 ) -> Result<Vec<MergedConfig>, ResolverError> {
-    compare_family(input, KPROFILE_CONFIGS_FAMILY.folder, &profile.configs, false)?;
+    compare_family(
+        input,
+        KPROFILE_CONFIGS_FAMILY.folder,
+        &profile.configs,
+        false,
+    )?;
     let input_configs = input.join(KPROFILE_CONFIGS_FAMILY.folder);
     let empty_auto: HashMap<String, String> = HashMap::new();
     let mut merged = Vec::new();
@@ -48,11 +53,12 @@ pub fn merge(
             continue;
         }
         let input_file = input_configs.join(file);
-        let input_content =
-            fs::read_to_string(&input_file).map_err(|cause| ResolverError::InitializationReadFailed {
+        let input_content = fs::read_to_string(&input_file).map_err(|cause| {
+            ResolverError::InitializationReadFailed {
                 path: input_file.display().to_string(),
                 cause: cause.to_string(),
-            })?;
+            }
+        })?;
         let prefilled = match server_secrets.get(file) {
             Some(values) => prefill_secrets(&input_content, values)?,
             None => input_content,

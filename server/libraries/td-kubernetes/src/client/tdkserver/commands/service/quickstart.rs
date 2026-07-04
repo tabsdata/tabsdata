@@ -18,7 +18,7 @@ use crate::client::tdkserver::commands::service::init::{InitArguments, command_i
 use crate::client::tdkserver::commands::service::start::{StartArguments, command_start};
 use crate::client::tdkserver::commands::service::trash::trash_instance_folder;
 use crate::client::tdkserver::commands::service::{
-    resolved_instance, resolved_details, resolved_yes,
+    resolved_details, resolved_instance, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::core::system::exit::{CommandResult, abort, render_error};
