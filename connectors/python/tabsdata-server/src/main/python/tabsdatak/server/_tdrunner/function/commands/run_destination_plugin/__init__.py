@@ -196,9 +196,18 @@ def main(args: argparse.Namespace) -> int:
         function_id=str(request.info.function_run_id),
         function_name=request.info.function,
     )
-    logger.info("Invoking destination plugin's write_out")
+    logger.info(
+        "Invoking %s.write_out: %d table frame(s) -> %s",
+        type(plugin).__name__,
+        len(tables),
+        type(conn).__name__,
+    )
     _invoke_write_out(plugin, ctx, conn, info.destination, tables)
-    logger.info("Destination plugin completed")
+    logger.info(
+        "Destination plugin completed: %d table frame(s) written to %s",
+        len(tables),
+        type(conn).__name__,
+    )
     return 0
 
 

@@ -551,8 +551,9 @@ def main(args: argparse.Namespace) -> int:
         1 for e in entries_out if e.get(outputs_manifest.MANIFEST_FILE_KEY) is not None
     )
     logger.info(
-        "User function returned %d slot(s); %d table(s) written, %d returned None",
+        "User function returned %d slot(s) for tables %s; %d written, %d returned None",
         len(entries_out),
+        output_tables,
         written,
         len(entries_out) - written,
     )
