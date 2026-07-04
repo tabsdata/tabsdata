@@ -7,6 +7,7 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     output_option,
     render,
@@ -55,6 +56,7 @@ def _validate_permission(perm: str, project: str) -> None:
         )
 
 
+@cli_command
 @click.group()
 def permission():
     """Permission management commands (Simple Security Mode)"""

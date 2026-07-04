@@ -30,23 +30,27 @@ from tabsdatak.cli.cli_utils import (
     utils_login,
     verify_login_or_prompt,
 )
+from tabsdatak.cli._registry import collect_cli_commands
 from tabsdatak.cli.td import examples_guide
-from tabsdatak.cli.td.auth_group import auth
-from tabsdatak.cli.td.collection_group import collection
 from tabsdatak.cli.td.config_utils import execute_actions_for_command
-from tabsdatak.cli.td.connection_group import connection
-from tabsdatak.cli.td.exe_group import exe
-from tabsdatak.cli.td.fn_group import fn
-from tabsdatak.cli.td.group_group import group
-from tabsdatak.cli.td.metrics_group import metrics
-from tabsdatak.cli.td.permission_group import permission
-from tabsdatak.cli.td.pin_group import pin
-from tabsdatak.cli.td.project_group import project
-
-# TODO: role management is temporarily removed; reintroduce in a later version.
-# from tabsdatak.cli.td.role_group import role
-from tabsdatak.cli.td.table_group import table
-from tabsdatak.cli.td.user_group import user
+# Built-in command groups, imported for their @cli_command side effects: each
+# module registers its top-level group, attached below via collect_cli_commands.
+# TODO: role, cron, and stage management are temporarily removed; reintroduce
+# their modules here (they self-register via @cli_command) in a later version.
+from tabsdatak.cli.td import (  # noqa: F401
+    auth_group,
+    collection_group,
+    connection_group,
+    exe_group,
+    fn_group,
+    group_group,
+    metrics_group,
+    permission_group,
+    pin_group,
+    project_group,
+    table_group,
+    user_group,
+)
 from tabsdatak.common._compatibility import (
     PackageVersionError,
     check_sticky_version_packages,
@@ -101,20 +105,12 @@ def cli(ctx: click.Context, no_prompt: bool):
         raise click.ClickException(f"Failed to initialize CLI: {e}")
 
 
-cli.add_command(auth)
-cli.add_command(collection)
-cli.add_command(connection)
-cli.add_command(exe)
-cli.add_command(fn)
-cli.add_command(group)
-cli.add_command(metrics)
-cli.add_command(permission)
-cli.add_command(pin)
-cli.add_command(project)
-# TODO: role management is temporarily removed; reintroduce in a later version.
-# cli.add_command(role)
-cli.add_command(table)
-cli.add_command(user)
+# Attach every @cli_command-annotated group: the built-ins imported above, plus
+# any enterprise-tier variant commands that register themselves when their
+# package is installed. No manual add_command list to keep
+# in sync -- a new command only needs the @cli_command annotation.
+for _command in collect_cli_commands():
+    cli.add_command(_command)
 
 
 @cli.command()

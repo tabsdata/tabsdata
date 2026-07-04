@@ -7,6 +7,7 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
     get_currently_pinned_object,
@@ -25,6 +26,7 @@ from tabsdatak.sdk.tabsdata_server import (
 ALL_ENTITIES_REPRESENTATION = "<ALL>"
 
 
+@cli_command
 @click.group()
 def role():
     """Role management commands"""

@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
+from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     proj_option,
     output_option,
@@ -37,6 +38,7 @@ from tabsdatak.sdk.tabsdata_server import (
 )
 
 
+@cli_command
 @click.group()
 def fn():
     """Function management commands"""

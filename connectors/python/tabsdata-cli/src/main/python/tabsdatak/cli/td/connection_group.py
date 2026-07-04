@@ -19,9 +19,11 @@ from rich.table import Table
 
 # noinspection PyProtectedMember
 from tabsdatak import _template as template
+from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import logical_prompt, output_option, render
 
 
+@cli_command
 @click.group()
 def connection():
     """Connection template commands"""

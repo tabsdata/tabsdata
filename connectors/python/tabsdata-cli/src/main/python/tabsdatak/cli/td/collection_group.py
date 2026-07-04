@@ -10,6 +10,8 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+from tabsdatak.cli._registry import cli_command
+
 # noinspection PyProtectedMember
 from tabsdatak import _template as template
 from tabsdatak.cli.cli_utils import (
@@ -27,6 +29,7 @@ from tabsdatak.common._json_serde import dehydrate
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
+@cli_command
 @click.group()
 def collection():
     """Collection management commands"""

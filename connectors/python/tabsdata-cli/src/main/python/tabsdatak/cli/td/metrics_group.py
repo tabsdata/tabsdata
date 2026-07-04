@@ -6,6 +6,7 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
+from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     proj_option,
     output_option,
@@ -120,6 +121,7 @@ def _render_summary(data: dict) -> None:
     Console().print(table)
 
 
+@cli_command
 @click.group()
 def metrics():
     """Operational metrics over a window."""

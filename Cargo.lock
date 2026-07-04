@@ -10282,8 +10282,14 @@ name = "te-authz"
 version = "2.0.0"
 dependencies = [
  "openssl",
+ "strum 0.28.0",
  "td-authz",
+ "td-database",
+ "td-error",
+ "td-security",
  "te-authz",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]
