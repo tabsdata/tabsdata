@@ -8,6 +8,8 @@ from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
     proj_option,
+    output_option,
+    render,
     MutuallyExclusiveOption,
     get_currently_pinned_object,
     hint_common_solutions,
@@ -204,6 +206,7 @@ def download(
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["at"],
 )
+@output_option
 @click.pass_context
 def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
     """List all tables in a collection"""
@@ -222,21 +225,27 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
             coll, filter=request_filter, at=at, at_trx=at_trx
         )
 
-        cli_table = Table(title=f"Tables in collection '{coll}'")
-        cli_table.add_column("Name", style="cyan", no_wrap=True)
-        cli_table.add_column("Function")
-
-        for table in list_of_tables:
-            cli_table.add_row(
-                table.name,
-                table.function.name,
+        def _table():
+            cli_table = Table(title=f"Tables in collection '{coll}'")
+            cli_table.add_column("Name", style="cyan", no_wrap=True)
+            cli_table.add_column("Function")
+            for table in list_of_tables:
+                cli_table.add_row(
+                    table.name,
+                    table.function.name,
+                )
+            click.echo()
+            Console().print(cli_table)
+            click.echo(
+                f"Number of tables in collection '{coll}': {len(list_of_tables)}"
             )
+            click.echo()
 
-        click.echo()
-        console = Console()
-        console.print(cli_table)
-        click.echo(f"Number of tables in collection '{coll}': {len(list_of_tables)}")
-        click.echo()
+        render(
+            ctx,
+            data=lambda: [t._data for t in list_of_tables],
+            table=_table,
+        )
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -312,6 +321,7 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
         "created as part of the download)."
     ),
 )
+@output_option
 @click.pass_context
 def sample(
     ctx: click.Context,
@@ -344,14 +354,20 @@ def sample(
             offset=offset,
         )
 
-        click.echo()
-        click.echo(f"Sample of table '{name}'")
-        click.echo(sampled_table)
-        click.echo()
+        def _table():
+            click.echo()
+            click.echo(f"Sample of table '{name}'")
+            click.echo(sampled_table)
+            click.echo()
+
+        # sampled_table is a polars DataFrame -> its rows are the full info.
+        render(ctx, data=lambda: sampled_table.to_dicts(), table=_table)
+
         if file:
-            click.echo(f"Saving sample to file '{file}'")
+            # Diagnostics to stderr so json/yaml stdout stays parseable.
+            click.echo(f"Saving sample to file '{file}'", err=True)
             sampled_table.write_ndjson(file)
-            click.echo("Sample saved successfully")
+            click.echo("Sample saved successfully", err=True)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -406,6 +422,7 @@ def sample(
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["at", "at-trx"],
 )
+@output_option
 @click.pass_context
 def schema(
     ctx: click.Context,
@@ -433,16 +450,18 @@ def schema(
             version=version,
         )
 
-        table = Table(title=f"Schema of table '{name}'")
-        table.add_column("Column", style="cyan", no_wrap=True)
-        table.add_column("Type")
-        for column in table_schema:
-            table.add_row(column["name"], column["type"])
+        def _table():
+            table = Table(title=f"Schema of table '{name}'")
+            table.add_column("Column", style="cyan", no_wrap=True)
+            table.add_column("Type")
+            for column in table_schema:
+                table.add_row(column["name"], column["type"])
+            click.echo()
+            Console().print(table)
+            click.echo()
 
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo()
+        # table_schema is already the raw list of column dicts -> full info.
+        render(ctx, data=lambda: table_schema, table=_table)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -469,6 +488,7 @@ def schema(
         "columns) and hash of the schema."
     ),
 )
+@output_option
 @click.pass_context
 def versions(ctx: click.Context, coll: str, name: str, details: bool):
     """
@@ -488,52 +508,56 @@ def versions(ctx: click.Context, coll: str, name: str, details: bool):
         # /data-versions returns all statuses; the CLI lists committed only.
         data_version_list = server.list_dataversions(coll, name, filter="status:eq:C")
 
-        table = Table(title=f"Data versions for table '{name}'")
-        table.add_column("ID", style="cyan", no_wrap=True)
-        table.add_column("Function ID")
-        table.add_column("Plan ID")
-        table.add_column("Created at")
-        table.add_column("Status")
-        if details:
-            table.add_column("Rows")
-            table.add_column("Columns")
-            table.add_column("Schema Hash")
-
-        for data_version in data_version_list:
-            row_content = [
-                data_version.id,
-                data_version.function.id,
-                data_version.execution.id,
-                data_version.created_at_str,
-                data_version.status,
-            ]
+        def _table():
+            table = Table(title=f"Data versions for table '{name}'")
+            table.add_column("ID", style="cyan", no_wrap=True)
+            table.add_column("Function ID")
+            table.add_column("Plan ID")
+            table.add_column("Created at")
+            table.add_column("Status")
             if details:
-                row_content.extend([
-                    (
-                        str(data_version.row_count)
-                        if data_version.row_count is not None
-                        else "-"
-                    ),
-                    (
-                        str(data_version.column_count)
-                        if data_version.column_count is not None
-                        else "-"
-                    ),
-                    data_version.schema_hash,
-                ])
-            table.add_row(*row_content)
+                table.add_column("Rows")
+                table.add_column("Columns")
+                table.add_column("Schema Hash")
+            for data_version in data_version_list:
+                row_content = [
+                    data_version.id,
+                    data_version.function.id,
+                    data_version.execution.id,
+                    data_version.created_at_str,
+                    data_version.status,
+                ]
+                if details:
+                    row_content.extend([
+                        (
+                            str(data_version.row_count)
+                            if data_version.row_count is not None
+                            else "-"
+                        ),
+                        (
+                            str(data_version.column_count)
+                            if data_version.column_count is not None
+                            else "-"
+                        ),
+                        data_version.schema_hash,
+                    ])
+                table.add_row(*row_content)
+            click.echo()
+            Console().print(table)
+            click.echo(f"Number of data versions: {len(data_version_list)}")
+            if not details:
+                show_hint(
+                    ctx,
+                    "Use the --details option to see more information about each data "
+                    "version, including the number of rows, the number of columns and "
+                    "the hash of the schema.",
+                )
 
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo(f"Number of data versions: {len(data_version_list)}")
-        if not details:
-            show_hint(
-                ctx,
-                "Use the --details option to see more information about each data "
-                "version, including the number of rows, the number of columns and the "
-                "hash of the schema.",
-            )
+        render(
+            ctx,
+            data=lambda: [dv._data for dv in data_version_list],
+            table=_table,
+        )
 
     except Exception as e:
         hint_common_solutions(ctx, e)

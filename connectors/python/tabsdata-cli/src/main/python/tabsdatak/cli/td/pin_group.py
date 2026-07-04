@@ -6,6 +6,8 @@
 import rich_click as click
 
 from tabsdatak.cli.cli_utils import (
+    output_option,
+    render,
     hint_common_solutions,
     store_pinned_objects,
 )
@@ -138,11 +140,20 @@ def unset(ctx: click.Context, project: bool, collection: bool):
 
 
 @pin.command()
+@output_option
 @click.pass_context
 def show(ctx: click.Context):
     """Show the currently pinned project and collection."""
     pinned = ctx.obj["pinned_objects"]
     project = pinned.get("project")
     collection = pinned.get("collection")
-    click.echo(f"Project:    {project if project else '(none)'}")
-    click.echo(f"Collection: {collection if collection else '(none)'}")
+
+    def _table():
+        click.echo(f"Project:    {project if project else '(none)'}")
+        click.echo(f"Collection: {collection if collection else '(none)'}")
+
+    render(
+        ctx,
+        data={"project": project, "collection": collection},
+        table=_table,
+    )

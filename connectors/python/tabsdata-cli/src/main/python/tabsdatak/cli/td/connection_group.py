@@ -19,7 +19,7 @@ from rich.table import Table
 
 # noinspection PyProtectedMember
 from tabsdatak import _template as template
-from tabsdatak.cli.cli_utils import logical_prompt
+from tabsdatak.cli.cli_utils import logical_prompt, output_option, render
 
 
 @click.group()
@@ -28,22 +28,29 @@ def connection():
 
 
 @connection.command()
-def types():
+@output_option
+@click.pass_context
+def types(ctx):
     """List the connection types available from installed connectors"""
     rows = template.list_connectors()
 
-    table = Table(title="Available connectors")
-    table.add_column("Type", style="cyan", no_wrap=True)
-    table.add_column("Mode")
-    table.add_column("System")
+    def _table():
+        table = Table(title="Available connectors")
+        table.add_column("Type", style="cyan", no_wrap=True)
+        table.add_column("Mode")
+        table.add_column("System")
+        for row in rows:
+            table.add_row(row.type, row.mode, row.system)
+        click.echo()
+        Console().print(table)
+        click.echo(f"Number of connectors: {len(rows)}")
+        click.echo()
 
-    for row in rows:
-        table.add_row(row.type, row.mode, row.system)
-
-    click.echo()
-    Console().print(table)
-    click.echo(f"Number of connectors: {len(rows)}")
-    click.echo()
+    render(
+        ctx,
+        data=[{"type": r.type, "mode": r.mode, "system": r.system} for r in rows],
+        table=_table,
+    )
 
 
 def _type_option(fn):

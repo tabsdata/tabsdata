@@ -3706,10 +3706,12 @@ class TabsdataServer:
             APIServerError: If the collection could not be obtained.
         """
         collection_definition = self.connection.collection_get_by_name(name)
-        return Collection(
-            self.connection,
-            **collection_definition.json().get("data"),
-        )
+        data = collection_definition.json().get("data")
+        collection = Collection(self.connection, **data)
+        # Retain the full server DTO so `-o json/yaml` renders all fields
+        # without a second fetch.
+        collection._data = data
+        return collection
 
     def list_collections(
         self,
@@ -3748,6 +3750,9 @@ class TabsdataServer:
             raw_collections = data.get("data") or []
             for raw_collection in raw_collections:
                 built_collection = Collection(self.connection, **raw_collection)
+                # Retain the list item's full DTO so `-o json/yaml` renders all
+                # fields without a per-item fetch.
+                built_collection._data = raw_collection
                 yield built_collection
             first_page = False
 
@@ -4321,10 +4326,10 @@ class TabsdataServer:
     def get_group(self, name: str) -> Group:
         """Get a group by name."""
         group_definition = self.connection.group_get_by_name(name)
-        return Group(
-            self.connection,
-            **group_definition.json().get("data"),
-        )
+        data = group_definition.json().get("data")
+        group = Group(self.connection, **data)
+        group._data = data
+        return group
 
     def list_groups(
         self,
@@ -4357,7 +4362,9 @@ class TabsdataServer:
             next_step = data.get("next")
             raw_groups = data.get("data") or []
             for raw_group in raw_groups:
-                yield Group(self.connection, **raw_group)
+                built_group = Group(self.connection, **raw_group)
+                built_group._data = raw_group
+                yield built_group
             first_page = False
 
     def update_group(
@@ -4718,10 +4725,10 @@ class TabsdataServer:
         project_definition = self.connection.project_get_by_name(
             name, raise_for_status=raise_for_status
         )
-        return Project(
-            self.connection,
-            **project_definition.json().get("data"),
-        )
+        data = project_definition.json().get("data")
+        project = Project(self.connection, **data)
+        project._data = data
+        return project
 
     def list_projects(
         self,
@@ -4754,7 +4761,9 @@ class TabsdataServer:
             next_step = data.get("next")
             raw_projects = data.get("data") or []
             for raw_project in raw_projects:
-                yield Project(self.connection, **raw_project)
+                built_project = Project(self.connection, **raw_project)
+                built_project._data = raw_project
+                yield built_project
             first_page = False
 
     def update_project(
@@ -5151,10 +5160,10 @@ class TabsdataServer:
             APIServerError: If the user could not be obtained.
         """
         user_definition = self.connection.users_get_by_name(name)
-        return User(
-            self.connection,
-            **user_definition.json().get("data"),
-        )
+        data = user_definition.json().get("data")
+        user = User(self.connection, **data)
+        user._data = data
+        return user
 
     def list_users(
         self,
@@ -5193,6 +5202,7 @@ class TabsdataServer:
             raw_users = data.get("data") or []
             for raw_user in raw_users:
                 built_user = User(self.connection, **raw_user)
+                built_user._data = raw_user
                 yield built_user
             first_page = False
 

@@ -35,7 +35,6 @@ from tabsdatak.cli.td.auth_group import auth
 from tabsdatak.cli.td.collection_group import collection
 from tabsdatak.cli.td.config_utils import execute_actions_for_command
 from tabsdatak.cli.td.connection_group import connection
-from tabsdatak.cli.td.cron_group import cron
 from tabsdatak.cli.td.exe_group import exe
 from tabsdatak.cli.td.fn_group import fn
 from tabsdatak.cli.td.group_group import group
@@ -43,8 +42,9 @@ from tabsdatak.cli.td.metrics_group import metrics
 from tabsdatak.cli.td.permission_group import permission
 from tabsdatak.cli.td.pin_group import pin
 from tabsdatak.cli.td.project_group import project
-from tabsdatak.cli.td.role_group import role
-from tabsdatak.cli.td.stage_group import stage
+
+# TODO: role management is temporarily removed; reintroduce in a later version.
+# from tabsdatak.cli.td.role_group import role
 from tabsdatak.cli.td.table_group import table
 from tabsdatak.cli.td.user_group import user
 from tabsdatak.common._compatibility import (
@@ -104,7 +104,6 @@ def cli(ctx: click.Context, no_prompt: bool):
 cli.add_command(auth)
 cli.add_command(collection)
 cli.add_command(connection)
-cli.add_command(cron)
 cli.add_command(exe)
 cli.add_command(fn)
 cli.add_command(group)
@@ -112,8 +111,8 @@ cli.add_command(metrics)
 cli.add_command(permission)
 cli.add_command(pin)
 cli.add_command(project)
-cli.add_command(role)
-cli.add_command(stage)
+# TODO: role management is temporarily removed; reintroduce in a later version.
+# cli.add_command(role)
 cli.add_command(table)
 cli.add_command(user)
 

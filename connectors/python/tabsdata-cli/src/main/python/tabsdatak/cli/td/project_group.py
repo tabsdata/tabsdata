@@ -8,6 +8,8 @@ from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
+    output_option,
+    render,
     hint_common_solutions,
     logical_prompt,
     verify_login_or_prompt,
@@ -69,6 +71,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 
 @project.command()
+@output_option
 @click.option("--name", "-n", help="Name of the project to display.")
 @click.pass_context
 def info(ctx: click.Context, name: str):
@@ -79,30 +82,32 @@ def info(ctx: click.Context, name: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         prj = server.get_project(name)
 
-        table = Table(title=f"Project '{name}'")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("ID", no_wrap=True)
-        table.add_column("Description")
-        table.add_column("Created on")
-        table.add_column("Created by")
+        def _table():
+            table = Table(title=f"Project '{name}'")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("ID", no_wrap=True)
+            table.add_column("Description")
+            table.add_column("Created on")
+            table.add_column("Created by")
+            table.add_row(
+                prj.name,
+                prj.id,
+                prj.description,
+                prj.created_on_str,
+                prj.created_by,
+            )
+            click.echo()
+            Console().print(table)
+            click.echo()
 
-        table.add_row(
-            prj.name,
-            prj.id,
-            prj.description,
-            prj.created_on_str,
-            prj.created_by,
-        )
-
-        click.echo()
-        Console().print(table)
-        click.echo()
+        render(ctx, data=lambda: prj._data, table=_table)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display project: {e}")
 
 
 @project.command()
+@output_option
 @click.pass_context
 def list(ctx: click.Context):
     """List all projects"""
@@ -111,26 +116,27 @@ def list(ctx: click.Context):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_projects = server.projects
 
-        table = Table(title="Projects")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("ID", no_wrap=True)
-        table.add_column("Description")
-        table.add_column("Created on")
-        table.add_column("Created by")
+        def _table():
+            table = Table(title="Projects")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("ID", no_wrap=True)
+            table.add_column("Description")
+            table.add_column("Created on")
+            table.add_column("Created by")
+            for prj in list_of_projects:
+                table.add_row(
+                    prj.name,
+                    prj.id,
+                    prj.description,
+                    prj.created_on_str,
+                    prj.created_by,
+                )
+            click.echo()
+            Console().print(table)
+            click.echo(f"Number of projects: {len(list_of_projects)}")
+            click.echo()
 
-        for prj in list_of_projects:
-            table.add_row(
-                prj.name,
-                prj.id,
-                prj.description,
-                prj.created_on_str,
-                prj.created_by,
-            )
-
-        click.echo()
-        Console().print(table)
-        click.echo(f"Number of projects: {len(list_of_projects)}")
-        click.echo()
+        render(ctx, data=lambda: [p._data for p in list_of_projects], table=_table)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list projects: {e}")

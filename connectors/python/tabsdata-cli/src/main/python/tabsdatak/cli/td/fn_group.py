@@ -12,6 +12,8 @@ from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
     proj_option,
+    output_option,
+    render,
     beautify_list,
     beautify_time,
     get_currently_pinned_object,
@@ -89,6 +91,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
 
 @fn.command()
 @proj_option
+@output_option
 @click.option(
     "--name",
     "-n",
@@ -115,65 +118,69 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
         or logical_prompt(ctx, "Name of the collection to which the function belongs")
     )
     try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
         if show_history:
-            server: TabsdataServer = ctx.obj["tabsdataserver"]
             function_list = server.list_function_history(coll, name)
 
-            table = Table(title=f"History of function '{name}' in collection '{coll}'")
-            table.add_column("ID", style="cyan", no_wrap=True)
-            table.add_column("Name")
-            table.add_column("Description")
-            table.add_column("Defined on")
-            table.add_column("Defined by")
-            table.add_column("Dependencies")
-            table.add_column("Triggers (functions)")
-            table.add_column("Tables")
+            def _table():
+                table = Table(
+                    title=f"History of function '{name}' in collection '{coll}'"
+                )
+                table.add_column("ID", style="cyan", no_wrap=True)
+                table.add_column("Name")
+                table.add_column("Description")
+                table.add_column("Defined on")
+                table.add_column("Defined by")
+                table.add_column("Dependencies")
+                table.add_column("Triggers (functions)")
+                table.add_column("Tables")
+                for function in function_list:
+                    table.add_row(
+                        str(function.id),
+                        function.name,
+                        function.description,
+                        function.defined_on_str,
+                        function.defined_by,
+                        beautify_list(function.dependencies),
+                        beautify_list(function.triggers),
+                        beautify_list([t.name for t in function.tables]),
+                    )
+                click.echo()
+                Console().print(table)
+                click.echo(f"Number of versions: {len(function_list)}")
+                click.echo()
 
-            for function in function_list:
+            render(
+                ctx,
+                data=lambda: [f._data for f in function_list],
+                table=_table,
+            )
+        else:
+            function = server.get_function(coll, name)
+
+            def _table():
+                table = Table(title=f"Function '{name}' in collection '{coll}'")
+                table.add_column("ID", style="cyan", no_wrap=True)
+                table.add_column("Description")
+                table.add_column("Defined on")
+                table.add_column("Defined by")
+                table.add_column("Dependencies")
+                table.add_column("Triggers (functions)")
+                table.add_column("Tables")
                 table.add_row(
                     str(function.id),
-                    function.name,
                     function.description,
                     function.defined_on_str,
                     function.defined_by,
                     beautify_list(function.dependencies),
                     beautify_list(function.triggers),
-                    beautify_list([table.name for table in function.tables]),
+                    beautify_list([t.name for t in function.tables]),
                 )
+                click.echo()
+                Console().print(table)
+                click.echo()
 
-            click.echo()
-            console = Console()
-            console.print(table)
-            click.echo(f"Number of versions: {len(function_list)}")
-            click.echo()
-
-        else:
-            server: TabsdataServer = ctx.obj["tabsdataserver"]
-            function = server.get_function(coll, name)
-
-            table = Table(title=f"Function '{name}' in collection '{coll}'")
-            table.add_column("ID", style="cyan", no_wrap=True)
-            table.add_column("Description")
-            table.add_column("Defined on")
-            table.add_column("Defined by")
-            table.add_column("Dependencies")
-            table.add_column("Triggers (functions)")
-            table.add_column("Tables")
-
-            table.add_row(
-                str(function.id),
-                function.description,
-                function.defined_on_str,
-                function.defined_by,
-                beautify_list(function.dependencies),
-                beautify_list(function.triggers),
-                beautify_list([table.name for table in function.tables]),
-            )
-
-            click.echo()
-            console = Console()
-            console.print(table)
-            click.echo()
+            render(ctx, data=lambda: function._data, table=_table)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -182,6 +189,7 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
 
 @fn.command()
 @proj_option
+@output_option
 @click.option(
     "--coll",
     "-c",
@@ -200,29 +208,34 @@ def list(ctx: click.Context, coll: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_functions = server.list_functions(coll)
 
-        table = Table(title=f"Functions in collection '{coll}'")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("Type")
-        table.add_column("Description")
-        table.add_column("Defined on")
-        table.add_column("Defined by")
-
-        for function in list_of_functions:
-            table.add_row(
-                function.name,
-                _function_type_to_mapping(function.type),
-                function.description,
-                function.defined_on_str,
-                function.defined_by,
+        def _table():
+            table = Table(title=f"Functions in collection '{coll}'")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("Type")
+            table.add_column("Description")
+            table.add_column("Defined on")
+            table.add_column("Defined by")
+            for function in list_of_functions:
+                table.add_row(
+                    function.name,
+                    _function_type_to_mapping(function.type),
+                    function.description,
+                    function.defined_on_str,
+                    function.defined_by,
+                )
+            click.echo()
+            Console().print(table)
+            click.echo(
+                f"Number of functions in collection '{coll}': "
+                f"{len(list_of_functions)}"
             )
+            click.echo()
 
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo(
-            f"Number of functions in collection '{coll}': {len(list_of_functions)}"
+        render(
+            ctx,
+            data=lambda: [f._data for f in list_of_functions],
+            table=_table,
         )
-        click.echo()
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -990,6 +1003,7 @@ def patch(
 
 @fn.command("list-patches")
 @proj_option
+@output_option
 @click.option(
     "--name",
     "-n",
@@ -1016,37 +1030,40 @@ def list_patches(ctx: click.Context, name: str, coll: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         patches = server.list_function_patches(coll, name)
 
-        table = Table(title=f"Patches of function '{name}' in collection '{coll}'")
-        table.add_column("Patch id (fvid)", style="cyan", no_wrap=True)
-        table.add_column("Patches fvid")
-        table.add_column("Description")
-        table.add_column("Defined on")
-        table.add_column("Defined by")
-        table.add_column("Status")
-
-        for p in patches:
-            defined_on = p.get("defined_on")
-            if isinstance(defined_on, (int, float)):
-                # epoch milliseconds -> ISO-ish UTC string
-                from datetime import datetime, timezone
-
-                defined_on = datetime.fromtimestamp(
-                    defined_on / 1000.0, tz=timezone.utc
-                ).strftime("%Y-%m-%dT%H:%M:%SZ")
-            table.add_row(
-                p.get("id") or "",
-                p.get("parent_function_version_id") or "",
-                p.get("description") or "",
-                beautify_time(defined_on) if defined_on else "",
-                p.get("defined_by") or p.get("defined_by_id") or "",
-                p.get("status") or "",
+        def _table():
+            table = Table(
+                title=f"Patches of function '{name}' in collection '{coll}'"
             )
+            table.add_column("Patch id (fvid)", style="cyan", no_wrap=True)
+            table.add_column("Patches fvid")
+            table.add_column("Description")
+            table.add_column("Defined on")
+            table.add_column("Defined by")
+            table.add_column("Status")
+            for p in patches:
+                defined_on = p.get("defined_on")
+                if isinstance(defined_on, (int, float)):
+                    # epoch milliseconds -> ISO-ish UTC string
+                    from datetime import datetime, timezone
 
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo(f"Number of patches: {len(patches)}")
-        click.echo()
+                    defined_on = datetime.fromtimestamp(
+                        defined_on / 1000.0, tz=timezone.utc
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+                table.add_row(
+                    p.get("id") or "",
+                    p.get("parent_function_version_id") or "",
+                    p.get("description") or "",
+                    beautify_time(defined_on) if defined_on else "",
+                    p.get("defined_by") or p.get("defined_by_id") or "",
+                    p.get("status") or "",
+                )
+            click.echo()
+            Console().print(table)
+            click.echo(f"Number of patches: {len(patches)}")
+            click.echo()
+
+        # `patches` is already the raw list of patch dicts -> full info as-is.
+        render(ctx, data=lambda: patches, table=_table)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list patches: {e}")

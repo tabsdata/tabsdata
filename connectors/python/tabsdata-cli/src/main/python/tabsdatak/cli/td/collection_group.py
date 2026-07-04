@@ -14,6 +14,8 @@ from rich.table import Table
 from tabsdatak import _template as template
 from tabsdatak.cli.cli_utils import (
     proj_option,
+    output_option,
+    render,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
@@ -202,6 +204,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 @collection.command()
 @proj_option
+@output_option
 @click.option("--name", "-n", help="Name of the collection to display.")
 @click.pass_context
 def info(ctx: click.Context, name: str):
@@ -216,23 +219,23 @@ def info(ctx: click.Context, name: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         collection = server.get_collection(name)
 
-        table = Table(title=f"Collection '{name}'")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("Description")
-        table.add_column("Created on")
-        table.add_column("Created by")
+        def _table():
+            table = Table(title=f"Collection '{name}'")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("Description")
+            table.add_column("Created on")
+            table.add_column("Created by")
+            table.add_row(
+                collection.name,
+                collection.description,
+                collection.created_on_str,
+                collection.created_by,
+            )
+            click.echo()
+            Console().print(table)
+            click.echo()
 
-        table.add_row(
-            collection.name,
-            collection.description,
-            collection.created_on_str,
-            collection.created_by,
-        )
-
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo()
+        render(ctx, data=lambda: collection._data, table=_table)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display collection: {e}")
@@ -240,6 +243,7 @@ def info(ctx: click.Context, name: str):
 
 @collection.command()
 @proj_option
+@output_option
 @click.pass_context
 def list(ctx: click.Context):
     """List all collections"""
@@ -248,25 +252,29 @@ def list(ctx: click.Context):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_collections = server.collections
 
-        table = Table(title="Collections")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("Description")
-        table.add_column("Created on")
-        table.add_column("Created by")
+        def _table():
+            table = Table(title="Collections")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("Description")
+            table.add_column("Created on")
+            table.add_column("Created by")
+            for collection in list_of_collections:
+                table.add_row(
+                    collection.name,
+                    collection.description,
+                    collection.created_on_str,
+                    collection.created_by,
+                )
+            click.echo()
+            Console().print(table)
+            click.echo(f"Number of collections: {len(list_of_collections)}")
+            click.echo()
 
-        for collection in list_of_collections:
-            table.add_row(
-                collection.name,
-                collection.description,
-                collection.created_on_str,
-                collection.created_by,
-            )
-
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo(f"Number of collections: {len(list_of_collections)}")
-        click.echo()
+        render(
+            ctx,
+            data=lambda: [c._data for c in list_of_collections],
+            table=_table,
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list collections: {e}")

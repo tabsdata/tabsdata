@@ -13,6 +13,9 @@ from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
     proj_option,
+    output_option,
+    output_format,
+    render,
     MutuallyExclusiveOption,
     beautify_time,
     get_currently_pinned_object,
@@ -151,6 +154,7 @@ def cancel(ctx: click.Context, plan: str, trx: str):
     help="ID of the transaction to which the function runs belong.",
     mutually_exclusive=["plan", "fn"],
 )
+@output_option
 @click.pass_context
 def list_fn_run(
     ctx: click.Context,
@@ -192,6 +196,14 @@ def list_fn_run(
                 f" '{transaction.status}'"
             )
         list_of_function_runs = server.list_function_runs(filter=request_filter)
+
+        if output_format(ctx) != "table":
+            render(
+                ctx,
+                data=[r._data for r in list_of_function_runs],
+                table=lambda: None,
+            )
+            return
 
         table = Table(title="Function Runs")
         table.add_column("Function Run ID", style="cyan", no_wrap=True)
@@ -308,6 +320,7 @@ def obtain_list_fn_run_filters(
         "a final state."
     ),
 )
+@output_option
 @click.pass_context
 def list_plan(
     ctx: click.Context,
@@ -332,6 +345,14 @@ def list_plan(
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_executions = obtain_execution_list(server, request_filter, last)
+
+        if output_format(ctx) != "table":
+            render(
+                ctx,
+                data=[e._data for e in list_of_executions],
+                table=lambda: None,
+            )
+            return
 
         def build_table() -> Table:
             """Generate and show table for transactions"""
@@ -504,6 +525,7 @@ def obtain_list_exec_filters(
         "a final state."
     ),
 )
+@output_option
 @click.pass_context
 def list_trx(
     ctx: click.Context,
@@ -528,6 +550,14 @@ def list_trx(
         )
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_transactions = obtain_transaction_list(server, request_filter, last)
+
+        if output_format(ctx) != "table":
+            render(
+                ctx,
+                data=[t._data for t in list_of_transactions],
+                table=lambda: None,
+            )
+            return
 
         def build_table() -> Table:
             """Generate and show table for transactions"""
@@ -694,6 +724,7 @@ def obtain_list_trx_filters(
     help="ID of the transaction to which the workers belong.",
     mutually_exclusive=["fn-run", "plan", "fn"],
 )
+@output_option
 @click.pass_context
 def list_worker(
     ctx: click.Context,
@@ -743,6 +774,14 @@ def list_worker(
                 f" '{function_run.status}'"
             )
         list_of_workers = server.list_workers(filter=request_filter)
+
+        if output_format(ctx) != "table":
+            render(
+                ctx,
+                data=[w._data for w in list_of_workers],
+                table=lambda: None,
+            )
+            return
 
         table = Table(title="Workers")
         table.add_column("Worker ID", style="cyan", no_wrap=True)
@@ -819,6 +858,7 @@ def obtain_list_worker_filters(
 @exe.command()
 @proj_option
 @click.option("--plan", help="ID of the plan to display.")
+@output_option
 @click.pass_context
 def info(ctx: click.Context, plan: str):
     """
@@ -828,6 +868,10 @@ def info(ctx: click.Context, plan: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         execution = server.get_execution(plan)
+
+        if output_format(ctx) != "table":
+            render(ctx, data=execution._data, table=lambda: None)
+            return
 
         table = Table(title=f"Plan '{plan}'")
         table.add_column("Name")
@@ -925,6 +969,7 @@ def info(ctx: click.Context, plan: str):
     help="ID of the transaction to which the workers belong.",
     mutually_exclusive=["fn-run", "plan", "fn"],
 )
+@output_option
 @click.pass_context
 def logs(
     ctx: click.Context,
@@ -980,6 +1025,12 @@ def logs(
             )
             generated_logs += server.get_worker_log(w)
             generated_logs += os.linesep + "*" * 20 + os.linesep
+        if output_format(ctx) != "table":
+            if file:
+                with open(file, "w") as f:
+                    f.write(generated_logs)
+            render(ctx, data={"logs": generated_logs}, table=lambda: None)
+            return
         if file:
             click.echo(f"Saving logs to file '{file}'")
             with open(file, "w") as f:

@@ -8,6 +8,8 @@ from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
+    output_option,
+    render,
     MutuallyExclusiveOption,
     hint_common_solutions,
     logical_prompt,
@@ -179,6 +181,7 @@ def revoke(ctx: click.Context, user: str, permission: str, project: str):
     cls=MutuallyExclusiveOption,
     mutually_exclusive=["user"],
 )
+@output_option
 @click.pass_context
 def list_permissions(ctx: click.Context, user: str, project: str):
     """List a user's permissions, or who has access to a project"""
@@ -191,9 +194,9 @@ def list_permissions(ctx: click.Context, user: str, project: str):
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         if user:
-            _list_by_user(server, user)
+            _list_by_user(ctx, server, user)
         else:
-            _list_by_project(server, project)
+            _list_by_project(ctx, server, project)
     except click.ClickException:
         raise
     except Exception as e:
@@ -201,36 +204,47 @@ def list_permissions(ctx: click.Context, user: str, project: str):
         raise click.ClickException(f"Failed to list permissions: {e}")
 
 
-def _list_by_user(server: TabsdataServer, user: str):
+def _list_by_user(ctx: click.Context, server: TabsdataServer, user: str):
     permissions = server.list_permissions_by_user(user)
 
-    table = Table(title=f"Permissions of user '{user}'")
-    table.add_column("Permission", style="cyan", no_wrap=True)
-    table.add_column("Project")
+    def _table():
+        table = Table(title=f"Permissions of user '{user}'")
+        table.add_column("Permission", style="cyan", no_wrap=True)
+        table.add_column("Project")
+        for perm in permissions:
+            table.add_row(perm.permission, perm.project if perm.project else "-")
+        click.echo()
+        Console().print(table)
+        click.echo(f"Number of permissions: {len(permissions)}")
+        click.echo()
 
-    for perm in permissions:
-        table.add_row(perm.permission, perm.project if perm.project else "-")
-
-    click.echo()
-    console = Console()
-    console.print(table)
-    click.echo(f"Number of permissions: {len(permissions)}")
-    click.echo()
+    render(
+        ctx,
+        data=[{"permission": p.permission, "project": p.project} for p in permissions],
+        table=_table,
+    )
 
 
-def _list_by_project(server: TabsdataServer, project: str):
+def _list_by_project(ctx: click.Context, server: TabsdataServer, project: str):
     access = server.list_permissions_by_project(project)
 
-    table = Table(title=f"Access on project '{project}'")
-    table.add_column("User", style="cyan", no_wrap=True)
-    table.add_column("Permission")
-    table.add_column("Source")
+    def _table():
+        table = Table(title=f"Access on project '{project}'")
+        table.add_column("User", style="cyan", no_wrap=True)
+        table.add_column("Permission")
+        table.add_column("Source")
+        for entry in access:
+            table.add_row(entry.user, entry.permission, entry.source)
+        click.echo()
+        Console().print(table)
+        click.echo(f"Number of grants: {len(access)}")
+        click.echo()
 
-    for entry in access:
-        table.add_row(entry.user, entry.permission, entry.source)
-
-    click.echo()
-    console = Console()
-    console.print(table)
-    click.echo(f"Number of grants: {len(access)}")
-    click.echo()
+    render(
+        ctx,
+        data=[
+            {"user": e.user, "permission": e.permission, "source": e.source}
+            for e in access
+        ],
+        table=_table,
+    )

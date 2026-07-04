@@ -10,6 +10,8 @@ from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
+    output_option,
+    render,
     beautify_list,
     logical_prompt,
     verify_login_or_prompt,
@@ -82,6 +84,7 @@ def delete_cert(ctx: click.Context, server: str):
 
 
 @auth.command()
+@output_option
 @click.pass_context
 def info(ctx: click.Context):
     """Display information of the currently authenticated user"""
@@ -89,21 +92,21 @@ def info(ctx: click.Context):
     try:
         info = ctx.obj["tabsdataserver"].auth_info()
 
-        table = Table(title="Current authenticated user")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("Email")
-        table.add_column("Roles")
+        def _table():
+            table = Table(title="Current authenticated user")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("Email")
+            table.add_column("Roles")
+            table.add_row(
+                info["name"],
+                info["email"],
+                beautify_list(info["roles"]),
+            )
+            click.echo()
+            Console().print(table)
+            click.echo()
 
-        table.add_row(
-            info["name"],
-            info["email"],
-            beautify_list(info["roles"]),
-        )
-
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo()
+        render(ctx, data=info, table=_table)
     except Exception as e:
         raise click.ClickException(f"Failed to display current user information: {e}")
 

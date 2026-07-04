@@ -8,6 +8,8 @@ from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
+    output_option,
+    render,
     hint_common_solutions,
     logical_prompt,
     verify_login_or_prompt,
@@ -95,6 +97,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 
 @user.command()
+@output_option
 @click.option("--name", "-n", help="Name of the user to display.")
 @click.pass_context
 def info(ctx: click.Context, name: str):
@@ -104,24 +107,25 @@ def info(ctx: click.Context, name: str):
     try:
         user = ctx.obj["tabsdataserver"].get_user(name)
 
-        table = Table(title=f"User '{name}'")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("Full name")
-        table.add_column("Email")
-        table.add_column("Enabled")
+        def _table():
+            table = Table(title=f"User '{name}'")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("Full name")
+            table.add_column("Email")
+            table.add_column("Enabled")
+            table.add_row(user.name, user.full_name, user.email, str(user.enabled))
+            click.echo()
+            Console().print(table)
+            click.echo()
 
-        table.add_row(user.name, user.full_name, user.email, str(user.enabled))
-
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo()
+        render(ctx, data=lambda: user._data, table=_table)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display user: {e}")
 
 
 @user.command()
+@output_option
 @click.pass_context
 def list(ctx: click.Context):
     """List all users"""
@@ -129,20 +133,22 @@ def list(ctx: click.Context):
     try:
         list_of_users = ctx.obj["tabsdataserver"].users
 
-        table = Table(title="Users")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("Full name")
-        table.add_column("Email")
-        table.add_column("Enabled")
+        def _table():
+            table = Table(title="Users")
+            table.add_column("Name", style="cyan", no_wrap=True)
+            table.add_column("Full name")
+            table.add_column("Email")
+            table.add_column("Enabled")
+            for user in list_of_users:
+                table.add_row(
+                    user.name, user.full_name, user.email, str(user.enabled)
+                )
+            click.echo()
+            Console().print(table)
+            click.echo(f"Number of users: {len(list_of_users)}")
+            click.echo()
 
-        for user in list_of_users:
-            table.add_row(user.name, user.full_name, user.email, str(user.enabled))
-
-        click.echo()
-        console = Console()
-        console.print(table)
-        click.echo(f"Number of users: {len(list_of_users)}")
-        click.echo()
+        render(ctx, data=lambda: [u._data for u in list_of_users], table=_table)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list users: {e}")

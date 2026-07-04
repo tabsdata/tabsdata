@@ -2,14 +2,14 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-import json
-
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
     proj_option,
+    output_option,
+    render,
     hint_common_solutions,
     verify_login_or_prompt,
 )
@@ -190,13 +190,7 @@ def metrics():
     default=None,
     help="Comma-separated LFR statuses to include (e.g. `C,D,E`).",
 )
-@click.option(
-    "--json",
-    "as_json",
-    is_flag=True,
-    help="Print the raw `/metrics` response (nodes + edges + envelope) "
-    "instead of the condensed table.",
-)
+@output_option
 @click.pass_context
 def show(
     ctx: click.Context,
@@ -210,14 +204,13 @@ def show(
     group: str,
     group_exclude: str,
     status: str,
-    as_json: bool,
 ):
     """Per-collection (or per-group) operational summary over the window.
 
     Renders one row per `(dim_entity, status)` with `Runs / Txns /
     Tables in / Rows in / Tables out / Rows out` (bytes columns added
     when any non-zero). Edges are dropped from the rendering — they
-    belong in a flow visualization; use `--json` for the raw shape.
+    belong in a flow visualization; use `-o json` for the raw shape.
     """
     verify_login_or_prompt(ctx)
     try:
@@ -234,10 +227,7 @@ def show(
             group_exclude=_split(group_exclude) or None,
             status=_split(status) or None,
         )
-        if as_json:
-            click.echo(json.dumps(data, indent=2))
-            return
-        _render_summary(data)
+        render(ctx, data=data, table=lambda: _render_summary(data))
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to fetch metrics: {e}")
@@ -270,12 +260,7 @@ def show(
     default=None,
     help="Comma-separated non-terminal LFR statuses to include (e.g. `S,R,H`).",
 )
-@click.option(
-    "--json",
-    "as_json",
-    is_flag=True,
-    help="Print raw JSON response instead of rendering a table.",
-)
+@output_option
 @click.pass_context
 def inflight(
     ctx: click.Context,
@@ -284,7 +269,6 @@ def inflight(
     group: str,
     group_exclude: str,
     status: str,
-    as_json: bool,
 ):
     """Point-in-time `/inflight` — non-terminal LFRs per
     (collection, group, status).
@@ -300,29 +284,30 @@ def inflight(
             status=_split(status) or None,
         )
         rows = data.get("rows") or []
-        if as_json:
-            click.echo(json.dumps(data, indent=2))
-            return
-        if not rows:
-            click.echo("(no inflight runs)")
-            return
-        table = Table(title=f"inflight ({len(rows)})")
-        table.add_column("Collection", style="cyan", no_wrap=True)
-        table.add_column("Group", no_wrap=True)
-        table.add_column("Status", no_wrap=True)
-        table.add_column("Count", justify="right")
-        for r in rows:
-            cid = str(r.get("collection_id") or "")
-            gid = str(r.get("group_id") or "")
-            cname = r.get("collection_name") or cid
-            gname = r.get("group_name") or gid
-            table.add_row(
-                cname,
-                gname,
-                str(r.get("status", "")),
-                str(r.get("count", 0)),
-            )
-        Console().print(table)
+
+        def _table():
+            if not rows:
+                click.echo("(no inflight runs)")
+                return
+            table = Table(title=f"inflight ({len(rows)})")
+            table.add_column("Collection", style="cyan", no_wrap=True)
+            table.add_column("Group", no_wrap=True)
+            table.add_column("Status", no_wrap=True)
+            table.add_column("Count", justify="right")
+            for r in rows:
+                cid = str(r.get("collection_id") or "")
+                gid = str(r.get("group_id") or "")
+                cname = r.get("collection_name") or cid
+                gname = r.get("group_name") or gid
+                table.add_row(
+                    cname,
+                    gname,
+                    str(r.get("status", "")),
+                    str(r.get("count", 0)),
+                )
+            Console().print(table)
+
+        render(ctx, data=data, table=_table)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to fetch inflight: {e}")

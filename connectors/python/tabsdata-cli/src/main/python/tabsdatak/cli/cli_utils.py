@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import importlib.machinery
 import importlib.util
+import io
 import json
 import os
 import platform
@@ -32,6 +33,7 @@ from typing import Any
 import requests
 import rich_click as click
 from rich_click import Option, UsageError
+from ruamel.yaml import YAML
 
 from tabsdatak.common._resources.reader import td_resource  # noqa: F401
 
@@ -263,6 +265,70 @@ def proj_option(fn):
         callback=_apply_proj,
         help="Project to target; overrides the pinned project.",
     )(fn)
+
+
+# ---------------------------------------------------------------------------
+# Output rendering: -o/--output {table,json,yaml}.
+# ---------------------------------------------------------------------------
+
+OUTPUT_FORMATS = ("table", "json", "yaml")
+
+
+def _apply_output(ctx: click.Context, param, value):
+    """``-o/--output`` callback: stash the chosen format on the context so the
+    command's renderer can dispatch on it."""
+    ctx.ensure_object(dict)
+    ctx.obj["output_format"] = value or "table"
+    return value
+
+
+def output_option(fn):
+    """Decorator adding ``-o/--output {table,json,yaml}`` (default ``table``)."""
+    return click.option(
+        "-o",
+        "--output",
+        "output",
+        type=click.Choice(OUTPUT_FORMATS),
+        default="table",
+        show_default=True,
+        expose_value=False,
+        callback=_apply_output,
+        help="Output format.",
+    )(fn)
+
+
+def output_format(ctx: click.Context) -> str:
+    """The active output format for this command (defaults to ``table``)."""
+    return (ctx.obj or {}).get("output_format", "table")
+
+
+def render(ctx: click.Context, *, data, table) -> None:
+    """Render a command's result in the active output format.
+
+    ``table`` is a zero-arg callable that prints the human-facing view (the
+    per-command rich table); it is invoked only in ``table`` mode. ``data`` is
+    -- or returns -- the full DTO(s) to serialize for ``json``/``yaml``; pass a
+    callable to defer fetching the full payload when the table view is shown.
+    JSON is pretty-printed and both machine formats carry all available fields;
+    data goes to stdout so it stays parseable."""
+    fmt = output_format(ctx)
+    if fmt == "table":
+        table()
+        return
+    payload = data() if callable(data) else data
+    if fmt == "json":
+        click.echo(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+    else:  # yaml
+        # Normalize through JSON (default=str) so any value is YAML-safe, then
+        # dump with ruamel (a guaranteed dependency via tabsdata-api; PyYAML is
+        # not a declared tabsdata-cli dependency). Key order is preserved.
+        normalized = json.loads(json.dumps(payload, default=str))
+        yaml = YAML()
+        yaml.default_flow_style = False
+        yaml.allow_unicode = True
+        buf = io.StringIO()
+        yaml.dump(normalized, buf)
+        click.echo(buf.getvalue(), nl=False)
 
 
 def load_pinned_objects(ctx: click.Context):
