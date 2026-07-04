@@ -15,7 +15,7 @@ use crate::client::registry::{
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::service::{
-    instance_markers, resolved_instance, resolved_preview, resolved_yes,
+    instance_markers, resolved_instance, resolved_details, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::preview;
@@ -62,15 +62,15 @@ pub struct CreateArguments {
 
     #[arg(
         long,
-        name = "preview",
+        name = "details",
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 110,
         long_help = "Show the summary of resolved values before creating the instance. \
-                     Defaults to 'true'. Pass '--preview false' to skip the summary."
+                     Defaults to 'true'. Pass '--details false' to skip the summary."
     )]
-    pub preview: Option<bool>,
+    pub details: Option<bool>,
 
     #[arg(
         long,
@@ -92,13 +92,13 @@ pub async fn command_create(
     let CreateArguments {
         instance,
         port,
-        preview,
+        details,
         yes,
     } = arguments;
 
     let pins = PinContext::pins();
     let instance = resolved_instance(instance, &pins);
-    let preview = resolved_preview(preview, &pins);
+    let details = resolved_details(details, &pins);
     let yes = resolved_yes(yes, &pins);
     let verbose = globals.verbose;
 
@@ -106,7 +106,7 @@ pub async fn command_create(
         instance.value,
         instance.pinned,
         port,
-        preview.value,
+        details.value,
         yes.value,
         verbose,
         &HashMap::new(),
@@ -118,7 +118,7 @@ pub async fn create_instance(
     instance: Option<String>,
     instance_pinned: bool,
     port: u16,
-    preview: bool,
+    details: bool,
     yes: bool,
     verbose: bool,
     secret_overrides: &HashMap<String, String>,
@@ -149,7 +149,7 @@ pub async fn create_instance(
     )
     .await?;
 
-    if preview {
+    if details {
         let markers = instance_markers(&provider.summary(), instance_pinned);
         preview::create_service(&provider.summary(), &markers);
         report_ports(&assigned);
@@ -159,7 +159,7 @@ pub async fn create_instance(
         return abort(Cancelled);
     }
 
-    if !preview {
+    if !details {
         report_ports(&assigned);
     }
     settings.ports = assigned.clone();

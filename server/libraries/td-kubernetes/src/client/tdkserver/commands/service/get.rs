@@ -7,7 +7,7 @@ use std::fs;
 
 use clap_derive::Args;
 use td_error::TdError;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
 use crate::base::error::cli::CliError;
@@ -43,20 +43,23 @@ pub struct GetArguments {
 
     #[arg(
         long,
-        name = "values",
+        name = "with-secrets",
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 70,
-        long_help = "Materialize the values the user can modify into the downloaded files. \
-                     Values the user cannot modify are kept as placeholders. Defaults to 'false'."
+        long_help = "Materialize secret values into the downloaded files. Values the user \
+                     cannot modify are kept as placeholders. Defaults to 'false'."
     )]
-    pub values: Option<bool>,
+    pub with_secrets: Option<bool>,
 }
 
 pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> CommandResult {
-    let GetArguments { instance, values } = arguments;
-    let values = values.unwrap_or(false);
+    let GetArguments {
+        instance,
+        with_secrets,
+    } = arguments;
+    let values = with_secrets.unwrap_or(false);
 
     let pins = PinContext::pins();
     let instance = resolved_instance(instance, &pins);
@@ -156,6 +159,13 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
 
     step.done(&format!("Downloaded {count} tabsdata configmaps"));
     info!("Configmaps written to {}", configs_folder.display());
+    warn!(
+        "Edit the configmaps in '{}', then run 'tdkserver put-cfg --instance {}' to upload \
+         your changes. The instance must be restarted for the changes to take effect; \
+         restart it manually or pass '--apply' to 'put-cfg'.",
+        edit_input.display(),
+        name,
+    );
     Ok(())
 }
 

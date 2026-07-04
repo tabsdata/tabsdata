@@ -135,7 +135,7 @@ pub struct Pins {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub save: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preview: Option<bool>,
+    pub details: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub autoconfirm: Option<bool>,
 }
@@ -154,7 +154,7 @@ pub struct PinSelection {
     pub context: bool,
     pub namespace: bool,
     pub save: bool,
-    pub preview: bool,
+    pub details: bool,
     pub autoconfirm: bool,
 }
 
@@ -166,7 +166,7 @@ impl PinSelection {
             || self.context
             || self.namespace
             || self.save
-            || self.preview
+            || self.details
             || self.autoconfirm
     }
 }
@@ -179,7 +179,7 @@ impl Pins {
             && self.context.is_none()
             && self.namespace.is_none()
             && self.save.is_none()
-            && self.preview.is_none()
+            && self.details.is_none()
             && self.autoconfirm.is_none()
     }
 
@@ -203,8 +203,8 @@ impl Pins {
         if let Some(save) = self.save {
             info!("  - save.........: {save}");
         }
-        if let Some(preview) = self.preview {
-            info!("  - preview......: {preview}");
+        if let Some(details) = self.details {
+            info!("  - details......: {details}");
         }
         if let Some(autoconfirm) = self.autoconfirm {
             info!("  - autoconfirm..: {autoconfirm}");
@@ -230,8 +230,8 @@ impl Pins {
         if values.save.is_some() {
             self.save = values.save;
         }
-        if values.preview.is_some() {
-            self.preview = values.preview;
+        if values.details.is_some() {
+            self.details = values.details;
         }
         if values.autoconfirm.is_some() {
             self.autoconfirm = values.autoconfirm;
@@ -258,7 +258,7 @@ impl Pins {
         if selection.save && self.save.take().is_some() {
             cleared = true;
         }
-        if selection.preview && self.preview.take().is_some() {
+        if selection.details && self.details.take().is_some() {
             cleared = true;
         }
         if selection.autoconfirm && self.autoconfirm.take().is_some() {

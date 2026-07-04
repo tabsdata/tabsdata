@@ -24,15 +24,15 @@ pub struct StartArguments {
 
     #[arg(
         long,
-        name = "preview",
+        name = "details",
         required = false,
         default_value_t = true,
         num_args = 0..=1,
         default_missing_value = "true",
         long_help = "Show the summary of resolved values before starting the instance. \
-                     Defaults to 'true'. Pass '--preview false' to skip the summary."
+                     Defaults to 'true'. Pass '--details false' to skip the summary."
     )]
-    pub preview: bool,
+    pub details: bool,
 
     #[arg(
         long,
@@ -49,7 +49,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
     let StartArguments {
         cluster,
         instance,
-        preview,
+        details,
         yes,
     } = arguments;
 
@@ -61,7 +61,7 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
         return Ok(());
     }
 
-    if preview {
+    if details {
         preview::start_instance(&provider.summary());
     }
     if !yes && !prompt_yes_no("Proceed with the start?") {

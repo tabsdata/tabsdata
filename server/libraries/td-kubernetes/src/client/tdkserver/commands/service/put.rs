@@ -21,7 +21,7 @@ use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::restart::restart_service;
 use crate::client::tdkserver::commands::service::{
-    resolved_instance, resolved_preview, resolved_yes,
+    resolved_instance, resolved_details, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::core::system::exit::{CommandResult, abort};
@@ -62,15 +62,15 @@ pub struct PutArguments {
 
     #[arg(
         long,
-        name = "preview",
+        name = "details",
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 110,
         long_help = "Show the summary of resolved values before replacing the configmaps. \
-                     Defaults to 'true'. Pass '--preview false' to skip the summary."
+                     Defaults to 'true'. Pass '--details false' to skip the summary."
     )]
-    pub preview: Option<bool>,
+    pub details: Option<bool>,
 
     #[arg(
         long,
@@ -89,13 +89,13 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
     let PutArguments {
         instance,
         apply,
-        preview,
+        details,
         yes,
     } = arguments;
 
     let pins = PinContext::pins();
     let instance = resolved_instance(instance, &pins);
-    let preview = resolved_preview(preview, &pins);
+    let details = resolved_details(details, &pins);
     let yes = resolved_yes(yes, &pins);
     let apply = apply.unwrap_or(false);
     let verbose = globals.verbose;
@@ -114,7 +114,7 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
 
     let merged = merge(&profile, &system, &input, &server_secrets).map_err(TdError::from)?;
 
-    if preview.value {
+    if details.value {
         info!("About to replace configmaps for tabsdata instance '{name}':");
         for config in &merged {
             info!("  - {}", config.file);

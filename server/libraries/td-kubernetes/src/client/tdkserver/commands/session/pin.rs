@@ -75,14 +75,14 @@ pub struct PinArguments {
 
     #[arg(
         long,
-        name = "preview",
+        name = "details",
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 110,
-        long_help = "Pin the --preview value used when a command omits --preview."
+        long_help = "Pin the --details value used when a command omits --details."
     )]
-    pub preview: Option<bool>,
+    pub details: Option<bool>,
 
     #[arg(
         long,
@@ -105,7 +105,7 @@ pub async fn command_pin(arguments: PinArguments, _globals: &GlobalArguments) ->
         context,
         namespace,
         save,
-        preview,
+        details,
         autoconfirm,
     } = arguments;
 
@@ -116,7 +116,7 @@ pub async fn command_pin(arguments: PinArguments, _globals: &GlobalArguments) ->
         context,
         namespace,
         save,
-        preview,
+        details,
         autoconfirm,
     };
 

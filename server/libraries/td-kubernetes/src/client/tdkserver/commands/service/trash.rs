@@ -18,7 +18,7 @@ use crate::client::registry::{InstanceSettings, instance_folder, trash_root};
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
-    resolved_instance, resolved_preview, resolved_yes,
+    resolved_instance, resolved_details, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::preview;
@@ -42,15 +42,15 @@ pub struct TrashArguments {
 
     #[arg(
         long,
-        name = "preview",
+        name = "details",
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 110,
         long_help = "Show the summary of resolved values before trashing the instance. \
-                     Defaults to 'true'. Pass '--preview false' to skip the summary."
+                     Defaults to 'true'. Pass '--details false' to skip the summary."
     )]
-    pub preview: Option<bool>,
+    pub details: Option<bool>,
 
     #[arg(
         long,
@@ -68,13 +68,13 @@ pub struct TrashArguments {
 pub async fn command_trash(arguments: TrashArguments, globals: &GlobalArguments) -> CommandResult {
     let TrashArguments {
         instance,
-        preview,
+        details,
         yes,
     } = arguments;
 
     let pins = PinContext::pins();
     let instance = resolved_instance(instance, &pins);
-    let preview = resolved_preview(preview, &pins);
+    let details = resolved_details(details, &pins);
     let yes = resolved_yes(yes, &pins);
     let verbose = globals.verbose;
 
@@ -89,7 +89,7 @@ pub async fn command_trash(arguments: TrashArguments, globals: &GlobalArguments)
 
     let trash_root = trash_root()?;
 
-    if preview.value {
+    if details.value {
         preview::trash_service(
             &name,
             &folder.display().to_string(),

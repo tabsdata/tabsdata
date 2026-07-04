@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Literal, Protocol
 
@@ -35,6 +37,86 @@ SERVICE_AIAGENT_PUBLIC_PORT: Service = "aiagent_public_port"
 SERVICE_DATABASE_PORT: Service = "database_port"
 SERVICE_KMINUS_API_PORT: Service = "kminus_api_port"
 
+APISERVER_SUPERUSER_NAME = "admin"
+APISERVER_SUPERUSER_PASSWORD = "tabsdata"
+
+ENV_ROOT_PREFIX = "TD_KSERVER"
+ENV_SEPARATOR = "_"
+
+
+class InstanceEnv(Enum):
+    NAME = "NAME"
+    FOLDER = "FOLDER"
+    APISERVER_HOST = "APISERVER_HOST"
+    APISERVER_PORT = "APISERVER_PORT"
+    APISERVER_SUPERUSER_USER = "APISERVER_SUPERUSER_USER"
+    APISERVER_SUPERUSER_PASSWORD = "APISERVER_SUPERUSER_PASSWORD"
+
+    def key(self, role: str) -> str:
+        return env_key(env_key(ENV_ROOT_PREFIX, role), self.value)
+
+    def get(self, role: str) -> str | None:
+        return os.environ.get(self.key(role))
+
+
+def env_key(prefix: str, name: str) -> str:
+    return f"{prefix}{ENV_SEPARATOR}{name}".upper()
+
+
+def server_properties(obj: object) -> dict[str, Server]:
+    servers: dict[str, Server] = {}
+    for name, attribute in type(obj).__dict__.items():
+        if isinstance(attribute, property):
+            value = getattr(obj, name)
+            if isinstance(value, Server):
+                servers[name] = value
+    return servers
+
+
+def dataclass_field_names(obj: object) -> list[str]:
+    field_map = getattr(type(obj), "__dataclass_fields__", {})
+    if isinstance(field_map, dict):
+        return list(field_map)
+    return []
+
+
+ENV_EXCLUDE_ATTRIBUTE = "ENV_EXCLUDED_FIELDS"
+
+
+def env_excluded_fields(value: object) -> frozenset[str]:
+    excluded = getattr(type(value), ENV_EXCLUDE_ATTRIBUTE, ())
+    return frozenset(excluded)
+
+
+def emit(prefix: str, value: object) -> dict[str, str]:
+    envs: dict[str, str] = {}
+    if value is None:
+        return envs
+    if is_dataclass(value) and not isinstance(value, type):
+        excluded = env_excluded_fields(value)
+        for field_name in dataclass_field_names(value):
+            if field_name in excluded:
+                continue
+            envs.update(emit(env_key(prefix, field_name), getattr(value, field_name)))
+    elif isinstance(value, dict):
+        for entry_key, entry_value in value.items():
+            envs.update(emit(env_key(prefix, str(entry_key)), entry_value))
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            envs.update(emit(env_key(prefix, str(index)), item))
+    elif isinstance(value, Path):
+        envs[prefix] = str(value)
+    elif isinstance(value, (str, int, float, bool)):
+        envs[prefix] = str(value)
+    return envs
+
+
+def as_envs(obj: object, prefix: str) -> dict[str, str]:
+    envs = emit(prefix, obj)
+    for name, server in server_properties(obj).items():
+        envs.update(emit(env_key(prefix, name), server))
+    return envs
+
 
 @dataclass(frozen=True)
 class AssignedPort:
@@ -44,17 +126,43 @@ class AssignedPort:
 
 
 @dataclass(frozen=True)
+class User:
+    user: str
+    password: str
+
+
+@dataclass(frozen=True)
+class Server:
+    host: str
+    port: int | None
+    superuser: User | None = None
+
+
+@dataclass(frozen=True)
 class Instance:
     name: str
     folder: Path
     settings: dict
     ports: list[AssignedPort]
 
+    ENV_EXCLUDED_FIELDS = ("settings", "ports")
+
     def port_for_service(self, service: Service) -> int | None:
         for assigned in self.ports:
             if assigned.service == service:
                 return assigned.port
         return None
+
+    @property
+    def apiserver(self) -> Server:
+        return Server(
+            host=LOCALHOST,
+            port=self.port_for_service(SERVICE_APISERVER_PUBLIC_PORT),
+            superuser=User(
+                user=APISERVER_SUPERUSER_NAME,
+                password=APISERVER_SUPERUSER_PASSWORD,
+            ),
+        )
 
     @property
     def apiserver_public_port(self) -> int | None:
@@ -190,25 +298,37 @@ def verify_serving(instance: Instance) -> None:
             )
 
 
+def instance_envs(instance: Instance) -> dict[str, str]:
+    prefix = env_key(ENV_ROOT_PREFIX, role_of(instance.name))
+    return as_envs(instance, prefix)
+
+
+def export_instance_envs(instance: Instance, monkeypatch: pytest.MonkeyPatch) -> None:
+    for key, value in instance_envs(instance).items():
+        monkeypatch.setenv(key, value)
+
+
 class InstanceMaker(Protocol):
     def __call__(self, role: str, check: bool = True) -> Instance: ...
 
 
 @pytest.fixture
-def instance_maker() -> InstanceMaker:
+def instance_maker(monkeypatch: pytest.MonkeyPatch) -> InstanceMaker:
     def make(role: str, check: bool = True) -> Instance:
         instance = make_instance(role)
         if check:
             verify_serving(instance)
+        export_instance_envs(instance, monkeypatch)
         return instance
 
     return make
 
 
 @pytest.fixture
-def instance(request) -> Instance:
+def instance(request, monkeypatch: pytest.MonkeyPatch) -> Instance:
     instance = make_instance(request.param)
     verify_serving(instance)
+    export_instance_envs(instance, monkeypatch)
     return instance
 
 

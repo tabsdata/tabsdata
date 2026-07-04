@@ -32,8 +32,8 @@ pub struct UnpinArguments {
     #[arg(long, name = "save", required = false, display_order = 100)]
     pub save: bool,
 
-    #[arg(long, name = "preview", required = false, display_order = 110)]
-    pub preview: bool,
+    #[arg(long, name = "details", required = false, display_order = 110)]
+    pub details: bool,
 
     #[arg(long, name = "autoconfirm", required = false, display_order = 120)]
     pub autoconfirm: bool,
@@ -47,7 +47,7 @@ pub async fn command_unpin(arguments: UnpinArguments, _globals: &GlobalArguments
         context,
         namespace,
         save,
-        preview,
+        details,
         autoconfirm,
     } = arguments;
 
@@ -58,7 +58,7 @@ pub async fn command_unpin(arguments: UnpinArguments, _globals: &GlobalArguments
         context,
         namespace,
         save,
-        preview,
+        details,
         autoconfirm,
     };
 

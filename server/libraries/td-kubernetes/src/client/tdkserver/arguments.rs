@@ -88,18 +88,24 @@ pub enum Commands {
     Status(InstanceNameArguments),
     #[command(about = "Show the configuration and state of a tabsdata instance")]
     Info(InstanceNameArguments),
+    #[command(about = "Trash a local kminus tabsdata instance")]
+    Trash(TrashArguments),
     #[command(about = "Register an existing tabsdata instance")]
     Register(RegisterArguments),
     #[command(about = "Unregister a tabsdata instance")]
     Unregister(InstanceNameArguments),
-    #[command(about = "Download the configmaps of a tabsdata instance for editing")]
+    #[command(
+        name = "get-cfg",
+        about = "Download the configmaps of a tabsdata instance for editing"
+    )]
     Get(GetArguments),
-    #[command(about = "Replace the configmaps of a tabsdata instance from edited files")]
+    #[command(
+        name = "put-cfg",
+        about = "Replace the configmaps of a tabsdata instance from edited files"
+    )]
     Put(PutArguments),
-    #[command(about = "View the configmaps of a tabsdata instance")]
+    #[command(name = "view-cfg", about = "View the configmaps of a tabsdata instance")]
     View(ViewArguments),
-    #[command(about = "Trash a local kminus tabsdata instance")]
-    Trash(TrashArguments),
     #[command(about = "Pin default values used when commands omit them")]
     Pin(PinArguments),
     #[command(about = "Unpin default values")]

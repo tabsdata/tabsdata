@@ -9,7 +9,7 @@ use crate::base::reporter::InteractiveReporter;
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
-    instance_markers, resolved_instance, resolved_preview, resolved_yes,
+    instance_markers, resolved_instance, resolved_details, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::{preview, report};
@@ -31,15 +31,15 @@ pub struct StopArguments {
 
     #[arg(
         long,
-        name = "preview",
+        name = "details",
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 110,
         long_help = "Show the summary of resolved values before stopping the instance. \
-                     Defaults to 'true'. Pass '--preview false' to skip the summary."
+                     Defaults to 'true'. Pass '--details false' to skip the summary."
     )]
-    pub preview: Option<bool>,
+    pub details: Option<bool>,
 
     #[arg(
         long,
@@ -57,13 +57,13 @@ pub struct StopArguments {
 pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -> CommandResult {
     let StopArguments {
         instance,
-        preview,
+        details,
         yes,
     } = arguments;
 
     let pins = PinContext::pins();
     let instance = resolved_instance(instance, &pins);
-    let preview = resolved_preview(preview, &pins);
+    let details = resolved_details(details, &pins);
     let yes = resolved_yes(yes, &pins);
     let verbose = globals.verbose;
 
@@ -75,7 +75,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
         return Ok(());
     }
 
-    if preview.value {
+    if details.value {
         let markers = instance_markers(&provider.summary(), instance.pinned);
         preview::stop_service(&provider.summary(), &markers);
     }

@@ -5,6 +5,7 @@
 from testi_tabsdatak.common.backend.tdkserver import (  # noqa: F401
     AssignedPort,
     Instance,
+    InstanceEnv,
     InstanceMaker,
     Role,
     Service,

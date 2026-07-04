@@ -40,20 +40,23 @@ pub struct ViewArguments {
 
     #[arg(
         long,
-        name = "values",
+        name = "with-secrets",
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 70,
-        long_help = "Show the values the user can modify resolved. Values resolved only when \
-                     applied are shown unresolved. Defaults to 'false'."
+        long_help = "Show secret values resolved. Values resolved only when applied are shown \
+                     unresolved. Defaults to 'false'."
     )]
-    pub values: Option<bool>,
+    pub with_secrets: Option<bool>,
 }
 
 pub async fn command_view(arguments: ViewArguments, globals: &GlobalArguments) -> CommandResult {
-    let ViewArguments { instance, values } = arguments;
-    let values = values.unwrap_or(false);
+    let ViewArguments {
+        instance,
+        with_secrets,
+    } = arguments;
+    let values = with_secrets.unwrap_or(false);
 
     let pins = PinContext::pins();
     let instance = resolved_instance(instance, &pins);

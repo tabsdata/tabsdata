@@ -37,15 +37,15 @@ pub struct ApplyArguments {
 
     #[arg(
         long,
-        name = "preview",
+        name = "details",
         required = false,
         default_value_t = true,
         num_args = 0..=1,
         default_missing_value = "true",
         long_help = "Show the summary of resolved values before applying. \
-                     Defaults to 'true'. Pass '--preview false' to skip the summary."
+                     Defaults to 'true'. Pass '--details false' to skip the summary."
     )]
-    pub preview: bool,
+    pub details: bool,
 
     #[arg(
         long,
@@ -63,7 +63,7 @@ pub async fn command_apply(arguments: ApplyArguments, globals: &GlobalArguments)
         cluster,
         instance,
         folder,
-        preview,
+        details,
         yes,
     } = arguments;
 
@@ -77,7 +77,7 @@ pub async fn command_apply(arguments: ApplyArguments, globals: &GlobalArguments)
         provider.ensure_stoppable_server().await?;
     }
 
-    if preview {
+    if details {
         preview::apply_config(&provider.summary());
     }
     if !yes && !prompt_yes_no("Proceed with the apply?") {

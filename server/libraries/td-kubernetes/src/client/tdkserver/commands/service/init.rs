@@ -21,7 +21,7 @@ use crate::client::registry::{
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::service::{
-    resolved_cluster, resolved_instance, resolved_preview, resolved_save, resolved_yes,
+    resolved_cluster, resolved_instance, resolved_details, resolved_save, resolved_yes,
 };
 use crate::client::tdkserver::commands::template::get::get_templates;
 use crate::client::tdkserver::common::prompt_yes_no;
@@ -50,15 +50,15 @@ pub struct InitArguments {
 
     #[arg(
         long,
-        name = "preview",
+        name = "details",
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 110,
         long_help = "Show the summary of resolved values before initializing the instance. \
-                     Defaults to 'true'. Pass '--preview false' to skip the summary."
+                     Defaults to 'true'. Pass '--details false' to skip the summary."
     )]
-    pub preview: Option<bool>,
+    pub details: Option<bool>,
 
     #[arg(
         long,
@@ -90,7 +90,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         instance,
         cluster,
         save,
-        preview,
+        details,
         yes,
     } = arguments;
 
@@ -98,7 +98,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     let instance = resolved_instance(instance, &pins);
     let (mut cluster, cluster_pinned) = resolved_cluster(cluster, &pins);
     let save = resolved_save(save, &pins);
-    let preview = resolved_preview(preview, &pins);
+    let details = resolved_details(details, &pins);
     let yes = resolved_yes(yes, &pins);
     let verbose = globals.verbose;
 
@@ -111,7 +111,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     let provider = cluster.provider.unwrap_or(DEFAULT_PROVIDER);
     cluster.provider = Some(provider);
 
-    if preview.value {
+    if details.value {
         preview::init_service(
             &instance,
             instance_pinned,

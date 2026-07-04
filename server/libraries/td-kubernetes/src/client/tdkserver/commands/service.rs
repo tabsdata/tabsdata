@@ -51,8 +51,8 @@ pub fn resolved_instance(user: Option<String>, pins: &Pins) -> Resolved<Option<S
     resolve(user, pins.instance.clone())
 }
 
-pub fn resolved_preview(user: Option<bool>, pins: &Pins) -> Resolved<bool> {
-    resolve_flag(user, pins.preview, true)
+pub fn resolved_details(user: Option<bool>, pins: &Pins) -> Resolved<bool> {
+    resolve_flag(user, pins.details, true)
 }
 
 pub fn resolved_yes(user: Option<bool>, pins: &Pins) -> Resolved<bool> {

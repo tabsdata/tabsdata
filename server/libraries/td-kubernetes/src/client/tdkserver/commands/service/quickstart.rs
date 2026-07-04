@@ -18,7 +18,7 @@ use crate::client::tdkserver::commands::service::init::{InitArguments, command_i
 use crate::client::tdkserver::commands::service::start::{StartArguments, command_start};
 use crate::client::tdkserver::commands::service::trash::trash_instance_folder;
 use crate::client::tdkserver::commands::service::{
-    resolved_instance, resolved_preview, resolved_yes,
+    resolved_instance, resolved_details, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::core::system::exit::{CommandResult, abort, render_error};
@@ -82,15 +82,15 @@ pub struct QuickstartArguments {
 
     #[arg(
         long,
-        name = "preview",
+        name = "details",
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
         display_order = 110,
         long_help = "Show the summary of resolved values before each step. Defaults to \
-                     'true'. Pass '--preview false' to skip the summaries."
+                     'true'. Pass '--details false' to skip the summaries."
     )]
-    pub preview: Option<bool>,
+    pub details: Option<bool>,
 
     #[arg(
         long,
@@ -116,7 +116,7 @@ pub async fn command_quickstart(
         openai_key,
         anthropic_key,
         save,
-        preview,
+        details,
         yes,
     } = arguments;
 
@@ -141,7 +141,7 @@ pub async fn command_quickstart(
     let preexisting = folder.exists();
 
     let outcome = run_quickstart(
-        instance, cluster, port, save, preview, yes, &overrides, globals,
+        instance, cluster, port, save, details, yes, &overrides, globals,
     )
     .await;
 
@@ -176,7 +176,7 @@ async fn run_quickstart(
     cluster: ClusterArguments,
     port: u16,
     save: Option<bool>,
-    preview: Option<bool>,
+    details: Option<bool>,
     yes: Option<bool>,
     overrides: &HashMap<String, String>,
     globals: &GlobalArguments,
@@ -185,7 +185,7 @@ async fn run_quickstart(
         InitArguments {
             instance: instance.clone(),
             cluster,
-            preview,
+            details,
             save,
             yes,
         },
@@ -195,7 +195,7 @@ async fn run_quickstart(
 
     let pins = PinContext::pins();
     let resolved_instance_value = resolved_instance(instance.clone(), &pins);
-    let resolved_preview_value = resolved_preview(preview, &pins);
+    let resolved_details_value = resolved_details(details, &pins);
     let resolved_yes_value = resolved_yes(yes, &pins);
     let resolved_verbose_value = globals.verbose;
 
@@ -203,7 +203,7 @@ async fn run_quickstart(
         resolved_instance_value.value,
         resolved_instance_value.pinned,
         port,
-        resolved_preview_value.value,
+        resolved_details_value.value,
         resolved_yes_value.value,
         resolved_verbose_value,
         overrides,
@@ -213,7 +213,7 @@ async fn run_quickstart(
     command_start(
         StartArguments {
             instance,
-            preview,
+            details,
             yes,
         },
         globals,
