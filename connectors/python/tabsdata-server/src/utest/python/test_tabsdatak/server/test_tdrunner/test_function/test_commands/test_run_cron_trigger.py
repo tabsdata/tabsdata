@@ -1,0 +1,144 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+"""Unit tests for the run-cron-trigger one-shot command."""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from tabsdatak.server._tdrunner.function._lib.http_request import (
+    HttpRequest,
+    HttpRequestError,
+    HttpResponse,
+)
+from tabsdatak.server._tdrunner.function.commands import run_cron_trigger
+from tabsdatak.server._tdrunner.function.commands.run_cron_trigger import (
+    _build_parser,
+    _execution_request_body,
+    _fire,
+    main,
+)
+from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.error import (
+    CronTriggerConnectionError,
+    CronTriggerRejectedError,
+)
+
+pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
+
+
+def _std_args() -> list[str]:
+    """The standard responder/liveness/log/journal args build_parser requires."""
+    return [
+        "--shared-dir",
+        "/s",
+        "--work-dir",
+        "/w",
+        "--log-config",
+        "/c",
+        "--liveness",
+        "/l",
+        "--responder-url",
+        "val:http://r",
+        "--responder-method",
+        "val:POST",
+        "--responder-authorization",
+        "val:Bearer r",
+        "--journal-file",
+        "/j",
+    ]
+
+
+# --- body shape (the regression that matters) -----------------------------
+
+
+def test_execution_request_body_is_cron_trigger_shape():
+    # Mirrors the legacy td-crontrigger builder: a fresh execution every
+    # tick (no external_uid dedup, skip_if_running false), tagged
+    # TriggerType::CronTrigger ("CT").
+    assert json.loads(_execution_request_body()) == {
+        "name": None,
+        "function_only": False,
+        "skip_if_running": False,
+        "external_uid": None,
+        "trigger_type": "CT",
+    }
+
+
+def test_main_carries_tabsdata_command_metadata():
+    assert getattr(main, "tabsdata_command", False) is True
+    assert getattr(main, "tabsdata_command_name", None) == "td_run_cron_trigger"
+
+
+def test_build_parser_accepts_trigger_triplet():
+    parser = _build_parser()
+    ns = parser.parse_args(
+        _std_args()
+        + [
+            "--trigger-url",
+            "env:SECRET__TD_TRIGGER_URL",
+            "--trigger-method",
+            "val:POST",
+            "--trigger-authorization",
+            "val:Bearer t",
+        ]
+    )
+    assert ns.trigger_url == "env:SECRET__TD_TRIGGER_URL"
+    assert ns.trigger_method == "val:POST"
+    assert ns.trigger_authorization == "val:Bearer t"
+
+
+# --- _fire: POST once, classify the response ------------------------------
+
+
+def _capture_invoke(*, response: HttpResponse | None = None, raise_exc=None):
+    captured: dict = {}
+
+    def fake_invoke(request, body=None):
+        captured["request"] = request
+        captured["body"] = body
+        if raise_exc is not None:
+            raise raise_exc
+        return response
+
+    return fake_invoke, captured
+
+
+def test_fire_posts_cron_body_and_returns_on_2xx(monkeypatch):
+    fake, captured = _capture_invoke(response=HttpResponse(status_code=200, body=b"{}"))
+    monkeypatch.setattr(run_cron_trigger, "invoke", fake)
+
+    # 2xx -> returns cleanly (no raise); the @command wrapper turns this into
+    # exit 0.
+    assert _fire("http://api/execute", "POST", "Bearer tok") is None
+
+    request = captured["request"]
+    assert isinstance(request, HttpRequest)
+    assert request.url == "http://api/execute"
+    assert request.method == "POST"
+    assert request.headers["Authorization"] == "Bearer tok"
+    assert request.headers["Content-Type"] == "application/json"
+    assert json.loads(captured["body"])["trigger_type"] == "CT"
+
+
+def test_fire_raises_ct2_on_non_2xx(monkeypatch):
+    fake, _ = _capture_invoke(response=HttpResponse(status_code=403, body=b"forbidden"))
+    monkeypatch.setattr(run_cron_trigger, "invoke", fake)
+
+    with pytest.raises(CronTriggerRejectedError) as excinfo:
+        _fire("http://api/execute", "POST", "Bearer tok")
+    assert excinfo.value.exit_code == 83
+    assert "403" in str(excinfo.value)
+
+
+def test_fire_raises_ct1_on_connection_error(monkeypatch):
+    fake, _ = _capture_invoke(raise_exc=HttpRequestError("connection refused"))
+    monkeypatch.setattr(run_cron_trigger, "invoke", fake)
+
+    with pytest.raises(CronTriggerConnectionError) as excinfo:
+        _fire("http://api/execute", "POST", "Bearer tok")
+    assert excinfo.value.exit_code == 82
+    assert "http://api/execute" in str(excinfo.value)

@@ -69,11 +69,17 @@ spec:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
-          initContainers:
-            - name: 0000-inspect-function
+          containers:
+            # One-shot cron trigger: Kubernetes owns the ticking (the gateway
+            # stamps spec.schedule from the function's cron mask), so each fire
+            # runs this once. The trigger triplet is injected from the worker's
+            # TD_TRIGGER_* secret; the command POSTs the execute endpoint and
+            # exits. No request.yaml / stage / loop -- the URL already encodes
+            # the project + function version.
+            - name: 1000-cron-publisher
               image: function
               imagePullPolicy: IfNotPresent
-              command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_inspect_function"]
+              command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_cron_trigger"]
               args:
                 - --shared-dir
                 - $(CONTAINER_ROOT)/tabsdata/shared
@@ -91,10 +97,16 @@ spec:
                 - env:SECRET__TD_RESPONDER_AUTHORIZATION
                 - --journal-file
                 - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+                - --trigger-url
+                - env:SECRET__TD_TRIGGER_URL
+                - --trigger-method
+                - env:SECRET__TD_TRIGGER_METHOD
+                - --trigger-authorization
+                - env:SECRET__TD_TRIGGER_AUTHORIZATION
               resources:
                 requests:
                   cpu: "50m"
-                  memory: "32Mi"
+                  memory: "64Mi"
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities:
@@ -115,7 +127,7 @@ spec:
                 - name: TD_LOG_CONFIG
                   value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
               volumeMounts:
-                - name: config-inspect-function
+                - name: config-cron-publisher
                   mountPath: /tabsdata/config
                   readOnly: true
                 - name: pyenv
@@ -123,41 +135,8 @@ spec:
                   readOnly: true
                 - name: shared
                   mountPath: /tabsdata/shared
-          containers:
-            # TODO(TD-2627): replace this placeholder with the one-shot
-            # cron-trigger command (resolve token -> POST /execute -> exit).
-            - name: 1000-cron-publisher
-              image: function
-              imagePullPolicy: IfNotPresent
-              command: ["/bin/sh"]
-              args:
-                - -c
-                - |
-                  echo "pod=$POD_NAME namespace=$POD_NAMESPACE worker=cron-publisher instance=$POD_TABSDATA_INSTANCE"
-              resources:
-                requests:
-                  cpu: "50m"
-                  memory: "32Mi"
-              securityContext:
-                allowPrivilegeEscalation: false
-                capabilities:
-                  drop: ["ALL"]
-              env:
-                - name: POD_NAME
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: metadata.name
-                - name: POD_NAMESPACE
-                  valueFrom:
-                    fieldRef:
-                      fieldPath: metadata.namespace
-                - name: POD_TABSDATA_INSTANCE
-                  value: "${{system:tdk_instance_name}}"
-              volumeMounts:
-                - name: shared
-                  mountPath: /tabsdata/shared
           volumes:
-            - name: config-inspect-function
+            - name: config-cron-publisher
               projected:
                 sources:
                   - configMap:
