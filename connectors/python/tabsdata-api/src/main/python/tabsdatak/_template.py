@@ -14,27 +14,30 @@ Introspects the connectors registered through the SPI registry
     apiVersion: '1.0'
     type: tabsdatak.conn.mysql:MySQLSrcConn
     spec:
+
       # accepts: <value> | secret:<value>
-      uri: <FILL: uri>
+      # replace <value> with the actual uri
+      #
+      uri: '<value> or secret:<value>'
       credentials:           # ... nested userPasswordCredentials envelope ...
         ...
 
 The ``spec`` mirrors the connection :class:`~tabsdatak.spi.Conn` dataclass's
-pydantic fields. Each field's sample is generated from the **first** member of
-its type union:
+pydantic fields. Each fill-in field renders a ``<value>`` placeholder generated
+from the **first** member of its type union:
 
-- a :class:`~tabsdatak.api.Secret` first member renders as a bare
-  runtime-resolved reference -- the ``":secret:"`` string; no value ever lands in
-  the file (the runtime store resolves it);
+- a :class:`~tabsdatak.api.Secret` first member renders as ``'secret:<value>'``
+  (or ``'<value> or secret:<value>'`` when the union also accepts a plain
+  literal); the runtime store resolves the value the user fills in;
 - a nested-object first member recurses into its own envelope;
-- any other first member renders a typed sample value, or a ``<FILL: ...>``
-  placeholder when none can be derived.
+- any other first member renders ``'<value>'`` or a concrete typed sample
+  (enum / int / bool / a field carrying a default).
 
-A field that accepts more than one form -- a Secret reference plus a plain
-literal (uri, bucket, region) -- carries a ``# accepts: ...`` comment listing
-those forms in the union's declaration order, regardless of which one the sample
-shows. A field with a single accepted form (a plain scalar, or a lone ``Secret``
-credential) carries no comment.
+Every fill-in field carries a comment block above it: a blank-line separator,
+an optional ``# accepts: ...`` line (only when the union accepts more than one
+form, e.g. uri / bucket / region), a ``# replace <value> ...`` hint, then a
+bare ``#`` border just above the key. Fields rendering a concrete sample (a
+default, enum, ...) carry no block.
 
 [`build_template`][build_template] / [`build_template_interactive`] return a
 YAML-ready :class:`~ruamel.yaml.comments.CommentedMap`; [`to_yaml`] renders it
@@ -58,6 +61,9 @@ from typing import Any, Callable, Optional
 
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.error import CommentMark
+from ruamel.yaml.scalarstring import SingleQuotedScalarString
+from ruamel.yaml.tokens import CommentToken
 
 # noinspection PyProtectedMember
 from tabsdatak._api import DescriptorBase, qualified_class, resolve_class
@@ -332,6 +338,61 @@ def build_template(conn_cls: type, *, all_fields: bool = False) -> CommentedMap:
     return env
 
 
+def _is_secret(m: Any) -> bool:
+    return isinstance(m, type) and issubclass(m, Secret)
+
+
+def _placeholder_value(members: list[Any], default: Any, path: str) -> Any:
+    """The fill-in placeholder a scalar (non-nested) field renders as.
+
+    Secret-capable fields render a quoted ``<value>`` hint so the file shows
+    exactly what to type; plain typed fields (Literal / enum / int / bool /
+    list / dict, or a field carrying a default) keep a concrete valid sample.
+    The :class:`SingleQuotedScalarString` wrapper both forces single-quote
+    YAML rendering and marks the value as a fill-in placeholder, so
+    :func:`_field_comment` knows to annotate it."""
+    if default is not None:
+        return default
+    if any(_is_secret(m) for m in members):
+        if any(not _is_secret(m) for m in members):
+            return SingleQuotedScalarString("<value> or secret:<value>")
+        return SingleQuotedScalarString("secret:<value>")
+    if members[0] is str:
+        return SingleQuotedScalarString("<value>")
+    return _scalar_placeholder([members[0]], default, path)
+
+
+def _field_comment_lines(name: str, members: list[Any], value: Any) -> Optional[list[str]]:
+    """The content lines of the comment block shown above a fill-in field
+    (borders are added by :func:`_set_block_comment`)::
+
+        # accepts: <value> | secret:<value>   (only when >1 accepted form)
+        # replace <value> with the actual <name>
+
+    Returns ``None`` for a field rendering a concrete sample (a default, enum,
+    int, ...) -- only the ``<value>`` placeholders are annotated."""
+    if not isinstance(value, SingleQuotedScalarString):
+        return None
+    lines = []
+    accepts = _type_comment(members)
+    if accepts is not None:
+        lines.append(accepts)
+    lines.append(f"replace <value> with the actual {name}")
+    return lines
+
+
+def _set_block_comment(cm: CommentedMap, key: str, lines: list[str], indent: int) -> None:
+    """Attach a comment block before ``key``: a blank-line separator, the
+    given comment lines (each ``# <text>``), then a single ``#`` border just
+    above the key. Built from low-level ruamel tokens because the high-level
+    API renders empty lines as blank rather than as a bare ``#`` border."""
+    mark = CommentMark(indent)
+    tokens = [CommentToken("\n", mark)]
+    tokens += [CommentToken(f"# {line}\n", mark) for line in lines]
+    tokens.append(CommentToken("#\n", mark))
+    cm.ca.items[key] = [None, tokens, None, None]
+
+
 def _build_spec(cls: type, prefix: str, all_fields: bool, indent: int) -> CommentedMap:
     out = CommentedMap()
     for name, fi in cls.__pydantic_fields__.items():
@@ -342,22 +403,18 @@ def _build_spec(cls: type, prefix: str, all_fields: bool, indent: int) -> Commen
         # The sample is generated from the FIRST member of the field's union.
         first = members[0]
         default = None if fi.default is _UNSET else fi.default
-        ref = _ref_class(first)
         if isinstance(first, type) and issubclass(first, DescriptorBase):
+            # Nested object -> its own envelope; no fill-in comment of its own.
             obj = _first_concrete(first)
             out[name] = _envelope(
                 obj, _build_spec(obj, f"{path}.", all_fields, indent + _NEST_INDENT)
             )
-        elif ref is not None:
-            # Secret first member -> bare runtime-resolved ref (":secret:");
-            # no value ever lands in the file.
-            out[name] = ref().to_dict()
-        else:
-            out[name] = _scalar_placeholder([first], default, path)
-        # For a secret/var(/str) union, note the accepted forms above the key.
-        comment = _type_comment(members)
-        if comment is not None:
-            out.yaml_set_comment_before_after_key(name, before=comment, indent=indent)
+            continue
+        value = _placeholder_value(members, default, path)
+        out[name] = value
+        lines = _field_comment_lines(name, members, value)
+        if lines is not None:
+            _set_block_comment(out, name, lines, indent)
     return out
 
 

@@ -215,11 +215,13 @@ def test_yaml_template_carries_accepts_comments():
     # is the only "# accepts:" note.
     assert text.count("# accepts:") == 1
     # The YAML parses back; comments are dropped from the parsed structure (the
-    # raw template carries a "<FILL: uri>" placeholder, so it is not yet a valid
-    # connection -- the user fills it in).
+    # raw template carries a "<value>" fill-in placeholder, so it is not yet a
+    # valid connection -- the user replaces it).
     parsed = template.from_yaml(text)
     assert parsed["kind"] == "connectionDef"
-    assert parsed["spec"]["uri"] == "<FILL: uri>"
+    assert parsed["spec"]["uri"] == "<value> or secret:<value>"
+    # Each fill-in field carries a "replace <value> ..." line in its block.
+    assert "# replace <value> with the actual uri" in text
 
 
 # --- wizard -----------------------------------------------------------------
@@ -236,15 +238,14 @@ def test_localfile_wizard_validates():
 )
 def test_mysql_secrets_render_as_refs_and_wizard_validates():
     info = template.resolve_conn("mysql-sql-in", "src")
-    # Each field renders from its union's FIRST member. credentials.user/password
-    # are Secret -> the dehydrated ref marker ":secret:". uri is
-    # Union[str, Secret] (str-first, so plain strings parse as strings) ->
-    # a fill-in placeholder; it still accepts a "secret:<value>" ref if edited.
+    # Each field renders a fill-in placeholder showing its accepted forms.
+    # credentials.user/password are Secret-only -> 'secret:<value>'. uri is
+    # Union[str, Secret] -> '<value> or secret:<value>'.
     doc = template.build_template(info.conn_cls)
     creds = doc["spec"]["credentials"]["spec"]
-    assert creds["user"] == ":secret:"
-    assert creds["password"] == ":secret:"
-    assert doc["spec"]["uri"] == "<FILL: uri>"
+    assert creds["user"] == "secret:<value>"
+    assert creds["password"] == "secret:<value>"
+    assert doc["spec"]["uri"] == "<value> or secret:<value>"
     # Wizard: secret-first leaves are prompted as refs; the str-first uri is
     # a plain prompt. A valid uri makes the result validate.
     record: list = []
