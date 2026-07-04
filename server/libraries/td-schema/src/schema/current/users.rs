@@ -30,6 +30,7 @@ pub enum Users {
     PasswordSetOn,
     PasswordMustChange,
     Enabled,
+    System,
 }
 
 pub(super) struct Defs;
@@ -51,6 +52,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Users::PasswordSetOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Users::PasswordMustChange).boolean().not_null())
                 .col(ColumnDef::new(Users::Enabled).boolean().not_null())
+                .col(ColumnDef::new(Users::System).boolean().not_null())
                 .to_owned(),
         ]
     }
@@ -59,6 +61,7 @@ impl Entity for Defs {
         vec![
             Index::create().name("users___name___idx").table(Users::Table).col(Users::Name).to_owned(),
             Index::create().name("users___enabled___idx").table(Users::Table).col(Users::Enabled).to_owned(),
+            Index::create().name("users___system___idx").table(Users::Table).col(Users::System).to_owned(),
         ]
     }
 
@@ -105,6 +108,7 @@ impl Entity for Defs {
             Users::PasswordSetOn,
             Users::PasswordMustChange,
             Users::Enabled,
+            Users::System,
         ];
         vec![
             Query::insert()
@@ -123,6 +127,7 @@ impl Entity for Defs {
                     Keyword::CurrentTimestamp.into(),
                     false.into(),
                     false.into(),
+                    true.into(),
                 ])
                 .to_owned(),
             Query::insert()
@@ -141,6 +146,7 @@ impl Entity for Defs {
                     Keyword::CurrentTimestamp.into(),
                     false.into(),
                     true.into(),
+                    false.into(),
                 ])
                 .to_owned(),
         ]

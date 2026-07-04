@@ -2,6 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+use crate::user::layers::assert_user_is_not_system;
 use crate::user::layers::update::{
     UpdateUserDBBuilderUpdate, update_user_validate, update_user_validate_enabled,
     update_user_validate_password_change,
@@ -40,6 +41,7 @@ fn service() {
         from_fn(With::<UpdateRequest<UserParam, UserUpdate>>::extract_name::<UserParam>),
         from_fn(With::<UserParam>::extract::<UserIdName>),
         from_fn(By::<UserIdName>::fetch_one::<UserDB>),
+        from_fn(assert_user_is_not_system),
         from_fn(With::<UserDB>::extract::<UserId>),
         from_fn(Scope::<User>::set),
         from_fn(Rbac::<User, (SelfUser, ManageAccess)>::check),
@@ -95,6 +97,7 @@ mod tests {
                 ),
                 type_of_val(&With::<UserParam>::extract::<UserIdName>),
                 type_of_val(&By::<UserIdName>::fetch_one::<UserDB>),
+                type_of_val(&assert_user_is_not_system),
                 type_of_val(&With::<UserDB>::extract::<UserId>),
                 type_of_val(&Scope::<User>::set),
                 type_of_val(&Rbac::<User, (SelfUser, ManageAccess)>::check),

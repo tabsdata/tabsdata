@@ -2,6 +2,7 @@
 // Copyright 2025 Tabs Data Inc.
 //
 
+use crate::user_role::layers::assert_user_is_not_system;
 use ta_services::factory::service_factory;
 use td_authz::rbac::{ManageAccess, Rbac, Scope, System};
 use td_authz::{AuthzContext, refresh_authz_context};
@@ -42,6 +43,7 @@ fn service() {
         from_fn(With::<RoleId>::set::<UserRoleDBBuilder>),
         from_fn(With::<UserRoleCreate>::extract::<UserName>),
         from_fn(By::<UserName>::fetch_one::<UserDB>),
+        from_fn(assert_user_is_not_system),
         from_fn(With::<UserDB>::extract::<UserId>),
         from_fn(With::<UserId>::set::<UserRoleDBBuilder>),
         from_fn(With::<RequestContext>::update::<UserRoleDBBuilder, _>),
@@ -59,10 +61,11 @@ fn service() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::user_role::UserRoleError;
     use std::str::FromStr;
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
-    use td_error::TdError;
+    use td_error::{TdError, assert_service_error};
     use td_objects::Buildable;
     use td_objects::types::basic::{AccessTokenId, Description, RoleName, UserEnabled};
     use td_queries::LiveEntry;
@@ -97,6 +100,7 @@ mod tests {
             type_of_val(&With::<RoleId>::set::<UserRoleDBBuilder>),
             type_of_val(&With::<UserRoleCreate>::extract::<UserName>),
             type_of_val(&By::<UserName>::fetch_one::<UserDB>),
+            type_of_val(&assert_user_is_not_system),
             type_of_val(&With::<UserDB>::extract::<UserId>),
             type_of_val(&With::<UserId>::set::<UserRoleDBBuilder>),
             type_of_val(&With::<RequestContext>::update::<UserRoleDBBuilder, _>),
@@ -146,6 +150,38 @@ mod tests {
         assert_eq!(response.added_on, found.added_on);
         assert_eq!(response.added_by_id, found.added_by_id);
         assert_eq!(response.fixed, found.fixed);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_create_user_role_rejects_system_user(db: TdPool) -> Result<(), TdError> {
+        db.seed().system_user(&UserName::try_from("svc")?).await?;
+        db.seed()
+            .role(
+                RoleName::try_from("king")?,
+                Description::try_from("super user")?,
+            )
+            .await;
+
+        let create = UserRoleCreate::builder()
+            .user(UserName::try_from("svc")?)
+            .build()?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
+            RoleParam::builder()
+                .role(RoleIdName::from_str("king")?)
+                .build()?,
+            create,
+        );
+
+        let service = CreateUserRoleService::with_defaults(db.clone()).service();
+        assert_service_error(service, request, |err| match err {
+            UserRoleError::CannotGrantRoleToSystemUser(name) => {
+                assert_eq!(name, &UserName::try_from("svc").unwrap());
+            }
+            other => panic!("Expected CannotGrantRoleToSystemUser, got {other:?}"),
+        })
+        .await;
         Ok(())
     }
 }

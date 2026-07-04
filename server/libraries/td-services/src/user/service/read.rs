@@ -2,6 +2,7 @@
 // Copyright 2024 Tabs Data Inc.
 //
 
+use crate::user::layers::assert_user_readable;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageAccess, Rbac, Scope, SelfUser, User};
@@ -29,6 +30,7 @@ fn service() {
         from_fn(With::<ReadRequest<UserParam>>::extract_name::<UserParam>),
         from_fn(With::<UserParam>::extract::<UserIdName>),
         from_fn(By::<UserIdName>::fetch_one::<UserDBWithNames>),
+        from_fn(assert_user_readable),
         from_fn(With::<UserDBWithNames>::extract::<UserId>),
         from_fn(Scope::<User>::set),
         from_fn(Rbac::<User, (SelfUser, ManageAccess)>::check),
@@ -63,6 +65,7 @@ mod tests {
                 type_of_val(&With::<ReadRequest<UserParam>>::extract_name::<UserParam>),
                 type_of_val(&With::<UserParam>::extract::<UserIdName>),
                 type_of_val(&By::<UserIdName>::fetch_one::<UserDBWithNames>),
+                type_of_val(&assert_user_readable),
                 type_of_val(&With::<UserDBWithNames>::extract::<UserId>),
                 type_of_val(&Scope::<User>::set),
                 type_of_val(&Rbac::<User, (SelfUser, ManageAccess)>::check),

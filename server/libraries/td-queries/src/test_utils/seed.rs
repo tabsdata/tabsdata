@@ -29,7 +29,7 @@ use crate::test_utils::seed_project::seed_project;
 use crate::test_utils::seed_role::seed_role;
 use crate::test_utils::seed_system_tables::seed_system_tables;
 use crate::test_utils::seed_transaction::seed_transaction;
-use crate::test_utils::seed_user::seed_user;
+use crate::test_utils::seed_user::{seed_system_user, seed_user};
 use crate::test_utils::seed_user_role::seed_user_role;
 use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
 use td_database::pool::TdPool;
@@ -240,6 +240,10 @@ impl<E: QueryExecutor> Seed<E> {
 
     pub async fn user(self, name: &UserName, enabled: &UserEnabled) -> Result<UserDB, TdError> {
         seed_user(self.executor, name, enabled).await
+    }
+
+    pub async fn system_user(self, name: &UserName) -> Result<UserDB, TdError> {
+        seed_system_user(self.executor, name).await
     }
 
     pub async fn user_role(self, user: &UserId, role: &RoleId) -> Result<UserRoleDB, TdError> {

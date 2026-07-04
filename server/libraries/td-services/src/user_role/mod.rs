@@ -12,4 +12,7 @@ pub mod services;
 pub enum UserRoleError {
     #[error("The role [{0}] for user [{1}] is a fixed user role and cannot be deleted")]
     FixedUserRole(UserName, RoleName) = 0,
+
+    #[error("Roles cannot be granted to system user [{0}]")]
+    CannotGrantRoleToSystemUser(UserName) = 2000,
 }

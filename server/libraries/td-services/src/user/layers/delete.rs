@@ -12,6 +12,9 @@ pub async fn delete_user_validate(
     user_db: Ref<UserDB>,
     user_id: Ref<UserId>,
 ) -> Result<(), TdError> {
+    if *user_db.system {
+        Err(UserError::SystemUserProtected)?
+    }
     if user_db.id == *user_id {
         Err(UserError::NotAllowedToDeleteThemselves)?
     }

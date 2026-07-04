@@ -7,7 +7,9 @@ use ta_objects::{Buildable, TryUpdater};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::{UserCreate, UserDB};
-use td_objects::types::basic::{AccessTokenId, Password, UserEnabled, UserId, UserName};
+use td_objects::types::basic::{
+    AccessTokenId, Password, UserEnabled, UserId, UserName, UserSystem,
+};
 use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
 
@@ -15,6 +17,25 @@ pub(crate) async fn seed_user(
     db: impl QueryExecutor,
     name: &UserName,
     enabled: &UserEnabled,
+) -> Result<UserDB, TdError> {
+    seed_user_with(db, name, enabled, &UserSystem::FALSE).await
+}
+
+/// Seed a system-flagged user (e.g. to exercise the hiding/immutability that the
+/// `system` flag drives for service users). Enabled so tests prove the
+/// row is hidden by the `system` flag rather than by `enabled`.
+pub(crate) async fn seed_system_user(
+    db: impl QueryExecutor,
+    name: &UserName,
+) -> Result<UserDB, TdError> {
+    seed_user_with(db, name, &UserEnabled::from(true), &UserSystem::TRUE).await
+}
+
+async fn seed_user_with(
+    db: impl QueryExecutor,
+    name: &UserName,
+    enabled: &UserEnabled,
+    system: &UserSystem,
 ) -> Result<UserDB, TdError> {
     let password_hashing_config = PasswordHashingConfig::default();
     let create = UserCreate::builder()
@@ -38,6 +59,7 @@ pub(crate) async fn seed_user(
         .try_password_set_on(request_context.time)?
         .password_must_change(false)
         .enabled(create.enabled)
+        .system(system.clone())
         .try_update_from(&request_context)?
         .build()?;
 

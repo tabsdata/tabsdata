@@ -24,9 +24,9 @@ use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::{
     PermissionEntityType, PermissionType, ProjectId, ProjectIdName, ProjectName, RoleId, RoleName,
-    SimplePermissionType, UserId, UserName,
+    SimplePermissionType, UserId, UserName, UserSystem,
 };
-use td_objects::{Buildable, and, not};
+use td_objects::{Buildable, and};
 use td_queries::LiveEntry;
 use td_security::{PROJECT_CREATOR_ROLE, SYS_ADMIN_ROLE};
 use td_tower::extractors::{MutRef, Ref};
@@ -84,10 +84,11 @@ pub async fn resolve_grant(
     grant: Ref<SimplePermissionGrant>,
 ) -> Result<ResolvedGrant, TdError> {
     // Resolve the user by name (the grant surface carries a UserName).
-    // Ignoring system user.
+    // System users (the built-in `system` user and other service users) are not
+    // grantable: filter them out so the fetch fails for them.
     let user = conn
         .live()
-        .fetch_one::<UserDB>(and!(&grant.user, not!(UserId::system())))
+        .fetch_one::<UserDB>(and!(&grant.user, UserSystem::FALSE))
         .await?;
 
     match grant.permission {
@@ -303,9 +304,11 @@ pub async fn list_project_access(
     let roles = conn.live().fetch_all::<RoleDB>(()).await?;
     let permissions = conn.live().fetch_all::<PermissionDB>(()).await?;
     let user_roles = conn.live().fetch_all::<UserRoleDB>(()).await?;
+    // Exclude system users (built-in `system` and other service users) from the
+    // project roster.
     let users = conn
         .live()
-        .fetch_all::<UserDB>(not!(UserId::system()))
+        .fetch_all::<UserDB>(UserSystem::FALSE)
         .await?;
     let user_names: HashMap<UserId, UserName> = users.into_iter().map(|u| (u.id, u.name)).collect();
 

@@ -8,7 +8,7 @@ mod definitions {
     use crate::dxo::role::Role;
     use crate::types::basic::{
         AtTime, Email, FullName, Password, PasswordChangeTime, PasswordHash, PasswordMustChange,
-        UserEnabled, UserId, UserName,
+        UserEnabled, UserId, UserName, UserSystem,
     };
 
     #[ta_objects::Dao]
@@ -42,6 +42,9 @@ mod definitions {
         pub password_must_change: PasswordMustChange,
         #[dxo(extractor, setter)]
         pub enabled: UserEnabled,
+        #[builder(default)]
+        #[dxo(extractor, setter)]
+        pub system: UserSystem,
     }
 
     #[ta_objects::Dao]

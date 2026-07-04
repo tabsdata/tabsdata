@@ -179,6 +179,7 @@ mod tests {
         let service = RevokeSimplePermissionService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
             UserRoleError::FixedUserRole(_, _) => {}
+            other => panic!("Expected FixedUserRole, got {other:?}"),
         })
         .await;
         Ok(())

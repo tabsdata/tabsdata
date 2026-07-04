@@ -4,12 +4,12 @@
 
 use ta_services::factory::service_factory;
 use td_error::TdError;
+use td_objects::NoFilter;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse};
 use td_objects::dxo::user::UserRead;
 use td_objects::list::params::ListQueryParams;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::UserId;
-use td_objects::{NoFilter, Not};
+use td_objects::types::basic::UserSystem;
 use td_queries::By;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -26,14 +26,15 @@ fn service() {
     layers!(
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<UserRead>, _>),
-        from_fn(set_system_user),
-        from_fn(By::<Not![UserId]>::list::<NoFilter, UserRead>),
+        from_fn(exclude_system_users),
+        from_fn(By::<UserSystem>::list::<NoFilter, UserRead>),
     )
 }
 
-// Ignoring system user.
-pub async fn set_system_user() -> Result<UserId, TdError> {
-    Ok(UserId::system())
+// Excludes system users (the built-in `system` user and other service users) from
+// listings by filtering on `system = false`.
+pub async fn exclude_system_users() -> Result<UserSystem, TdError> {
+    Ok(UserSystem::FALSE)
 }
 
 #[cfg(test)]
@@ -58,8 +59,8 @@ mod tests {
             .assert_service::<ListRequest<()>, ListResponse<UserRead>>(&[
                 type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
                 type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<UserRead>, _>),
-                type_of_val(&set_system_user),
-                type_of_val(&By::<Not![UserId]>::list::<NoFilter, UserRead>),
+                type_of_val(&exclude_system_users),
+                type_of_val(&By::<UserSystem>::list::<NoFilter, UserRead>),
             ]);
     }
 
@@ -74,6 +75,13 @@ mod tests {
             .user(&UserName::try_from("u1").unwrap(), &UserEnabled::from(true))
             .await
             .unwrap();
+        // An enabled, system-flagged user must still be excluded — proving the
+        // filter is on `system`, not `enabled`.
+        let _ = db
+            .seed()
+            .system_user(&UserName::try_from("svc").unwrap())
+            .await
+            .unwrap();
 
         let service = ListUsersService::with_defaults(db.clone()).service();
 
@@ -84,11 +92,14 @@ mod tests {
         let response = service.raw_oneshot(request).await;
         assert!(response.is_ok());
         let list = response.unwrap();
-        // The system user is excluded from the listing.
+        // System users (built-in `system` and the seeded `svc`) are excluded.
         assert_eq!(list.len, 3);
         assert!(
-            list.data.iter().all(|u| u.name != UserName::system()),
-            "system user should be excluded from the listing"
+            list.data
+                .iter()
+                .all(|u| u.name != UserName::system()
+                    && u.name != UserName::try_from("svc").unwrap()),
+            "system users should be excluded from the listing"
         );
         let users = list
             .data

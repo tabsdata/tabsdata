@@ -101,3 +101,7 @@ pub struct UncommittedStatus;
 #[ta_objects::typed(bool(default = true))]
 #[derive(Eq, PartialEq)]
 pub struct UserEnabled;
+
+#[ta_objects::typed(bool(default = false))]
+#[derive(Eq, PartialEq)]
+pub struct UserSystem;

@@ -16,6 +16,12 @@ pub enum UserError {
     #[error("The user update request has nothing to update")]
     UpdateRequestHasNothingToUpdate = 2,
 
+    // 404 range: system users are hidden — reported as not found on read.
+    #[error("User not found")]
+    UserNotFound = 1000,
+
     #[error("You cannot delete your own user account")]
     NotAllowedToDeleteThemselves = 2000,
+    #[error("System users cannot be modified or deleted")]
+    SystemUserProtected = 2001,
 }
