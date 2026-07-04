@@ -1,0 +1,13 @@
+{
+  "kinds": [
+    "sql",
+    "file",
+    "kafka"
+  ],
+  "prolific": "--cities",
+  "prolific_base": 4000,
+  "defaults": {},
+  "caps": {
+    "--cities": 4079
+  }
+}

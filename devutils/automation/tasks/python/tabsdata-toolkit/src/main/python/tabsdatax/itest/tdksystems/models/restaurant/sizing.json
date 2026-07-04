@@ -1,0 +1,15 @@
+{
+  "kinds": [
+    "sql",
+    "file",
+    "kafka"
+  ],
+  "prolific": "--orders",
+  "prolific_base": 500,
+  "defaults": {
+    "--menu-items": 40,
+    "--ingredients": 80,
+    "--tables": 20,
+    "--po-orders": 60
+  }
+}

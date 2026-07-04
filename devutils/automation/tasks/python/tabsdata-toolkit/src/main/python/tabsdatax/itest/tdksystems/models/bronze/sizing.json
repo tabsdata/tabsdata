@@ -1,0 +1,18 @@
+{
+  "kinds": [
+    "sql",
+    "file",
+    "kafka"
+  ],
+  "prolific": "--batches",
+  "prolific_base": 10,
+  "defaults": {
+    "--batch-size": 100
+  },
+  "mins": {
+    "--batch-size": 100
+  },
+  "caps": {
+    "--batch-size": 100
+  }
+}

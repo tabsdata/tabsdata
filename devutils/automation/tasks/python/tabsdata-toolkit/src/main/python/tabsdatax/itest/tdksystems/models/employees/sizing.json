@@ -1,0 +1,10 @@
+{
+  "kinds": [
+    "sql",
+    "file",
+    "kafka"
+  ],
+  "prolific": "--employees",
+  "prolific_base": 10000,
+  "defaults": {}
+}

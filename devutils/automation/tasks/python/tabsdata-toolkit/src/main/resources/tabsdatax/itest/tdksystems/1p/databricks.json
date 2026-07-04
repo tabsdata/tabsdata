@@ -1,0 +1,42 @@
+{
+  "title": "Databricks",
+  "category": "API_CREDENTIAL",
+  "fields": [
+    {
+      "id": "host",
+      "label": "host",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "token",
+      "label": "token",
+      "type": "CONCEALED",
+      "value": "?"
+    },
+    {
+      "id": "warehouse_id",
+      "label": "warehouse_id",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "catalog",
+      "label": "catalog",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "volume",
+      "label": "volume",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "expires",
+      "label": "expires",
+      "type": "DATE",
+      "value": "2099-12-31"
+    }
+ ]
+}

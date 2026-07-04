@@ -1,0 +1,17 @@
+{
+  "kinds": [
+    "sql",
+    "file",
+    "kafka"
+  ],
+  "prolific": "--students",
+  "prolific_base": 500,
+  "defaults": {
+    "--teachers": 40,
+    "--subjects": 30,
+    "--years": 3
+  },
+  "caps": {
+    "--subjects": 30
+  }
+}

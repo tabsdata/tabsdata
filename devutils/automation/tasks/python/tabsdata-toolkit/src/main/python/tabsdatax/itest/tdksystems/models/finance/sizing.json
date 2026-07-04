@@ -1,0 +1,7 @@
+{
+  "kinds": [
+    "sql",
+    "kafka"
+  ],
+  "defaults": {}
+}

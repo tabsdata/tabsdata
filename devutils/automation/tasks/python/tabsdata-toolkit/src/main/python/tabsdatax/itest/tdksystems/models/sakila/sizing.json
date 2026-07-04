@@ -1,0 +1,10 @@
+{
+  "kinds": [
+    "sql",
+    "file",
+    "kafka"
+  ],
+  "prolific": "--rentals",
+  "prolific_base": 16000,
+  "defaults": {}
+}

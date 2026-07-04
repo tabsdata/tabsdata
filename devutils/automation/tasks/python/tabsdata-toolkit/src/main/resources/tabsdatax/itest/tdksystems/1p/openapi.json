@@ -1,0 +1,18 @@
+{
+  "title": "OpenAPI",
+  "category": "API_CREDENTIAL",
+  "fields": [
+    {
+      "id": "api_key",
+      "label": "api_key",
+      "type": "CONCEALED",
+      "value": "?"
+    },
+    {
+      "id": "expires",
+      "label": "expires",
+      "type": "DATE",
+      "value": "2099-12-31"
+    }
+ ]
+}

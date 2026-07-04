@@ -1,0 +1,36 @@
+{
+  "title": "Salesforce",
+  "category": "API_CREDENTIAL",
+  "fields": [
+    {
+      "id": "url",
+      "label": "url",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "username",
+      "label": "username",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "password",
+      "label": "password",
+      "type": "CONCEALED",
+      "value": "?"
+    },
+    {
+      "id": "token",
+      "label": "token",
+      "type": "CONCEALED",
+      "value": "?"
+    },
+    {
+      "id": "expires",
+      "label": "expires",
+      "type": "DATE",
+      "value": "2099-12-31"
+    }
+ ]
+}

@@ -54,6 +54,32 @@ dependencies = [
     "textual-plotext==1.0.1",
     "tqdm==4.67.3",
     "tzlocal==5.3.1",
+    "cryptography",
+    "sqlalchemy",
+    "sqlparse",
+    "pyodbc",
+    "mysql-connector-python",
+    "oracledb",
+    "psycopg2-binary",
+    "ibm_db; platform_machine != 'aarch64'",
+    "ibm_db_sa; platform_machine != 'aarch64'",
+    "clickhouse-sqlalchemy",
+    "pandas",
+    "pyarrow",
+    "boto3",
+    "google-cloud-storage",
+    "azure-storage-blob",
+    "snowflake-connector-python",
+    "confluent-kafka[avro,json,protobuf]",
+    "fastavro",
+    "protobuf",
+]
+
+[project.optional-dependencies]
+salesforce = [
+    "cryptography",
+    "cumulusci-plus",
+    "snowfakery",
 ]
 
 [project.entry-points.pytest11]
@@ -64,6 +90,8 @@ tdkdocker = "tabsdatax.docker.cli:main"
 tdx-gconnector = "tabsdatax.generator.connector.cli:main"
 tdx-gtableframe = "tabsdatax.generator.tableframe.cli:main"
 tdx-itest = "tabsdatax.itest.tdkserver.cli:main"
+tdx-system = "tabsdatax.itest.tdksystems.tdx_system:main"
+tdx-domain = "tabsdatax.itest.tdksystems.tdx_domain:main"
 tdx-pyoutdated = "tabsdatax.cmake.pyoutdated:main"
 tdx-bundle = "tabsdatax.support.bundle:main"
 tdx-harvester-monitor = "tabsdatax.pytesting.plugins.harvester.client:main"
@@ -157,6 +185,15 @@ namespaces = true
 [tool.setuptools.package-data]
 "*" = ["!.gitkeep", "!*.pyc", "!__pycache__/*"]
 "tabsdatax.generator.tableframe.engine.generate" = ["templates/*.tmpl", "ruff.toml"]
+"tabsdatax.itest.tdksystems" = [
+    "models/*/datagen.py",
+    "models/*/sizing.json",
+    "models/*/*.ddl",
+    "models/*/*.csv",
+    "models/*/*.json",
+    "models/*/*.yml",
+    "models/*/*.md",
+]
 
 [tool.tabsdata]
 name = "tabsdata-toolkit"

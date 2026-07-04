@@ -1,0 +1,17 @@
+{
+  "kinds": [
+    "sql",
+    "file",
+    "kafka"
+  ],
+  "prolific": "--shipments",
+  "prolific_base": 1000,
+  "defaults": {
+    "--customers": 200,
+    "--couriers": 50,
+    "--hubs": 10
+  },
+  "mins": {
+    "--hubs": 2
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "title": "Snowflake",
+  "category": "API_CREDENTIAL",
+  "fields": [
+    {
+      "id": "account",
+      "label": "account",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "username",
+      "label": "username",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "pat",
+      "label": "pat",
+      "type": "CONCEALED",
+      "value": "?"
+    },
+    {
+      "id": "warehouse",
+      "label": "warehouse",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "database",
+      "label": "database",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "expires",
+      "label": "expires",
+      "type": "DATE",
+      "value": "2099-12-31"
+    }
+ ]
+}

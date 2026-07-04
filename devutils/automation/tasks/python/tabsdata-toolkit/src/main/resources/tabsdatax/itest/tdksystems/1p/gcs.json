@@ -1,0 +1,36 @@
+{
+  "title": "GCS",
+  "category": "API_CREDENTIAL",
+  "fields": [
+    {
+      "id": "bucket",
+      "label": "bucket",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "access_key",
+      "label": "access_key",
+      "type": "CONCEALED",
+      "value": "?"
+    },
+    {
+      "id": "secret_key",
+      "label": "secret_key",
+      "type": "CONCEALED",
+      "value": "?"
+    },
+    {
+      "id": "sys_path",
+      "label": "sys_path",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "expires",
+      "label": "expires",
+      "type": "DATE",
+      "value": "2099-12-31"
+    }
+ ]
+}
