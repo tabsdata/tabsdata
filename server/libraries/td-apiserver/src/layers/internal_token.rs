@@ -18,7 +18,7 @@ use axum::response::Response;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use ta_apiserver::status::error_status::ErrorStatus;
-use td_authz::jwt::{InternalTokenClaims, JwtConfig, decode_internal_token};
+use td_common::jwt::{InternalTokenClaims, JwtConfig, decode_internal_token};
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::{AccessTokenId, UserId};
@@ -116,7 +116,7 @@ mod tests {
     use axum::middleware::from_fn_with_state;
     use axum::routing::get;
     use std::collections::BTreeMap;
-    use td_authz::jwt::{INTERNAL_TOKEN_KIND, encode_internal_token};
+    use td_common::jwt::{INTERNAL_TOKEN_KIND, encode_internal_token};
     use td_common::id;
     use td_objects::rest_urls::internal::RESOLVE_FUNCTION_RUN_WORKER;
     use td_objects::rest_urls::{BASE_API_URL, BASE_URL, V1};

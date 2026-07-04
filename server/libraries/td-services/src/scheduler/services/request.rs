@@ -14,7 +14,7 @@ use crate::scheduler::layers::request::{
     materialize_replay_dispatch, pfr_ids_from_minted_dispatch,
 };
 use ta_services::factory::service_factory;
-use td_authz::jwt::JwtConfig;
+use td_common::jwt::JwtConfig;
 use td_bridge::BridgeProviderHandle;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
@@ -248,7 +248,7 @@ mod tests {
     use std::sync::Arc;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
-    use td_authz::jwt::decode_internal_token;
+    use td_common::jwt::decode_internal_token;
     use td_bridge::messaging::memory::InMemoryOrchestratorMessageQueue;
     use td_bridge::messaging::{
         CronRequest, FunctionRequest, OrchestratorMessagePayload, StageTriggerRequest,

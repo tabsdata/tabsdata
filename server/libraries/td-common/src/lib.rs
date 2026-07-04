@@ -12,6 +12,7 @@ pub mod env;
 pub mod execution_status;
 pub mod files;
 pub mod id;
+pub mod jwt;
 pub mod limits;
 pub mod logging;
 pub mod logic_id;

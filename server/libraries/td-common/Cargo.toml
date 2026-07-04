@@ -77,6 +77,7 @@ dirs = { workspace = true }
 homedir = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
+jsonwebtoken = { workspace = true, features = ["aws_lc_rs"] }
 libc = { workspace = true }
 nix = { workspace = true, features = ["process"] }
 once_cell = { workspace = true }

@@ -22,7 +22,6 @@ use td_error::TdError;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::instrument;
 
-pub mod jwt;
 pub mod rbac;
 pub mod session_provider;
 

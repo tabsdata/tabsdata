@@ -9,7 +9,7 @@
 use http::Method;
 use std::collections::{BTreeMap, HashMap};
 use std::net::SocketAddr;
-use td_authz::jwt::{JwtConfig, encode_internal_token};
+use td_common::jwt::{JwtConfig, encode_internal_token};
 use td_common::worker::{Callback, HttpCallback, HttpRequest};
 use td_error::td_error;
 use td_objects::rest_urls::BASE_URL;
@@ -20,7 +20,7 @@ pub enum WorkerRequestError {
     #[error("Error parsing URL: {0}")]
     UrlParse(#[from] url::ParseError) = 5000,
     #[error("Error minting internal token: {0}")]
-    Token(#[from] td_authz::jwt::JwtError) = 5001,
+    Token(#[from] td_common::jwt::JwtError) = 5001,
 }
 
 /// Build an internal `HttpRequest` for a worker to call back on. Substitutes

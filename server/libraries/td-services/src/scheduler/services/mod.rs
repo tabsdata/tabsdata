@@ -7,7 +7,7 @@ use crate::scheduler::services::request::RequestService;
 use axum::extract::FromRef;
 use std::sync::Arc;
 use ta_services::factory::{FieldAccessors, ServiceFactory};
-use td_authz::jwt::JwtConfig;
+use td_common::jwt::JwtConfig;
 use td_bridge::BridgeProviderHandle;
 use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;

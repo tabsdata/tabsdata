@@ -66,7 +66,6 @@ td-tower = { workspace = true }
 # External dependencies
 
 chrono = { workspace = true }
-jsonwebtoken = { workspace = true, features = ["aws_lc_rs"] }
 serde = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }

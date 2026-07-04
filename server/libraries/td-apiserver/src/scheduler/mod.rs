@@ -5,7 +5,7 @@
 use crate::scheduler::v1::{FunctionDispatcherV1, FunctionRequesterV1};
 use async_trait::async_trait;
 use std::sync::Arc;
-use td_authz::jwt::JwtConfig;
+use td_common::jwt::JwtConfig;
 use td_bridge::BridgeProviderHandle;
 use td_common::server_runner::ServerRunnable;
 use td_database::pool::TdPool;

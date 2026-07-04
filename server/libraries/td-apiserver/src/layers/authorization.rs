@@ -9,7 +9,7 @@ use axum::response::Response;
 use std::string::ToString;
 use std::sync::Arc;
 use ta_apiserver::status::error_status::ErrorStatus;
-use td_authz::jwt::{JwtConfig, decode_token};
+use td_common::jwt::{JwtConfig, decode_token};
 use td_authz::session_provider::{Session, SessionError, Sessions};
 use td_common::provider::Provider;
 use td_database::pool::TdPool;

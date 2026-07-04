@@ -7,7 +7,7 @@ use crate::auth::layers::decode_refresh_token::decode_refresh_token;
 use crate::auth::layers::refresh_sessions::refresh_sessions;
 use crate::auth::layers::set_session_expiration::set_session_expiration;
 use ta_services::factory::service_factory;
-use td_authz::jwt::JwtConfig;
+use td_common::jwt::JwtConfig;
 use td_authz::session_provider::Sessions;
 use td_objects::And;
 use td_objects::dxo::auth::{
@@ -70,7 +70,7 @@ mod tests {
     use crate::auth::services::tests::assert_session;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
-    use td_authz::jwt::decode_token;
+    use td_common::jwt::decode_token;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::Buildable;

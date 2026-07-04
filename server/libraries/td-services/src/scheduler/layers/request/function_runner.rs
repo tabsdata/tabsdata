@@ -8,7 +8,7 @@ use crate::logical::layers::dispatch_mint::MintedDispatch;
 use crate::logical::layers::index_lfrs_by_exec_fn;
 use crate::scheduler::message_builder::{build_function_v2, prefetch_dispatch};
 use std::collections::HashMap;
-use td_authz::jwt::JwtConfig;
+use td_common::jwt::JwtConfig;
 use td_bridge::messaging::{FunctionRequest, FunctionStartRequest, OrchestratorMessagePayload};
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::worker::{MessageAction, RequestMessagePayload, WorkerClass, WorkerName};

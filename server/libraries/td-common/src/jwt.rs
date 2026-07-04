@@ -2,18 +2,32 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::id;
+use crate::id::Id;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use td_common::id;
-use td_common::id::Id;
 use td_error::td_error;
 use tracing::debug;
+
+/// Default access-token lifetime (seconds), and the multiple applied to it for
+/// the refresh-token lifetime when `refresh_token_expiration` is absent from config.
+const DEFAULT_ACCESS_TOKEN_EXPIRATION: i64 = 3600;
+const DEFAULT_REFRESH_EXPIRATION_FACTOR: i64 = 10;
+
+fn default_refresh_token_expiration() -> i64 {
+    DEFAULT_ACCESS_TOKEN_EXPIRATION * DEFAULT_REFRESH_EXPIRATION_FACTOR
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct JwtConfig {
     pub secret: Option<String>,
     pub access_token_expiration: i64,
+    /// Refresh-token lifetime in seconds. Absent from config it defaults to 10×
+    /// the standard access-token lifetime; [`JwtConfig::new`] instead derives it
+    /// as 10× the actual `access_token_expiration`.
+    #[serde(default = "default_refresh_token_expiration")]
+    pub refresh_token_expiration: i64,
     #[serde(skip)]
     encoding_key: Option<EncodingKey>,
     #[serde(skip)]
@@ -33,6 +47,7 @@ impl JwtConfig {
         Self {
             secret: Some(secret),
             access_token_expiration,
+            refresh_token_expiration: access_token_expiration * DEFAULT_REFRESH_EXPIRATION_FACTOR,
             encoding_key,
             decoding_key,
             validation,
@@ -50,8 +65,7 @@ impl JwtConfig {
 
 impl Default for JwtConfig {
     fn default() -> Self {
-        const EXPIRATION: i64 = 3600;
-        JwtConfig::new(id::id().to_string(), EXPIRATION)
+        JwtConfig::new(id::id().to_string(), DEFAULT_ACCESS_TOKEN_EXPIRATION)
     }
 }
 
@@ -71,6 +85,22 @@ impl TokenClaims {
             exp,
         }
     }
+}
+
+/// Far-future expiry (2100-01-01T00:00:00Z, in seconds) for a long-lived service
+/// token and its backing session.
+pub const SERVICE_TOKEN_EXP_SECS: i64 = 4_102_444_800;
+
+/// Fixed `jti` of the instance service token (and the session backing it). The
+/// `secretAuto:service_token` generator mints the token with this `jti`, and the
+/// apiserver seeds the matching session from the same constant, so the two agree
+/// without the apiserver ever holding or decoding the token. The `0xA0` prefix
+/// keeps it clear of the `0x00`-prefixed `td_security::DEFAULT_IDS`.
+const SERVICE_TOKEN_JTI_BYTES: [u8; 16] = [0xA0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01];
+
+/// The instance service token's fixed `jti`, as an [`Id`].
+pub fn service_token_jti() -> Id {
+    Id::_new(SERVICE_TOKEN_JTI_BYTES)
 }
 
 #[td_error]
@@ -168,11 +198,8 @@ pub fn encode_token(jwt_settings: &JwtConfig, token: &TokenClaims) -> Result<Str
 }
 
 pub fn decode_token(jwt_settings: &JwtConfig, token: &str) -> Result<TokenClaims, JwtError> {
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.leeway = 5;
-    validation.set_required_spec_claims(&["jti", "exp"]);
     decode::<TokenClaims>(token, jwt_settings.decoding_key(), &jwt_settings.validation)
-        .map_err(JwtError::JwtEncodingError)
+        .map_err(JwtError::JwtDecodingError)
         .map(|tt| tt.claims)
 }
 

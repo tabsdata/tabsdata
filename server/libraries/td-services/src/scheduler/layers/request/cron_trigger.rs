@@ -5,7 +5,7 @@
 use super::shared::{internal_get_callback, internal_post_callback, internal_request};
 use http::Method;
 use std::collections::HashMap;
-use td_authz::jwt::JwtConfig;
+use td_common::jwt::JwtConfig;
 use td_bridge::messaging::{
     CronRequest, CronStartRequest, CronStopRequest, OrchestratorMessagePayload,
 };

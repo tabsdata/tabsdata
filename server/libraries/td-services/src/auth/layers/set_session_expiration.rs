@@ -4,7 +4,7 @@
 
 use std::ops::Deref;
 use std::time::Duration;
-use td_authz::jwt::JwtConfig;
+use td_common::jwt::JwtConfig;
 use td_common::time::UniqueUtc;
 use td_error::TdError;
 use td_objects::dxo::auth::SessionDBBuilder;

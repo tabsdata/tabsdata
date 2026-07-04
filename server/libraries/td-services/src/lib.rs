@@ -26,7 +26,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use ta_services::factory::{FieldAccessors, ServiceFactory};
 use td_authz::AuthzContext;
-use td_authz::jwt::JwtConfig;
+use td_common::jwt::JwtConfig;
 use td_authz::session_provider::Sessions;
 use td_bridge::BridgeProviderHandle;
 use td_database::config::DatabaseDescriptor;

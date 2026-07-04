@@ -6,7 +6,7 @@ use super::shared::{internal_get_callback, internal_post_callback, internal_requ
 use crate::scheduler::message_builder::build_external_location;
 use http::Method;
 use std::collections::HashMap;
-use td_authz::jwt::JwtConfig;
+use td_common::jwt::JwtConfig;
 use td_bridge::messaging::{
     OrchestratorMessagePayload, StageTriggerRequest, StageTriggerStartRequest,
     StageTriggerStopRequest,

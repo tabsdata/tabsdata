@@ -89,7 +89,7 @@ mod tests {
     use crate::auth::services::AuthServices;
     use ta_services::factory::ServiceFactory;
     use ta_services::service::TdService;
-    use td_authz::jwt::decode_token;
+    use td_common::jwt::decode_token;
     use td_database::pool::TdPool;
     use td_error::assert_service_error;
     use td_objects::Buildable;

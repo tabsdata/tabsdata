@@ -2,7 +2,7 @@
 // Copyright 2025. Tabs Data Inc.
 //
 
-use td_authz::jwt::{JwtConfig, TokenClaims, encode_token};
+use td_common::jwt::{JwtConfig, TokenClaims, encode_token};
 use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::auth::{SessionDB, TokenResponseX};
@@ -16,9 +16,15 @@ pub async fn create_access_token(
     const BEARER: &str = "Bearer";
 
     let id = *session.access_token_id;
-    let access_token = TokenClaims::new(id, session.expires_on.timestamp());
+    let access_exp = session.expires_on.timestamp();
+    let access_token = TokenClaims::new(id, access_exp);
     let id = *session.refresh_token_id;
-    let refresh_token = TokenClaims::new(id, session.expires_on.timestamp() * 2);
+    // `expires_on` is the access-token expiry (now + access_token_expiration); the
+    // refresh token lives `refresh_token_expiration` from that same `now`.
+    let refresh_token = TokenClaims::new(
+        id,
+        access_exp + jwt_settings.refresh_token_expiration - jwt_settings.access_token_expiration,
+    );
 
     let token = TokenResponseX::builder()
         .try_access_token(encode_token(&jwt_settings, &access_token)?)?

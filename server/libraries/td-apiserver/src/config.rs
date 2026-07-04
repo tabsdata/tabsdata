@@ -11,7 +11,7 @@ use std::net::{AddrParseError, SocketAddr};
 use std::path::PathBuf;
 use strum::{Display, EnumString, ParseError};
 use ta_services::factory::FieldAccessors;
-use td_authz::jwt::JwtConfig;
+use td_common::jwt::JwtConfig;
 use td_bridge::Orchestrator;
 use td_database::config::DatabaseDescriptor;
 use td_error::{TdError, td_error};
