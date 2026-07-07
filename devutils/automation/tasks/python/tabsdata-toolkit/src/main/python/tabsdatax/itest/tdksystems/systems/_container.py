@@ -20,7 +20,7 @@ from .base import (
 from ..errors import DatagenError
 from ..shell import (
     container_exists, container_state, docker_rm, docker_start, docker_stop,
-    find_free_port, gen_password, require_docker, validate_name,
+    find_free_port, gen_password, port_open, require_docker, validate_name,
 )
 
 
@@ -31,6 +31,22 @@ class DomainResult:
     user: str
     password: str
     sqlalchemy_uri: str
+
+
+@dataclass
+class AdminConn:
+    """Superuser admin connection to a running container's engine, over TCP on
+    the published host port — the replacement for docker-exec-as-superuser.
+
+    `create_domain` / `destroy_domain` build it from the descriptor's HOST /
+    PORT and the admin USER / PASSWORD, and hand it to the `do_create` /
+    `do_delete` / `do_list` hooks. Because admin now travels over TCP (not a
+    local Docker socket), a client with only network reach — e.g. through an
+    SSH tunnel — can provision domains without a local Docker daemon."""
+    host: str
+    port: str
+    user: str
+    password: str
 
 
 class ContainerBase(System):
@@ -176,24 +192,29 @@ class ContainerBase(System):
     # ==================================================================
 
     def create_domain(self, ctx: SystemContext, spec: CreateDomainSpec) -> dict[str, Setting]:
-        cname = ctx.meta["CONTAINER"]
-        admin_pw = ctx.meta.get("PASSWORD", "")
+        cname = ctx.meta.get("CONTAINER", "")
         validate_name(spec.name, label=self.domain_flag)
-        # Hooks read the port / staging root from env (as they did on the old
-        # base); tdx exports the system meta before calling create_domain.
-        os.environ["PORT"] = ctx.meta.get("PORT", os.environ.get("PORT", ""))
+        # Domain admin runs over TCP as the superuser on the published host port
+        # (no `docker exec`), so a network-only client can provision domains.
+        admin = AdminConn(
+            host=ctx.meta.get("HOST", "localhost"),
+            port=ctx.meta.get("PORT", os.environ.get("PORT", "")),
+            user=ctx.meta.get("USER", ""),
+            password=ctx.meta.get("PASSWORD", ""))
+        # Some hooks still read PORT / CONTAINER from env (e.g. redpanda's
+        # broker / schema-registry extra vars); keep exporting them.
+        os.environ["PORT"] = admin.port
         os.environ["CONTAINER"] = cname
-        if any(d.lower() == spec.name.lower()
-               for d in self.do_list(cname, admin_pw)):
+        if any(d.lower() == spec.name.lower() for d in self.do_list(admin)):
             if spec.force:
-                self.do_delete(cname, admin_pw, spec.name)
+                self.do_delete(admin, spec.name)
                 print(f">>> --force: removed existing {self.domain_flag} "
                       f"'{spec.name}'")
             else:
                 raise DatagenError(
                     f"{self.domain_flag} '{spec.name}' already exists "
                     f"(use --force)")
-        result = self.do_create(cname, admin_pw, spec.name)
+        result = self.do_create(admin, spec.name)
         out: dict[str, Setting] = {
             "HOST": Setting("HOST", value="localhost"),
             "PORT": Setting("PORT", value=ctx.meta.get("PORT", "")),
@@ -205,8 +226,8 @@ class ContainerBase(System):
             "IMAGE": Setting("IMAGE", value=ctx.meta.get("IMAGE", "")),
             # Back-refs so destroy_domain needs only the domain descriptor.
             "SYS_CONTAINER": Setting("SYS_CONTAINER", value=cname),
-            "SYS_ADMIN_USER": Setting("SYS_ADMIN_USER", value=ctx.meta.get("USER", "")),
-            "SYS_ADMIN_PASSWORD": Setting("SYS_ADMIN_PASSWORD", value=admin_pw),
+            "SYS_ADMIN_USER": Setting("SYS_ADMIN_USER", value=admin.user),
+            "SYS_ADMIN_PASSWORD": Setting("SYS_ADMIN_PASSWORD", value=admin.password),
         }
         if self.uses_file_staging:
             root = ctx.meta.get("SYS_PATH", "")
@@ -218,13 +239,20 @@ class ContainerBase(System):
         return out
 
     def destroy_domain(self, ctx: DomainContext) -> None:
-        self.do_delete(ctx.meta.get("SYS_CONTAINER", ""),
-                       ctx.meta.get("SYS_ADMIN_PASSWORD", ""), ctx.meta["DB"])
+        admin = AdminConn(
+            host=ctx.meta.get("HOST", "localhost"),
+            port=ctx.meta.get("PORT", ""),
+            user=ctx.meta.get("SYS_ADMIN_USER", ""),
+            password=ctx.meta.get("SYS_ADMIN_PASSWORD", ""))
+        self.do_delete(admin, ctx.meta["DB"])
 
     def domain_status(self, ctx: DomainContext) -> Health:
-        cname = ctx.meta.get("SYS_CONTAINER", "")
-        st = container_state(cname)
-        return Health(st == "running", f"container {cname} is {st or 'absent'}")
+        # TCP reachability of the published port — no Docker daemon needed.
+        host = ctx.meta.get("HOST", "localhost")
+        port = ctx.meta.get("PORT", "")
+        ok = port.isdigit() and port_open(host, int(port))
+        return Health(ok, f"{self.label} at {host}:{port} "
+                          f"{'reachable' if ok else 'unreachable'}")
 
     # ==================================================================
     # Data plane (SQL) — run the model's DDL / INSERTs against the domain
@@ -293,6 +321,63 @@ class ContainerBase(System):
             print(f">>> dropped {len(md.tables)} table(s)")
 
     # ==================================================================
+    # Admin plane (TCP) — provision domains over the published port
+    # ==================================================================
+    #
+    # Domain admin (create / drop / list) runs as the system superuser over TCP
+    # on the container's published host port — NOT `docker exec` — so a client
+    # with only network access (e.g. an SSH tunnel) can provision domains
+    # without a local Docker daemon. SQL systems share the two helpers below and
+    # supply `_admin_url`; non-SQL systems (redpanda / mongodb) override the
+    # do_* hooks to talk their own admin protocol.
+
+    admin_autocommit = False    # True where CREATE DATABASE can't run inside a
+                                # transaction (postgres / sql server)
+
+    def _admin_url(self, admin: AdminConn) -> str:
+        """SQLAlchemy URL for the superuser admin connection. SQL subclasses
+        override; non-SQL systems don't use it."""
+        raise NotImplementedError(f"{self.slug} has no SQL admin URL")
+
+    def _run_admin_sql(self, admin: AdminConn, statements: list[str]) -> None:
+        """Run admin DDL over TCP as the superuser. `admin_autocommit` systems
+        run each statement outside a transaction (CREATE DATABASE can't be
+        transactional there); the rest commit once at the end."""
+        from sqlalchemy import create_engine
+        engine = create_engine(self._admin_url(admin))
+        try:
+            if self.admin_autocommit:
+                conn = engine.connect().execution_options(
+                    isolation_level="AUTOCOMMIT")
+                with conn:
+                    for st in statements:
+                        conn.exec_driver_sql(st)
+            else:
+                with engine.begin() as conn:
+                    for st in statements:
+                        conn.exec_driver_sql(st)
+        except Exception as exc:   # surface the DB's own message, no traceback
+            raise DatagenError(
+                f"{self.label} admin SQL failed: {exc}") from exc
+        finally:
+            engine.dispose()
+
+    def _query_admin_names(self, admin: AdminConn, query: str) -> list[str]:
+        """Run a single-column admin query over TCP; return the trimmed
+        first-column values (used by `do_list`)."""
+        from sqlalchemy import create_engine
+        engine = create_engine(self._admin_url(admin))
+        try:
+            with engine.connect() as conn:
+                rows = conn.exec_driver_sql(query).fetchall()
+        except Exception as exc:
+            raise DatagenError(
+                f"{self.label} admin query failed: {exc}") from exc
+        finally:
+            engine.dispose()
+        return [str(r[0]).strip() for r in rows if r and r[0] is not None]
+
+    # ==================================================================
     # Per-system hooks — subclasses implement
     # ==================================================================
 
@@ -343,11 +428,11 @@ class ContainerBase(System):
     def check_ready(self, container: str, password: str) -> bool:
         raise NotImplementedError
 
-    def do_create(self, container: str, password: str, name: str) -> DomainResult:
+    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         raise NotImplementedError
 
-    def do_delete(self, container: str, password: str, name: str) -> None:
+    def do_delete(self, admin: AdminConn, name: str) -> None:
         raise NotImplementedError
 
-    def do_list(self, container: str, password: str) -> list[str]:
+    def do_list(self, admin: AdminConn) -> list[str]:
         raise NotImplementedError

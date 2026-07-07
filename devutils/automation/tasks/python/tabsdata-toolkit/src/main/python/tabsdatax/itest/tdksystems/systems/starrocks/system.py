@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import time
 
-from .._container import ContainerBase, DomainResult
+from .._container import AdminConn, ContainerBase, DomainResult
 from ...errors import DatagenError
 from ...shell import (
     docker_exec, docker_exec_check, docker_run, gen_password,
@@ -81,37 +81,28 @@ class StarrocksSystem(ContainerBase):
             time.sleep(2)
         raise DatagenError("could not set default_replication_num=1 on StarRocks FE")
 
-    def _exec(self, container: str, password: str, sql: str) -> str:
-        cp = docker_exec(
-            container, "mysql", "-h", "127.0.0.1", "-P", "9030",
-            "-u", self.system_user, f"--password={password}",
-            input=sql,
-        )
-        if cp.returncode != 0:
-            raise DatagenError(f"mysql command failed: {cp.stderr.strip()}")
-        return cp.stdout
+    def _admin_url(self, admin: AdminConn) -> str:
+        return (f"mysql+mysqlconnector://{admin.user}:{admin.password}"
+                f"@{admin.host}:{admin.port}")
 
-    def do_create(self, container: str, password: str, name: str) -> DomainResult:
+    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         pw = gen_password()
-        self._exec(container, password, (
-            f"CREATE DATABASE `{name}`;\n"
-            f"CREATE USER '{name}'@'%' IDENTIFIED BY '{pw}';\n"
-            f"GRANT ALL ON `{name}`.* TO '{name}'@'%';\n"
-        ))
-        port = os.environ.get("PORT", "9030")
-        uri = f"mysql+mysqlconnector://{name}:{pw}@localhost:{port}/{name}"
+        self._run_admin_sql(admin, [
+            f"CREATE DATABASE `{name}`",
+            f"CREATE USER '{name}'@'%' IDENTIFIED BY '{pw}'",
+            f"GRANT ALL ON `{name}`.* TO '{name}'@'%'",
+        ])
+        uri = f"mysql+mysqlconnector://{name}:{pw}@{admin.host}:{admin.port}/{name}"
         return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
-    def do_delete(self, container: str, password: str, name: str) -> None:
-        self._exec(container, password, (
-            f"DROP DATABASE IF EXISTS `{name}`;\n"
-            f"DROP USER IF EXISTS '{name}'@'%';\n"
-        ))
+    def do_delete(self, admin: AdminConn, name: str) -> None:
+        self._run_admin_sql(admin, [
+            f"DROP DATABASE IF EXISTS `{name}`",
+            f"DROP USER IF EXISTS '{name}'@'%'",
+        ])
 
-    def do_list(self, container: str, password: str) -> list[str]:
-        out = self._exec(container, password, (
+    def do_list(self, admin: AdminConn) -> list[str]:
+        return self._query_admin_names(admin, (
             "SELECT schema_name FROM information_schema.schemata "
             "WHERE schema_name NOT IN ('information_schema','_statistics_','sys') "
-            "ORDER BY schema_name;\n"
-        ))
-        return [line for line in (l.strip() for l in out.splitlines()) if line]
+            "ORDER BY schema_name"))

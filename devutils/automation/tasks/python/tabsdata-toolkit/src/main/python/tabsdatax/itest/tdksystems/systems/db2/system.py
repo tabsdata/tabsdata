@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import os
 
-from .._container import ContainerBase, DomainResult
+from .._container import AdminConn, ContainerBase, DomainResult
 from ...errors import DatagenError
 from ...shell import docker_exec, docker_exec_check, docker_run
 
@@ -91,50 +91,37 @@ class Db2System(ContainerBase):
             return []
         return [line for line in (l.strip() for l in cp.stdout.splitlines()) if line]
 
-    def do_create(self, container: str, password: str, name: str) -> DomainResult:
-        # Belt-and-braces: make sure the shared database exists (it normally
-        # does, from _post_start), then create the domain's schema in it.
-        self._post_start(container, password)
+    def _admin_url(self, admin: AdminConn) -> str:
+        # Admin connects to the shared XP database over TCP as the instance
+        # owner; domains are SCHEMAs inside it. The XP database itself is created
+        # server-side in `_post_start` (a CLP command, not SQL) at system create.
+        return (f"db2+ibm_db://{admin.user}:{admin.password}"
+                f"@{admin.host}:{admin.port}/{XP_DB}")
+
+    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         schema = db2_schema_name(name)
-        self._exec_inst(
-            container,
-            f"set -e\n"
-            f"db2 -v connect to {XP_DB}\n"
-            f'db2 -v "CREATE SCHEMA {schema}"\n'
-            f"db2 -v connect reset\n"
-            f"db2 -v terminate\n",
-        )
-        port = os.environ.get("PORT", "50000")
+        self._run_admin_sql(admin, [f"CREATE SCHEMA {schema}"])
         # currentSchema pins unqualified DDL / DML to this domain's schema.
-        uri = (f"db2+ibm_db://{self.system_user}:{password}@localhost:{port}/"
-               f"{XP_DB}?currentSchema={schema}")
-        return DomainResult(db=schema, user=self.system_user, password=password,
+        uri = (f"db2+ibm_db://{admin.user}:{admin.password}"
+               f"@{admin.host}:{admin.port}/{XP_DB}?currentSchema={schema}")
+        return DomainResult(db=schema, user=admin.user, password=admin.password,
                             sqlalchemy_uri=uri)
 
-    def do_delete(self, container: str, password: str, name: str) -> None:
+    def do_delete(self, admin: AdminConn, name: str) -> None:
         # ADMIN_DROP_SCHEMA drops the schema and all its objects (plain DROP
         # SCHEMA … RESTRICT refuses a non-empty schema). Best-effort on
-        # teardown; the database 'XP' itself is left for the other domains.
+        # teardown; the shared XP database is left for the other domains.
         schema = db2_schema_name(name)
-        self._exec_inst(
-            container,
-            f"db2 -v connect to {XP_DB}\n"
-            f"db2 -v \"CALL SYSPROC.ADMIN_DROP_SCHEMA('{schema}', NULL, NULL, NULL)\"\n"
-            f"db2 -v connect reset\n"
-            f"db2 -v terminate\n",
-            ignore_failure=True,
-        )
+        try:
+            self._run_admin_sql(
+                admin,
+                [f"CALL SYSPROC.ADMIN_DROP_SCHEMA('{schema}', NULL, NULL, NULL)"])
+        except DatagenError as exc:
+            print(f">>> db2: could not drop schema {schema}: {exc}")
 
-    def do_list(self, container: str, password: str) -> list[str]:
-        cp = docker_exec(
-            container, "bash", "-lc",
-            f"db2 connect to {XP_DB} >/dev/null 2>&1 && "
-            f"db2 -x \"SELECT TRIM(schemaname) FROM syscat.schemata "
-            f"WHERE schemaname NOT LIKE 'SYS%' "
-            f"AND schemaname NOT IN ('NULLID','SQLJ','DB2INST1','DB2GSE','DB2QP') "
-            f"ORDER BY schemaname\"",
-            user=self.system_user,
-        )
-        if cp.returncode != 0:
-            return []
-        return [line for line in (l.strip() for l in cp.stdout.splitlines()) if line]
+    def do_list(self, admin: AdminConn) -> list[str]:
+        return self._query_admin_names(admin, (
+            "SELECT TRIM(schemaname) FROM syscat.schemata "
+            "WHERE schemaname NOT LIKE 'SYS%' "
+            "AND schemaname NOT IN ('NULLID','SQLJ','DB2INST1','DB2GSE','DB2QP') "
+            "ORDER BY schemaname"))

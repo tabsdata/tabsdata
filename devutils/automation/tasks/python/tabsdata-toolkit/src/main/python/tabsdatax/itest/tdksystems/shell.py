@@ -70,6 +70,21 @@ def find_free_port() -> int:
         s.close()
 
 
+def port_open(host: str, port: int, timeout: float = 3.0) -> bool:
+    """True if a TCP connection to host:port succeeds within `timeout` seconds.
+    A transport-only reachability probe (no auth) — used by domain status so it
+    works over a network connection, without a local Docker daemon."""
+    s = socket.socket()
+    s.settimeout(timeout)
+    try:
+        s.connect((host, port))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
 def require_docker() -> None:
     if subprocess.run(
         ["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL

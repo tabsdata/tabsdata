@@ -5,7 +5,7 @@ import os
 import platform
 import subprocess
 
-from .._container import ContainerBase, DomainResult
+from .._container import AdminConn, ContainerBase, DomainResult
 from ..base import DomainContext, LoadRequest
 from ...errors import DatagenError
 from ...shell import docker_run, find_free_port
@@ -113,36 +113,35 @@ class RedpandaSystem(ContainerBase):
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         ).returncode == 0
 
-    def _rpk(self, container: str, *args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["docker", "exec", container, "rpk"] + list(args),
-            capture_output=True, text=True,
-        )
+    def _admin_client(self, admin: AdminConn):
+        from confluent_kafka.admin import AdminClient
+        return AdminClient({"bootstrap.servers": f"{admin.host}:{admin.port}"})
 
-    def do_create(self, container: str, password: str, name: str) -> DomainResult:
-        cp = self._rpk(container, "topic", "create", name)
-        if cp.returncode != 0:
-            raise DatagenError(f"rpk topic create failed: {cp.stderr.strip() or cp.stdout.strip()}")
-        port = os.environ.get("PORT", "9092")
+    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
+        from confluent_kafka.admin import NewTopic
+        futures = self._admin_client(admin).create_topics(
+            [NewTopic(name, num_partitions=1, replication_factor=1)])
+        try:
+            futures[name].result()   # block until created; raises on failure
+        except Exception as exc:
+            raise DatagenError(
+                f"kafka create topic '{name}' failed: {exc}") from exc
         return DomainResult(
             db=name, user="", password="",
-            sqlalchemy_uri=f"kafka://localhost:{port}/{name}",
-        )
+            sqlalchemy_uri=f"kafka://{admin.host}:{admin.port}/{name}")
 
-    def do_delete(self, container: str, password: str, name: str) -> None:
-        cp = self._rpk(container, "topic", "delete", name)
-        if cp.returncode != 0:
-            raise DatagenError(f"rpk topic delete failed: {cp.stderr.strip() or cp.stdout.strip()}")
+    def do_delete(self, admin: AdminConn, name: str) -> None:
+        futures = self._admin_client(admin).delete_topics([name])
+        try:
+            futures[name].result()
+        except Exception as exc:
+            raise DatagenError(
+                f"kafka delete topic '{name}' failed: {exc}") from exc
 
-    def do_list(self, container: str, password: str) -> list[str]:
-        cp = self._rpk(container, "topic", "list")
-        if cp.returncode != 0:
-            return []
-        out: list[str] = []
-        for i, line in enumerate(cp.stdout.splitlines()):
-            if i == 0:  # skip header
-                continue
-            parts = line.split()
-            if parts:
-                out.append(parts[0])
-        return out
+    def do_list(self, admin: AdminConn) -> list[str]:
+        try:
+            md = self._admin_client(admin).list_topics(timeout=10)
+        except Exception as exc:
+            raise DatagenError(f"kafka list topics failed: {exc}") from exc
+        # Skip Kafka/Redpanda internal topics (e.g. _schemas, __consumer_offsets).
+        return [t for t in md.topics if not t.startswith("_")]

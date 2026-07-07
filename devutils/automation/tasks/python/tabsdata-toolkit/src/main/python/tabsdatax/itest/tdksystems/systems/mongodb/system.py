@@ -5,7 +5,7 @@ import os
 import platform
 import subprocess
 
-from .._container import ContainerBase, DomainResult
+from .._container import AdminConn, ContainerBase, DomainResult
 from ...errors import DatagenError
 from ...shell import docker_run, gen_password
 
@@ -40,39 +40,47 @@ class MongodbSystem(ContainerBase):
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         ).returncode == 0
 
-    def _eval(self, container: str, password: str, db: str, js: str) -> str:
-        cp = subprocess.run(
-            ["docker", "exec", container, "mongosh", "--quiet",
-             "-u", self.system_user, "-p", password,
-             "--authenticationDatabase", "admin", db, "--eval", js],
-            capture_output=True, text=True,
-        )
-        if cp.returncode != 0:
-            raise DatagenError(f"mongosh failed: {cp.stderr.strip()}")
-        return cp.stdout
+    def _client(self, admin: AdminConn):
+        from pymongo import MongoClient
+        return MongoClient(
+            host=admin.host, port=int(admin.port),
+            username=admin.user, password=admin.password,
+            authSource="admin", serverSelectionTimeoutMS=10000)
 
-    def do_create(self, container: str, password: str, name: str) -> DomainResult:
+    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         pw = gen_password()
-        # Create user + materialise DB so it shows in listDatabases.
-        self._eval(container, password, name, (
-            f"db.createUser({{ user: '{name}', pwd: '{pw}', roles: ['dbOwner'] }});\n"
-            f"db.createCollection('_init');\n"
-        ))
-        port = os.environ.get("PORT", "27017")
-        uri = f"mongodb://{name}:{pw}@localhost:{port}/{name}"
+        client = self._client(admin)
+        try:
+            db = client[name]
+            db.command("createUser", name, pwd=pw, roles=["dbOwner"])
+            db.create_collection("_init")   # materialise DB so it lists
+        except Exception as exc:
+            raise DatagenError(f"mongodb create '{name}' failed: {exc}") from exc
+        finally:
+            client.close()
+        uri = f"mongodb://{name}:{pw}@{admin.host}:{admin.port}/{name}"
         return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
-    def do_delete(self, container: str, password: str, name: str) -> None:
-        self._eval(container, password, name, (
-            f"try {{ db.dropUser('{name}'); }} catch (e) {{ print('dropUser:', e.message); }}\n"
-            "db.dropDatabase();\n"
-        ))
+    def do_delete(self, admin: AdminConn, name: str) -> None:
+        client = self._client(admin)
+        try:
+            db = client[name]
+            try:
+                db.command("dropUser", name)
+            except Exception as exc:       # user may not exist — best-effort
+                print(f">>> mongodb dropUser {name}: {exc}")
+            client.drop_database(name)
+        except Exception as exc:
+            raise DatagenError(f"mongodb delete '{name}' failed: {exc}") from exc
+        finally:
+            client.close()
 
-    def do_list(self, container: str, password: str) -> list[str]:
-        out = self._eval(container, password, "admin", (
-            "db.adminCommand({ listDatabases: 1 }).databases"
-            ".map(d => d.name)"
-            ".filter(n => !['admin','local','config'].includes(n))"
-            ".forEach(n => print(n));"
-        ))
-        return [line for line in (l.strip() for l in out.splitlines()) if line]
+    def do_list(self, admin: AdminConn) -> list[str]:
+        client = self._client(admin)
+        try:
+            names = client.list_database_names()
+        except Exception as exc:
+            raise DatagenError(f"mongodb list failed: {exc}") from exc
+        finally:
+            client.close()
+        return [n for n in names if n not in ("admin", "local", "config")]

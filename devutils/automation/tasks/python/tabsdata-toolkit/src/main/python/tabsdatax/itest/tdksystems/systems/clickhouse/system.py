@@ -4,9 +4,8 @@ from __future__ import annotations
 import os
 import platform
 
-from .._container import ContainerBase, DomainResult
-from ...errors import DatagenError
-from ...shell import docker_exec, docker_exec_check, docker_run, gen_password
+from .._container import AdminConn, ContainerBase, DomainResult
+from ...shell import docker_exec_check, docker_run, gen_password
 
 
 class ClickhouseSystem(ContainerBase):
@@ -39,37 +38,28 @@ class ClickhouseSystem(ContainerBase):
             "-q", "SELECT 1",
         )
 
-    def _exec(self, container: str, password: str, sql: str) -> str:
-        cp = docker_exec(
-            container, "clickhouse-client",
-            f"--user={self.system_user}", f"--password={password}", "--multiquery",
-            input=sql,
-        )
-        if cp.returncode != 0:
-            raise DatagenError(f"clickhouse-client failed: {cp.stderr.strip()}")
-        return cp.stdout
+    def _admin_url(self, admin: AdminConn) -> str:
+        return (f"clickhouse+http://{admin.user}:{admin.password}"
+                f"@{admin.host}:{admin.port}/default")
 
-    def do_create(self, container: str, password: str, name: str) -> DomainResult:
+    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         pw = gen_password()
-        self._exec(container, password, (
-            f'CREATE DATABASE "{name}";\n'
-            f'CREATE USER "{name}" IDENTIFIED WITH plaintext_password BY \'{pw}\';\n'
-            f'GRANT ALL ON "{name}".* TO "{name}";\n'
-        ))
-        port = os.environ.get("PORT", "8123")
-        uri = f"clickhouse+http://{name}:{pw}@localhost:{port}/{name}"
+        self._run_admin_sql(admin, [
+            f'CREATE DATABASE "{name}"',
+            f'CREATE USER "{name}" IDENTIFIED WITH plaintext_password BY \'{pw}\'',
+            f'GRANT ALL ON "{name}".* TO "{name}"',
+        ])
+        uri = f"clickhouse+http://{name}:{pw}@{admin.host}:{admin.port}/{name}"
         return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
-    def do_delete(self, container: str, password: str, name: str) -> None:
-        self._exec(container, password, (
-            f'DROP USER IF EXISTS "{name}";\n'
-            f'DROP DATABASE IF EXISTS "{name}";\n'
-        ))
+    def do_delete(self, admin: AdminConn, name: str) -> None:
+        self._run_admin_sql(admin, [
+            f'DROP USER IF EXISTS "{name}"',
+            f'DROP DATABASE IF EXISTS "{name}"',
+        ])
 
-    def do_list(self, container: str, password: str) -> list[str]:
-        out = self._exec(container, password, (
-            "SELECT name FROM system.databases "
-            "WHERE name NOT IN ('system','INFORMATION_SCHEMA','information_schema','default') "
-            "ORDER BY name;\n"
-        ))
-        return [line for line in (l.strip() for l in out.splitlines()) if line]
+    def do_list(self, admin: AdminConn) -> list[str]:
+        return self._query_admin_names(admin, (
+            "SELECT name FROM system.databases WHERE name NOT IN "
+            "('system','INFORMATION_SCHEMA','information_schema','default') "
+            "ORDER BY name"))

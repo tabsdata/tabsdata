@@ -103,10 +103,10 @@ def test_create_system_requires_staging_root():
 
 def test_create_domain_derives_base_path(monkeypatch):
     sysobj = systems.get("clickhouse")
-    monkeypatch.setattr(sysobj, "do_list", lambda c, p: [])
+    monkeypatch.setattr(sysobj, "do_list", lambda admin: [])
     monkeypatch.setattr(
         sysobj, "do_create",
-        lambda c, p, name: DomainResult(
+        lambda admin, name: DomainResult(
             db=name, user=name, password="pw",
             sqlalchemy_uri=f"clickhouse+http://{name}"))
     ctx = SystemContext("clickhouse", "clickhouse", {

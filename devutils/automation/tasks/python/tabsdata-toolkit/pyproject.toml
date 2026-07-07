@@ -64,6 +64,7 @@ dependencies = [
     "ibm_db; platform_machine != 'aarch64'",
     "ibm_db_sa; platform_machine != 'aarch64'",
     "clickhouse-sqlalchemy",
+    "pymongo",
     "pandas",
     "pyarrow",
     "boto3",

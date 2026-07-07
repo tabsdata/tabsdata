@@ -111,7 +111,11 @@ def test_s3_descriptor_matches_old_writer(tmp_path, fake_s3):
 # ---- mysql (container) — domain via tdx; system descriptor built directly -
 
 def test_mysql_domain_through_tdx(tmp_path, monkeypatch):
-    monkeypatch.setattr(MysqlSystem, "_exec_sql", lambda self, c, pw, sql: "")
+    # Admin runs over TCP now; stub the SQL helpers so no real DB is needed.
+    monkeypatch.setattr(MysqlSystem, "_run_admin_sql",
+                        lambda self, admin, statements: None)
+    monkeypatch.setattr(MysqlSystem, "_query_admin_names",
+                        lambda self, admin, query: [])
     sysf, domf = str(tmp_path / "my.json"), str(tmp_path / "my_dom.json")
     descriptor.write_container_system(
         out=sysf, system_type="mysql", system_kind="sql", label="MySQL",

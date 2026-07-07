@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import os
 
-from .._container import ContainerBase, DomainResult
-from ...errors import DatagenError
-from ...shell import docker_exec, docker_exec_check, docker_run, gen_password
+from .._container import AdminConn, ContainerBase, DomainResult
+from ...shell import docker_exec_check, docker_run, gen_password
 
 
 class MssqlSystem(ContainerBase):
@@ -14,6 +13,8 @@ class MssqlSystem(ContainerBase):
     domain_desc = "a database (with a dedicated user that owns it)"
     domain_flag = "schema"
     supports_sql = True
+    # CREATE DATABASE can't run inside a multi-statement transaction.
+    admin_autocommit = True
 
     image = f"mcr.microsoft.com/mssql/server:{os.environ.get('MSSQL_IMAGE_VERSION', '2022-CU14-ubuntu-22.04')}"
     image_platform = "linux/amd64"
@@ -33,42 +34,34 @@ class MssqlSystem(ContainerBase):
             "-Q", "SELECT 1", "-C", "-N", "-l", "5", "-b",
         )
 
-    def _exec(self, container: str, password: str, sql: str) -> str:
-        cp = docker_exec(
-            container, "/opt/mssql-tools18/bin/sqlcmd",
-            "-S", "localhost", "-U", self.system_user, "-P", password,
-            "-C", "-N", "-b", "-h-1", "-W",
-            input=sql,
-        )
-        if cp.returncode != 0:
-            raise DatagenError(f"sqlcmd failed: {cp.stderr.strip() or cp.stdout.strip()}")
-        return cp.stdout
+    def _admin_url(self, admin: AdminConn) -> str:
+        return (f"mssql+pyodbc://{admin.user}:{admin.password}"
+                f"@{admin.host}:{admin.port}/master"
+                f"?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes")
 
-    def do_create(self, container: str, password: str, name: str) -> DomainResult:
+    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         pw = gen_password()
-        self._exec(container, password, (
-            f"CREATE DATABASE [{name}];\nGO\n"
-            f"CREATE LOGIN [{name}] WITH PASSWORD = '{pw}', CHECK_POLICY = OFF;\nGO\n"
-            f"USE [{name}];\nGO\n"
-            f"CREATE USER [{name}] FOR LOGIN [{name}];\n"
-            f"ALTER ROLE db_owner ADD MEMBER [{name}];\nGO\n"
-        ))
-        port = os.environ.get("PORT", "1433")
-        uri = (f"mssql+pyodbc://{name}:{pw}@localhost:{port}/{name}"
+        # No GO batches over pyodbc — each statement runs on its own; USE
+        # switches the connection's DB context for the CREATE USER that follows.
+        self._run_admin_sql(admin, [
+            f"CREATE DATABASE [{name}]",
+            f"CREATE LOGIN [{name}] WITH PASSWORD = '{pw}', CHECK_POLICY = OFF",
+            f"USE [{name}]",
+            f"CREATE USER [{name}] FOR LOGIN [{name}]",
+            f"ALTER ROLE db_owner ADD MEMBER [{name}]",
+        ])
+        uri = (f"mssql+pyodbc://{name}:{pw}@{admin.host}:{admin.port}/{name}"
                f"?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes")
         return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
-    def do_delete(self, container: str, password: str, name: str) -> None:
-        self._exec(container, password, (
-            f"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;\nGO\n"
-            f"DROP DATABASE [{name}];\nGO\n"
-            f"DROP LOGIN [{name}];\nGO\n"
-        ))
+    def do_delete(self, admin: AdminConn, name: str) -> None:
+        self._run_admin_sql(admin, [
+            f"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE",
+            f"DROP DATABASE [{name}]",
+            f"DROP LOGIN [{name}]",
+        ])
 
-    def do_list(self, container: str, password: str) -> list[str]:
-        out = self._exec(container, password, (
-            "SET NOCOUNT ON;\n"
+    def do_list(self, admin: AdminConn) -> list[str]:
+        return self._query_admin_names(admin, (
             "SELECT name FROM sys.databases "
-            "WHERE name NOT IN ('master','tempdb','model','msdb') ORDER BY name;\nGO\n"
-        ))
-        return [line for line in (l.strip() for l in out.splitlines()) if line]
+            "WHERE name NOT IN ('master','tempdb','model','msdb') ORDER BY name"))
