@@ -119,7 +119,11 @@ class RedpandaSystem(ContainerBase):
 
     def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         from confluent_kafka.admin import NewTopic
-        futures = self._admin_client(admin).create_topics(
+        # Keep `client` referenced until the future resolves — if the
+        # AdminClient is GC'd first, librdkafka tears the broker handle down
+        # ("Handle is terminating") and the future fails.
+        client = self._admin_client(admin)
+        futures = client.create_topics(
             [NewTopic(name, num_partitions=1, replication_factor=1)])
         try:
             futures[name].result()   # block until created; raises on failure
@@ -131,7 +135,8 @@ class RedpandaSystem(ContainerBase):
             sqlalchemy_uri=f"kafka://{admin.host}:{admin.port}/{name}")
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
-        futures = self._admin_client(admin).delete_topics([name])
+        client = self._admin_client(admin)
+        futures = client.delete_topics([name])
         try:
             futures[name].result()
         except Exception as exc:
@@ -139,8 +144,9 @@ class RedpandaSystem(ContainerBase):
                 f"kafka delete topic '{name}' failed: {exc}") from exc
 
     def do_list(self, admin: AdminConn) -> list[str]:
+        client = self._admin_client(admin)
         try:
-            md = self._admin_client(admin).list_topics(timeout=10)
+            md = client.list_topics(timeout=10)
         except Exception as exc:
             raise DatagenError(f"kafka list topics failed: {exc}") from exc
         # Skip Kafka/Redpanda internal topics (e.g. _schemas, __consumer_offsets).
