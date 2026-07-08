@@ -402,18 +402,6 @@ def test_src_format_json_reads_records(tmp_path: Path):
     ]
 
 
-@pytest.mark.skip(
-    reason=(
-        "``TransporterAvroFormat`` serialises to the YAML scalar "
-        "``Binary``, which signals the transporter binary to byte-"
-        "copy the file -- it does NOT transcode avro -> parquet. The "
-        "``.avro`` file is preserved as-is in the target dir, so any "
-        "downstream parquet reader chokes on it. Re-enable once the "
-        "binary actually transcodes avro on import (or rename "
-        "``DestFileFormat.AVRO`` / ``SrcFileFormat.AVRO`` to make the "
-        "byte-copy semantics explicit)."
-    ),
-)
 def test_src_format_avro_reads_records(tmp_path: Path):
     base = tmp_path / "store"
     base.mkdir()
@@ -616,10 +604,7 @@ def test_dest_format_auto_defaults_to_parquet(tmp_path: Path):
 #
 # One test per ``CsvSrcKey`` option. Each test crafts a CSV that only
 # parses correctly if the option is honored, and verifies the parquet
-# output reflects the expected interpretation. Tests that confirm a
-# known binary defect are marked ``xfail``; if the binary starts
-# honoring the option, the test flips to ``XPASS`` and pytest will
-# loudly surface the change.
+# output reflects the expected interpretation.
 # ---------------------------------------------------------------------------
 
 
@@ -665,10 +650,6 @@ def test_csv_src_separator(tmp_path: Path):
 # --- quote_char ------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason="binary crashes (exit 201) when ``quote_char != '\"'``",
-    strict=True,
-)
 def test_csv_src_quote_char(tmp_path: Path):
     # Apostrophe-quoted field with embedded comma -- only parses
     # correctly when ``quote_char`` is honored.
@@ -702,13 +683,6 @@ def test_csv_src_has_header_false(tmp_path: Path):
 # --- skip_rows -------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "binary ignores ``skip_rows`` -- schema inference chokes on the "
-        "unskipped noise rows (exit 201)"
-    ),
-    strict=True,
-)
 def test_csv_src_skip_rows(tmp_path: Path):
     df = _read_csv_with_cfg(
         tmp_path,
@@ -724,13 +698,6 @@ def test_csv_src_skip_rows(tmp_path: Path):
 # --- skip_rows_after_header ------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "binary ignores ``skip_rows_after_header`` -- the skip rows come "
-        "back as data"
-    ),
-    strict=True,
-)
 def test_csv_src_skip_rows_after_header(tmp_path: Path):
     df = _read_csv_with_cfg(
         tmp_path,
@@ -746,10 +713,6 @@ def test_csv_src_skip_rows_after_header(tmp_path: Path):
 # --- comment_prefix --------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason="binary crashes (exit 201) on input lines starting with ``comment_prefix``",
-    strict=True,
-)
 def test_csv_src_comment_prefix(tmp_path: Path):
     df = _read_csv_with_cfg(
         tmp_path,
@@ -765,10 +728,6 @@ def test_csv_src_comment_prefix(tmp_path: Path):
 # --- null_values -----------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason="binary ignores ``null_values`` -- literal strings stay as text",
-    strict=True,
-)
 def test_csv_src_null_values(tmp_path: Path):
     df = _read_csv_with_cfg(
         tmp_path,
@@ -815,13 +774,6 @@ def test_csv_src_try_parse_dates(tmp_path: Path):
 # --- decimal_comma ---------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "binary ignores ``decimal_comma`` -- values with a decimal "
-        "comma stay as text"
-    ),
-    strict=True,
-)
 def test_csv_src_decimal_comma(tmp_path: Path):
     # Comma is the decimal point, so the field delimiter must be
     # something else (``;`` here).
@@ -838,10 +790,6 @@ def test_csv_src_decimal_comma(tmp_path: Path):
 # --- truncate_ragged_lines -------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason="binary crashes (exit 201) on ragged input rows even with ``truncate_ragged_lines=True``",
-    strict=True,
-)
 def test_csv_src_truncate_ragged_lines(tmp_path: Path):
     df = _read_csv_with_cfg(
         tmp_path,

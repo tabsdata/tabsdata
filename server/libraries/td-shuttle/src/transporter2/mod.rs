@@ -21,6 +21,7 @@ pub mod cli;
 pub mod codec;
 pub mod commands;
 pub mod convert;
+pub mod csvprep;
 pub mod error;
 pub mod factory;
 pub mod find;

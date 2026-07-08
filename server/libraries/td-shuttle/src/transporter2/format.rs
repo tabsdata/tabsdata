@@ -12,8 +12,9 @@
 //! invariant 3); object-store streaming and (de)compression live in `io` /
 //! `codec`. Phase 1 is sequential — no range splits (`format::Split` is Phase 2).
 
+use crate::transporter2::csvprep::ResolvedCsv;
 use crate::transporter2::error::{Result, TransporterError};
-use crate::transporter2::spec::Format;
+use crate::transporter2::spec::{CsvOptions, Format};
 use arrow::array::{ArrayRef, RecordBatch, StringArray};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use bytes::Bytes;
@@ -33,8 +34,7 @@ pub struct DecodeOptions {
     pub batch_size: usize,
     /// Rows sampled to infer a schema for schemaless formats (csv / ndjson).
     pub sample_rows: usize,
-    pub csv_has_header: bool,
-    pub csv_delimiter: u8,
+    pub csv: CsvOptions,
 }
 
 impl Default for DecodeOptions {
@@ -42,8 +42,7 @@ impl Default for DecodeOptions {
         Self {
             batch_size: 8192,
             sample_rows: 1024,
-            csv_has_header: true,
-            csv_delimiter: b',',
+            csv: CsvOptions::default(),
         }
     }
 }
@@ -97,22 +96,21 @@ pub fn decode_with_schema(
             Ok((schema, Box::new(iter)))
         }
         Format::Csv => {
+            let csv = ResolvedCsv::try_new(&opts.csv)?;
             let schema = match schema {
                 Some(s) => s,
                 None => {
-                    let fmt = arrow::csv::reader::Format::default()
-                        .with_header(opts.csv_has_header)
-                        .with_delimiter(opts.csv_delimiter);
-                    let (s, _) =
-                        fmt.infer_schema(&mut Cursor::new(data.as_ref()), Some(opts.sample_rows))?;
+                    let (s, _) = csv.arrow_format().infer_schema(
+                        csv.wrap(Cursor::new(data.clone())),
+                        Some(opts.sample_rows),
+                    )?;
                     Arc::new(s)
                 }
             };
             let reader = arrow::csv::ReaderBuilder::new(schema.clone())
-                .with_header(opts.csv_has_header)
-                .with_delimiter(opts.csv_delimiter)
+                .with_format(csv.arrow_format())
                 .with_batch_size(opts.batch_size)
-                .build(Cursor::new(data))?;
+                .build(csv.wrap(Cursor::new(data)))?;
             let iter = reader.map(|r| r.map_err(TransporterError::from));
             Ok((schema, Box::new(iter)))
         }
@@ -157,11 +155,10 @@ pub fn infer_schema(format: Format, data: &Bytes, opts: &DecodeOptions) -> Resul
             Ok(Arc::new(s))
         }
         Format::Csv => {
-            let fmt = arrow::csv::reader::Format::default()
-                .with_header(opts.csv_has_header)
-                .with_delimiter(opts.csv_delimiter);
-            let (s, _) =
-                fmt.infer_schema(&mut Cursor::new(data.as_ref()), Some(opts.sample_rows))?;
+            let csv = ResolvedCsv::try_new(&opts.csv)?;
+            let (s, _) = csv
+                .arrow_format()
+                .infer_schema(csv.wrap(Cursor::new(data.clone())), Some(opts.sample_rows))?;
             Ok(Arc::new(s))
         }
         Format::Parquet => Ok(ParquetRecordBatchReaderBuilder::try_new(data.clone())?
@@ -281,16 +278,15 @@ pub fn decode_file(
             ))
         }
         Format::Csv => {
-            let fmt = arrow::csv::reader::Format::default()
-                .with_header(opts.csv_has_header)
-                .with_delimiter(opts.csv_delimiter);
-            let (schema, _) = fmt.infer_schema(&mut File::open(path)?, Some(opts.sample_rows))?;
+            let csv = ResolvedCsv::try_new(&opts.csv)?;
+            let (schema, _) = csv
+                .arrow_format()
+                .infer_schema(csv.wrap(File::open(path)?), Some(opts.sample_rows))?;
             let schema = Arc::new(schema);
             let reader = arrow::csv::ReaderBuilder::new(schema.clone())
-                .with_header(opts.csv_has_header)
-                .with_delimiter(opts.csv_delimiter)
+                .with_format(csv.arrow_format())
                 .with_batch_size(opts.batch_size)
-                .build(File::open(path)?)?;
+                .build(csv.wrap(File::open(path)?))?;
             Ok((
                 schema,
                 Box::new(reader.map(|r| r.map_err(TransporterError::from))),
@@ -571,6 +567,201 @@ mod test {
         assert_eq!(files.value(0), "app.log");
         assert_eq!(msgs.value(0), "first line");
         assert_eq!(msgs.value(1), "second, with comma"); // comma kept intact
+    }
+
+    fn decode_csv(text: &str, csv: CsvOptions) -> (SchemaRef, Vec<RecordBatch>) {
+        let opts = DecodeOptions {
+            csv,
+            ..Default::default()
+        };
+        let (schema, iter) =
+            decode(Format::Csv, "x.csv", Bytes::from(text.to_string()), &opts).unwrap();
+        (schema, iter.map(|r| r.unwrap()).collect())
+    }
+
+    fn string_column(batches: &[RecordBatch], name: &str) -> Vec<Option<String>> {
+        let mut out = Vec::new();
+        for b in batches {
+            let col = b
+                .column_by_name(name)
+                .unwrap()
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .unwrap();
+            out.extend(col.iter().map(|v| v.map(str::to_string)));
+        }
+        out
+    }
+
+    #[test]
+    fn csv_quote_char_honors_alternate_quote() {
+        let (_schema, batches) = decode_csv(
+            "id,name\n1,'alice, the great'\n2,bob\n",
+            CsvOptions {
+                quote_char: '\'',
+                ..Default::default()
+            },
+        );
+        assert_eq!(ids(&batches), vec![1, 2]);
+        assert_eq!(
+            string_column(&batches, "name"),
+            vec![
+                Some("alice, the great".to_string()),
+                Some("bob".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn csv_skip_rows_drops_leading_noise() {
+        let (_schema, batches) = decode_csv(
+            "% noise 1\n% noise 2\nid,name\n1,alice\n2,bob\n",
+            CsvOptions {
+                skip_rows: 2,
+                ..Default::default()
+            },
+        );
+        assert_eq!(ids(&batches), vec![1, 2]); // noise skipped, id inferred Int64
+    }
+
+    #[test]
+    fn csv_skip_rows_after_header_drops_rows_not_header() {
+        let (_schema, batches) = decode_csv(
+            "id,name\nskip_1,skip_1\nskip_2,skip_2\n1,alice\n2,bob\n",
+            CsvOptions {
+                skip_rows_after_header: 2,
+                ..Default::default()
+            },
+        );
+        assert_eq!(ids(&batches), vec![1, 2]);
+        assert_eq!(
+            string_column(&batches, "name"),
+            vec![Some("alice".to_string()), Some("bob".to_string())]
+        );
+    }
+
+    #[test]
+    fn csv_comment_prefix_skips_comment_lines() {
+        let (_schema, batches) = decode_csv(
+            "# header comment\nid,name\n# data comment\n1,alice\n2,bob\n",
+            CsvOptions {
+                comment_prefix: Some("#".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(ids(&batches), vec![1, 2]);
+    }
+
+    #[test]
+    fn csv_null_values_become_nulls() {
+        let (_schema, batches) = decode_csv(
+            "id,name\n1,NA\n2,bob\n",
+            CsvOptions {
+                null_values: Some(vec!["NA".to_string()]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(ids(&batches), vec![1, 2]);
+        assert_eq!(
+            string_column(&batches, "name"),
+            vec![None, Some("bob".to_string())]
+        );
+    }
+
+    #[test]
+    fn csv_decimal_comma_parses_floats() {
+        use arrow::array::Float64Array;
+        let (schema, batches) = decode_csv(
+            "id;value\n1;1,5\n2;2,75\n",
+            CsvOptions {
+                delimiter: ';',
+                decimal_comma: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            schema.field_with_name("value").unwrap().data_type(),
+            &DataType::Float64
+        );
+        let mut values = Vec::new();
+        for b in &batches {
+            let col = b
+                .column_by_name("value")
+                .unwrap()
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .unwrap();
+            values.extend(col.iter().map(Option::unwrap));
+        }
+        assert_eq!(values, vec![1.5, 2.75]);
+    }
+
+    #[test]
+    fn csv_truncate_ragged_lines_keeps_overlong_rows() {
+        let (_schema, batches) = decode_csv(
+            "id,name\n1,alice\n2,bob,extra\n",
+            CsvOptions {
+                truncate_ragged_lines: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(ids(&batches), vec![1, 2]);
+        assert_eq!(
+            string_column(&batches, "name"),
+            vec![Some("alice".to_string()), Some("bob".to_string())]
+        );
+    }
+
+    #[test]
+    fn csv_decode_file_applies_the_same_options() {
+        let dir = std::env::temp_dir().join(format!("transporter-csvopts-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("in.csv");
+        std::fs::write(
+            &path,
+            "% noise\nid;name;value\n# comment\n1;'a; b';1,5\n2;bob;2,75;extra\n",
+        )
+        .unwrap();
+        let opts = DecodeOptions {
+            csv: CsvOptions {
+                delimiter: ';',
+                quote_char: '\'',
+                comment_prefix: Some("#".to_string()),
+                decimal_comma: true,
+                truncate_ragged_lines: true,
+                skip_rows: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let (_schema, iter) = decode_file(Format::Csv, "in.csv", &path, &opts).unwrap();
+        let batches: Vec<RecordBatch> = iter.map(|r| r.unwrap()).collect();
+        assert_eq!(ids(&batches), vec![1, 2]);
+        assert_eq!(
+            string_column(&batches, "name"),
+            vec![Some("a; b".to_string()), Some("bob".to_string())]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn csv_invalid_options_error_cleanly() {
+        let opts = DecodeOptions {
+            csv: CsvOptions {
+                decimal_comma: true, // with the default ',' delimiter
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let err = decode(
+            Format::Csv,
+            "x.csv",
+            Bytes::from("id,value\n1,2\n".to_string()),
+            &opts,
+        )
+        .err()
+        .unwrap();
+        assert!(matches!(err, TransporterError::InvalidCsvOptions(_)));
     }
 
     #[test]

@@ -535,6 +535,7 @@ mod test {
         let csv = serde_yaml::to_string(&FormatSpec::csv_with(CsvOptions {
             has_header: false,
             delimiter: ';',
+            ..Default::default()
         }))
         .unwrap();
         assert!(!csv.contains('!'), "no YAML tags: {csv}");

@@ -279,11 +279,20 @@ class Location:
 
 @dataclass(frozen=True, slots=True)
 class CsvOptions:
-    """The only format with knobs on the wire: ``has_header`` and a
-    single-char ``delimiter``."""
+    """The only format with knobs on the wire. Everything beyond
+    ``has_header`` / ``delimiter`` is reader-side only and optional:
+    ``None`` keeps the key off the wire, deferring to the binary's
+    default."""
 
     has_header: bool = True
     delimiter: str = ","
+    quote_char: str | None = None
+    comment_prefix: str | None = None
+    null_values: list[str] | None = None
+    decimal_comma: bool | None = None
+    truncate_ragged_lines: bool | None = None
+    skip_rows: int | None = None
+    skip_rows_after_header: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -515,19 +524,49 @@ def to_location(loc: TransporterLocation) -> Location:
     raise ValueError(f"unsupported transporter location: {type(loc).__name__}")
 
 
+def _csv_char(value: Any, default: str) -> str:
+    if isinstance(value, int):  # callers may pass a byte/char code
+        value = chr(value)
+    value = str(value)
+    return value[0] if value else default
+
+
+def _csv_null_values(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        raise ValueError(
+            "per-column null_values mappings are not supported by the"
+            " transporter; pass a string or a list of strings"
+        )
+    return [str(v) for v in value]
+
+
 def _csv_options_to_spec(options: dict) -> CsvOptions:
     """Map the (polars-shaped) CSV option dict to td_transporter2's CSV
-    options, which carry only ``has_header`` and a single-char
-    ``delimiter``. Other polars knobs (quote/eol/encoding/...) are not
-    representable on the arrow-rs CSV reader/writer and are dropped."""
-    separator = options.get("separator", ",")
-    if isinstance(separator, int):  # callers may pass a byte/char code
-        separator = chr(separator)
-    separator = str(separator)
-    delimiter = separator[0] if separator else ","
+    options, normalizing default values to ``None`` so they stay off the
+    wire. The remaining polars knobs (eol_char/encoding/missing_is_null/
+    try_parse_dates/raise_if_empty/ignore_errors and the writer-side set)
+    are not representable on the arrow-rs CSV reader/writer and are
+    dropped."""
     # Src dicts carry ``has_header``; dest dicts carry ``include_header``.
     has_header = options.get("has_header", options.get("include_header", True))
-    return CsvOptions(has_header=bool(has_header), delimiter=delimiter)
+    quote_char = _csv_char(options.get("quote_char", '"'), '"')
+    skip_rows = int(options.get("skip_rows", 0) or 0)
+    skip_rows_after_header = int(options.get("skip_rows_after_header", 0) or 0)
+    return CsvOptions(
+        has_header=bool(has_header),
+        delimiter=_csv_char(options.get("separator", ","), ","),
+        quote_char=None if quote_char == '"' else quote_char,
+        comment_prefix=options.get("comment_prefix") or None,
+        null_values=_csv_null_values(options.get("null_values")) or None,
+        decimal_comma=True if options.get("decimal_comma") else None,
+        truncate_ragged_lines=True if options.get("truncate_ragged_lines") else None,
+        skip_rows=skip_rows or None,
+        skip_rows_after_header=skip_rows_after_header or None,
+    )
 
 
 def to_format_spec(fmt: TransporterFormat) -> FormatSpec:
@@ -687,9 +726,8 @@ def delete(
 
 # --- Format mappers ------------------------------------------------
 #
-# Identical to :mod:`transporter1`. Only the keys td_transporter2
-# understands (``separator`` -> delimiter, ``has_header`` /
-# ``include_header``) take effect today; the rest are accepted for
+# Identical to :mod:`transporter1`. The reader-side keys mapped by
+# :func:`_csv_options_to_spec` take effect; the rest are accepted for
 # forward-compatibility and layered under the user's ``format_cfg``.
 
 _CSV_SRC_DEFAULTS: dict = {

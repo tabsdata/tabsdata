@@ -90,12 +90,27 @@ impl FormatSpec {
 }
 
 /// CSV reader/writer options carried on the wire (the only format with knobs).
+/// Everything beyond `has_header` / `delimiter` is reader-side only.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CsvOptions {
     #[serde(default = "csv_has_header_default")]
     pub has_header: bool,
     #[serde(default = "csv_delimiter_default")]
     pub delimiter: char,
+    #[serde(default = "csv_quote_char_default")]
+    pub quote_char: char,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment_prefix: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub null_values: Option<Vec<String>>,
+    #[serde(default)]
+    pub decimal_comma: bool,
+    #[serde(default)]
+    pub truncate_ragged_lines: bool,
+    #[serde(default)]
+    pub skip_rows: usize,
+    #[serde(default)]
+    pub skip_rows_after_header: usize,
 }
 
 fn csv_has_header_default() -> bool {
@@ -106,11 +121,22 @@ fn csv_delimiter_default() -> char {
     ','
 }
 
+fn csv_quote_char_default() -> char {
+    '"'
+}
+
 impl Default for CsvOptions {
     fn default() -> Self {
         Self {
             has_header: csv_has_header_default(),
             delimiter: csv_delimiter_default(),
+            quote_char: csv_quote_char_default(),
+            comment_prefix: None,
+            null_values: None,
+            decimal_comma: false,
+            truncate_ragged_lines: false,
+            skip_rows: 0,
+            skip_rows_after_header: 0,
         }
     }
 }

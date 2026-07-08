@@ -32,12 +32,10 @@ fn basename(uri: &str) -> String {
 }
 
 fn decode_opts_for(sf: &FormatSpec, opts: &CopyOptions) -> DecodeOptions {
-    let csv = sf.csv();
     DecodeOptions {
         batch_size: opts.rows_per_batch,
         sample_rows: opts.infer_sample_rows,
-        csv_has_header: csv.as_ref().map(|c| c.has_header).unwrap_or(true),
-        csv_delimiter: csv.as_ref().map(|c| c.delimiter as u8).unwrap_or(b','),
+        csv: sf.csv().unwrap_or_default(),
     }
 }
 

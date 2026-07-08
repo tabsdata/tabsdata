@@ -62,6 +62,9 @@ pub enum TransporterError {
     #[error("format {0:?} is read-only and cannot be a conversion target")]
     UnsupportedTarget(Format),
 
+    #[error("invalid csv options: {0}")]
+    InvalidCsvOptions(String),
+
     /// A declared codec does not match the bytes (magic-byte sanity guard).
     #[error("codec mismatch: declared {declared}, but the data is not {declared} ({detail})")]
     CodecMismatch { declared: String, detail: String },
