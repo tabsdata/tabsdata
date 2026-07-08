@@ -24,6 +24,8 @@ from .errors import DatagenError
 DIST_NAME = "tabsdata-toolkit"
 
 _IMPORT_OVERRIDES: dict[str, str] = {
+    "py-cpuinfo": "cpuinfo",
+    "pyyaml": "yaml",
     "psycopg2-binary": "psycopg2",
     "mysql-connector-python": "mysql.connector",
     "clickhouse-sqlalchemy": "clickhouse_sqlalchemy",

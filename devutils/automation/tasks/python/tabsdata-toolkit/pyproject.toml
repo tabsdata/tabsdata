@@ -3,7 +3,10 @@
 #
 
 [build-system]
-requires = []
+requires = [
+    "setuptools==83.0.0",
+    "wheel==0.47.0"
+]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -49,36 +52,38 @@ dependencies = [
     "pyyaml==6.0.3",
     "rich==14.3.3",
     "rich-click==1.9.7",
-    "setuptools==81.0.0",
+    "setuptools==83.0.0",
     "tenacity==9.1.4",
     "textual==8.2.3",
     "textual-plotext==1.0.1",
     "tqdm==4.67.3",
     "tzlocal==5.3.1",
-    "cryptography",
-    "sqlalchemy",
-    "sqlparse",
-    "pyodbc",
-    "mysql-connector-python",
-    "oracledb",
-    "psycopg2-binary",
-    "ibm_db; platform_machine != 'aarch64'",
-    "ibm_db_sa; platform_machine != 'aarch64'",
-    "clickhouse-sqlalchemy",
-    "pymongo",
-    "pandas",
-    "pyarrow",
-    "boto3",
-    "google-cloud-storage",
-    "google-cloud-bigquery",
-    "azure-storage-blob",
-    "snowflake-connector-python",
-    "confluent-kafka[avro,json,protobuf]",
-    "fastavro",
-    "protobuf",
 ]
 
 [project.optional-dependencies]
+main = [
+    "azure-storage-blob",
+    "boto3",
+    "clickhouse-sqlalchemy",
+    "confluent-kafka[avro,json,protobuf]",
+    "cryptography",
+    "fastavro",
+    "google-cloud-bigquery",
+    "google-cloud-storage",
+    "ibm_db; platform_machine != 'aarch64'",
+    "ibm_db_sa; platform_machine != 'aarch64'",
+    "mysql-connector-python",
+    "oracledb",
+    "pandas",
+    "protobuf",
+    "psycopg2-binary",
+    "pyarrow",
+    "pymongo",
+    "pyodbc",
+    "snowflake-connector-python",
+    "sqlalchemy",
+    "sqlparse",
+]
 salesforce = [
     "cryptography",
     "cumulusci-plus",

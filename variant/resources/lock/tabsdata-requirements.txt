@@ -18,7 +18,7 @@ botocore-stubs==1.43.14
 build==1.5.0
 cachetools==6.2.6
 certifi==2026.6.17
-cffi==2.0.0 ; platform_python_implementation != 'PyPy'
+cffi==2.1.0 ; platform_python_implementation != 'PyPy'
 charset-normalizer==3.4.8
 click==8.3.1
 click-repl==0.3.0

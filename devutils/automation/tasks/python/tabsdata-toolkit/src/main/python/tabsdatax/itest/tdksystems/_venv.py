@@ -99,11 +99,14 @@ def _ensure(
     label = venv.name
     print(f">>> setting up uv venv '{label}' at {venv} (one-time) ...", file=sys.stderr)
     venv.parent.mkdir(parents=True, exist_ok=True)
-    _run([uv, "venv", "--clear", str(venv)], what=f"creating venv '{label}'")
+    _run(
+        [uv, "venv", "--clear", "--python", sys.executable, str(venv)],
+        what=f"creating venv '{label}'",
+    )
     py = str(_venv_python(venv))
     if editable_extra is not None:
         proj = _project_dir()
-        spec = f"{proj}[{editable_extra}]" if editable_extra else str(proj)
+        spec = f"{proj}/[{editable_extra}]" if editable_extra else str(proj)
         _run(
             [uv, "pip", "install", "--python", py, "-e", spec],
             what=f"installing tabsdata-toolkit into '{label}'",
