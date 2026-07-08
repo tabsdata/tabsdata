@@ -119,7 +119,7 @@ PAYMENT_METHOD_WEIGHTS = [
 ]
 CARD_BRANDS = ["VISA", "MASTERCARD", "AMEX", "DISCOVER"]
 
-SEED = 42  # overridden by --seed (td_gen framework doesn't pass --seed; left
+SEED = 42  # overridden by --seed (tdx framework doesn't pass --seed; left
 # for direct CLI use of this script).
 
 

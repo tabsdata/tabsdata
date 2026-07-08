@@ -38,7 +38,7 @@ def test_container_system_descriptor_shape(tmp_path):
         user="root", password="secret", domain_desc="a database",
     )
     doc = _load(out)
-    assert doc["generator"] == "td_gen"
+    assert doc["generator"] == "tdx"
     assert doc["kind"] == "container-system"
     assert doc["category"] == "container"   # picks the helper module family
     assert doc["system"] == "mysql"         # picks the specific backend

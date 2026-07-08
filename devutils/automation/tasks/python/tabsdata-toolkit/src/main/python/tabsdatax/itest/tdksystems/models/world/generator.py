@@ -13,7 +13,7 @@ per table in --out (sql, csv, json or parquet).
 Tables: wld_country, wld_city, wld_country_language
 
 Usage:
-    python datagen.py [--cities N] [--format FMT] [--out DIR]
+    python generator.py [--cities N] [--format FMT] [--out DIR]
 """
 
 import argparse

@@ -41,7 +41,7 @@ class GcsBackend:
 
     def status(self):
         # Reachability via an object-level probe (storage.objects.list), not
-        # bucket.reload() (storage.buckets.get): datagen only does object
+        # bucket.reload() (storage.buckets.get): tdx only does object
         # ops, and least-privilege service accounts often lack buckets.get.
         next(iter(self.client.list_blobs(self.bucket_name, max_results=1)), None)
 

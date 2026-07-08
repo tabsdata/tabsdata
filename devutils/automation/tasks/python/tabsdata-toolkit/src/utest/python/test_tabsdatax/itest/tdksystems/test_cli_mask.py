@@ -1,4 +1,4 @@
-"""Credentials are never echoed to the terminal by `td_gen sys`/domain create —
+"""Credentials are never echoed to the terminal by `tdx-system`/domain create —
 passwords and the password inside a sqlalchemy URI are masked."""
 from __future__ import annotations
 

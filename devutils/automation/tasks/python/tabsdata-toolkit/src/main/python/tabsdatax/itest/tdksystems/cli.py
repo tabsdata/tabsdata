@@ -185,7 +185,7 @@ def _run_data_load(args: argparse.Namespace) -> int:
             args.chunks,
         )
 
-    with tempfile.TemporaryDirectory(prefix="td_gen-load-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="tdx-load-") as tmp:
         tmp_out = Path(tmp) / "data"
         print()
         size_msg = f"size={size}, " if size else ""

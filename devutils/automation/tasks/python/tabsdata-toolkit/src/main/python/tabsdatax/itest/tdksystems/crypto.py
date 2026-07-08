@@ -15,9 +15,9 @@ application salt (a dev secret, not per-file salting — so the derivation is
 cheap and cached per process). Every encryption uses a fresh random 96-bit
 nonce, stored alongside the ciphertext in the PEM body:
 
-    -----BEGIN TD_GEN DESCRIPTOR-----
+    -----BEGIN TDX DESCRIPTOR-----
     <base64(nonce || ciphertext+tag)>
-    -----END TD_GEN DESCRIPTOR-----
+    -----END TDX DESCRIPTOR-----
 """
 
 from __future__ import annotations
@@ -60,10 +60,10 @@ def using_secret_env(name: str | None):
         use_secret_env(prev)
 
 
-_PEM_LABEL = "TD_GEN DESCRIPTOR"
+_PEM_LABEL = "TDX DESCRIPTOR"
 _BEGIN = f"-----BEGIN {_PEM_LABEL}-----"
 _END = f"-----END {_PEM_LABEL}-----"
-_SALT = b"tabsdata-datagen/descriptor/v1"  # fixed: one dev secret, symmetric
+_SALT = b"tabsdata-tdx/descriptor/v2"  # fixed: one dev secret, symmetric
 _ITERATIONS = 200_000
 _NONCE_LEN = 12
 

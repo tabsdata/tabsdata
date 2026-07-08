@@ -193,7 +193,7 @@ namespaces = true
 "*" = ["!.gitkeep", "!*.pyc", "!__pycache__/*"]
 "tabsdatax.generator.tableframe.engine.generate" = ["templates/*.tmpl", "ruff.toml"]
 "tabsdatax.itest.tdksystems" = [
-    "models/*/datagen.py",
+    "models/*/generator.py",
     "models/*/sizing.json",
     "models/*/*.ddl",
     "models/*/*.csv",

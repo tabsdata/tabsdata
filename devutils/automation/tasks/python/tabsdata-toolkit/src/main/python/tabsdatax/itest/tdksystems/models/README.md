@@ -1,7 +1,7 @@
 # Bundled models
 
 Each subdirectory of this folder is a *model*: a self-contained sample
-domain shipped as part of the `tabsdata_datagen` package. A model has a
+domain shipped as part of the `tabsdata-toolkit` package. A model has a
 Python data generator, a `sizing.json` describing what kinds of system
 it can target (and how its size buckets scale), and one DDL file per
 supported SQL system.
@@ -14,9 +14,9 @@ format.
 ## Where models live
 
 ```
-src/main/python/tabsdata_datagen/models/
+src/main/python/tabsdatax/itest/tdksystems/models/
   <name>/
-    datagen.py          # generator (must expose main())
+    generator.py          # generator (must expose main())
     sizing.json         # kinds + how size buckets scale the generator's flags
     mysql.ddl           # one DDL per supported SQL system
     postgres.ddl
@@ -147,7 +147,7 @@ fixed). In that case:
 - the data load calls the generator with no scaling args.
 - passing `--data <SIZE>` for a fixed model just loads it (the size is ignored).
 
-## Generator contract — `datagen.py`
+## Generator contract — `generator.py`
 
 The generator is loaded via `importlib.util.spec_from_file_location`. It
 must expose `main()` and read its options from `sys.argv`:
@@ -160,10 +160,10 @@ must expose `main()` and read its options from `sys.argv`:
 - The model's `prolific` flag (e.g. `--shipments`) and any flag named
   in `defaults` (sizeable models only).
 
-Build the data and call `tabsdata_datagen.emit.write_tables`:
+Build the data and call `tabsdatax.itest.tdksystems.emit.write_tables`:
 
 ```python
-from tabsdata_datagen.emit import Column, Table, write_tables
+from tabsdatax.itest.tdksystems.emit import Column, Table, write_tables
 
 def main():
     p = argparse.ArgumentParser(...)
@@ -223,9 +223,9 @@ OUTPUT_DIR/
 3. **Drop `<name>/<sys>.ddl`** for each SQL system you want to support.
    Use a short table-name prefix (`cou_*`, `hp_*`, `rst_*`, …) so several
    models can coexist in one database.
-4. **Write `<name>/datagen.py`** exposing `main()` — see the contract
+4. **Write `<name>/generator.py`** exposing `main()` — see the contract
    above. (For non-`sql/file` kinds, the data path may be entirely
-   manual — see `salesforce/datagen.py` for a stub example.)
+   manual — see `salesforce/generator.py` for a stub example.)
 5. **Write `<name>/sizing.json`** with `kinds`, `prolific`,
    `prolific_base`, `defaults` (and optional `mins` / `caps`). Omit
    `prolific` for a fixed-data model.
@@ -238,7 +238,7 @@ OUTPUT_DIR/
    ls target/store/m
    ```
 7. **Add to package_data** if you ship a new file kind — the existing
-   `pyproject.toml` glob picks up `datagen.py`, `sizing.json`, `*.ddl`,
+   `pyproject.toml` glob picks up `generator.py`, `sizing.json`, `*.ddl`,
    `*.csv`, `*.json`, `*.yml`, `*.md`. Then `pip install -e .` to refresh.
 
 The existing models are good templates — pick the one whose shape

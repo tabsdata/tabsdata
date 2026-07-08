@@ -4,7 +4,7 @@
 
 """Verify the active Python env satisfies the project's declared deps.
 
-Reads runtime dependencies from the installed `td_gen` distribution
+Reads runtime dependencies from the installed `tabsdata-toolkit` distribution
 metadata (i.e. pyproject.toml's `[project] dependencies`) via
 `importlib.metadata`, so there's a single source of truth.
 
@@ -21,7 +21,7 @@ import sys
 
 from .errors import DatagenError
 
-DIST_NAME = "td_gen"
+DIST_NAME = "tabsdata-toolkit"
 
 _IMPORT_OVERRIDES: dict[str, str] = {
     "psycopg2-binary": "psycopg2",

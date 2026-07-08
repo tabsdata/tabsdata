@@ -6,7 +6,7 @@
 
 Models live in ``src/main/python/tabsdatax.itest.tdksystems/models/<name>/``
 (shipped as package_data). Each model has:
-  - ``datagen.py`` — the source generator (calls
+  - ``generator.py`` — the source generator (calls
     ``tabsdatax.itest.tdksystems.emit.write_tables``)
   - ``sizing.json`` — scaling configuration
   - ``<system>.ddl`` — schema definitions (mysql, postgres, …)
@@ -53,13 +53,13 @@ def list_models() -> list[str]:
     if not root.is_dir():
         return []
     return sorted(
-        p.name for p in root.iterdir() if p.is_dir() and (p / "datagen.py").is_file()
+        p.name for p in root.iterdir() if p.is_dir() and (p / "generator.py").is_file()
     )
 
 
 def model_dir(name: str) -> Path:
     p = _models_root() / name
-    if not (p / "datagen.py").is_file():
+    if not (p / "generator.py").is_file():
         avail = ", ".join(list_models()) or "(none)"
         raise DatagenError(f"unknown model: {name} (available: {avail})")
     return p
@@ -69,7 +69,7 @@ def is_sizeable(name: str) -> bool:
     """A model is sizeable if its sizing.json has a `prolific` key.
 
     Models without sizing.json or without a `prolific` entry are treated
-    as fixed-data: the row counts are baked into the source's datagen.py
+    as fixed-data: the row counts are baked into the source generator.py
     and `--size` doesn't apply."""
     cfg = model_dir(name) / "sizing.json"
     if not cfg.is_file():
@@ -129,14 +129,14 @@ def generate(
     row counts.
 
     `engine` — optional target-engine slug ('mysql', 'postgres', …). Exposed
-    to the model's datagen.py via the ``TD_GEN_ENGINE`` env var. Most models
+    to the model's generator.py via the ``TDX_ENGINE`` env var. Most models
     are engine-agnostic and ignore it; models with engine-specific SQL
     quirks (e.g. bronze, whose CDC table uses identifier names that need
     engine-appropriate quoting) read it.
 
     `schema_sidecar` — when True, ask the emitter to also drop a
     ``_schema.json`` column-type sidecar next to the data (via the
-    ``TD_GEN_SCHEMA_SIDECAR`` env var). The kafka and saas-sql loaders set
+    ``TDX_SCHEMA_SIDECAR`` env var). The kafka and saas-sql loaders set
     this so they can rebuild Avro/Protobuf/JSON schemas and typed INSERTs
     from the otherwise type-erased json output.
     """
@@ -153,15 +153,15 @@ def generate(
 
     sourcedir = Path(sourcedir)
     cfg_path = sourcedir / "sizing.json"
-    datagen_path = sourcedir / "datagen.py"
-    if not datagen_path.is_file():
-        raise DatagenError(f"missing {datagen_path}")
+    generator_path = sourcedir / "generator.py"
+    if not generator_path.is_file():
+        raise DatagenError(f"missing {generator_path}")
 
     cfg: dict = {}
     if cfg_path.is_file():
         cfg = json.loads(cfg_path.read_text())
 
-    argv = [str(datagen_path), "--format", fmt, "--out", str(output)]
+    argv = [str(generator_path), "--format", fmt, "--out", str(output)]
     if cfg.get("prolific"):
         # Sizeable model — scale every default by the chosen size bucket.
         bucket = size or "xs"
@@ -181,19 +181,19 @@ def generate(
     if chunks is not None:
         argv += ["--chunks", str(chunks)]
 
-    module = _load_datagen(datagen_path)
+    module = _load_generator(generator_path)
     if not hasattr(module, "main"):
-        raise DatagenError(f"{datagen_path} has no main() entry point")
+        raise DatagenError(f"{generator_path} has no main() entry point")
     with (
         _patched_argv(argv),
         _patched_engine_env(engine),
-        _patched_env("TD_GEN_SCHEMA_SIDECAR", "1" if schema_sidecar else None),
+        _patched_env("TDX_SCHEMA_SIDECAR", "1" if schema_sidecar else None),
     ):
         module.main()
 
 
-def _load_datagen(path: Path) -> ModuleType:
-    mod_name = f"_datagen_{path.parent.name.replace('-', '_')}"
+def _load_generator(path: Path) -> ModuleType:
+    mod_name = f"_generator_{path.parent.name.replace('-', '_')}"
     spec = importlib.util.spec_from_file_location(mod_name, path)
     if spec is None or spec.loader is None:
         raise DatagenError(f"cannot load {path}")
@@ -221,20 +221,20 @@ def _patched_argv(argv: list[str]) -> Iterator[None]:
 
 @contextlib.contextmanager
 def _patched_engine_env(engine: str | None) -> Iterator[None]:
-    """Expose the target engine slug to the model's datagen via
-    ``TD_GEN_ENGINE`` (no-op when no engine is supplied)."""
+    """Expose the target engine slug to the model's generator via
+    ``TDX_ENGINE`` (no-op when no engine is supplied)."""
     if not engine:
         yield
         return
-    prev = os.environ.get("TD_GEN_ENGINE")
-    os.environ["TD_GEN_ENGINE"] = engine
+    prev = os.environ.get("TDX_ENGINE")
+    os.environ["TDX_ENGINE"] = engine
     try:
         yield
     finally:
         if prev is None:
-            os.environ.pop("TD_GEN_ENGINE", None)
+            os.environ.pop("TDX_ENGINE", None)
         else:
-            os.environ["TD_GEN_ENGINE"] = prev
+            os.environ["TDX_ENGINE"] = prev
 
 
 @contextlib.contextmanager

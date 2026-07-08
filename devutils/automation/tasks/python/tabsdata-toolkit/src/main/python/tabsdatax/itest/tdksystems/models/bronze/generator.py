@@ -48,11 +48,11 @@ Those column names contain `@` and `.` — not valid in a bare SQL
 identifier — so DDLs and INSERTs use quoted identifiers. The quote
 char is engine-specific (backticks for MySQL, double quotes for
 Postgres / MSSQL / Oracle / Db2). The generator reads the target
-engine slug from the ``TD_GEN_ENGINE`` env var (set by
+engine slug from the ``TDX_ENGINE`` env var (set by
 the data load when loading into a SQL container domain).
 
 Usage:
-    python datagen.py --batches N [--batch-size M] [options]
+    python generator.py --batches N [--batch-size M] [options]
 
     --batches N      Number of batches per table  (required)
     --batch-size M   Rows per batch               (default: 100)
@@ -424,7 +424,7 @@ def parse_args():
 def main():
     args = parse_args()
     tables = build_tables(args)
-    engine = os.environ.get("TD_GEN_ENGINE")
+    engine = os.environ.get("TDX_ENGINE")
     write_tables(
         tables,
         args.out,

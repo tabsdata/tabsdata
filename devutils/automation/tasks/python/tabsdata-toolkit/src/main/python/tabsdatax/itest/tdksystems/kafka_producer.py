@@ -17,8 +17,8 @@ produced in Confluent wire format (magic byte + schema id) via the registry
 serializers.
 
 Heavy deps (``confluent-kafka`` and, for those encodings, ``fastavro`` /
-``protobuf``) are imported lazily so the rest of td_gen runs without them;
-install the ``kafka`` extra (``pip install 'td_gen[kafka]'``) to use this.
+``protobuf``) are imported lazily so the rest of tdx runs without them;
+install the ``kafka`` extra (``pip install 'tabsdata-toolkit[kafka]'``) to use this.
 
 The schema-derivation and serialization helpers are pure and unit-tested; the
 admin/produce/registry calls require a live broker + registry.
@@ -174,7 +174,7 @@ def _require(mod: str, extra_hint: str):
     except ImportError as exc:
         raise DatagenError(
             f"{mod} is required for kafka loads ({extra_hint}). "
-            f"Install the kafka extra: pip install 'td_gen[kafka]'"
+            f"Install the kafka extra: pip install 'tabsdata-toolkit[kafka]'"
         ) from exc
 
 

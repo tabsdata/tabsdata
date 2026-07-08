@@ -21,7 +21,7 @@ The companion **`finance`** model joins back to the loaded Accounts via
 
 Auth is a non-interactive SOAP login (`simple-salesforce`) using the
 `URL` / `USERNAME` / `PASSWORD` / `TOKEN` the salesforce **domain** carries —
-no OAuth, no `cci` keychain. The load runs in the `tdx-system-salesforce` uv venv
+no OAuth, no `cci` keychain. The load runs in the `.tdz` uv venv
 (`cumulusci-plus` + `snowfakery`), which the tooling creates and re-execs into
 automatically; the `main` venv is untouched.
 

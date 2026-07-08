@@ -14,7 +14,7 @@ write encrypts and every read decrypts, so nothing runs without the secret.
 The decrypted JSON is::
 
     {
-      "generator": "td_gen",
+      "generator": "tdx",
       "kind":     "<category>-<role>",    # e.g. "container-system", "cloud-domain"
       "category": "container|cloud|saas", # which helper module family handles it
       "system":   "<slug>",               # external system (mysql, s3, snowflake…)
@@ -57,7 +57,7 @@ from .errors import DatagenError
 
 # Marker at the top of every descriptor — lets `load` tell a tdx descriptor
 # from an unrelated JSON file.
-GENERATOR = "td_gen"
+GENERATOR = "tdx"
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 

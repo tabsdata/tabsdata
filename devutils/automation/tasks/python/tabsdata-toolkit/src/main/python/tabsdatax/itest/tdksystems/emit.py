@@ -4,7 +4,7 @@
 
 """Shared output emitter for tabsdatax.itest.tdksystems sources.
 
-Each source's datagen.py builds a list of `Table` objects describing
+Each source's generator.py builds a list of `Table` objects describing
 the rows it has generated, then calls :func:`write_tables` to emit
 them in the requested format (sql, csv, json or parquet).
 
@@ -171,11 +171,11 @@ def write_tables(
             shutil.copy2(ddl, out / ddl.name)
 
     # Optional column-type sidecar — written only when the generating caller
-    # asks for it (kafka / saas-sql loaders set TD_GEN_SCHEMA_SIDECAR). It
+    # asks for it (kafka / saas-sql loaders set TDX_SCHEMA_SIDECAR). It
     # carries the per-table Column metadata that the serialized data files
     # (json/csv) drop, so a loader can rebuild schemas / typed INSERTs. Gated
     # on the env var so ordinary sql/cloud loads never see the extra file.
-    if os.environ.get("TD_GEN_SCHEMA_SIDECAR"):
+    if os.environ.get("TDX_SCHEMA_SIDECAR"):
         _write_schema_sidecar(tables, out)
 
     print(f"Wrote {len(pairs)} {fmt} file(s) to {out}", file=sys.stderr)
@@ -207,7 +207,7 @@ def _write_schema_sidecar(tables: list[Table], out: Path) -> None:
 
 def read_structured(data_dir: str | Path) -> list[tuple[str, list[Column], list[dict]]]:
     """Read a dir produced by ``write_tables(fmt="json")`` WITH the schema
-    sidecar (i.e. generated under TD_GEN_SCHEMA_SIDECAR). Returns
+    sidecar (i.e. generated under TDX_SCHEMA_SIDECAR). Returns
     ``[(table_name, [Column, ...], [row, ...]), ...]`` in run-order.
 
     Used by the kafka and saas-sql loaders, which need typed columns + rows

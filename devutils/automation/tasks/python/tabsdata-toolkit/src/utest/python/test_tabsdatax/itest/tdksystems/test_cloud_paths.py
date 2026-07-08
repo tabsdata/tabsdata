@@ -60,7 +60,7 @@ def test_validate_path_rejects_newlines():
 # ---- _validate_fs_root ----------------------------------------------------
 
 @pytest.mark.parametrize("ok", [
-    "/tmp/td_gen", "/home/user/data", "/Users/me/data", "rel/path",
+    "/tmp/tdx", "/home/user/data", "/Users/me/data", "rel/path",
 ])
 def test_validate_fs_root_accepts(ok):
     _validate_fs_root(ok)

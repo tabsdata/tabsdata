@@ -28,7 +28,7 @@ def test_list_models_is_sorted():
 def test_model_dir_returns_existing_directory():
     p = data_gen.model_dir("courierlogistics")
     assert p.is_dir()
-    assert (p / "datagen.py").is_file()
+    assert (p / "generator.py").is_file()
     assert (p / "sizing.json").is_file()
 
 
@@ -53,7 +53,7 @@ def test_is_sizeable_false_when_sizing_lacks_prolific(tmp_path, monkeypatch):
     # Point models root at a tmp dir with a fixed model.
     m = tmp_path / "fixed"
     m.mkdir()
-    (m / "datagen.py").write_text("def main(): pass\n")
+    (m / "generator.py").write_text("def main(): pass\n")
     (m / "sizing.json").write_text("{}\n")
     monkeypatch.setattr(data_gen, "_models_root", lambda: tmp_path)
     assert data_gen.list_models() == ["fixed"]
@@ -63,7 +63,7 @@ def test_is_sizeable_false_when_sizing_lacks_prolific(tmp_path, monkeypatch):
 def test_is_sizeable_handles_invalid_sizing_json(tmp_path, monkeypatch):
     m = tmp_path / "broken"
     m.mkdir()
-    (m / "datagen.py").write_text("def main(): pass\n")
+    (m / "generator.py").write_text("def main(): pass\n")
     (m / "sizing.json").write_text("not json {")
     monkeypatch.setattr(data_gen, "_models_root", lambda: tmp_path)
     assert data_gen.is_sizeable("broken") is False

@@ -86,12 +86,12 @@ def test_fs_domain_keeps_absolute_path(tmp_path, capsys):
     out = tmp_path / "fs_OUT.json"
     descriptor.write_cloud_domain(
         out=str(out), storage_type="fs", system_kind="file",
-        sys_path="/tmp/td_gen/xp-fs", sys_path_env=None,
-        base_path="/tmp/td_gen/xp-fs/fs_OUT", forwarded=[],
+        sys_path="/tmp/tdx/xp-fs", sys_path_env=None,
+        base_path="/tmp/tdx/xp-fs/fs_OUT", forwarded=[],
         strip_sys_path_slash=False)
     meta = _resolved(out)
-    assert meta["SYS_PATH"] == "/tmp/td_gen/xp-fs"
-    assert meta["BASE_PATH"] == "/tmp/td_gen/xp-fs/fs_OUT"
+    assert meta["SYS_PATH"] == "/tmp/tdx/xp-fs"
+    assert meta["BASE_PATH"] == "/tmp/tdx/xp-fs/fs_OUT"
     assert "WARNING" not in capsys.readouterr().err
 
 

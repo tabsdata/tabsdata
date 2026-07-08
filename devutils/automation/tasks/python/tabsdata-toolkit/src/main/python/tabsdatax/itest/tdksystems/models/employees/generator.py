@@ -14,7 +14,7 @@ Tables:
     emp_dept_manager emp_titles emp_salaries
 
 Usage:
-    python datagen.py [--employees N] [--format FMT] [--out DIR]
+    python generator.py [--employees N] [--format FMT] [--out DIR]
 """
 
 import argparse

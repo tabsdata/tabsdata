@@ -1,5 +1,5 @@
 """Tests for the emit additions backing the kafka + saas-sql loaders:
-the schema sidecar (gated on TD_GEN_SCHEMA_SIDECAR), read_structured, and
+the schema sidecar (gated on TDX_SCHEMA_SIDECAR), read_structured, and
 batched iter_insert_statements."""
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def test_schema_sidecar_written_only_when_requested(tmp_path):
 
 
 def test_schema_sidecar_and_read_structured(tmp_path, monkeypatch):
-    monkeypatch.setenv("TD_GEN_SCHEMA_SIDECAR", "1")
+    monkeypatch.setenv("TDX_SCHEMA_SIDECAR", "1")
     out = tmp_path / "yes"
     emit.write_tables(_tables(), out, "json")
     assert (out / "_schema.json").is_file()

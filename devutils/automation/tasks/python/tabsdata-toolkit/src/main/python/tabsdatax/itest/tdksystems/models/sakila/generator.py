@@ -21,7 +21,7 @@ sk_store FK on manager_staff_id off in the DDL — the column is plain
 INT pointing at the (already-known) new staff id.
 
 Usage:
-    python datagen.py [--rentals N] [--format FMT] [--out DIR]
+    python generator.py [--rentals N] [--format FMT] [--out DIR]
 """
 
 import argparse

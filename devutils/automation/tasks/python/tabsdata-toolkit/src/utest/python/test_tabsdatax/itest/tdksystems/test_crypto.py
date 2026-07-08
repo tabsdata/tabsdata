@@ -38,8 +38,8 @@ def test_roundtrip(monkeypatch):
 def test_output_is_pem(monkeypatch):
     monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "a-good-dev-secret")
     pem = crypto.encrypt(b"payload")
-    assert pem.startswith("-----BEGIN TD_GEN DESCRIPTOR-----")
-    assert pem.strip().endswith("-----END TD_GEN DESCRIPTOR-----")
+    assert pem.startswith("-----BEGIN TDX DESCRIPTOR-----")
+    assert pem.strip().endswith("-----END TDX DESCRIPTOR-----")
     assert crypto.is_pem(pem)
     assert not crypto.is_pem("just some text")
     # payload is not present in cleartext
