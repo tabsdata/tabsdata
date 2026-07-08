@@ -269,7 +269,7 @@ mod tests {
     use td_objects::dxo::yaml::function::{InputTable, OutputTable};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, EnvPrefix,
+        AccessTokenId, BundleId, CollectionIdName, CollectionName, CronMask, Decorator, EnvPrefix,
         ExecutionName, FunctionIdName, FunctionRuntimeValues, ProjectId, TableName, TableNameDto,
         UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
@@ -1040,6 +1040,9 @@ mod tests {
         assert_eq!(start.worker, WorkerName::CronTrigger);
         assert_eq!(start.function_version_id, worker.function_version_id);
         assert_eq!(start.collection_id, worker.collection_id);
+        // The CronJob schedule mask travels in the start request, read from
+        // the worker's serialized config.
+        assert_eq!(start.schedule, CronMask::try_from("* * * * *")?);
 
         assert_http_post(&start.trigger);
         assert_http_post(&start.responder);

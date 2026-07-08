@@ -439,7 +439,7 @@ mod tests {
             .name(CollectionName::try_from("nameless").unwrap())
             .description(Description::try_from("d").unwrap())
             .group(GroupName::source())
-            .connection(Some(serde_json::json!({"kind": "mysqlSrcConn"})))
+            .connection(Some(serde_json::json!({"type": "mysqlSrcConn"})))
             .secrets(Some(vec![]))
             .vars(Some(vec![]))
             .build()

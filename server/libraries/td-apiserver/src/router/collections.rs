@@ -420,9 +420,10 @@ mod tests {
             if group == SOURCE_GROUP || group == DESTINATION_GROUP {
                 let suffix = if group == SOURCE_GROUP { "Src" } else { "Dest" };
                 // The create endpoint takes the connection as a dehydrated YAML
-                // string; the server reads only `kind` off it (the rest is opaque
+                // string; the server reads only `type` off it (the rest is opaque
                 // and forwarded to the store/worker).
-                body["connection"] = json!(format!("kind: mysql{suffix}Conn\n"));
+                body["connection"] =
+                    json!(format!("kind: connectionDef\ntype: mysql{suffix}Conn\n"));
                 body["secrets"] = json!([{"key": "CREDENTIALS_PASSWORD", "value": "hunter2"}]);
                 body["vars"] = json!([]);
             }
@@ -453,7 +454,7 @@ mod tests {
 
         let conn_body = json!({
             "connection": {
-                "kind": "mysqlSrcConn",
+                "type": "mysqlSrcConn",
                 "name": "src_coll",
                 "conn_configs": {"env:password": "CREDENTIALS_PASSWORD"},
             },

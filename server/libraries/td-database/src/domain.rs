@@ -436,11 +436,20 @@ impl<D: DbDomain> SeaExecutor for &mut DomainConnection<D> {
 /// A service's pools as one parameter, keyed by domain (built at boot via
 /// [`ServingPools::domain_pools`](crate::system::ServingPools::domain_pools)).
 #[derive(Clone)]
+#[cfg_attr(any(test, feature = "test-utils"), derive(Default))]
 pub struct DomainPools(BTreeMap<&'static str, TdPool>);
 
 impl DomainPools {
     pub(crate) fn from_map(map: BTreeMap<&'static str, TdPool>) -> Self {
         Self(map)
+    }
+
+    /// Test-only assembly, one domain at a time: bless `pool` as `D`'s — the
+    /// caller asserts the provenance, as with [`DomainPool::over`].
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn with<D: DbDomain>(mut self, pool: TdPool) -> Self {
+        self.0.insert(D::SCHEMA_KEY, pool);
+        self
     }
 
     /// Errors only if the deployment never registered `D`'s component.

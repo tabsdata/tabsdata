@@ -12,8 +12,10 @@ use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::transaction::TransactionDB;
-use td_objects::dxo::worker::WorkerDB;
-use td_objects::types::basic::{WorkerMessageStatus, WorkerStatus, WorkerType};
+use td_objects::dxo::worker::{CronTriggerConfig, WorkerDB};
+use td_objects::types::basic::{
+    CronMask, WorkerConfig, WorkerMessageStatus, WorkerStatus, WorkerType,
+};
 
 pub(crate) async fn seed_worker(
     mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
@@ -23,6 +25,17 @@ pub(crate) async fn seed_worker(
     worker_status: &WorkerStatus,
     message_status: &WorkerMessageStatus,
 ) -> Result<WorkerDB, TdError> {
+    // Production cron-trigger workers always carry a serialized
+    // `CronTriggerConfig` (the k8s start path reads the schedule mask
+    // from it), so the seed mirrors that.
+    let worker_config = match worker_type {
+        WorkerType::CronTrigger => Some(WorkerConfig::serialize(CronTriggerConfig {
+            start: None,
+            end: None,
+            mask: CronMask::try_from("* * * * *")?,
+        })?),
+        _ => None,
+    };
     let worker_db = WorkerDB::builder()
         .project_id(collection.project_id)
         .collection_id(collection.id)
@@ -36,7 +49,7 @@ pub(crate) async fn seed_worker(
         .status(worker_status)
         .worker_enabled(true)
         .worker_type(worker_type)
-        .worker_config(None)
+        .worker_config(worker_config)
         .build()?;
 
     executor

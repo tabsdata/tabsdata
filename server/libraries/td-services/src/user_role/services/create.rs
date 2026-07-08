@@ -161,7 +161,7 @@ mod tests {
                 RoleName::try_from("king")?,
                 Description::try_from("super user")?,
             )
-            .await;
+            .await?;
 
         let create = UserRoleCreate::builder()
             .user(UserName::try_from("svc")?)
