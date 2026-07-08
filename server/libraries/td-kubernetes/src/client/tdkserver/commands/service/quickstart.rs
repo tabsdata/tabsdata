@@ -6,9 +6,11 @@ use std::collections::HashMap;
 
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
+#[cfg(feature = "enterprise")]
 use td_common::status::ExitStatus::Cancelled;
 use tracing::warn;
 
+#[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::client::registry::instance_folder;
 use crate::client::session::pin::PinContext;
@@ -20,8 +22,11 @@ use crate::client::tdkserver::commands::service::trash::trash_instance_folder;
 use crate::client::tdkserver::commands::service::{
     resolved_details, resolved_instance, resolved_yes,
 };
+#[cfg(feature = "enterprise")]
 use crate::client::tdkserver::common::prompt_yes_no;
-use crate::core::system::exit::{CommandResult, abort, render_error};
+#[cfg(feature = "enterprise")]
+use crate::core::system::exit::abort;
+use crate::core::system::exit::{CommandResult, render_error};
 use crate::cwarn;
 use crate::runtime::instance::ports::DEFAULT_BASE_PORT;
 
@@ -50,6 +55,7 @@ pub struct QuickstartArguments {
     )]
     pub port: u16,
 
+    #[cfg(feature = "enterprise")]
     #[arg(
         long,
         name = "openai-key",
@@ -59,6 +65,7 @@ pub struct QuickstartArguments {
     )]
     pub openai_key: Option<String>,
 
+    #[cfg(feature = "enterprise")]
     #[arg(
         long,
         name = "anthropic-key",
@@ -113,24 +120,30 @@ pub async fn command_quickstart(
         instance,
         cluster,
         port,
+        #[cfg(feature = "enterprise")]
         openai_key,
+        #[cfg(feature = "enterprise")]
         anthropic_key,
         save,
         details,
         yes,
     } = arguments;
 
+    #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
     let mut overrides: HashMap<String, String> = HashMap::new();
-    if let Some(value) = openai_key {
-        overrides.insert(SECRET_CATEGORY_OPENAI_KEY.to_owned(), value);
-    }
-    if let Some(value) = anthropic_key {
-        overrides.insert(SECRET_CATEGORY_ANTHROPIC_KEY.to_owned(), value);
-    }
-    if overrides.is_empty()
-        && !prompt_yes_no("No OpenAI or Anthropic key provided. Proceed with no aiagent keys?")
+    #[cfg(feature = "enterprise")]
     {
-        return abort(Cancelled);
+        if let Some(value) = openai_key {
+            overrides.insert(SECRET_CATEGORY_OPENAI_KEY.to_owned(), value);
+        }
+        if let Some(value) = anthropic_key {
+            overrides.insert(SECRET_CATEGORY_ANTHROPIC_KEY.to_owned(), value);
+        }
+        if overrides.is_empty()
+            && !prompt_yes_no("No OpenAI or Anthropic key provided. Proceed with no aiagent keys?")
+        {
+            return abort(Cancelled);
+        }
     }
 
     let pins = PinContext::pins();
