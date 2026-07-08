@@ -598,6 +598,14 @@ def _info_pairs(doc: dict) -> list[tuple[str, str]]:
     return pairs
 
 
+def attributes(doc: dict) -> dict[str, str]:
+    """The flat ``{KEY: value}`` view of a descriptor — the same unprefixed keys
+    as ``info(doc, "json")`` (identity + connection settings), as data rather
+    than rendered text. Consumers (e.g. the test fixtures) map their fields onto
+    these keys."""
+    return dict(_info_pairs(doc))
+
+
 VALID_INFO_FORMATS = ("json", "export", "unset")
 
 
