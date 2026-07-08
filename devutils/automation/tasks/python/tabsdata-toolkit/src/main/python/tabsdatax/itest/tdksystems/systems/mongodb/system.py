@@ -115,12 +115,15 @@ class MongodbSystem(ContainerBase):
         the database, its user and password — the entity container is emptied
         without minting new credentials; `recreate` then replays the data."""
         client = self._client(self._admin_from_domain_meta(ctx.meta))
+        # The database is the (possibly prefixed) external entity name recorded
+        # as DB, not the logical descriptor name.
+        dbname = ctx.meta.get("DB") or ctx.name
         try:
-            db = client[ctx.name]
+            db = client[dbname]
             for coll in db.list_collection_names():
                 if not coll.startswith("system."):
                     db.drop_collection(coll)
         except Exception as exc:  # noqa: BLE001
-            raise DatagenError(f"mongodb reset '{ctx.name}' failed: {exc}") from exc
+            raise DatagenError(f"mongodb reset '{dbname}' failed: {exc}") from exc
         finally:
             client.close()

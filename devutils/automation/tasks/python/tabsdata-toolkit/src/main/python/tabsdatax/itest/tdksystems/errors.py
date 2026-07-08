@@ -21,6 +21,15 @@ class DatagenError(Exception):
     pass
 
 
+class DecryptError(DatagenError):
+    """A descriptor is one of ours (PEM armor present) but won't decrypt with the
+    active $TD_BACKENDS_CRYPTO_KEY — i.e. the key is wrong (or the file is
+    corrupt). Kept distinct from DatagenError so listing/enumeration can surface
+    a bad key instead of silently skipping the descriptor as a non-descriptor."""
+
+    pass
+
+
 def _red(msg: str) -> str:
     """Wrap `msg` in ANSI red — but only when stderr is a TTY, so piped or
     redirected output (e.g. setup.sh logs) stays plain text."""

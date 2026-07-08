@@ -120,6 +120,19 @@ def container_state(name: str) -> str | None:
     return cp.stdout.strip() or None
 
 
+def docker_pull(image: str, platform: str = "") -> None:
+    """Pull `image` (for `platform`, if given), streaming docker's own download
+    progress straight to our stdout/stderr — unlike the capturing helpers, so a
+    first-time create shows the layers downloading instead of appearing to hang.
+    A re-pull of an already-present image is quick ("Image is up to date")."""
+    args = ["docker", "pull"]
+    if platform:
+        args += ["--platform", platform]
+    args.append(image)
+    if subprocess.run(args).returncode != 0:
+        raise DatagenError(f"docker pull failed for image {image}")
+
+
 def docker_run(args: list[str]) -> str:
     cp = subprocess.run(["docker", "run"] + args, capture_output=True, text=True)
     if cp.returncode != 0:

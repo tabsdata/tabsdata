@@ -5,7 +5,12 @@ type lookup, argument shape, role validation and info-format handling. Systems
 and domains are addressed by name; the `stores` fixture points the stores at
 tmp dirs and files are located with `store.system_path` / `store.domain_path`
 (the same resolution the CLI uses). Data loading (`--model` / `--data`) is
-covered by the integration suite."""
+covered by the integration suite.
+
+By default a domain's external entity is named `<DOMAIN_PREFIX><domain>` (see
+`_resolve_domain_prefix`), which depends on the host user; tests that assert the
+concrete fs path / external name pin `--domain-prefix ""` so the entity name is
+just the domain name. The prefixing itself is covered by its own tests below."""
 from __future__ import annotations
 
 import json
@@ -134,7 +139,8 @@ def test_full_fs_lifecycle(stores, fs_root):
                      "--sys-path", str(fs_root), "-f"])
     assert tdx._sys_status(["--sys", "my_fs"]) == 0
 
-    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox", "-f"])
+    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox",
+                        "--domain-prefix", "", "-f"])
     dom = _read(store.domain_path("inbox"))
     assert dom["role"] == "env" and dom["name"] == "inbox"
     assert (fs_root / "inbox").is_dir()
@@ -165,10 +171,12 @@ def test_sys_list_and_domain_list(stores, fs_root, capsys):
     assert tdx._sys_list([]) == 0
     out = capsys.readouterr().out
     assert "alpha" in out and "beta" in out and "fs" in out
+    assert "System" in out and "Type" in out         # column titles
 
     assert tdx._domain_list([]) == 0
     out = capsys.readouterr().out
     assert "inbox" in out and "fs" in out
+    assert "Domain" in out and "System" in out        # column titles
 
 
 def test_domain_list_shows_model_and_data(stores, fs_root, capsys):
@@ -187,6 +195,31 @@ def test_domain_list_shows_model_and_data(stores, fs_root, capsys):
 def test_list_empty_store_is_friendly(stores, capsys):
     tdx._sys_list([])
     assert "no systems in" in capsys.readouterr().out
+
+
+def test_list_wrong_key_fails_loudly(stores, fs_root, monkeypatch):
+    # A wrong key must not make `list` silently report nothing: it fails saying
+    # the key is incorrect.
+    tdx._sys_create(["--type", "fs", "--sys", "alpha",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "alpha", "--domain", "inbox", "-f"])
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "a-different-good-secret")
+    with pytest.raises(DatagenError, match="TD_BACKENDS_CRYPTO_KEY is incorrect"):
+        tdx._sys_list([])
+    with pytest.raises(DatagenError, match="TD_BACKENDS_CRYPTO_KEY is incorrect"):
+        tdx._domain_list([])
+
+
+def test_list_skips_non_descriptor_sidecars(stores, fs_root, capsys):
+    # A stray non-descriptor file in the store dir is skipped, not mistaken for a
+    # bad-key descriptor (only our PEM-armored files can trigger the key error).
+    tdx._sys_create(["--type", "fs", "--sys", "alpha",
+                     "--sys-path", str(fs_root), "-f"])
+    (store.system_dir() / "alpha.ssh.log").write_text("not a descriptor\n")
+    capsys.readouterr()
+    tdx._sys_list([])
+    out = capsys.readouterr().out
+    assert "alpha" in out and "alpha.ssh.log" not in out
 
 
 # ---- --secret-env: which env var holds the personal secret ------------------
@@ -269,16 +302,50 @@ def test_types_lists_all_systems(capsys):
     assert "container" in out and "cloud" in out and "native" in out  # fs -> native
 
 
-# ---- create --auto: one system per type, named s_<type> --------------------
+# ---- tdx-system fetch-images: docker pull every container image ------------
+
+def test_fetch_images_pulls_every_container_image(monkeypatch, capsys):
+    from tabsdatax.itest.tdksystems import systems
+    # fetch-images is descriptor-free (no secret / venv) — registry + docker pull.
+    assert "fetch-images" in tdx._SYS_VERBS
+    assert "fetch-images" in tdx._NO_DESCRIPTOR_VERBS
+    monkeypatch.setattr(tdx, "require_docker", lambda: None)
+    pulled: list[tuple[str, str]] = []
+    monkeypatch.setattr(tdx, "docker_pull",
+                        lambda image, platform="": pulled.append((image, platform)))
+    assert tdx._sys_fetch_images([]) == 0
+    # Exactly the container systems' (image, platform) pairs were pulled — no
+    # cloud / saas / native system (which have no image) was.
+    container = [systems.get(s) for s in systems.all_slugs()
+                 if systems.get(s).category == "container"]
+    expected = {(c.image, c.image_platform) for c in container}
+    assert set(pulled) == expected
+    out = capsys.readouterr().out
+    assert f"fetched {len(expected)}/{len(expected)} image(s)" in out
+
+
+def test_fetch_images_reports_failures(monkeypatch, capsys):
+    monkeypatch.setattr(tdx, "require_docker", lambda: None)
+
+    def boom(image, platform=""):
+        raise DatagenError("no such image")
+
+    monkeypatch.setattr(tdx, "docker_pull", boom)
+    assert tdx._sys_fetch_images([]) == 1
+    out = capsys.readouterr().out
+    assert "failed to pull" in out and "failed" in out
+
+
+# ---- create --auto: one system per type, named after the type --------------
 
 def test_sys_create_auto_fs(stores, tmp_path, monkeypatch, capsys):
-    # fs takes no env: --auto defaults its root to target/backends/<system name>
-    # under the current directory (here, the tmp cwd).
+    # fs takes no env: --auto names the system after its type and defaults its
+    # root to target/backends/<system name> under the current directory (tmp cwd).
     monkeypatch.chdir(tmp_path)
     assert tdx._sys_create(["--auto", "fs", "-f"]) == 0
-    doc = _read(store.system_path("s_fs"))
-    assert doc["system"] == "fs" and doc["name"] == "s_fs"
-    assert (tmp_path / "target" / "backends" / "s_fs").is_dir()
+    doc = _read(store.system_path("fs"))
+    assert doc["system"] == "fs" and doc["name"] == "fs"    # named after its type
+    assert (tmp_path / "target" / "backends" / "fs").is_dir()
     assert "created 1/1 systems" in capsys.readouterr().out
 
 
@@ -286,11 +353,11 @@ def test_sys_create_auto_continues_on_failure(stores, tmp_path, monkeypatch, cap
     monkeypatch.chdir(tmp_path)
     assert tdx._sys_create(["--auto", "fs", "-f"]) == 0
     capsys.readouterr()
-    # Re-run without --force: s_fs already exists -> that item FAILs, but the
+    # Re-run without --force: fs already exists -> that item FAILs, but the
     # batch keeps going and the non-zero rc reflects the failure.
     assert tdx._sys_create(["--auto", "fs"]) == 1
     out = capsys.readouterr().out
-    assert "FAIL" in out and "s_fs" in out and "already exists" in out
+    assert "FAIL" in out and "fs" in out and "already exists" in out
 
 
 def test_sys_create_auto_unknown_type_rejected(stores):
@@ -339,16 +406,16 @@ def test_sys_status_and_destroy_all(stores, fs_root, capsys):
 
 # ---- tdx-domain create --auto: one domain per system ----------------------
 
-def test_domain_create_auto_derives_names(stores, fs_root, capsys):
-    # s_<x> -> d_<x>; a non-s_ system name is prefixed d_.
-    tdx._sys_create(["--type", "fs", "--sys", "s_alpha",
+def test_domain_create_auto_names_after_system(stores, fs_root, capsys):
+    # each domain is named after its system (verbatim, no prefix).
+    tdx._sys_create(["--type", "fs", "--sys", "alpha",
                      "--sys-path", str(fs_root / "a"), "-f"])
     tdx._sys_create(["--type", "fs", "--sys", "beta",
                      "--sys-path", str(fs_root / "b"), "-f"])
     capsys.readouterr()
     assert tdx._domain_create(["--auto", "ALL", "-f"]) == 0
-    assert _read(store.domain_path("d_alpha"))["name"] == "d_alpha"
-    assert _read(store.domain_path("d_beta"))["name"] == "d_beta"
+    assert _read(store.domain_path("alpha"))["name"] == "alpha"
+    assert _read(store.domain_path("beta"))["name"] == "beta"
     assert "created 2/2 domains" in capsys.readouterr().out
 
 
@@ -366,17 +433,36 @@ def test_all_is_reserved_as_a_domain_name(stores, fs_root):
         tdx._domain_create(["--sys", "my_fs", "--domain", "ALL", "-f"])
 
 
-def test_domain_status_and_destroy_all(stores, fs_root, capsys):
+def test_domain_status_and_destroy_auto(stores, fs_root, capsys):
+    # Batch status/destroy go through --auto now (ALL or a comma list);
+    # --domain is single-target only.
     tdx._sys_create(["--type", "fs", "--sys", "a",
                      "--sys-path", str(fs_root), "-f"])
     tdx._domain_create(["--sys", "a", "--domain", "d1", "-f"])
     tdx._domain_create(["--sys", "a", "--domain", "d2", "-f"])
     capsys.readouterr()
-    assert tdx._domain_status(["--domain", "ALL"]) == 0
+    assert tdx._domain_status(["--auto", "ALL"]) == 0
     assert "2/2 domains ready" in capsys.readouterr().out
-    assert tdx._domain_destroy(["--domain", "ALL"]) == 0
+    # a comma list selects a subset.
+    assert tdx._domain_status(["--auto", "d1,d2"]) == 0
+    capsys.readouterr()
+    assert tdx._domain_destroy(["--auto", "ALL"]) == 0
     assert not store.domain_path("d1").exists()
     assert not store.domain_path("d2").exists()
+
+
+def test_domain_destroy_status_domain_is_single_only(stores, fs_root):
+    # The old `--domain ALL` / comma form is gone — point users at --auto.
+    tdx._sys_create(["--type", "fs", "--sys", "a",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d1", "-f"])
+    with pytest.raises(DatagenError, match="use --auto"):
+        tdx._domain_destroy(["--domain", "ALL"])
+    with pytest.raises(DatagenError, match="use --auto"):
+        tdx._domain_status(["--domain", "d1,d2"])
+    # --domain and --auto are mutually exclusive (argparse SystemExit).
+    with pytest.raises(SystemExit):
+        tdx._domain_destroy(["--domain", "d1", "--auto", "ALL"])
 
 
 # ---- tdx-domain seed: DDL/data into an existing domain --------------------
@@ -437,7 +523,8 @@ def test_system_meta_from_domain_remaps_container_backrefs():
 def test_domain_recreate_empty_wipes_contents(stores, fs_root, capsys):
     tdx._sys_create(["--type", "fs", "--sys", "a",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "a", "--domain", "inbox", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "inbox",
+                        "--domain-prefix", "", "-f"])
     stray = fs_root / "inbox" / "stray.txt"
     stray.write_text("x")
     capsys.readouterr()
@@ -452,7 +539,8 @@ def test_domain_recreate_empty_wipes_contents(stores, fs_root, capsys):
 def test_domain_recreate_replays_recorded_model(stores, fs_root):
     tdx._sys_create(["--type", "fs", "--sys", "a",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "a", "--domain", "inbox", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "inbox",
+                        "--domain-prefix", "", "-f"])
     # Record a model (as a --model create would); recreate must preserve it.
     descriptor.stamp(store.domain_path("inbox"), name="inbox", started="t",
                      model="world")
@@ -464,8 +552,8 @@ def test_domain_recreate_replays_recorded_model(stores, fs_root):
 def test_domain_recreate_all(stores, fs_root, capsys):
     tdx._sys_create(["--type", "fs", "--sys", "a",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "a", "--domain", "d1", "-f"])
-    tdx._domain_create(["--sys", "a", "--domain", "d2", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d1", "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d2", "--domain-prefix", "", "-f"])
     capsys.readouterr()
     assert tdx._domain_recreate(["--domain", "ALL"]) == 0
     assert "recreated 2/2 domains" in capsys.readouterr().out
@@ -525,3 +613,86 @@ def test_azureblob_default_env_prefix_is_az():
     settings = az.resolve_create_settings(argparse.Namespace(env_prefix="AZ"))
     assert settings["CONTAINER"].env_var == "AZ__CONTAINER"
     assert settings["ACCOUNT_KEY"].env_var == "AZ__ACCOUNT_KEY"
+
+
+# ---- DOMAIN_PREFIX: the entity container's name in the external system -----
+
+def test_resolve_domain_prefix_precedence(monkeypatch):
+    # --domain-prefix wins verbatim (even empty, meaning "no prefix").
+    assert tdx._resolve_domain_prefix("myrun_") == "myrun_"
+    assert tdx._resolve_domain_prefix("") == ""
+    # else $TD_BUILD_USER / $TD_BUILD_NUMBER ...
+    monkeypatch.setenv("TD_BUILD_USER", "ci")
+    monkeypatch.setenv("TD_BUILD_NUMBER", "7")
+    assert tdx._resolve_domain_prefix(None) == "ci_7_"
+    # ... each sanitised to identifier-safe tokens.
+    monkeypatch.setenv("TD_BUILD_USER", "a.b/c")
+    assert tdx._resolve_domain_prefix(None) == "a_b_c_7_"
+    # ... else the OS user + build 0.
+    monkeypatch.delenv("TD_BUILD_USER", raising=False)
+    monkeypatch.delenv("TD_BUILD_NUMBER", raising=False)
+    monkeypatch.setattr(tdx, "_os_username", lambda: "devx")
+    assert tdx._resolve_domain_prefix(None) == "devx_0_"
+
+
+def test_ident_token_sanitizes():
+    assert tdx._ident_token("tucu") == "tucu"
+    assert tdx._ident_token("a.b/c") == "a_b_c"
+    assert tdx._ident_token("--x--") == "x"
+    assert tdx._ident_token("") == "x"          # never empty (would break names)
+
+
+def test_domain_prefix_defaults_to_build_identity(stores, fs_root, monkeypatch):
+    # No --domain-prefix -> the entity dir is named <TD_BUILD_USER>_<NUMBER>_<domain>;
+    # the descriptor's logical name stays the bare domain name.
+    monkeypatch.setenv("TD_BUILD_USER", "ci")
+    monkeypatch.setenv("TD_BUILD_NUMBER", "7")
+    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox", "-f"])
+    doc = _read(store.domain_path("inbox"))
+    assert doc["name"] == "inbox"                       # logical name unchanged
+    assert doc["external_name"] == "ci_7_inbox"
+    assert (fs_root / "ci_7_inbox").is_dir()            # the real entity dir
+    assert not (fs_root / "inbox").exists()
+    info = json.loads(descriptor.info(doc, "json"))
+    assert info["NAME"] == "inbox" and info["EXTERNAL_NAME"] == "ci_7_inbox"
+    assert info["BASE_PATH"] == f"{fs_root}/ci_7_inbox"
+
+
+def test_domain_prefix_falls_back_to_os_user(stores, fs_root, monkeypatch):
+    monkeypatch.delenv("TD_BUILD_USER", raising=False)
+    monkeypatch.delenv("TD_BUILD_NUMBER", raising=False)
+    monkeypatch.setattr(tdx, "_os_username", lambda: "devx")
+    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox", "-f"])
+    assert _read(store.domain_path("inbox"))["external_name"] == "devx_0_inbox"
+    assert (fs_root / "devx_0_inbox").is_dir()
+
+
+def test_domain_prefix_explicit_option(stores, fs_root):
+    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox",
+                        "--domain-prefix", "run5_", "-f"])
+    assert _read(store.domain_path("inbox"))["external_name"] == "run5_inbox"
+    assert (fs_root / "run5_inbox").is_dir()
+
+
+def test_recreate_reuses_recorded_external_name(stores, fs_root, monkeypatch):
+    # A domain created under one build identity keeps that entity name on
+    # recreate — even if the build number has since changed — so recreate
+    # rebuilds the SAME external resource, not a freshly-prefixed one.
+    monkeypatch.setenv("TD_BUILD_USER", "ci")
+    monkeypatch.setenv("TD_BUILD_NUMBER", "7")
+    tdx._sys_create(["--type", "fs", "--sys", "a",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "inbox", "-f"])
+    assert (fs_root / "ci_7_inbox").is_dir()
+    # The build advances; recreate must still target ci_7_inbox.
+    monkeypatch.setenv("TD_BUILD_NUMBER", "9")
+    assert tdx._domain_recreate(["--domain", "inbox"]) == 0
+    assert (fs_root / "ci_7_inbox").is_dir()
+    assert not (fs_root / "ci_9_inbox").exists()
+    assert _read(store.domain_path("inbox"))["external_name"] == "ci_7_inbox"

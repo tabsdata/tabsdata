@@ -51,7 +51,9 @@ def test_bigquery_lifecycle_through_tdx(stores, bq):
 
     # domain: named like any other system — the domain NAME is the dataset and
     # the GCS prefix segment (BASE_PATH = SYS_PATH/<name>). No extra options.
-    assert tdx._domain_create(["--sys", "wh", "--domain", "inbox", "-f"]) == 0
+    # Pin the prefix off so the dataset/prefix are exactly the domain name.
+    assert tdx._domain_create(["--sys", "wh", "--domain", "inbox",
+                               "--domain-prefix", "", "-f"]) == 0
     m = descriptor.read_meta(store.domain_path("inbox"))
     assert m["DATASET"] == "inbox"
     assert m["BASE_PATH"] == "staging/inbox"      # <name> under sys-path
@@ -69,9 +71,25 @@ def test_bigquery_domain_needs_no_extra_options(stores, bq):
     # No --dataset / --domain-path: the domain name supplies both, consistent
     # with every other system.
     tdx._sys_create(["--type", "bigquery", "--sys", "wh", *_SYS_CREATE])
-    assert tdx._domain_create(["--sys", "wh", "--domain", "sales", "-f"]) == 0
+    assert tdx._domain_create(["--sys", "wh", "--domain", "sales",
+                               "--domain-prefix", "", "-f"]) == 0
     m = descriptor.read_meta(store.domain_path("sales"))
     assert m["DATASET"] == "sales" and m["BASE_PATH"] == "staging/sales"
+
+
+def test_bigquery_dataset_is_prefixed(stores, bq):
+    """The DOMAIN_PREFIX carries into the dataset name and the GCS staging
+    prefix; the logical domain name stays bare and the prefixed name is the
+    recorded EXTERNAL_NAME."""
+    tdx._sys_create(["--type", "bigquery", "--sys", "wh", *_SYS_CREATE])
+    assert tdx._domain_create(["--sys", "wh", "--domain", "sales",
+                               "--domain-prefix", "ci_1_", "-f"]) == 0
+    doc = descriptor.load(store.domain_path("sales"))
+    assert doc["name"] == "sales" and doc["external_name"] == "ci_1_sales"
+    m = descriptor.read_meta(store.domain_path("sales"))
+    assert m["DATASET"] == "ci_1_sales"
+    assert m["BASE_PATH"] == "staging/ci_1_sales"
+    assert "ci_1_sales" in bq["datasets"]
 
 
 def test_bigquery_rejects_models_and_data(stores, bq):

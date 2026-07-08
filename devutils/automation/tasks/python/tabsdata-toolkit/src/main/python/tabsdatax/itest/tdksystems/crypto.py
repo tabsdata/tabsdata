@@ -28,7 +28,7 @@ import hashlib
 import os
 import textwrap
 
-from .errors import DatagenError
+from .errors import DatagenError, DecryptError
 
 ENV_VAR = "TD_BACKENDS_CRYPTO_KEY"
 MIN_SECRET_LEN = 12
@@ -114,8 +114,9 @@ def encrypt(plaintext: bytes) -> str:
 
 
 def decrypt(pem: str) -> bytes:
-    """Decrypt a PEM string produced by :func:`encrypt`. Raises DatagenError
-    if it isn't our PEM or the secret is wrong."""
+    """Decrypt a PEM string produced by :func:`encrypt`. Raises DatagenError if
+    it isn't our PEM, and DecryptError (a DatagenError) if it is ours but the
+    active secret is wrong (or the blob is corrupt)."""
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
     if not is_pem(pem):
@@ -128,6 +129,6 @@ def decrypt(pem: str) -> bytes:
     except DatagenError:
         raise
     except Exception:  # noqa: BLE001 - corrupt blob or wrong key
-        raise DatagenError(
+        raise DecryptError(
             f"could not decrypt descriptor — is {ENV_VAR} the one it was created with?"
         )

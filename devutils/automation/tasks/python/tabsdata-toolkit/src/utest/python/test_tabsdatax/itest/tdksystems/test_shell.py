@@ -2,14 +2,20 @@
 from __future__ import annotations
 
 import string
+import subprocess
 
 import pytest
 
+from tabsdatax.itest.tdksystems import shell
 from tabsdatax.itest.tdksystems.errors import DatagenError
 from tabsdatax.itest.tdksystems.shell import (
-    env_optional, env_required, find_free_port, gen_password, validate_name,
+    docker_pull,
+    env_optional,
+    env_required,
+    find_free_port,
+    gen_password,
+    validate_name,
 )
-
 
 # ---- gen_password ----------------------------------------------------------
 
@@ -88,3 +94,39 @@ def test_validate_name_rejects_invalid(name):
 def test_validate_name_uses_label_in_error():
     with pytest.raises(DatagenError, match="schema"):
         validate_name("bad name", label="schema")
+
+
+# ---- docker_pull -----------------------------------------------------------
+
+def _capture_run(monkeypatch, returncode=0):
+    calls: list[dict] = []
+
+    def fake_run(args, **kwargs):
+        calls.append({"args": args, "kwargs": kwargs})
+        return subprocess.CompletedProcess(args, returncode)
+
+    monkeypatch.setattr(shell.subprocess, "run", fake_run)
+    return calls
+
+
+def test_docker_pull_streams_progress_not_captured(monkeypatch):
+    # No capture_output / DEVNULL: docker's own progress reaches our stdout.
+    calls = _capture_run(monkeypatch)
+    docker_pull("postgres:17")
+    assert calls[0]["args"] == ["docker", "pull", "postgres:17"]
+    assert "capture_output" not in calls[0]["kwargs"]
+    assert "stdout" not in calls[0]["kwargs"]
+
+
+def test_docker_pull_passes_platform(monkeypatch):
+    calls = _capture_run(monkeypatch)
+    docker_pull("mysql:8.4", "linux/amd64")
+    assert calls[0]["args"] == [
+        "docker", "pull", "--platform", "linux/amd64", "mysql:8.4",
+    ]
+
+
+def test_docker_pull_raises_on_failure(monkeypatch):
+    _capture_run(monkeypatch, returncode=1)
+    with pytest.raises(DatagenError, match="docker pull failed for image nope:1"):
+        docker_pull("nope:1")

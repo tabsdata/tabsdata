@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tabsdatax.itest.fixture import backend as common
+from tabsdatax.itest.tdksystems import tdx
 from tabsdatax.itest.fixture.backends.clickhouse import ClickhouseDomain, ClickhouseSystem
 from tabsdatax.itest.fixture.backends.db2 import Db2Domain, Db2System
 from tabsdatax.itest.fixture.backends.mongodb import MongodbDomain, MongodbSystem
@@ -45,7 +46,7 @@ def test_container_system(provision, slug, kind, staging, Sys, Dom):
     obj = common.load("s", Sys)
     assert isinstance(obj, Sys) and obj.system_type == slug
     assert obj.system_kind == kind and obj.host == "localhost"
-    assert obj.container == "s" and obj.image      # container name + non-empty image
+    assert obj.container == "tdx_s" and obj.image  # tdx_-prefixed name + image
     if staging:
         assert isinstance(obj.sys_path, Path)
 
@@ -57,7 +58,10 @@ def test_container_domain(provision, slug, kind, staging, Sys, Dom):
     obj = common.load("d", Dom)
     assert isinstance(obj, Dom) and obj.system_type == slug
     assert obj.system_kind == kind and obj.host == "localhost"
-    assert obj.db == "d" and obj.sqlalchemy_uri == "proto://d"
+    # The entity (db) is the prefixed external name (default DOMAIN_PREFIX);
+    # the descriptor's logical name stays "d".
+    ext = tdx._resolve_domain_prefix(None) + "d"
+    assert obj.db == ext and obj.sqlalchemy_uri == f"proto://{ext}"
     assert obj.model is None and obj.data is None
 
 

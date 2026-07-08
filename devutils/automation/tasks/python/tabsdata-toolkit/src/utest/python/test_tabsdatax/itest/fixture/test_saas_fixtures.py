@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tabsdatax.itest.fixture import backend as common
+from tabsdatax.itest.tdksystems import tdx
 from tabsdatax.itest.fixture.backends.bigquery import BigqueryDomain, BigquerySystem
 from tabsdatax.itest.fixture.backends.databricks import DatabricksDomain, DatabricksSystem
 from tabsdatax.itest.fixture.backends.salesforce import SalesforceDomain, SalesforceSystem
@@ -24,14 +25,17 @@ def test_snowflake(provision):
     assert common.load("s", SnowflakeSystem).account == "x"
     provision.domain("snowflake", "s", "d")
     dom = common.load("d", SnowflakeDomain)
-    assert dom.schema == "d" and dom.warehouse == "x"   # schema == domain name
+    # schema is the prefixed external name (default DOMAIN_PREFIX).
+    assert dom.schema == tdx._resolve_domain_prefix(None) + "d"
+    assert dom.warehouse == "x"
 
 
 def test_databricks(provision):
     provision.system("databricks", "s")
     assert common.load("s", DatabricksSystem).catalog == "x"
     provision.domain("databricks", "s", "d")
-    assert common.load("d", DatabricksDomain).schema == "d"
+    ext = tdx._resolve_domain_prefix(None) + "d"
+    assert common.load("d", DatabricksDomain).schema == ext
 
 
 def test_salesforce(provision):
@@ -47,7 +51,7 @@ def test_bigquery(provision):
     assert sysobj.project == "x" and isinstance(sysobj.sys_path, Path)
     provision.domain("bigquery", "s", "d")
     dom = common.load("d", BigqueryDomain)
-    assert dom.dataset == "d"  # dataset == the domain name
+    assert dom.dataset == tdx._resolve_domain_prefix(None) + "d"  # prefixed name
     assert isinstance(dom.base_path, Path)
 
 
@@ -65,4 +69,5 @@ def test_saas_injection(
     assert isinstance(system_wh, SnowflakeSystem)
     assert isinstance(domain_sales, SnowflakeDomain)
     assert system_wh.name == "wh"
-    assert domain_sales.name == "sales" and domain_sales.schema == "sales"
+    assert domain_sales.name == "sales"          # logical name
+    assert domain_sales.schema == tdx._resolve_domain_prefix(None) + "sales"

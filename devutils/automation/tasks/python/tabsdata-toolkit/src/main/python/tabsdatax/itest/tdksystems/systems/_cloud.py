@@ -72,7 +72,7 @@ class CloudBase(System):
     ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
         values = self.resolve_values(settings)
-        base = _normalize_path(spec.name)
+        base = _normalize_path(spec.entity_name)
         if not base:
             raise DatagenError("domain --name is empty")
         _validate_path(base, "name")

@@ -124,12 +124,23 @@ class CreateSystemSpec:
 
 @dataclass
 class CreateDomainSpec:
-    name: str
-    out: str
+    name: str  # logical name (= --domain file name); identity
+    out: str  # descriptor path to write
     force: bool = False
     # Extra per-system domain inputs beyond the name (e.g. bigquery's DATASET /
     # DOMAIN_PATH), resolved from the system's `domain_options`.
     options: dict[str, str] = field(default_factory=dict)
+    # The name of the entity container to create in the external system (schema
+    # / dataset / folder / database). Carries a run prefix so concurrent runs
+    # don't collide (see tdx.py's DOMAIN_PREFIX); empty means "no prefix" and
+    # `entity_name` falls back to the logical `name`.
+    external_name: str = ""
+
+    @property
+    def entity_name(self) -> str:
+        """The name to give the entity container in the external system — the
+        prefixed `external_name` if one was resolved, else the logical `name`."""
+        return self.external_name or self.name
 
 
 # --- run-time handles (resolved from an existing descriptor) ---
@@ -259,8 +270,10 @@ class System(ABC):
         """Create the domain resource inside the system — a database, schema,
         Kafka topic, object-store prefix, or directory — and return the domain
         settings to bake (e.g. SQLALCHEMY_URI + system back-refs, or BASE_PATH +
-        the forwarded connection settings). `spec.name` is used verbatim (no run
-        prefix). Same Setting-vs-string contract as `create_system`."""
+        the forwarded connection settings). The entity container is named
+        `spec.entity_name` (the run-prefixed external name, defaulting to the
+        logical `spec.name`); the descriptor's logical name is stamped
+        separately. Same Setting-vs-string contract as `create_system`."""
 
     @abstractmethod
     def destroy_domain(self, ctx: DomainContext) -> None:

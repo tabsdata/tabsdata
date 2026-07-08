@@ -54,11 +54,12 @@ class SaasBase(System):
     ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
         if self.domain_is_named:
-            validate_name(spec.name, label="schema")
+            entity = spec.entity_name
+            validate_name(entity, label="schema")
             self.create_schema(
-                self.resolve_values(settings), spec.name, force=spec.force
+                self.resolve_values(settings), entity, force=spec.force
             )
-            settings["SCHEMA"] = Setting("SCHEMA", value=spec.name)
+            settings["SCHEMA"] = Setting("SCHEMA", value=entity)
         return settings
 
     def destroy_domain(self, ctx: DomainContext) -> None:

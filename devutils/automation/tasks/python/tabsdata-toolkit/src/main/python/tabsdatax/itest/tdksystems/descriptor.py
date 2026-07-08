@@ -21,6 +21,9 @@ The decrypted JSON is::
       "role":     "sys|env",              # system descriptor vs domain descriptor
       "name":     "<logical-name>",       # the descriptor's file name (an identifier)
       "started":  "<ISO-8601 UTC>",       # when the system/domain was created
+      "external_name": "<prefixed-name>", # domains only, the entity container's
+                                          # name in the external system (schema /
+                                          # dataset / folder / database)
       "model":    "<model>",              # domains only, if a model was installed
       "data":     "<size>",               # domains only, if data was loaded
       "meta": [                           # baked settings, in order
@@ -678,13 +681,16 @@ def stamp(
     started: str,
     model: str | None = None,
     data: str | None = None,
+    external_name: str | None = None,
     extra_meta: dict[str, str] | None = None,
 ) -> dict:
     """Attach the tdx identity to a freshly-written descriptor and rewrite it.
 
-    Sets `name` / `started`; records `model` / `data` for domains; and appends
-    `extra_meta` literals (e.g. a container domain's admin back-reference, so it
-    can destroy itself)."""
+    Sets `name` / `started`; records `model` / `data` for domains and, when a
+    domain's entity container was created under a run prefix, its
+    `external_name` (the schema/dataset/folder/database name in the external
+    system); and appends `extra_meta` literals (e.g. a container domain's admin
+    back-reference, so it can destroy itself)."""
     doc = load(path)
     doc["name"] = name
     doc["started"] = started
@@ -692,6 +698,8 @@ def stamp(
         doc["model"] = model
     if data is not None:
         doc["data"] = data
+    if external_name is not None:
+        doc["external_name"] = external_name
     if extra_meta:
         have = {e["name"] for e in doc["meta"]}
         for k, v in extra_meta.items():
@@ -716,6 +724,8 @@ def _info_pairs(doc: dict) -> list[tuple[str, str]]:
         ("TYPE", doc.get("system", "")),
         ("STARTED", doc.get("started", "")),
     ]
+    if doc.get("external_name"):
+        pairs.append(("EXTERNAL_NAME", doc["external_name"]))
     if "model" in doc:
         pairs.append(("MODEL", doc.get("model") or ""))
     if "data" in doc:

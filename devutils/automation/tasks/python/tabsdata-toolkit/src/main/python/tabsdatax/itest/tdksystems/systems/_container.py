@@ -22,6 +22,7 @@ from ..errors import DatagenError
 from ..shell import (
     container_exists,
     container_state,
+    docker_pull,
     docker_rm,
     docker_start,
     docker_stop,
@@ -41,6 +42,18 @@ from .base import (
     System,
     SystemContext,
 )
+
+# Docker container names are prefixed with this so tdx-managed containers are
+# recognisable (and don't collide with unrelated containers named after the bare
+# system). The descriptor records the prefixed name as CONTAINER, so destroy /
+# status / pause / resume address it by the same name.
+CONTAINER_NAME_PREFIX = "tdx_"
+
+
+def container_name(sys_name: str) -> str:
+    """The docker container name for a system named `sys_name`: the system name
+    prefixed with ``tdx_``."""
+    return f"{CONTAINER_NAME_PREFIX}{sys_name}"
 
 
 @dataclass
@@ -134,7 +147,7 @@ class ContainerBase(System):
             self._staging_setting(spec) if self.uses_file_staging else None
         )
         require_docker()
-        container = spec.name
+        container = container_name(spec.name)
         if container_exists(container):
             if spec.force:
                 docker_rm(container, force=True)
@@ -145,6 +158,10 @@ class ContainerBase(System):
                 )
         password = self.generate_password()
         port = spec.host_port or find_free_port()
+        # flush so our line precedes docker's own pull output when stdout is
+        # redirected to a log (block-buffered), not just on a TTY.
+        print(f">>> pulling docker image {self.image} …", flush=True)
+        docker_pull(self.image, self.image_platform)
         print(f">>> starting container {container} from image {self.image}")
         self._docker_run(container, port, password)
         # Once the container is up, any failure (readiness timeout, a failing
@@ -251,7 +268,8 @@ class ContainerBase(System):
         self, ctx: SystemContext, spec: CreateDomainSpec
     ) -> dict[str, Setting]:
         cname = ctx.meta.get("CONTAINER", "")
-        validate_name(spec.name, label=self.domain_flag)
+        entity = spec.entity_name
+        validate_name(entity, label=self.domain_flag)
         # Domain admin runs over TCP as the superuser on the published host port
         # (no `docker exec`), so a network-only client can provision domains.
         admin = AdminConn(
@@ -264,15 +282,15 @@ class ContainerBase(System):
         # broker / schema-registry extra vars); keep exporting them.
         os.environ["PORT"] = admin.port
         os.environ["CONTAINER"] = cname
-        if any(d.lower() == spec.name.lower() for d in self.do_list(admin)):
+        if any(d.lower() == entity.lower() for d in self.do_list(admin)):
             if spec.force:
-                self.do_delete(admin, spec.name)
-                print(f">>> --force: removed existing {self.domain_flag} '{spec.name}'")
+                self.do_delete(admin, entity)
+                print(f">>> --force: removed existing {self.domain_flag} '{entity}'")
             else:
                 raise DatagenError(
-                    f"{self.domain_flag} '{spec.name}' already exists (use --force)"
+                    f"{self.domain_flag} '{entity}' already exists (use --force)"
                 )
-        result = self.do_create(admin, spec.name)
+        result = self.do_create(admin, entity)
         out: dict[str, Setting] = {
             "HOST": Setting("HOST", value="localhost"),
             "PORT": Setting("PORT", value=ctx.meta.get("PORT", "")),
@@ -289,7 +307,7 @@ class ContainerBase(System):
         }
         if self.uses_file_staging:
             root = ctx.meta.get("SYS_PATH", "")
-            full = f"{root}/{spec.name}" if root else spec.name
+            full = f"{root}/{entity}" if root else entity
             out["SYS_PATH"] = Setting("SYS_PATH", value=root, is_path=True)
             out["BASE_PATH"] = Setting("BASE_PATH", value=full, is_path=True)
         for k, v in self._domain_extra_vars().items():

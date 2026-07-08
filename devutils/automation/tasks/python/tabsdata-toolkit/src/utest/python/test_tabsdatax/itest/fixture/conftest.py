@@ -64,6 +64,7 @@ def _mock_provisioning(monkeypatch, sysobj):
     if cat == "container":
         monkeypatch.setattr(_container, "require_docker", lambda: None)
         monkeypatch.setattr(_container, "container_exists", lambda name: False)
+        monkeypatch.setattr(_container, "docker_pull", lambda image, platform="": None)
         monkeypatch.setattr(cls, "_docker_run", lambda self, c, port, pw: "")
         monkeypatch.setattr(cls, "_wait_ready", lambda self, c, pw, timeout: None)
         monkeypatch.setattr(cls, "_post_start", lambda self, c, pw: None)

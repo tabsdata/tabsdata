@@ -83,7 +83,10 @@ def test_s3_lifecycle_through_tdx(stores, fake_s3):
     doc = descriptor.load(store.system_path("store"))
     assert (doc["category"], doc["system"], doc["role"]) == ("cloud", "s3", "sys")
     assert tdx._sys_status(["--sys", "store"]) == 0
-    assert tdx._domain_create(["--sys", "store", "--domain", "inbox", "-f"]) == 0
+    # Pin the prefix off so BASE_PATH is exactly data/<domain> (the default
+    # prefix, covered separately, would be host-user dependent).
+    assert tdx._domain_create(["--sys", "store", "--domain", "inbox",
+                               "--domain-prefix", "", "-f"]) == 0
     m = descriptor.read_meta(store.domain_path("inbox"))
     assert m["KIND"] == "cloud-domain"
     assert m["STORAGE_TYPE"] == "s3"      # cli.py's cloud loader still finds it
@@ -123,13 +126,38 @@ def test_mysql_domain_through_tdx(stores, monkeypatch):
         container="mydb", host="localhost", port="3306", user="root",
         password="rootpw", domain_desc="db")
     descriptor.stamp(str(sysf), name="mydb", started="t")
-    assert tdx._domain_create(["--sys", "mydb", "--domain", "finance", "-f"]) == 0
+    assert tdx._domain_create(["--sys", "mydb", "--domain", "finance",
+                               "--domain-prefix", "", "-f"]) == 0
     m = descriptor.read_meta(store.domain_path("finance"))
     assert m["KIND"] == "container-domain" and m["DB"] == "finance"
     assert m["SYS_CONTAINER"] == "mydb"        # back-ref for destroy
     assert m["SQLALCHEMY_URI"].startswith("mysql+mysqlconnector://finance:")
     assert tdx._domain_destroy(["--domain", "finance"]) == 0
     assert not store.domain_path("finance").exists()
+
+
+def test_container_domain_entity_is_prefixed(stores, monkeypatch):
+    """The entity container (DB / user) created in the system carries the
+    DOMAIN_PREFIX; the descriptor's logical name stays the bare domain name and
+    the prefixed name is recorded as EXTERNAL_NAME."""
+    monkeypatch.setattr(MysqlSystem, "_run_admin_sql",
+                        lambda self, admin, statements: None)
+    monkeypatch.setattr(MysqlSystem, "_query_admin_names",
+                        lambda self, admin, query: [])
+    sysf = store.system_path("mydb")
+    descriptor.write_container_system(
+        out=str(sysf), system_type="mysql", system_kind="sql", label="MySQL",
+        container="mydb", host="localhost", port="3306", user="root",
+        password="rootpw", domain_desc="db")
+    descriptor.stamp(str(sysf), name="mydb", started="t")
+    assert tdx._domain_create(["--sys", "mydb", "--domain", "finance",
+                               "--domain-prefix", "ci_1_", "-f"]) == 0
+    doc = descriptor.load(store.domain_path("finance"))
+    assert doc["name"] == "finance"                    # logical name unchanged
+    assert doc["external_name"] == "ci_1_finance"
+    m = descriptor.read_meta(store.domain_path("finance"))
+    assert m["DB"] == "ci_1_finance"                   # the actual database
+    assert m["SQLALCHEMY_URI"].startswith("mysql+mysqlconnector://ci_1_finance:")
 
 
 # ---- snowflake (saas) -----------------------------------------------------
@@ -140,7 +168,8 @@ def test_snowflake_lifecycle_through_tdx(stores, fake_sf):
                      "--warehouse", "wh", "--database", "ANALYTICS", "-f"])
     assert descriptor.load(store.system_path("snow"))["category"] == "saas"
     assert tdx._sys_status(["--sys", "snow"]) == 0
-    assert tdx._domain_create(["--sys", "snow", "--domain", "finance", "-f"]) == 0
+    assert tdx._domain_create(["--sys", "snow", "--domain", "finance",
+                               "--domain-prefix", "", "-f"]) == 0
     assert descriptor.read_meta(store.domain_path("finance"))["SCHEMA"] == "finance"
     # pause is container-only — capability flag, surfaced as a clear error.
     with pytest.raises(DatagenError, match="only applies to container"):

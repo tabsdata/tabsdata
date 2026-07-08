@@ -114,10 +114,10 @@ class BigQuerySystem(System):
     ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
         values = self.resolve_values(settings)
-        # The domain name is the dataset AND the staging prefix segment, so
-        # `tdx-domain create --sys wh --domain <name>` is all it takes — same as
-        # every other system (the name is already a validated identifier).
-        dataset = spec.name
+        # The (prefixed) entity name is the dataset AND the staging prefix
+        # segment, so `tdx-domain create --sys wh --domain <name>` is all it
+        # takes — same as every other system (it's a validated identifier).
+        dataset = spec.entity_name
         full = self._base_path(values, dataset)
 
         self._bq(values).create_dataset(dataset, force=spec.force)
