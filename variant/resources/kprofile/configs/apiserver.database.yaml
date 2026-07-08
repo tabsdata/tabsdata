@@ -2,29 +2,18 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
+# The registry components' database connections. The privileged server
+# connection lives in dbmanager.database.yaml, mounted only where needed.
 database:
-  mode: sidecar
-  system:
-    data_dir: ${{system:tdk_database_path}}
-    port: ${{system:tdk_database_port}}
-    persistent: true
-    username: ${{secretAuto:postgres_system_user}}
+  apiserver:
+    url: postgres://localhost:${{system:tdk_database_port}}/postgres
+    schema: td_apiserver
+    username: td_apiserver
     password: ${{secretAuto:postgres_password}}
     min_connections: 1
-    max_connections: 2
+    max_connections: 10
     acquire_timeout: 30
-    max_lifetime: 1800
-    idle_timeout: 30
+    max_lifetime: 3600
+    idle_timeout: 60
     test_before_acquire: true
     log_level: off
-  components:
-    apiserver:
-      schema: td_apiserver
-      password: ${{secretAuto:postgres_password}}
-      min_connections: 1
-      max_connections: 10
-      acquire_timeout: 30
-      max_lifetime: 3600
-      idle_timeout: 60
-      test_before_acquire: true
-      log_level: off

@@ -13,7 +13,7 @@ mod imp {
     use super::SqliteProvider;
     use crate::db::DbBackendProvider;
     use std::future::Future;
-    use td_database::system::SchemaComponent;
+    use td_database::components::SchemaComponent;
     use td_database::test_utils::MultiTestDb;
 
     impl DbBackendProvider for SqliteProvider {

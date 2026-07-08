@@ -13,7 +13,7 @@ use strum::{Display, EnumString, ParseError};
 use ta_services::factory::FieldAccessors;
 use td_bridge::Orchestrator;
 use td_common::jwt::JwtConfig;
-use td_database::config::DatabaseDescriptor;
+use td_database::config::DatabaseComponents;
 use td_error::{TdError, td_error};
 use td_execution::TransactionBy;
 use td_objects::types::addresses::{
@@ -34,7 +34,7 @@ pub struct Config {
     pub request_timeout: i64, // in seconds
     pub ssl_folder: PathBuf,
     #[serde(default)]
-    pub database: DatabaseDescriptor,
+    pub database: DatabaseComponents,
     #[serde(default)]
     pub storage: Option<StorageConfig>,
     /// Root directory served by `GET /api/v1/resources/{*path}`. A request for
@@ -132,7 +132,7 @@ impl Default for Config {
             jwt: JwtConfig::default(),
             request_timeout: 60,
             ssl_folder: PathBuf::default(),
-            database: DatabaseDescriptor::default(),
+            database: DatabaseComponents::default(),
             storage: Some(StorageConfig::default()),
             resources_folder: None,
             transaction_by: TransactionBy::default(),
@@ -177,10 +177,9 @@ impl From<&Config> for PasswordHashingConfig {
 
 /// CLI parameters that overlay the YAML [`Config`]. Database configuration is
 /// not among them: the apiserver sources its entire database setup from the
-/// `database:` section of its config file (the embedded data directory is
-/// templated in via `${env:TD_URI_REPOSITORY}`), and schema management is the
-/// `td_dbmanager` command's job, so there are no `--database-*` / `--db-schema`
-/// flags.
+/// `database:` section of its config file, and both the server lifecycle and
+/// schema management are the `td_dbmanager` command's job, so there are no
+/// `--database-*` / `--db-schema` flags.
 #[derive(Debug, Clone, Args)]
 pub struct Params {
     #[clap(long)]
@@ -334,21 +333,16 @@ mod tests {
     use std::net::SocketAddr;
     use std::str::FromStr;
     use td_common::id;
-    use td_database::config::DatabaseMode;
+    use td_database::components::{ApiserverComponent, resolved_schema};
     use td_objects::types::addresses::NonEmptyAddresses;
 
     #[test]
-    fn config_crate_loads_database_descriptor() {
+    fn config_crate_loads_database_components() {
         let yaml = r#"
 database:
-  mode: sidecar
-  system:
+  apiserver:
     url: postgres://localhost/tabsdata
-    username: admin
-    password: secret
-  components:
-    apiserver:
-      password: owner_secret
+    password: owner_secret
 "#;
         let built = config::Config::builder()
             .add_source(config::Config::try_from(&Config::default()).unwrap())
@@ -357,15 +351,11 @@ database:
             .build()
             .unwrap();
         let config: Config = built.try_deserialize().unwrap();
-        assert_eq!(config.database.mode(), DatabaseMode::Sidecar);
-        // Managed: the backend lives in the `system` entry, not top-level.
-        assert!(config.database.backend().is_none());
-        config.database.validate().unwrap();
         assert_eq!(
             config
                 .database
-                .component_override("apiserver")
-                .and_then(|o| o.password.as_deref()),
+                .get("apiserver")
+                .and_then(|entry| entry.password.as_deref()),
             Some("owner_secret")
         );
     }
@@ -378,14 +368,9 @@ orchestrator: kubernetes
 "#;
         let database_yaml = r#"
 database:
-  mode: sidecar
-  system:
+  apiserver:
     url: postgres://localhost/tabsdata
-    username: admin
-    password: secret
-  components:
-    apiserver:
-      password: owner_secret
+    password: owner_secret
 "#;
         let storage_yaml = r#"
 storage:
@@ -414,15 +399,11 @@ storage:
         let config: Config = built.try_deserialize().unwrap();
         assert_eq!(config.request_timeout, 90);
         assert_eq!(config.orchestrator, Orchestrator::Kubernetes);
-        assert_eq!(config.database.mode(), DatabaseMode::Sidecar);
-        let resolver = config.database.resolve().unwrap();
+        // The apiserver entry omits `schema:`, so it resolves to the
+        // component's default.
         assert_eq!(
-            resolver
-                .assemble("td_apiserver", None)
-                .unwrap()
-                .schema
-                .as_deref(),
-            Some("td_apiserver")
+            resolved_schema(&config.database, &ApiserverComponent).unwrap(),
+            "td_apiserver"
         );
         assert_eq!(config.storage_mounts().unwrap().len(), 1);
     }
@@ -430,7 +411,7 @@ storage:
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert!(config.database.backend().is_none());
+        assert!(config.database.is_empty());
         assert_eq!(
             *config.addresses,
             NonEmptyAddresses::new(nonempty![SocketAddr::from(([0, 0, 0, 0], 2457))])

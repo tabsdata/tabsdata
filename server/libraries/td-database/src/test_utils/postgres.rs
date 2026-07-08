@@ -15,7 +15,7 @@
 //!
 //! - [`pools`] — the `#[td_test::test(db)]` macro path: one schema + serving pool
 //!   per requested component, brought to its current version.
-//! - [`pool`] — td-database's own `system`/RLS tests: one schema (left un-upgraded;
+//! - [`pool`] — td-database's own `components`/RLS tests: one schema (left un-upgraded;
 //!   the caller applies it via [`TestDb::upgrade`]) plus the privileged handle and
 //!   superuser URL those white-box tests need.
 //!
@@ -25,9 +25,9 @@
 //! `after_connect` runs `SET app.bypass_rls = on`: RLS is **disabled by default**
 //! in tests. Use `db.scoped(p)` (or a service) to re-enforce RLS for a query.
 
-use crate::config::{ConnectableBackend, DatabaseConfig, Schema};
+use crate::components::{AdminPool, SchemaComponent};
+use crate::config::{BackendConfig, DatabaseConfig, Schema};
 use crate::pool::TdPool;
-use crate::system::{SchemaComponent, SystemPool};
 #[cfg(test)]
 use crate::test_utils::TestDb;
 use crate::test_utils::{MultiTestDb, TestDbCleanup};
@@ -42,13 +42,13 @@ fn unique_schema(index: usize) -> String {
 }
 
 /// A superuser connectable to the shared server, pinned to `schema`. Used for both
-/// the privileged ([`SystemPool`]) and serving ([`TdPool`]) connects — the schema is
+/// the privileged ([`AdminPool`]) and serving ([`TdPool`]) connects — the schema is
 /// superuser-owned, so there is no per-test owner role; serving `SET ROLE`s the
 /// shared `td_app`. Credentials live in explicit fields (URL credentials rejected).
 fn schema_connectable(schema: &str) -> DatabaseConfig {
     let (base, su_user, su_pass) = server::admin_base();
     DatabaseConfig {
-        conn: ConnectableBackend::from_url(base).expect("schema url"),
+        conn: BackendConfig::from_url(base).expect("schema url"),
         schema: Some(Schema::new(schema)),
         username: Some(su_user),
         password: Some(su_pass),
@@ -62,7 +62,7 @@ fn schema_connectable(schema: &str) -> DatabaseConfig {
 fn admin_connectable() -> DatabaseConfig {
     let (base, su_user, su_pass) = server::admin_base();
     DatabaseConfig {
-        conn: ConnectableBackend::from_url(base).expect("admin url"),
+        conn: BackendConfig::from_url(base).expect("admin url"),
         schema: None,
         username: Some(su_user),
         password: Some(su_pass),
@@ -72,22 +72,22 @@ fn admin_connectable() -> DatabaseConfig {
 }
 
 /// Create this test's own unique, superuser-owned schema on the shared server and
-/// open the privileged [`SystemPool`] for it. The privileged connect also ensures
+/// open the privileged [`AdminPool`] for it. The privileged connect also ensures
 /// the cluster-global `td_app`. Shared by [`pool`] and [`pools`]; both then connect
 /// their serving pool(s) to the same `config` (returned to avoid rebuilding it).
-async fn provision_schema(index: usize) -> (String, DatabaseConfig, SystemPool) {
+async fn provision_schema(index: usize) -> (String, DatabaseConfig, AdminPool) {
     let schema = unique_schema(index);
     let config = schema_connectable(&schema);
-    let system = SystemPool::connect(&config).await.expect("privileged pool");
-    system
+    let admin = AdminPool::connect(&config).await.expect("privileged pool");
+    admin
         .create_schema(&schema)
         .await
         .expect("create test schema");
-    (schema, config, system)
+    (schema, config, admin)
 }
 
 /// A [`TestDb`] on its **own unique schema** of the shared server, for td-database's
-/// own `system`/RLS tests — which connect their own pools as arbitrary roles via
+/// own `components`/RLS tests — which connect their own pools as arbitrary roles via
 /// [`TestDb::url`] (superuser credentials) and create their own roles when they need
 /// to mutate role-level state. The schema is superuser-owned and left un-upgraded;
 /// the caller applies it via [`TestDb::upgrade`]. Serving `SET ROLE`s the shared
@@ -96,7 +96,7 @@ async fn provision_schema(index: usize) -> (String, DatabaseConfig, SystemPool) 
 pub(crate) async fn pool() -> TestDb {
     server::ensure_started().await;
     // Keep the privileged pool open in the `TestDb` — the caller drives `upgrade`.
-    let (schema, config, system) = provision_schema(0).await;
+    let (schema, config, admin) = provision_schema(0).await;
     let serving = TdPool::connect(&config).await.expect("postgres test pool");
 
     // Superuser URL with credentials inline, for tests that connect raw pools as
@@ -107,7 +107,7 @@ pub(crate) async fn pool() -> TestDb {
 
     TestDb {
         serving,
-        system,
+        admin,
         schema: Schema::new(&schema),
         url,
         cleanup: TestDbCleanup::PostgresSchemas {
@@ -131,9 +131,9 @@ pub async fn pools(components: &[&'static dyn SchemaComponent]) -> MultiTestDb {
         // Build the schema to its current version (tables + grant `td_app`) on the
         // privileged pool, then drop it and connect the serving pool. All
         // schema-local ⇒ runs concurrently with other tests.
-        let (schema, config, system) = provision_schema(index).await;
-        component.upgrade(&system).await.expect("upgrade component");
-        system.close().await;
+        let (schema, config, admin) = provision_schema(index).await;
+        component.upgrade(&admin).await.expect("upgrade component");
+        admin.close().await;
 
         serving.push(
             TdPool::connect(&config)
@@ -155,8 +155,8 @@ pub async fn pools(components: &[&'static dyn SchemaComponent]) -> MultiTestDb {
 #[cfg(all(test, postgres))]
 mod tests {
     use super::*;
+    use crate::components::{ApiserverComponent, SchemaSource};
     use crate::dynamic::DynamicConnection;
-    use crate::system::{ApiserverComponent, SchemaSource};
     use td_schema::schema::backend::Backend;
 
     struct DummySource;

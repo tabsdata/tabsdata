@@ -7,10 +7,10 @@
 //! maintain-current trigger under RLS, and the scope GUC primitives. PostgreSQL
 //! only — this whole module is `#[cfg(postgres)]`.
 
+use crate::components::{ApiserverComponent, SchemaComponent};
 use crate::dynamic::DynamicConnection;
 use crate::error::DbError;
 use crate::pool::TdPool;
-use crate::system::{ApiserverComponent, SchemaComponent};
 use sqlx::postgres::PgPoolOptions;
 
 /// Row-level security end to end on real Postgres: reads are scoped to the
@@ -181,7 +181,7 @@ async fn test_rls_project_isolation() {
 /// isolation; `check_rls_posture` on the serving pool must catch it.
 #[tokio::test]
 async fn test_check_rejects_bypassing_serving_role() {
-    use crate::config::{ConnectableBackend, DatabaseConfig};
+    use crate::config::{BackendConfig, DatabaseConfig};
 
     let db = crate::test_utils::postgres::pool().await;
     db.upgrade().await.unwrap();
@@ -214,7 +214,7 @@ async fn test_check_rejects_bypassing_serving_role() {
     url.set_username("").unwrap();
     url.set_password(None).unwrap();
     let cfg = DatabaseConfig {
-        conn: ConnectableBackend::from_url(url).unwrap(),
+        conn: BackendConfig::from_url(url).unwrap(),
         schema: Some(db.schema().clone()),
         username: Some(username),
         password: Some(password),

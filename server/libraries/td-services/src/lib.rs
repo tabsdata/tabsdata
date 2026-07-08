@@ -29,7 +29,6 @@ use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
 use td_bridge::BridgeProviderHandle;
 use td_common::jwt::JwtConfig;
-use td_database::config::DatabaseDescriptor;
 use td_database::pool::TdPool;
 use td_execution::SchedulerNotify;
 use td_execution::TransactionBy;
@@ -83,7 +82,6 @@ pub struct Services {
 #[derive(FieldAccessors, FromRef, Clone)]
 pub struct Context {
     pub apiserver_pool: TdPool,
-    pub database_descriptor: Arc<DatabaseDescriptor>,
     pub server_addresses: Arc<ApiServerAddresses>,
     pub jwt_config: Arc<JwtConfig>,
     pub auth_context: Arc<AuthzContext>,
@@ -102,7 +100,6 @@ impl Context {
     pub fn with_defaults(db: TdPool) -> Self {
         Self {
             apiserver_pool: db,
-            database_descriptor: Arc::new(DatabaseDescriptor::default()),
             server_addresses: Arc::new(ApiServerAddresses::default()),
             jwt_config: Arc::new(JwtConfig::default()),
             auth_context: Arc::new(AuthzContext::default()),

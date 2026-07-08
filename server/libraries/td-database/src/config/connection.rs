@@ -3,13 +3,13 @@
 //
 
 //! [`DatabaseConfig`] — a single **connectable** database target: its
-//! [`BackendConfig`], schema, credentials, and [`PoolConfig`]. The resolved config
-//! that [`DatabaseDescriptor`](super::DatabaseDescriptor) produces and
-//! [`super::connect`] consumes, so the backend is mandatory (a target with no
-//! backend isn't connectable).
+//! [`BackendConfig`], schema, credentials, and [`PoolConfig`]. The resolved
+//! config that component/server resolution produces and
+//! [`crate::pool::connect`] consumes, so the backend is mandatory (a target
+//! with no backend isn't connectable).
 
 use super::Schema;
-use super::backend::ConnectableBackend;
+use super::backend::BackendConfig;
 use super::pool::PoolConfig;
 use crate::error::DbError;
 use serde::{Deserialize, Serialize};
@@ -18,10 +18,9 @@ use url::Url;
 /// Configuration for a connectable database pool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
-    /// The backend target — always reachable by URL (embedded is resolved to its
-    /// live URL during resolution, so it never reaches a connectable config).
+    /// The backend target — always reachable by URL.
     #[serde(flatten)]
-    pub conn: ConnectableBackend,
+    pub conn: BackendConfig,
     /// PostgreSQL schema the connection's `search_path` is pinned to. Mandatory on
     /// the PostgreSQL path (no `public` default, so each component stays isolated);
     /// [`Self::connect`] fails with [`DbError::MissingSchema`] when unset. Ignored
@@ -50,7 +49,7 @@ pub struct DatabaseConfig {
 impl DatabaseConfig {
     pub fn new<P: Into<Url>>(db_url: P) -> Result<Self, DbError> {
         Ok(Self {
-            conn: ConnectableBackend::from_url(db_url.into())?,
+            conn: BackendConfig::from_url(db_url.into())?,
             schema: None,
             username: None,
             password: None,
@@ -82,7 +81,7 @@ impl DatabaseConfig {
     pub fn validate(&self) -> Result<(), DbError> {
         match &self.conn {
             #[cfg(sqlite)]
-            ConnectableBackend::Sqlite(_) => {
+            BackendConfig::Sqlite(_) => {
                 if self.username.is_some() || self.password.is_some() {
                     return Err(DbError::UnexpectedCredentials);
                 }
@@ -114,7 +113,7 @@ min_connections: 2
 max_connections: 20
 ";
         let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
-        assert!(matches!(cfg.conn, ConnectableBackend::Sqlite(_)));
+        assert!(matches!(cfg.conn, BackendConfig::Sqlite(_)));
         assert_eq!(cfg.url().as_str(), "file:///tmp/test.db");
         assert_eq!(cfg.pool.min_connections, 2);
         assert_eq!(cfg.pool.max_connections, 20);
@@ -135,7 +134,7 @@ min_connections: 2
 max_connections: 20
 ";
         let cfg: DatabaseConfig = serde_yaml::from_str(yaml).unwrap();
-        assert!(matches!(cfg.conn, ConnectableBackend::Postgres(_)));
+        assert!(matches!(cfg.conn, BackendConfig::Postgres(_)));
         assert_eq!(cfg.username.as_deref(), Some("user"));
         assert_eq!(cfg.password.as_deref(), Some("pass"));
         assert_eq!(cfg.pool.min_connections, 2);
@@ -180,7 +179,7 @@ max_connections: 20
         );
 
         let original = DatabaseConfig {
-            conn: ConnectableBackend::from_url(url).unwrap(),
+            conn: BackendConfig::from_url(url).unwrap(),
             schema: Some(Schema::new(schema::TEST_SCHEMA)),
             username,
             password,

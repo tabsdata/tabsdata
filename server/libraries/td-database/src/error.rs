@@ -10,8 +10,7 @@ pub enum DbError {
     #[error(
         "Unsupported database engine: '{0}'. Tabsdata supports PostgreSQL \
          (`postgres://…`), SQLite (`file:…`), and MySQL (`mysql://…`). Set the \
-         database `url:` (or the embedded-postgres knobs) in the configuration \
-         to one of these engines."
+         database `url:` in the configuration to one of these engines."
     )]
     UnsupportedDatabase(String) = 0,
     #[error(
@@ -59,12 +58,6 @@ pub enum DbError {
     )]
     DatabaseCorrupted(String) = 5003,
     #[error(
-        "No database location in the configuration. Set the database `url:` \
-         (e.g. `postgres://user:pass@host:5432/db`, `mysql://…`, or \
-         `file:/path/to/app.db`), or configure the embedded-postgres knobs."
-    )]
-    MissingDatabaseLocation = 5004,
-    #[error(
         "No database schema in the configuration. PostgreSQL backends require an \
          explicit `schema:` so each component's objects stay isolated in their \
          own schema. Set `schema:` (e.g. `schema: td_apiserver`) in the database \
@@ -88,16 +81,65 @@ pub enum DbError {
     )]
     UnexpectedCredentials = 5030,
     #[error(
-        "No system entry in the database configuration. A managed database \
-         (`embedded`/`sidecar`) must define a `system` entry carrying the \
-         connection target and admin credentials."
+        "No `database_server:` section in the configuration. This operation \
+         needs the privileged server connection (its URL and admin credentials)."
     )]
-    MissingSystemEntry = 5025,
+    MissingServerEntry = 5025,
     #[error(
-        "Unexpected `system` entry in the database configuration. A `remote` \
-         database is not managed by Tabsdata; remove the `system` entry."
+        "No configuration entry for database component '{0}'. Every registered \
+         component needs its own entry under `database:` with its `url:` and \
+         credentials."
     )]
-    UnexpectedSystemEntry = 5026,
+    MissingComponentEntry(String) = 5033,
+    #[error(
+        "The `database_server:` URL points at non-local host '{0}', so its \
+         server is not ours to run. Point the URL at localhost to boot a \
+         server here."
+    )]
+    NonLocalServerUrl(String) = 5034,
+    #[error(
+        "The `database_server:` backend is '{0}', but the managed server is \
+         PostgreSQL. Set its `url:` to a `postgres://` URL."
+    )]
+    ServerBackendNotPostgres(String) = 5035,
+    #[error(
+        "The `database_server:` entry must not define a `schema:`. It is the \
+         privileged server connection and has no home schema."
+    )]
+    ServerSchemaNotAllowed = 5036,
+    #[error(
+        "`${{embedded}}` is not valid for a component's `username`: the owner \
+         role name is the schema name, which is already the default when the \
+         field is omitted."
+    )]
+    EmbeddedUsernameNotAllowed = 5038,
+    #[error(
+        "The booted server's superuser is always 'postgres' — it cannot be \
+         named '{0}'. Set the `database_server:` `username:` to 'postgres', \
+         `${{embedded}}`, or omit it."
+    )]
+    ServerUsernameNotBootable(String) = 5039,
+    #[error(
+        "The database data directory cannot be resolved. Set the \
+         TD_DATABASE_DIR environment variable (or TD_URI_REPOSITORY, whose \
+         `database` subdirectory is the default)."
+    )]
+    MissingDatabaseDir = 5037,
+    #[error(
+        "A database server is already running on the data directory, but it \
+         listens on port {running} while the `database_server:` URL configures \
+         port {configured}. Align the URL with the running server, or stop the \
+         server before starting it on the new port."
+    )]
+    ServerPortMismatch { running: u16, configured: u16 } = 5040,
+    #[error(
+        "The database server rejected the configured admin credentials: {0}. \
+         The data directory was likely initialized with different credentials \
+         (e.g. the secret changed after the first boot). Restore the original \
+         credentials in the configuration, or re-initialize the data directory \
+         (destroying its data) so the next boot bakes in the new ones."
+    )]
+    ServerAuthenticationFailed(String) = 5041,
     #[error(
         "Unknown database schema entry '{0}'. Add an entry named '{0}' to the \
          database configuration."

@@ -4,7 +4,7 @@
 
 //! Database edition extension.
 //!
-//! Re-exports `td-database`'s management API ([`td_database::system`]) and wires
+//! Re-exports `td-database`'s management API ([`td_database::components`]) and wires
 //! *this edition's* schema components into the inventory registry. The built-in
 //! apiserver component self-registers in `td-database`, so the open-source edition
 //! adds nothing here; the enterprise edition swaps this crate (it is a `te-*`
@@ -15,7 +15,7 @@
 //! [`force_link!`] macro, which plants the `#[used]` anchor that defeats linker
 //! dead-code elimination.
 
-pub use td_database::system::*;
+pub use td_database::components::*;
 
 /// No-op symbol the [`force_link!`] anchor references to force this crate (and
 /// thus its `inventory::submit!`s) into the final link. See the module docs.
@@ -25,7 +25,7 @@ pub fn link() {}
 /// registrations in a binary's final link. Without it the linker may drop the
 /// `inventory::submit!`s as unreferenced and the registry comes up empty at
 /// runtime (caught at boot by
-/// [`validate_descriptor`](td_database::system::validate_descriptor)). Invoke once
+/// [`validate_components`](td_database::components::validate_components)). Invoke once
 /// at the top level of every binary that opens the database:
 ///
 /// ```ignore

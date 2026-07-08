@@ -3,11 +3,12 @@
 //
 
 //! [`BackendConfig`] — which database backend a connection targets, plus the
-//! per-backend URL/boot config. The variants are the per-backend structs in the
-//! sibling modules (sqlite, postgres, embedded, mysql).
+//! per-backend URL config. The variants are the per-backend structs in the
+//! sibling modules (sqlite, postgres, mysql). Every backend is reachable by
+//! URL; the embedded postgres server is a *deployment* concern (booted by
+//! `td_dbmanager` from [`crate::server`]) and is addressed through its
+//! localhost URL like any other server.
 
-#[cfg(all(postgres, feature = "embedded-postgres"))]
-use super::embedded::EmbeddedConfig;
 #[cfg(mysql)]
 use super::mysql::{MySqlConfig, MySqlUrl};
 #[cfg(postgres)]
@@ -18,8 +19,8 @@ use crate::error::DbError;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-/// Database connection configuration. Each variant pairs a URL (or, for
-/// embedded postgres, the boot knobs) with the backend-specific config.
+/// Database connection configuration. Each variant pairs a URL with the
+/// backend-specific config.
 ///
 /// The backend is determined by which config key is present (`sqlite`,
 /// `postgres`, or `mysql`). When none is present, the backend is inferred
@@ -37,38 +38,31 @@ pub enum BackendConfig {
     Sqlite(SqliteConfig),
     #[cfg(postgres)]
     Postgres(PostgresConfig),
-    /// In-process Postgres, booted out of band by `td_dbmanager start`
-    /// ([`crate::embedded::start_detached`]) and resolved to its live URL before
-    /// connecting (see [`Self::into_connectable`]). A *deployment* backend only —
-    /// it never appears on a [`ConnectableBackend`]. Mutually exclusive with
-    /// [`Self::Postgres`] — pick external (URL set) or embedded (boot knobs), not both.
-    #[cfg(all(postgres, feature = "embedded-postgres"))]
-    EmbeddedPostgres(EmbeddedConfig),
     #[cfg(mysql)]
     MySql(MySqlConfig),
 }
 
 impl BackendConfig {
-    /// The configured URL. `None` for [`Self::EmbeddedPostgres`], since the
-    /// URL isn't known until the server boots. Query the live URL via
-    /// [`crate::pool::TdPool::url`] instead.
-    pub fn url(&self) -> Option<&Url> {
+    /// The connection URL (always present — every backend has one).
+    pub fn url(&self) -> &Url {
         match self {
             #[cfg(sqlite)]
-            Self::Sqlite(c) => Some(&c.url),
+            Self::Sqlite(c) => &c.url,
             #[cfg(postgres)]
-            Self::Postgres(c) => Some(&c.url),
-            #[cfg(all(postgres, feature = "embedded-postgres"))]
-            Self::EmbeddedPostgres(_) => None,
+            Self::Postgres(c) => &c.url,
             #[cfg(mysql)]
-            Self::MySql(c) => Some(&c.url),
+            Self::MySql(c) => &c.url,
         }
     }
 
-    /// Build the embedded-postgres variant from boot knobs.
-    #[cfg(all(postgres, feature = "embedded-postgres"))]
-    pub fn embedded_postgres(cfg: EmbeddedConfig) -> Self {
-        Self::EmbeddedPostgres(cfg)
+    /// Whether this backend is PostgreSQL.
+    pub fn is_postgres(&self) -> bool {
+        match self {
+            #[cfg(postgres)]
+            Self::Postgres(_) => true,
+            #[allow(unreachable_patterns)]
+            _ => false,
+        }
     }
 
     /// Infer the backend variant from the URL scheme. The URL carries the
@@ -91,62 +85,6 @@ impl BackendConfig {
         }
         Err(DbError::UnsupportedDatabase(url.scheme().to_string()))
     }
-
-    /// Lower a *deployment* backend to a *connectable* one. The url-based variants
-    /// map across directly; [`Self::EmbeddedPostgres`] **resolves** to its live URL
-    /// (read from the running server) — the same lowering as [`Self::serving_url`].
-    /// Errors only if an embedded server is asked for before it is running.
-    /// Credentials are not in the URL; they travel in the config's explicit fields.
-    pub fn into_connectable(self) -> Result<ConnectableBackend, DbError> {
-        match self {
-            #[cfg(sqlite)]
-            Self::Sqlite(c) => Ok(ConnectableBackend::Sqlite(c)),
-            #[cfg(postgres)]
-            Self::Postgres(c) => Ok(ConnectableBackend::Postgres(c)),
-            #[cfg(all(postgres, feature = "embedded-postgres"))]
-            Self::EmbeddedPostgres(cfg) => {
-                ConnectableBackend::from_url(crate::embedded::live_url(&cfg)?)
-            }
-            #[cfg(mysql)]
-            Self::MySql(c) => Ok(ConnectableBackend::MySql(c)),
-        }
-    }
-}
-
-/// A backend a [`DatabaseConfig`](super::DatabaseConfig) can actually **connect**
-/// to — always reachable by URL. Distinct from [`BackendConfig`] (the *deployment*
-/// type), which also models the not-yet-running embedded server: resolution lowers
-/// `BackendConfig` to this (embedded → its live URL) before any connect, so the
-/// connect path never has to boot a server.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ConnectableBackend {
-    #[cfg(sqlite)]
-    Sqlite(SqliteConfig),
-    #[cfg(postgres)]
-    Postgres(PostgresConfig),
-    #[cfg(mysql)]
-    MySql(MySqlConfig),
-}
-
-impl ConnectableBackend {
-    /// The connection URL (always present — every connectable backend has one).
-    pub fn url(&self) -> &Url {
-        match self {
-            #[cfg(sqlite)]
-            Self::Sqlite(c) => &c.url,
-            #[cfg(postgres)]
-            Self::Postgres(c) => &c.url,
-            #[cfg(mysql)]
-            Self::MySql(c) => &c.url,
-        }
-    }
-
-    /// Infer the connectable backend from the URL scheme — see
-    /// [`BackendConfig::from_url`] for the credential rules.
-    pub fn from_url(url: Url) -> Result<Self, DbError> {
-        BackendConfig::from_url(url)?.into_connectable()
-    }
 }
 
 #[cfg(test)]
@@ -159,7 +97,7 @@ mod tests {
         let yaml = "url: file:///tmp/test.db";
         let conn: BackendConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(conn, BackendConfig::Sqlite(_)));
-        assert_eq!(conn.url().unwrap().as_str(), "file:///tmp/test.db");
+        assert_eq!(conn.url().as_str(), "file:///tmp/test.db");
     }
 
     #[cfg(sqlite)]
@@ -201,7 +139,7 @@ mod tests {
         let yaml = "url: file:///tmp/inferred.db";
         let conn: BackendConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(conn, BackendConfig::Sqlite(_)));
-        assert_eq!(conn.url().unwrap().as_str(), "file:///tmp/inferred.db");
+        assert_eq!(conn.url().as_str(), "file:///tmp/inferred.db");
     }
 
     #[cfg(postgres)]
@@ -227,12 +165,11 @@ mod tests {
         assert!(result.is_err());
     }
 
-    /// `sqlite: {}` has no `url`, so deserialization fails. Empty bodies are
-    /// rejected by serde when no untagged variant accepts them.
-    #[cfg(all(sqlite, not(postgres)))]
+    /// A body with no `url` matches no variant, so deserialization fails —
+    /// the config surface requires every backend to state its URL.
     #[test]
     fn conn_missing_url_errors() {
-        let yaml = "sqlite: {}";
+        let yaml = "persistent: true";
         let result = serde_yaml::from_str::<BackendConfig>(yaml);
         assert!(result.is_err());
     }

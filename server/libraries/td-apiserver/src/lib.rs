@@ -40,27 +40,17 @@ pub fn run() {
                 ExitStatus::GeneralError
             })?;
 
-            let database_descriptor = &config.database;
-            dbm::validate_descriptor(database_descriptor).map_err(|e| {
+            let database_components = &config.database;
+            dbm::validate_components(database_components).map_err(|e| {
                 error!("Invalid database configuration: {e:#?}");
                 ExitStatus::GeneralError
             })?;
 
-            // In embedded mode the apiserver owns its in-process database server: boot
-            // it (detached, idempotent) before connecting and stop it on shutdown.
-            // Sidecar/remote servers are external — the apiserver is app-only there and
-            // `td_dbmanager` manages their lifecycle out of band. Schemas are always
-            // provisioned/upgraded by `td_dbmanager create`/`upgrade`, never here.
-            if database_descriptor.mode().is_embedded() {
-                dbm::start_server(database_descriptor).await.map_err(|e| {
-                    error!("Error starting embedded database server: {e:#?}");
-                    ExitStatus::GeneralError
-                })?;
-            }
-
-            // Connect the database, app-only: one serving pool per registered component
-            // so each context grabs the one it needs.
-            let serving_pools = dbm::connect_app_all(database_descriptor)
+            // Connect the database, app-only: one serving pool per registered
+            // component so each context grabs the one it needs. The server
+            // lifecycle and schema management belong to `td_dbmanager`, never
+            // to the apiserver.
+            let serving_pools = dbm::connect_app_all(database_components)
                 .await
                 .map_err(|e| {
                     error!("Error connecting to database: {e:#?}");
@@ -195,14 +185,6 @@ pub fn run() {
             // Close every serving pool's connections explicitly, rather than at the
             // mercy of Drop ordering during tokio runtime teardown.
             serving_pools.shutdown().await;
-
-            // In embedded mode the apiserver owns the in-process server it booted
-            // above: stop it once the pools are closed. No-op for sidecar/remote.
-            if database_descriptor.mode().is_embedded()
-                && let Err(e) = dbm::stop_server(database_descriptor).await
-            {
-                error!("Error stopping embedded database server: {e:#?}");
-            }
 
             outcome
         },

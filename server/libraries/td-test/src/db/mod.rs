@@ -9,8 +9,8 @@
 use crate::__private::{TestSetup, TestSetupExecution, teardown};
 use std::future::Future;
 use std::marker::PhantomData;
+use td_database::components::SchemaComponent;
 use td_database::pool::TdPool;
-use td_database::system::SchemaComponent;
 use td_database::test_utils::MultiTestDb;
 
 pub mod postgres;

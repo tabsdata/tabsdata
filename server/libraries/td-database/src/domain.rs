@@ -7,6 +7,7 @@
 //! serves one ([`Domained`]); the `td-queries` surfaces require them to
 //! match, so a query cannot compile against the wrong pool.
 
+use crate::components::APISERVER_COMPONENT_KEY;
 use crate::dynamic::{
     DynamicConnection, DynamicDecode, DynamicFromRow, DynamicPool, DynamicQueryResult, DynamicRow,
     DynamicTransaction, DynamicType,
@@ -17,7 +18,6 @@ use crate::pool::scoped::Scoped;
 use crate::sea_query::builder::SeaQuerySqlxBuild;
 use crate::sea_query::executor::SeaExecutor;
 use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
-use crate::system::APISERVER_COMPONENT_KEY;
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
 use futures_util::stream::BoxStream;
@@ -29,7 +29,7 @@ use td_error::TdError;
 /// One schema component's database, as a zero-sized marker type.
 pub trait DbDomain: Send + Sync + Copy + 'static {
     /// The component key its pool registers under (see
-    /// [`ServingPools`](crate::system::ServingPools)).
+    /// [`ServingPools`](crate::components::ServingPools)).
     const SCHEMA_KEY: &'static str;
 }
 
@@ -434,7 +434,7 @@ impl<D: DbDomain> SeaExecutor for &mut DomainConnection<D> {
 }
 
 /// A service's pools as one parameter, keyed by domain (built at boot via
-/// [`ServingPools::domain_pools`](crate::system::ServingPools::domain_pools)).
+/// [`ServingPools::domain_pools`](crate::components::ServingPools::domain_pools)).
 #[derive(Clone)]
 #[cfg_attr(any(test, feature = "test-utils"), derive(Default))]
 pub struct DomainPools(BTreeMap<&'static str, TdPool>);

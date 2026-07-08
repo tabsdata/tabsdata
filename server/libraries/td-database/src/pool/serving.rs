@@ -18,8 +18,8 @@ use tracing::{debug, info, instrument, warn};
 /// Serving pool handed to the running server and its services. On PostgreSQL its
 /// connections run as the non-bypass [`APP_ROLE`](crate::APP_ROLE), so every
 /// request is enforced by row-level security. It deliberately carries **no**
-/// privileged connection: schema creation/upgrade/checks live in the `system`
-/// module's [`SystemPool`](crate::system::SystemPool), built from
+/// privileged connection: schema creation/upgrade/checks live in the `components`
+/// module's [`AdminPool`](crate::components::AdminPool), built from
 /// [`DatabaseConfig::connect`] with [`ConnectRole::Admin`].
 #[derive(Debug, Clone)]
 pub struct TdPool {

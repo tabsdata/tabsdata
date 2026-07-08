@@ -71,11 +71,11 @@ enum DbManagerCommand {
 }
 
 impl DbManagerCommand {
-    fn as_str(self) -> &'static str {
+    fn args(self) -> [&'static str; 2] {
         match self {
-            DbManagerCommand::Start => "start",
-            DbManagerCommand::Create => "create",
-            DbManagerCommand::Stop => "stop",
+            DbManagerCommand::Start => ["server", "start"],
+            DbManagerCommand::Create => ["db", "create"],
+            DbManagerCommand::Stop => ["server", "stop"],
         }
     }
 
@@ -102,10 +102,12 @@ const PYVENV_BINARY: &str = "td_pyvenv";
 const APISERVER_SERVICE_CONFIG_KEY: &str = "apiserver.service.yaml";
 const APISERVER_DATABASE_CONFIG_KEY: &str = "apiserver.database.yaml";
 const APISERVER_STORAGE_CONFIG_KEY: &str = "apiserver.storage.yaml";
+const DBMANAGER_DATABASE_CONFIG_KEY: &str = "dbmanager.database.yaml";
 const APISERVER_CONFIG_KEYS: &[&str] = &[
     APISERVER_SERVICE_CONFIG_KEY,
     APISERVER_DATABASE_CONFIG_KEY,
     APISERVER_STORAGE_CONFIG_KEY,
+    DBMANAGER_DATABASE_CONFIG_KEY,
 ];
 
 pub struct KminusProvider {
@@ -774,10 +776,10 @@ impl KminusProvider {
     ) -> CommandResult {
         let (step_label, done_label) = subcommand.step_labels();
         let dbmanager = name_program(&PathBuf::from(DBMANAGER_BINARY));
-        let command_label = format!("{} {}", dbmanager.display(), subcommand.as_str());
+        let command_label = format!("{} {}", dbmanager.display(), subcommand.args().join(" "));
         let step = reporter.step(step_label);
         let mut command = std::process::Command::new(&dbmanager);
-        command.arg(subcommand.as_str());
+        command.args(subcommand.args());
         for config_file in config_files {
             command.arg("--config-file").arg(config_file.path());
         }

@@ -45,9 +45,12 @@ spec:
         imagePullPolicy: IfNotPresent
         command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_dbmanager"]
         args:
+        - db
         - create
         - --config-file
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.database.yaml
+        - --config-file
+        - $(CONTAINER_ROOT)/tabsdata/config/dbmanager.database.yaml
         resources:
           requests:
             cpu: "50m"
@@ -84,6 +87,8 @@ spec:
           sources:
           - configMap:
               name: td-app-apiserver-config-apiserver.database.yaml
+          - configMap:
+              name: td-app-dbmanager-config-dbmanager.database.yaml
           - configMap:
               name: td-app-tabsdata-config-tabsdata.log.rs.yaml
       - name: pyenv

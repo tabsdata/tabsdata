@@ -4,30 +4,23 @@
 
 //! Database connection configuration.
 //!
-//! * [`BackendConfig`] picks one of the supported backends (sqlite, postgres,
-//!   embedded postgres, mysql); each has its own per-backend config struct in a
-//!   submodule ([`sqlite`], [`postgres`], [`embedded`], [`mysql`]).
+//! * [`BackendConfig`] picks a backend (sqlite, postgres, mysql) by URL scheme.
 //! * [`PoolConfig`] holds the sqlx pool settings.
-//! * [`DatabaseConfig`] is one connectable target (backend + schema +
-//!   credentials + pool); [`crate::pool::connect`] turns it into live pools.
-//! * [`DatabaseDescriptor`] is the whole `database:` section: the mode, the
-//!   database-wide backend and admin credentials, and an optional
-//!   [`ComponentOverride`] per component. Which components exist (and the schema
-//!   each owns) comes from the linked component registry, not the config — so
-//!   the descriptor never enumerates schemas; it only carries the connection and
-//!   any per-component deployment overrides (e.g. remote owner passwords).
+//! * [`ComponentConfig`] is one named connection; [`DatabaseComponents`] (the
+//!   `database:` section) is a plain map of them, one per registry component.
+//!   The `database_server:` section reuses the same shape (gated by
+//!   [`crate::server`], its only reader).
+//! * [`DatabaseConfig`] is one connectable target, consumed by
+//!   [`crate::pool::connect`].
 //!
-//! These are the declarative types only. The act of connecting (opening pools,
-//! booting embedded postgres) is behavior and lives in [`crate::pool::connect`].
+//! Declarative types only: connecting lives in [`crate::pool::connect`],
+//! running the managed server in [`crate::server`], and resolving components
+//! against the registry in [`crate::components`].
 
 // Shared definitions.
-pub mod mode;
 pub mod schema;
-pub mod system_config;
 
-// Per-backend URL / boot configs.
-#[cfg(all(postgres, feature = "embedded-postgres"))]
-pub mod embedded;
+// Per-backend URL configs.
 #[cfg(mysql)]
 pub mod mysql;
 #[cfg(postgres)]
@@ -37,13 +30,10 @@ pub mod sqlite;
 
 // Configuration types.
 mod backend;
+mod component;
 mod connection;
-mod descriptor;
 mod pool;
 
-#[cfg(all(postgres, feature = "embedded-postgres"))]
-pub use embedded::EmbeddedConfig;
-pub use mode::DatabaseMode;
 #[cfg(mysql)]
 pub use mysql::{MySqlConfig, MySqlUrl};
 #[cfg(postgres)]
@@ -51,9 +41,8 @@ pub use postgres::{PostgresConfig, PostgresUrl};
 pub use schema::Schema;
 #[cfg(sqlite)]
 pub use sqlite::{SqliteConfig, SqliteUrl};
-pub use system_config::SystemConfig;
 
-pub use backend::{BackendConfig, ConnectableBackend};
+pub use backend::BackendConfig;
+pub use component::{ComponentConfig, DatabaseComponents, EMBEDDED_CREDENTIAL};
 pub use connection::DatabaseConfig;
-pub use descriptor::{ComponentOverride, DatabaseDescriptor, DatabaseResolver};
 pub use pool::PoolConfig;

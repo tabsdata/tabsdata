@@ -86,7 +86,7 @@ async fn ledger_and_version_created_by_shared_logic() {
     );
 
     let db = pool().await;
-    let system = &db.system;
+    let system = &db.admin;
     system
         .upgrade_db_version(&WidgetSource { version: 1 })
         .await
@@ -112,7 +112,7 @@ async fn ledger_and_version_created_by_shared_logic() {
 #[tokio::test]
 async fn upgrade_advances_version_via_delta() {
     let db = pool().await;
-    let system = &db.system;
+    let system = &db.admin;
 
     system
         .upgrade_db_version(&WidgetSource { version: 1 })

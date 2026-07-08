@@ -6,9 +6,9 @@
 //! detection) and the version / edition gates `check` enforces.
 
 use super::{schema_db_version, schema_index_names, schema_table_names, schema_view_names};
+use crate::components::{ApiserverComponent, SchemaComponent};
 use crate::pool::TdPool;
 use crate::sea_query::kind::{DatabaseBackend, DatabaseKind};
-use crate::system::{ApiserverComponent, SchemaComponent};
 // Used only by the sqlite-gated pre-2.0 rejection test below.
 #[cfg(sqlite)]
 use crate::error::DbError;

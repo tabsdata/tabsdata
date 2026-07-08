@@ -428,6 +428,21 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 
+    /// td-database's `${embedded}` credential placeholder is not an env
+    /// placeholder — the supervisor resolver must pass it through untouched.
+    #[test]
+    fn test_supervisor_leaves_embedded_credential_unresolved() {
+        let path = get_current_dir().join("explicit-embedded.yaml");
+        std::fs::write(&path, "name: ${embedded}\nport: 9999\n").expect("write explicit config");
+
+        let config = load_config::<MyConfig>("my-config-embedded", None, vec![path.clone()], false);
+
+        assert_eq!(config.name, "${embedded}");
+        assert_eq!(config.port(), &9999u16);
+
+        std::fs::remove_file(&path).ok();
+    }
+
     #[test]
     fn test_load_config_multiple_files_merge_additively() {
         let first = get_current_dir().join("multi-first.yaml");

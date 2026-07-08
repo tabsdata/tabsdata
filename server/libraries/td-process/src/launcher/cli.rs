@@ -68,11 +68,15 @@ struct CliParser<P: Params> {
     params: P,
     #[arg(
         long = "stdin-config",
+        global = true,
         help = "Whether to ingest additional config from stdin"
     )]
     stdin_config: Option<bool>,
+    // `global` so binaries whose params are subcommands (e.g. `td_dbmanager
+    // db create --config-file x`) accept it after the leaf too.
     #[arg(
         long = "config-file",
+        global = true,
         action = clap::ArgAction::Append,
         help = "Path to a YAML configuration file. Repeatable; the files are applied \
                 as the highest-precedence YAML sources in the given order (each later \
@@ -83,6 +87,7 @@ struct CliParser<P: Params> {
     #[arg(
         long = "log-config",
         short = 'c',
+        global = true,
         help = "Path to a logging config YAML."
     )]
     log_config: Option<PathBuf>,
@@ -487,6 +492,35 @@ mod tests {
         ));
         assert!(c1.is_some());
         assert!(option.is_some());
+    }
+
+    #[derive(Debug, Clone, Args)]
+    struct SubcommandParams {
+        #[command(subcommand)]
+        command: Option<SubCommand>,
+    }
+
+    #[derive(Debug, Clone, clap_derive::Subcommand)]
+    enum SubCommand {
+        Group {
+            #[command(subcommand)]
+            leaf: Leaf,
+        },
+    }
+
+    #[derive(Debug, Clone, clap_derive::Subcommand)]
+    enum Leaf {
+        Run,
+    }
+
+    /// The shared flags are `global`: binaries whose params are nested
+    /// subcommands must accept them after the leaf (`group run --config-file x`).
+    #[test]
+    fn test_shared_flags_are_global_across_subcommands() {
+        let cli: CliParser<SubcommandParams> =
+            simulate_cli(vec!["group", "run", "--config-file", "x.yaml"]).unwrap();
+        assert_eq!(cli.config_file.len(), 1);
+        assert!(cli.params.command.is_some());
     }
 
     #[test]

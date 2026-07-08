@@ -82,20 +82,19 @@ pub const SUPERVISOR_PROGRAM: &str = "td_supervisor";
 
 pub const APISERVER: &str = "td_apiserver";
 pub const APISERVER_WORKER: &str = "apiserver";
-// Schema management (create/upgrade) is the privileged `td_dbmanager` command's
-// job — the only thing that opens a system pool. The supervisor runs it as a
-// one-shot before the serving apiserver. The apiserver itself sources its
-// database setup from the `database:` section of its YAML (an external postgres
-// URL, or an embedded instance whose `data_dir` the config templates in as
-// `${env:TD_URI_REPOSITORY}/database`); the supervisor only ensures
-// `TD_URI_REPOSITORY` is set so that substitution resolves.
+// The database server lifecycle and schema management are `td_dbmanager`'s
+// job, run around the instance lifecycle: `start` before the workers come up
+// (the managed server stays running for the app-only apiserver), `stop` after
+// they are down. The server's data directory defaults to
+// `<TD_URI_REPOSITORY>/database`, so the supervisor only ensures
+// `TD_URI_REPOSITORY` is set.
 pub const APISERVER_ARGUMENT_CONFIG_FILE: &str = "--config-file";
 // The privileged db-admin binary and its one-shot subcommands.
 pub const DBMANAGER: &str = "td_dbmanager";
-pub const DBMANAGER_COMMAND_START: &str = "start";
-pub const DBMANAGER_COMMAND_STOP: &str = "stop";
-pub const DBMANAGER_COMMAND_CREATE: &str = "create";
-pub const DBMANAGER_COMMAND_UPGRADE: &str = "upgrade";
+pub const DBMANAGER_COMMAND_START: &[&str] = &["server", "start"];
+pub const DBMANAGER_COMMAND_STOP: &[&str] = &["server", "stop"];
+pub const DBMANAGER_COMMAND_CREATE: &[&str] = &["db", "create"];
+pub const DBMANAGER_COMMAND_UPGRADE: &[&str] = &["db", "upgrade"];
 
 pub const TD_KEEP: &str = ".tdkeep";
 
@@ -896,7 +895,8 @@ fn create_instance(instance: &Option<PathBuf>, profile: &Option<PathBuf>) {
 
 //noinspection DuplicatedCode
 /// Path to the apiserver regular-worker config file for an instance — the
-/// `database:` section the `td_dbmanager` one-shots read.
+/// merged config (`database_server:` + `database:`) the `td_dbmanager`
+/// one-shots read.
 fn apiserver_config_file(instance_absolute: &Path) -> PathBuf {
     get_workspace_path_for_instance(&Some(instance_absolute.to_path_buf()))
         .join(CONFIG_FOLDER)
@@ -908,10 +908,14 @@ fn apiserver_config_file(instance_absolute: &Path) -> PathBuf {
 }
 
 /// Build a `td_dbmanager <subcommand> --config-file <apiserver config>` command,
-/// carrying `TD_URI_REPOSITORY` so the embedded backend's data directory
-/// (`${env:TD_URI_REPOSITORY}/database`) resolves. The shared shape for the
+/// carrying `TD_URI_REPOSITORY` so the managed server's data directory
+/// (default `<TD_URI_REPOSITORY>/database`) resolves. The shared shape for the
 /// start / create / upgrade / stop one-shots.
-fn dbmanager_command(subcommand: &str, repository_absolute: &Path, config_file: &Path) -> Command {
+fn dbmanager_command(
+    subcommand: &[&str],
+    repository_absolute: &Path,
+    config_file: &Path,
+) -> Command {
     let dbmanager = name_program(&PathBuf::from(DBMANAGER));
     let mut binary = Command::new(dbmanager);
     if check_flag_env(TD_DETACHED_SUBPROCESSES) {
@@ -928,7 +932,7 @@ fn dbmanager_command(subcommand: &str, repository_absolute: &Path, config_file: 
             REPOSITORY_URI_ENV,
             prepend_slash(repository_absolute.to_path_buf()),
         )
-        .arg(subcommand)
+        .args(subcommand)
         .arg(APISERVER_ARGUMENT_CONFIG_FILE)
         .arg(config_file.to_string_lossy().to_string());
     binary
@@ -938,17 +942,18 @@ fn dbmanager_command(subcommand: &str, repository_absolute: &Path, config_file: 
 /// Used for the server lifecycle (`start`/`stop`) and `create`; `upgrade` keeps its
 /// own handling for the "already up to date" exit code.
 fn run_dbmanager(
-    subcommand: &str,
+    subcommand: &[&str],
     repository_absolute: &Path,
     config_file: &Path,
     instance: &Path,
 ) {
+    let label = subcommand.join(" ");
     match dbmanager_command(subcommand, repository_absolute, config_file).output() {
         Ok(output) => {
             if !output.status.success() {
                 show_std_out_and_err(&output);
                 error!(
-                    "Bad exit code running 'td_dbmanager {subcommand}' for instance '{}': {}",
+                    "Bad exit code running 'td_dbmanager {label}' for instance '{}': {}",
                     instance.display(),
                     output.status
                 );
@@ -957,7 +962,7 @@ fn run_dbmanager(
         }
         Err(error) => {
             error!(
-                "Error running 'td_dbmanager {subcommand}' for instance '{}': {}",
+                "Error running 'td_dbmanager {label}' for instance '{}': {}",
                 instance.display(),
                 error
             );
@@ -967,8 +972,8 @@ fn run_dbmanager(
 }
 
 /// Provision the schema against an already-running server (the `create` one-shot).
-/// The caller owns the server lifecycle (`start`/`stop`); for sidecar/remote the
-/// server is external and those are no-ops.
+/// The caller owns the server lifecycle (`start`/`stop`); for a remote database
+/// the server is external and those are no-ops.
 fn provision_database(repository_absolute: &Path, config_file: &Path, instance: &Path) {
     run_dbmanager(
         DBMANAGER_COMMAND_CREATE,
@@ -992,9 +997,9 @@ fn create_database(instance: &Option<PathBuf>) {
 
     let config_file = apiserver_config_file(&supervisor_instance_absolute);
 
-    // Standalone instance creation is a one-shot: bring the (embedded) server up,
+    // Standalone instance creation is a one-shot: bring the managed server up,
     // provision the schema against it, then bring it back down. `start`/`stop` are
-    // no-ops for sidecar/remote, whose server is external.
+    // no-ops for a remote database, whose server is external.
     run_dbmanager(
         DBMANAGER_COMMAND_START,
         &supervisor_repository_absolute,
@@ -1259,26 +1264,18 @@ fn command_start(arguments: StartArguments) {
                 create_instance(arguments.instance(), &None);
             }
 
-            // The (embedded) apiserver owns its in-process database server, booting it
-            // when it starts to serve — so the supervisor starts no persistent server
-            // here. A fresh instance still needs its schema provisioned first: do that
-            // against a transient server (bring it up, provision, bring it down), then
-            // let the apiserver boot and own it.
+            // Bring the managed server up (idempotent; no-op for remote) and
+            // leave it running for the app-only apiserver; `tdserver stop`
+            // brings it down. A fresh instance provisions its schema first.
             let apiserver_config = apiserver_config_file(&supervisor_instance_absolute);
+            run_dbmanager(
+                DBMANAGER_COMMAND_START,
+                &supervisor_repository_absolute,
+                &apiserver_config,
+                &supervisor_instance_absolute,
+            );
             if fresh_instance {
-                run_dbmanager(
-                    DBMANAGER_COMMAND_START,
-                    &supervisor_repository_absolute,
-                    &apiserver_config,
-                    &supervisor_instance_absolute,
-                );
                 provision_database(
-                    &supervisor_repository_absolute,
-                    &apiserver_config,
-                    &supervisor_instance_absolute,
-                );
-                run_dbmanager(
-                    DBMANAGER_COMMAND_STOP,
                     &supervisor_repository_absolute,
                     &apiserver_config,
                     &supervisor_instance_absolute,
@@ -1447,8 +1444,17 @@ fn command_stop(arguments: StopArguments) {
         }
     }
 
-    // The (embedded) apiserver owns and stops its in-process database server on its
-    // own shutdown, so there is nothing for the supervisor to stop here.
+    // Stop the managed server now that the workers are down (idempotent;
+    // no-op for remote).
+    let supervisor_repository =
+        get_repository_path_for_instance(&Some(supervisor_instance_absolute.clone()));
+    let supervisor_repository_absolute = to_absolute(&supervisor_repository.clone()).unwrap();
+    run_dbmanager(
+        DBMANAGER_COMMAND_STOP,
+        &supervisor_repository_absolute,
+        &apiserver_config_file(&supervisor_instance_absolute),
+        &supervisor_instance_absolute,
+    );
 }
 
 fn command_status(arguments: StatusArguments) {

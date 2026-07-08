@@ -106,15 +106,42 @@ fn mounted_config_injects_secret_keys() {
 #[test]
 fn secret_auto_placeholders_are_injected() {
     let profile = build_profile(&[(
-        "apiserver.database.yaml",
-        "database:\n  system:\n    password: ${{secretAuto:postgres_password}}\n",
+        "dbmanager.database.yaml",
+        "database_server:\n  password: ${{secretAuto:postgres_password}}\n",
     )]);
-    let mut spec = build_pod_spec_mounting(&["dbcreate"], &["apiserver.database.yaml"]);
+    let mut spec = build_pod_spec_mounting(&["dbcreate"], &["dbmanager.database.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
-    secrets.insert("td-app-apiserver-secret-config-apiserver.database.yaml".to_owned());
+    secrets.insert("td-app-dbmanager-secret-config-dbmanager.database.yaml".to_owned());
     inject_secret_envs(&profile, "dbmanager.yaml", &mut spec, &secrets).expect("ok");
     let injected = names(&spec, "dbcreate");
-    assert!(injected.contains(&"DATABASE__SYSTEM__PASSWORD".to_owned()));
+    assert!(injected.contains(&"DATABASE_SERVER__PASSWORD".to_owned()));
+}
+
+/// The privileged server config is its own file: a pod that does not mount it
+/// (the apiserver) never receives its secret env vars.
+#[test]
+fn server_secrets_stay_out_of_pods_not_mounting_the_file() {
+    let profile = build_profile(&[
+        (
+            "apiserver.database.yaml",
+            "database:\n  apiserver:\n    password: ${{secretAuto:postgres_password}}\n",
+        ),
+        (
+            "dbmanager.database.yaml",
+            "database_server:\n  password: ${{secretAuto:postgres_password}}\n",
+        ),
+    ]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.database.yaml"]);
+    let mut secrets: BTreeSet<String> = BTreeSet::new();
+    secrets.insert("td-app-apiserver-secret-config-apiserver.database.yaml".to_owned());
+    secrets.insert("td-app-dbmanager-secret-config-dbmanager.database.yaml".to_owned());
+    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
+    let injected = names(&spec, "apiserver");
+    assert!(injected.contains(&"DATABASE__APISERVER__PASSWORD".to_owned()));
+    assert!(
+        !injected.contains(&"DATABASE_SERVER__PASSWORD".to_owned()),
+        "the server secret must not reach a pod that does not mount its config"
+    );
 }
 
 #[test]

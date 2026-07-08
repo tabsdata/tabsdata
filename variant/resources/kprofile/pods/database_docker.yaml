@@ -72,13 +72,13 @@ spec:
     - name: POSTGRES_USER
       valueFrom:
         secretKeyRef:
-          name: td-app-apiserver-secret-config-apiserver.database.yaml
-          key: DATABASE__SYSTEM__USERNAME
+          name: td-app-dbmanager-secret-config-dbmanager.database.yaml
+          key: DATABASE_SERVER__USERNAME
     - name: POSTGRES_PASSWORD
       valueFrom:
         secretKeyRef:
-          name: td-app-apiserver-secret-config-apiserver.database.yaml
-          key: DATABASE__SYSTEM__PASSWORD
+          name: td-app-dbmanager-secret-config-dbmanager.database.yaml
+          key: DATABASE_SERVER__PASSWORD
     volumeMounts:
     - name: database
       mountPath: /var/lib/postgresql/data

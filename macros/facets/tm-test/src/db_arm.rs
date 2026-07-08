@@ -88,7 +88,7 @@ impl DbComponents {
     /// list is empty.
     pub(crate) fn paths(&self) -> Vec<TokenStream2> {
         if self.0.is_empty() {
-            vec![quote! { ::td_database::system::ApiserverComponent }]
+            vec![quote! { ::td_database::components::ApiserverComponent }]
         } else {
             self.0.iter().map(|p| quote! { #p }).collect()
         }
@@ -108,7 +108,7 @@ pub(crate) fn db_arms(components: &[TokenStream2]) -> Vec<DbArm> {
                 setup_expr: quote! {
                     {
                         const __TD_TEST_COMPONENTS:
-                            &[&dyn ::td_database::system::SchemaComponent] =
+                            &[&dyn ::td_database::components::SchemaComponent] =
                             &[#(& #components),*];
                         ::td_test::db::DbTestSetup::<::td_test::db::#provider>::new(
                             __TD_TEST_COMPONENTS,

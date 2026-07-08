@@ -8,13 +8,13 @@
 //!
 //! Plain reads against a pool already pinned to the schema, needing no privilege:
 //! the serving [`TdPool`](crate::pool::TdPool) runs them as its runtime check, and
-//! [`SystemPool`](crate::system::SystemPool) reuses them to decide what to upgrade.
+//! [`AdminPool`](crate::components::AdminPool) reuses them to decide what to upgrade.
 
+use crate::components::sql::is_undefined_table_error;
 use crate::dynamic::DynamicPool;
 use crate::error::DbError;
 use crate::sea_query::builder::SeaQueryExt;
 use crate::sea_query::kind::DatabaseKind;
-use crate::system::sql::is_undefined_table_error;
 use sea_query::{Expr, ExprTrait, Iden, Query};
 use sqlx::Error;
 use std::cmp::Ordering;

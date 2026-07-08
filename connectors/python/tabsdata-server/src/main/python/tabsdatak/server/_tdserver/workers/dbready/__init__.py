@@ -9,8 +9,6 @@ import logging
 import sys
 import time
 
-import yaml
-
 from tabsdatak._logging import setup_logging
 from tabsdatak.common._interpreter.python.binary import Binary, current_scripts_dir
 from tabsdatak.common._runtime.worker.error import ExitCode, WorkerErrorCode
@@ -18,15 +16,10 @@ from tabsdatak.common._runtime.worker.poll import PollWorker
 
 logger = logging.getLogger(__name__)
 
-APISERVER_BINARY = "td_apiserver"
-
-DATABASE_KEY = "database"
-MODE_KEY = "mode"
-IN_PROCESS_MODES = ("embedded", "sidecar")
+DBMANAGER_BINARY = "td_dbmanager"
+DBMANAGER_PING = ("db", "ping")
 
 ARG_CONFIG_FILE = "--config-file"
-ARG_DB_SCHEMA = "--db-schema"
-DB_SCHEMA_PING = "ping"
 ARG_LOG_CONFIG = "--log-config"
 
 ARG_LOG_CONFIG_PY = "--log-config-py"
@@ -38,7 +31,7 @@ PROG = "td_dbready"
 DESCRIPTION = "Wait until the database becomes reachable."
 CONFIG_FILE_HELP = "Path to a database configuration file. Repeatable."
 LOG_CONFIG_PY_HELP = "Path to a logging configuration YAML for this worker."
-LOG_CONFIG_RS_HELP = "Path to a logging configuration YAML forwarded to the apiserver."
+LOG_CONFIG_RS_HELP = "Path to a logging configuration YAML forwarded to the db manager."
 TIMEOUT_HELP = "Maximum number of seconds to wait for the database."
 INTERVAL_HELP = "Number of seconds between readiness checks."
 METAVAR_PATH = "PATH"
@@ -64,16 +57,15 @@ class DbReady(PollWorker):
 
     def ready(self) -> bool:
         self.attempts += 1
-        binary = current_scripts_dir() / Binary(name=APISERVER_BINARY, prefix="").exe()
+        binary = current_scripts_dir() / Binary(name=DBMANAGER_BINARY, prefix="").exe()
         if not binary.is_file():
             raise WorkerErrorCode.WORKER_1.exception(
                 argv=[str(binary)],
-                detail=BINARY_NOT_FOUND.format(binary=APISERVER_BINARY, path=binary),
+                detail=BINARY_NOT_FOUND.format(binary=DBMANAGER_BINARY, path=binary),
             )
-        argv = [str(binary)]
+        argv = [str(binary), *DBMANAGER_PING]
         for config_file in self.config_files:
             argv += [ARG_CONFIG_FILE, config_file]
-        argv += [ARG_DB_SCHEMA, DB_SCHEMA_PING]
         argv += [ARG_LOG_CONFIG, self.log_config_rs]
         completed = self.submit(argv, timeout=self.timeout, check=False)
         if completed.returncode == 0:
@@ -123,27 +115,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def database_mode(config_files: list[str]) -> str | None:
-    mode: str | None = None
-    for config_file in config_files:
-        with open(config_file, encoding="utf-8") as handle:
-            loaded = yaml.safe_load(handle) or {}
-        database = loaded.get(DATABASE_KEY)
-        if isinstance(database, dict) and MODE_KEY in database:
-            mode = database[MODE_KEY]
-    return mode
-
-
 def main() -> int:
     args = build_parser().parse_args()
     setup_logging(args.log_config_py)
-    mode = database_mode(args.config_file)
-    if mode in IN_PROCESS_MODES:
-        logger.info(
-            f"Polling the database for readiness was skipped: the database runs "
-            f"in-process (mode '{mode}'), so there is no separate server to wait for."
-        )
-        return int(ExitCode.SUCCESS)
     worker = DbReady(
         config_files=args.config_file,
         log_config_rs=args.log_config_rs,
@@ -151,7 +125,7 @@ def main() -> int:
         interval=args.interval,
     )
     logger.info(
-        f"Polling the database for readiness via {APISERVER_BINARY} "
+        f"Polling the database for readiness via {DBMANAGER_BINARY} "
         f"(configs={args.config_file}, timeout={args.timeout}s, "
         f"interval={args.interval}s)."
     )

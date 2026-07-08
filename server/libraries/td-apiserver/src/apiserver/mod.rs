@@ -13,7 +13,7 @@ use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
 use td_bridge::BridgeProviderHandle;
 use td_common::server_runner::ServerRunnable;
-use td_database::system::{APISERVER_COMPONENT_KEY, ServingPools};
+use td_database::components::{APISERVER_COMPONENT_KEY, ServingPools};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_services::execution::services::runtime_info::RuntimeContext;
@@ -95,7 +95,6 @@ impl ApiServerCtx {
         let apiserver_pool = serving_pools.get(APISERVER_COMPONENT_KEY)?.clone();
         let context = Context {
             apiserver_pool,
-            database_descriptor: Arc::new(config.database.clone()),
             server_addresses: Arc::new(config.addresses.clone()),
             jwt_config: Arc::new(config.jwt.clone()),
             // Authorization source built from the wired registry (built-in kinds

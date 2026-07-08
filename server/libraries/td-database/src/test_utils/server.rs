@@ -29,8 +29,10 @@
 //! so they leave it warm and reuse it. Each test isolates itself on its own
 //! uniquely-named schema (see [`super::postgres`]).
 
-use crate::config::EmbeddedConfig;
+use crate::error::DbError;
 use crate::pool::connect::redacted_url;
+use crate::server::{BootConfig, load_password};
+use postgresql_embedded::Settings;
 use sqlx::postgres::PgPoolOptions;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
@@ -68,12 +70,11 @@ fn admin_port() -> u16 {
 /// Boot config for the shared server: persistent (survives across tests/runs),
 /// fixed `data_dir`, fixed worktree-derived port (so the live URL is known
 /// without reading `postmaster.pid`).
-pub fn embedded_config() -> EmbeddedConfig {
-    EmbeddedConfig {
+pub fn embedded_config() -> BootConfig {
+    BootConfig {
         data_dir: Some(data_dir()),
         port: Some(admin_port()),
         persistent: true,
-        username: None,
         password: None,
     }
 }
@@ -87,7 +88,7 @@ static STARTED: OnceCell<()> = OnceCell::const_new();
 /// connect, which is exactly the signal the boot loop wants.
 async fn probe() -> bool {
     let cfg = embedded_config();
-    let Ok((mut url, user, pass)) = crate::embedded::live_admin(&cfg) else {
+    let Ok((mut url, user, pass)) = admin_identity(&cfg) else {
         return false;
     };
     url.set_username(&user).ok();
@@ -145,7 +146,7 @@ pub async fn ensure_started() {
                 // the connect-probe above, not by a possibly-stale `postmaster.pid`;
                 // its boot is Drop-safe, so even a lost race leaves a peer's server
                 // untouched.
-                crate::embedded::boot_detached(&embedded_config())
+                crate::server::boot_detached(&embedded_config())
                     .await
                     .expect("boot shared test postgres");
                 // `pg_ctl start -w` already waits for readiness, but confirm via a
@@ -168,10 +169,30 @@ pub async fn ensure_started() {
         .await;
 }
 
-/// Redacted base URL + superuser credentials for the running shared server, for
-/// building per-schema admin and serving connectables. Call after [`ensure_started`].
+/// Credential-free base URL + superuser credentials for the running shared
+/// server, for building per-schema admin and serving connectables. Call after
+/// [`ensure_started`].
 pub fn admin_base() -> (Url, String, String) {
-    let (url, user, pass) = crate::embedded::live_admin(&embedded_config())
-        .expect("shared test postgres must be running (call ensure_started first)");
-    (redacted_url(&url), user, pass)
+    admin_identity(&embedded_config())
+        .expect("shared test postgres must be running (call ensure_started first)")
+}
+
+/// Admin URL and superuser identity for the **fixed-port** shared server. The
+/// URL is credential-free; callers supply the identity in explicit fields.
+fn admin_identity(cfg: &BootConfig) -> Result<(Url, String, String), DbError> {
+    let port = cfg
+        .port
+        .ok_or_else(|| DbError::EmbeddedPostgres("no fixed port configured".to_string()))?;
+    let settings = Settings {
+        port,
+        ..Settings::default()
+    };
+    let url = Url::parse(&settings.url("postgres"))
+        .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
+    let username = Settings::default().username;
+    let password = match cfg.password.clone() {
+        Some(password) => password,
+        None => load_password(&cfg.data_dir_or_default())?,
+    };
+    Ok((redacted_url(&url), username, password))
 }

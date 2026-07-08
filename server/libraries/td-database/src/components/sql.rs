@@ -2,18 +2,15 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Privileged DDL the `system` module runs to provision and grant. These emit raw
-//! `CREATE ROLE` / `CREATE SCHEMA` / `GRANT` / `ALTER DEFAULT PRIVILEGES`
-//! statements — session/DDL statements sea_query does not model — run on
-//! [`super::SystemPool`].
+//! Privileged provisioning DDL — session/DDL statements sea_query does not
+//! model — run on [`super::AdminPool`].
 
 use crate::dynamic::DynamicPool;
 use crate::error::DbError;
 
 #[cfg(postgres)]
 pub(super) fn create_owner_role_sql(owner: &str, password: &str) -> String {
-    // Race-safe idempotent create (see `create_app_role_sql`): create unconditionally
-    // and swallow the duplicate, since concurrent provisions can both pass an
+    // Race-safe idempotent create: concurrent provisions can both pass an
     // `IF NOT EXISTS` check and one then hits the `pg_authid` unique index.
     format!(
         "DO $$ BEGIN CREATE ROLE \"{owner}\" LOGIN PASSWORD '{password}'; \
@@ -68,8 +65,7 @@ pub(super) async fn execute_batch_tx(pool: &DynamicPool, stmts: &[String]) -> Re
 }
 
 /// True if a database error reports a missing `tabsdata_system` table for any
-/// backend enabled at compile time. Each arm is gated on its backend feature so
-/// the check stays tight to what's actually linked in.
+/// backend enabled at compile time.
 pub(crate) fn is_undefined_table_error(code: Option<&str>, message: &str) -> bool {
     #[cfg(postgres)]
     if matches!(code, Some("42P01")) {

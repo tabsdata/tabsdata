@@ -2,54 +2,73 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Standalone database-administration CLI: create / upgrade / check / report /
-//! drop the schema components of a deployment using the same td-database `system`
-//! machinery the apiserver uses at boot, but in its own binary so DB lifecycle can
-//! be driven without starting the server. The connection target comes entirely
-//! from the shared config's `database:` section; there are no override flags.
+//! Standalone database-administration CLI, two command groups that never mix
+//! configs: `server start|serve|stop` reads only the `database_server:` entry,
+//! `db create|upgrade|check|status|drop|ping` reads the `database:` map
+//! (`create`/`drop` also need the server entry for the privileged pool).
+//!
+//! Import rule: registry-dependent operations go through `te_database` (the
+//! edition facade, aliased `dbm`); server lifecycle and config types come
+//! from `td_database` directly (edition-agnostic).
 
 use std::env;
 use std::process;
 
-use clap::{Args, ValueEnum};
+use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use td_common::attach::attach;
 use td_common::status::ExitStatus;
 use td_common::{about, logging};
-use td_database::config::DatabaseDescriptor;
+use td_database::config::{ComponentConfig, DatabaseComponents};
 use td_database::error::DbError;
+use td_database::server::{bootable_server, start_server, stop_server};
 use td_process::launcher::cli::Cli;
 use td_process::launcher::hooks;
 use te_database as dbm;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// Keep the schema-component registrations in this binary's final link (see the
-// macro docs); without the anchor the linker drops the inventory submissions and
-// the registry comes up empty.
+// Without this anchor the linker drops the inventory submissions and the
+// component registry comes up empty.
 te_database::force_link!();
 
-/// Slim configuration: only the `database:` section is relevant to DB admin.
-/// Other apiserver config keys present in the file are ignored.
+/// The two sections this binary consumes; other apiserver config keys in the
+/// file are ignored.
 #[derive(Clone, Default, Serialize, Deserialize)]
 struct DbManagerConfig {
     #[serde(default)]
-    database: DatabaseDescriptor,
+    database_server: Option<ComponentConfig>,
+    #[serde(default)]
+    database: DatabaseComponents,
 }
 
 impl td_process::launcher::config::Config for DbManagerConfig {}
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Subcommand)]
 enum Command {
-    /// Start the in-process database server (embedded only; no-op otherwise).
+    /// Run the database server (reads only `database_server:`).
+    #[command(subcommand)]
+    Server(ServerCommand),
+    /// Manage the schema components (reads `database:`; `create`/`drop` also
+    /// need `database_server:`).
+    #[command(subcommand)]
+    Db(DbCommand),
+}
+
+#[derive(Debug, Clone, Copy, Subcommand)]
+enum ServerCommand {
+    /// Start the database server (no-op without a local `database_server:`).
     Start,
-    /// Start the in-process database server and stay in the foreground until a
-    /// shutdown signal is received, then stop it (embedded only).
+    /// Start the database server and stay in the foreground until a shutdown
+    /// signal is received, then stop it (requires a local `database_server:`).
     Serve,
-    /// Stop the in-process database server
-    /// (embedded & local sidecar only; no-op otherwise).
+    /// Stop the database server (no-op without a local `database_server:`).
     Stop,
+}
+
+#[derive(Debug, Clone, Copy, Subcommand)]
+enum DbCommand {
     /// Provision and upgrade all configured schemas.
     Create,
     /// Upgrade all configured schemas to the current version.
@@ -59,34 +78,135 @@ enum Command {
     /// Report each schema's recorded version.
     Status,
     /// Drop all configured schemas and their owner roles (destructive).
-    Drop,
+    Drop {
+        /// Required to run this destructive command.
+        #[clap(long)]
+        force: bool,
+    },
     /// Check that every configured schema is reachable on its serving pool.
     Ping,
 }
 
 #[derive(Debug, Clone, Args)]
 struct DbManagerParams {
-    /// The db-management command to run.
-    #[clap(value_enum)]
-    command: Command,
-    /// Required to run the destructive `drop` command.
-    #[clap(long)]
-    force: bool,
+    // Optional so the bare `--config default|current` invocations (exclusive
+    // flag, handled before the app runs) still parse; run() requires it.
+    #[command(subcommand)]
+    command: Option<Command>,
 }
 
-/// Run `op` against a freshly-opened privileged (superuser) system pool, closing
-/// it afterward whether the operation succeeds or fails. Only the commands that
-/// need superuser DDL use it (`create` provisions schemas/roles, `drop` drops
-/// them); `upgrade` runs as the schema owner, and `ping`/`check`/`status` reach
-/// the serving pools as the app would, so they stay out of this path.
-async fn with_system(
-    descriptor: &DatabaseDescriptor,
-    op: impl AsyncFnOnce(&dbm::SystemPool) -> Result<(), DbError>,
+/// `serve` exists to BE the database process: anything less than a bootable
+/// local server entry is a misconfiguration, not a no-op.
+async fn serve(server: Option<&ComponentConfig>) -> Result<(), DbError> {
+    bootable_server(server)?;
+    start_server(server).await?;
+    info!("Database server running; waiting for shutdown signal");
+    wait_for_shutdown().await;
+    info!("Shutdown signal received; stopping database server");
+    stop_server(server).await
+}
+
+/// Provision every component's schema and owner role, then upgrade each.
+async fn create(
+    components: &DatabaseComponents,
+    server: Option<&ComponentConfig>,
 ) -> Result<(), DbError> {
-    let system = dbm::connect_system(descriptor).await?;
-    let result = op(&system).await;
-    system.close().await;
+    if let Some(server) = server {
+        warn_url_divergence(components, server);
+    }
+    with_server(server, async |admin| {
+        info!("Creating database");
+        dbm::provision_all(components, admin).await?;
+        dbm::upgrade_all(components).await?;
+        info!("Database created");
+        Ok(())
+    })
+    .await
+}
+
+/// Runs as each schema's owner (DDL on its own schema) — no privileged pool.
+async fn upgrade(components: &DatabaseComponents) -> Result<(), DbError> {
+    info!("Upgrading database");
+    dbm::upgrade_all(components)
+        .await
+        .inspect(|()| info!("Database upgraded"))
+}
+
+/// The same correctness check the apiserver runs on its serving pools.
+async fn check(components: &DatabaseComponents) -> Result<(), DbError> {
+    dbm::check_all(components)
+        .await
+        .inspect(|()| info!("Database is up to date"))
+}
+
+/// Report each component's recorded version.
+async fn status(components: &DatabaseComponents) -> Result<(), DbError> {
+    for s in dbm::status(components).await? {
+        info!(
+            component = s.key,
+            schema = %s.schema,
+            db_version = ?s.db_version,
+            current = s.current,
+            "schema status"
+        );
+    }
+    Ok(())
+}
+
+async fn drop_components(
+    components: &DatabaseComponents,
+    server: Option<&ComponentConfig>,
+) -> Result<(), DbError> {
+    with_server(server, async |admin| {
+        info!("Dropping database");
+        dbm::drop_all(components, admin).await?;
+        info!("Database dropped");
+        Ok(())
+    })
+    .await
+}
+
+/// Ping each component's serving pool — the way the apiserver reaches it.
+async fn ping(components: &DatabaseComponents) -> Result<(), DbError> {
+    dbm::ping_all(components)
+        .await
+        .inspect(|()| info!("Database is reachable"))
+}
+
+/// Run `op` against a freshly-opened privileged pool on the
+/// `database_server:` entry, closing it afterward.
+async fn with_server(
+    server: Option<&ComponentConfig>,
+    op: impl AsyncFnOnce(&dbm::AdminPool) -> Result<(), DbError>,
+) -> Result<(), DbError> {
+    let server = server.ok_or(DbError::MissingServerEntry)?;
+    let pool = dbm::connect_server(server).await?;
+    let result = op(&pool).await;
+    pool.close().await;
     result
+}
+
+/// A component URL pointing at a different server than the entry is
+/// legitimate (e.g. a pooler), but usually a typo'd port — flag it.
+fn warn_url_divergence(components: &DatabaseComponents, server: &ComponentConfig) {
+    const DEFAULT_PORT: u16 = 5432;
+    let server_url = server.conn.url();
+    let server_host = server_url.host_str().unwrap_or_default();
+    let server_port = server_url.port().unwrap_or(DEFAULT_PORT);
+    for (key, entry) in components {
+        if !entry.conn.is_postgres() {
+            continue;
+        }
+        let url = entry.conn.url();
+        let host = url.host_str().unwrap_or_default();
+        let port = url.port().unwrap_or(DEFAULT_PORT);
+        if host != server_host || port != server_port {
+            warn!(
+                "component '{key}' targets {host}:{port}, but `database_server:` is \
+                 {server_host}:{server_port}; provisioning runs on the latter"
+            );
+        }
+    }
 }
 
 async fn wait_for_shutdown() {
@@ -115,83 +235,38 @@ fn run() {
     Cli::<DbManagerConfig, DbManagerParams>::exec_async(
         td_apiserver::CONFIG_NAME,
         |config, params| async move {
-            let descriptor = &config.database;
-            if let Err(e) = dbm::validate_descriptor(descriptor) {
+            let Some(command) = params.command else {
+                error!("No command given; see --help for the command groups");
+                return ExitStatus::GeneralError;
+            };
+            let components = &config.database;
+            let server = config.database_server.as_ref();
+            // Each group validates only the section it reads.
+            if matches!(command, Command::Db(_))
+                && let Err(e) = dbm::validate_components(components)
+            {
                 error!("Invalid database configuration: {e:#?}");
                 return ExitStatus::GeneralError;
             }
-            if matches!(params.command, Command::Drop) && !params.force {
-                error!("Refusing to drop schemas without --force");
-                return ExitStatus::GeneralError;
-            }
 
-            let outcome: Result<(), DbError> = match params.command {
-                // Server lifecycle: bring the in-process embedded server up
-                // (detached, so it outlives this command) or stop it. No-op for
-                // sidecar/remote, whose server is not ours to run.
-                Command::Start => dbm::start_server(descriptor).await,
-                Command::Serve => match dbm::start_server(descriptor).await {
-                    Ok(()) => {
-                        info!("Database server running; waiting for shutdown signal");
-                        wait_for_shutdown().await;
-                        info!("Shutdown signal received; stopping database server");
-                        dbm::stop_server(descriptor).await
-                    }
-                    Err(e) => Err(e),
+            let outcome: Result<(), DbError> = match command {
+                Command::Server(command) => match command {
+                    ServerCommand::Start => start_server(server).await,
+                    ServerCommand::Serve => serve(server).await,
+                    ServerCommand::Stop => stop_server(server).await,
                 },
-                Command::Stop => dbm::stop_server(descriptor).await,
-                // App ping: reach each component's serving pool from the
-                // descriptor and ping it — the way the apiserver does — with no
-                // privileged system pool.
-                Command::Ping => dbm::ping_all(descriptor)
-                    .await
-                    .inspect(|()| info!("Database is reachable")),
-                Command::Create => {
-                    with_system(descriptor, async |system| {
-                        info!("Creating database");
-                        dbm::provision_all(descriptor, system).await?;
-                        dbm::upgrade_all(descriptor).await?;
-                        info!("Database created");
-                        Ok(())
-                    })
-                    .await
-                }
-                // Upgrade runs as each schema's owner (DDL on its own schema), so
-                // it needs no superuser system pool.
-                Command::Upgrade => {
-                    info!("Upgrading database");
-                    dbm::upgrade_all(descriptor)
-                        .await
-                        .inspect(|()| info!("Database upgraded"))
-                }
-                // App check: validate the descriptor against the database it
-                // connects to — the same correctness check the apiserver runs on
-                // its serving pool — with no privileged system pool.
-                Command::Check => dbm::check_all(descriptor)
-                    .await
-                    .inspect(|()| info!("Database is up to date")),
-                // App status: read each component's recorded version from its
-                // serving pool, no privileged system pool.
-                Command::Status => dbm::status(descriptor).await.map(|statuses| {
-                    for s in statuses {
-                        info!(
-                            component = s.key,
-                            schema = %s.schema,
-                            db_version = ?s.db_version,
-                            current = s.current,
-                            "schema status"
-                        );
+                Command::Db(command) => match command {
+                    DbCommand::Create => create(components, server).await,
+                    DbCommand::Upgrade => upgrade(components).await,
+                    DbCommand::Check => check(components).await,
+                    DbCommand::Status => status(components).await,
+                    DbCommand::Drop { force: false } => {
+                        error!("Refusing to drop schemas without --force");
+                        return ExitStatus::GeneralError;
                     }
-                }),
-                Command::Drop => {
-                    with_system(descriptor, async |system| {
-                        info!("Dropping database");
-                        dbm::drop_all(descriptor, system).await?;
-                        info!("Database dropped");
-                        Ok(())
-                    })
-                    .await
-                }
+                    DbCommand::Drop { force: true } => drop_components(components, server).await,
+                    DbCommand::Ping => ping(components).await,
+                },
             };
 
             match outcome {

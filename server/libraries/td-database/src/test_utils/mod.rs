@@ -6,18 +6,16 @@
 //! for one test" — used by td-test's `DbBackendProvider` impls and, directly, by
 //! td-database's own tests.
 //!
-//! A [`TestDb`] pairs a privileged [`SystemPool`] with the serving [`TdPool`] a
+//! A [`TestDb`] pairs a privileged [`AdminPool`] with the serving [`TdPool`] a
 //! test queries (and, for the embedded backend, owns the private embedded server
 //! so it stops when the test ends). Returned databases are freshly connected but
 //! **un-upgraded**; callers that need the schema applied call [`TestDb::upgrade`].
 
+use crate::components::{AdminPool, ApiserverComponent, SchemaComponent};
 use crate::config::{DatabaseConfig, PoolConfig, Schema};
 use crate::dynamic::DynamicPool;
 use crate::error::DbError;
 use crate::pool::TdPool;
-use crate::system::ApiserverComponent;
-use crate::system::SchemaComponent;
-use crate::system::SystemPool;
 use std::ops::Deref;
 use std::time::Duration;
 use tracing::warn;
@@ -69,7 +67,7 @@ impl TestDbCleanup {
         let TestDbCleanup::PostgresSchemas { admin, schemas } = self else {
             return;
         };
-        match SystemPool::connect(&admin).await {
+        match AdminPool::connect(&admin).await {
             Ok(pool) => {
                 for schema in &schemas {
                     if let Err(error) = pool.drop_schema_cascade(schema).await {
@@ -83,7 +81,7 @@ impl TestDbCleanup {
     }
 }
 
-/// A test database: a privileged [`SystemPool`] and the serving pool, both bound to
+/// A test database: a privileged [`AdminPool`] and the serving pool, both bound to
 /// this test's **own unique schema** of the shared server. On postgres [`Drop`]
 /// drops the schema; sqlite has a temp file the next run wipes. Derefs to the
 /// serving [`TdPool`] so queries read like production.
@@ -91,7 +89,7 @@ pub struct TestDb {
     /// Serving pool a test queries.
     pub serving: TdPool,
     /// Privileged (superuser) pool on the same schema — runs upgrades/checks.
-    pub system: SystemPool,
+    pub admin: AdminPool,
     /// The schema the serving pool is scoped to.
     schema: Schema,
     /// The live server URL **with superuser credentials**, for tests that connect
@@ -162,6 +160,6 @@ impl TestDb {
     /// Apply the apiserver schema to its current version, via the real
     /// [`ApiserverComponent`] on the privileged system pool.
     pub async fn upgrade(&self) -> Result<(), DbError> {
-        ApiserverComponent.upgrade(&self.system).await
+        ApiserverComponent.upgrade(&self.admin).await
     }
 }

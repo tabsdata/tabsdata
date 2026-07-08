@@ -3,7 +3,7 @@
 //
 
 use sea_query::{ColumnDef, Iden, Query, Table};
-use td_database::system::{SchemaComponent, SchemaSource};
+use td_database::components::{SchemaComponent, SchemaSource};
 use td_schema::schema::backend::Backend;
 
 #[derive(Iden)]

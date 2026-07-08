@@ -19,28 +19,32 @@ jwt:
   access_token_expiration: 3600
 request_timeout: 60
 orchestrator: supervisor
+# The server td_dbmanager boots on this URL's port; ${embedded} = the
+# generated credentials persisted next to the data dir.
+database_server:
+  url: postgres://localhost:2462/postgres
+  username: ${embedded}
+  password: ${embedded}
+  min_connections: 1
+  max_connections: 2
+  acquire_timeout: 30
+  max_lifetime: 1800
+  idle_timeout: 30
+  test_before_acquire: true
+  log_level: off
 database:
-  mode: embedded
-  system:
-    data_dir: ${env:TD_URI_REPOSITORY}/database
-    persistent: true
+  apiserver:
+    url: postgres://localhost:2462/postgres
+    schema: td_apiserver
+    username: td_apiserver
+    password: ${embedded}
     min_connections: 1
-    max_connections: 2
+    max_connections: 10
     acquire_timeout: 30
-    max_lifetime: 1800
-    idle_timeout: 30
+    max_lifetime: 3600
+    idle_timeout: 60
     test_before_acquire: true
     log_level: off
-  components:
-    apiserver:
-      schema: td_apiserver
-      min_connections: 1
-      max_connections: 10
-      acquire_timeout: 30
-      max_lifetime: 3600
-      idle_timeout: 60
-      test_before_acquire: true
-      log_level: off
 storage:
   mounts:
     - id: ROOT

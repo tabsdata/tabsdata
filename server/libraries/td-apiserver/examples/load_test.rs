@@ -6,16 +6,16 @@ use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::RngExt;
 use rand::prelude::{IndexedRandom, IteratorRandom};
-use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::time::Instant;
 use strum::IntoEnumIterator;
+use td_common::env::DATABASE_DIR_ENV;
 use td_common::logging;
 use td_common::logging::{CONSOLE_PROFILE, LoggingOptions};
 use td_database::config::{
-    BackendConfig, ComponentOverride, DatabaseDescriptor, DatabaseMode, EmbeddedConfig, Schema,
-    SystemConfig,
+    BackendConfig, ComponentConfig, DatabaseComponents, EMBEDDED_CREDENTIAL, Schema,
 };
+use td_database::server::{start_server, stop_server};
 use td_execution::TransactionBy;
 use td_objects::Buildable;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
@@ -30,14 +30,17 @@ use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_queries::LiveEntry;
 use td_queries::test_utils::SeedEntry;
 use te_database::{
-    APISERVER_COMPONENT_KEY, build_pool, connect_system, provision_all, start_server, stop_server,
-    upgrade_all,
+    APISERVER_COMPONENT_KEY, build_pool, connect_server, provision_all, upgrade_all,
 };
 use tracing::Level;
 use tracing::{debug, info};
+use url::Url;
 
 /// Schema the load test isolates its objects in.
 const LOAD_TEST_SCHEMA: &str = "td_load_test";
+
+/// Fixed port the load test's managed server listens on.
+const LOAD_TEST_PORT: u16 = 7462;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -102,45 +105,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     info!("Starting load test with config: {:?}", args);
 
-    // Build the embedded database descriptor the apiserver/td_dbmanager consume,
+    // Build the component map + server entry the apiserver/td_dbmanager consume,
     // then drive the production lifecycle helpers — start the server, provision +
     // upgrade, open the serving pool — instead of hand-rolling credential plumbing.
-    // The detached embedded server is brought up by `start_server` and stopped by
-    // `stop_server` at the end; its owner password is generated and persisted under
-    // the data dir.
-    let descriptor = DatabaseDescriptor {
-        mode: DatabaseMode::Embedded,
-        conn: None,
-        system: Some(SystemConfig {
-            conn: BackendConfig::embedded_postgres(EmbeddedConfig {
-                data_dir: Some(td_common::tdtestdir!().join("postgres")),
-                port: None,
-                persistent: true,
-                username: None,
-                password: None,
-            }),
-            username: None,
-            password: None,
-            pool: Default::default(),
-        }),
-        components: BTreeMap::from([(
-            APISERVER_COMPONENT_KEY.to_owned(),
-            ComponentOverride {
-                schema: Some(Schema::new(LOAD_TEST_SCHEMA)),
-                ..Default::default()
-            },
-        )]),
+    // The detached server is brought up by `start_server` and stopped by
+    // `stop_server` at the end; its data dir comes from TD_DATABASE_DIR and its
+    // credentials are the generated ones (`${embedded}`).
+    unsafe {
+        std::env::set_var(
+            DATABASE_DIR_ENV,
+            td_common::tdtestdir!().join("postgres").join("data"),
+        )
     };
+    let url = Url::parse(&format!("postgres://localhost:{LOAD_TEST_PORT}/postgres"))?;
+    let server = ComponentConfig {
+        conn: BackendConfig::from_url(url.clone())?,
+        schema: None,
+        username: Some(EMBEDDED_CREDENTIAL.to_owned()),
+        password: Some(EMBEDDED_CREDENTIAL.to_owned()),
+        pool: Default::default(),
+    };
+    let apiserver_entry = ComponentConfig {
+        conn: BackendConfig::from_url(url)?,
+        schema: Some(Schema::new(LOAD_TEST_SCHEMA)),
+        username: None,
+        password: Some(EMBEDDED_CREDENTIAL.to_owned()),
+        pool: Default::default(),
+    };
+    let components =
+        DatabaseComponents::from([(APISERVER_COMPONENT_KEY.to_owned(), apiserver_entry)]);
 
-    info!("Connecting to database with descriptor: {descriptor:?}");
-    // The apiserver no longer boots the embedded server; bring it up first (the
-    // detached server `td_dbmanager start` would otherwise own), then connect.
-    start_server(&descriptor).await?;
-    let system = connect_system(&descriptor).await?;
-    provision_all(&descriptor, &system).await?;
-    system.close().await;
-    upgrade_all(&descriptor).await?;
-    let db = build_pool(&descriptor, APISERVER_COMPONENT_KEY).await?;
+    info!("Connecting to database with components: {components:?}");
+    // The apiserver never boots the server; bring it up first (the detached
+    // server `td_dbmanager start` would otherwise own), then connect.
+    start_server(Some(&server)).await?;
+    let pool = connect_server(&server).await?;
+    provision_all(&components, &pool).await?;
+    pool.close().await;
+    upgrade_all(&components).await?;
+    let db = build_pool(&components, APISERVER_COMPONENT_KEY).await?;
 
     let start_total = Instant::now();
 
@@ -350,6 +353,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Close the serving pool, then stop the detached embedded server we started.
     db.shutdown().await;
-    stop_server(&descriptor).await?;
+    stop_server(Some(&server)).await?;
     Ok(())
 }

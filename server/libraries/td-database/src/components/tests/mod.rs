@@ -3,7 +3,7 @@
 //
 
 //! Integration tests for applying and checking the apiserver schema through the
-//! real [`ApiserverComponent`](crate::system::ApiserverComponent) +
+//! real [`ApiserverComponent`](crate::components::ApiserverComponent) +
 //! [`TestDb`](crate::test_utils::TestDb), grouped by concern:
 //!
 //! * [`seeded`] — the bootstrap-seeded data (users, roles, permissions).
@@ -152,25 +152,92 @@ async fn schema_db_version(db: &TestDb) -> String {
 }
 
 /// The schema a component is mounted on decouples from both its registry key and
-/// its default name: with no override it is the component's default, and an
-/// override mounts the same content on any schema.
+/// its default name: with no `schema:` on its entry it is the component's
+/// default, and an explicit `schema:` mounts the same content on any schema.
+#[cfg(postgres)]
 #[test]
 fn component_schema_override_resolves() {
-    use crate::config::{ComponentOverride, Schema};
-    use crate::system::ApiserverComponent;
+    use crate::components::{ApiserverComponent, resolved_schema};
+    use crate::config::DatabaseComponents;
 
+    let yaml = "
+apiserver:
+  url: postgres://localhost:7432/postgres
+";
+    let components: DatabaseComponents = serde_yaml::from_str(yaml).unwrap();
     assert_eq!(
-        super::resolved_schema(None, &ApiserverComponent),
+        resolved_schema(&components, &ApiserverComponent).unwrap(),
         "td_apiserver"
     );
 
-    let ovr = ComponentOverride {
-        schema: Some(Schema::new("tenant_a_apiserver")),
-        password: None,
-        pool: Default::default(),
-    };
+    let yaml = "
+apiserver:
+  url: postgres://localhost:7432/postgres
+  schema: tenant_a_apiserver
+";
+    let components: DatabaseComponents = serde_yaml::from_str(yaml).unwrap();
     assert_eq!(
-        super::resolved_schema(Some(&ovr), &ApiserverComponent),
+        resolved_schema(&components, &ApiserverComponent).unwrap(),
         "tenant_a_apiserver"
     );
+}
+
+/// Credential semantics of the serving config: explicit values pass through,
+/// absence stays absent (no silent file read), `${embedded}` on the username
+/// is rejected, and `${embedded}` on the password reads the persisted owner
+/// file (hard error when it cannot resolve).
+#[cfg(all(postgres, feature = "embedded-postgres"))]
+#[test]
+fn serving_config_credential_semantics() {
+    use crate::components::{ApiserverComponent, serving_config};
+    use crate::config::DatabaseComponents;
+    use crate::error::DbError;
+
+    let parse = |extra: &str| -> DatabaseComponents {
+        serde_yaml::from_str(&format!(
+            "
+apiserver:
+  url: postgres://localhost:7432/postgres
+{extra}"
+        ))
+        .unwrap()
+    };
+
+    // Explicit credentials pass through; username defaults to the owner role.
+    let config = serving_config(&parse("  password: owner_secret"), &ApiserverComponent).unwrap();
+    assert_eq!(config.username.as_deref(), Some("td_apiserver"));
+    assert_eq!(config.password.as_deref(), Some("owner_secret"));
+
+    // Absent password stays absent.
+    let config = serving_config(&parse(""), &ApiserverComponent).unwrap();
+    assert!(config.password.is_none());
+
+    // `${embedded}` is not a valid username source for a component.
+    assert!(matches!(
+        serving_config(&parse("  username: ${embedded}"), &ApiserverComponent),
+        Err(DbError::EmbeddedUsernameNotAllowed)
+    ));
+
+    // `${embedded}` password reads the persisted owner file...
+    let base = std::env::temp_dir().join(format!("td-embedded-cred-{}", std::process::id()));
+    let data_dir = base.join("data");
+    std::fs::create_dir_all(&data_dir).unwrap();
+    std::fs::write(
+        base.join(".td_embedded_owner_password.td_apiserver"),
+        "from_file",
+    )
+    .unwrap();
+    unsafe { std::env::set_var("TD_DATABASE_DIR", &data_dir) };
+    let config = serving_config(&parse("  password: ${embedded}"), &ApiserverComponent).unwrap();
+    assert_eq!(config.password.as_deref(), Some("from_file"));
+
+    // ...and an unresolvable placeholder is a hard error, unlike absence.
+    unsafe { std::env::remove_var("TD_DATABASE_DIR") };
+    unsafe { std::env::remove_var("TD_URI_REPOSITORY") };
+    assert!(matches!(
+        serving_config(&parse("  password: ${embedded}"), &ApiserverComponent),
+        Err(DbError::MissingDatabaseDir)
+    ));
+
+    std::fs::remove_dir_all(&base).ok();
 }

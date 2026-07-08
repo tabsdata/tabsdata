@@ -26,6 +26,10 @@ pub const WORKSPACE_PATH_ENV: &str = "TD_PATH_WORKSPACE";
 pub const CONFIG_PATH_ENV: &str = "TD_PATH_CONFIG";
 pub const WORK_PATH_ENV: &str = "TD_PATH_WORK";
 
+// Directory the managed database server stores its data in; defaults to
+// `<TD_URI_REPOSITORY>/database` when unset.
+pub const DATABASE_DIR_ENV: &str = "TD_DATABASE_DIR";
+
 pub const TABSDATA_HOME_DIR: &str = ".tabsdata";
 pub const TABSDATA_DEV_HOME_DIR: &str = ".tabsdata-dev";
 

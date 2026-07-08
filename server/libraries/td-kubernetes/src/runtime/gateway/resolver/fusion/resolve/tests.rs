@@ -8,10 +8,9 @@ use crate::runtime::gateway::resolver::placeholder::SystemValues;
 #[test]
 fn secret_auto_collects_generated_value_and_retains_token() {
     let config = "\
-database:
-  system:
-    username: ${{secretAuto:postgres_system_user}}
-    password: ${{secretAuto:postgres_password}}
+database_server:
+  username: ${{secretAuto:postgres_system_user}}
+  password: ${{secretAuto:postgres_password}}
 ";
     let system = SystemValues::default();
     let auto = HashMap::new();
@@ -29,16 +28,32 @@ database:
         .map(|entry| (entry.key.as_str(), entry.value.as_str()))
         .collect();
     let user = by_key
-        .get("DATABASE__SYSTEM__USERNAME")
+        .get("DATABASE_SERVER__USERNAME")
         .expect("username secret collected");
     assert_eq!(*user, "postgres");
     let password = by_key
-        .get("DATABASE__SYSTEM__PASSWORD")
+        .get("DATABASE_SERVER__PASSWORD")
         .expect("password secret collected");
     assert!(
         !password.contains("${"),
         "password must be a generated value, not the token: {password}"
     );
+}
+
+/// `${embedded}` is not a resolver placeholder — it passes through as a plain
+/// scalar and reaches td-database untouched.
+#[test]
+fn embedded_credential_passes_through_untouched() {
+    let config = "\
+database:
+  apiserver:
+    password: ${embedded}
+";
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let outcome = resolve_config_file(config, config, &system, &auto).expect("resolve");
+    assert!(outcome.rendered.contains("${embedded}"));
+    assert!(outcome.secrets.is_empty());
 }
 
 #[test]

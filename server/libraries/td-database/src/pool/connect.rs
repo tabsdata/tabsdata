@@ -4,11 +4,12 @@
 
 //! Turning a [`DatabaseConfig`] into live pools: the per-backend connect
 //! machinery, the [`ConnectRole`] privilege selector, and the [`ConnectOutput`]
-//! it produces. This is *behavior*, not configuration — it opens sqlx pools and
-//! boots embedded postgres — so it lives outside [`crate::config`], which holds
-//! only the declarative types.
+//! it produces. This is *behavior*, not configuration — it opens sqlx pools —
+//! so it lives outside [`crate::config`], which holds only the declarative
+//! types. It never boots a server: the managed one is brought up out of band
+//! by `td_dbmanager` (see [`crate::server`]).
 
-use crate::config::{ConnectableBackend, DatabaseConfig, Schema};
+use crate::config::{BackendConfig, DatabaseConfig, Schema};
 use crate::dynamic::DynamicPool;
 use crate::error::DbError;
 use sqlx::any::AnyConnectOptions;
@@ -30,7 +31,7 @@ const SLOW_QUERIES_THRESHOLD: u64 = 5000;
 /// PostgreSQL is the only backend where the two differ: [`Self::Serving`]
 /// switches every connection to the non-bypass [`APP_ROLE`](crate::APP_ROLE)
 /// (`TdPool`, RLS-enforced), while [`Self::Admin`] keeps the raw role and its
-/// DDL/provisioning privileges (`SystemPool`, used for create/upgrade/check).
+/// DDL/provisioning privileges (`AdminPool`, used for create/upgrade/check).
 /// SQLite and MySQL have no RLS, so both roles build the same pool.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ConnectRole {
@@ -76,7 +77,7 @@ impl DatabaseConfig {
 
         match &self.conn {
             #[cfg(sqlite)]
-            ConnectableBackend::Sqlite(c) => {
+            BackendConfig::Sqlite(c) => {
                 Self::try_create_missing_dir(&c.url);
                 let conn_options = self.conn_options(&c.url)?;
                 let (rw, ro) = (
@@ -93,7 +94,7 @@ impl DatabaseConfig {
                 })
             }
             #[cfg(postgres)]
-            ConnectableBackend::Postgres(c) => {
+            BackendConfig::Postgres(c) => {
                 let schema = self.connect_schema(role)?;
                 let url = self.url_with_credentials(&c.url)?;
                 let conn_options = self.conn_options(&url)?;
@@ -103,7 +104,7 @@ impl DatabaseConfig {
                 Ok(ConnectOutput { pool, url, schema })
             }
             #[cfg(mysql)]
-            ConnectableBackend::MySql(c) => {
+            BackendConfig::MySql(c) => {
                 let url = self.url_with_credentials(&c.url)?;
                 let conn_options = self.conn_options(&url)?;
                 let (rw, ro) = tokio::try_join!(
@@ -366,13 +367,8 @@ impl DatabaseConfig {
 /// `url` with userinfo (user[:password]) stripped — for deriving a credential-free
 /// base URL (credentials travel in explicit config fields, never the URL).
 /// Infallible: stripping only fails on cannot-be-a-base URLs, which database URLs
-/// are not. Only the test server's `admin_base` consumes it, so it is gated to the
-/// same builds as `test_utils`.
-#[cfg(all(
-    postgres,
-    feature = "embedded-postgres",
-    any(test, feature = "test-utils")
-))]
+/// are not.
+#[cfg(all(postgres, feature = "embedded-postgres"))]
 pub(crate) fn redacted_url(url: &Url) -> Url {
     let mut url = url.clone();
     url.set_username("").ok();
@@ -408,7 +404,7 @@ fn create_app_role_sql(app_role: &str) -> String {
 /// switch can succeed. Idempotent, and privilege-free when the role already exists
 /// (the `IF NOT EXISTS` guard means external deployments, which pre-create the role,
 /// need no `CREATEROLE`). The schema/table grants are applied later, once the tables
-/// exist, by the `system` module's `SystemPool::ensure_app_role`.
+/// exist, by the `components` module's `AdminPool::ensure_app_role`.
 #[cfg(postgres)]
 async fn provision_app_role(pool: &sqlx::PgPool, app_role: &str) -> Result<(), DbError> {
     sqlx::query(&create_app_role_sql(app_role))

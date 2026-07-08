@@ -5,7 +5,7 @@
 use axum::extract::FromRef;
 use std::future::Future;
 use ta_services::factory::{FieldAccessors, ServiceFactory};
-use td_database::system::ServingPools;
+use td_database::components::ServingPools;
 use td_error::TdError;
 
 #[derive(ServiceFactory, Clone, Debug)]

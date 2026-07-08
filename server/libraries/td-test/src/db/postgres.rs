@@ -9,7 +9,7 @@
 
 use crate::db::DbBackendProvider;
 use std::future::Future;
-use td_database::system::SchemaComponent;
+use td_database::components::SchemaComponent;
 use td_database::test_utils::MultiTestDb;
 
 /// Marker type for the postgres provider. The trait impl is gated on
