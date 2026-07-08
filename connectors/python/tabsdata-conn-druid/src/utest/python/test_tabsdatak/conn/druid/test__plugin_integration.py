@@ -32,13 +32,13 @@ test runs never overwrite each other.
 from __future__ import annotations
 
 import os
-import time
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
 import polars as pl
 import pytest
+from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
 
 from tabsdatak.api import Secret
 from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
@@ -227,6 +227,23 @@ def _druid_sql(broker_url: str, sql: str) -> list[dict]:
     return resp.json()
 
 
+@retry(
+    retry=retry_if_exception_type(Exception),
+    wait=wait_fixed(5),
+    stop=stop_after_delay(120),
+    reraise=True,
+)
+def _druid_count(broker_url: str, datasource_name: str) -> int:
+    """Poll ``SELECT COUNT(*)`` until the datasource is queryable.
+
+    Druid ingestion is asynchronous: the Overlord accepts the task
+    before the Broker can resolve the datasource, so an immediate query
+    fails with HTTP 400 (unknown table). Retry every 5 seconds for up to
+    two minutes to let segment handoff complete."""
+    rows = _druid_sql(broker_url, f"SELECT COUNT(*) AS n FROM {datasource_name}")
+    return rows[0]["n"]
+
+
 # ---------------------------------------------------------------------------
 # DruidDestPlugin.write_out -- happy path against a real Druid
 # ---------------------------------------------------------------------------
@@ -251,13 +268,7 @@ def test_dest_plugin_writes_single_datasource(
         _DestCtx(work_dir), fresh_druid, dest, [Path(parquet)],
     )
 
-    # Allow the segments to become queryable (small grace period).
-    time.sleep(5)
-    rows = _druid_sql(
-        broker_url,
-        f"SELECT COUNT(*) AS n FROM {datasource_name}",
-    )
-    assert rows[0]["n"] == 2
+    assert _druid_count(broker_url, datasource_name) == 2
 
 
 def test_dest_plugin_writes_multiple_datasources(
@@ -286,8 +297,5 @@ def test_dest_plugin_writes_multiple_datasources(
         ],
     )
 
-    time.sleep(5)
-    rows_a = _druid_sql(broker_url, f"SELECT COUNT(*) AS n FROM {ds_a}")
-    rows_b = _druid_sql(broker_url, f"SELECT COUNT(*) AS n FROM {ds_b}")
-    assert rows_a[0]["n"] == 1
-    assert rows_b[0]["n"] == 2
+    assert _druid_count(broker_url, ds_a) == 1
+    assert _druid_count(broker_url, ds_b) == 2
