@@ -63,7 +63,6 @@ lerna-debug.log*
 !**/*.log.py.yaml
 !**/*.log.rs.yaml
 !**/*.log.ts.yaml
-CLAUDE.md
 .claude/
 MANIFEST
 !server/libraries/td-kubernetes/src/base/error/manifest/
