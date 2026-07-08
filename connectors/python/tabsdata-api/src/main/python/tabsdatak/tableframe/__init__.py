@@ -3,21 +3,12 @@
 
 from __future__ import annotations
 
-from tabsdatak.tableframe._core.hooks import run_hook
+from tabsdatak.tableframe._core.hooks import compute
 from tabsdatak.tableframe._core.translate import register_loader, unwrap, wrap
 from tabsdatak.tableframe._engine.frame.frame import EngineFrame
 
 
 class TableFrame(EngineFrame):
-    _HOOKABLE_OPS = (
-        "agg",
-        "drop",
-        "join",
-        "rename",
-        "select",
-        "with_columns",
-    )
-
     @property
     def columns(self):
         return wrap(self._lf.columns)
@@ -34,71 +25,65 @@ class TableFrame(EngineFrame):
     def width(self):
         return wrap(self._lf.width)
 
-    def __eq__(self, *args, **kwargs):
-        out = self._lf.__eq__(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def __ne__(self, *args, **kwargs):
-        out = self._lf.__ne__(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def __gt__(self, *args, **kwargs):
-        out = self._lf.__gt__(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def __lt__(self, *args, **kwargs):
-        out = self._lf.__lt__(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def __ge__(self, *args, **kwargs):
-        out = self._lf.__ge__(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
-    def __le__(self, *args, **kwargs):
-        out = self._lf.__le__(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
-
     def __getitem__(self, *args, **kwargs):
-        out = self._lf.__getitem__(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "__getitem__",
+            (self,),
+            {},
+            call=lambda lf: lf.__getitem__(*u_args, **u_kwargs),
+        )
 
     def explain(self, *args, **kwargs):
-        out = self._lf.explain(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        return self._lf.explain(*unwrap(args), **unwrap(kwargs))
 
     def show_graph(self, *args, **kwargs):
-        out = self._lf.show_graph(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        return self._lf.show_graph(*unwrap(args), **unwrap(kwargs))
 
     def inspect(self, *args, **kwargs):
-        out = self._lf.inspect(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "inspect", (self,), {}, call=lambda lf: lf.inspect(*u_args, **u_kwargs)
+        )
 
     def sort(self, *args, **kwargs):
-        out = self._lf.sort(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "sort", (self,), {}, call=lambda lf: lf.sort(*u_args, **u_kwargs)
+        )
 
     def cast(self, *args, **kwargs):
-        out = self._lf.cast(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "cast", (self,), {}, call=lambda lf: lf.cast(*u_args, **u_kwargs)
+        )
 
     def clear(self, *args, **kwargs):
-        out = self._lf.clear(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "clear", (self,), {}, call=lambda lf: lf.clear(*u_args, **u_kwargs)
+        )
 
     def filter(self, *args, **kwargs):
-        out = self._lf.filter(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "filter", (self,), {}, call=lambda lf: lf.filter(*u_args, **u_kwargs)
+        )
 
     def select(self, *exprs, **named_exprs):
         u_args = unwrap(exprs)
         u_named = unwrap(named_exprs)
-        out = self._clone(self._lf.select(*u_args, **u_named))
-        return run_hook(
+        return compute(
             "select",
-            out,
-            sources=(self,),
-            params={"exprs": u_args, "named": u_named, "replace_all": True},
+            (self,),
+            {"exprs": u_args, "named": u_named, "replace_all": True},
+            call=lambda lf: lf.select(*u_args, **u_named),
         )
 
     def group_by(self, *by, **named_by):
@@ -118,97 +103,146 @@ class TableFrame(EngineFrame):
         right_on=None,
         suffix="_right",
     ):
-        out = self._clone(
-            self._lf.join(
-                other._lf,
-                on=unwrap(on),
-                how=how,
-                left_on=unwrap(left_on),
-                right_on=unwrap(right_on),
-                suffix=suffix,
-            )
-        )
-        return run_hook(
+        u_on = unwrap(on)
+        u_left_on = unwrap(left_on)
+        u_right_on = unwrap(right_on)
+        return compute(
             "join",
-            out,
-            sources=(self, other),
-            params={
-                "on": unwrap(on),
+            (self, other),
+            {
+                "on": u_on,
                 "how": how,
-                "left_on": unwrap(left_on),
-                "right_on": unwrap(right_on),
+                "left_on": u_left_on,
+                "right_on": u_right_on,
                 "suffix": suffix,
             },
+            call=lambda left, right: left.join(
+                right,
+                on=u_on,
+                how=how,
+                left_on=u_left_on,
+                right_on=u_right_on,
+                suffix=suffix,
+            ),
         )
 
     def with_columns(self, *exprs, **named_exprs):
         u_args = unwrap(exprs)
         u_named = unwrap(named_exprs)
-        out = self._clone(self._lf.with_columns(*u_args, **u_named))
-        return run_hook(
+        return compute(
             "with_columns",
-            out,
-            sources=(self,),
-            params={"exprs": u_args, "named": u_named, "replace_all": False},
+            (self,),
+            {"exprs": u_args, "named": u_named, "replace_all": False},
+            call=lambda lf: lf.with_columns(*u_args, **u_named),
         )
 
     def drop(self, *columns, **kwargs):
         u_columns = unwrap(columns)
-        out = self._clone(self._lf.drop(*u_columns, **unwrap(kwargs)))
-        return run_hook("drop", out, sources=(self,), params={"columns": u_columns})
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "drop",
+            (self,),
+            {"columns": u_columns},
+            call=lambda lf: lf.drop(*u_columns, **u_kwargs),
+        )
 
     def rename(self, mapping, *args, **kwargs):
         u_mapping = unwrap(mapping)
-        out = self._clone(self._lf.rename(u_mapping, *unwrap(args), **unwrap(kwargs)))
-        return run_hook("rename", out, sources=(self,), params={"mapping": u_mapping})
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "rename",
+            (self,),
+            {"mapping": u_mapping},
+            call=lambda lf: lf.rename(u_mapping, *u_args, **u_kwargs),
+        )
 
     def slice(self, *args, **kwargs):
-        out = self._lf.slice(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "slice", (self,), {}, call=lambda lf: lf.slice(*u_args, **u_kwargs)
+        )
 
     def limit(self, *args, **kwargs):
-        out = self._lf.limit(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "limit", (self,), {}, call=lambda lf: lf.limit(*u_args, **u_kwargs)
+        )
 
     def head(self, *args, **kwargs):
-        out = self._lf.head(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "head", (self,), {}, call=lambda lf: lf.head(*u_args, **u_kwargs)
+        )
 
     def tail(self, *args, **kwargs):
-        out = self._lf.tail(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "tail", (self,), {}, call=lambda lf: lf.tail(*u_args, **u_kwargs)
+        )
 
     def last(self, *args, **kwargs):
-        out = self._lf.last(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "last", (self,), {}, call=lambda lf: lf.last(*u_args, **u_kwargs)
+        )
 
     def first(self, *args, **kwargs):
-        out = self._lf.first(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "first", (self,), {}, call=lambda lf: lf.first(*u_args, **u_kwargs)
+        )
 
     def fill_null(self, *args, **kwargs):
-        out = self._lf.fill_null(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "fill_null", (self,), {}, call=lambda lf: lf.fill_null(*u_args, **u_kwargs)
+        )
 
     def fill_nan(self, *args, **kwargs):
-        out = self._lf.fill_nan(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "fill_nan", (self,), {}, call=lambda lf: lf.fill_nan(*u_args, **u_kwargs)
+        )
 
     def unique(self, *args, **kwargs):
-        out = self._lf.unique(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "unique", (self,), {}, call=lambda lf: lf.unique(*u_args, **u_kwargs)
+        )
 
     def drop_nans(self, *args, **kwargs):
-        out = self._lf.drop_nans(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "drop_nans", (self,), {}, call=lambda lf: lf.drop_nans(*u_args, **u_kwargs)
+        )
 
     def drop_nulls(self, *args, **kwargs):
-        out = self._lf.drop_nulls(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "drop_nulls",
+            (self,),
+            {},
+            call=lambda lf: lf.drop_nulls(*u_args, **u_kwargs),
+        )
 
     def unnest(self, *args, **kwargs):
-        out = self._lf.unnest(*unwrap(args), **unwrap(kwargs))
-        return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "unnest", (self,), {}, call=lambda lf: lf.unnest(*u_args, **u_kwargs)
+        )
 
 
 def _load_registry() -> None:
@@ -227,7 +261,9 @@ def _load_registry() -> None:
     ):
         importlib.import_module(f"{__name__}.{submodule}")
 
-    importlib.import_module("tabsdatak.tableframe._engine.frame.hook")
+    from tabsdatak.extensions.tableframe._engine.features import install
+
+    install(TableFrame)
 
     from tabsdatak.tableframe._core.hooks import tableframe_of
     from tabsdatak.tableframe._core.translate import register_factory

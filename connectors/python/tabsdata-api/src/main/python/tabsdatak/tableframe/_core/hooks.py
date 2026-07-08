@@ -3,15 +3,21 @@
 
 """Hook mechanism (no provenance policy lives here).
 
-Augmenting ops on ``TableFrame`` wrap the result, then call ``run_hook(op, ...)``.
-A hook has the signature ``(frame, sources, params) -> frame``: it reads the
-source frames' ``_state`` and the raw op ``params``, writes its own
-(namespaced) key into ``frame._state``, and returns the frame. With no hook
-registered, ``run_hook`` returns the frame unchanged (pure wrapping).
+Every augmenting op on ``TableFrame`` / ``LazyGroupBy`` routes through
+``compute(op, sources, params, call)``, a universal interceptor with four
+phases:
 
-Provenance implementations (e.g. column lineage) live OUTSIDE the generated code
-and register hooks via ``set_hook`` / ``chain``. Everything here is private
-framework API — never part of the public surface.
+* before  -- prepend lazy ops to the input lazyframe(s) before the op runs.
+* during  -- own the op invocation (wrap or replace the polars call).
+* after   -- append lazy ops to the result lazyframe after the op.
+* state   -- transform the built ``TableFrameState`` (e.g. write namespaced
+             per-aspect metadata into ``state.aspects``).
+
+With no hook registered, every phase is the identity, so a routed op behaves
+exactly like the plain polars call built through the engine. Aspect
+implementations (system-column guards, column lineage, row provenance) live
+OUTSIDE the generated code and register hooks via ``set_hook`` / ``chain``.
+Everything here is private framework API -- never part of the public API.
 """
 
 from __future__ import annotations
@@ -25,19 +31,24 @@ if TYPE_CHECKING:
     import polars as pl
 
     from tabsdatak.tableframe import TableFrame
+    from tabsdatak.tableframe._engine.model.frame import TableFrameState
 
 _P = TypeVar("_P")
 
-# Generic hook type (op-agnostic), used by the registry / dispatch below.
-Hook = Callable[["TableFrame", tuple, dict], "TableFrame"]
+# Phase hooks. Each takes its working value FIRST (lazyframes / lazyframe /
+# state), then op / views / params, so ``chain`` threads that value through
+# same-phase hooks. The ``*Params`` TypedDicts below document what each op
+# passes; they are generated from the manifest (one per hookable op).
+BeforeHook = Callable[[list, str, tuple, dict], list]
+DuringHook = Callable[[Callable, list, str, tuple, dict], "pl.LazyFrame"]
+AfterHook = Callable[["pl.LazyFrame", str, tuple, dict], "pl.LazyFrame"]
+StateHook = Callable[["TableFrameState", str, tuple, dict], "TableFrameState"]
+
+_PHASES = ("before", "during", "after", "state")
 
 
-# Per-op hook types. Each augmenting op dispatches a hook with the signature
-# (frame, sources, params) -> frame; the ``*Params`` TypedDicts document exactly
-# what each op passes and ``*Hook`` is the typed callable to annotate a hook with.
-# Generated from the manifest (one per hookable op).
 class AggParams(TypedDict):
-    """Params a 'agg' op passes to its hook."""
+    """Params a 'agg' op passes to its hooks."""
 
     by: tuple
     named_by: dict
@@ -46,13 +57,13 @@ class AggParams(TypedDict):
 
 
 class DropParams(TypedDict):
-    """Params a 'drop' op passes to its hook."""
+    """Params a 'drop' op passes to its hooks."""
 
     columns: tuple
 
 
 class JoinParams(TypedDict):
-    """Params a 'join' op passes to its hook."""
+    """Params a 'join' op passes to its hooks."""
 
     on: Any
     how: str
@@ -62,7 +73,7 @@ class JoinParams(TypedDict):
 
 
 class ProjectParams(TypedDict):
-    """Params a 'project' op passes to its hook."""
+    """Params a 'project' op passes to its hooks."""
 
     exprs: tuple
     named: dict
@@ -70,29 +81,51 @@ class ProjectParams(TypedDict):
 
 
 class RenameParams(TypedDict):
-    """Params a 'rename' op passes to its hook."""
+    """Params a 'rename' op passes to its hooks."""
 
     mapping: Any
 
 
-AggHook = Callable[["TableFrame", tuple["TableFrame"], AggParams], "TableFrame"]
-DropHook = Callable[["TableFrame", tuple["TableFrame"], DropParams], "TableFrame"]
-JoinHook = Callable[
-    ["TableFrame", tuple["TableFrame", "TableFrame"], JoinParams], "TableFrame"
-]
-RenameHook = Callable[["TableFrame", tuple["TableFrame"], RenameParams], "TableFrame"]
-SelectHook = Callable[["TableFrame", tuple["TableFrame"], ProjectParams], "TableFrame"]
-WithColumnsHook = Callable[
-    ["TableFrame", tuple["TableFrame"], ProjectParams], "TableFrame"
-]
+@dataclass(frozen=True)
+class FrameView:
+    """Immutable snapshot of a source frame's attributes.
+
+    A ``TableFrame`` is immutable, so hooks never receive the live frame; they
+    read this read-only copy of its state, per-aspect metadata, and schema
+    instead. ``schema`` is the source frame's polars schema (names + dtypes,
+    read from the lazy plan without materializing), for hooks that resolve
+    multi-output expressions (selectors, ``col("*")``) against the input columns.
+    """
+
+    state: "TableFrameState"
+    aspects: dict
+    schema: "pl.Schema"
+
+    @classmethod
+    def of(cls, frame: "TableFrame") -> "FrameView":
+        state = frame._state.clone() if frame._state is not None else None
+        aspects = dict(state.aspects) if state is not None else {}
+        return cls(state=state, aspects=aspects, schema=frame._lf.collect_schema())
+
+    @property
+    def columns(self) -> list:
+        return self.schema.names()
+
+    @property
+    def genesis(self):
+        return self.state.genesis if self.state is not None else None
+
+    @property
+    def version(self):
+        return self.state.version if self.state is not None else None
 
 
 def polars_of(instance, polars_type: type[_P]) -> _P:
     """Return the underlying polars object of a delegation instance.
 
-    The controlled, type-checked way for hook code to reach polars internals —
-    instead of an easily-misused ``_pl`` accessor on the wrappers. Raises ``TypeError``
-    if the unwrapped object is not an instance of ``polars_type``.
+    The controlled, type-checked way for hook code to reach polars internals --
+    instead of an easily-misused ``_pl`` accessor on the wrappers. Raises
+    ``TypeError`` if the unwrapped object is not an instance of ``polars_type``.
     """
     inner = unwrap(instance)
     if not isinstance(inner, polars_type):
@@ -105,8 +138,9 @@ def polars_of(instance, polars_type: type[_P]) -> _P:
 
 def tableframe_of(lf: "pl.LazyFrame") -> "TableFrame":
     """Wrap a polars LazyFrame into a TableFrame (empty hook state). The inverse
-    of ``polars_of`` — lives here so TableFrame needs no public constructor. As an
-    external entry point it enforces the allowed-datatype set on ``lf``'s schema."""
+    of ``polars_of`` -- lives here so TableFrame needs no public constructor. As
+    an external entry point it enforces the allowed-datatype set on ``lf``'s
+    schema."""
     from tabsdatak.tableframe import (
         TableFrame,
     )  # lazy: TableFrame's module imports this one
@@ -116,64 +150,118 @@ def tableframe_of(lf: "pl.LazyFrame") -> "TableFrame":
 
 
 # --------------------------------------------------------------------------- #
-# Hook registry (per-class, MRO-resolved) + dispatch + composition.
+# Hook registry (per-class, per-phase, MRO-resolved) + dispatch + composition.
 # --------------------------------------------------------------------------- #
-def set_hook(cls, op: str, hook: Hook) -> None:
+def set_hook(cls, op: str, hook, *, phase: str = "after") -> None:
+    if phase not in _PHASES:
+        raise ValueError(f"Unknown hook phase {phase!r}; expected one of {_PHASES}.")
     if "_hooks" not in cls.__dict__:
         cls._hooks = {}
-    cls._hooks[op] = hook
+    cls._hooks[(op, phase)] = hook
 
 
-def get_hook(cls, op: str) -> "Hook | None":
+def get_hook(cls, op: str, phase: str):
     for klass in cls.__mro__:
-        hook = klass.__dict__.get("_hooks", {}).get(op)
+        hook = klass.__dict__.get("_hooks", {}).get((op, phase))
         if hook is not None:
             return hook
     return None
 
 
-def run_hook(
-    op: str, frame: "TableFrame", sources: tuple, params: dict
-) -> "TableFrame":
-    hook = get_hook(type(frame), op)
-    return hook(frame, sources, params) if hook is not None else frame
+def set_sink_observer(cls, observer) -> None:
+    """Register the materialization-path observer for ``cls``. Unlike the
+    per-op ``compute`` hooks, a sink observer runs on the ``sink_*`` path and has
+    its own shape ``(lazyframe, method, path) -> lazyframe`` -- it may wrap the
+    lazy plan (e.g. inserting a progress node) before the streaming sink runs."""
+    cls._sink_observer = observer
 
 
-def chain(*hooks: Hook) -> Hook:
-    """Compose hooks into one that threads the frame through each, in order."""
+def get_sink_observer(cls):
+    for klass in cls.__mro__:
+        observer = klass.__dict__.get("_sink_observer")
+        if observer is not None:
+            return observer
+    return None
 
-    def chained(frame, sources, params):
+
+def chain(*hooks):
+    """Compose same-phase hooks into one that threads the working value (the
+    first positional argument) through each, in order."""
+
+    def chained(value, *rest):
         for hook in hooks:
-            frame = hook(frame, sources, params)
-        return frame
+            value = hook(value, *rest)
+        return value
 
     return chained
 
 
+def compute(op: str, sources: tuple, params: dict, call: Callable) -> "TableFrame":
+    """Route one op through the before/during/after/state interceptor.
+
+    ``sources`` are the input frames (read only, via immutable ``FrameView``s);
+    ``params`` are the already-unwrapped op arguments; ``call`` is a variadic
+    thunk ``(*LazyFrame) -> LazyFrame`` over the underlying polars op. Builds the
+    single result frame from the primary source through the engine ``_build``.
+    """
+    from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
+
+    primary = sources[0]
+    cls = type(primary)
+    views = tuple(FrameView.of(source) for source in sources)
+    lazyframes = [source._lf for source in sources]
+
+    before = get_hook(cls, op, "before")
+    if before is not None:
+        lazyframes = before(lazyframes, op, views, params)
+
+    during = get_hook(cls, op, "during")
+    if during is not None:
+        lazyframe = during(call, lazyframes, op, views, params)
+    else:
+        lazyframe = call(*lazyframes)
+
+    after = get_hook(cls, op, "after")
+    if after is not None:
+        lazyframe = after(lazyframe, op, views, params)
+
+    genesis = views[0].genesis
+    frame = cls._build(
+        lazyframe,
+        CreationMode.TAB,
+        idx=genesis.idx if genesis is not None else None,
+        source=primary,
+    )
+
+    state = get_hook(cls, op, "state")
+    if state is not None:
+        frame._state = state(frame._state, op, views, params)
+    return frame
+
+
 @dataclass
 class HookStatus:
-    registered: dict[str, str]  # op -> "module.qualname" of the registered hook
-    unregistered: tuple[str, ...]  # hookable ops with no registration
+    registered: dict  # (op, phase) -> "module.qualname" of the registered hook
+
+    @property
+    def ops(self) -> tuple:
+        return tuple(sorted({op for op, _ in self.registered}))
 
 
 def hook_status(cls) -> HookStatus:
-    registered: dict[str, str] = {}
-    unregistered: list[str] = []
-    for op in getattr(cls, "_HOOKABLE_OPS", ()):
-        hook = get_hook(cls, op)
-        if hook is None:
-            unregistered.append(op)
-        else:
-            registered[op] = f"{hook.__module__}.{hook.__qualname__}"
-    return HookStatus(registered, tuple(unregistered))
+    registered: dict = {}
+    for klass in cls.__mro__:
+        for (op, phase), hook in klass.__dict__.get("_hooks", {}).items():
+            registered.setdefault((op, phase), f"{hook.__module__}.{hook.__qualname__}")
+    return HookStatus(registered)
 
 
-def verify_hooks(cls, fail_if: bool) -> HookStatus:
-    """Report which hookable ops have a registered hook. If ``fail_if`` and any
+def verify_hooks(cls, ops: tuple, fail_if: bool) -> HookStatus:
+    """Report which of ``ops`` have any registered hook. If ``fail_if`` and any
     are missing, raise."""
     status = hook_status(cls)
-    if fail_if and status.unregistered:
-        raise RuntimeError(
-            f"Unregistered hooks on {cls.__name__}: {list(status.unregistered)}"
-        )
+    if fail_if:
+        missing = [op for op in ops if op not in status.ops]
+        if missing:
+            raise RuntimeError(f"Unregistered hooks on {cls.__name__}: {missing}")
     return status

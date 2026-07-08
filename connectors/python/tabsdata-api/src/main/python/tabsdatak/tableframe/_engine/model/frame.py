@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from tabsdatak.tableframe._engine.constant.emptiness import (
     EMPTY_EXECUTION,
@@ -14,6 +15,11 @@ from tabsdatak.tableframe._engine.constant.emptiness import (
     EMPTY_VERSION,
 )
 from tabsdatak.tableframe._engine.taxonomy.frame import TableFrameOrigin
+
+if TYPE_CHECKING:
+    from tabsdatak.extensions.tableframe._engine.taxonomy.aspect import (
+        Aspect as Aspect_,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,13 +138,15 @@ class DataGenesis:
 class TableFrameState:
     version: DataVersion | None = None
     genesis: DataGenesis | None = None
+    aspects: dict[Aspect_, object] = field(default_factory=dict)
 
     @classmethod
     def empty(cls) -> TableFrameState:
-        return cls(version=None, genesis=None)
+        return cls(version=None, genesis=None, aspects={})
 
     def clone(self) -> TableFrameState:
         return TableFrameState(
             version=None if self.version is None else self.version.clone(),
             genesis=None if self.genesis is None else self.genesis.clone(),
+            aspects=dict(self.aspects),
         )

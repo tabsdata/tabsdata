@@ -35,6 +35,12 @@ class UnsupportedInputError(TableFrameInitException): ...
 class MissingRequiredColumnsError(TableFrameInternalException): ...
 
 
+class NotSupportedError(TableFrameRuntimeException): ...
+
+
+class SystemColumnWriteError(TableFrameRuntimeException): ...
+
+
 class TableFrameErrorCode(ErrorCode):
     TF1 = ErrorDef(
         DirectConstructionError,
@@ -57,4 +63,13 @@ class TableFrameErrorCode(ErrorCode):
     TF4 = ErrorDef(
         MissingRequiredColumnsError,
         "TableFrame is missing required system columns: {missing}.",
+    )
+    TF5 = ErrorDef(
+        NotSupportedError,
+        "TableFrame does not support the {op} operation.",
+    )
+    TF6 = ErrorDef(
+        SystemColumnWriteError,
+        "The {op} operation cannot create, overwrite, or drop the system columns "
+        "{columns}; they are managed by TableFrame.",
     )

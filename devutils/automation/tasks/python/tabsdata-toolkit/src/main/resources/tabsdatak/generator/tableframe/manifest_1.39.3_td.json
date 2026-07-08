@@ -87,7 +87,7 @@
       "signature": "(self, other: 'object') -> 'NoReturn'",
       "returns": "NoReturn",
       "is_property": false,
-      "whitelisted": true,
+      "whitelisted": false,
       "hook_name": "-"
     },
     {
@@ -98,7 +98,7 @@
       "signature": "(self, other: 'object') -> 'NoReturn'",
       "returns": "NoReturn",
       "is_property": false,
-      "whitelisted": true,
+      "whitelisted": false,
       "hook_name": "-"
     },
     {
@@ -109,7 +109,7 @@
       "signature": "(self, other: 'Any') -> 'NoReturn'",
       "returns": "NoReturn",
       "is_property": false,
-      "whitelisted": true,
+      "whitelisted": false,
       "hook_name": "-"
     },
     {
@@ -120,7 +120,7 @@
       "signature": "(self, other: 'Any') -> 'NoReturn'",
       "returns": "NoReturn",
       "is_property": false,
-      "whitelisted": true,
+      "whitelisted": false,
       "hook_name": "-"
     },
     {
@@ -131,7 +131,7 @@
       "signature": "(self, other: 'Any') -> 'NoReturn'",
       "returns": "NoReturn",
       "is_property": false,
-      "whitelisted": true,
+      "whitelisted": false,
       "hook_name": "-"
     },
     {
@@ -142,7 +142,7 @@
       "signature": "(self, other: 'Any') -> 'NoReturn'",
       "returns": "NoReturn",
       "is_property": false,
-      "whitelisted": true,
+      "whitelisted": false,
       "hook_name": "-"
     },
     {

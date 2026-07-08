@@ -42,7 +42,7 @@ def test_first_generation_has_no_markers(root_dir):
         _report([_expr("alias", "(self, name: 'str') -> 'Expr'")]), ROOT, str(root_dir)
     )
     text = (root_dir / "pkg" / "wrap" / "expr.pyi").read_text()
-    assert "NEW SIGNATURE" not in text and "CHANGED SIGNATURE" not in text
+    assert "New signature" not in text and "Signature changed" not in text
     # annotations rewritten through the typing engine (unquoted, our types);
     # every entity gets an empty docstring placeholder instead of `...`
     assert "def alias(self, name: str) -> Expr:" in text
@@ -91,13 +91,13 @@ def test_regeneration_preserves_docstring_and_flags_changes(root_dir):
     )
     result_text = pyi.read_text()
 
-    # changed signature -> marker (ruff normalizes "# ") + kept old pydoc
-    assert "# CHANGED SIGNATURE, VALIDATE/FIX PYDOC" in result_text
+    # changed signature -> marker + kept old docstring
+    assert "# Signature changed; validate and fix the docstring below." in result_text
     assert '"""Alias the expression."""' in result_text
     # unchanged -> doc preserved verbatim
     assert '"""Unchanged doc."""' in result_text
     # new symbol -> marker
-    assert "# NEW SIGNATURE, CREATE PYDOC" in result_text
+    assert "# New signature; write the docstring below." in result_text
     # the .pyi-ori snapshot is transient: read for docstring recovery, then dropped
     assert not (base / "expr.pyi-ori").exists()
 

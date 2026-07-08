@@ -12,19 +12,20 @@ from typing import Callable
 
 from .base import BaseFrame, BaseWrapper
 
-# polars type -> factory(polars_obj) -> wrapper. Value wrappers use ``cls._wrap``;
-# TableFrame registers ``tableframe_of`` (it wraps a LazyFrame with empty state).
+# Maps a polars type to factory(polars_object) -> wrapper. Value wrappers use
+# ``cls._wrap``; TableFrame registers ``tableframe_of`` (wraps a LazyFrame with
+# empty state).
 _REGISTRY: dict[type, Callable] = {}
 
-# polars leaf types we deliberately expose as-is (aliased, not wrapped) — e.g.
+# The polars leaf types deliberately exposed as-is (aliased, not wrapped) -- e.g.
 # datatypes. ``wrap`` returns their instances (and the classes themselves, when
 # used as values) unchanged instead of raising as a leak. Populated by the modules
 # that alias them (see datatypes.py -> register_passthrough(pl.DataType)).
 _PASSTHROUGH: tuple[type, ...] = ()
 
-# optional validator asserting a datatype is allowed (raises if not). Applied to
-# datatype args flowing into polars (unwrap) and to incoming LazyFrame schemas
-# (validate_schema). Registered by datatypes.py; None => no enforcement.
+# Optional validator asserting a datatype is allowed (raises if not). Applied to
+# datatype arguments flowing into polars (unwrap) and to incoming LazyFrame
+# schemas (validate_schema). Registered by datatypes.py; None => no enforcement.
 _TYPE_VALIDATOR: "Callable | None" = None
 
 # Lazy registry population. Importing the package must not drag in polars; the
@@ -35,19 +36,19 @@ _loader: "Callable | None" = None
 _loaded = False
 
 
-def register(pl_type: type):
+def register(polars_type: type):
     """Class decorator: map a polars type to its wrapper class."""
 
     def decorator(cls: type) -> type:
-        register_factory(pl_type, cls._wrap)
-        cls._pl_type = pl_type
+        register_factory(polars_type, cls._wrap)
+        cls._polars_type = polars_type
         return cls
 
     return decorator
 
 
-def register_factory(pl_type: type, factory: Callable) -> None:
-    _REGISTRY[pl_type] = factory
+def register_factory(polars_type: type, factory: Callable) -> None:
+    _REGISTRY[polars_type] = factory
 
 
 def register_passthrough(*types: type) -> None:
@@ -57,19 +58,19 @@ def register_passthrough(*types: type) -> None:
     _PASSTHROUGH = _PASSTHROUGH + tuple(types)
 
 
-def register_type_validator(fn: Callable) -> None:
+def register_type_validator(validator: Callable) -> None:
     """Register a callable that asserts a datatype is allowed (raises otherwise).
     Applied to datatype arguments in ``unwrap`` and to incoming schemas."""
     global _TYPE_VALIDATOR
-    _TYPE_VALIDATOR = fn
+    _TYPE_VALIDATOR = validator
 
 
-def register_loader(fn: Callable) -> None:
+def register_loader(loader: Callable) -> None:
     """Register the callback that imports every wrapper submodule (filling the
     registry / passthrough set / type validator). Deferred so ``import <pkg>``
     stays free of the heavy polars import until an op actually runs."""
     global _loader
-    _loader = fn
+    _loader = loader
 
 
 def _ensure_loaded() -> None:
@@ -82,12 +83,12 @@ def _ensure_loaded() -> None:
         _loader()
 
 
-def _is_passthrough(obj) -> bool:
-    """True if obj is an aliased leaf type — a datatype instance, or a class that
-    subclasses one (used as a value)."""
+def _is_passthrough(value) -> bool:
+    """True if the value is an aliased leaf type -- a datatype instance, or a
+    class that subclasses one (used as a value)."""
     return bool(_PASSTHROUGH) and (
-        isinstance(obj, _PASSTHROUGH)
-        or (isinstance(obj, type) and issubclass(obj, _PASSTHROUGH))
+        isinstance(value, _PASSTHROUGH)
+        or (isinstance(value, type) and issubclass(value, _PASSTHROUGH))
     )
 
 
@@ -102,47 +103,47 @@ def validate_schema(lf) -> None:
         _TYPE_VALIDATOR(dtype)
 
 
-def wrap(obj):
-    factory = _REGISTRY.get(type(obj))
+def wrap(value):
+    factory = _REGISTRY.get(type(value))
     if factory is not None:
-        return factory(obj)
-    if type(obj) is list:
-        return [wrap(x) for x in obj]
-    if type(obj) is tuple:
-        return tuple(wrap(x) for x in obj)
-    if type(obj) is dict:
-        return {k: wrap(v) for k, v in obj.items()}
-    # Aliased leaf types (e.g. datatypes) are part of our surface as-is.
-    if _is_passthrough(obj):
-        return obj
-    if type(obj).__module__.split(".", 1)[0] == "polars":
-        # The wrapper/passthrough for this type may simply not be imported yet —
+        return factory(value)
+    if type(value) is list:
+        return [wrap(item) for item in value]
+    if type(value) is tuple:
+        return tuple(wrap(item) for item in value)
+    if type(value) is dict:
+        return {key: wrap(item) for key, item in value.items()}
+    # Aliased leaf types (e.g. datatypes) are part of our API as-is.
+    if _is_passthrough(value):
+        return value
+    if type(value).__module__.split(".", 1)[0] == "polars":
+        # The wrapper / passthrough for this type may simply not be imported yet;
         # load the registry once and retry before declaring a leak.
         if not _loaded:
             _ensure_loaded()
-            return wrap(obj)
+            return wrap(value)
         # Nothing should leak a raw polars object out of the delegation API.
         raise TypeError(
             f"tableframe: no wrapper for polars type "
-            f"{type(obj).__module__}.{type(obj).__qualname__} — "
-            f"it would leak the impl. "
+            f"{type(value).__module__}.{type(value).__qualname__} — "
+            f"it would leak the implementation. "
             f"Wrap this type or remove the operation from the whitelist."
         )
-    return obj
+    return value
 
 
-def unwrap(obj):
-    if isinstance(obj, BaseWrapper):
-        return obj._inner
-    if isinstance(obj, BaseFrame):
-        return obj._lf
-    if type(obj) is list:
-        return [unwrap(x) for x in obj]
-    if type(obj) is tuple:
-        return tuple(unwrap(x) for x in obj)
-    if type(obj) is dict:
-        return {k: unwrap(v) for k, v in obj.items()}
+def unwrap(value):
+    if isinstance(value, BaseWrapper):
+        return value._inner
+    if isinstance(value, BaseFrame):
+        return value._lf
+    if type(value) is list:
+        return [unwrap(item) for item in value]
+    if type(value) is tuple:
+        return tuple(unwrap(item) for item in value)
+    if type(value) is dict:
+        return {key: unwrap(item) for key, item in value.items()}
     # A datatype passed INTO polars (e.g. cast(Int64)) must be allowed.
-    if _TYPE_VALIDATOR is not None and _is_passthrough(obj):
-        _TYPE_VALIDATOR(obj)
-    return obj
+    if _TYPE_VALIDATOR is not None and _is_passthrough(value):
+        _TYPE_VALIDATOR(value)
+    return value

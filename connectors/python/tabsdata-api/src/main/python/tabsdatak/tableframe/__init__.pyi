@@ -62,24 +62,6 @@ class TableFrame(EngineFrame):
     def width(self) -> int:
         """ """
 
-    def __eq__(self, other: object) -> Any:
-        """ """
-
-    def __ne__(self, other: object) -> Any:
-        """ """
-
-    def __gt__(self, other: Any) -> Any:
-        """ """
-
-    def __lt__(self, other: Any) -> Any:
-        """ """
-
-    def __ge__(self, other: Any) -> Any:
-        """ """
-
-    def __le__(self, other: Any) -> Any:
-        """ """
-
     def __getitem__(self, item: Any) -> TableFrame:
         """ """
 

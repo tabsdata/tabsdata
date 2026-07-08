@@ -186,28 +186,23 @@ def test_tableframe_has_hooks_and_augmenting_ops(main_root):
     perform(_report(), ROOT, str(main_root))
     text = (main_root / "pkg" / "wrap" / "__init__.py").read_text()  # ruff-formatted
     assert "class TableFrame(EngineFrame):" in text
-    # _HOOKABLE_OPS lists the dispatching method names (no policy in generated code)
-    assert "_HOOKABLE_OPS = (" in text
-    for op in ('"agg"', '"join"', '"select"', '"with_columns"', '"drop"', '"rename"'):
-        assert op in text
-    assert "from pkg.wrap._core.hooks import run_hook" in text
-    # augmenting ops wrap then dispatch run_hook — no typed registrars, no lineage
+    # every op routes through compute (no policy in generated code)
+    assert "from pkg.wrap._core.hooks import compute" in text
+    # augmenting ops route through compute with their params + call thunk
     assert "def join(" in text and 'how="inner"' in text
-    assert "run_hook(" in text and "sources=(self, other)" in text
+    assert '"join",\n            (self, other),' in text
+    assert "call=lambda left, right: left.join(" in text
     assert "def select(self, *exprs, **named_exprs):" in text
     assert '"replace_all": True' in text  # select replaces
-    assert "sources=(self,)" in text
+    assert '"select",\n            (self,),' in text
     assert "def with_columns(self, *exprs, **named_exprs):" in text
     assert (
         "return LazyGroupBy(self._lf.group_by(*u_by, **u_named), self, (u_by, u_named))"
         in text
     )
-    # transparent op: LazyFrame result -> _clone (carry state); else wrap as a value
-    assert "out = self._lf.filter(*unwrap(args), **unwrap(kwargs))" in text
-    assert (
-        "return self._clone(out) if isinstance(out, type(self._lf)) else wrap(out)"
-        in text
-    )
+    # transparent LazyFrame op: routed through compute with empty params
+    assert '"filter", (self,), {}, ' in text
+    assert "call=lambda lf: lf.filter(*u_args, **u_kwargs)" in text
     # property reads (wrapped) underlying frame
     assert "return wrap(self._lf.schema)" in text
 
@@ -216,14 +211,12 @@ def test_drop_and_rename_dispatch_hooks(main_root):
     perform(_report(), ROOT, str(main_root))
     init = (main_root / "pkg" / "wrap" / "__init__.py").read_text()
     assert "def drop(self, *columns, **kwargs):" in init
-    assert (
-        'run_hook("drop", out, sources=(self,), params={"columns": u_columns})' in init
-    )
+    assert '"drop",\n            (self,),\n            {"columns": u_columns},' in init
+    assert "call=lambda lf: lf.drop(*u_columns, **u_kwargs)" in init
     assert "def rename(self, mapping, *args, **kwargs):" in init
-    assert (
-        'run_hook("rename", out, sources=(self,), params={"mapping": u_mapping})'
-        in init
-    )
+    assert '"rename",\n            (self,),\n' in init
+    assert '{"mapping": u_mapping},' in init
+    assert "call=lambda lf: lf.rename(u_mapping, *u_args, **u_kwargs)" in init
 
 
 def test_lazygroupby_agg(main_root):
@@ -232,7 +225,8 @@ def test_lazygroupby_agg(main_root):
     assert "class LazyGroupBy:" in text
     assert "def agg(self, *aggs, **named_aggs):" in text
     assert "by, named_by = self._by" in text
-    assert "run_hook(" in text and "sources=(self._parent,)" in text
+    assert '"agg",\n            (self._parent,),' in text
+    assert "call=lambda *_: self._lgb.agg(*u_args, **u_named)" in text
 
 
 def test_value_class_and_function_still_transparent(main_root):
@@ -258,7 +252,7 @@ def test_generates_core_runtime(main_root):
     assert (core / "base.py").read_text().splitlines()[0].startswith("# Copyright ")
 
 
-def test_hooks_module_has_per_op_typed_hook_types(main_root):
+def test_hooks_module_has_per_op_typed_params(main_root):
     perform(_report(), ROOT, str(main_root))
     hooks = (main_root / "pkg" / "wrap" / "_core" / "hooks.py").read_text()
     assert "__HOOK_TYPES__" not in hooks  # placeholder substituted
@@ -267,19 +261,13 @@ def test_hooks_module_has_per_op_typed_hook_types(main_root):
     assert "class ProjectParams(TypedDict):" in hooks
     assert "class AggParams(TypedDict):" in hooks
     # join params carry the real keys
-    for field in ("on:", "how: str", "left_on:", "right_on:", "suffix: str"):
-        assert field in hooks
-    # one Hook alias per op-name, with the right source arity + params
-    assert (
-        "JoinHook = Callable[\n    "
-        '["TableFrame", tuple["TableFrame", "TableFrame"], JoinParams]' in hooks
-    )
-    assert (
-        "SelectHook = Callable["
-        '["TableFrame", tuple["TableFrame"], ProjectParams], "TableFrame"]' in hooks
-    )
-    assert "WithColumnsHook = Callable[" in hooks and "ProjectParams" in hooks
-    assert "AggHook = Callable[" in hooks
+    for field_name in ("on:", "how: str", "left_on:", "right_on:", "suffix: str"):
+        assert field_name in hooks
+    # the four phase-hook aliases + the compute interceptor + FrameView
+    for symbol in ("BeforeHook", "DuringHook", "AfterHook", "StateHook"):
+        assert symbol in hooks
+    assert "def compute(" in hooks
+    assert "class FrameView:" in hooks
 
 
 def test_multiple_classes_in_one_module(main_root):
@@ -330,6 +318,12 @@ def test_init_defers_registry_load_off_the_import_path(main_root):
     assert "def _load_registry() -> None:" in init
     assert 'importlib.import_module(f"{__name__}.{submodule}")' in init
     assert "register_loader(_load_registry)" in init
+    # the edition feature seam is installed lazily (guards/lineage/provenance),
+    # not a hardcoded hook-module import
+    assert (
+        "from tabsdatak.extensions.tableframe._engine.features import install" in init
+    )
+    assert "install(TableFrame)" in init
     assert (
         '"expr"' in init and '"group_by"' in init
     )  # submodules registered for side-effects

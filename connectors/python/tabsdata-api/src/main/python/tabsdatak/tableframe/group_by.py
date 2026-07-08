@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
-from tabsdatak.tableframe._core.hooks import run_hook
-from tabsdatak.tableframe._core.translate import unwrap, wrap
+from tabsdatak.tableframe._core.hooks import compute
+from tabsdatak.tableframe._core.translate import unwrap
 
 
 class LazyGroupBy:
+    # agg-family ops carry lineage / provenance via after / state hooks
+    # over the parent; the grouper already captured the plan, so a before
+    # hook is inert for them (its rewritten lazyframes are not run).
     def __init__(self, lgb, parent, by):
         self._lgb = lgb
         self._parent = parent
@@ -16,80 +19,90 @@ class LazyGroupBy:
     def agg(self, *aggs, **named_aggs):
         u_args = unwrap(aggs)
         u_named = unwrap(named_aggs)
-        out = self._parent._clone(self._lgb.agg(*u_args, **u_named))
         by, named_by = self._by
-        return run_hook(
+        return compute(
             "agg",
-            out,
-            sources=(self._parent,),
-            params={
-                "by": by,
-                "named_by": named_by,
-                "aggs": u_args,
-                "named_aggs": u_named,
-            },
+            (self._parent,),
+            {"by": by, "named_by": named_by, "aggs": u_args, "named_aggs": u_named},
+            call=lambda *_: self._lgb.agg(*u_args, **u_named),
         )
 
     def len(self, *args, **kwargs):
-        out = self._lgb.len(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "len",
+            (self._parent,),
+            {},
+            call=lambda *_: self._lgb.len(*u_args, **u_kwargs),
+        )
 
     def count(self, *args, **kwargs):
-        out = self._lgb.count(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "count",
+            (self._parent,),
+            {},
+            call=lambda *_: self._lgb.count(*u_args, **u_kwargs),
+        )
 
     def max(self, *args, **kwargs):
-        out = self._lgb.max(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "max",
+            (self._parent,),
+            {},
+            call=lambda *_: self._lgb.max(*u_args, **u_kwargs),
+        )
 
     def mean(self, *args, **kwargs):
-        out = self._lgb.mean(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "mean",
+            (self._parent,),
+            {},
+            call=lambda *_: self._lgb.mean(*u_args, **u_kwargs),
+        )
 
     def median(self, *args, **kwargs):
-        out = self._lgb.median(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "median",
+            (self._parent,),
+            {},
+            call=lambda *_: self._lgb.median(*u_args, **u_kwargs),
+        )
 
     def min(self, *args, **kwargs):
-        out = self._lgb.min(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "min",
+            (self._parent,),
+            {},
+            call=lambda *_: self._lgb.min(*u_args, **u_kwargs),
+        )
 
     def n_unique(self, *args, **kwargs):
-        out = self._lgb.n_unique(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "n_unique",
+            (self._parent,),
+            {},
+            call=lambda *_: self._lgb.n_unique(*u_args, **u_kwargs),
+        )
 
     def sum(self, *args, **kwargs):
-        out = self._lgb.sum(*unwrap(args), **unwrap(kwargs))
-        if isinstance(out, type(self._lgb)):
-            return LazyGroupBy(out, self._parent, self._by)
-        if isinstance(out, type(self._parent._lf)):
-            return self._parent._clone(out)
-        return wrap(out)
+        u_args = unwrap(args)
+        u_kwargs = unwrap(kwargs)
+        return compute(
+            "sum",
+            (self._parent,),
+            {},
+            call=lambda *_: self._lgb.sum(*u_args, **u_kwargs),
+        )

@@ -44,6 +44,36 @@ class EngineFrame(BaseFrame):
         state = self._state.clone() if self._state is not None else None
         return type(self)._wrap(lf, state)
 
+    def _identity(self):
+        genesis = self._state.genesis if self._state is not None else None
+        return genesis.id if genesis is not None else None
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, EngineFrame):
+            return self._identity() == other._identity()
+        return self._lf.__eq__(other)
+
+    def __ne__(self, other) -> bool:
+        if isinstance(other, EngineFrame):
+            return self._identity() != other._identity()
+        return self._lf.__ne__(other)
+
+    def __gt__(self, other):
+        return self._lf.__gt__(self._operand(other))
+
+    def __lt__(self, other):
+        return self._lf.__lt__(self._operand(other))
+
+    def __ge__(self, other):
+        return self._lf.__ge__(self._operand(other))
+
+    def __le__(self, other):
+        return self._lf.__le__(self._operand(other))
+
+    @staticmethod
+    def _operand(other):
+        return other._lf if isinstance(other, EngineFrame) else other
+
     @classmethod
     def _resolve_idx(cls, idx) -> int | None:
         from tabsdatak.tableframe._engine.column.generator import IdxGenerator
@@ -162,7 +192,13 @@ class EngineFrame(BaseFrame):
         return self._lf.select(keep)
 
     def _sink_native(self, path) -> None:
-        self._persisted().sink_parquet(path)
+        from tabsdatak.tableframe._core.hooks import get_sink_observer
+
+        lf = self._persisted()
+        observer = get_sink_observer(type(self))
+        if observer is not None:
+            lf = observer(lf, "sink_parquet", path)
+        lf.sink_parquet(path, engine="streaming")
 
     # Construction surface. Classmethods so cls is the concrete subclass and the
     # wrapped result is a TableFrame; each normalizes its input to a polars
@@ -252,3 +288,4 @@ class EngineFrame(BaseFrame):
             .collect(no_optimization=True)
             .to_dict(as_series=False)
         )
+

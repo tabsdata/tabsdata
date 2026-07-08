@@ -21,9 +21,9 @@ class BaseWrapper:
 
     @classmethod
     def _wrap(cls, inner) -> "BaseWrapper":
-        obj = cls.__new__(cls)
-        obj._inner = inner
-        return obj
+        instance = cls.__new__(cls)
+        instance._inner = inner
+        return instance
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._inner!r})"
@@ -40,13 +40,13 @@ class BaseFrame:
 
     @classmethod
     def _wrap(cls, lf, state=None) -> "BaseFrame":
-        obj = cls.__new__(cls)
-        obj._lf = lf
-        obj._state = state
-        return obj
+        instance = cls.__new__(cls)
+        instance._lf = lf
+        instance._state = state
+        return instance
 
     def _clone(self, lf) -> "BaseFrame":
-        # carry the opaque state forward (type(self) => subclass)
+        # Carry the opaque state forward; type(self) keeps the concrete subclass.
         return type(self)._wrap(lf, self._state)
 
     def __repr__(self) -> str:

@@ -16,7 +16,7 @@ Module kinds:
                     lists the dispatching ops.
 * LazyGroupBy    -> ``group_by.py``: ``agg`` (hookable) and group-transparent ops.
 
-Per-op behavior is selected by each symbol's ``hook_name`` from the report
+Per-op behavior is selected by each symbol's ``hook_name`` from the manifest
 ("-" = no hook by default; "project"/"join"/"group_by"/"agg"/"drop"/"rename" set
 by the user). The generated code carries NO provenance policy — it only wraps and
 dispatches hooks; column lineage etc. lives in handwritten hook modules that the
@@ -43,8 +43,8 @@ from tabsdatax.generator.tableframe.engine.generate.stubs import (
 from tabsdatax.generator.tableframe.model.model import Report, Symbol
 from tabsdatax.generator.tableframe.model.spec import datatype_names
 
-_PYI_CHANGED = "#CHANGED SIGNATURE, VALIDATE/FIX PYDOC"
-_PYI_NEW = "#NEW SIGNATURE, CREATE PYDOC"
+_PYI_CHANGED = "# Signature changed; validate and fix the docstring below."
+_PYI_NEW = "# New signature; write the docstring below."
 
 
 def _copyright() -> str:
@@ -101,7 +101,7 @@ _HOOK_SHAPES: dict[str, tuple[int, list[tuple[str, str]]]] = {
 _HOOK_NAMES = set(_HOOK_SHAPES)
 
 # Constructors of generator-scaffolded classes (class name -> parameter names).
-# These have no polars-report symbol — the runtime renderers emit them as
+# These have no manifest symbol — the runtime renderers emit them as
 # scaffolding — so the .pyi renderer sources them from here; otherwise the stub
 # class has no __init__ and type checkers fall back to ``object()``'s
 # zero-argument constructor, flagging every construction site.
@@ -143,8 +143,9 @@ def perform(
         if symbol.hook_name in _HOOK_NAMES
     })
 
-    # datatypes.py is always emitted (aliased leaf types); it is not a report module
-    # but must be a submodule so the __init__ loop imports it (registers passthrough).
+    # The datatypes.py module is always emitted (aliased leaf types); it is not a
+    # manifest module but must be a submodule so the __init__ loop imports it
+    # (registering the passthrough types).
     datatypes = datatype_names()
     submodules = sorted(
         {
@@ -257,8 +258,9 @@ def _pascal(name: str) -> str:
 
 
 def _render_hook_types(specs: list[tuple[str, str]]) -> str:
-    """Render the per-op hook types for hooks.py: one ``<HookName>Params`` TypedDict
-    per distinct hook_name, and one ``<OpName>Hook`` Callable alias per op-name.
+    """Render the per-op params types for hooks.py: one ``<HookName>Params``
+    TypedDict per distinct hook_name, documenting exactly what a routed op passes
+    to its hooks in the ``params`` dict.
 
     ``specs`` is (op-name, hook_name) per hookable op — e.g. ("with_columns",
     "project"), ("join", "join"). Empty input yields an empty block.
@@ -270,20 +272,12 @@ def _render_hook_types(specs: list[tuple[str, str]]) -> str:
         _, fields = _HOOK_SHAPES[hook_name]
         lines += [
             f"class {_pascal(hook_name)}Params(TypedDict):",
-            f'    """Params a {hook_name!r} op passes to its hook."""',
+            f'    """Params a {hook_name!r} op passes to its hooks."""',
             "",
         ]
         lines += [f"    {field_name}: {type_text}" for field_name, type_text in fields]
         lines += ["", ""]
-    for op_name, hook_name in sorted(specs):
-        source_count, _ = _HOOK_SHAPES[hook_name]
-        sources = ", ".join(['"TableFrame"'] * source_count)
-        lines.append(
-            f"{_pascal(op_name)}Hook = "
-            f'Callable[["TableFrame", tuple[{sources}], '
-            f'{_pascal(hook_name)}Params], "TableFrame"]'
-        )
-    return "\n".join(lines)
+    return "\n".join(lines).rstrip("\n")
 
 
 def _write_datatypes(base: Path, module: str, names: list[str]) -> Path:
@@ -388,7 +382,7 @@ def _write_test_namespace_inits(base: Path) -> list[Path]:
     parts = base.parts
     # Namespace inits belong only to the importable test package, i.e. the
     # folders below the source root (the `.../src/utest/python` segment). Start
-    # at the LAST "python" segment, not the first — a root-dir like
+    # at the LAST "python" segment, not the first — a main root like
     # `./python/tabsdata-api/src/main/python` has two, and anchoring on the
     # first would scaffold spurious inits into the non-package layout folders
     # (tabsdata-api/, src/, src/utest/).
@@ -535,13 +529,12 @@ def _render_value_test(symbols: list[Symbol], root: str) -> str:
             safe = f"{prefix}{_safe(name)}"
             lines += ["", f"def test_{safe}_delegates():", "    inner = MagicMock()"]
             if symbol.is_property:
-                lines.append(
-                    f"    getattr({class_name}._wrap(inner), {name!r})"
-                )  # accessor wires through
+                # The accessor wires straight through to the underlying object.
+                lines.append(f"    getattr({class_name}._wrap(inner), {name!r})")
             else:
-                arg = "MagicMock()" if name in ("__eq__", "__ne__") else ""
+                argument = "MagicMock()" if name in ("__eq__", "__ne__") else ""
                 lines += [
-                    f"    getattr({class_name}._wrap(inner), {name!r})({arg})",
+                    f"    getattr({class_name}._wrap(inner), {name!r})({argument})",
                     f"    getattr(inner, {name!r}).assert_called()",
                 ]
             if receiver is not None:
@@ -748,16 +741,13 @@ def _render_tableframe_py(
         _py_header(),
         "from __future__ import annotations",
         "",
-        f"from {root}._core.hooks import run_hook",
+        f"from {root}._core.hooks import compute",
         f"from {root}._core.translate import register_loader, unwrap, wrap",
         f"from {root}._engine.frame.frame import EngineFrame",
         "",
         "",
         "class TableFrame(EngineFrame):",
     ]
-    if hookable:
-        lines.append(f"    _HOOKABLE_OPS = ({', '.join(repr(op) for op in hookable)},)")
-        lines.append("")
     # The from_* / empty / to_* construction and materialization API is
     # handwritten on EngineFrame (not generated); TableFrame inherits it, and the
     # stub's `class TableFrame(EngineFrame)` link lets tooling resolve it from source.
@@ -780,7 +770,9 @@ def _render_tableframe_py(
         f"    for submodule in {tuple(submodules)!r}:",
         '        importlib.import_module(f"{__name__}.{submodule}")',
         "",
-        f'    importlib.import_module("{root}._engine.frame.hook")',
+        "    from tabsdatak.extensions.tableframe._engine.features import install",
+        "",
+        "    install(TableFrame)",
         "",
         f"    from {root}._core.translate import register_factory",
         f"    from {root}._core.hooks import tableframe_of",
@@ -798,11 +790,14 @@ def _render_lazygroupby_py(symbols: list[Symbol], root: str) -> str:
         _py_header(),
         "from __future__ import annotations",
         "",
-        f"from {root}._core.hooks import run_hook",
+        f"from {root}._core.hooks import compute",
         f"from {root}._core.translate import unwrap, wrap",
         "",
         "",
         "class LazyGroupBy:",
+        "    # agg-family ops carry lineage / provenance via after / state hooks",
+        "    # over the parent; the grouper already captured the plan, so a before",
+        "    # hook is inert for them (its rewritten lazyframes are not run).",
         f"    def __init__(self, {', '.join(_SCAFFOLD_CONSTRUCTORS['LazyGroupBy'])}):",
         "        self._lgb = lgb",
         "        self._parent = parent",
@@ -813,16 +808,25 @@ def _render_lazygroupby_py(symbols: list[Symbol], root: str) -> str:
         name = _member(symbol)
         if symbol.hook_name == "agg":
             lines += _agg_body()
+        elif _body_kind(symbol) == "compute":
+            # An aggregation over the group (len/count/max/...) terminates into a
+            # frame; route it through compute over the parent, like agg.
+            lines += [
+                f"    def {name}(self, *args, **kwargs):",
+                "        u_args = unwrap(args)",
+                "        u_kwargs = unwrap(kwargs)",
+                f'        return compute("{name}", (self._parent,), {{}},',
+                f"            call=lambda *_: self._lgb.{name}(*u_args, **u_kwargs))",
+                "",
+            ]
         else:
             # A LazyGroupBy result (e.g. having) re-wraps as our LazyGroupBy with the
-            # same parent + keys; a LazyFrame result clones the parent; else wrap.
+            # same parent + keys; anything else is wrapped as a value.
             lines += [
                 f"    def {name}(self, *args, **kwargs):",
                 f"        out = self._lgb.{name}(*unwrap(args), **unwrap(kwargs))",
                 "        if isinstance(out, type(self._lgb)):",
                 "            return LazyGroupBy(out, self._parent, self._by)",
-                "        if isinstance(out, type(self._parent._lf)):",
-                "            return self._parent._clone(out)",
                 "        return wrap(out)",
                 "",
             ]
@@ -832,6 +836,61 @@ def _render_lazygroupby_py(symbols: list[Symbol], root: str) -> str:
 # --------------------------------------------------------------------------- #
 # TableFrame per-op bodies.
 # --------------------------------------------------------------------------- #
+# Return types that yield a derived frame (route through compute).
+_FRAME_RETURNS = frozenset({"LazyFrame"})
+# Return types wrappable into one of our value wrappers (wrap()).
+_WRAP_RETURNS = frozenset({
+    "DataFrame",
+    "Schema",
+    "LazyGroupBy",
+    "tuple[DataFrame, DataFrame]",
+    "Iterator[DataFrame]",
+})
+# Scalar / stdlib return types returned as-is (wrap passes them through anyway).
+_PASSTHROUGH_RETURNS = frozenset({
+    "int",
+    "str",
+    "bool",
+    "bytes",
+    "list[str]",
+    "list[DataType]",
+    "T",
+})
+
+
+def _normalize_return(returns: str) -> str:
+    text = returns.strip()
+    for prefix in ("pl.", "pc."):
+        if text.startswith(prefix):
+            text = text[len(prefix) :]
+    if text.endswith(" | None"):
+        text = text[: -len(" | None")]
+    return text.strip()
+
+
+def _body_kind(symbol: Symbol) -> str:
+    """Classify a symbol's op body by its manifest return type: route a frame
+    result through ``compute``, ``wrap`` a wrappable polars object, return a
+    scalar as-is, or ``raise`` for unsupported / unmodeled returns."""
+    returns = _normalize_return(symbol.returns)
+    if returns in _FRAME_RETURNS:
+        return "compute"
+    if returns in _WRAP_RETURNS:
+        return "wrap"
+    if returns in _PASSTHROUGH_RETURNS:
+        return "passthrough"
+    return "raise"
+
+
+_HOOKED_BODIES = {
+    "join": lambda name, root: _join_body(),
+    "project": lambda name, root: _project_body(name),
+    "group_by": lambda name, root: _group_by_body(name, root),
+    "drop": lambda name, root: _drop_body(),
+    "rename": lambda name, root: _rename_body(),
+}
+
+
 def _tableframe_member(symbol: Symbol, root: str) -> list[str]:
     name = _member(symbol)
     if symbol.is_property:
@@ -841,23 +900,39 @@ def _tableframe_member(symbol: Symbol, root: str) -> list[str]:
             f"        return wrap(self._lf.{name})",
             "",
         ]
-    if symbol.hook_name == "join":
-        return _join_body()
-    if symbol.hook_name == "project":
-        return _project_body(name)
-    if symbol.hook_name == "group_by":
-        return _group_by_body(name, root)
-    if symbol.hook_name == "drop":
-        return _drop_body()
-    if symbol.hook_name == "rename":
-        return _rename_body()
-    # default: transparent. A LazyFrame result is a derived frame (carry hook state
-    # via _clone); anything else (Schema, scalar, str, ...) is wrapped as a value.
+    hooked = _HOOKED_BODIES.get(symbol.hook_name)
+    if hooked is not None:
+        return hooked(name, root)
+    return _classified_body(_body_kind(symbol), name, root)
+
+
+def _classified_body(kind: str, name: str, root: str) -> list[str]:
+    if kind == "compute":
+        return [
+            f"    def {name}(self, *args, **kwargs):",
+            "        u_args = unwrap(args)",
+            "        u_kwargs = unwrap(kwargs)",
+            f'        return compute("{name}", (self,), {{}},',
+            f"            call=lambda lf: lf.{name}(*u_args, **u_kwargs))",
+            "",
+        ]
+    if kind == "wrap":
+        return [
+            f"    def {name}(self, *args, **kwargs):",
+            f"        return wrap(self._lf.{name}(*unwrap(args), **unwrap(kwargs)))",
+            "",
+        ]
+    if kind == "passthrough":
+        return [
+            f"    def {name}(self, *args, **kwargs):",
+            f"        return self._lf.{name}(*unwrap(args), **unwrap(kwargs))",
+            "",
+        ]
     return [
         f"    def {name}(self, *args, **kwargs):",
-        f"        out = self._lf.{name}(*unwrap(args), **unwrap(kwargs))",
-        "        return self._clone(out) "
-        "if isinstance(out, type(self._lf)) else wrap(out)",
+        f"        from {root}._engine.event.error import TableFrameErrorCode",
+        "",
+        f'        raise TableFrameErrorCode.TF5.exception(op="{name}")',
         "",
     ]
 
@@ -868,11 +943,11 @@ def _project_body(name: str) -> list[str]:
         f"    def {name}(self, *exprs, **named_exprs):",
         "        u_args = unwrap(exprs)",
         "        u_named = unwrap(named_exprs)",
-        f"        out = self._clone(self._lf.{name}(*u_args, **u_named))",
-        f'        return run_hook("{name}", out, sources=(self,), '
-        'params={"exprs": u_args, "named": u_named, "replace_all": '
+        f'        return compute("{name}", (self,), '
+        '{"exprs": u_args, "named": u_named, "replace_all": '
         + replace_all
-        + "})",
+        + "},",
+        f"            call=lambda lf: lf.{name}(*u_args, **u_named))",
         "",
     ]
 
@@ -881,12 +956,14 @@ def _join_body() -> list[str]:
     return [
         '    def join(self, other, on=None, how="inner", *, '
         'left_on=None, right_on=None, suffix="_right"):',
-        "        out = self._clone(self._lf.join(other._lf, on=unwrap(on), how=how, "
-        "left_on=unwrap(left_on), right_on=unwrap(right_on), suffix=suffix))",
-        '        return run_hook("join", out, sources=(self, other), '
-        'params={"on": unwrap(on), '
-        '"how": how, "left_on": unwrap(left_on), "right_on": unwrap(right_on), '
-        '"suffix": suffix})',
+        "        u_on = unwrap(on)",
+        "        u_left_on = unwrap(left_on)",
+        "        u_right_on = unwrap(right_on)",
+        '        return compute("join", (self, other), '
+        '{"on": u_on, "how": how, "left_on": u_left_on, '
+        '"right_on": u_right_on, "suffix": suffix},',
+        "            call=lambda left, right: left.join(right, on=u_on, how=how, "
+        "left_on=u_left_on, right_on=u_right_on, suffix=suffix))",
         "",
     ]
 
@@ -907,9 +984,9 @@ def _drop_body() -> list[str]:
     return [
         "    def drop(self, *columns, **kwargs):",
         "        u_columns = unwrap(columns)",
-        "        out = self._clone(self._lf.drop(*u_columns, **unwrap(kwargs)))",
-        '        return run_hook("drop", out, sources=(self,), '
-        'params={"columns": u_columns})',
+        "        u_kwargs = unwrap(kwargs)",
+        '        return compute("drop", (self,), {"columns": u_columns},',
+        "            call=lambda lf: lf.drop(*u_columns, **u_kwargs))",
         "",
     ]
 
@@ -918,24 +995,26 @@ def _rename_body() -> list[str]:
     return [
         "    def rename(self, mapping, *args, **kwargs):",
         "        u_mapping = unwrap(mapping)",
-        "        out = self._clone("
-        "self._lf.rename(u_mapping, *unwrap(args), **unwrap(kwargs)))",
-        '        return run_hook("rename", out, sources=(self,), '
-        'params={"mapping": u_mapping})',
+        "        u_args = unwrap(args)",
+        "        u_kwargs = unwrap(kwargs)",
+        '        return compute("rename", (self,), {"mapping": u_mapping},',
+        "            call=lambda lf: lf.rename(u_mapping, *u_args, **u_kwargs))",
         "",
     ]
 
 
 def _agg_body() -> list[str]:
+    # agg's call closes over self._lgb (the grouper), not a lazyframe input, so it
+    # ignores the lazyframes compute passes; sources / build use the parent frame.
     return [
         "    def agg(self, *aggs, **named_aggs):",
         "        u_args = unwrap(aggs)",
         "        u_named = unwrap(named_aggs)",
-        "        out = self._parent._clone(self._lgb.agg(*u_args, **u_named))",
         "        by, named_by = self._by",
-        '        return run_hook("agg", out, sources=(self._parent,), '
-        'params={"by": by, "named_by": named_by, '
-        '"aggs": u_args, "named_aggs": u_named})',
+        '        return compute("agg", (self._parent,), '
+        '{"by": by, "named_by": named_by, '
+        '"aggs": u_args, "named_aggs": u_named},',
+        "            call=lambda *_: self._lgb.agg(*u_args, **u_named))",
         "",
     ]
 
