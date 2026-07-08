@@ -31,11 +31,15 @@ import os
 import sys
 from pathlib import Path
 
-from . import cli, crypto, data_gen, descriptor, secret, ssh, systems, _venv
+from . import _venv, cli, crypto, data_gen, descriptor, secret, ssh, systems
 from .errors import DatagenError, run
 from .shell import ArgumentParser as _ArgumentParser, find_free_port
 from .systems.base import (
-    CreateDomainSpec, CreateSystemSpec, DomainContext, SystemContext, Unsupported,
+    CreateDomainSpec,
+    CreateSystemSpec,
+    DomainContext,
+    SystemContext,
+    Unsupported,
 )
 
 
@@ -424,6 +428,17 @@ def _domain_create(rest: list[str]) -> int:
                    help="also load model data at this size (requires --model)")
     p.add_argument("-f", "--force", action="store_true",
                    help="recreate if it already exists")
+    # Peek --sys so the target system can contribute its own create-domain
+    # options (e.g. bigquery --dataset / --domain-path) before we parse, so
+    # `tdx-domain create --sys FILE -h` lists them (mirrors --type peeking in
+    # _sys_create).
+    sys_peek = _extract_opt(rest, "--sys")
+    peeked_sys = None
+    if sys_peek and Path(sys_peek).exists():
+        peek_doc = descriptor.load(sys_peek)
+        if peek_doc.get("system") in systems.all_slugs():
+            peeked_sys = systems.get(peek_doc["system"])
+            peeked_sys.add_domain_options(p)
     args = p.parse_args(rest)
     if args.data and not args.model:
         raise DatagenError("--data requires --model")
@@ -437,10 +452,13 @@ def _domain_create(rest: list[str]) -> int:
     slug = sysdoc["system"]
     started = descriptor.now_stamp()
 
-    sysobj = systems.get(slug)
+    sysobj = peeked_sys or systems.get(slug)
+    if (args.model or args.data) and not sysobj.supports_models:
+        raise DatagenError(f"{slug} does not support --model / --data")
     baked = sysobj.create_domain(
         SystemContext(slug, sysdoc["name"], sysmeta),
-        CreateDomainSpec(name=args.name, out=args.domain, force=args.force))
+        CreateDomainSpec(name=args.name, out=args.domain, force=args.force,
+                         options=sysobj.resolve_domain_options(args)))
     # The domain resource (database / schema / prefix) exists now. If writing
     # its descriptor OR the optional schema-install / data-load fails, drop the
     # resource and remove the descriptor so nothing half-created is left behind.

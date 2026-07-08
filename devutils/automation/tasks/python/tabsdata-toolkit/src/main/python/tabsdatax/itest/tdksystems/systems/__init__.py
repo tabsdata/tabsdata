@@ -28,6 +28,7 @@ _SLUGS = {
     "databricks":  ("databricks.system",  "DatabricksSystem"),
     "snowflake":   ("snowflake.system",   "SnowflakeSystem"),
     "salesforce":  ("salesforce.system",  "SalesforceSystem"),
+    "bigquery":    ("bigquery.system",    "BigQuerySystem"),
 }
 
 

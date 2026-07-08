@@ -29,7 +29,7 @@ def fs_root(tmp_path):
 
 def test_registry_covers_every_system():
     from tabsdatax.itest.tdksystems import systems
-    assert len(systems.all_slugs()) == 16
+    assert len(systems.all_slugs()) == 17
     for slug in systems.all_slugs():
         assert systems.get(slug).slug == slug
 

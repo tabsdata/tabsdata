@@ -9,6 +9,12 @@
       "value": "?"
     },
     {
+      "id": "service_account_key",
+      "label": "service_account_key",
+      "type": "CONCEALED",
+      "value": "?"
+    },
+    {
       "id": "access_key",
       "label": "access_key",
       "type": "CONCEALED",

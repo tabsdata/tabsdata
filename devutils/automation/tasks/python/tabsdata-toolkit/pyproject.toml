@@ -69,6 +69,7 @@ dependencies = [
     "pyarrow",
     "boto3",
     "google-cloud-storage",
+    "google-cloud-bigquery",
     "azure-storage-blob",
     "snowflake-connector-python",
     "confluent-kafka[avro,json,protobuf]",

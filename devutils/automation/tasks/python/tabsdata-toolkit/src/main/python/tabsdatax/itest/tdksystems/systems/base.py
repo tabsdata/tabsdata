@@ -117,6 +117,9 @@ class CreateDomainSpec:
     name: str
     out: str
     force: bool = False
+    # Extra per-system domain inputs beyond --name (e.g. bigquery's DATASET /
+    # DOMAIN_PATH), resolved from the system's `domain_options`.
+    options: dict[str, str] = field(default_factory=dict)
 
 
 # --- run-time handles (resolved from an existing descriptor) ---
@@ -184,6 +187,11 @@ class System(ABC):
     domain_is_named: bool = True       # False for salesforce (creds clone, no
                                        # schema/db/prefix to create)
     supports_sql: bool = False         # can install_schema + run INSERTs
+    supports_models: bool = True       # accepts --model/--data on domain create
+                                       # (False -> tdx-domain rejects them)
+    domain_options: tuple[Option, ...] = ()   # extra create-domain inputs a
+                                       # system needs beyond --name (bigquery:
+                                       # --dataset / --domain-path)
 
     @property
     def default_env_prefix(self) -> str:
@@ -315,6 +323,29 @@ class System(ABC):
                 env = f"{prefix}__{opt.name}"       # default-prefix fallback
             out[opt.name] = Setting(name=opt.name, value=lit, env_var=env,
                                     is_path=opt.is_path)
+        return out
+
+    def add_domain_options(self, parser: argparse.ArgumentParser) -> None:
+        """Add any per-system `create-domain` args beyond --name (e.g. bigquery's
+        --dataset / --domain-path). Default: none. tdx.py calls this once it has
+        loaded the target system, so `tdx-domain create --sys FILE -h` lists
+        them."""
+        for opt in self.domain_options:
+            parser.add_argument(
+                f"--{opt.cli_flag}", dest=f"dom_{opt.name}", required=True,
+                metavar=opt.name, help=f"{self.slug} domain: --{opt.cli_flag}")
+
+    def resolve_domain_options(self, ns) -> dict[str, str]:
+        """Collect the declared `domain_options` from a parsed Namespace into a
+        `{name: value}` dict (paths normalised + validated), for
+        CreateDomainSpec.options."""
+        out: dict[str, str] = {}
+        for opt in self.domain_options:
+            val = getattr(ns, f"dom_{opt.name}", None) or ""
+            if opt.is_path:
+                val = _normalize_path(val)
+                _validate_path(val, opt.name)
+            out[opt.name] = val
         return out
 
     def settings_from_meta(self, meta: dict[str, str]) -> dict[str, Setting]:

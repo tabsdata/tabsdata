@@ -1,0 +1,36 @@
+{
+  "title": "BigQuery",
+  "category": "API_CREDENTIAL",
+  "fields": [
+    {
+      "id": "project",
+      "label": "project",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "bucket",
+      "label": "bucket",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "sys_path",
+      "label": "sys_path",
+      "type": "STRING",
+      "value": "?"
+    },
+    {
+      "id": "service_account_key",
+      "label": "service_account_key",
+      "type": "CONCEALED",
+      "value": "?"
+    },
+    {
+      "id": "expires",
+      "label": "expires",
+      "type": "DATE",
+      "value": "2099-12-31"
+    }
+ ]
+}
