@@ -35,6 +35,10 @@
     {
       "id": "CVE-2026-44471",
       "reason": "Improper Link Resolution Before File Access ('Link Following')."
+    },
+    {
+      "id": "CVE-2026-48504",
+      "reason": "Allocation of Resources Without Limits or Throttling"
     }
   ]
 }

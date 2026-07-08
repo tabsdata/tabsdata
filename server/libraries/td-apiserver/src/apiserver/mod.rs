@@ -41,38 +41,6 @@ pub(crate) fn normalize_catch_all_paths(openapi: &mut utoipa::openapi::OpenApi) 
         .collect();
 }
 
-#[cfg(test)]
-mod catch_all_tests {
-    use super::normalize_catch_all_paths;
-    use utoipa::openapi::{OpenApiBuilder, PathItem, PathsBuilder};
-
-    #[test]
-    fn rewrites_catch_all_to_openapi_template() {
-        let paths = PathsBuilder::new()
-            .path("/api/v1/resources/{*path}", PathItem::default())
-            .path(
-                "/projects/{project}/collections/{collection}",
-                PathItem::default(),
-            )
-            .build();
-        let mut openapi = OpenApiBuilder::new().paths(paths).build();
-
-        normalize_catch_all_paths(&mut openapi);
-
-        let keys: Vec<&str> = openapi.paths.paths.keys().map(String::as_str).collect();
-        // Catch-all sigil stripped so Swagger can substitute the `path` param.
-        assert!(
-            keys.contains(&"/api/v1/resources/{path}"),
-            "catch-all not normalized, got: {keys:?}"
-        );
-        // Ordinary single-segment params are left alone.
-        assert!(
-            keys.contains(&"/projects/{project}/collections/{collection}"),
-            "normal params altered, got: {keys:?}"
-        );
-    }
-}
-
 #[allow(dead_code)]
 pub struct ApiServerCtx {
     pub config: Config,
@@ -152,5 +120,37 @@ impl ServerRunnable for ApiServer {
         match *self {
             ApiServer::V1(server) => server.inner.run(shutdown).await,
         }
+    }
+}
+
+#[cfg(test)]
+mod catch_all_tests {
+    use super::normalize_catch_all_paths;
+    use utoipa::openapi::{OpenApiBuilder, PathItem, PathsBuilder};
+
+    #[test]
+    fn rewrites_catch_all_to_openapi_template() {
+        let paths = PathsBuilder::new()
+            .path("/api/v1/resources/{*path}", PathItem::default())
+            .path(
+                "/projects/{project}/collections/{collection}",
+                PathItem::default(),
+            )
+            .build();
+        let mut openapi = OpenApiBuilder::new().paths(paths).build();
+
+        normalize_catch_all_paths(&mut openapi);
+
+        let keys: Vec<&str> = openapi.paths.paths.keys().map(String::as_str).collect();
+        // Catch-all sigil stripped so Swagger can substitute the `path` param.
+        assert!(
+            keys.contains(&"/api/v1/resources/{path}"),
+            "catch-all not normalized, got: {keys:?}"
+        );
+        // Ordinary single-segment params are left alone.
+        assert!(
+            keys.contains(&"/projects/{project}/collections/{collection}"),
+            "normal params altered, got: {keys:?}"
+        );
     }
 }

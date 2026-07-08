@@ -493,8 +493,14 @@ def test_output_new_azure_parquet_with_export_timestamp(
     )
     container_name = azure_config["CONTAINER_NAME"]
     current_test_indicator = int(datetime.datetime.now().timestamp())
+    # The stem must not be shared with the trigger/scheduler-timestamp variants:
+    # this test locates (and finally deletes) its blob BY PREFIX, and the
+    # second-resolution indicator collides when the tests start within the same
+    # second on different workers — the sibling's blob would be matched first
+    # (the fake trigger/scheduler values sort before a real export timestamp)
+    # and deleted, making the sibling's exact-name download fail.
     blob_name = (
-        "test_output/test_output_new_azure_parquet_"
+        "test_output/test_output_new_azure_parquet_export_"
         f"{current_test_indicator}_$EXPORT_TIMESTAMP.parquet"
     )
     output_fn = output_new_azure(
@@ -509,7 +515,7 @@ def test_output_new_azure_parquet_with_export_timestamp(
     resolved_blob_name = None
     try:
         prefix = (
-            "test_output/test_output_new_azure_parquet_"
+            "test_output/test_output_new_azure_parquet_export_"
             f"{current_test_indicator}_"
         )
         container_client = azure_client.get_container_client(container_name)

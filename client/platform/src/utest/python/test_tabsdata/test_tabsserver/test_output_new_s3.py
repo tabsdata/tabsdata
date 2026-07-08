@@ -278,8 +278,14 @@ def test_output_new_s3_parquet_with_export_timestamp(tmp_path, s3_client, s3_con
     )
     bucket_name = s3_config["BUCKET_NAME"]
     current_test_indicator = int(datetime.datetime.now().timestamp())
+    # The stem must not be shared with the trigger/scheduler-timestamp variants:
+    # this test locates (and finally deletes) its object BY PREFIX, and the
+    # second-resolution indicator collides when the tests start within the same
+    # second on different workers — the sibling's object would be matched first
+    # (the fake trigger/scheduler values sort before a real export timestamp)
+    # and deleted, making the sibling's exact-name download fail.
     file_name = (
-        f"testing_output/test_output_new_s3_parquet_"
+        f"testing_output/test_output_new_s3_parquet_export_"
         f"{current_test_indicator}_$EXPORT_TIMESTAMP.parquet"
     )
     output_fn = output_new_s3(
@@ -295,7 +301,7 @@ def test_output_new_s3_parquet_with_export_timestamp(tmp_path, s3_client, s3_con
     resolved_file_name = None
     try:
         prefix = (
-            f"testing_output/test_output_new_s3_parquet_"
+            f"testing_output/test_output_new_s3_parquet_export_"
             f"{current_test_indicator}_"
         )
         paginator = s3_client.get_paginator("list_objects_v2")

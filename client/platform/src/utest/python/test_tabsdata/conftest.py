@@ -41,6 +41,21 @@ try:
 except ImportError:
     pass
 
+try:
+    import pytest_reporter_html1.plugin as _html1_plugin
+
+    _publish_parts = _html1_plugin.publish_parts
+
+    def _quiet_publish_parts(*args, **kwargs):
+        overrides = dict(kwargs.get("settings_overrides") or {})
+        overrides.setdefault("report_level", 3)  # 1=info 2=warning 3=error
+        kwargs["settings_overrides"] = overrides
+        return _publish_parts(*args, **kwargs)
+
+    _html1_plugin.publish_parts = _quiet_publish_parts
+except ImportError:
+    pass
+
 # noinspection PyProtectedMember
 import tabsdata._utils.tableframe._constants as td_constants
 from tabsdata._tdfunction import TableInput, TableOutput, TabsdataFunction

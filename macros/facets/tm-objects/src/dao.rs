@@ -561,8 +561,8 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         }
         let value_variants: Vec<Ident> = field_iden_variants
             .iter()
+            .filter(|&v| !key_variants.contains(v))
             .cloned()
-            .filter(|v| !key_variants.contains(v))
             .collect();
         quote! {
             impl #impl_generics ta_objects::KeyedDao for #ident #ty_generics #where_clause {

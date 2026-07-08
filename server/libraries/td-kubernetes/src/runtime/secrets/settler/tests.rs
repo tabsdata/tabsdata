@@ -215,7 +215,7 @@ fn identical_values_across_configs_merge() {
     assert_eq!(existing.get(&Generator::JwtSigningKey).unwrap(), "same");
 }
 
-fn filled_map<'a>(pairs: Vec<(&'a str, String)>) -> BTreeMap<&'a str, String> {
+fn filled_map(pairs: Vec<(&str, String)>) -> BTreeMap<&str, String> {
     pairs.into_iter().collect()
 }
 

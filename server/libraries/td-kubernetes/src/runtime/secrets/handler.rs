@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::base::error::kubernetes::KubernetesError;
 use crate::kube::api::secret::upsert_secret;
@@ -31,7 +31,7 @@ impl SecretHandler {
             }
             let data = generator.generate(context).await?;
             upsert_secret(context, generator.name(), data, BTreeMap::new(), None, None).await?;
-            info!(
+            debug!(
                 secret = %generator.name(),
                 namespace = %context.namespace(),
                 phase = %phase,
