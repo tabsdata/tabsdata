@@ -134,3 +134,60 @@ fn read_flat_family_lists_files() {
     assert!(files.contains("b.yaml"));
     assert_eq!(files.len(), 2);
 }
+
+#[test]
+fn seed_vault_takes_existing_generated_values_by_category() {
+    let template = "\
+database_server:
+  username: ${{secretAuto:postgres_system_user}}
+  password: ${{secretAuto:postgres_password}}
+  host: ${{literal:host}}
+";
+    let configs = configs(&[("dbmanager.database.yaml", template)]);
+    let server_secrets: HashMap<String, HashMap<String, String>> = HashMap::from([(
+        "dbmanager.database.yaml".to_owned(),
+        HashMap::from([
+            (
+                "DATABASE_SERVER__PASSWORD".to_owned(),
+                "stored-password".to_owned(),
+            ),
+            ("DATABASE_SERVER__USERNAME".to_owned(), String::new()),
+        ]),
+    )]);
+    let vault: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    seed_vault_from_server_secrets(&vault, &configs, &server_secrets);
+
+    let vault = vault.borrow();
+    assert_eq!(
+        vault.get("postgres_password").map(String::as_str),
+        Some("stored-password")
+    );
+    assert!(!vault.contains_key("postgres_system_user"));
+}
+
+#[test]
+fn seed_vault_keeps_first_seen_value_per_category() {
+    let template = "password: ${{secretAuto:postgres_password}}\n";
+    let configs = configs(&[
+        ("a.yaml", template),
+        ("b.yaml", template),
+        ("c.yamls", "directives: []\n"),
+    ]);
+    let server_secrets: HashMap<String, HashMap<String, String>> = HashMap::from([
+        (
+            "a.yaml".to_owned(),
+            HashMap::from([("PASSWORD".to_owned(), "value-a".to_owned())]),
+        ),
+        (
+            "b.yaml".to_owned(),
+            HashMap::from([("PASSWORD".to_owned(), "value-b".to_owned())]),
+        ),
+    ]);
+    let vault: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    seed_vault_from_server_secrets(&vault, &configs, &server_secrets);
+
+    assert_eq!(
+        vault.borrow().get("postgres_password").map(String::as_str),
+        Some("value-a")
+    );
+}

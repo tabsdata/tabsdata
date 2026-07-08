@@ -4,6 +4,7 @@
 
 mod resolve;
 
+use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::Path;
@@ -19,6 +20,7 @@ use crate::runtime::gateway::resolver::schema::Schema;
 use crate::runtime::gateway::resolver::walker::SecretEntry;
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::profile::{Profile, RenderedConfigmap};
+use crate::runtime::secrets::discovery::extract_secret_leaves;
 
 const CONFIG_EXTENSION: &str = ".yaml";
 const SCHEMA_EXTENSION: &str = ".yamls";
@@ -47,6 +49,8 @@ pub fn merge(
     )?;
     let input_configs = input.join(KPROFILE_CONFIGS_FAMILY.folder);
     let empty_auto: HashMap<String, String> = HashMap::new();
+    let vault: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    seed_vault_from_server_secrets(&vault, &profile.configs, server_secrets);
     let mut merged = Vec::new();
     for (file, template) in &profile.configs {
         if file.ends_with(SCHEMA_EXTENSION) {
@@ -64,7 +68,7 @@ pub fn merge(
             None => input_content,
         };
         let template = bake_schema_secrets(file, template, &profile.configs)?;
-        let outcome = resolve_config_file(&template, &prefilled, system, &empty_auto)?;
+        let outcome = resolve_config_file(&template, &prefilled, system, &empty_auto, &vault)?;
         merged.push(MergedConfig {
             file: file.clone(),
             rendered: outcome.rendered,
@@ -72,6 +76,39 @@ pub fn merge(
         });
     }
     Ok(merged)
+}
+
+fn seed_vault_from_server_secrets(
+    vault: &RefCell<HashMap<String, String>>,
+    configs: &RenderedConfigmap,
+    server_secrets: &HashMap<String, HashMap<String, String>>,
+) {
+    let mut vault = vault.borrow_mut();
+    for (file, template) in configs {
+        if file.ends_with(SCHEMA_EXTENSION) {
+            continue;
+        }
+        let Some(values) = server_secrets.get(file) else {
+            continue;
+        };
+        let Ok(mut yaml) = serde_yaml::from_str::<Value>(template) else {
+            continue;
+        };
+        let Ok(leaves) = extract_secret_leaves(file, &mut yaml) else {
+            continue;
+        };
+        for leaf in leaves {
+            let Some(generator) = leaf.generator else {
+                continue;
+            };
+            let Some(value) = values.get(&leaf.key).filter(|value| !value.is_empty()) else {
+                continue;
+            };
+            vault
+                .entry(generator.name().to_owned())
+                .or_insert_with(|| value.clone());
+        }
+    }
 }
 
 pub fn fuse(
@@ -115,6 +152,7 @@ fn resolve_configs_files(
     let init_configs = init.join(KPROFILE_CONFIGS_FAMILY.folder);
     let stage_configs = stage.join(KPROFILE_CONFIGS_FAMILY.folder);
     create_folder(&stage_configs)?;
+    let vault: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
     let mut by_file = Vec::new();
     for (file, template) in &profile.configs {
         if file.ends_with(SCHEMA_EXTENSION) {
@@ -128,7 +166,7 @@ fn resolve_configs_files(
             }
         })?;
         let template = bake_schema_secrets(file, template, &profile.configs)?;
-        let outcome = resolve_config_file(&template, &init_content, system, auto)?;
+        let outcome = resolve_config_file(&template, &init_content, system, auto, &vault)?;
         write_staged(&stage_configs.join(file), &outcome.rendered)?;
         if !outcome.secrets.is_empty() {
             by_file.push((file.clone(), outcome.secrets));

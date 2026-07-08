@@ -25,6 +25,7 @@
 //! A list of maps with differing first keys or duplicated first values, or a list
 //! mixing scalar and map items, cannot carry placeholders and is rejected.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
@@ -106,6 +107,7 @@ pub struct ResolveContext<'a> {
     pub placeholder: &'a Placeholder,
     pub init_value: Option<&'a str>,
     pub auto_value: Option<&'a str>,
+    pub vault: &'a RefCell<HashMap<String, String>>,
     pub system: &'a super::SystemValues,
 }
 

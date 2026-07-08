@@ -14,7 +14,14 @@ database_server:
 ";
     let system = SystemValues::default();
     let auto = HashMap::new();
-    let outcome = resolve_config_file(config, config, &system, &auto).expect("resolve");
+    let outcome = resolve_config_file(
+        config,
+        config,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("resolve");
 
     assert!(
         outcome
@@ -40,6 +47,60 @@ database_server:
     );
 }
 
+#[test]
+fn secret_auto_same_category_shares_one_value_across_configs() {
+    let first = "\
+database:
+  apiserver:
+    password: ${{secretAuto:postgres_password}}
+  aiagent:
+    password: ${{secretAuto:postgres_password}}
+";
+    let second = "\
+database_server:
+  password: ${{secretAuto:postgres_password}}
+";
+    let system = SystemValues::default();
+    let auto = HashMap::new();
+    let vault = RefCell::new(HashMap::new());
+    let first_outcome = resolve_config_file(first, first, &system, &auto, &vault).expect("first");
+    let second_outcome =
+        resolve_config_file(second, second, &system, &auto, &vault).expect("second");
+
+    let values: std::collections::BTreeSet<_> = first_outcome
+        .secrets
+        .iter()
+        .chain(second_outcome.secrets.iter())
+        .map(|entry| entry.value.clone())
+        .collect();
+    assert_eq!(
+        values.len(),
+        1,
+        "all postgres_password occurrences must share one value: {values:?}"
+    );
+    assert!(!values.iter().next().expect("value").is_empty());
+}
+
+#[test]
+fn secret_auto_prefers_caller_provided_auto_value() {
+    let config = "\
+database_server:
+  password: ${{secretAuto:postgres_password}}
+";
+    let system = SystemValues::default();
+    let auto: HashMap<String, String> =
+        HashMap::from([("postgres_password".to_owned(), "from-auto".to_owned())]);
+    let outcome = resolve_config_file(
+        config,
+        config,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("resolve");
+    assert_eq!(outcome.secrets[0].value, "from-auto");
+}
+
 /// `${embedded}` is not a resolver placeholder — it passes through as a plain
 /// scalar and reaches td-database untouched.
 #[test]
@@ -51,7 +112,14 @@ database:
 ";
     let system = SystemValues::default();
     let auto = HashMap::new();
-    let outcome = resolve_config_file(config, config, &system, &auto).expect("resolve");
+    let outcome = resolve_config_file(
+        config,
+        config,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("resolve");
     assert!(outcome.rendered.contains("${embedded}"));
     assert!(outcome.secrets.is_empty());
 }
@@ -74,7 +142,14 @@ storage:
 ";
     let system = SystemValues::default();
     let auto = HashMap::new();
-    let outcome = resolve_config_file(template, init, &system, &auto).expect("resolve");
+    let outcome = resolve_config_file(
+        template,
+        init,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("resolve");
 
     let by_key: std::collections::BTreeMap<_, _> = outcome
         .secrets
@@ -101,8 +176,14 @@ envFrom:
     };
     let auto = HashMap::new();
 
-    let outcome =
-        resolve_config_file(config, config, &system, &auto).expect("envFrom must resolve");
+    let outcome = resolve_config_file(
+        config,
+        config,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("envFrom must resolve");
 
     assert!(
         outcome.rendered.contains("td-conn-abc123"),
@@ -119,13 +200,26 @@ envFrom:
 fn resolve(template: &str, init: &str) -> ResolveOutcome {
     let system = SystemValues::default();
     let auto = HashMap::new();
-    resolve_config_file(template, init, &system, &auto).expect("resolve")
+    resolve_config_file(
+        template,
+        init,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("resolve")
 }
 
 fn resolve_error(template: &str, init: &str) -> ResolverError {
     let system = SystemValues::default();
     let auto = HashMap::new();
-    match resolve_config_file(template, init, &system, &auto) {
+    match resolve_config_file(
+        template,
+        init,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+    ) {
         Ok(_) => panic!("expected resolve error"),
         Err(error) => error,
     }
@@ -191,7 +285,14 @@ fn embedded_system_placeholder_splices_into_surrounding_text() {
         ..SystemValues::default()
     };
     let auto = HashMap::new();
-    let outcome = resolve_config_file(template, init, &system, &auto).expect("resolve embedded");
+    let outcome = resolve_config_file(
+        template,
+        init,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+    )
+    .expect("resolve embedded");
     assert!(outcome.rendered.contains("0.0.0.0:2457"));
 }
 
@@ -204,7 +305,13 @@ fn non_editable_placeholder_modified_in_init_errors() {
         ..SystemValues::default()
     };
     let auto = HashMap::new();
-    let error = match resolve_config_file(template, init, &system, &auto) {
+    let error = match resolve_config_file(
+        template,
+        init,
+        &system,
+        &auto,
+        &RefCell::new(HashMap::new()),
+    ) {
         Ok(_) => panic!("modified system value must error"),
         Err(error) => error,
     };

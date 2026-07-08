@@ -26,7 +26,7 @@ use crate::client::tdkserver::commands::service::{
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::api::configmap::replace_configmap;
-use crate::kube::api::secret::{get_secret, upsert_secret};
+use crate::kube::api::secret::{delete_secret, exists_secret, get_secret, upsert_secret};
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::fusion::{MergedConfig, merge};
 use crate::runtime::instance::ports::apply_ports;
@@ -228,6 +228,17 @@ async fn replace_config(context: &KubeContext, config: &MergedConfig) -> Command
     .map_err(TdError::from)?;
 
     let secret_name = to_secret_name(&config.file).map_err(TdError::from)?;
+    if config.secrets.is_empty() {
+        if exists_secret(context, &secret_name)
+            .await
+            .map_err(TdError::from)?
+        {
+            delete_secret(context, &secret_name)
+                .await
+                .map_err(TdError::from)?;
+        }
+        return Ok(());
+    }
     let secret_data: BTreeMap<String, String> = config
         .secrets
         .iter()

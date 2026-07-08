@@ -86,11 +86,47 @@ pub async fn auto_fill_generated_secrets(context: &KubeContext) -> Result<(), Se
         let secret_name = to_secret_name(&config_file)?;
         leaves_by_secret.push((secret_name, leaves));
     }
-    let existing = collect_existing_values(context, &leaves_by_secret).await?;
+    let mut existing = collect_existing_values(context, &leaves_by_secret).await?;
+    let invalidated = invalidated_generators(&leaves_by_secret, &existing);
+    for generator in &invalidated {
+        existing.remove(generator);
+    }
     for (secret_name, leaves) in &leaves_by_secret {
-        fill_generated_keys(context, secret_name, leaves, &existing).await?;
+        fill_generated_keys(context, secret_name, leaves, &mut existing, &invalidated).await?;
     }
     Ok(())
+}
+
+fn invalidated_generators(
+    leaves_by_secret: &[(String, Vec<SecretLeaf>)],
+    existing: &BTreeMap<Generator, String>,
+) -> BTreeSet<Generator> {
+    let declared: BTreeSet<Generator> = leaves_by_secret
+        .iter()
+        .flat_map(|(_, leaves)| leaves.iter().filter_map(|leaf| leaf.generator))
+        .collect();
+    let mut invalidated: BTreeSet<Generator> = declared
+        .iter()
+        .copied()
+        .filter(|generator| !existing.contains_key(generator))
+        .collect();
+    loop {
+        let cascade: Vec<Generator> = declared
+            .iter()
+            .copied()
+            .filter(|generator| !invalidated.contains(generator))
+            .filter(|generator| {
+                generator
+                    .dependencies()
+                    .iter()
+                    .any(|dependency| invalidated.contains(dependency))
+            })
+            .collect();
+        if cascade.is_empty() {
+            return invalidated;
+        }
+        invalidated.extend(cascade);
+    }
 }
 
 async fn collect_existing_values(
@@ -141,7 +177,8 @@ async fn fill_generated_keys(
     context: &KubeContext,
     secret_name: &str,
     leaves: &[SecretLeaf],
-    existing: &BTreeMap<Generator, String>,
+    existing: &mut BTreeMap<Generator, String>,
+    invalidated: &BTreeSet<Generator>,
 ) -> Result<(), SecretError> {
     let generated: Vec<(&str, Generator)> = leaves
         .iter()
@@ -157,12 +194,13 @@ async fn fill_generated_keys(
     let needs_fill: Vec<(&str, Generator)> = generated
         .iter()
         .copied()
-        .filter(
-            |(key, _)| match live.as_ref().and_then(|data| data.get(*key)) {
-                None => true,
-                Some(value) => value.is_empty(),
-            },
-        )
+        .filter(|(key, generator)| {
+            invalidated.contains(generator)
+                || match live.as_ref().and_then(|data| data.get(*key)) {
+                    None => true,
+                    Some(value) => value.is_empty(),
+                }
+        })
         .collect();
     if needs_fill.is_empty() {
         return Ok(());
@@ -191,21 +229,21 @@ async fn fill_generated_keys(
 
 fn resolve_generated_values<'a>(
     needs_fill: &[(&'a str, Generator)],
-    existing: &BTreeMap<Generator, String>,
+    resolved: &mut BTreeMap<Generator, String>,
 ) -> Result<Vec<(&'a str, String)>, SecretError> {
     let mut pending = needs_fill.to_vec();
-    let mut resolved = existing.clone();
     let mut filled: Vec<(&'a str, String)> = Vec::with_capacity(pending.len());
     while let Some(index) = pending.iter().position(|(_, generator)| {
-        generator
-            .dependencies()
-            .iter()
-            .all(|dependency| resolved.contains_key(dependency))
+        resolved.contains_key(generator)
+            || generator
+                .dependencies()
+                .iter()
+                .all(|dependency| resolved.contains_key(dependency))
     }) {
         let (key, generator) = pending.remove(index);
-        let value = match (generator.has_dependencies(), resolved.get(&generator)) {
-            (false, Some(existing)) => existing.clone(),
-            _ => generator.generate(&resolved)?,
+        let value = match resolved.get(&generator) {
+            Some(existing) => existing.clone(),
+            None => generator.generate(resolved)?,
         };
         resolved.insert(generator, value.clone());
         filled.push((key, value));

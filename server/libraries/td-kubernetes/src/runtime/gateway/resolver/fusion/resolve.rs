@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use serde_yaml::Value;
@@ -26,6 +27,7 @@ pub(super) fn resolve_config_file(
     init: &str,
     system: &SystemValues,
     auto: &HashMap<String, String>,
+    vault: &RefCell<HashMap<String, String>>,
 ) -> Result<ResolveOutcome, ResolverError> {
     let template_value: Value =
         serde_yaml::from_str(template).map_err(|cause| ResolverError::ParseFailed {
@@ -41,6 +43,7 @@ pub(super) fn resolve_config_file(
     let mut session = ResolveSession {
         system,
         auto,
+        vault,
         secrets: Vec::new(),
         values: HashMap::new(),
     };
@@ -64,6 +67,7 @@ pub(super) fn resolve_config_file(
 struct ResolveSession<'a> {
     system: &'a SystemValues,
     auto: &'a HashMap<String, String>,
+    vault: &'a RefCell<HashMap<String, String>>,
     secrets: Vec<SecretEntry>,
     values: HashMap<String, String>,
 }
@@ -285,6 +289,7 @@ impl ResolveSession<'_> {
             placeholder,
             init_value: init_text,
             auto_value,
+            vault: self.vault,
             system: self.system,
         }
     }

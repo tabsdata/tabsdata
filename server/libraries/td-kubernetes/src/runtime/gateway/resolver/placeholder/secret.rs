@@ -38,6 +38,26 @@ impl SecretResolver {
         context: &ResolveContext,
         key: String,
     ) -> Result<Option<SecretEntry>, ResolverError> {
+        fn generate_once(
+            context: &ResolveContext,
+            generator: Generator,
+            category: &str,
+        ) -> Result<String, ResolverError> {
+            let mut vault = context.vault.borrow_mut();
+            if let Some(value) = vault.get(category) {
+                return Ok(value.clone());
+            }
+            let value = generator.generate(&BTreeMap::new()).map_err(|cause| {
+                ResolverError::GeneratorFailed {
+                    path: context.path.join(PATH_SEPARATOR),
+                    generator: category.to_owned(),
+                    cause: cause.to_string(),
+                }
+            })?;
+            vault.insert(category.to_owned(), value.clone());
+            Ok(value)
+        }
+
         let category = context.placeholder.category.as_deref().ok_or_else(|| {
             ResolverError::MissingPlaceholderCategory {
                 path: context.path.join(PATH_SEPARATOR),
@@ -53,13 +73,10 @@ impl SecretResolver {
         if generator.has_dependencies() {
             return Ok(None);
         }
-        let value = generator.generate(&BTreeMap::new()).map_err(|cause| {
-            ResolverError::GeneratorFailed {
-                path: context.path.join(PATH_SEPARATOR),
-                generator: category.to_owned(),
-                cause: cause.to_string(),
-            }
-        })?;
+        let value = match context.auto_value.filter(|value| !value.is_empty()) {
+            Some(value) => value.to_owned(),
+            None => generate_once(context, generator, category)?,
+        };
         Ok(Some(SecretEntry {
             key,
             value,

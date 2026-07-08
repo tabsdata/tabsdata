@@ -2,6 +2,9 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use super::*;
 use crate::runtime::gateway::resolver::walker::{Placeholder, ResolveContext, Rule};
 
@@ -18,6 +21,7 @@ fn context<'a>(
     path: &'a [String],
     init_value: Option<&'a str>,
     auto_value: Option<&'a str>,
+    vault: &'a RefCell<HashMap<String, String>>,
     system: &'a SystemValues,
 ) -> ResolveContext<'a> {
     ResolveContext {
@@ -26,6 +30,7 @@ fn context<'a>(
         placeholder,
         init_value,
         auto_value,
+        vault,
         system,
     }
 }
@@ -42,7 +47,15 @@ fn literal_resolve_prefers_init_over_auto() {
     let bar = placeholder("literal", Some("label"), Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, Some("from-init"), Some("from-auto"), &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(
+        &bar,
+        &path,
+        Some("from-init"),
+        Some("from-auto"),
+        &vault,
+        &system,
+    );
     let resolution = resolver.resolve(&context).expect("resolve");
     assert_eq!(resolution.rendered, "from-init");
 }
@@ -53,7 +66,8 @@ fn literal_resolve_falls_back_to_auto_when_init_empty() {
     let bar = placeholder("literal", Some("label"), Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, None, Some("from-auto"), &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, None, Some("from-auto"), &vault, &system);
     let resolution = resolver.resolve(&context).expect("resolve");
     assert_eq!(resolution.rendered, "from-auto");
 }
@@ -64,7 +78,8 @@ fn literal_required_without_value_errors() {
     let bar = placeholder("literal", Some("label"), Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, None, None, &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, None, None, &vault, &system);
     let result = resolver.resolve(&context);
     assert!(matches!(
         result,
@@ -78,7 +93,8 @@ fn literal_auto_without_value_renders_empty() {
     let bar = placeholder("literalAuto", Some("label"), Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, None, None, &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, None, None, &vault, &system);
     let resolution = resolver.resolve(&context).expect("resolve");
     assert_eq!(resolution.rendered, "");
 }
@@ -89,7 +105,8 @@ fn literal_optional_without_value_renders_empty() {
     let bar = placeholder("literal", Some("label"), Rule::Optional);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, None, None, &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, None, None, &vault, &system);
     let resolution = resolver.resolve(&context).expect("resolve");
     assert_eq!(resolution.rendered, "");
 }
@@ -100,7 +117,8 @@ fn env_resolve_keeps_token_at_creation() {
     let bar = placeholder("env", Some("HOME"), Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, None, None, &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, None, None, &vault, &system);
     let resolution = resolver.resolve(&context).expect("resolve");
     assert_eq!(resolution.rendered, "${{env:HOME}}");
 }
@@ -114,7 +132,8 @@ fn env_materialize_reads_process_variable() {
     let bar = placeholder("env", Some(key), Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, None, None, &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, None, None, &vault, &system);
     let resolution = resolver.materialize(&context).expect("materialize");
     assert_eq!(resolution.rendered, "env-value");
 
@@ -129,7 +148,8 @@ fn env_materialize_missing_required_errors() {
     let bar = placeholder("env", Some("TD_PLACEHOLDER_TEST_MISSING"), Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, None, None, &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, None, None, &vault, &system);
     let result = resolver.materialize(&context);
     assert!(matches!(
         result,
@@ -143,7 +163,8 @@ fn secret_resolve_collects_init_value_and_retains_token() {
     let bar = placeholder("secret", None, Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, Some("topsecret"), None, &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, Some("topsecret"), None, &vault, &system);
     let resolution = resolver.resolve(&context).expect("resolve");
     assert_eq!(resolution.rendered, "${{secret}}");
     let secret = resolution.secret.expect("secret entry");
@@ -156,7 +177,8 @@ fn secret_required_without_value_errors() {
     let bar = placeholder("secret", None, Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, None, None, &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, None, None, &vault, &system);
     let result = resolver.resolve(&context);
     assert!(matches!(
         result,
@@ -170,10 +192,36 @@ fn secret_auto_generates_known_generator_value() {
     let bar = placeholder("secretAuto", Some("postgres_system_user"), Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, None, None, &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, None, None, &vault, &system);
     let resolution = resolver.resolve(&context).expect("resolve");
     let secret = resolution.secret.expect("secret entry");
     assert_eq!(secret.value, "postgres");
+}
+
+#[test]
+fn secret_auto_reuses_memoized_value_for_same_category() {
+    let resolver = resolver_for("secretAuto", "a.b").expect("resolver");
+    let bar = placeholder("secretAuto", Some("postgres_password"), Rule::Mandatory);
+    let path = path();
+    let system = SystemValues::default();
+    let vault = RefCell::new(HashMap::new());
+
+    let first_context = context(&bar, &path, None, None, &vault, &system);
+    let first = resolver
+        .resolve(&first_context)
+        .expect("first resolve")
+        .secret
+        .expect("first secret");
+    let second_context = context(&bar, &path, None, None, &vault, &system);
+    let second = resolver
+        .resolve(&second_context)
+        .expect("second resolve")
+        .secret
+        .expect("second secret");
+
+    assert!(!first.value.is_empty());
+    assert_eq!(first.value, second.value);
 }
 
 #[test]
@@ -182,7 +230,8 @@ fn secret_auto_unknown_generator_errors() {
     let bar = placeholder("secretAuto", Some("not_a_generator"), Rule::Mandatory);
     let path = path();
     let system = SystemValues::default();
-    let context = context(&bar, &path, None, None, &system);
+    let vault = RefCell::new(HashMap::new());
+    let context = context(&bar, &path, None, None, &vault, &system);
     let result = resolver.resolve(&context);
     assert!(matches!(
         result,
