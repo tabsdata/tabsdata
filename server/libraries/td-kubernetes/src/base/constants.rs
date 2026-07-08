@@ -86,6 +86,8 @@ pub const PROGRAM_TD_RESOURCE: &str = "td_resource";
 
 pub const DEFAULT_INSTANCE_NAME: &str = "tabsdata";
 
+pub const DATABASE_HOST_LOOPBACK: &str = "127.0.0.1";
+
 pub const TABSDATA_LABEL_NAMESPACE: &str = "tabsdata.com/";
 pub const KUBERNETES_LABEL_NAMESPACE: &str = "app.kubernetes.io/";
 

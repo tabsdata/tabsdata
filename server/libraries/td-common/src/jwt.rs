@@ -266,7 +266,10 @@ mod internal_token_tests {
         const SUPERVISOR_JWT_SIGNING_KEY: &str = "tabsdata-pytest-fixed-jwt-signing-key";
         const SUPERVISOR_SERVICE_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJLMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwNCIsImV4cCI6NDEwMjQ0NDgwMH0.bTDwhmVOC-p0JQzgtqfXUstQzmbndOx6Y_xJSeBh8dI";
 
-        let jwt = JwtConfig::new(SUPERVISOR_JWT_SIGNING_KEY.to_string(), SERVICE_TOKEN_EXP_SECS);
+        let jwt = JwtConfig::new(
+            SUPERVISOR_JWT_SIGNING_KEY.to_string(),
+            SERVICE_TOKEN_EXP_SECS,
+        );
         let claims = TokenClaims::new(service_token_jti(), SERVICE_TOKEN_EXP_SECS);
         let token = encode_token(&jwt, &claims).unwrap();
         assert_eq!(

@@ -49,6 +49,19 @@ configs/apiserver.storage.yaml:
                 "client_id": "1234567890"
               }
 
+configs/apiserver.database.yaml:
+  database:
+    help: >
+      These are the database connections used by the registry components. The
+      privileged server connection lives in dbmanager.database.yaml and is
+      mounted only where it is needed.
+
+configs/dbmanager.database.yaml:
+  database_server:
+    help: >
+      This is the privileged server connection and boot target. Only
+      td_dbmanager reads it.
+
 pods/apiserver_kminus.yaml:
   spec.volumes.resources:
     help: >

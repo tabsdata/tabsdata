@@ -19,9 +19,10 @@ use td_python::python::{get_python_scripts_folder, resolve_python_binary};
 use tracing::info;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, DEFAULT_NAMESPACE, FOLDER_CLUSTER, FOLDER_DATABASE, FOLDER_IMAGES,
-    FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY, FOLDER_RUNTIMES,
-    FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA,
+    CONFIGMAP_TABSDATA_MANIFEST, DATABASE_HOST_LOOPBACK, DEFAULT_NAMESPACE, FOLDER_CLUSTER,
+    FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
+    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -868,6 +869,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         pyenv_scripts_folder,
         pyenv_libexec_folder,
         instance_name,
+        database_host: Some(DATABASE_HOST_LOOPBACK.to_owned()),
         ..SystemValues::default()
     })
 }

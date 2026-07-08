@@ -54,6 +54,8 @@ pub enum SystemKey {
     #[cfg(feature = "enterprise")]
     #[strum(serialize = "tdk_aiagent_public_port")]
     AiagentPublicPort,
+    #[strum(serialize = "tdk_database_host")]
+    DatabaseHost,
     #[strum(serialize = "tdk_database_port")]
     DatabasePort,
     #[strum(serialize = "tdk_kminus_api_port")]
@@ -99,6 +101,7 @@ pub struct SystemValues {
     pub apiserver_private_port: Option<String>,
     #[cfg(feature = "enterprise")]
     pub aiagent_public_port: Option<String>,
+    pub database_host: Option<String>,
     pub database_port: Option<String>,
     pub kminus_api_port: Option<String>,
     pub connection_configmap_name: Option<String>,
@@ -124,6 +127,7 @@ impl SystemValues {
             SystemKey::ApiserverPrivatePort => self.apiserver_private_port.as_deref(),
             #[cfg(feature = "enterprise")]
             SystemKey::AiagentPublicPort => self.aiagent_public_port.as_deref(),
+            SystemKey::DatabaseHost => self.database_host.as_deref(),
             SystemKey::DatabasePort => self.database_port.as_deref(),
             SystemKey::KminusApiPort => self.kminus_api_port.as_deref(),
             SystemKey::ConnectionConfigmapName => self.connection_configmap_name.as_deref(),

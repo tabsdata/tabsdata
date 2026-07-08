@@ -2,11 +2,9 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-# The registry components' database connections. The privileged server
-# connection lives in dbmanager.database.yaml, mounted only where needed.
 database:
   apiserver:
-    url: postgres://localhost:${{system:tdk_database_port}}/postgres
+    url: postgres://${{system:tdk_database_host}}:${{system:tdk_database_port}}/postgres
     schema: td_apiserver
     username: td_apiserver
     password: ${{secretAuto:postgres_password}}

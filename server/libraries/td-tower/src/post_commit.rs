@@ -73,7 +73,11 @@ mod tests {
         let ran = Arc::new(AtomicUsize::new(0));
         let mut actions = PostCommitActions::default();
         let ran2 = ran.clone();
-        actions.push(move || Box::pin(async move { ran2.fetch_add(1, Ordering::SeqCst); }));
+        actions.push(move || {
+            Box::pin(async move {
+                ran2.fetch_add(1, Ordering::SeqCst);
+            })
+        });
         drop(actions); // rollback path: never `run()`
         assert_eq!(ran.load(Ordering::SeqCst), 0);
     }

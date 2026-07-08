@@ -22,7 +22,7 @@ orchestrator: supervisor
 # The server td_dbmanager boots on this URL's port; ${embedded} = the
 # generated credentials persisted next to the data dir.
 database_server:
-  url: postgres://localhost:2462/postgres
+  url: postgres://127.0.0.1:2462/postgres
   username: ${embedded}
   password: ${embedded}
   min_connections: 1
@@ -34,7 +34,7 @@ database_server:
   log_level: off
 database:
   apiserver:
-    url: postgres://localhost:2462/postgres
+    url: postgres://127.0.0.1:2462/postgres
     schema: td_apiserver
     username: td_apiserver
     password: ${embedded}

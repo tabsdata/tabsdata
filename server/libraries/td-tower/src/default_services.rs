@@ -384,10 +384,7 @@ where
                     "TransactionProviderService",
                     type_of::<DomainConnection<D>>(),
                 );
-                m.created_type(
-                    "TransactionProviderService",
-                    type_of::<PostCommitActions>(),
-                );
+                m.created_type("TransactionProviderService", type_of::<PostCommitActions>());
             }
 
             handler.insert(DomainConnection::<D>::ready(connection));

@@ -7,6 +7,8 @@ from pathlib import Path
 
 import yaml
 
+RESERVED_BLOCKS = {"database"}
+
 
 def main():
     if len(sys.argv) != 3:
@@ -44,6 +46,8 @@ def main():
         sys.exit(0)
 
     for root, values in data.items():
+        if root in RESERVED_BLOCKS:
+            continue
         print("--")
         print(root)
         if values is not None and isinstance(values, dict):

@@ -231,6 +231,46 @@ script = [
             if not is_empty ${instance}
                 info "🔅 Starting instance: ${instance}"
 
+                database_port = exec --fail-on-error python ${TESTING_DATABASE_SCRIPT} ${TESTING_SUPERVISORS_CONFIG} ${instance}
+                database_port = trim ${database_port.stdout}
+                debug "🔅 Database port for ${instance}: ${database_port}"
+
+                apiserver_port = exec --fail-on-error python ${TESTING_APISERVER_SCRIPT} ${TESTING_SUPERVISORS_CONFIG} ${instance}
+                apiserver_port = trim ${apiserver_port.stdout}
+                debug "🔅 Apiserver port for ${instance}: ${apiserver_port}"
+
+                temp_folder = temp_dir
+                profile_folder = set ${temp_folder}/td-testing-profile/${instance}
+
+                profile_apiserver_config_folder = set ${profile_folder}/workspace/config/proc/regular/apiserver/config
+                profile_apiserver_config_file = set ${profile_apiserver_config_folder}/config.yaml
+                mkdir ${profile_apiserver_config_folder}
+                apiserver_config_content = readfile ${TESTING_PROFILE_CONFIG_FILE}
+                apiserver_config_content = replace ${apiserver_config_content} ":2462/" ":${database_port}/"
+                writefile ${profile_apiserver_config_file} ${apiserver_config_content}
+                debug "🔅 Rendered apiserver config overlay for ${instance}: ${profile_apiserver_config_file}"
+
+                profile_supervisor_config_folder = set ${profile_folder}/workspace/config
+                profile_supervisor_config_file = set ${profile_supervisor_config_folder}/config.yaml
+                mkdir ${profile_supervisor_config_folder}
+                supervisor_config_content = readfile ${TESTING_PROFILE_SUPERVISOR_CONFIG_FILE}
+                supervisor_config_content = replace ${supervisor_config_content} ":2457" ":${apiserver_port}"
+                writefile ${profile_supervisor_config_file} ${supervisor_config_content}
+                debug "🔅 Rendered supervisor config overlay for ${instance}: ${profile_supervisor_config_file}"
+
+                create_arguments = array
+                array_push ${create_arguments} ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
+                array_push ${create_arguments} --accept-terms
+                array_push ${create_arguments} y
+                array_push ${create_arguments} create
+                array_push ${create_arguments} --instance
+                array_push ${create_arguments} ${instance}
+                array_push ${create_arguments} --profile
+                array_push ${create_arguments} ${profile_folder}
+                create_command = array_join ${create_arguments} " "
+                debug "🚀 ${create_command}"
+                exec --fail-on-error %{create_command}
+
                 instance_arguments = array
                 array_push ${instance_arguments} ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
                 array_push ${instance_arguments} --accept-terms
@@ -238,6 +278,7 @@ script = [
                 array_push ${instance_arguments} start
                 array_push ${instance_arguments} --instance
                 array_push ${instance_arguments} ${instance}
+                array_push ${instance_arguments} --existing
                 array_push ${instance_arguments} --
 
                 debug "🚀 python ${TESTING_INSTANCE_SCRIPT} ${TESTING_SUPERVISORS_CONFIG} ${instance}"

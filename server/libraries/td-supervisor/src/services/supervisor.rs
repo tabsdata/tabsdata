@@ -2848,13 +2848,11 @@ impl Supervisor {
 
         for (key, value) in worker.parameters() {
             parameters.push(format!("--{key}"));
-            if !value.is_empty() {
-                parameters.push(
-                    render(value)
-                        .map_err(|error| RuntimeError::new(error.to_string()))?
-                        .to_string(),
-                );
-            }
+            parameters.push(
+                render(value)
+                    .map_err(|error| RuntimeError::new(error.to_string()))?
+                    .to_string(),
+            );
         }
 
         for key in worker.arguments() {

@@ -223,7 +223,6 @@ def clean_rs(project_folder):
         "*.log.*",
         "*.log",
         "books/dguide/book",
-        "CLAUDE.md",
         "target",
         "variant/assets/manifest/THIRD-PARTY",
     ]

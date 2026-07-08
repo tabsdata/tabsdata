@@ -234,9 +234,7 @@ fn resolve_generated_values<'a>(
     Ok(filled)
 }
 
-pub async fn settle_cluster_configs_and_secrets(
-    context: &KubeContext,
-) -> Result<(), SecretError> {
+pub async fn settle_cluster_configs_and_secrets(context: &KubeContext) -> Result<(), SecretError> {
     let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
     let configmaps = get_configmaps(context, Some(filter)).await?;
     let mut failures: Vec<SecretError> = Vec::new();

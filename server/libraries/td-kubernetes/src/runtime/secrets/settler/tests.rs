@@ -43,10 +43,7 @@ fn leaves_and_no_secret_fails() {
         actual_keys: None,
     };
     let error = settle_secret_keys(&input).expect_err("missing secret");
-    assert!(matches!(
-        error,
-        SecretError::SettlementSecretMissing { .. }
-    ));
+    assert!(matches!(error, SecretError::SettlementSecretMissing { .. }));
 }
 
 #[test]
@@ -347,8 +344,12 @@ fn merge_treats_distinct_nonempty_values_as_divergent_only() {
     let error = merge_existing_value(&mut existing, Generator::PostgresPassword, "p2".to_owned())
         .expect_err("divergent");
     assert!(matches!(error, SecretError::GeneratorValueDivergent { .. }));
-    merge_existing_value(&mut existing, Generator::PostgresSystemUser, "postgres".to_owned())
-        .expect("independent generator");
+    merge_existing_value(
+        &mut existing,
+        Generator::PostgresSystemUser,
+        "postgres".to_owned(),
+    )
+    .expect("independent generator");
 }
 
 #[test]
