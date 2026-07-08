@@ -41,6 +41,36 @@ def test_template_emits_yaml():
     assert not result.output.lstrip().startswith("{")
 
 
+def test_template_file_writes_document_to_path(tmp_path):
+    # ``--file``/``-f`` writes the template to a file instead of stdout. The
+    # template's output path is ``--file`` (the CLI-wide name), NOT ``-o`` --
+    # ``-o/--output`` is reserved for the table/json/yaml format contract.
+    out = tmp_path / "conn.yaml"
+    result = CliRunner().invoke(
+        cli, ["connection", "template", "-t", "local-file-in", "--file", str(out)]
+    )
+    assert result.exit_code == 0, result.output
+    assert f"Wrote connection document to {out}" in result.output
+    assert "kind: connectionDef" in out.read_text()
+    # The short form -f is the same option.
+    out2 = tmp_path / "conn2.yaml"
+    result = CliRunner().invoke(
+        cli, ["connection", "template", "-t", "local-file-in", "-f", str(out2)]
+    )
+    assert result.exit_code == 0, result.output
+    assert out2.read_text() == out.read_text()
+
+
+def test_template_rejects_dash_o_output_flag():
+    # ``-o`` no longer means "output file" here; it is not a template option, so
+    # passing it is a usage error rather than silently writing a file named "x".
+    result = CliRunner().invoke(
+        cli, ["connection", "template", "-t", "local-file-in", "-o", "x"]
+    )
+    assert result.exit_code != 0
+    assert "no such option" in result.output.lower()
+
+
 @pytest.mark.skipif(
     not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
 )

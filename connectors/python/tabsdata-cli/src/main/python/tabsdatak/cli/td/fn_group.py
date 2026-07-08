@@ -189,7 +189,11 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
         raise click.ClickException(f"Failed to display function: {e}")
 
 
-@fn.command()
+# Registered as "list" but the Python function is NOT named ``list``: a module
+# named ``list`` would shadow the ``list`` builtin, and ``register`` / ``update``
+# / ``patch`` below call ``list(local_pkg)`` -- with the builtin shadowed that
+# invoked this Click command instead, breaking ``--local-pkg`` at runtime.
+@fn.command("list")
 @proj_option
 @output_option
 @click.option(
@@ -198,9 +202,9 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
     help="Name of the collection to which the functions belong.",
 )
 @click.pass_context
-def list(ctx: click.Context, coll: str):
-    verify_login_or_prompt(ctx)
+def list_functions(ctx: click.Context, coll: str):
     """List all functions in a collection"""
+    verify_login_or_prompt(ctx)
     coll = (
         coll
         or get_currently_pinned_object(ctx, "collection")

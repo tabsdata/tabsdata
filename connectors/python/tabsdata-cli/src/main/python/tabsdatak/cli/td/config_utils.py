@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 
-import yaml
+from ruamel.yaml import YAML
 
 from tabsdatak.cli.cli_utils import td_resource
 
@@ -73,7 +73,13 @@ def load_actions_config_for_command(command_name: str) -> dict:
     config_path = os.path.join(td_resource(ACTIONS_DIRECTORY), f"{command_name}.yaml")
     try:
         with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
+            # ruamel, not PyYAML: PyYAML is NOT a declared tabsdata-cli
+            # dependency (only ruamel is, transitively via tabsdata-api), and
+            # this module is imported eagerly by the root CLI -- an undeclared
+            # top-level ``import yaml`` would fail the whole CLI on a minimal
+            # install. ``or {}`` keeps the empty-file case a dict (safe_load
+            # returned None), matching the FileNotFoundError default.
+            config = YAML(typ="safe").load(f) or {}
     except FileNotFoundError:
         config = {}
     return config

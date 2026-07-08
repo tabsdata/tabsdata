@@ -74,11 +74,11 @@ def _resolve(ctx, type_):
         raise click.ClickException(str(e))
 
 
-def _emit(document, output):
+def _emit(document, file):
     text = template.to_yaml(document)
-    if output:
-        Path(output).write_text(text)
-        click.echo(f"Wrote connection document to {output}")
+    if file:
+        Path(file).write_text(text)
+        click.echo(f"Wrote connection document to {file}")
     else:
         click.echo(text, nl=False)
 
@@ -87,14 +87,18 @@ def _emit(document, output):
 # shadowing the imported engine module.
 @connection.command("template")
 @_type_option
+# The template is always a commented YAML document (the "# accepts:" hints are
+# the point, and JSON can't carry them), so there is no output *format* to pick
+# here -- ``-o/--output`` is reserved CLI-wide for that. Use ``--file``/``-f``
+# for the output path, matching validate/table/exe.
 @click.option(
-    "--output", "-o", help="Write the template to this file instead of stdout."
+    "--file", "-f", help="Write the template to this file instead of stdout."
 )
 @click.pass_context
-def template_(ctx, type_, output):
+def template_(ctx, type_, file):
     """Print a fill-in connection template for a connector type"""
     info = _resolve(ctx, type_)
-    _emit(template.build_template(info.conn_cls), output)
+    _emit(template.build_template(info.conn_cls), file)
 
 
 @connection.command()

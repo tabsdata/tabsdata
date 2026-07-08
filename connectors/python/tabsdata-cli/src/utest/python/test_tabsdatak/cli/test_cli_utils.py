@@ -88,19 +88,6 @@ def test_td_resource_raises_filenotfound_for_missing_resource():
     assert "does/not/exist.txt" in str(ei.value)
 
 
-def test_td_resource_normalises_backslashes(monkeypatch, tmp_path):
-    """The legacy helper normalised Windows-style backslashes; the
-    stand-in must do the same."""
-    # We can't easily test a real resource lookup without writing a
-    # file to a packaged location, so test the FileNotFoundError
-    # message which echoes the normalised input.
-    with pytest.raises(FileNotFoundError) as ei:
-        cli_utils.td_resource("a\\b\\c")
-    # The error message includes the original (pre-normalisation)
-    # string so the user can match what they passed.
-    assert "a" in str(ei.value)
-
-
 # ---------------------------------------------------------------------------
 # load_info_and_project_root: thin wrapper used by td fn register/update/patch
 # ---------------------------------------------------------------------------

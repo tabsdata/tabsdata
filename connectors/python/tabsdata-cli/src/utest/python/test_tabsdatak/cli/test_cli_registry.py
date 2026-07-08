@@ -22,8 +22,13 @@ from tabsdatak.cli._registry import (
     collect_cli_commands,
 )
 
-# role / cron / stage are temporarily removed from the root CLI (see the TODO
-# in tabsdatak.cli.td.cli); re-add them here when their modules return.
+# The core command groups the open-source ``tdk`` CLI must always expose. Kept
+# in lockstep with what ``tabsdatak.cli.td.cli`` imports for its @cli_command
+# side effects: ``cron``/``role``/``stage`` are intentionally NOT here -- they
+# are gated off in this edition (see the TODO in ``cli.py``; ``role_group.py``
+# exists but is not imported, and there are no cron/stage modules yet). Add a
+# group here when it is wired into ``cli.py`` so this guards against a group
+# silently dropping out of the registry.
 BUILTIN_GROUPS = {
     "auth",
     "collection",
