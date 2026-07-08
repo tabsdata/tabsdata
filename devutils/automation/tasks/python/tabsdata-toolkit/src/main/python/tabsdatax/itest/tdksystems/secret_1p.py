@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 
 from .errors import DatagenError
 
@@ -31,9 +32,9 @@ def _require(cmd: str) -> None:
 
 
 def fetch(vault: str) -> dict[str, str]:
-    """Read every item/field in `vault` via `op`, returning an ordered
-    ``{<ITEM>__<FIELD>: value}`` dict. Skips null values, `expires` fields,
-    and any item that can't be read. Prints nothing."""
+    """Read every item/field in `vault` via `op` (items fetched concurrently),
+    returning an ordered ``{<ITEM>__<FIELD>: value}`` dict. Skips null values,
+    `expires` fields, and any item that can't be read. Prints nothing."""
     _require("op")
     cp = subprocess.run(
         ["op", "--vault", vault, "item", "list", "--format=json"],
@@ -49,19 +50,25 @@ def fetch(vault: str) -> dict[str, str]:
     if not items:
         raise DatagenError(f"vault '{vault}' returned no items")
 
-    secrets: dict[str, str] = {}
-    for it in items:
-        title = it.get("title", "")
-        if not title:
-            continue
+    titles = [it.get("title", "") for it in items if it.get("title", "")]
+
+    def get_item(title: str) -> dict | None:
         cp = subprocess.run(
             ["op", "--vault", vault, "item", "get", title, "--format=json"],
             capture_output=True,
             text=True,
         )
         if cp.returncode != 0:
+            return None
+        return json.loads(cp.stdout)
+
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        datas = list(executor.map(get_item, titles))
+
+    secrets: dict[str, str] = {}
+    for title, data in zip(titles, datas):
+        if data is None:
             continue
-        data = json.loads(cp.stdout)
         title_norm = _norm(data.get("title", title))
         for field in data.get("fields", []) or []:
             fid = field.get("id", "")
