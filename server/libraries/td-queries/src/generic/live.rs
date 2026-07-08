@@ -17,12 +17,17 @@
 //! Insert/update/delete stay open to any `Dao` / `DaoCore` — every
 //! table receives INSERTs (versioned tables get new version rows) and
 //! updates/deletes are legitimate for backfills.
+//!
+//! `upsert` / `insert_or_ignore` are gated on [`KeyedDao`] — only tables
+//! that declare a logical key via `#[dao(key(...))]` can be
+//! `INSERT … ON CONFLICT`'d, so the append-only / versioned tables
+//! (which never conflict-replace) can't reach them.
 
 use crate::QueryExecutor;
-use sea_query::{Query, SelectStatement};
+use sea_query::{LockType, OnConflict, Query, SelectStatement};
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::{SqlCondition, resolve_condition};
-use ta_objects::{Dao, DaoCore, DaoUpdate, ListDto, ListFilter, LiveDao, StateFilter};
+use ta_objects::{Dao, DaoCore, DaoUpdate, KeyedDao, ListDto, ListFilter, LiveDao, StateFilter};
 use td_database::domain::Domained;
 use td_database::dynamic::DynamicQueryResult;
 use td_database::sea_query::builder::SeaQueryExt;
@@ -60,6 +65,39 @@ where
         Ok(r)
     }
 
+    /// Upsert one row: insert it, and on a conflict over the DAO's
+    /// [`key_columns`](KeyedDao::key_columns) replace its
+    /// [`value_columns`](KeyedDao::value_columns) (every non-key column).
+    pub async fn upsert<D: KeyedDao>(self, dao: &D) -> Result<DynamicQueryResult, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
+        let r = upsert_query::<D>(dao)?
+            .build_query()
+            .execute(self.executor)
+            .await
+            .map_err(|e| SqlError::on_write::<D>(e, &dao.column_display_values()))?;
+        Ok(r)
+    }
+
+    /// Insert one row, ignoring a conflict over the DAO's
+    /// [`key_columns`](KeyedDao::key_columns) (`ON CONFLICT DO NOTHING`):
+    /// a write-once / idempotent insert where the first row per key wins.
+    pub async fn insert_or_ignore<D: KeyedDao>(
+        self,
+        dao: &D,
+    ) -> Result<DynamicQueryResult, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
+        let r = insert_or_ignore_query::<D>(dao)?
+            .build_query()
+            .execute(self.executor)
+            .await
+            .map_err(|e| SqlError::on_write::<D>(e, &dao.column_display_values()))?;
+        Ok(r)
+    }
+
     /// Fetch the single row matching `condition`. Errors if missing.
     pub async fn fetch_one<D: LiveDao>(self, condition: impl SqlCondition) -> Result<D, SqlError>
     where
@@ -83,6 +121,47 @@ where
         E: Domained<Domain = D::Db>,
     {
         let r = select::<D>(condition)?
+            .limit(1)
+            .build_query_as()
+            .fetch_optional(self.executor)
+            .await
+            .map_err(SqlError::on_read::<D>)?;
+        Ok(r)
+    }
+
+    /// Fetch the last row matching `condition` in the DAO's default
+    /// ordering (the ordering *reversed*, `LIMIT 1`), or `None` if no row
+    /// matches. For a DAO ordered `seq ASC` this is the max-`seq` row.
+    /// Mirror of [`fetch_latest_before`](Self::fetch_latest_before), which
+    /// walks the default ordering forward (newest-first for DESC DAOs).
+    pub async fn fetch_last<D: LiveDao>(
+        self,
+        condition: impl SqlCondition,
+    ) -> Result<Option<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
+        let r = select_last::<D>(condition)?
+            .build_query_as()
+            .fetch_optional(self.executor)
+            .await
+            .map_err(SqlError::on_read::<D>)?;
+        Ok(r)
+    }
+
+    /// Fetch the row matching `condition` **for update** (`SELECT … FOR
+    /// UPDATE`, `LIMIT 1`), or `None` if none matches. The row lock
+    /// serializes a concurrent read-modify-write on the same row behind
+    /// this one. sea_query emits `FOR UPDATE` on Postgres and omits it on
+    /// SQLite (which serializes write transactions anyway).
+    pub async fn fetch_optional_for_update<D: LiveDao>(
+        self,
+        condition: impl SqlCondition,
+    ) -> Result<Option<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
+        let r = select_for_update::<D>(condition)?
             .limit(1)
             .build_query_as()
             .fetch_optional(self.executor)
@@ -233,6 +312,60 @@ pub(crate) fn insert_query<D: Dao>(dao: &D) -> Result<sea_query::InsertStatement
     Ok(query)
 }
 
+/// `insert_query` with an `ON CONFLICT (key) DO UPDATE` clause replacing the
+/// DAO's value columns.
+pub(crate) fn upsert_query<D: KeyedDao>(dao: &D) -> Result<sea_query::InsertStatement, SqlError> {
+    let mut on_conflict = OnConflict::columns(D::key_columns());
+    on_conflict.update_columns(D::value_columns());
+    let mut query = insert_query::<D>(dao)?;
+    query.on_conflict(on_conflict);
+    Ok(query)
+}
+
+/// `insert_query` with an `ON CONFLICT (key) DO NOTHING` clause.
+pub(crate) fn insert_or_ignore_query<D: KeyedDao>(
+    dao: &D,
+) -> Result<sea_query::InsertStatement, SqlError> {
+    let mut on_conflict = OnConflict::columns(D::key_columns());
+    on_conflict.do_nothing();
+    let mut query = insert_query::<D>(dao)?;
+    query.on_conflict(on_conflict);
+    Ok(query)
+}
+
+/// `select` with the DAO's ordering reversed and `LIMIT 1` — the last row
+/// in default order.
+pub(crate) fn select_last<D: Dao>(
+    condition: impl SqlCondition,
+) -> Result<SelectStatement, SqlError> {
+    let query = select::<D>(condition)?
+        .clear_order_by()
+        .order_by_columns(reverse_order::<D>())
+        .limit(1)
+        .take();
+    Ok(query)
+}
+
+/// `select` with a `FOR UPDATE` row lock.
+pub(crate) fn select_for_update<D: Dao>(
+    condition: impl SqlCondition,
+) -> Result<SelectStatement, SqlError> {
+    let query = select::<D>(condition)?.lock(LockType::Update).take();
+    Ok(query)
+}
+
+/// The DAO's default ordering with each column's direction flipped.
+fn reverse_order<D: Dao>() -> impl Iterator<Item = (D::Iden, sea_query::Order)> {
+    D::order_by().into_iter().map(|(col, ord)| {
+        let flipped = match ord {
+            sea_query::Order::Asc => sea_query::Order::Desc,
+            sea_query::Order::Desc => sea_query::Order::Asc,
+            other => other,
+        };
+        (col, flipped)
+    })
+}
+
 pub(crate) fn update_query<U: DaoUpdate, D: DaoCore>(
     dao: &U,
     condition: impl SqlCondition,
@@ -316,6 +449,14 @@ mod tests {
         status: TestStatus,
     }
 
+    #[ta_objects::Dao]
+    #[dao(sql_table = "test_keyed", key(id))]
+    struct TestKeyedDao {
+        id: TestId,
+        name: TestName,
+        status: TestStatus,
+    }
+
     #[test]
     fn test_select_with_condition() {
         let id = TestId::try_from("abc").unwrap();
@@ -352,5 +493,61 @@ mod tests {
             sql,
             r#"INSERT INTO "test_basic" ("id", "name", "status") VALUES ('i1', 'n1', 'A')"#
         );
+    }
+
+    fn keyed_dao() -> TestKeyedDao {
+        TestKeyedDao::builder()
+            .id(TestId::try_from("i1").unwrap())
+            .name(TestName::try_from("n1").unwrap())
+            .status(TestStatus::Active)
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn test_upsert_query_sql() {
+        let sql = upsert_query::<TestKeyedDao>(&keyed_dao())
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        // conflict target = the declared key; replaced = every other column.
+        assert_eq!(
+            sql,
+            r#"INSERT INTO "test_keyed" ("id", "name", "status") VALUES ('i1', 'n1', 'A') ON CONFLICT ("id") DO UPDATE SET "name" = "excluded"."name", "status" = "excluded"."status""#
+        );
+    }
+
+    #[test]
+    fn test_insert_or_ignore_query_sql() {
+        let sql = insert_or_ignore_query::<TestKeyedDao>(&keyed_dao())
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"INSERT INTO "test_keyed" ("id", "name", "status") VALUES ('i1', 'n1', 'A') ON CONFLICT ("id") DO NOTHING"#
+        );
+    }
+
+    #[test]
+    fn test_select_last_reverses_order() {
+        let id = TestId::try_from("abc").unwrap();
+        // TestDao's default order is `id DESC` (no explicit order_by); the
+        // last row reverses it to `id ASC`.
+        let sql = select_last::<TestDao>(&id)
+            .unwrap()
+            .to_string(SqliteQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' ORDER BY "id" ASC LIMIT 1"#
+        );
+    }
+
+    #[test]
+    fn test_select_for_update_emits_lock_on_postgres() {
+        use sea_query::PostgresQueryBuilder;
+        let id = TestId::try_from("abc").unwrap();
+        let sql = select_for_update::<TestDao>(&id)
+            .unwrap()
+            .to_string(PostgresQueryBuilder);
+        assert!(sql.contains("FOR UPDATE"), "{sql}");
     }
 }

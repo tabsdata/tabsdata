@@ -60,7 +60,7 @@ async fn seed_user_with(
         .try_password_set_on(request_context.time)?
         .password_must_change(false)
         .enabled(create.enabled)
-        .system(system.clone())
+        .system(*system)
         .try_update_from(&request_context)?
         .build()?;
 

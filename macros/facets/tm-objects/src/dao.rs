@@ -45,8 +45,11 @@ pub struct DaoArguments {
     /// `current()` / `versioned(...)` / `historic(...)`.
     event_log: Flag,
     logical_pointer: Option<LogicalPointerArguments>,
+    /// The row's logical key. Emits a `KeyedDao` impl (key = these columns,
+    /// values = every other DAO column), unlocking the generic
+    /// upsert / insert-or-ignore surface. Must back a `UNIQUE` constraint.
     #[darling(default)]
-    unique: PathList,
+    key: PathList,
     #[darling(default)]
     states: HashMap<Ident, Expr>,
 }
@@ -108,9 +111,9 @@ impl ToTokens for DaoArguments {
                 )
             });
         }
-        if !self.unique.is_empty() {
-            let paths = self.unique.iter();
-            args.push(quote! { unique(#(#paths),*) });
+        if !self.key.is_empty() {
+            let paths = self.key.iter();
+            args.push(quote! { key(#(#paths),*) });
         }
         let states = self
             .states
@@ -156,10 +159,10 @@ impl DaoArguments {
                 self.event_log
             },
             logical_pointer: other.logical_pointer.or(self.logical_pointer),
-            unique: if other.unique.is_empty() {
-                self.unique
+            key: if other.key.is_empty() {
+                self.key
             } else {
-                other.unique
+                other.key
             },
             states: other.states.into_iter().chain(self.states).collect(),
         }
@@ -533,6 +536,46 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         }
     };
 
+    // ---- KeyedDao (emitted from `#[dao(key(cols...))]`). Key = the declared
+    // columns; values = every other DAO column, derived so the update set
+    // can't drift when columns are added. See the `KeyedDao` trait doc.
+    let keyed_dao_marker = if parsed.key.is_empty() {
+        quote! {}
+    } else {
+        let mut key_variants: Vec<Ident> = Vec::new();
+        for path in parsed.key.iter() {
+            let Some(name) = path.get_ident() else {
+                return syn::Error::new_spanned(path, "key: expected a plain column name")
+                    .to_compile_error()
+                    .into();
+            };
+            if !field_names.contains(&name) {
+                return syn::Error::new_spanned(
+                    path,
+                    format!("key: `{name}` is not a column of this DAO"),
+                )
+                .to_compile_error()
+                .into();
+            }
+            key_variants.push(iden_variant(name));
+        }
+        let value_variants: Vec<Ident> = field_iden_variants
+            .iter()
+            .cloned()
+            .filter(|v| !key_variants.contains(v))
+            .collect();
+        quote! {
+            impl #impl_generics ta_objects::KeyedDao for #ident #ty_generics #where_clause {
+                fn key_columns() -> impl IntoIterator<Item = Self::Iden> {
+                    [#(#table_iden::#key_variants),*]
+                }
+                fn value_columns() -> impl IntoIterator<Item = Self::Iden> {
+                    [#(#table_iden::#value_variants),*]
+                }
+            }
+        }
+    };
+
     // ---- Access trait: DaoUpdate, VersionedDao, or both --------------------
     let access_trait = match (&parsed.versioned, parsed.data_version.is_present()) {
         (None, false) => dao_update_impl,
@@ -809,6 +852,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         #dao_core
         #dao_read
         #live_dao_marker
+        #keyed_dao_marker
         #access_trait
         #states
         #recursive

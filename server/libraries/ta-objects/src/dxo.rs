@@ -147,6 +147,24 @@ pub trait Dao: DaoCore + td_database::dynamic::DynamicFromRow + Unpin {
 /// [`crate::QueryEntry::current`] / [`crate::QueryEntry::versioned`].
 pub trait LiveDao: Dao {}
 
+/// A DAO with a declared logical key (`#[dao(key(col, …))]`, which must
+/// back a `UNIQUE` constraint): the key identifies the row, every other
+/// column is its replaceable value. Unlocks the generic
+/// `Live::upsert` (replace-by-key) / `Live::insert_or_ignore`
+/// (first-write-wins-by-key) — an opt-in, so append-only / versioned
+/// tables can't be conflict-replaced. The [`LiveDao`] supertrait makes
+/// that structural: a keyed row is by definition one live row per key,
+/// so `key(...)` on an `event_log` table refuses to compile.
+pub trait KeyedDao: LiveDao {
+    /// The key columns (the `ON CONFLICT (...)` target).
+    fn key_columns() -> impl IntoIterator<Item = Self::Iden>;
+
+    /// Every DAO column except the key, in `columns()` order — what a
+    /// conflicting upsert replaces. Derived by the macro so it can't
+    /// drift when columns are added.
+    fn value_columns() -> impl IntoIterator<Item = Self::Iden>;
+}
+
 /// An append-only versioned table. Never queried directly — always
 /// through a ranked-window CTE — for tables that *aren't* also
 /// `LiveDao` (true event logs). For insert-once timeline tables, raw
