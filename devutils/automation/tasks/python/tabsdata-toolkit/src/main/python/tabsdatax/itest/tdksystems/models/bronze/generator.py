@@ -68,7 +68,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems.emit import Column, Table, write_tables
+from tabsdatax.itest.tdksystems.emit import VALID_FORMATS, Column, Table, write_tables
 
 BASE_SEED = 42
 TENANTS = ["T01", "T02", "T03"]
@@ -414,7 +414,7 @@ def parse_args():
         "CDC and INSUP batches typically carry multiple "
         "changes against the same composite key",
     )
-    p.add_argument("--format", choices=("sql", "csv", "json", "parquet"), default="sql")
+    p.add_argument("--format", choices=VALID_FORMATS, default="sql")
     p.add_argument("--seed", type=int, default=BASE_SEED)
     p.add_argument("--out", required=True)
     p.add_argument("--chunks", type=int, default=None)

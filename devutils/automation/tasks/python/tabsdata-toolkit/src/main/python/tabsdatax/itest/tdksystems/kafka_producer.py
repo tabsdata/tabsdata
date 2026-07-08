@@ -407,6 +407,8 @@ def _create_topics(admin, NewTopic, names: list[str]) -> None:
     for name, fut in futures.items():
         try:
             fut.result()
-        except Exception as exc:  # noqa: BLE001 — tolerate "already exists"
-            if "already exists" not in str(exc).lower():
+        except Exception as exc:  # noqa: BLE001 — tolerate an already-present topic
+            msg = str(exc).lower()
+            # librdkafka says "already exists"; Redpanda says "already been created".
+            if "already exists" not in msg and "already been created" not in msg:
                 raise DatagenError(f"could not create topic {name}: {exc}")

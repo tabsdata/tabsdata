@@ -15,6 +15,8 @@ All test artefacts land under `target/itest/<test-id>/`."""
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from conftest import (
     assert_ok,
@@ -67,16 +69,20 @@ def test_fs_system_lifecycle_no_creds_needed(itest_dir):
     )
     assert_ok(cp, "tdx-system create fs")
 
-    # Create the domain and load the `world` model's data (CSV) into it.
+    # Create the domain and load the `world` model's data into it — every
+    # supported file format is staged. The domain file name is <name>_<model>_<data>.
+    dom_name = "inbox_world_xs"
     cp = run_cmd(
         "tdx-domain",
         "create",
         "--sys",
         "fs_sys",
         *S,
-        "--domain",
+        "--name",
         "inbox",
         *D,
+        "--domain-prefix",
+        "",
         "--model",
         "world",
         "--data",
@@ -84,15 +90,17 @@ def test_fs_system_lifecycle_no_creds_needed(itest_dir):
         "--force",
     )
     assert_ok(cp, "create fs domain + data")
-    assert (fs_root / "inbox" / "wld_city.csv").is_file()
+    assert (fs_root / dom_name / "csv" / "wld_city.csv").is_file()
+    assert (fs_root / dom_name / "json" / "wld_city.json").is_file()
+    assert (fs_root / dom_name / "parquet" / "wld_city.parquet").is_file()
 
-    cp = run_cmd("tdx-domain", "info", "--domain", "inbox", *D, "--format", "json")
+    cp = run_cmd("tdx-domain", "info", "--domain", dom_name, *D, "--format", "json")
     assert_ok(cp, "fs domain info")
 
     assert_ok(
-        run_cmd("tdx-domain", "destroy", "--domain", "inbox", *D), "fs domain destroy"
+        run_cmd("tdx-domain", "destroy", "--domain", dom_name, *D), "fs domain destroy"
     )
-    assert not (fs_root / "inbox").exists()
+    assert not (fs_root / dom_name).exists()
     assert_ok(
         run_cmd("tdx-system", "destroy", "--sys", "fs_sys", *S), "fs system destroy"
     )
@@ -148,15 +156,19 @@ def test_cloud_system_lifecycle(slug, prefix, vault_env, itest_dir):
         assert_ok(cp, f"{slug} status")
         assert "ready" in cp.stdout.lower()
 
+        # domain file name is derived: <name>_<model>_<data>.
+        dom_name = "inbox_world_xs"
         cp = run_cmd(
             "tdx-domain",
             "create",
             "--sys",
             sysname,
             *S,
-            "--domain",
+            "--name",
             "inbox",
             *D,
+            "--domain-prefix",
+            "",
             "--model",
             "world",
             "--data",
@@ -165,20 +177,25 @@ def test_cloud_system_lifecycle(slug, prefix, vault_env, itest_dir):
             env=vault_env,
         )
         assert_ok(cp, f"{slug} create domain + data")
-        assert (domdir / "inbox").is_file()
+        assert (domdir / dom_name).is_file()
 
         cp = run_cmd(
             "tdx-domain",
             "info",
             "--domain",
-            "inbox",
+            dom_name,
             *D,
             "--format",
             "json",
             env=vault_env,
         )
         assert_ok(cp, f"{slug} domain info")
+        dinfo = json.loads(cp.stdout)
+        assert dinfo["PREFIX"] == dom_name  # system-terminology entity name
+        # entities keyed by each staged file's full path (under BASE_PATH).
+        base = dinfo["BASE_PATH"]
+        assert dinfo["ENTITIES"][f"{base}/csv/wld_city.csv"] == 100
     finally:
         # Tear down whatever we wrote to the prefix, then the system.
-        run_cmd("tdx-domain", "destroy", "--domain", "inbox", *D, env=vault_env)
+        run_cmd("tdx-domain", "destroy", "--domain", dom_name, *D, env=vault_env)
         run_cmd("tdx-system", "destroy", "--sys", sysname, *S, env=vault_env)

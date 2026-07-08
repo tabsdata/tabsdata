@@ -24,8 +24,12 @@ The decrypted JSON is::
       "external_name": "<prefixed-name>", # domains only, the entity container's
                                           # name in the external system (schema /
                                           # dataset / folder / database)
+      "sys_name": "<system-name>",        # domains only, the store name of the
+                                          # system the domain was created in
       "model":    "<model>",              # domains only, if a model was installed
       "data":     "<size>",               # domains only, if data was loaded
+      "entities": {"<table>": <rows>},    # domains only, per-entity record counts
+                                          # (once data has been loaded)
       "meta": [                           # baked settings, in order
          {"name": "HOST", "value": "localhost"},  # a literal, OR
          {"name": "SYS_PATH", "env": "MY_ROOT"}   # read from $MY_ROOT at run time
@@ -682,6 +686,8 @@ def stamp(
     model: str | None = None,
     data: str | None = None,
     external_name: str | None = None,
+    sys_name: str | None = None,
+    entity_term: str | None = None,
     extra_meta: dict[str, str] | None = None,
 ) -> dict:
     """Attach the tdx identity to a freshly-written descriptor and rewrite it.
@@ -689,8 +695,15 @@ def stamp(
     Sets `name` / `started`; records `model` / `data` for domains and, when a
     domain's entity container was created under a run prefix, its
     `external_name` (the schema/dataset/folder/database name in the external
-    system); and appends `extra_meta` literals (e.g. a container domain's admin
-    back-reference, so it can destroy itself)."""
+    system); records `sys_name` (the store name of the system a domain was
+    created in, so a manifest can name it); and appends `extra_meta` literals
+    (e.g. a container domain's admin back-reference, so it can destroy itself).
+
+    `entity_term` — the system's word for its entity container (postgres:
+    `schema`, fs: `folder`, bigquery: `dataset`, …). When given, a redundant
+    exported key of that (upper-cased) name is added carrying the entity
+    container's name, unless the system already bakes it (bigquery's DATASET,
+    saas SCHEMA)."""
     doc = load(path)
     doc["name"] = name
     doc["started"] = started
@@ -700,11 +713,30 @@ def stamp(
         doc["data"] = data
     if external_name is not None:
         doc["external_name"] = external_name
+    if sys_name is not None:
+        doc["sys_name"] = sys_name
     if extra_meta:
         have = {e["name"] for e in doc["meta"]}
         for k, v in extra_meta.items():
             if k not in have:
                 doc["meta"].append({"name": k, "value": v if v is not None else ""})
+    if entity_term:
+        key = entity_term.upper()
+        names = {e["name"] for e in doc["meta"]}
+        if key not in names and key not in doc.get("exported", []):
+            term_value = doc.get("external_name") or doc.get("name", "")
+            doc["meta"].append({"name": key, "value": term_value})
+            doc.setdefault("exported", []).append(key)
+    _write_doc(path, doc)
+    return doc
+
+
+def record_entities(path: str | Path, entities: dict[str, int]) -> dict:
+    """Record a domain's per-entity record counts (``{table: rows}``) into its
+    descriptor, surfaced by `info` / `attributes` as ``ENTITIES``. Called by the
+    data pipeline right after a model's data is loaded."""
+    doc = load(path)
+    doc["entities"] = {str(k): int(v) for k, v in entities.items()}
     _write_doc(path, doc)
     return doc
 
@@ -714,12 +746,13 @@ def stamp(
 # ---------------------------------------------------------------------------
 
 
-def _info_pairs(doc: dict) -> list[tuple[str, str]]:
+def _info_pairs(doc: dict) -> list[tuple[str, object]]:
     """(key, value) pairs for `info`: the identity fields, then the connection
     settings (`exported`). Keys are unprefixed — the descriptor's file name
-    already identifies the system/domain."""
+    already identifies the system/domain. Values are strings except ``ENTITIES``,
+    which is the ``{table: rows}`` mapping verbatim."""
     meta = resolve(doc)
-    pairs = [
+    pairs: list[tuple[str, object]] = [
         ("NAME", doc.get("name", "")),
         ("TYPE", doc.get("system", "")),
         ("STARTED", doc.get("started", "")),
@@ -730,15 +763,18 @@ def _info_pairs(doc: dict) -> list[tuple[str, str]]:
         pairs.append(("MODEL", doc.get("model") or ""))
     if "data" in doc:
         pairs.append(("DATA", doc.get("data") or ""))
+    if doc.get("entities"):
+        pairs.append(("ENTITIES", doc["entities"]))
     pairs += [(n, meta[n]) for n in doc.get("exported", [])]
     return pairs
 
 
-def attributes(doc: dict) -> dict[str, str]:
+def attributes(doc: dict) -> dict[str, object]:
     """The flat ``{KEY: value}`` view of a descriptor — the same unprefixed keys
     as ``info(doc, "json")`` (identity + connection settings), as data rather
     than rendered text. Consumers (e.g. the test fixtures) map their fields onto
-    these keys."""
+    these keys. Values are strings except ``ENTITIES`` (the ``{table: rows}``
+    mapping)."""
     return dict(_info_pairs(doc))
 
 
@@ -760,5 +796,11 @@ def info(doc: dict, fmt: str) -> str:
     if fmt == "json":
         return json.dumps(dict(pairs), indent=2)
     if fmt == "export":
-        return "\n".join(f"export {k}={shlex.quote(v)}" for k, v in pairs)
+        return "\n".join(f"export {k}={shlex.quote(_shell_value(v))}" for k, v in pairs)
     return "\n".join(f"unset {k}" for k, _ in pairs)
+
+
+def _shell_value(v: object) -> str:
+    """Render an info value for `export` lines: strings as-is; the ENTITIES
+    mapping as compact JSON."""
+    return v if isinstance(v, str) else json.dumps(v, separators=(",", ":"))

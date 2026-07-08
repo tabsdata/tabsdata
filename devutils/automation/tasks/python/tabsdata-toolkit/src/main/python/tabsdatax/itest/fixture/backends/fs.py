@@ -36,8 +36,10 @@ class FsDomain(Domain):
     system_kind: str
     sys_path: Path
     base_path: Path
+    folder: str  # the domain's directory name (== the entity container)
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def fs_system(name: str):

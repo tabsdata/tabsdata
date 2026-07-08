@@ -30,7 +30,12 @@ import os
 import sys
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems.emit import Column, Table, write_tables  # noqa: E402
+from tabsdatax.itest.tdksystems.emit import (  # noqa: E402
+    VALID_FORMATS,
+    Column,
+    Table,
+    write_tables,
+)
 
 BASE_SEED = 42
 DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data.json")
@@ -345,7 +350,7 @@ def parse_args():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     p.add_argument("--rentals", type=int, default=20000)
-    p.add_argument("--format", choices=("sql", "csv", "json", "parquet"), default="sql")
+    p.add_argument("--format", choices=VALID_FORMATS, default="sql")
     p.add_argument("--seed", type=int, default=BASE_SEED)
     p.add_argument("--out", required=True)
     p.add_argument("--chunks", type=int, default=None)

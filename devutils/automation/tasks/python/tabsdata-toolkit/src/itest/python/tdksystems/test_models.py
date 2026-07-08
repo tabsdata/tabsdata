@@ -54,6 +54,8 @@ def fs_system_for_models():
 def test_model_loads_into_fs_domain(model, fs_system_for_models):
     fs_root, sysdir, domdir = fs_system_for_models
     # create-domain writes CSVs (data create is a no-op for fs; --data loads).
+    # The domain file name is derived: <system>_<model>_<data> (no --name given).
+    dom_name = f"models_fs_{model}_xs"
     cp = run_cmd(
         "tdx-domain",
         "create",
@@ -61,10 +63,10 @@ def test_model_loads_into_fs_domain(model, fs_system_for_models):
         "models_fs",
         "--sys-dir",
         str(sysdir),
-        "--domain",
-        model,
         "--domain-dir",
         str(domdir),
+        "--domain-prefix",
+        "",
         "--model",
         model,
         "--data",
@@ -73,6 +75,9 @@ def test_model_loads_into_fs_domain(model, fs_system_for_models):
     )
     assert_ok(cp, f"tdx-domain create + data model={model}")
 
-    dom_root = fs_root / model
+    # Every supported file format is staged under its own subdir; csv is one.
+    dom_root = fs_root / dom_name
     csvs = [p for p in dom_root.rglob("*.csv") if p.is_file()]
     assert csvs, f"model {model!r}: no .csv files materialised"
+    parquets = [p for p in dom_root.rglob("*.parquet") if p.is_file()]
+    assert parquets, f"model {model!r}: no .parquet files materialised"

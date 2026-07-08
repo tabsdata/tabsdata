@@ -38,6 +38,7 @@ class DatabricksDomain(Domain):
     volume: str
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def databricks_system(name: str):

@@ -28,6 +28,23 @@ def test_supports_sql_gate():
     assert systems.get("salesforce").supports_sql is False
 
 
+def test_data_create_is_a_noop_for_kafka(monkeypatch):
+    # Kafka topics have no schema — `data create` must skip (return 0), not raise
+    # "no SQL backend", so a kafka domain can still be seeded via create/--auto
+    # (the records are produced by `data load`).
+    import argparse
+
+    from tabsdatax.itest.tdksystems import cli
+
+    monkeypatch.setattr(cli.env_check, "check_requirements", lambda: None)
+    meta = {"KIND": "container-domain", "SYSTEM_KIND": "kafka"}
+    monkeypatch.setattr(cli, "_domain", lambda dp: (systems.get("redpanda"), None, meta))
+    rc = cli._run_data_create(
+        argparse.Namespace(model="world", domain="x", force=False)
+    )
+    assert rc == 0
+
+
 def test_ddl_table_names():
     stmts = [
         "CREATE TABLE foo (a int)",

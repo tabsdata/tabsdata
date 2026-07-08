@@ -38,8 +38,10 @@ class MongodbDomain(Domain):
     password: str
     db: str
     sqlalchemy_uri: str
+    database: str  # mongodb calls the entity container a database (== db here)
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def mongodb_system(name: str):

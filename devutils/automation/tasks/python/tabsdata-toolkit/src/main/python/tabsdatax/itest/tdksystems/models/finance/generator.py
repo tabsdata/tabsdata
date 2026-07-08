@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems.emit import Column, Table, write_tables
+from tabsdatax.itest.tdksystems.emit import VALID_FORMATS, Column, Table, write_tables
 
 HERE = Path(__file__).resolve().parent
 ACCOUNTS_CSV = HERE / "accounts.csv"
@@ -568,7 +568,7 @@ def _build_tables(accounts: list[dict]) -> list[Table]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--format", required=True, choices=("sql", "csv", "json", "parquet"))
+    p.add_argument("--format", required=True, choices=VALID_FORMATS)
     p.add_argument("--out", required=True)
     p.add_argument("--chunks", type=int, default=None)
     args = p.parse_args()

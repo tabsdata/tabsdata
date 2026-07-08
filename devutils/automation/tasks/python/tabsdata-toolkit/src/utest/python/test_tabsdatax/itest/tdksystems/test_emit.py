@@ -125,6 +125,14 @@ def test_write_tables_json_writes_one_file(tmp_path):
                     {"id": 2, "name": "r2"}]
 
 
+def test_write_tables_writes_entities_manifest(tmp_path):
+    import json
+    out = tmp_path / "out"
+    write_tables([_table("foo", 3), _table("bar", 2)], out, "csv")
+    counts = json.loads((out / "_entities.json").read_text())
+    assert counts == {"foo": 3, "bar": 2}
+
+
 def test_write_tables_rejects_existing_out(tmp_path):
     out = tmp_path / "out"
     out.mkdir()

@@ -26,6 +26,7 @@ import base64
 import contextlib
 import hashlib
 import os
+import re
 import textwrap
 
 from .errors import DatagenError, DecryptError
@@ -63,6 +64,11 @@ def using_secret_env(name: str | None):
 _PEM_LABEL = "TDX DESCRIPTOR"
 _BEGIN = f"-----BEGIN {_PEM_LABEL}-----"
 _END = f"-----END {_PEM_LABEL}-----"
+# Any `-----BEGIN <LABEL> DESCRIPTOR-----` armor counts as (claiming to be) one
+# of ours: a descriptor written by an older / incompatible tdx carries a
+# different LABEL, and matching it here means the reader surfaces a clear label
+# error instead of silently mistaking the file for a non-descriptor sidecar.
+_ARMOR_RE = re.compile(r"-----BEGIN ([A-Z0-9_]+ DESCRIPTOR)-----")
 _SALT = b"tabsdata-tdx/descriptor/v2"  # fixed: one dev secret, symmetric
 _ITERATIONS = 200_000
 _NONCE_LEN = 12
@@ -97,9 +103,24 @@ def _key(secret: str) -> bytes:
     return cached
 
 
+def descriptor_label(text: str) -> str | None:
+    """The PEM descriptor label in `text` (e.g. ``TDX DESCRIPTOR``), matched with
+    its ``END`` armor, or None if `text` carries no descriptor armor. Any label
+    matches — so a legacy / foreign label is still detected (then rejected on
+    read), rather than mistaken for a non-descriptor file."""
+    m = _ARMOR_RE.search(text)
+    if not m:
+        return None
+    label = m.group(1)
+    return label if f"-----END {label}-----" in text else None
+
+
 def is_pem(text: str) -> bool:
-    """Whether `text` looks like one of our PEM-armored descriptors."""
-    return _BEGIN in text and _END in text
+    """Whether `text` is PEM-armored as one of our descriptors (ANY label). A
+    non-current label still returns True so the reader treats the file as a
+    descriptor and fails loudly on the label mismatch, instead of skipping it as
+    a non-descriptor sidecar."""
+    return descriptor_label(text) is not None
 
 
 def encrypt(plaintext: bytes) -> str:
@@ -115,12 +136,21 @@ def encrypt(plaintext: bytes) -> str:
 
 def decrypt(pem: str) -> bytes:
     """Decrypt a PEM string produced by :func:`encrypt`. Raises DatagenError if
-    it isn't our PEM, and DecryptError (a DatagenError) if it is ours but the
-    active secret is wrong (or the blob is corrupt)."""
+    it isn't a descriptor at all (no PEM armor), and DecryptError (a DatagenError)
+    if it IS a descriptor but unreadable — either its PEM label is not the current
+    one (written by an older / incompatible tdx) or the active secret is wrong
+    (or the blob is corrupt)."""
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
     if not is_pem(pem):
         raise DatagenError("not an encrypted descriptor (no PEM armor)")
+    label = descriptor_label(pem)
+    if label != _PEM_LABEL:
+        raise DecryptError(
+            f"descriptor PEM label {label!r} is not the expected {_PEM_LABEL!r} — "
+            f"it was written by an older or incompatible tdx (the descriptor label "
+            f"changed); recreate it with tdx-system / tdx-domain create"
+        )
     b64 = "".join(ln for ln in pem.splitlines() if ln and not ln.startswith("-----"))
     try:
         blob = base64.b64decode(b64)

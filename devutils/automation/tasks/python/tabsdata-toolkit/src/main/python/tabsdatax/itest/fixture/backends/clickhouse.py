@@ -40,8 +40,10 @@ class ClickhouseDomain(Domain):
     password: str
     db: str
     sqlalchemy_uri: str
+    database: str  # clickhouse calls the entity container a database (== db here)
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def clickhouse_system(name: str):

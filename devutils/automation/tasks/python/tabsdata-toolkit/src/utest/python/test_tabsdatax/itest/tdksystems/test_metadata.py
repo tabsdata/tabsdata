@@ -56,6 +56,18 @@ def test_redpanda_uses_topic_flag():
     assert systems.get("redpanda").domain_flag == "topic"
 
 
+def test_entity_container_terminology_per_family():
+    """Every system exposes its own word for the entity container (used as the
+    redundant descriptor key); salesforce has none (a creds clone)."""
+    flags = {slug: systems.get(slug).domain_flag for slug in systems.all_slugs()}
+    assert flags["s3"] == flags["gcs"] == flags["azureblob"] == "prefix"
+    assert flags["fs"] == "folder"
+    assert flags["snowflake"] == flags["databricks"] == "schema"
+    assert flags["bigquery"] == "dataset"
+    assert flags["mysql"] == "database"
+    assert flags["salesforce"] == ""
+
+
 def test_redpanda_and_mongodb_do_not_support_sql():
     assert systems.get("redpanda").supports_sql is False
     assert systems.get("mongodb").supports_sql is False

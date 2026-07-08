@@ -38,8 +38,10 @@ class RedpandaDomain(Domain):
     password: str
     db: str
     sqlalchemy_uri: str
+    topic: str  # redpanda calls the entity container a topic (== db here)
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def redpanda_system(name: str):

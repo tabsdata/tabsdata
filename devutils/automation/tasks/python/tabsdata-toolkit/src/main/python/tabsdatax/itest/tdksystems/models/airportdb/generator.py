@@ -26,7 +26,12 @@ import sys
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems.emit import Column, Table, write_tables  # noqa: E402
+from tabsdatax.itest.tdksystems.emit import (  # noqa: E402
+    VALID_FORMATS,
+    Column,
+    Table,
+    write_tables,
+)
 
 BASE_SEED = 42
 
@@ -797,7 +802,7 @@ def parse_args():
     p.add_argument("--airplane-types", type=int, default=20, dest="airplane_types")
     p.add_argument("--employees", type=int, default=20)
     p.add_argument("--weather-days", type=int, default=10, dest="weather_days")
-    p.add_argument("--format", choices=("sql", "csv", "json", "parquet"), default="sql")
+    p.add_argument("--format", choices=VALID_FORMATS, default="sql")
     p.add_argument("--seed", type=int, default=BASE_SEED)
     p.add_argument("--out", required=True)
     p.add_argument("--chunks", type=int, default=None)

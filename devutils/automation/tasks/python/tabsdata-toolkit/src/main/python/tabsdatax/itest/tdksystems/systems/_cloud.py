@@ -32,6 +32,7 @@ class CloudBase(System):
     kind = "file"
     staging_root = True  # -> base adds the SYS_PATH (--sys-path) option
     relative_sys_path = True  # object-store prefix: strip a leading slash
+    domain_flag = "prefix"  # object stores name the domain a prefix (fs: folder)
 
     def _backend(self, values: dict[str, str]):
         raise NotImplementedError
@@ -74,7 +75,7 @@ class CloudBase(System):
         values = self.resolve_values(settings)
         base = _normalize_path(spec.entity_name)
         if not base:
-            raise DatagenError("domain --name is empty")
+            raise DatagenError("domain name is empty")
         _validate_path(base, "name")
         root = values.get("SYS_PATH", "")
         full = f"{root}/{base}" if root else base

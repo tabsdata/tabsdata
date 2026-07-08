@@ -87,7 +87,7 @@ class ContainerBase(System):
     category = "container"
     kind = "sql"
     supports_pause = True
-    domain_flag = "database"  # --name names a database/schema/topic
+    domain_flag = "database"  # --domain names a database/schema/topic
     supports_sql = True
     domain_desc = ""
     options = ()  # port is allocated, password generated
@@ -282,14 +282,26 @@ class ContainerBase(System):
         # broker / schema-registry extra vars); keep exporting them.
         os.environ["PORT"] = admin.port
         os.environ["CONTAINER"] = cname
-        if any(d.lower() == entity.lower() for d in self.do_list(admin)):
-            if spec.force:
+        exists = any(d.lower() == entity.lower() for d in self.do_list(admin))
+        if exists and not spec.force:
+            raise DatagenError(
+                f"{self.domain_flag} '{entity}' already exists (use --force)"
+            )
+        if spec.force and exists:
+            # A leftover entity (typically an orphan whose descriptor was lost, so
+            # the tdx-level destroy-first couldn't find it) is torn down over the
+            # system admin before recreating. Do NOT swallow a real drop failure —
+            # otherwise a half-dropped entity resurfaces as a confusing "already
+            # exists" during the later DDL install.
+            self.do_delete(admin, entity)
+            print(f">>> --force: removed existing {self.domain_flag} '{entity}'")
+        elif spec.force:
+            # Not present per do_list — best-effort drop of a partial leftover
+            # do_list can't see; do_create surfaces any real conflict.
+            try:
                 self.do_delete(admin, entity)
-                print(f">>> --force: removed existing {self.domain_flag} '{entity}'")
-            else:
-                raise DatagenError(
-                    f"{self.domain_flag} '{entity}' already exists (use --force)"
-                )
+            except DatagenError:
+                pass
         result = self.do_create(admin, entity)
         out: dict[str, Setting] = {
             "HOST": Setting("HOST", value="localhost"),

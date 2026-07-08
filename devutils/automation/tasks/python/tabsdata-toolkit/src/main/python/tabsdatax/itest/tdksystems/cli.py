@@ -118,6 +118,13 @@ def _run_data_create(args: argparse.Namespace) -> int:
         )
         print()
         return 0
+    if meta.get("SYSTEM_KIND") == "kafka":
+        # Kafka topics have no schema to install — the records are produced by
+        # `data load` (which builds them from the json + schema sidecar).
+        print()
+        print("data create: no schema needed for kafka domains (topics only)")
+        print()
+        return 0
     if not sysobj.supports_sql:
         if kind.startswith("saas") and ctx.slug == "salesforce":
             print()
@@ -174,37 +181,47 @@ def _run_data_load(args: argparse.Namespace) -> int:
             )
 
     size = _resolve_size(args.model, args.size)
-    # kafka + saas-SQL build messages / INSERTs from the json + schema sidecar;
-    # the other kinds keep their native file format.
-    if is_kafka or kind.startswith("saas"):
-        fmt, sidecar, gen_chunks = "json", True, None
-    else:
-        fmt, sidecar, gen_chunks = (
-            args.format or _default_format_for(kind, meta),
-            False,
-            args.chunks,
-        )
 
     with tempfile.TemporaryDirectory(prefix="tdx-load-") as tmp:
         tmp_out = Path(tmp) / "data"
         print()
-        size_msg = f"size={size}, " if size else ""
-        chunks_msg = f", chunks={gen_chunks}" if gen_chunks else ""
-        print(
-            f">>> generating model='{args.model}' "
-            f"({size_msg}format={fmt}{chunks_msg}) ..."
-        )
-        data_gen.generate(
-            data_gen.model_dir(args.model),
-            size,
-            tmp_out,
-            fmt,
-            chunks=gen_chunks,
-            engine=(
-                ctx.slug if kind.startswith("container") and not is_kafka else None
-            ),
-            schema_sidecar=sidecar,
-        )
+        if kind.startswith("cloud"):
+            # file/az/gcs/s3 domains: stage EVERY supported file format, each in
+            # its own subdir (<base>/csv, <base>/ndjson, <base>/parquet — JSON is
+            # staged as NDJSON), so the object store carries a copy of the model in
+            # each format. The entity counts are keyed by each staged file's path.
+            table_counts = _generate_file_formats(
+                args.model, size, tmp_out, args.chunks
+            )
+            entities = _file_path_entities(ctx.meta.get("BASE_PATH", ""), table_counts)
+        else:
+            # kafka + saas-SQL build messages / INSERTs from the json + schema
+            # sidecar; SQL containers keep their native sql format.
+            if is_kafka or kind.startswith("saas"):
+                fmt, sidecar, gen_chunks = "json", True, None
+            else:
+                fmt, sidecar, gen_chunks = (
+                    args.format or _default_format_for(kind, meta),
+                    False,
+                    args.chunks,
+                )
+            size_msg = f"size={size}, " if size else ""
+            chunks_msg = f", chunks={gen_chunks}" if gen_chunks else ""
+            print(
+                f">>> generating model='{args.model}' "
+                f"({size_msg}format={fmt}{chunks_msg}) ..."
+            )
+            entities = data_gen.generate(
+                data_gen.model_dir(args.model),
+                size,
+                tmp_out,
+                fmt,
+                chunks=gen_chunks,
+                engine=(
+                    ctx.slug if kind.startswith("container") and not is_kafka else None
+                ),
+                schema_sidecar=sidecar,
+            )
         print()
         sysobj.load_data(
             ctx,
@@ -219,7 +236,44 @@ def _run_data_load(args: argparse.Namespace) -> int:
             ),
         )
         print()
-        return 0
+    # Record each entity's row count on the descriptor now the data is in place.
+    if entities:
+        descriptor.record_entities(args.domain, entities)
+    return 0
+
+
+def _generate_file_formats(
+    model: str, size: str | None, out: Path, chunks: int | None
+) -> dict[str, int]:
+    """Stage `model` under ``out/<format>/`` for every supported file format,
+    returning the per-entity record counts (identical across formats, so the
+    first non-empty result is kept). ``run-order.txt`` — a SQL-load manifest the
+    object-store / fs data plane doesn't use — is dropped from each format dir so
+    only the data files are staged."""
+    entities: dict[str, int] = {}
+    size_msg = f"size={size}, " if size else ""
+    for fmt in data_gen.FILE_FORMATS:
+        print(f">>> generating model='{model}' ({size_msg}format={fmt}) ...")
+        counts = data_gen.generate(
+            data_gen.model_dir(model), size, out / fmt, fmt, chunks=chunks
+        )
+        (out / fmt / "run-order.txt").unlink(missing_ok=True)
+        entities = entities or counts
+    return entities
+
+
+def _file_path_entities(base_path: str, table_counts: dict[str, int]) -> dict[str, int]:
+    """Key a file domain's record counts by each staged file's full path
+    (``<base>/<format>/<table>.<ext>``) rather than the bare table name — one
+    entry per (table, format), since a file domain stages every format. Each file
+    format's extension is the format name (``csv``/``ndjson``/``parquet``)."""
+    base = base_path.rstrip("/")
+    entities: dict[str, int] = {}
+    for table, count in table_counts.items():
+        for fmt in data_gen.FILE_FORMATS:
+            rel = f"{fmt}/{table}.{fmt}"
+            entities[f"{base}/{rel}" if base else rel] = count
+    return entities
 
 
 def _print_saas_model_instructions(

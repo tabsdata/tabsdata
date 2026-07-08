@@ -105,6 +105,42 @@ def test_domain_create_fails_if_descriptor_exists(stores, fs_root):
         tdx._domain_create(dom)
 
 
+def test_install_model_and_data_loads_without_rerunning_ddl(monkeypatch):
+    # create --model --data installs the schema once (data create) then loads with
+    # force=False — the DDL must NOT run twice (db2/oracle reject the second
+    # CREATE TABLE, since their force-load table-drop can't see the domain schema).
+    seen = {}
+    monkeypatch.setattr(tdx.cli, "_run_data_create",
+                        lambda ns: seen.__setitem__("create_force", ns.force))
+    monkeypatch.setattr(tdx.cli, "_run_data_load",
+                        lambda ns: seen.__setitem__("load_force", ns.force))
+    monkeypatch.setattr(tdx.data_gen, "is_sizeable", lambda m: True)
+    tdx._install_model_and_data("/tmp/x/dom", "world", "xs", force=True)
+    assert seen == {"create_force": True, "load_force": False}
+
+
+def test_domain_create_force_destroys_existing_via_system(stores, fs_root, monkeypatch):
+    # create -f on an existing domain destroys it FIRST (over the system's
+    # connection, via _domain_destroy_one), then creates fresh.
+    tdx._sys_create(["--type", "fs", "--sys", "a", "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d", "--domain-prefix", "", "-f"])
+    calls = []
+    orig = tdx._domain_destroy_one
+    monkeypatch.setattr(
+        tdx, "_domain_destroy_one",
+        lambda name, dd, sd: calls.append((name, sd)) or orig(name, dd, sd),
+    )
+    assert tdx._domain_create(
+        ["--sys", "a", "--domain", "d", "--domain-prefix", "", "-f"]
+    ) == 0
+    assert calls == [("d", None)]           # destroyed via the system before recreate
+    assert (fs_root / "d").is_dir()         # and recreated
+    # a fresh create (no existing descriptor) does NOT destroy first.
+    calls.clear()
+    tdx._domain_create(["--sys", "a", "--domain", "e", "--domain-prefix", "", "-f"])
+    assert calls == []
+
+
 def test_created_info_hint_uses_verb_first_syntax(stores, fs_root, capsys):
     tdx._sys_create(["--type", "fs", "--sys", "my_fs",
                      "--sys-path", str(fs_root), "-f"])
@@ -204,10 +240,23 @@ def test_list_wrong_key_fails_loudly(stores, fs_root, monkeypatch):
                      "--sys-path", str(fs_root), "-f"])
     tdx._domain_create(["--sys", "alpha", "--domain", "inbox", "-f"])
     monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "a-different-good-secret")
-    with pytest.raises(DatagenError, match="TD_BACKENDS_CRYPTO_KEY is incorrect"):
+    with pytest.raises(DatagenError, match="could not read descriptor"):
         tdx._sys_list([])
-    with pytest.raises(DatagenError, match="TD_BACKENDS_CRYPTO_KEY is incorrect"):
+    with pytest.raises(DatagenError, match="could not read descriptor"):
         tdx._domain_list([])
+
+
+def test_list_fails_loudly_on_stale_descriptor_label(stores):
+    # A descriptor written by an older tdx (a different PEM label) must NOT be
+    # silently skipped as a sidecar: list surfaces it as a read error naming the
+    # label mismatch. The body is irrelevant — the label is rejected first.
+    sysdir = store.system_dir()
+    sysdir.mkdir(parents=True, exist_ok=True)
+    (sysdir / "legacy").write_text(
+        "-----BEGIN TD_GEN DESCRIPTOR-----\nAAAA\n-----END TD_GEN DESCRIPTOR-----\n"
+    )
+    with pytest.raises(DatagenError, match="older or incompatible tdx"):
+        tdx._sys_list([])
 
 
 def test_list_skips_non_descriptor_sidecars(stores, fs_root, capsys):
@@ -390,15 +439,15 @@ def test_sys_status_and_destroy_all(stores, fs_root, capsys):
                      "--sys-path", str(fs_root / "b"), "-f"])
     capsys.readouterr()
 
-    assert tdx._sys_status(["--sys", "ALL"]) == 0
+    assert tdx._sys_status(["--auto", "ALL"]) == 0
     out = capsys.readouterr().out
     assert "alpha" in out and "beta" in out and "2/2 systems ready" in out
 
     # A comma list selects a subset.
-    assert tdx._sys_status(["--sys", "alpha,beta"]) == 0
+    assert tdx._sys_status(["--auto", "alpha,beta"]) == 0
     capsys.readouterr()
 
-    assert tdx._sys_destroy(["--sys", "ALL"]) == 0
+    assert tdx._sys_destroy(["--auto", "ALL"]) == 0
     assert not store.system_path("alpha").exists()
     assert not store.system_path("beta").exists()
     assert "destroyed 2/2 systems" in capsys.readouterr().out
@@ -579,6 +628,353 @@ def test_reset_domain_unsupported_for_object_store():
     # Object stores have no per-domain creds; reset falls back to re-provision.
     with pytest.raises(Unsupported):
         tdx.systems.get("s3").reset_domain(DomainContext("s3", "d", {}))
+
+
+# ---- create --model --data: multi-format staging + entities + entity term --
+
+def test_domain_create_stages_all_formats_and_records_entities(
+    stores, fs_root, monkeypatch
+):
+    # file/az/gcs/s3 domains stage EVERY supported file format (each under its
+    # own subdir), record per-entity record counts, and carry the redundant
+    # system-terminology entity-container key (fs -> FOLDER).
+    from tabsdatax.itest.tdksystems import cli
+    monkeypatch.setattr(cli.env_check, "check_requirements", lambda: None)
+    tdx._sys_create(["--type", "fs", "--sys", "a", "--sys-path", str(fs_root), "-f"])
+    assert tdx._domain_create(
+        ["--sys", "a", "--domain", "inbox", "--domain-prefix", "",
+         "--model", "world", "--data", "xs", "-f"]
+    ) == 0
+    # the domain is named by --domain verbatim; --model/--data only seed it.
+    dom_name = "inbox"
+    dom = fs_root / dom_name
+    assert (dom / "csv" / "wld_city.csv").is_file()
+    # JSON is staged as NDJSON (one object per line), not a single array.
+    ndjson_file = dom / "ndjson" / "wld_city.ndjson"
+    assert ndjson_file.is_file()
+    assert not (dom / "json").exists()
+    lines = [ln for ln in ndjson_file.read_text().splitlines() if ln.strip()]
+    assert len(lines) == 100
+    assert json.loads(lines[0])  # each line is a standalone JSON object
+    assert (dom / "parquet" / "wld_city.parquet").is_file()
+    # the emitter's manifest + the SQL-load run-order manifest are not staged.
+    assert not list(dom.rglob("_entities.json"))
+    assert not list(dom.rglob("run-order.txt"))
+    attrs = descriptor.attributes(_read(store.domain_path(dom_name)))
+    assert attrs["FOLDER"] == dom_name
+    # entities are keyed by each staged file's full path (one per table+format).
+    ents = attrs["ENTITIES"]
+    assert ents[f"{dom}/csv/wld_city.csv"] == 100
+    assert ents[f"{dom}/ndjson/wld_city.ndjson"] == 100
+    assert ents[f"{dom}/parquet/wld_city.parquet"] == 100
+    assert len(ents) == 9  # 3 tables x 3 formats
+
+
+# ---- system --sys-manifest / dump subcommand; domain --auto seeding --------
+
+def test_sys_create_from_manifest(stores, fs_root, tmp_path):
+    m = tmp_path / "sys.yaml"
+    m.write_text(
+        f"- type: fs\n  name: alpha\n  sys-path: {fs_root}/alpha\n  force: true\n"
+        f"- type: fs\n  name: beta\n  sys-path: {fs_root}/beta\n  force: true\n"
+    )
+    assert tdx._sys_create(["--sys-manifest", str(m)]) == 0
+    assert {n for n, _ in tdx._store_entries(store.system_dir(), "sys")} == {
+        "alpha", "beta"
+    }
+
+
+def test_sys_dump_subcommand_writes_store(stores, fs_root, tmp_path):
+    # `tdx-system dump --sys-manifest F` emits a manifest of every system in the
+    # store (identity under `name`) that round-trips back through `create`.
+    from tabsdatax.itest.tdksystems import manifest
+    tdx._sys_create(["--type", "fs", "--sys", "alpha",
+                     "--sys-path", str(fs_root / "alpha"), "-f"])
+    tdx._sys_create(["--type", "fs", "--sys", "beta",
+                     "--sys-path", str(fs_root / "beta"), "-f"])
+    out = tmp_path / "systems.yaml"
+    assert tdx._sys_dump(["--sys-manifest", str(out)]) == 0
+    entries = manifest.read(str(out))
+    assert {e["name"] for e in entries} == {"alpha", "beta"}
+    assert all(e["type"] == "fs" and "sys-path" in e for e in entries)
+
+
+def test_sys_dump_subcommand_registered():
+    assert "dump" in tdx._SYS_VERBS
+
+
+def test_sys_create_manifest_rejects_sys(stores):
+    with pytest.raises(DatagenError, match="not used with --sys-manifest"):
+        tdx._sys_create(["--sys-manifest", "x.yaml", "--sys", "a"])
+
+
+def test_domain_create_auto_names_and_seeds(
+    stores, fs_root, tmp_path, monkeypatch
+):
+    # --auto creates one domain per system, named after its system, seeding
+    # --model/--data where the system supports it.
+    from tabsdatax.itest.tdksystems import cli
+    monkeypatch.setattr(cli.env_check, "check_requirements", lambda: None)
+    tdx._sys_create(["--type", "fs", "--sys", "one",
+                     "--sys-path", str(fs_root / "one"), "-f"])
+    tdx._sys_create(["--type", "fs", "--sys", "two",
+                     "--sys-path", str(fs_root / "two"), "-f"])
+    rc = tdx._domain_create(["--auto", "ALL", "--model", "world",
+                             "--data", "xs", "--domain-prefix", "", "-f"])
+    assert rc == 0
+    # each domain is named after its system.
+    assert {n for n, _ in tdx._store_entries(store.domain_dir(), "env")} == {
+        "one", "two"
+    }
+    # and each was seeded (data staged in per-format subdirs).
+    assert (fs_root / "one" / "one" / "csv" / "wld_city.csv").is_file()
+    assert (fs_root / "two" / "two" / "parquet" / "wld_city.parquet").is_file()
+
+
+def test_domain_create_auto_model_is_noop_for_unsupported_system(
+    stores, fs_root, tmp_path, monkeypatch, capsys
+):
+    # A system that can't be seeded: the domain is still created (empty), the
+    # model/data is a no-op, and a warning is emitted to stderr.
+    from tabsdatax.itest.tdksystems import cli
+    monkeypatch.setattr(cli.env_check, "check_requirements", lambda: None)
+    tdx._sys_create(["--type", "fs", "--sys", "flat",
+                     "--sys-path", str(fs_root / "flat"), "-f"])
+    monkeypatch.setattr(tdx, "_system_can_seed", lambda name, model, sys_dir: False)
+    capsys.readouterr()
+    rc = tdx._domain_create(["--auto", "ALL", "--model", "world",
+                             "--data", "xs", "--domain-prefix", "", "-f"])
+    cap = capsys.readouterr()
+    assert rc == 0
+    # domain named after the system, no data staged.
+    assert store.domain_path("flat").exists()
+    assert (fs_root / "flat" / "flat").is_dir()
+    assert not list((fs_root / "flat" / "flat").rglob("*.csv"))
+    # warned that it was created empty.
+    assert "flat: model 'world' is not seedable here" in cap.err
+    assert "empty (model 'world' not seeded)" in cap.out
+
+
+def test_domain_create_auto_rejects_sys(stores):
+    with pytest.raises(DatagenError, match="not used with --auto"):
+        tdx._domain_create(["--auto", "ALL", "--sys", "a"])
+
+
+def test_system_can_seed_requires_ddl_for_sql(stores):
+    # A SQL system is seedable only if the model ships its <slug>.ddl: world has
+    # mysql.ddl but no clickhouse.ddl, so clickhouse can't be seeded (empty domain).
+    descriptor.write_container_system(
+        out=str(store.system_path("my")), system_type="mysql", system_kind="sql",
+        label="MySQL", container="c", host="h", port="3306",
+        user="root", password="pw", domain_desc="")
+    descriptor.stamp(store.system_path("my"), name="my", started="t")
+    descriptor.write_container_system(
+        out=str(store.system_path("ch")), system_type="clickhouse",
+        system_kind="sql", label="ClickHouse", container="c2", host="h",
+        port="9000", user="default", password="pw", domain_desc="")
+    descriptor.stamp(store.system_path("ch"), name="ch", started="t")
+    assert tdx._system_can_seed("my", "world", None) is True
+    assert tdx._system_can_seed("ch", "world", None) is False
+
+
+def test_domain_create_from_manifest(stores, fs_root, tmp_path, monkeypatch):
+    # A tdx-domain manifest: each entry's keys mirror the create flags. The entity
+    # prefix comes from the CLI (not the manifest), so entities are predictable.
+    from tabsdatax.itest.tdksystems import cli
+    monkeypatch.setattr(cli.env_check, "check_requirements", lambda: None)
+    tdx._sys_create(["--type", "fs", "--sys", "mysys",
+                     "--sys-path", str(fs_root), "-f"])
+    m = tmp_path / "domains.yaml"
+    m.write_text(
+        "- name: orders\n  sys: mysys\n  model: world\n  data: xs\n"
+        "- name: inbox\n  sys: mysys\n"
+    )
+    assert tdx._domain_create(
+        ["--domain-manifest", str(m), "--domain-prefix", "", "-f"]
+    ) == 0
+    assert {n for n, _ in tdx._store_entries(store.domain_dir(), "env")} == {
+        "orders", "inbox"
+    }
+    assert (fs_root / "orders" / "csv" / "wld_city.csv").is_file()
+    assert (fs_root / "inbox").is_dir()
+
+
+def test_domain_dump_subcommand_round_trips(stores, fs_root, tmp_path, monkeypatch):
+    # `tdx-domain dump --domain-manifest F` dumps every domain (name + sys +
+    # model/data, no prefix) so it replays through `create --domain-manifest`.
+    from tabsdatax.itest.tdksystems import cli, manifest
+    monkeypatch.setattr(cli.env_check, "check_requirements", lambda: None)
+    tdx._sys_create(["--type", "fs", "--sys", "mysys",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "orders", "--model", "world",
+                        "--data", "xs", "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "inbox",
+                        "--domain-prefix", "", "-f"])
+    out = tmp_path / "domains.yaml"
+    assert tdx._domain_dump(["--domain-manifest", str(out)]) == 0
+    entries = {e["name"]: e for e in manifest.read(str(out))}
+    assert set(entries) == {"orders", "inbox"}
+    assert entries["orders"] == {"name": "orders", "sys": "mysys", "model": "world",
+                                 "data": "xs"}
+    assert entries["inbox"] == {"name": "inbox", "sys": "mysys"}
+
+
+def test_domain_dump_subcommand_registered():
+    assert "dump" in tdx._DOMAIN_VERBS
+
+
+# ---- destroy from a manifest (systems + domains) ---------------------------
+
+def test_sys_destroy_from_manifest_destroys_and_skips_missing(
+    stores, fs_root, tmp_path, capsys
+):
+    # Every system in the manifest is destroyed; one not in the store is warned
+    # to stderr and skipped (the rest still run).
+    tdx._sys_create(["--type", "fs", "--sys", "one",
+                     "--sys-path", str(fs_root / "one"), "-f"])
+    tdx._sys_create(["--type", "fs", "--sys", "two",
+                     "--sys-path", str(fs_root / "two"), "-f"])
+    m = tmp_path / "sys.yaml"
+    m.write_text("- type: fs\n  name: one\n- type: fs\n  name: two\n"
+                 "- type: fs\n  name: ghost\n")
+    capsys.readouterr()
+    rc = tdx._sys_destroy(["--sys-manifest", str(m)])
+    err = capsys.readouterr().err
+    assert rc == 0
+    assert not store.system_path("one").exists()
+    assert not store.system_path("two").exists()
+    assert "skipping system 'ghost'" in err
+
+
+def test_sys_status_from_manifest_reports_and_skips_missing(
+    stores, fs_root, tmp_path, capsys
+):
+    # status accepts a system manifest too (like destroy); a system not in the
+    # store is warned to stderr and skipped.
+    tdx._sys_create(["--type", "fs", "--sys", "one",
+                     "--sys-path", str(fs_root / "one"), "-f"])
+    m = tmp_path / "sys.yaml"
+    m.write_text("- type: fs\n  name: one\n- type: fs\n  name: ghost\n")
+    capsys.readouterr()
+    rc = tdx._sys_status(["--sys-manifest", str(m)])
+    cap = capsys.readouterr()
+    assert rc == 0
+    assert "one" in cap.out
+    assert "skipping system 'ghost'" in cap.err
+
+
+def test_sys_destroy_from_manifest_refuses_system_in_use(
+    stores, fs_root, tmp_path, capsys
+):
+    # A system still referenced by a domain (via the domain's sys_name) fails and
+    # is left in place.
+    tdx._sys_create(["--type", "fs", "--sys", "busy",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "busy", "--domain", "d",
+                        "--domain-prefix", "", "-f"])
+    m = tmp_path / "sys.yaml"
+    m.write_text("- type: fs\n  name: busy\n")
+    capsys.readouterr()
+    rc = tdx._sys_destroy(["--sys-manifest", str(m)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "in use by domain(s): d" in out
+    assert store.system_path("busy").exists()
+
+
+def test_domain_destroy_from_manifest_destroys_and_skips_missing(
+    stores, fs_root, tmp_path, capsys
+):
+    # Every domain in the manifest is dropped (folder + descriptor); one whose
+    # derived name isn't in the store is warned to stderr and skipped.
+    tdx._sys_create(["--type", "fs", "--sys", "mysys",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "keep",
+                        "--domain-prefix", "", "-f"])
+    m = tmp_path / "domains.yaml"
+    m.write_text("- name: keep\n  sys: mysys\n- name: ghost\n  sys: mysys\n")
+    capsys.readouterr()
+    rc = tdx._domain_destroy(["--domain-manifest", str(m)])
+    err = capsys.readouterr().err
+    assert rc == 0
+    assert not store.domain_path("keep").exists()
+    assert not (fs_root / "keep").exists()
+    assert "skipping domain 'ghost'" in err
+
+
+# ---- destroy uses the system connection (via the domain's sys_name) ---------
+
+def test_domain_meta_via_system_refreshes_cloud_connection(stores, fs_root):
+    tdx._sys_create(["--type", "fs", "--sys", "mysys",
+                     "--sys-path", str(fs_root), "-f"])
+    # a domain doc with a STALE SYS_PATH but a valid sys_name -> the merge pulls
+    # the connection from the live system, keeping the domain's own BASE_PATH.
+    doc = {"system": "fs", "name": "d", "sys_name": "mysys",
+           "meta": [{"name": "SYS_PATH", "value": "/stale/root"},
+                    {"name": "BASE_PATH", "value": "/stale/root/d"}]}
+    merged = tdx._domain_meta_via_system(doc, None)
+    assert merged["SYS_PATH"] == str(fs_root)        # refreshed from the system
+    assert merged["BASE_PATH"] == "/stale/root/d"    # entity identity kept
+
+
+def test_domain_meta_via_system_maps_container_admin(stores):
+    descriptor.write_container_system(
+        out=str(store.system_path("db")), system_type="mysql", system_kind="sql",
+        label="MySQL", container="tdx_db", host="h", port="3306",
+        user="root", password="rootpw", domain_desc="")
+    descriptor.stamp(store.system_path("db"), name="db", started="t")
+    doc = {"system": "mysql", "name": "shop", "sys_name": "db",
+           "meta": [{"name": "DB", "value": "shop"},
+                    {"name": "HOST", "value": "oldhost"},
+                    {"name": "PORT", "value": "1"},
+                    {"name": "SYS_ADMIN_USER", "value": "stale"},
+                    {"name": "SYS_ADMIN_PASSWORD", "value": "stalepw"}]}
+    merged = tdx._domain_meta_via_system(doc, None)
+    # admin creds refreshed from the system's own USER / PASSWORD / HOST / PORT.
+    assert merged["SYS_ADMIN_USER"] == "root"
+    assert merged["SYS_ADMIN_PASSWORD"] == "rootpw"
+    assert merged["HOST"] == "h" and merged["PORT"] == "3306"
+    assert merged["DB"] == "shop"                    # entity identity kept
+
+
+def test_domain_meta_via_system_falls_back_without_sys_name():
+    doc = {"system": "fs", "name": "d",
+           "meta": [{"name": "SYS_PATH", "value": "/x"}]}
+    assert tdx._domain_meta_via_system(doc, None) == {"SYS_PATH": "/x"}
+
+
+def test_domain_destroy_uses_system_and_removes_folder(stores, fs_root):
+    tdx._sys_create(["--type", "fs", "--sys", "mysys",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "d", "--domain-prefix", "", "-f"])
+    assert (fs_root / "d").is_dir()
+    tdx._domain_destroy(["--domain", "d"])
+    assert not store.domain_path("d").exists()
+    assert not (fs_root / "d").exists()
+
+
+def test_domain_create_single_defaults_name_to_system(stores, fs_root):
+    # --sys with no --domain -> domain named after the system.
+    tdx._sys_create(["--type", "fs", "--sys", "mysys",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain-prefix", "", "-f"])
+    assert store.domain_path("mysys").exists()
+    assert (fs_root / "mysys").is_dir()
+
+
+def test_manifest_batch_reports_per_entry_failure(stores, fs_root, tmp_path, capsys):
+    # A bad entry (unknown type) is reported; the good one still runs.
+    m = tmp_path / "mixed.yaml"
+    m.write_text(
+        f"- type: fs\n  sys: good\n  sys-path: {fs_root}/good\n  force: true\n"
+        f"- type: nope\n  sys: bad\n"
+    )
+    capsys.readouterr()
+    rc = tdx._sys_create(["--sys-manifest", str(m)])
+    out = capsys.readouterr().out
+    assert rc == 1                       # one entry failed
+    assert "created 1/2 systems" in out
+    assert "good" in out and "bad" in out
 
 
 # ---- fs: --sys-path is a local option (no env), default target/<name> ------

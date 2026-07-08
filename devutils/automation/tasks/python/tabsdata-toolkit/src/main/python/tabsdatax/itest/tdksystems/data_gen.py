@@ -33,7 +33,11 @@ SIZE_BUCKETS: dict[str, int] = {
     "l": 100000,
     "xl": 1000000,
 }
-VALID_FORMATS = ("sql", "csv", "json", "parquet")
+VALID_FORMATS = ("sql", "csv", "json", "ndjson", "parquet")
+# The file formats an object-store / filesystem domain is staged in. JSON is
+# staged as NDJSON (one object per line) — the shape a table loader consumes —
+# not a single JSON array. (sql is a DB-load shape, not a file one.)
+FILE_FORMATS = ("csv", "ndjson", "parquet")
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +124,12 @@ def generate(
     chunks: int | None = None,
     engine: str | None = None,
     schema_sidecar: bool = False,
-) -> None:
-    """Generate the model into `output`.
+) -> dict[str, int]:
+    """Generate the model into `output`; return each entity's record count.
+
+    The returned ``{table_name: rows}`` map is read from the emitter's
+    ``_entities.json`` manifest, which is consumed (removed) here so it never
+    reaches the SQL load / cloud upload that follows.
 
     For sizeable models (sizing.json has a `prolific` key), `size` selects a
     bucket from SIZE_BUCKETS and we pass scaled args to the source.
@@ -190,6 +198,23 @@ def generate(
         _patched_env("TDX_SCHEMA_SIDECAR", "1" if schema_sidecar else None),
     ):
         module.main()
+    return _consume_entities_manifest(output)
+
+
+def _consume_entities_manifest(output: Path) -> dict[str, int]:
+    """Read + remove the emitter's ``_entities.json`` (record counts per table),
+    returning ``{}`` if it is absent or unreadable."""
+    from .emit import ENTITIES_MANIFEST
+
+    manifest = Path(output) / ENTITIES_MANIFEST
+    if not manifest.is_file():
+        return {}
+    try:
+        data = json.loads(manifest.read_text())
+    except json.JSONDecodeError:
+        data = {}
+    manifest.unlink()
+    return {str(k): int(v) for k, v in data.items()}
 
 
 def _load_generator(path: Path) -> ModuleType:

@@ -122,8 +122,9 @@ def load(name: str, cls: type):
     return _CACHE[key]
 
 
-def _construct(cls, attrs: dict[str, str], *, name: str):
-    """Build `cls` from the flat attribute dict (field ← key ``field_name.upper()``)."""
+def _construct(cls, attrs: dict[str, object], *, name: str):
+    """Build `cls` from the flat attribute dict (field ← key ``field_name.upper()``).
+    Values are strings except ``ENTITIES`` (the ``{table: rows}`` mapping)."""
     kwargs = {
         f.name: attrs[f.name.upper()]
         for f in dataclasses.fields(cls)

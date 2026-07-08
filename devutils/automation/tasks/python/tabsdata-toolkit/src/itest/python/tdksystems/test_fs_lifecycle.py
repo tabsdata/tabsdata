@@ -41,7 +41,9 @@ def test_full_fs_lifecycle(fs_root, tmp_path):
     sysdir, domdir = tmp_path / "systems", tmp_path / "domains"
     S = ("--sys-dir", str(sysdir))
     D = ("--domain-dir", str(domdir))
-    sysd, domd = sysdir / "my_fs", domdir / "inbox"
+    # the domain file name is derived: <name>_<model>_<data>.
+    dom_name = "inbox_world_xs"
+    sysd, domd = sysdir / "my_fs", domdir / dom_name
 
     # 1. Create the fs system.
     cp = _run(
@@ -72,16 +74,20 @@ def test_full_fs_lifecycle(fs_root, tmp_path):
     _ok(cp, "sys list")
     assert "my_fs" in cp.stdout and "fs" in cp.stdout
 
-    # 3. Create a domain and load the `world` model's data into it.
+    # 3. Create a domain and load the `world` model's data into it. The domain
+    #    file name is <name>_<model>_<data>; `--domain-prefix ""` keeps the folder
+    #    the bare file name. Every supported format is staged in its own subdir.
     cp = _run(
         "tdx-domain",
         "create",
         "--sys",
         "my_fs",
         *S,
-        "--domain",
+        "--name",
         "inbox",
         *D,
+        "--domain-prefix",
+        "",
         "--model",
         "world",
         "--data",
@@ -90,27 +96,34 @@ def test_full_fs_lifecycle(fs_root, tmp_path):
     )
     _ok(cp, "tdx-domain create + data")
     assert domd.is_file()
-    dom_root = fs_root / "inbox"
+    dom_root = fs_root / dom_name
     assert dom_root.is_dir()
-    assert (dom_root / "wld_city.csv").is_file()
+    assert (dom_root / "csv" / "wld_city.csv").is_file()
+    assert (dom_root / "json" / "wld_city.json").is_file()
+    assert (dom_root / "parquet" / "wld_city.parquet").is_file()
+    # only the data files are staged — no SQL-load run-order manifest.
+    assert not list(dom_root.rglob("run-order.txt"))
 
-    cp = _run("tdx-domain", "info", "--domain", "inbox", *D, "--format", "json")
+    cp = _run("tdx-domain", "info", "--domain", dom_name, *D, "--format", "json")
     _ok(cp, "domain info json")
     dinfo = json.loads(cp.stdout)
     assert dinfo["MODEL"] == "world"
     assert dinfo["DATA"] == "xs"
-    assert dinfo["BASE_PATH"] == f"{fs_root}/inbox"
-    _ok(_run("tdx-domain", "status", "--domain", "inbox", *D), "domain status")
+    assert dinfo["BASE_PATH"] == f"{fs_root}/{dom_name}"
+    assert dinfo["FOLDER"] == dom_name  # system-terminology entity-container name
+    # entities keyed by each staged file's full path.
+    assert dinfo["ENTITIES"][f"{fs_root}/{dom_name}/csv/wld_city.csv"] == 100
+    _ok(_run("tdx-domain", "status", "--domain", dom_name, *D), "domain status")
 
     # list shows the domain with its type + model/data.
     cp = _run("tdx-domain", "list", *D)
     _ok(cp, "domain list")
     assert (
-        "inbox" in cp.stdout and "model=world" in cp.stdout and "data=xs" in cp.stdout
+        dom_name in cp.stdout and "model=world" in cp.stdout and "data=xs" in cp.stdout
     )
 
     # 4. Destroy the domain (removes objects + descriptor).
-    _ok(_run("tdx-domain", "destroy", "--domain", "inbox", *D), "domain destroy")
+    _ok(_run("tdx-domain", "destroy", "--domain", dom_name, *D), "domain destroy")
     assert not domd.exists()
     assert not dom_root.exists()
 

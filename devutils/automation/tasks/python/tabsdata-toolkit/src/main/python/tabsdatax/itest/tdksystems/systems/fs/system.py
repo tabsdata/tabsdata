@@ -57,6 +57,7 @@ class FsSystem(CloudBase):
     category = "native"  # local filesystem, not a cloud object store; still
     # persisted via write_cloud_* (descriptor kind stays "cloud-*")
     relative_sys_path = False  # absolute roots are valid — don't strip slash
+    domain_flag = "folder"  # a domain is a directory on disk
     options = ()  # only --sys-path (the root)
 
     def _backend(self, values: dict[str, str]) -> FsBackend:
@@ -114,7 +115,7 @@ class FsSystem(CloudBase):
         root = self.resolve_values(settings).get("SYS_PATH", "")
         base = _normalize_path(spec.entity_name)
         if not base:
-            raise DatagenError("domain --name is empty")
+            raise DatagenError("domain name is empty")
         _validate_path(base, "name")
         full = f"{root}/{base}"
         full_p = Path(full)

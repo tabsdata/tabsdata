@@ -38,6 +38,7 @@ class SnowflakeDomain(Domain):
     database: str
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def snowflake_system(name: str):

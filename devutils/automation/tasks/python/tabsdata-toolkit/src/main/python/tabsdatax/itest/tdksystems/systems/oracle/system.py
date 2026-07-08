@@ -75,6 +75,8 @@ class OracleSystem(ContainerBase):
         return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
+        if not any(u.lower() == name.lower() for u in self.do_list(admin)):
+            return  # user already gone — idempotent (avoids a noisy ORA-01918)
         self._run_admin_sql(admin, [f"DROP USER {name} CASCADE"])
 
     def do_list(self, admin: AdminConn) -> list[str]:

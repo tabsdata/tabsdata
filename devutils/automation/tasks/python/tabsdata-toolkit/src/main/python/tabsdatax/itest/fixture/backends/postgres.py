@@ -38,8 +38,10 @@ class PostgresDomain(Domain):
     password: str
     db: str
     sqlalchemy_uri: str
+    schema: str  # postgres calls the entity container a schema (== db here)
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def postgres_system(name: str):

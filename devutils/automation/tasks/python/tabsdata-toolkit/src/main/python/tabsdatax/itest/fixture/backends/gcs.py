@@ -31,10 +31,12 @@ class GcsDomain(Domain):
     system_kind: str
     sys_path: Path
     base_path: Path
+    prefix: str  # the domain's object-store prefix (== the entity container)
     bucket: str
     service_account_key: str
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def gcs_system(name: str):

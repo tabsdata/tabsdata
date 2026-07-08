@@ -79,4 +79,22 @@ def test_size_buckets_cover_xs_through_xl():
 
 
 def test_valid_formats_include_all_emitters():
-    assert set(data_gen.VALID_FORMATS) == {"sql", "csv", "json", "parquet"}
+    assert set(data_gen.VALID_FORMATS) == {"sql", "csv", "json", "ndjson", "parquet"}
+
+
+def test_file_formats_exclude_sql():
+    # Object stores / fs stage every FILE format (JSON as NDJSON); sql is a
+    # DB-load shape, and the single-array json is the kafka/saas intermediate.
+    assert set(data_gen.FILE_FORMATS) == {"csv", "ndjson", "parquet"}
+
+
+# ---- generate: returns entity counts, consumes the manifest ---------------
+
+def test_generate_returns_entity_counts_and_consumes_manifest(tmp_path):
+    out = tmp_path / "world"
+    counts = data_gen.generate(data_gen.model_dir("world"), "xs", out, "csv")
+    # world xs: three fixed tables with known row counts.
+    assert counts == {"wld_country": 239, "wld_city": 100, "wld_country_language": 984}
+    # the manifest is consumed (removed), never left for a load / upload.
+    assert not (out / "_entities.json").exists()
+    assert (out / "run-order.txt").is_file()

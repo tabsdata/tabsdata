@@ -38,8 +38,10 @@ class Db2Domain(Domain):
     password: str
     db: str
     sqlalchemy_uri: str
+    schema: str  # db2 calls the entity container a schema (== db here)
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def db2_system(name: str):

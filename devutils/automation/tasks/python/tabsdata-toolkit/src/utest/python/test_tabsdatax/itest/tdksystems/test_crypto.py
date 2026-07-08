@@ -65,6 +65,17 @@ def test_decrypt_rejects_non_pem(monkeypatch):
         crypto.decrypt("plain text")
 
 
+def test_decrypt_rejects_stale_pem_label(monkeypatch):
+    # A descriptor written by an older tdx (different PEM label) is recognised as
+    # a descriptor (is_pem True) but rejected loudly on the label, not silently.
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "a-good-dev-secret")
+    legacy = "-----BEGIN TD_GEN DESCRIPTOR-----\nAAAA\n-----END TD_GEN DESCRIPTOR-----\n"
+    assert crypto.is_pem(legacy)
+    assert crypto.descriptor_label(legacy) == "TD_GEN DESCRIPTOR"
+    with pytest.raises(DatagenError, match="older or incompatible tdx"):
+        crypto.decrypt(legacy)
+
+
 def test_encrypt_requires_secret(monkeypatch):
     monkeypatch.delenv("TD_BACKENDS_CRYPTO_KEY", raising=False)
     with pytest.raises(DatagenError, match="TD_BACKENDS_CRYPTO_KEY"):

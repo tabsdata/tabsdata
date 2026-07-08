@@ -34,6 +34,8 @@ class SaasBase(System):
     kind = "sql"
     supports_sql = True
     domain_is_named = True  # schema domains; salesforce overrides to False
+    domain_flag = "schema"  # databricks/snowflake domains are schemas
+    # (salesforce clones creds — no entity container — and clears this)
 
     # ---- system lifecycle (account is external: verify, don't provision) ----
 

@@ -139,6 +139,8 @@ class Db2System(ContainerBase):
         # needs no admin routine (the approach tabsdata-conn-db2 uses). The
         # shared XP database is left for the other domains.
         schema = db2_schema_name(name)
+        if schema not in self.do_list(admin):
+            return  # already gone — idempotent (avoids a noisy SQL0204N)
         views = self._query_admin_names(
             admin, f"SELECT viewname FROM syscat.views WHERE viewschema = '{schema}'"
         )

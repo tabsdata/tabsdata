@@ -6,12 +6,15 @@
 
 Each source's generator.py builds a list of `Table` objects describing
 the rows it has generated, then calls :func:`write_tables` to emit
-them in the requested format (sql, csv, json or parquet).
+them in the requested format (sql, csv, json, ndjson or parquet). ``json`` is a
+single array per table; ``ndjson`` is one JSON object per line (what the
+object-store / fs domains stage).
 
 Output layout for any format::
 
     <out_dir>/
         _load_order.txt        # newline-separated table names in dependency order
+        _entities.json         # per-entity record counts (consumed by data_gen)
         <table_name>.<ext>     # one file per table
 
 Type strings recognised in :class:`Column`:
@@ -103,8 +106,14 @@ def _norm(t: str) -> str:
 # Public entry
 # ---------------------------------------------------------------------------
 
-VALID_FORMATS = ("sql", "csv", "json", "parquet")
-_FORMAT_EXT = {"sql": "sql", "csv": "csv", "json": "json", "parquet": "parquet"}
+VALID_FORMATS = ("sql", "csv", "json", "ndjson", "parquet")
+_FORMAT_EXT = {
+    "sql": "sql",
+    "csv": "csv",
+    "json": "json",
+    "ndjson": "ndjson",
+    "parquet": "parquet",
+}
 
 
 def write_tables(
@@ -151,6 +160,7 @@ def write_tables(
         writer = {
             "csv": _write_csv_pair,
             "json": _write_json_pair,
+            "ndjson": _write_ndjson_pair,
             "parquet": _write_parquet_pair,
         }[fmt]
     for basename, view in pairs:
@@ -162,6 +172,12 @@ def write_tables(
     (out / "run-order.txt").write_text(
         "\n".join(f"{name}.{ext}" for name, _ in pairs) + "\n"
     )
+
+    # Per-entity record counts (keyed by the logical table name, not the chunked
+    # file basename) — a manifest the data pipeline reads to record each domain's
+    # `entities` map. `data_gen.generate` consumes and removes it, so it never
+    # reaches a SQL load / cloud upload.
+    _write_entities_manifest(tables, out)
 
     # For --format sql, ship every <dbtype>.ddl alongside the data so the
     # env script's `load --in DIR` can create the schema before inserting.
@@ -179,6 +195,14 @@ def write_tables(
         _write_schema_sidecar(tables, out)
 
     print(f"Wrote {len(pairs)} {fmt} file(s) to {out}", file=sys.stderr)
+
+
+ENTITIES_MANIFEST = "_entities.json"
+
+
+def _write_entities_manifest(tables: list[Table], out: Path) -> None:
+    counts = {t.name: len(t.rows) for t in tables}
+    (out / ENTITIES_MANIFEST).write_text(json.dumps(counts, indent=2) + "\n")
 
 
 _SCHEMA_SIDECAR = "_schema.json"
@@ -468,6 +492,22 @@ def _write_json_pair(basename: str, tbl: Table, out: Path) -> None:
             rows, f, ensure_ascii=False, indent=None, separators=(",", ":"), default=str
         )
         f.write("\n")
+
+
+def _write_ndjson_pair(basename: str, tbl: Table, out: Path) -> None:
+    """NDJSON (JSON Lines): one JSON object per row, per line — what the
+    object-store / fs domains stage."""
+    with (out / f"{basename}.ndjson").open("w") as f:
+        for r in tbl.rows:
+            f.write(
+                json.dumps(
+                    _coerce_row(r, tbl.columns),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    default=str,
+                )
+            )
+            f.write("\n")
 
 
 # ---------------------------------------------------------------------------

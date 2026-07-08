@@ -38,6 +38,7 @@ class BigQuerySystem(System):
     kind = "file"  # GCS-staged; no SQL data-load path
     staging_root = True  # -> base adds the SYS_PATH (--sys-path) option
     supports_models = False  # datasets + prefixes only; no schema/data load
+    domain_flag = "dataset"  # a domain is a BigQuery dataset (DATASET is baked)
 
     options = (
         Option("PROJECT", "project"),

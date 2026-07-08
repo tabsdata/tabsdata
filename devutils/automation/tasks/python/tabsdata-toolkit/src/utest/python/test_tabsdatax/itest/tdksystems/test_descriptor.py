@@ -70,6 +70,58 @@ def test_stamp_records_model_and_data_and_extra_meta(tmp_path):
     assert "SYS_ADMIN_PASSWORD" not in doc["exported"]
 
 
+def test_stamp_adds_redundant_entity_term_key(tmp_path):
+    # fs: the entity container is a "folder" — stamp adds a redundant FOLDER key
+    # (== the external entity name) to meta + exported.
+    out = tmp_path / "inbox.json"
+    descriptor.write_cloud_domain(
+        out=str(out), storage_type="fs", system_kind="file",
+        sys_path="/tmp/x", sys_path_env=None, base_path="/tmp/x/pfx_inbox",
+        forwarded=[], strip_sys_path_slash=False)
+    descriptor.stamp(out, name="inbox", started="t", external_name="pfx_inbox",
+                     entity_term="folder")
+    attrs = descriptor.attributes(_load(out))
+    assert attrs["FOLDER"] == "pfx_inbox"
+    assert attrs["EXTERNAL_NAME"] == "pfx_inbox"
+    assert "FOLDER" in _load(out)["exported"]
+
+
+def test_stamp_skips_entity_term_when_key_already_present(tmp_path):
+    # bigquery bakes DATASET itself; stamp must not add a duplicate DATASET.
+    out = tmp_path / "ds.json"
+    descriptor.write_cloud_domain(
+        out=str(out), storage_type="bigquery", system_kind="file",
+        sys_path="root", sys_path_env=None, base_path="root/pfx_ds",
+        forwarded=[("DATASET", "pfx_ds", None)])
+    descriptor.stamp(out, name="ds", started="t", external_name="pfx_ds",
+                     entity_term="dataset")
+    doc = _load(out)
+    assert [e["name"] for e in doc["meta"]].count("DATASET") == 1
+    assert doc["exported"].count("DATASET") == 1
+
+
+def test_record_entities_surfaced_by_info_and_attributes(tmp_path):
+    doc = _stamped_domain(tmp_path)
+    # _stamped_domain wrote to mydb.json; record entities on it.
+    out = tmp_path / "mydb.json"
+    descriptor.record_entities(out, {"wld_city": 100, "wld_country": 239})
+    doc = _load(out)
+    attrs = descriptor.attributes(doc)
+    assert attrs["ENTITIES"] == {"wld_city": 100, "wld_country": 239}
+    obj = json.loads(descriptor.info(doc, "json"))
+    assert obj["ENTITIES"] == {"wld_city": 100, "wld_country": 239}
+
+
+def test_info_export_renders_entities_as_json(tmp_path):
+    out = tmp_path / "mydb.json"
+    _stamped_domain(tmp_path)
+    descriptor.record_entities(out, {"wld_city": 100})
+    text = descriptor.info(_load(out), "export")
+    assert "export ENTITIES='{\"wld_city\":100}'" in text
+    unset = {ln.split()[1] for ln in descriptor.info(_load(out), "unset").splitlines()}
+    assert "ENTITIES" in unset
+
+
 def test_cloud_and_saas_categories(tmp_path):
     s3 = tmp_path / "s3.json"
     descriptor.write_cloud_system(

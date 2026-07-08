@@ -170,12 +170,27 @@ class RedpandaSystem(ContainerBase):
         )
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
+        # A domain seeds one topic per entity, named `<domain>.<entity>`, so drop
+        # the domain topic AND every per-entity topic under it — otherwise destroy
+        # / force-recreate leave orphaned `<domain>.*` topics and a re-seed hits
+        # TOPIC_ALREADY_EXISTS.
         client = self._admin_client(admin)
-        futures = client.delete_topics([name])
         try:
-            futures[name].result()
+            md = client.list_topics(timeout=10)
         except Exception as exc:
-            raise DatagenError(f"kafka delete topic '{name}' failed: {exc}") from exc
+            raise DatagenError(f"kafka list topics failed: {exc}") from exc
+        targets = [t for t in md.topics if t == name or t.startswith(f"{name}.")]
+        if not targets:
+            return
+        futures = client.delete_topics(targets)
+        errors = []
+        for t in targets:
+            try:
+                futures[t].result()
+            except Exception as exc:  # noqa: BLE001 - report all, don't stop at first
+                errors.append(f"{t}: {exc}")
+        if errors:
+            raise DatagenError("kafka delete topic(s) failed: " + "; ".join(errors))
 
     def do_list(self, admin: AdminConn) -> list[str]:
         client = self._admin_client(admin)

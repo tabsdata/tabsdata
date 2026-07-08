@@ -35,6 +35,7 @@ class SalesforceDomain(Domain):
     token: str
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def salesforce_system(name: str):

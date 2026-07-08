@@ -24,6 +24,7 @@ class SalesforceSystem(SaasBase):
     kind = "salesforce"
     domain_is_named = False
     supports_sql = False
+    domain_flag = ""  # a domain clones creds — there is no entity container
     options = (
         Option("URL", "url"),
         Option("USERNAME", "username"),

@@ -33,12 +33,14 @@ class S3Domain(Domain):
     system_kind: str
     sys_path: Path
     base_path: Path
+    prefix: str  # the domain's object-store prefix (== the entity container)
     bucket: str
     region: str
     access_key: str
     secret_key: str
     model: str | None = None
     data: str | None = None
+    entities: dict[str, int] | None = None  # {table: record count}, once loaded
 
 
 def s3_system(name: str):

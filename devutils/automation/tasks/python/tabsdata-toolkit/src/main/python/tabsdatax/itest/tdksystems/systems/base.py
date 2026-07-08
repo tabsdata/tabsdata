@@ -172,8 +172,9 @@ class DomainContext:
 class LoadRequest:
     """Generated model artifacts handed to `load_data`. cli.py generates the
     shape that matches `System.kind` (SQL INSERTs in run-order for SQL
-    containers, CSV/Parquet for object stores, JSON + per-entity schema
-    sidecars for kafka / saas-SQL) into `data_dir`; each backend reads only the
+    containers, every file format under a per-format subdir for object stores /
+    fs, JSON + per-entity schema sidecars for kafka / saas-SQL) into `data_dir`;
+    each backend reads only the
     fields relevant to its data plane. `ser` / `schemas_dir` /
     `use_schema_registry` are kafka-only."""
 
@@ -220,6 +221,9 @@ class System(ABC):
     # --dataset / --domain-path)
     env_prefix: str = ""  # override the $<PREFIX>__ stem (else the slug
     # upper-cased); azureblob -> AZ
+    domain_flag: str = ""  # the system's word for its entity container
+    # (postgres: schema, fs: folder, bigquery: dataset); labels create output
+    # and is stamped as a redundant exported key on the domain descriptor
 
     @property
     def default_env_prefix(self) -> str:

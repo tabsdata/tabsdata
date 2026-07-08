@@ -22,7 +22,12 @@ import os
 import sys
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems.emit import Column, Table, write_tables  # noqa: E402
+from tabsdatax.itest.tdksystems.emit import (  # noqa: E402
+    VALID_FORMATS,
+    Column,
+    Table,
+    write_tables,
+)
 
 BASE_SEED = 42
 DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data.json")
@@ -134,7 +139,7 @@ def parse_args():
     p.add_argument(
         "--cities", type=int, default=10000, help="Cap on cities to emit (default: all)"
     )
-    p.add_argument("--format", choices=("sql", "csv", "json", "parquet"), default="sql")
+    p.add_argument("--format", choices=VALID_FORMATS, default="sql")
     p.add_argument("--seed", type=int, default=BASE_SEED)
     p.add_argument("--out", required=True, help="Output directory (must not exist)")
     p.add_argument("--chunks", type=int, default=None)
