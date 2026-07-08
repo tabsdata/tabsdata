@@ -59,7 +59,7 @@ use crate::runtime::provider::{
     Cluster, ClusterProvider, HostedProvider, Instance, LocalProvider, ProcessProvider, Provider,
     Transaction, handle_phase_secrets,
 };
-use crate::runtime::secrets::reconciliation::auto_fill_generated_secrets;
+use crate::runtime::secrets::settler::auto_fill_generated_secrets;
 use crate::runtime::secrets::source::to_secret_name;
 use crate::runtime::secrets::{KubeconfigSecretGenerator, SecretGenerator, SecretPhase};
 

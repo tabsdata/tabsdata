@@ -92,7 +92,7 @@ impl TokenClaims {
 pub const SERVICE_TOKEN_EXP_SECS: i64 = 4_102_444_800;
 
 /// Fixed `jti` of the instance service token (and the session backing it). The
-/// `secretAuto:service_token` generator mints the token with this `jti`, and the
+/// `secretAuto:apiserver_service_token` generator mints the token with this `jti`, and the
 /// apiserver seeds the matching session from the same constant, so the two agree
 /// without the apiserver ever holding or decoding the token. The `0xA0` prefix
 /// keeps it clear of the `0x00`-prefixed `td_security::DEFAULT_IDS`.
@@ -259,5 +259,22 @@ mod internal_token_tests {
         let internal =
             encode_internal_token(&jwt, "GET", "/s", bindings(&[("worker_id", "W")])).unwrap();
         assert!(decode_token(&jwt, &internal).is_err());
+    }
+
+    #[test]
+    fn supervisor_service_token_is_stable() {
+        const SUPERVISOR_JWT_SIGNING_KEY: &str = "tabsdata-pytest-fixed-jwt-signing-key";
+        const SUPERVISOR_SERVICE_TOKEN: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJLMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwNCIsImV4cCI6NDEwMjQ0NDgwMH0.bTDwhmVOC-p0JQzgtqfXUstQzmbndOx6Y_xJSeBh8dI";
+
+        let jwt = JwtConfig::new(SUPERVISOR_JWT_SIGNING_KEY.to_string(), SERVICE_TOKEN_EXP_SECS);
+        let claims = TokenClaims::new(service_token_jti(), SERVICE_TOKEN_EXP_SECS);
+        let token = encode_token(&jwt, &claims).unwrap();
+        assert_eq!(
+            token, SUPERVISOR_SERVICE_TOKEN,
+            "supervisor service token drifted; paste this value into the config \
+             templates and update SUPERVISOR_SERVICE_TOKEN: {token}"
+        );
+        let decoded = decode_token(&jwt, &token).unwrap();
+        assert_eq!(decoded.jti, service_token_jti());
     }
 }

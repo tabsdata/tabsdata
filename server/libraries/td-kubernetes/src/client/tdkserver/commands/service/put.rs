@@ -34,6 +34,7 @@ use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::profile::load_profile;
 use crate::runtime::provider::Provider;
 use crate::runtime::provider::provider_for_instance;
+use crate::runtime::secrets::settler::auto_fill_generated_secrets;
 use crate::runtime::secrets::source::to_secret_name;
 
 const SCHEMA_EXTENSION: &str = ".yamls";
@@ -139,6 +140,13 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
         }
     }
     step.done(&format!("Replaced {} tabsdata configmaps", merged.len()));
+
+    let fill_step = reporter.step("Filling generated secrets");
+    if let Err(error) = auto_fill_generated_secrets(&context).await {
+        fill_step.fail();
+        return Err(error.into());
+    }
+    fill_step.done("Filled generated secrets");
 
     if apply {
         restart(provider.as_ref(), &reporter).await?;

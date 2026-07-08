@@ -107,7 +107,7 @@ pub enum SecretError {
         "Config '{config}' declares secret keys but the matching secret '{secret}' is missing.\n\
          Expected keys:{expected}"
     )]
-    ReconciliationSecretMissing {
+    SettlementSecretMissing {
         config: String,
         secret: String,
         expected: String,
@@ -116,20 +116,20 @@ pub enum SecretError {
         "Config '{config}' declares no secret keys but a matching secret '{secret}' exists. \
          Delete the orphan secret or add the corresponding '${{secret}}' placeholders to the config."
     )]
-    ReconciliationSecretUnexpected { config: String, secret: String } = 5012,
+    SettlementSecretUnexpected { config: String, secret: String } = 5012,
     #[error(
         "Secret '{secret}' keys do not match those declared by config '{config}'.\n\
          Extra keys:{extra}\n\
          Missing keys:{missing}"
     )]
-    ReconciliationKeysMismatch {
+    SettlementKeysMismatch {
         config: String,
         secret: String,
         extra: String,
         missing: String,
     } = 5013,
     #[error("Cannot start the instance: configs and secrets are not in sync.{failures}")]
-    ReconciliationBatchFailed { failures: String } = 5014,
+    SettlementBatchFailed { failures: String } = 5014,
     #[error(
         "Config '{config}' uses unknown secret generator '${{secretAuto:{name}}}'. \
          Supported generators: {supported}."
@@ -145,10 +145,22 @@ pub enum SecretError {
         "Cannot derive the '{generator}' secret: its dependency '{dependency}' is not declared by \
          any config (no '${{secretAuto:{dependency}}}' placeholder exists to generate it)."
     )]
-    DerivedSecretMissingDependency {
+    SecretDependencyMissing {
         generator: String,
         dependency: String,
     } = 5017,
+    #[error(
+        "Cannot derive the '{generator}' secret: its dependency chain is cyclic \
+         (it transitively depends on itself). Fix the generator dependency declarations \
+         so the dependency graph is acyclic."
+    )]
+    SecretDependencyCyclic { generator: String } = 5018,
+    #[error(
+        "Generated secret '{generator}' has divergent values across configs: two configs \
+         declare '${{secretAuto:{generator}}}' but their stored secret values differ. \
+         A generated secret must have a single value across the instance."
+    )]
+    GeneratorValueDivergent { generator: String } = 5019,
     #[error(transparent)]
     Profile(#[from] ProfileError) = 5004,
     #[error(transparent)]

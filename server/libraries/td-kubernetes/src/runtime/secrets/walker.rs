@@ -2,20 +2,14 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_yaml::Value;
-use td_common::jwt::{
-    JwtConfig, SERVICE_TOKEN_EXP_SECS, TokenClaims, encode_token, service_token_jti,
-};
 
-use crate::base::constants::{
-    SECRET_GENERATOR_JWT_SIGNING_KEY, SECRET_GENERATOR_POSTGRES_PASSWORD,
-    SECRET_GENERATOR_POSTGRES_SYSTEM_USER, SECRET_GENERATOR_SERVICE_TOKEN,
-};
 use crate::base::error::secret::SecretError;
+use crate::runtime::secrets::generator::Generator;
 
 pub const SECRET_KEY_SEPARATOR: &str = "__";
 
@@ -23,96 +17,6 @@ static PLACEHOLDER_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^\$\{\{secret(Auto)?(?::([A-Za-z0-9._-]*))?\??\}\}$")
         .expect("invalid secret placeholder pattern")
 });
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Generator {
-    JwtSigningKey,
-    PostgresSystemUser,
-    PostgresPassword,
-    ServiceToken,
-}
-
-const EMBEDDED_POSTGRES_DEFAULT_USER: &str = "postgres";
-
-impl Generator {
-    pub fn from_name(name: &str) -> Option<Generator> {
-        match name {
-            SECRET_GENERATOR_JWT_SIGNING_KEY => Some(Generator::JwtSigningKey),
-            SECRET_GENERATOR_POSTGRES_SYSTEM_USER => Some(Generator::PostgresSystemUser),
-            SECRET_GENERATOR_POSTGRES_PASSWORD => Some(Generator::PostgresPassword),
-            SECRET_GENERATOR_SERVICE_TOKEN => Some(Generator::ServiceToken),
-            _ => None,
-        }
-    }
-
-    pub fn supported() -> &'static [&'static str] {
-        &[
-            SECRET_GENERATOR_JWT_SIGNING_KEY,
-            SECRET_GENERATOR_POSTGRES_SYSTEM_USER,
-            SECRET_GENERATOR_POSTGRES_PASSWORD,
-            SECRET_GENERATOR_SERVICE_TOKEN,
-        ]
-    }
-
-    /// The placeholder category name for this generator (inverse of [`from_name`]).
-    pub fn name(self) -> &'static str {
-        match self {
-            Generator::JwtSigningKey => SECRET_GENERATOR_JWT_SIGNING_KEY,
-            Generator::PostgresSystemUser => SECRET_GENERATOR_POSTGRES_SYSTEM_USER,
-            Generator::PostgresPassword => SECRET_GENERATOR_POSTGRES_PASSWORD,
-            Generator::ServiceToken => SECRET_GENERATOR_SERVICE_TOKEN,
-        }
-    }
-
-    /// Generators whose value this one is derived from; empty = self-contained.
-    pub fn deps(self) -> &'static [Generator] {
-        match self {
-            Generator::ServiceToken => &[Generator::JwtSigningKey],
-            _ => &[],
-        }
-    }
-
-    /// True for generators whose value is a function of other generators'
-    /// (i.e. [`deps`](Self::deps) is non-empty).
-    pub fn is_derived(self) -> bool {
-        !self.deps().is_empty()
-    }
-
-    /// Produce the real value, given the already-resolved dependency values
-    /// (keyed by generator). Self-contained generators ignore `resolved`; derived
-    /// ones read their dependencies from it — the topo order guarantees presence.
-    pub fn generate(self, resolved: &BTreeMap<Generator, String>) -> Result<String, SecretError> {
-        match self {
-            Generator::JwtSigningKey => Ok(td_common::id::id().to_string()),
-            Generator::PostgresSystemUser => Ok(EMBEDDED_POSTGRES_DEFAULT_USER.to_owned()),
-            Generator::PostgresPassword => Ok(td_common::random::password()),
-            Generator::ServiceToken => {
-                // Unreachable in practice: the reconciliation topo order (reconciliation.rs)
-                // only calls `generate` once deps are resolved; this guard is just defense.
-                let signing_key = resolved.get(&Generator::JwtSigningKey).ok_or_else(|| {
-                    SecretError::DerivedSecretMissingDependency {
-                        generator: SECRET_GENERATOR_SERVICE_TOKEN.to_owned(),
-                        dependency: SECRET_GENERATOR_JWT_SIGNING_KEY.to_owned(),
-                    }
-                })?;
-                sign_service_token(signing_key)
-            }
-        }
-    }
-}
-
-/// Sign a long-lived service bearer (JWT: fixed well-known `jti`, far-future
-/// `exp`) with the instance `jwt_signing_key`. The `jti` is the shared
-/// [`service_token_jti`] constant, so the apiserver seeds the matching session
-/// from the same constant — it never holds the signing key nor the token itself.
-fn sign_service_token(signing_key: &str) -> Result<String, SecretError> {
-    let jwt = JwtConfig::new(signing_key.to_owned(), SERVICE_TOKEN_EXP_SECS);
-    let claims = TokenClaims::new(service_token_jti(), SERVICE_TOKEN_EXP_SECS);
-    encode_token(&jwt, &claims).map_err(|cause| SecretError::TokenSigningFailed {
-        generator: SECRET_GENERATOR_SERVICE_TOKEN.to_owned(),
-        cause: cause.to_string(),
-    })
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Placeholder {

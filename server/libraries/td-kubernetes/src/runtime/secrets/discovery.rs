@@ -9,7 +9,8 @@ use serde_yaml::Value;
 use crate::base::error::secret::SecretError;
 use crate::runtime::secrets::walker::{Placeholder, SecretVisitor, walk};
 
-pub use crate::runtime::secrets::walker::{Generator, SECRET_KEY_SEPARATOR, encode_secret_key};
+pub use crate::runtime::secrets::generator::Generator;
+pub use crate::runtime::secrets::walker::{SECRET_KEY_SEPARATOR, encode_secret_key};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SecretLeaf {

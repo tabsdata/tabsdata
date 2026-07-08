@@ -24,7 +24,7 @@ use crate::kube::context::KubeContext;
 use crate::runtime::provider::{provider_for_or_tdkcontext, require_started_cluster};
 use crate::runtime::secrets::discovery::extract_secret_leaves;
 use crate::runtime::secrets::parser::parse_secret_manifest;
-use crate::runtime::secrets::reconciliation::{Reconciliation, reconcile_secret_keys};
+use crate::runtime::secrets::settler::{Settlement, settle_secret_keys};
 
 #[derive(Debug, Clone, Args)]
 #[command(group(
@@ -263,7 +263,7 @@ async fn process_candidate(
     let config_file = file_segment.to_owned();
     let config_yaml = load_config_yaml(context, &configmap_name, &config_file).await?;
     let actual_keys: BTreeSet<String> = parsed.data.keys().cloned().collect();
-    reconcile_secret_keys(&Reconciliation {
+    settle_secret_keys(&Settlement {
         config: &config_file,
         config_yaml: &config_yaml,
         secret: &parsed.name,

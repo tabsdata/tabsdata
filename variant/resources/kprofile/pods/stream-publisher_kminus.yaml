@@ -231,11 +231,6 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        # K8s native sidecar (init container with restartPolicy: Always).
-        # Starts after 0030 has completed (so request.yaml exists) and
-        # runs concurrently with the main 1000-run-streamer container.
-        # Terminates when the main container exits (per Q5: sidecar
-        # exits with streamer).
         - name: 0900-manifest-trigger
           image: function
           imagePullPolicy: IfNotPresent

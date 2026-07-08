@@ -14,14 +14,14 @@ use crate::kube::context::KubeContext;
 use crate::runtime::secrets::discovery::{Generator, SecretLeaf, extract_secret_leaves};
 use crate::runtime::secrets::source::to_secret_name;
 
-pub struct Reconciliation<'a> {
+pub struct Settlement<'a> {
     pub config: &'a str,
     pub config_yaml: &'a str,
     pub secret: &'a str,
     pub actual_keys: Option<BTreeSet<String>>,
 }
 
-pub fn reconcile_secret_keys(input: &Reconciliation<'_>) -> Result<(), SecretError> {
+pub fn settle_secret_keys(input: &Settlement<'_>) -> Result<(), SecretError> {
     let mut yaml: serde_yaml::Value = serde_yaml::from_str(input.config_yaml).map_err(|error| {
         SecretError::ConfigYamlParseFailed {
             config: input.config.to_owned(),
@@ -33,12 +33,12 @@ pub fn reconcile_secret_keys(input: &Reconciliation<'_>) -> Result<(), SecretErr
 
     match (&input.actual_keys, expected.is_empty()) {
         (None, true) => Ok(()),
-        (None, false) => Err(SecretError::ReconciliationSecretMissing {
+        (None, false) => Err(SecretError::SettlementSecretMissing {
             config: input.config.to_owned(),
             secret: input.secret.to_owned(),
             expected: sorted_join(&expected),
         }),
-        (Some(_), true) => Err(SecretError::ReconciliationSecretUnexpected {
+        (Some(_), true) => Err(SecretError::SettlementSecretUnexpected {
             config: input.config.to_owned(),
             secret: input.secret.to_owned(),
         }),
@@ -48,7 +48,7 @@ pub fn reconcile_secret_keys(input: &Reconciliation<'_>) -> Result<(), SecretErr
             if extra.is_empty() && missing.is_empty() {
                 Ok(())
             } else {
-                Err(SecretError::ReconciliationKeysMismatch {
+                Err(SecretError::SettlementKeysMismatch {
                     config: input.config.to_owned(),
                     secret: input.secret.to_owned(),
                     extra: sorted_join_str(&extra),
@@ -62,6 +62,7 @@ pub fn reconcile_secret_keys(input: &Reconciliation<'_>) -> Result<(), SecretErr
 pub async fn auto_fill_generated_secrets(context: &KubeContext) -> Result<(), SecretError> {
     let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
     let configmaps = get_configmaps(context, Some(filter)).await?;
+    let mut leaves_by_secret: Vec<(String, Vec<SecretLeaf>)> = Vec::with_capacity(configmaps.len());
     for (configmap_name, entries) in configmaps {
         let config_file = name_from_kube_resource_name(
             &configmap_name,
@@ -83,8 +84,56 @@ pub async fn auto_fill_generated_secrets(context: &KubeContext) -> Result<(), Se
         })?;
         let leaves = extract_secret_leaves(&config_file, &mut yaml)?;
         let secret_name = to_secret_name(&config_file)?;
-        fill_generated_keys(context, &secret_name, &leaves).await?;
+        leaves_by_secret.push((secret_name, leaves));
     }
+    let existing = collect_existing_values(context, &leaves_by_secret).await?;
+    for (secret_name, leaves) in &leaves_by_secret {
+        fill_generated_keys(context, secret_name, leaves, &existing).await?;
+    }
+    Ok(())
+}
+
+async fn collect_existing_values(
+    context: &KubeContext,
+    leaves_by_secret: &[(String, Vec<SecretLeaf>)],
+) -> Result<BTreeMap<Generator, String>, SecretError> {
+    let mut existing: BTreeMap<Generator, String> = BTreeMap::new();
+    for (secret_name, leaves) in leaves_by_secret {
+        let Some(live) = get_secret(context, secret_name).await? else {
+            continue;
+        };
+        for leaf in leaves {
+            let Some(generator) = leaf.generator else {
+                continue;
+            };
+            let Some(bytes) = live.get(&leaf.key) else {
+                continue;
+            };
+            let Ok(value) = String::from_utf8(bytes.clone()) else {
+                continue;
+            };
+            if value.is_empty() {
+                continue;
+            }
+            merge_existing_value(&mut existing, generator, value)?;
+        }
+    }
+    Ok(existing)
+}
+
+fn merge_existing_value(
+    existing: &mut BTreeMap<Generator, String>,
+    generator: Generator,
+    value: String,
+) -> Result<(), SecretError> {
+    if let Some(previous) = existing.get(&generator)
+        && previous != &value
+    {
+        return Err(SecretError::GeneratorValueDivergent {
+            generator: generator.name().to_owned(),
+        });
+    }
+    existing.insert(generator, value);
     Ok(())
 }
 
@@ -92,6 +141,7 @@ async fn fill_generated_keys(
     context: &KubeContext,
     secret_name: &str,
     leaves: &[SecretLeaf],
+    existing: &BTreeMap<Generator, String>,
 ) -> Result<(), SecretError> {
     let generated: Vec<(&str, Generator)> = leaves
         .iter()
@@ -104,7 +154,7 @@ async fn fill_generated_keys(
         return Ok(());
     }
     let live = get_secret(context, secret_name).await?;
-    let mut needs_fill: Vec<(&str, Generator)> = generated
+    let needs_fill: Vec<(&str, Generator)> = generated
         .iter()
         .copied()
         .filter(
@@ -124,40 +174,8 @@ async fn fill_generated_keys(
             .collect(),
         None => BTreeMap::new(),
     };
-    // Values by generator, so a derived generator (e.g. a service token) can read
-    // the sibling it's signed from. Seed with values already present in the secret.
-    let mut resolved: BTreeMap<Generator, String> = generated
-        .iter()
-        .filter_map(|(key, generator)| {
-            data.get(*key)
-                .filter(|value| !value.is_empty())
-                .map(|value| (*generator, value.clone()))
-        })
-        .collect();
-    // Topological fill: each step takes a generator whose deps are all resolved
-    // and produces it. Whatever is left has a missing or cyclic dependency.
-    while let Some(index) = needs_fill.iter().position(|(_, generator)| {
-        generator
-            .deps()
-            .iter()
-            .all(|dep| resolved.contains_key(dep))
-    }) {
-        let (key, generator) = needs_fill.remove(index);
-        let value = generator.generate(&resolved)?;
-        resolved.insert(generator, value.clone());
+    for (key, value) in resolve_generated_values(&needs_fill, existing)? {
         data.insert(key.to_owned(), value);
-    }
-    if let Some((_, generator)) = needs_fill.first() {
-        let dependency = generator
-            .deps()
-            .iter()
-            .copied()
-            .find(|dep| !resolved.contains_key(dep))
-            .unwrap_or(*generator);
-        return Err(SecretError::DerivedSecretMissingDependency {
-            generator: generator.name().to_owned(),
-            dependency: dependency.name().to_owned(),
-        });
     }
     upsert_secret(
         context,
@@ -171,7 +189,52 @@ async fn fill_generated_keys(
     Ok(())
 }
 
-pub async fn reconcile_cluster_configs_and_secrets(
+fn resolve_generated_values<'a>(
+    needs_fill: &[(&'a str, Generator)],
+    existing: &BTreeMap<Generator, String>,
+) -> Result<Vec<(&'a str, String)>, SecretError> {
+    let mut pending = needs_fill.to_vec();
+    let mut resolved = existing.clone();
+    let mut filled: Vec<(&'a str, String)> = Vec::with_capacity(pending.len());
+    while let Some(index) = pending.iter().position(|(_, generator)| {
+        generator
+            .dependencies()
+            .iter()
+            .all(|dependency| resolved.contains_key(dependency))
+    }) {
+        let (key, generator) = pending.remove(index);
+        let value = match (generator.has_dependencies(), resolved.get(&generator)) {
+            (false, Some(existing)) => existing.clone(),
+            _ => generator.generate(&resolved)?,
+        };
+        resolved.insert(generator, value.clone());
+        filled.push((key, value));
+    }
+    if let Some((_, generator)) = pending.first() {
+        let unresolved = generator
+            .dependencies()
+            .iter()
+            .copied()
+            .find(|dependency| !resolved.contains_key(dependency));
+        return match unresolved {
+            Some(dependency) if pending.iter().any(|(_, waiting)| *waiting == dependency) => {
+                Err(SecretError::SecretDependencyCyclic {
+                    generator: generator.name().to_owned(),
+                })
+            }
+            Some(dependency) => Err(SecretError::SecretDependencyMissing {
+                generator: generator.name().to_owned(),
+                dependency: dependency.name().to_owned(),
+            }),
+            None => Err(SecretError::SecretDependencyCyclic {
+                generator: generator.name().to_owned(),
+            }),
+        };
+    }
+    Ok(filled)
+}
+
+pub async fn settle_cluster_configs_and_secrets(
     context: &KubeContext,
 ) -> Result<(), SecretError> {
     let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
@@ -204,7 +267,7 @@ pub async fn reconcile_cluster_configs_and_secrets(
         let secret_name = to_secret_name(&config_file)?;
         let live = get_secret(context, &secret_name).await?;
         let actual_keys = live.map(|data| data.into_keys().collect::<BTreeSet<String>>());
-        if let Err(error) = reconcile_secret_keys(&Reconciliation {
+        if let Err(error) = settle_secret_keys(&Settlement {
             config: &config_file,
             config_yaml: &config_yaml,
             secret: &secret_name,
@@ -216,7 +279,7 @@ pub async fn reconcile_cluster_configs_and_secrets(
     if failures.is_empty() {
         Ok(())
     } else {
-        Err(SecretError::ReconciliationBatchFailed {
+        Err(SecretError::SettlementBatchFailed {
             failures: format_failures(&failures),
         })
     }

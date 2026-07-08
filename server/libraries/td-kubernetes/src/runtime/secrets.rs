@@ -112,7 +112,7 @@ pub mod kubeconfig;
 pub mod manifest;
 pub mod parser;
 pub mod phase;
-pub mod reconciliation;
+pub mod settler;
 pub mod source;
 pub mod walker;
 

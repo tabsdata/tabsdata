@@ -20,7 +20,7 @@ pub enum ReportContext<'a> {
     ClusterDown,
 }
 
-pub async fn reconciliation(
+pub async fn settlement(
     context: &ReportContext<'_>,
     input: &ReportInput<'_>,
 ) -> Result<(), SecretError> {
@@ -28,7 +28,7 @@ pub async fn reconciliation(
     let kube_context = match context {
         ReportContext::ClusterDown => {
             warn!(
-                "  - Reconciliation check skipped: the cluster is stopped. \
+                "  - Settlement check skipped: the cluster is stopped. \
                  Start the cluster and rerun `tdkserver secret get` to verify deployed Secrets."
             );
             return Ok(());

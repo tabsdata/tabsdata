@@ -15,7 +15,7 @@ use crate::base::error::cli::CliError;
 use crate::base::error::secret::SecretError;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::render::report::component::secret::{
-    ReportContext, ReportInput, reconciliation,
+    ReportContext, ReportInput, settlement,
 };
 use crate::core::system::exit::{CommandResult, abort_with};
 use crate::kube::api::secret::get_secret;
@@ -184,7 +184,7 @@ async fn emit_report(
         secret_name,
         expected_keys: &expected,
     };
-    reconciliation(&context, &input).await?;
+    settlement(&context, &input).await?;
     Ok(())
 }
 

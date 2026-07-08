@@ -15,6 +15,7 @@ password:
   parallelism_cost: 1
 jwt:
   #secret: null # by default a UUID is generated
+  secret: tabsdata-pytest-fixed-jwt-signing-key
   access_token_expiration: 3600
 request_timeout: 60
 orchestrator: supervisor

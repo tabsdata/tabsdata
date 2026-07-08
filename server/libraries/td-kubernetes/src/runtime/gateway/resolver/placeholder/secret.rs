@@ -10,7 +10,8 @@ use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::gateway::resolver::walker::{
     ConcreteResolver, PATH_SEPARATOR, Resolution, ResolveContext, Rule, SecretEntry,
 };
-use crate::runtime::secrets::walker::{Generator, encode_secret_key};
+use crate::runtime::secrets::generator::Generator;
+use crate::runtime::secrets::walker::encode_secret_key;
 
 const CONSUMER_LABEL: &str = "<consumer config>";
 
@@ -49,10 +50,7 @@ impl SecretResolver {
                 generator: category.to_owned(),
                 supported: Generator::supported().join(", "),
             })?;
-        // Derived generators depend on other secrets (possibly declared in other
-        // configs) and are produced by the dependency-ordered fill at instance
-        // start — not here, where only this config's values are in scope.
-        if generator.is_derived() {
+        if generator.has_dependencies() {
             return Ok(None);
         }
         let value = generator.generate(&BTreeMap::new()).map_err(|cause| {
