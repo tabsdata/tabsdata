@@ -2,7 +2,7 @@
 # Copyright 2025 Tabs Data Inc.
 #
 
-pytest:
+tdtest:
   apiserver:
     address: 0.0.0.0:2467
     internal-address: 0.0.0.0:2468

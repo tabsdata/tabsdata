@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Unified system registry. ONE slug->System map replaces the three
 per-category `_SLUGS` dicts (container/cloud/saas). A new system is a new
 `systems/<slug>/` directory plus one line here.

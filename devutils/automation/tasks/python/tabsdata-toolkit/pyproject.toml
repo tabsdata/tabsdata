@@ -87,12 +87,13 @@ salesforce = [
 
 [project.entry-points.pytest11]
 tdx-harvester = "tabsdatax.pytesting.plugins.harvester.plugin"
+tdf-instances = "tabsdatax.itest.fixture.instances.tabsdata"
 
 [project.scripts]
 tdkdocker = "tabsdatax.docker.cli:main"
 tdx-gconnector = "tabsdatax.generator.connector.cli:main"
 tdx-gtableframe = "tabsdatax.generator.tableframe.cli:main"
-tdx-itest = "tabsdatax.itest.tdkserver.cli:main"
+tdx-itest = "tabsdatax.itest.tdkinstance.cli:main"
 tdx-system = "tabsdatax.itest.tdksystems.tdx_system:main"
 tdx-domain = "tabsdatax.itest.tdksystems.tdx_domain:main"
 tdx-pyoutdated = "tabsdatax.cmake.pyoutdated:main"

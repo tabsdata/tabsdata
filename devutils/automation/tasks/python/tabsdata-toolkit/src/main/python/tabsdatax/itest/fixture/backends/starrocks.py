@@ -1,16 +1,22 @@
-"""Fixture dataclasses for the ``mysql`` backend."""
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+"""Fixture dataclasses for the ``starrocks`` backend."""
+
 from __future__ import annotations
 
+from pathlib import Path
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from .backend import Domain, System, require
+from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class MysqlSystem(System):
-    system_type: ClassVar[str] = "mysql"
+class StarrocksSystem(System):
+    system_type: ClassVar[str] = "starrocks"
     name: str
     system_kind: str
     container: str
@@ -19,11 +25,12 @@ class MysqlSystem(System):
     port: str
     user: str
     password: str
+    sys_path: Path
 
 
 @dataclass(frozen=True)
-class MysqlDomain(Domain):
-    system_type: ClassVar[str] = "mysql"
+class StarrocksDomain(Domain):
+    system_type: ClassVar[str] = "starrocks"
     name: str
     system_kind: str
     image: str
@@ -37,9 +44,9 @@ class MysqlDomain(Domain):
     data: str | None = None
 
 
-def mysql_system(name: str):
-    return require(name, MysqlSystem)
+def starrocks_system(name: str):
+    return require(name, StarrocksSystem)
 
 
-def mysql_domain(name: str):
-    return require(name, MysqlDomain)
+def starrocks_domain(name: str):
+    return require(name, StarrocksDomain)

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """JSON descriptors for tdx systems and domains.
 
 `tdx-system create` and `tdx-domain create` write a *descriptor* describing one

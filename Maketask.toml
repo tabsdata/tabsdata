@@ -603,7 +603,7 @@ script = [
 plugin = "td-task-tracker"
 category = "04 - Test"
 description = "Task 'unit test' for Python projects"
-env = { TD_TEST_INSTANCES_ARENA = "pytest" }
+env = { TD_TEST_INSTANCES_ARENA = "tdtest" }
 dependencies = ["__os__set_mode_test_py"]
 run_task = [
     { name = [
@@ -633,7 +633,7 @@ run_task = [
 plugin = "td-task-tracker"
 category = "04 - Test"
 description = "Task 'integration test' for Python projects"
-env = { TD_TEST_INSTANCES_ARENA = "pytest" }
+env = { TD_TEST_INSTANCES_ARENA = "tdtest" }
 dependencies = ["__os__set_mode_test_py"]
 run_task = [
     { name = [
@@ -753,7 +753,7 @@ script = [
         info "                      Paths that do not exist are silently skipped."
         info "   --preview          List the test folders (packages and modules) that would be selected, then exit without running any test."
         info "   --collect          Run pytest in collect-only mode (no test execution, no parallelism, no coverage) to surface collection/import errors early."
-        info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting."
+        info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting (default: '--tb=line')."
         info "   --skipe utest_py    Report test failures as a diagnostic summary instead of failing the task."
         info "   -h, --help         Show this help and exit."
         info ""
@@ -1007,7 +1007,7 @@ script = [
         exit 0
     end
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -1201,7 +1201,7 @@ script = [
         info "                      Paths that do not exist are silently skipped."
         info "   --preview          List the test folders (packages and modules) that would be selected, then exit without running any test."
         info "   --collect          Run pytest in collect-only mode (no test execution, no parallelism, no coverage) to surface collection/import errors early."
-        info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting."
+        info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting (default: '--tb=line')."
         info "   --skipe itest_py   Report test failures as a diagnostic summary instead of failing the task."
         info "   -h, --help         Show this help and exit."
         info ""
@@ -1455,7 +1455,7 @@ script = [
         exit 0
     end
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}

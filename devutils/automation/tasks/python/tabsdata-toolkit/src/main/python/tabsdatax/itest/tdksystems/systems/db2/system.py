@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """IBM Db2 Community 11.5. Domain == a SCHEMA inside one shared database.
 
 Db2 database names are capped at 8 characters — far too short for the prefixed

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Shared object-store lifecycle on the unified `System` contract.
 
 A cloud system's pluggable logic is one hook: `_backend(values)` returning an

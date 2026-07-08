@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Shared output emitter for tabsdatax.itest.tdksystems sources.
 
 Each source's datagen.py builds a list of `Table` objects describing

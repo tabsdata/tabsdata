@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """S3 raw storage ops (boto3). Only the four ops the `System` contract needs:
 status / exists / clear / upload.
 

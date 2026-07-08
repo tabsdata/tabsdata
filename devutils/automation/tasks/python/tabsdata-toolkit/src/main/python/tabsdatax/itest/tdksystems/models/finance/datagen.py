@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Finance — subscription billing data keyed to Salesforce Accounts.
 
 This is the *finance* half of the Salesforce ↔ Finance pair. The

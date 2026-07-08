@@ -1,11 +1,16 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Fixture dataclasses for the ``fs`` (local filesystem) backend.
 
-    @fs_system("my_fs")
-    @fs_domain("inbox")
-    def test_x(backends):
-        my_fs: FsSystem = backends["my_fs"]
-        inbox: FsDomain = backends["inbox"]
+@fs_system("my_fs")
+@fs_domain("inbox")
+def test_x(backends):
+    my_fs: FsSystem = backends["my_fs"]
+    inbox: FsDomain = backends["inbox"]
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,7 +18,7 @@ from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from .backend import Domain, System, require
+from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)

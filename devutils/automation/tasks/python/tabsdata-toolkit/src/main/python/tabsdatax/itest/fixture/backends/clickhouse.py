@@ -1,16 +1,22 @@
-"""Fixture dataclasses for the ``db2`` backend."""
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+"""Fixture dataclasses for the ``clickhouse`` backend."""
+
 from __future__ import annotations
 
+from pathlib import Path
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from .backend import Domain, System, require
+from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class Db2System(System):
-    system_type: ClassVar[str] = "db2"
+class ClickhouseSystem(System):
+    system_type: ClassVar[str] = "clickhouse"
     name: str
     system_kind: str
     container: str
@@ -19,11 +25,12 @@ class Db2System(System):
     port: str
     user: str
     password: str
+    sys_path: Path
 
 
 @dataclass(frozen=True)
-class Db2Domain(Domain):
-    system_type: ClassVar[str] = "db2"
+class ClickhouseDomain(Domain):
+    system_type: ClassVar[str] = "clickhouse"
     name: str
     system_kind: str
     image: str
@@ -37,9 +44,9 @@ class Db2Domain(Domain):
     data: str | None = None
 
 
-def db2_system(name: str):
-    return require(name, Db2System)
+def clickhouse_system(name: str):
+    return require(name, ClickhouseSystem)
 
 
-def db2_domain(name: str):
-    return require(name, Db2Domain)
+def clickhouse_domain(name: str):
+    return require(name, ClickhouseDomain)

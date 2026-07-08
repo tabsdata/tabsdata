@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Bronze medallion arrival-pattern simulator.
 
 Five tables, one per pattern a source system uses to deliver data to

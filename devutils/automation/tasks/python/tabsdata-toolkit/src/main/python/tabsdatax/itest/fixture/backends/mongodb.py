@@ -1,17 +1,21 @@
-"""Fixture dataclasses for the ``starrocks`` backend."""
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+"""Fixture dataclasses for the ``mongodb`` backend."""
+
 from __future__ import annotations
 
-from pathlib import Path
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from .backend import Domain, System, require
+from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class StarrocksSystem(System):
-    system_type: ClassVar[str] = "starrocks"
+class MongodbSystem(System):
+    system_type: ClassVar[str] = "mongodb"
     name: str
     system_kind: str
     container: str
@@ -20,12 +24,11 @@ class StarrocksSystem(System):
     port: str
     user: str
     password: str
-    sys_path: Path
 
 
 @dataclass(frozen=True)
-class StarrocksDomain(Domain):
-    system_type: ClassVar[str] = "starrocks"
+class MongodbDomain(Domain):
+    system_type: ClassVar[str] = "mongodb"
     name: str
     system_kind: str
     image: str
@@ -39,9 +42,9 @@ class StarrocksDomain(Domain):
     data: str | None = None
 
 
-def starrocks_system(name: str):
-    return require(name, StarrocksSystem)
+def mongodb_system(name: str):
+    return require(name, MongodbSystem)
 
 
-def starrocks_domain(name: str):
-    return require(name, StarrocksDomain)
+def mongodb_domain(name: str):
+    return require(name, MongodbDomain)

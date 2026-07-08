@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """StarRocks all-in-one image. MySQL-protocol-compatible on 9030."""
 
 from __future__ import annotations
@@ -29,8 +33,7 @@ class StarrocksSystem(ContainerBase):
     # it; the arm64 build has no such dependency (as tabsdata-conn-starrocks
     # relies on). Pinned to the latest 3.x (3.4.8), which ships an arm64 variant.
     image = (
-        "starrocks/allin1-ubuntu:"
-        f"{os.environ.get('STARROCKS_IMAGE_VERSION', '3.4.8')}"
+        f"starrocks/allin1-ubuntu:{os.environ.get('STARROCKS_IMAGE_VERSION', '3.4.8')}"
     )
     image_platform = (
         "linux/arm64" if platform.machine() in ("arm64", "aarch64") else "linux/amd64"

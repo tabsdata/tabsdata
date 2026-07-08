@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """SSH helpers for `tdx-system connect`: fetch a remote (encrypted) descriptor
 over SSH and run a detached, multiplatform local-forward tunnel.
 

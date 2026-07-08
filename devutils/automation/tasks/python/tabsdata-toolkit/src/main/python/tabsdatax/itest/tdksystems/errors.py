@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Application errors and a top-level run() wrapper.
 
 `DatagenError` is the application-level exception for expected, user-facing

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Microsoft SQL Server. Single-DB-with-login domain model."""
 
 from __future__ import annotations

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """MongoDB. Domain == database with a dbOwner user; no SQL."""
 
 from __future__ import annotations

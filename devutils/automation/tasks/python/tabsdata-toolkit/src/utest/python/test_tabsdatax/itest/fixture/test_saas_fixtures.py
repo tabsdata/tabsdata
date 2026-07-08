@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 from tabsdatax.itest.fixture import backend as common
-from tabsdatax.itest.fixture.bigquery import BigqueryDomain, BigquerySystem
-from tabsdatax.itest.fixture.databricks import DatabricksDomain, DatabricksSystem
-from tabsdatax.itest.fixture.salesforce import SalesforceDomain, SalesforceSystem
-from tabsdatax.itest.fixture.snowflake import (
+from tabsdatax.itest.fixture.backends.bigquery import BigqueryDomain, BigquerySystem
+from tabsdatax.itest.fixture.backends.databricks import DatabricksDomain, DatabricksSystem
+from tabsdatax.itest.fixture.backends.salesforce import SalesforceDomain, SalesforceSystem
+from tabsdatax.itest.fixture.backends.snowflake import (
     SnowflakeDomain,
     SnowflakeSystem,
     snowflake_domain,

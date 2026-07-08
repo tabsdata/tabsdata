@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Unified external-system contract.
 
 ONE `System` ABC that every backend implements, so `tdx.py` and `cli.py`

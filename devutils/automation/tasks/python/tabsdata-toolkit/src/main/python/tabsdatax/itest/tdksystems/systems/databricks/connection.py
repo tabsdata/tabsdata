@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Databricks connection — schema ops via the SQL Statement Execution REST
 API (stdlib `urllib`, no DB-API driver). Built from a resolved
 `{OPTION: value}` dict — no argparse / descriptor coupling."""

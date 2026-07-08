@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Local-filesystem storage ops — the four the System contract needs."""
 
 from __future__ import annotations

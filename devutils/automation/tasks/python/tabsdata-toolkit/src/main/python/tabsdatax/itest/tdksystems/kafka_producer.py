@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Kafka / Redpanda producer for loading a model into a kafka domain.
 
 Model → topics: one topic per entity (table), named ``<domain>.<entity>``;

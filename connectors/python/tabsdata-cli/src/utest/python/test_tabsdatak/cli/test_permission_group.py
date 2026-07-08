@@ -26,16 +26,21 @@ import logging
 import uuid
 
 import pytest
+from tabsdatax.itest.fixture.instances.tabsdata import (
+    CONSUMER_TDTEST,
+    Instance,
+    with_instance,
+)
 
 from tabsdatak.sdk._apiserver import APIServerError
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
-# noinspection PyUnresolvedReferences
-from test_tabsdata.conftest import APISERVER_URL
-
 # Keep the whole module on one xdist worker: the tests mint/destroy shared
 # users, roles and grants, which race under ``--dist=loadgroup``.
-pytestmark = pytest.mark.xdist_group("connector-permission_group_seq")
+pytestmark = [
+    pytest.mark.xdist_group("connector-permission_group_seq"),
+    with_instance(consumer=CONSUMER_TDTEST),
+]
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -47,24 +52,24 @@ def _unique(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:12]}"
 
 
-def _client_for(name: str, password: str = _PASSWORD) -> TabsdataServer:
+def _client_for(
+    instance: Instance, name: str, password: str = _PASSWORD
+) -> TabsdataServer:
     """An API client authenticated as the given user (a fresh token, so it
     reflects the user's current grants)."""
-    return TabsdataServer(APISERVER_URL, name, password)
-
-
-@pytest.fixture(scope="module")
-def admin_client() -> TabsdataServer:
-    """Admin API client.
-
-    Built directly instead of through the shared ``tabsserver_connection``
-    fixture so the module stays self-contained and can run independently.
-    """
-    return _client_for("admin", "tabsdata")
+    server = instance.apiserver
+    return TabsdataServer(f"{server.host}:{server.port}", name, password)
 
 
 @pytest.fixture
-def regular_user(admin_client):
+def admin_client(instance: Instance) -> TabsdataServer:
+    """Admin API client against the registered ``tdtest`` instance."""
+    superuser = instance.apiserver.superuser
+    return _client_for(instance, superuser.user, superuser.password)
+
+
+@pytest.fixture
+def regular_user(instance: Instance, admin_client):
     """A freshly-created, enabled user holding only the auto-assigned
     ``default`` role (no ``manage_system`` / ``manage_project``), with an API
     client logged in as that user.
@@ -79,7 +84,7 @@ def regular_user(admin_client):
     # changing the password (to the same value) so the user can authenticate.
     admin_client.change_password(name, _PASSWORD, _PASSWORD)
     try:
-        yield name, _client_for(name)
+        yield name, _client_for(instance, name)
     finally:
         admin_client.delete_user(name, raise_for_status=False)
 
@@ -184,7 +189,7 @@ def test_list_by_project_forbidden_for_non_privileged_user(regular_user):
 
 @pytest.mark.integration
 def test_manage_system_grant_enables_granting(
-    admin_client, regular_user, other_user
+    instance, admin_client, regular_user, other_user
 ):
     name, client = regular_user
 
@@ -196,7 +201,7 @@ def test_manage_system_grant_enables_granting(
     admin_client.grant_permission(name, "manage_system")
     try:
         # Re-login so the client carries a token issued after the grant.
-        elevated = _client_for(name)
+        elevated = _client_for(instance, name)
         # After: the user can now grant (effective permissions are the union
         # across the user's roles, evaluated live on each request).
         elevated.grant_permission(other_user, "create_projects")
@@ -260,7 +265,7 @@ def test_grant_project_permission_lists_under_project(
 
 @pytest.mark.integration
 def test_project_manager_can_grant_on_own_project_only(
-    admin_client, created_project, regular_user, other_user
+    instance, admin_client, created_project, regular_user, other_user
 ):
     name, client = regular_user
     # Make `name` a manager of the project (manage_project on it).
@@ -268,7 +273,7 @@ def test_project_manager_can_grant_on_own_project_only(
         name, "manage_project", project=created_project
     )
     try:
-        manager = _client_for(name)
+        manager = _client_for(instance, name)
         # Can grant a project permission on the project they manage.
         manager.grant_permission(
             other_user, "view_project", project=created_project

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Local-filesystem system — domains are directories under a root path.
 
 Diverges from the object stores: the root and each domain are real dirs

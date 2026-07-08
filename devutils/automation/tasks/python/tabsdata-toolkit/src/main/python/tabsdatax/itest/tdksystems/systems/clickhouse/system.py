@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """ClickHouse container system — hooks only; the lifecycle is in ContainerBase."""
 
 from __future__ import annotations

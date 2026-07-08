@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Small helpers shared across container + cloud subclasses.
 
 Wraps subprocess for docker, generates passwords / free ports, and reads

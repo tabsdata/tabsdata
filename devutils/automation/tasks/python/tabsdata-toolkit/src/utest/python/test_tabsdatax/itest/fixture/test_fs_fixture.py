@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from tabsdatax.itest.fixture import backend as common
-from tabsdatax.itest.fixture.fs import (
+from tabsdatax.itest.fixture.backends.fs import (
     FsDomain,
     FsSystem,
     fs_domain,

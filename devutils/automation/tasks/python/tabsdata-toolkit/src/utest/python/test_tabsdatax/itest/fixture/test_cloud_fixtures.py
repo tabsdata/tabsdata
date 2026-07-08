@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from tabsdatax.itest.fixture import backend as common
-from tabsdatax.itest.fixture.azureblob import AzureblobDomain, AzureblobSystem
-from tabsdatax.itest.fixture.gcs import GcsDomain, GcsSystem
-from tabsdatax.itest.fixture.s3 import (
+from tabsdatax.itest.fixture.backends.azureblob import AzureblobDomain, AzureblobSystem
+from tabsdatax.itest.fixture.backends.gcs import GcsDomain, GcsSystem
+from tabsdatax.itest.fixture.backends.s3 import (
     S3Domain,
     S3System,
     s3_domain,

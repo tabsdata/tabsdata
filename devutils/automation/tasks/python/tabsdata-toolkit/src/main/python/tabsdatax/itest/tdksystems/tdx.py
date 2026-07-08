@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """`tdx-system` / `tdx-domain` — manage external systems and their domains.
 
     tdx-system types                                # list all system types
@@ -361,9 +365,7 @@ def _recreate_one(name: str, domain_dir: str | None) -> str:
     # 2. Replay DDL/data if the domain recorded a model (the resource is now a
     #    clean slate, so no force needed — mirrors `create --model --data`).
     if model:
-        cli._run_data_create(
-            argparse.Namespace(model=model, domain=path, force=False)
-        )
+        cli._run_data_create(argparse.Namespace(model=model, domain=path, force=False))
     if data:
         size = data if data_gen.is_sizeable(model) else None
         schemas_dir = Path(path).with_suffix("").as_posix() + "-schemas"
@@ -380,9 +382,7 @@ def _recreate_one(name: str, domain_dir: str | None) -> str:
                 use_schema_registry=False,
             )
         )
-    return f"({slug})" + (
-        f" model={model} data={data or '-'}" if model else " (empty)"
-    )
+    return f"({slug})" + (f" model={model} data={data or '-'}" if model else " (empty)")
 
 
 # --- name-based descriptor locators ---------------------------------------
@@ -755,11 +755,11 @@ def _provision_system_auto(
 def _sys_destroy(rest: list[str]) -> int:
     args = _locator_ns("tdx-system destroy", "sys", rest)
     if _is_multi(args.sys):
-        names = _expand_names(
-            args.sys, store.system_dir(args.sys_dir), "sys", "--sys"
-        )
+        names = _expand_names(args.sys, store.system_dir(args.sys_dir), "sys", "--sys")
         return _multi_apply(
-            names, "system", lambda n: _sys_destroy_one(n, args.sys_dir),
+            names,
+            "system",
+            lambda n: _sys_destroy_one(n, args.sys_dir),
             past="destroyed",
         )
     descriptor.validate_name(args.sys)
@@ -773,9 +773,7 @@ def _sys_destroy(rest: list[str]) -> int:
 def _sys_status(rest: list[str]) -> int:
     args = _locator_ns("tdx-system status", "sys", rest)
     if _is_multi(args.sys):
-        names = _expand_names(
-            args.sys, store.system_dir(args.sys_dir), "sys", "--sys"
-        )
+        names = _expand_names(args.sys, store.system_dir(args.sys_dir), "sys", "--sys")
         return _multi_status(
             names, "system", lambda n: _sys_status_one(n, args.sys_dir)
         )
@@ -1263,9 +1261,7 @@ def _domain_seed(rest: list[str]) -> int:
         raise DatagenError(f"{slug} does not support --model / --data")
     # Reuse the same pipeline `create --model` runs, with force=False so an
     # already-populated schema/tables make it fail rather than clobber.
-    cli._run_data_create(
-        argparse.Namespace(model=args.model, domain=path, force=False)
-    )
+    cli._run_data_create(argparse.Namespace(model=args.model, domain=path, force=False))
     if args.data:
         size = args.data if data_gen.is_sizeable(args.model) else None
         schemas_dir = Path(path).with_suffix("").as_posix() + "-schemas"
@@ -1311,7 +1307,9 @@ def _domain_recreate(rest: list[str]) -> int:
             args.domain, store.domain_dir(args.domain_dir), "env", "--domain"
         )
         return _multi_apply(
-            names, "domain", lambda n: _recreate_one(n, args.domain_dir),
+            names,
+            "domain",
+            lambda n: _recreate_one(n, args.domain_dir),
             past="recreated",
         )
     descriptor.validate_name(args.domain)
@@ -1329,7 +1327,9 @@ def _domain_destroy(rest: list[str]) -> int:
             args.domain, store.domain_dir(args.domain_dir), "env", "--domain"
         )
         return _multi_apply(
-            names, "domain", lambda n: _domain_destroy_one(n, args.domain_dir),
+            names,
+            "domain",
+            lambda n: _domain_destroy_one(n, args.domain_dir),
             past="destroyed",
         )
     descriptor.validate_name(args.domain)

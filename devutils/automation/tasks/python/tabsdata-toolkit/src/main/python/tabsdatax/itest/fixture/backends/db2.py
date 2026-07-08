@@ -1,16 +1,21 @@
-"""Fixture dataclasses for the ``mssqlserver`` backend."""
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+"""Fixture dataclasses for the ``db2`` backend."""
+
 from __future__ import annotations
 
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from .backend import Domain, System, require
+from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class MssqlserverSystem(System):
-    system_type: ClassVar[str] = "mssqlserver"
+class Db2System(System):
+    system_type: ClassVar[str] = "db2"
     name: str
     system_kind: str
     container: str
@@ -22,8 +27,8 @@ class MssqlserverSystem(System):
 
 
 @dataclass(frozen=True)
-class MssqlserverDomain(Domain):
-    system_type: ClassVar[str] = "mssqlserver"
+class Db2Domain(Domain):
+    system_type: ClassVar[str] = "db2"
     name: str
     system_kind: str
     image: str
@@ -37,9 +42,9 @@ class MssqlserverDomain(Domain):
     data: str | None = None
 
 
-def mssqlserver_system(name: str):
-    return require(name, MssqlserverSystem)
+def db2_system(name: str):
+    return require(name, Db2System)
 
 
-def mssqlserver_domain(name: str):
-    return require(name, MssqlserverDomain)
+def db2_domain(name: str):
+    return require(name, Db2Domain)

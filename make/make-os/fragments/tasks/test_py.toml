@@ -41,7 +41,7 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -105,7 +105,7 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -168,7 +168,7 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -231,7 +231,7 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -294,7 +294,7 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -357,7 +357,7 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -420,7 +420,7 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -483,7 +483,7 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -546,7 +546,7 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -609,7 +609,7 @@ script = [
     mkdir ${report_folder}
     report_file = set ${report_folder}/pytest.html
 
-    td_tb = set ""
+    td_tb = set "--tb=line"
     td_fail = set ""
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -679,7 +679,7 @@ script = [
             mkdir ${report_folder}
             report_file = set ${report_folder}/pytest.html
 
-            td_tb = set ""
+            td_tb = set "--tb=line"
             td_fail = set ""
             arguments = split ${CARGO_MAKE_TASK_ARGS} ;
             for argument in ${arguments}

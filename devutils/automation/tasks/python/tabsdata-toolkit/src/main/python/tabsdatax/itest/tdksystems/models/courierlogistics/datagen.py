@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """
 Data generator — Courier Logistics System
 Schema: cou_hubs, cou_couriers, cou_customers, cou_shipments, cou_tracking_events

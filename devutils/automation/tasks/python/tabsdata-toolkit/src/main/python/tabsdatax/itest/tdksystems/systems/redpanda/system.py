@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Redpanda broker. Domain == topic. No SASL in this setup."""
 
 from __future__ import annotations

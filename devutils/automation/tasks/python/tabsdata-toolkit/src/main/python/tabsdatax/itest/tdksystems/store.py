@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Where tdx descriptors live on disk — resolve a system/domain *name* to its
 descriptor file path.
 
@@ -37,6 +41,11 @@ def system_dir(dir_opt: str | None = None) -> Path:
 def domain_dir(dir_opt: str | None = None) -> Path:
     """The domain store directory: --domain-dir, else <backends-dir>/domains."""
     return Path(dir_opt).expanduser() if dir_opt else backends_dir() / "domains"
+
+
+def instances_dir(dir_opt: str | None = None) -> Path:
+    """The tabsdata instances store directory: <backends-dir>/instances."""
+    return Path(dir_opt).expanduser() if dir_opt else backends_dir() / "instances"
 
 
 def system_path(name: str, dir_opt: str | None = None) -> Path:

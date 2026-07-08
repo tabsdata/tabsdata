@@ -9,20 +9,20 @@ from pathlib import Path
 import pytest
 
 from tabsdatax.itest.fixture import backend as common
-from tabsdatax.itest.fixture.clickhouse import ClickhouseDomain, ClickhouseSystem
-from tabsdatax.itest.fixture.db2 import Db2Domain, Db2System
-from tabsdatax.itest.fixture.mongodb import MongodbDomain, MongodbSystem
-from tabsdatax.itest.fixture.mssqlserver import MssqlserverDomain, MssqlserverSystem
-from tabsdatax.itest.fixture.mysql import (
+from tabsdatax.itest.fixture.backends.clickhouse import ClickhouseDomain, ClickhouseSystem
+from tabsdatax.itest.fixture.backends.db2 import Db2Domain, Db2System
+from tabsdatax.itest.fixture.backends.mongodb import MongodbDomain, MongodbSystem
+from tabsdatax.itest.fixture.backends.mssqlserver import MssqlserverDomain, MssqlserverSystem
+from tabsdatax.itest.fixture.backends.mysql import (
     MysqlDomain,
     MysqlSystem,
     mysql_domain,
     mysql_system,
 )
-from tabsdatax.itest.fixture.oracle import OracleDomain, OracleSystem
-from tabsdatax.itest.fixture.postgres import PostgresDomain, PostgresSystem
-from tabsdatax.itest.fixture.redpanda import RedpandaDomain, RedpandaSystem
-from tabsdatax.itest.fixture.starrocks import StarrocksDomain, StarrocksSystem
+from tabsdatax.itest.fixture.backends.oracle import OracleDomain, OracleSystem
+from tabsdatax.itest.fixture.backends.postgres import PostgresDomain, PostgresSystem
+from tabsdatax.itest.fixture.backends.redpanda import RedpandaDomain, RedpandaSystem
+from tabsdatax.itest.fixture.backends.starrocks import StarrocksDomain, StarrocksSystem
 
 # slug, system_kind, staging, SystemCls, DomainCls
 CONTAINER = [

@@ -1,16 +1,21 @@
-"""Fixture dataclasses for the ``oracle`` backend."""
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+"""Fixture dataclasses for the ``mysql`` backend."""
+
 from __future__ import annotations
 
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from .backend import Domain, System, require
+from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class OracleSystem(System):
-    system_type: ClassVar[str] = "oracle"
+class MysqlSystem(System):
+    system_type: ClassVar[str] = "mysql"
     name: str
     system_kind: str
     container: str
@@ -22,8 +27,8 @@ class OracleSystem(System):
 
 
 @dataclass(frozen=True)
-class OracleDomain(Domain):
-    system_type: ClassVar[str] = "oracle"
+class MysqlDomain(Domain):
+    system_type: ClassVar[str] = "mysql"
     name: str
     system_kind: str
     image: str
@@ -37,9 +42,9 @@ class OracleDomain(Domain):
     data: str | None = None
 
 
-def oracle_system(name: str):
-    return require(name, OracleSystem)
+def mysql_system(name: str):
+    return require(name, MysqlSystem)
 
 
-def oracle_domain(name: str):
-    return require(name, OracleDomain)
+def mysql_domain(name: str):
+    return require(name, MysqlDomain)

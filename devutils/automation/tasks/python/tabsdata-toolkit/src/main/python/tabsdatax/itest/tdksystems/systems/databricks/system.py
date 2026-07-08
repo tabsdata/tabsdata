@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Databricks SaaS system — hooks only; the lifecycle is in SaasBase.
 
 Domain == schema (`<catalog>.<name>`), created via the SQL Statement

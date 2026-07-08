@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Azure Blob object-store system — hooks only; the lifecycle is in CloudBase."""
 
 from __future__ import annotations

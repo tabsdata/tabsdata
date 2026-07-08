@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Inject tdx-provisioned systems / domains into tests as typed dataclasses.
 
 A test declares the backends it needs by name with the per-type decorators
@@ -19,6 +23,7 @@ Env: ``TD_TEST_ON_MISSING_BACKEND`` = ``skip`` | ``fail`` (default) when a
 descriptor is absent; ``TD_TEST_SKIP_BACKENDS`` = comma-separated vendor
 ``system_type``s to skip even when present.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -30,24 +35,26 @@ from pydantic import ValidationError
 
 from ..tdksystems import crypto, descriptor, store
 
-ON_MISSING_ENV = "TD_TEST_ON_MISSING_BACKEND"   # skip | fail (default: fail)
-SKIP_ENV = "TD_TEST_SKIP_BACKENDS"              # comma-separated types to skip
+ON_MISSING_ENV = "TD_TEST_ON_MISSING_BACKEND"  # skip | fail (default: fail)
+SKIP_ENV = "TD_TEST_SKIP_BACKENDS"  # comma-separated types to skip
 
 SYSTEM = "system"
 DOMAIN = "domain"
 _DESCRIPTOR_ROLE = {SYSTEM: "sys", DOMAIN: "env"}
 
-_REQUESTED = "_tdx_backends"   # marker on a test fn: [(name, cls), …]
+_REQUESTED = "_tdx_backends"  # marker on a test fn: [(name, cls), …]
 
 
 class System:
     """Base for a system fixture dataclass; set ``system_type`` (the vendor) and
     declare fields named after the descriptor's (lower-cased) info keys."""
+
     system_type: ClassVar[str]
 
 
 class Domain:
     """Base for a domain fixture dataclass (see :class:`System`)."""
+
     system_type: ClassVar[str]
 
 
@@ -62,7 +69,7 @@ def _skip_types() -> set[str]:
     return {t.strip() for t in os.environ.get(SKIP_ENV, "").split(",") if t.strip()}
 
 
-_CACHE: dict[tuple[str, type], object] = {}   # (descriptor path, cls) -> built
+_CACHE: dict[tuple[str, type], object] = {}  # (descriptor path, cls) -> built
 
 
 def load(name: str, cls: type):
@@ -81,50 +88,67 @@ def load(name: str, cls: type):
     crypto.use_secret_env(None)
     if not path.exists():
         if _on_missing() == "skip":
-            pytest.skip(f"{backend_type} {name!r} not found at {path} "
-                        f"(${ON_MISSING_ENV}=skip)")
-        pytest.fail(f"{backend_type} {name!r} not found at {path} "
-                    f"(set ${ON_MISSING_ENV}=skip to skip instead)")
+            pytest.skip(
+                f"{backend_type} {name!r} not found at {path} (${ON_MISSING_ENV}=skip)"
+            )
+        pytest.fail(
+            f"{backend_type} {name!r} not found at {path} "
+            f"(set ${ON_MISSING_ENV}=skip to skip instead)"
+        )
     if system_type in _skip_types():
-        pytest.skip(f"{backend_type} {name!r} (system_type {system_type!r}) "
-                    f"skipped via ${SKIP_ENV}")
+        pytest.skip(
+            f"{backend_type} {name!r} (system_type {system_type!r}) "
+            f"skipped via ${SKIP_ENV}"
+        )
 
     key = (str(path), cls)
     if key not in _CACHE:
         doc = descriptor.load(path)
         if doc.get("role") != _DESCRIPTOR_ROLE[backend_type]:
-            pytest.fail(f"{name!r} is a {doc.get('kind')} descriptor, "
-                        f"not a {backend_type}")
+            pytest.fail(
+                f"{name!r} is a {doc.get('kind')} descriptor, not a {backend_type}"
+            )
         found = doc.get("system", "")
         if found != system_type:
-            pytest.fail(f"{name!r} is a {found!r} {backend_type}, but was requested "
-                        f"as {cls.__name__} (system_type {system_type!r})")
+            pytest.fail(
+                f"{name!r} is a {found!r} {backend_type}, but was requested "
+                f"as {cls.__name__} (system_type {system_type!r})"
+            )
         _CACHE[key] = _construct(cls, descriptor.attributes(doc), name=name)
     return _CACHE[key]
 
 
 def _construct(cls, attrs: dict[str, str], *, name: str):
     """Build `cls` from the flat attribute dict (field ← key ``field_name.upper()``)."""
-    kwargs = {f.name: attrs[f.name.upper()]
-              for f in dataclasses.fields(cls) if f.name.upper() in attrs}
+    kwargs = {
+        f.name: attrs[f.name.upper()]
+        for f in dataclasses.fields(cls)
+        if f.name.upper() in attrs
+    }
     try:
         return cls(**kwargs)
     except (ValidationError, TypeError, ValueError) as exc:
-        missing = [f.name.upper() for f in dataclasses.fields(cls)
-                   if f.name.upper() not in attrs
-                   and f.default is dataclasses.MISSING
-                   and f.default_factory is dataclasses.MISSING]
+        missing = [
+            f.name.upper()
+            for f in dataclasses.fields(cls)
+            if f.name.upper() not in attrs
+            and f.default is dataclasses.MISSING
+            and f.default_factory is dataclasses.MISSING
+        ]
         hint = f" (descriptor missing key(s): {', '.join(missing)})" if missing else ""
-        pytest.fail(f"{name!r}: cannot build {cls.__name__} from its "
-                    f"descriptor{hint}: {exc}")
+        pytest.fail(
+            f"{name!r}: cannot build {cls.__name__} from its descriptor{hint}: {exc}"
+        )
 
 
 def require(name: str, cls: type):
     """Decorator: declare the test needs backend `name`, loaded as `cls`. Stack to
     request several; read them from the `backends` fixture by name."""
+
     def deco(fn):
         fn.__dict__.setdefault(_REQUESTED, []).append((name, cls))
         return fn
+
     return deco
 
 
@@ -139,8 +163,10 @@ class _Backends:
         try:
             cls = self._by_name[name]
         except KeyError:
-            raise KeyError(f"no backend {name!r} declared — add a @<type>_system "
-                           f"/ @<type>_domain decorator for it") from None
+            raise KeyError(
+                f"no backend {name!r} declared — add a @<type>_system "
+                f"/ @<type>_domain decorator for it"
+            ) from None
         return load(name, cls)
 
     def __contains__(self, name: str) -> bool:

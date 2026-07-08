@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """MySQL container system — hooks only; the lifecycle is in ContainerBase.
 
 CDC is enabled by default (row-format binlog, full metadata, fixed server-id)

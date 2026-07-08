@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Shared container lifecycle on the unified `System` contract.
 
 A container system's *pluggable* logic is a small hook set (image config +

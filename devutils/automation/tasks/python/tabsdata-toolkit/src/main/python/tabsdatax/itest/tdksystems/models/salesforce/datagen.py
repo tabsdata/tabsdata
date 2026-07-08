@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Salesforce — Accounts + Opportunities data.
 
 This is the *salesforce* half of the Salesforce ↔ Finance pair. It is loaded

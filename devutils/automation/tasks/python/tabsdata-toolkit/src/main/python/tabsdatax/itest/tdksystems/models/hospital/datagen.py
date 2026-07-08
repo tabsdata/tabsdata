@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """
 Data generator — Hospital Patient System
 Schema: hp_wards, hp_staff, hp_patients, hp_admissions,

@@ -1,11 +1,16 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Fixture dataclasses for the ``snowflake`` backend."""
+
 from __future__ import annotations
 
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from .backend import Domain, System, require
+from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)

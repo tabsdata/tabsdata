@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Snowflake SaaS system — hooks only; the lifecycle is in SaasBase.
 
 Domain == schema (`<database>.<name>`). Auth uses a Personal Access Token

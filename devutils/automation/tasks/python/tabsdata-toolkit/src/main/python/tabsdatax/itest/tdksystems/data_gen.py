@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Generate per-table data files for a bundled model.
 
 Models live in ``src/main/python/tabsdatax.itest.tdksystems/models/<name>/``

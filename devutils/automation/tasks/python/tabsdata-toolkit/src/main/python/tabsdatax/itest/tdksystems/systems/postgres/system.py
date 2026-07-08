@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """PostgreSQL — community 17.x. Single-DB-with-dedicated-user domain model."""
 
 from __future__ import annotations

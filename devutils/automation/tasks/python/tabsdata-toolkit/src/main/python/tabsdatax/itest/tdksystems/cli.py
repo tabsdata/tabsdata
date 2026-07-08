@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Data operations shared by the tdx commands.
 
 A library, not a command: the `data create` / `data load` pipeline that

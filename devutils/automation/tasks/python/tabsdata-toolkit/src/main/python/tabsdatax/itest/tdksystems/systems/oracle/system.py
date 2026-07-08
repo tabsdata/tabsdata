@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Oracle Database Free 23c. Domain == user/schema (FREEPDB1)."""
 
 from __future__ import annotations

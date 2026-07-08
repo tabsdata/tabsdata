@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Self-managing uv virtual environments for tdx-system / tdx-domain.
 
 The commands run their real work inside dedicated uv venvs under

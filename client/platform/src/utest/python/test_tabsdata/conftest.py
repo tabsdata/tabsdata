@@ -287,7 +287,7 @@ def gather_connectors() -> list[str]:
 
 
 APISERVER_URL = (
-    TESTING_SUPERVISOR_INSTANCES.get("pytest").get("apiserver").get("address")
+    TESTING_SUPERVISOR_INSTANCES.get("tdtest").get("apiserver").get("address")
 )
 
 # The bootstrap seeds exactly one project, `sandbox`; tenant-scoped tests target

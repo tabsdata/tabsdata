@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Google Cloud Storage system — hooks only; the lifecycle is in CloudBase."""
 
 from __future__ import annotations

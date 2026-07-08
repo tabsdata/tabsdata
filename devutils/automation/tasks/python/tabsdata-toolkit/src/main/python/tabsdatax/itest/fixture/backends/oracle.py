@@ -1,17 +1,21 @@
-"""Fixture dataclasses for the ``clickhouse`` backend."""
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+"""Fixture dataclasses for the ``oracle`` backend."""
+
 from __future__ import annotations
 
-from pathlib import Path
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from .backend import Domain, System, require
+from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class ClickhouseSystem(System):
-    system_type: ClassVar[str] = "clickhouse"
+class OracleSystem(System):
+    system_type: ClassVar[str] = "oracle"
     name: str
     system_kind: str
     container: str
@@ -20,12 +24,11 @@ class ClickhouseSystem(System):
     port: str
     user: str
     password: str
-    sys_path: Path
 
 
 @dataclass(frozen=True)
-class ClickhouseDomain(Domain):
-    system_type: ClassVar[str] = "clickhouse"
+class OracleDomain(Domain):
+    system_type: ClassVar[str] = "oracle"
     name: str
     system_kind: str
     image: str
@@ -39,9 +42,9 @@ class ClickhouseDomain(Domain):
     data: str | None = None
 
 
-def clickhouse_system(name: str):
-    return require(name, ClickhouseSystem)
+def oracle_system(name: str):
+    return require(name, OracleSystem)
 
 
-def clickhouse_domain(name: str):
-    return require(name, ClickhouseDomain)
+def oracle_domain(name: str):
+    return require(name, OracleDomain)

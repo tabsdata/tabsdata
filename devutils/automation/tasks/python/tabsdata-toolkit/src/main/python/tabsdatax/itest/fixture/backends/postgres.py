@@ -1,16 +1,21 @@
-"""Fixture dataclasses for the ``redpanda`` backend."""
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+"""Fixture dataclasses for the ``postgres`` backend."""
+
 from __future__ import annotations
 
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from .backend import Domain, System, require
+from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class RedpandaSystem(System):
-    system_type: ClassVar[str] = "redpanda"
+class PostgresSystem(System):
+    system_type: ClassVar[str] = "postgres"
     name: str
     system_kind: str
     container: str
@@ -22,8 +27,8 @@ class RedpandaSystem(System):
 
 
 @dataclass(frozen=True)
-class RedpandaDomain(Domain):
-    system_type: ClassVar[str] = "redpanda"
+class PostgresDomain(Domain):
+    system_type: ClassVar[str] = "postgres"
     name: str
     system_kind: str
     image: str
@@ -37,9 +42,9 @@ class RedpandaDomain(Domain):
     data: str | None = None
 
 
-def redpanda_system(name: str):
-    return require(name, RedpandaSystem)
+def postgres_system(name: str):
+    return require(name, PostgresSystem)
 
 
-def redpanda_domain(name: str):
-    return require(name, RedpandaDomain)
+def postgres_domain(name: str):
+    return require(name, PostgresDomain)

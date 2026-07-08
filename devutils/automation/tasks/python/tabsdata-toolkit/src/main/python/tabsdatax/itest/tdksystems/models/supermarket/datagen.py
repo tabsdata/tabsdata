@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """
 Data generator — Supermarket Inventory System
 Schema: sm_suppliers, sm_categories, sm_products, sm_warehouses, sm_stock,

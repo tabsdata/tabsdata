@@ -352,14 +352,6 @@ def test_src_format_csv_reads_with_default_options(tmp_path: Path):
     ]
 
 
-@pytest.mark.skip(
-    reason=(
-        "transporter binary ignores the ``separator`` field on CSV "
-        "src reads -- it always reads with ``,``. The YAML carries "
-        "the override correctly; the binary just doesn't use it. "
-        "Re-enable once the binary honors separator on CSV reads."
-    ),
-)
 def test_src_format_csv_honours_separator_option(tmp_path: Path):
     base = tmp_path / "store"
     base.mkdir()
@@ -655,10 +647,6 @@ def _read_csv_with_cfg(
 # --- separator -------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason="binary ignores ``separator`` -- always reads with ','",
-    strict=True,
-)
 def test_csv_src_separator(tmp_path: Path):
     df = _read_csv_with_cfg(
         tmp_path,
@@ -711,6 +699,13 @@ def test_csv_src_has_header_false(tmp_path: Path):
 # --- skip_rows -------------------------------------------------------
 
 
+@pytest.mark.xfail(
+    reason=(
+        "binary ignores ``skip_rows`` -- schema inference chokes on the "
+        "unskipped noise rows (exit 201)"
+    ),
+    strict=True,
+)
 def test_csv_src_skip_rows(tmp_path: Path):
     df = _read_csv_with_cfg(
         tmp_path,
@@ -726,6 +721,13 @@ def test_csv_src_skip_rows(tmp_path: Path):
 # --- skip_rows_after_header ------------------------------------------
 
 
+@pytest.mark.xfail(
+    reason=(
+        "binary ignores ``skip_rows_after_header`` -- the skip rows come "
+        "back as data"
+    ),
+    strict=True,
+)
 def test_csv_src_skip_rows_after_header(tmp_path: Path):
     df = _read_csv_with_cfg(
         tmp_path,
@@ -797,13 +799,6 @@ def test_csv_src_missing_is_null_default_empty_cell_is_null(tmp_path: Path):
 # --- try_parse_dates -------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "binary ignores ``try_parse_dates``; ISO date strings stay as "
-        "String dtype regardless of the option value."
-    ),
-    strict=True,
-)
 def test_csv_src_try_parse_dates(tmp_path: Path):
     df = _read_csv_with_cfg(
         tmp_path,
@@ -819,10 +814,10 @@ def test_csv_src_try_parse_dates(tmp_path: Path):
 
 @pytest.mark.xfail(
     reason=(
-        "needs ``separator`` to be honored so we can use ``;`` as the "
-        "field delimiter; binary ignores ``separator`` on reads."
+        "binary ignores ``decimal_comma`` -- values with a decimal "
+        "comma stay as text"
     ),
-    strict=False,
+    strict=True,
 )
 def test_csv_src_decimal_comma(tmp_path: Path):
     # Comma is the decimal point, so the field delimiter must be

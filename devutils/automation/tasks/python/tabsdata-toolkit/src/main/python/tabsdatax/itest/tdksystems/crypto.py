@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Encryption for the descriptor files, keyed by ``$TD_BACKENDS_CRYPTO_KEY``.
 
 Descriptors hold connection settings (hosts, users, sometimes passwords), so

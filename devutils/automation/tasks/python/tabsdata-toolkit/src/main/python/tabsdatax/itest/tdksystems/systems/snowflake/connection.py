@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Snowflake connection (snowflake-connector-python). Built from a resolved
 `{OPTION: value}` dict — no argparse / descriptor coupling."""
 

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """BigQuery dataset ops (google-cloud-bigquery). Only what the System contract
 needs: ping / dataset_exists / create_dataset / delete_dataset. Built from a
 plain `{OPTION: value}` dict of resolved connection values, like GcsBackend, so

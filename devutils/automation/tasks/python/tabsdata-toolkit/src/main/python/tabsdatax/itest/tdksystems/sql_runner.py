@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Execute SQL via SQLAlchemy — from a file or as inline text.
 
 Splits with sqlparse (preferred) or naive `;` split, runs in one

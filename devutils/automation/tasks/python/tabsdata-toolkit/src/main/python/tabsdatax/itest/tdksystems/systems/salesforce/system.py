@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Salesforce SaaS system — the SPECIAL saas case: no schema domain, no SQL.
 
 `domain_is_named = False` makes the domain a credentials clone (no schema op),

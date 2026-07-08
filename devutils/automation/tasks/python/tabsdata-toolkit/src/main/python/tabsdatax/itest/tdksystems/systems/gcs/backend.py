@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """GCS raw storage ops (google-cloud-storage). Only the four ops the `System`
 contract needs: status / exists / clear / upload.
 

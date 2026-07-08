@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Azure Blob raw storage ops (azure-storage-blob). Only the four ops the
 `System` contract needs: status / exists / clear / upload.
 

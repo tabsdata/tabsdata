@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """
 Data generator — Restaurant Menu and Provisioning System
 Schema: rst_suppliers, rst_ingredients, rst_menu_categories, rst_menu_items,

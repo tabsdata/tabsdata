@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Verify the active Python env satisfies the project's declared deps.
 
 Reads runtime dependencies from the installed `td_gen` distribution

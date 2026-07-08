@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Common helpers for cloud backends (walking local paths, normalising
 prefixes for object listings)."""
 

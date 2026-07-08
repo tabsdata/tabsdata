@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Secret providers for `tdx-system secrets --get <PROVIDER>:<REF>`.
 
 A provider fetches a set of named secrets from an external store and returns

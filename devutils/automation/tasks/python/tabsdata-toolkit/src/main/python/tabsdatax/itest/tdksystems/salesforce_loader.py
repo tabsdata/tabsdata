@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Automated Salesforce load — no manual cci/OAuth steps.
 
 `tdx-domain create --model salesforce --data` runs this: it generates the dataset

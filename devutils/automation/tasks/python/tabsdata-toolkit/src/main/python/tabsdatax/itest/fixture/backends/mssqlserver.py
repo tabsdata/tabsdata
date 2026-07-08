@@ -1,16 +1,21 @@
-"""Fixture dataclasses for the ``mongodb`` backend."""
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+"""Fixture dataclasses for the ``mssqlserver`` backend."""
+
 from __future__ import annotations
 
 from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from .backend import Domain, System, require
+from ..backend import Domain, System, require
 
 
 @dataclass(frozen=True)
-class MongodbSystem(System):
-    system_type: ClassVar[str] = "mongodb"
+class MssqlserverSystem(System):
+    system_type: ClassVar[str] = "mssqlserver"
     name: str
     system_kind: str
     container: str
@@ -22,8 +27,8 @@ class MongodbSystem(System):
 
 
 @dataclass(frozen=True)
-class MongodbDomain(Domain):
-    system_type: ClassVar[str] = "mongodb"
+class MssqlserverDomain(Domain):
+    system_type: ClassVar[str] = "mssqlserver"
     name: str
     system_kind: str
     image: str
@@ -37,9 +42,9 @@ class MongodbDomain(Domain):
     data: str | None = None
 
 
-def mongodb_system(name: str):
-    return require(name, MongodbSystem)
+def mssqlserver_system(name: str):
+    return require(name, MssqlserverSystem)
 
 
-def mongodb_domain(name: str):
-    return require(name, MongodbDomain)
+def mssqlserver_domain(name: str):
+    return require(name, MssqlserverDomain)

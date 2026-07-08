@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """BigQuery system — a managed warehouse (datasets) staged through a GCS bucket.
 
 Hybrid, so it subclasses `System` directly rather than a category mixin:

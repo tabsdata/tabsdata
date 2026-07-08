@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Shared SaaS lifecycle on the unified `System` contract.
 
 A saas system's pluggable logic: `_ping(values)` (auth check) and — for

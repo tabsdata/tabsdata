@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """
 Data generator — School Classes and Student Grades System
 Schema: sch_academic_years, sch_departments, sch_teachers, sch_subjects,
