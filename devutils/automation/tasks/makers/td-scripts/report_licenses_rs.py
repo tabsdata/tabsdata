@@ -198,7 +198,7 @@ if os.path.exists(TARGET_FILE):
     os.remove(TARGET_FILE)
 
 cargo_tomls = []
-skip = {"node_modules", "target", "tabsdata-ui", "venv"}
+skip = {".claude", "node_modules", "target", "tabsdata-ui", "venv"}
 for root, dirs, files in os.walk(".", topdown=True, followlinks=True):
     dirs[:] = [d for d in dirs if d not in skip]
     if "Cargo.toml" in files:
