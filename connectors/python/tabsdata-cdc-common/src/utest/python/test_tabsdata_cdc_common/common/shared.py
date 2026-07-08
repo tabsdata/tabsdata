@@ -242,7 +242,7 @@ def stop_trigger(
 def build_publisher(
     trigger: td.StageTrigger,
 ) -> td.TabsdataFunction | Callable[..., Any]:
-    @td.publisher(
+    @td.publisher(  # type: ignore[misc]
         source=td.Stage(use_existing_data=True),
         tables="output",
         name=str(uuid.uuid4()),

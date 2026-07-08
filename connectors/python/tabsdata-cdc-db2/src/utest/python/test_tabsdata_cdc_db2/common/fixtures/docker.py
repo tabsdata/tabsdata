@@ -314,7 +314,7 @@ def setup_cdc_db2_asncap(container: Container, port: int) -> None:
         except Exception as exception:
             logger.error(
                 f"Restart table did not get populated "
-                f"after {retries} attempts: {exception}"
+                f"within {timeout} seconds: {exception}"
             )
             raise
 

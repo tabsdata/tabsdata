@@ -435,7 +435,7 @@ def test_fail_on_duplicate_key_false_with_trx(
 @pytest.mark.mongodb
 @pytest.mark.requires_internet
 @pytest.mark.slow
-def test_fail_on_duplicate_key_false(tmp_path, testing_mongodb):
+def test_fail_on_duplicate_key_false_without_update_existing(tmp_path, testing_mongodb):
     size = 2
     id_column = [1 for _ in range(size)]
     lf = pl.LazyFrame(

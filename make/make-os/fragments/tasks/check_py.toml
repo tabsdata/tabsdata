@@ -6,10 +6,101 @@
 plugin = "td-task-tracker"
 category = "08 - Linting"
 private = true
+dependencies = ["__os__set_mode_test_py"]
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
 script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    warn "⏳ Nothing to do."
+    help = set false
+    baseline = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--help"
+            help = set true
+        end
+        if eq ${argument} "-h"
+            help = set true
+        end
+        if eq ${argument} "--baseline"
+            baseline = set true
+        end
+    end
+
+    if ${help}
+        info ""
+        info "🔬 check_py — Validate cross-module resolution of the Python sources with mypy."
+        info ""
+        info "   Gates on resolution and reference errors (unresolved imports, undefined names,"
+        info "   missing attributes, wrong call arguments, malformed annotations). Value-level"
+        info "   type-mismatch diagnostics are left to 'lint_py'."
+        info ""
+        info "🛟 Usage:"
+        info "   cargo make check_py [-- <options>]"
+        info ""
+        info "🛟 Check options:"
+        info "   --baseline         Regenerate the accepted-error baseline from the current run and exit."
+        info ""
+        info "🛟 Build mode flags (handled before the check runs; they shape the wrapping build):"
+        info "   --fast             Shorthand for --no-banners --no-responsive --no-permit --no-license --no-compile --no-deploy."
+        info "                      Use it when your environment is already hydrated and you just want to run the check."
+        info "   --no-banners       Disable terminal output banners (on by default)."
+        info "   --no-responsive    Disable terminal responsive output (on by default)."
+        info "   --no-permit        Skip the proactive dependency check and installation (active by default)."
+        info "   --no-license       Skip the license check and generation (active by default)."
+        info "   --no-compile       Skip compilation and linking of the Rust projects (active by default)."
+        info "   --no-deploy        Skip deployment (hydration) of the tabsdata packages (active by default)."
+        info "   -h, --help         Show this help and exit."
+        info ""
+        info "🛟 Examples:"
+        info "   cargo make check_py"
+        info "   cargo make check_py --fast"
+        info "   cargo make check_py --no-compile --no-deploy"
+        info ""
+        exit 0
+    end
+
+    set_env TD_WITH_SERVER_START "false"
+    set_env TD_WITH_SERVER_STOP "false"
+    set_env TD_WITH_SERVER_STATUS "false"
+
+    cm_run_task __os__set_bootest_utest
+    cm_run_task __os__setup_test_py
+
+    utest_pythonpath = get_env PYTHONPATH
+    debug "🔅 utest PYTHONPATH: ${utest_pythonpath}"
+
+    cm_run_task __os__set_bootest_itest
+    cm_run_task __os__setup_context_test_py
+
+    itest_pythonpath = get_env PYTHONPATH
+    debug "🔅 itest PYTHONPATH: ${itest_pythonpath}"
+
+    os_name = get_env OS
+    is_windows = contains ${os_name} "Windows"
+    if ${is_windows}
+        separator = set ";"
+    else
+        separator = set ":"
+    end
+
+    merged_pythonpath = set "${utest_pythonpath}${separator}${itest_pythonpath}"
+    set_env PYTHONPATH ${merged_pythonpath}
+    debug "🔅 merged PYTHONPATH: ${merged_pythonpath}"
+
+    python_binary = which python
+    info "🐍 Using python: ${python_binary}"
+
+    project_root = get_env PROJECT_ROOT_FOLDER
+    info "🌳 Checking sources under: ${project_root}"
+
+    if ${baseline}
+        info "📝 Regenerating the accepted-error baseline."
+        debug "🚀 python ${CHECK_PY_SCRIPT} --write-baseline ${project_root} ${python_binary} ${CHECK_PY_CONFIG} ${CHECK_PY_BASELINE} ${CHECK_PY_CACHE}"
+        exec --fail-on-error python ${CHECK_PY_SCRIPT} --write-baseline ${project_root} ${python_binary} ${CHECK_PY_CONFIG} ${CHECK_PY_BASELINE} ${CHECK_PY_CACHE}
+    else
+        debug "🚀 python ${CHECK_PY_SCRIPT} ${project_root} ${python_binary} ${CHECK_PY_CONFIG} ${CHECK_PY_BASELINE} ${CHECK_PY_CACHE}"
+        exec --fail-on-error python ${CHECK_PY_SCRIPT} ${project_root} ${python_binary} ${CHECK_PY_CONFIG} ${CHECK_PY_BASELINE} ${CHECK_PY_CACHE}
+    end
     ''']

@@ -441,7 +441,7 @@ def test_users_create(apiserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_users_list(apiserver_connection):
+def test_users_list_after_create(apiserver_connection):
     apiserver_connection.users_delete("test_users_list", raise_for_status=False)
     name = "test_users_list"
     full_name = "test_users_list_full_name"

@@ -8,7 +8,7 @@ import random
 import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from typing import Callable, TypeAlias, Union
+from typing import Any, Callable, Protocol, TypeAlias, Union
 
 import polars as pl
 import pytest
@@ -34,7 +34,11 @@ logger.setLevel(logging.DEBUG)
 pretty_polars()
 
 # pk == Library Package
-pk: TypeAlias = Union[td.tableframe.selectors, pl.selectors]
+class SelectorsPackage(Protocol):
+    def exclude(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
+pk: TypeAlias = SelectorsPackage
 # ft = Frame Type
 ft: TypeAlias = Union[td.TableFrame, pl.LazyFrame]
 

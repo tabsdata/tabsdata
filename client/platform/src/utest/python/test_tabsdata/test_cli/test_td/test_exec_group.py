@@ -837,7 +837,9 @@ def test_exec_info(login, testing_collection_with_table, tabsserver_connection):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_exec_monitor(login, testing_collection_with_table, tabsserver_connection):
+def test_exec_monitor_plan(
+    login, testing_collection_with_table, tabsserver_connection
+):
     exec_id = tabsserver_connection.executions[0].id
     runner = CliRunner()
     result = runner.invoke(
@@ -850,7 +852,9 @@ def test_exec_monitor(login, testing_collection_with_table, tabsserver_connectio
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_exec_monitor(login, testing_collection_with_table, tabsserver_connection):
+def test_exec_monitor_trx(
+    login, testing_collection_with_table, tabsserver_connection
+):
     transaction_id = tabsserver_connection.transactions[0].id
     runner = CliRunner()
     result = runner.invoke(

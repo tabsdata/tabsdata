@@ -543,7 +543,7 @@ def test_clean_recursively_and_convert_to_datatype_empty_objects():
     assert _clean_recursively_and_convert_to_datatype(arg, pl.DataFrame) is None
 
 
-@td.transformer(["a", "b"], ["c", "d"])
+@td.transformer(["a", "b"], ["c", "d"])  # type: ignore[misc]
 def dummy_transformer(a: td.TableFrame, b: td.TableFrame):
     if not isinstance(a, TableFrame):
         raise ValueError("a is not a TableFrame")
@@ -628,7 +628,7 @@ def test_call_transformer_hybrid():
     assert isinstance(d, pd.DataFrame)
 
 
-@td.transformer(["a", "b"], ["c", "d"])
+@td.transformer(["a", "b"], ["c", "d"])  # type: ignore[misc]
 def dummy_list_transformer(a: List[pl.DataFrame], b: List[pl.DataFrame]):
     for element in a:
         if not isinstance(element, TableFrame):

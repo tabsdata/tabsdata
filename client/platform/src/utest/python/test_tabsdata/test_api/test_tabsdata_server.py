@@ -889,7 +889,7 @@ def test_table_download_at(
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_table_sample(tabsserver_connection, testing_collection_with_table):
+def test_table_sample_at(tabsserver_connection, testing_collection_with_table):
     epoch_ms = int(time.time() * 1000)  # Current time in milliseconds
     table = tabsserver_connection.sample_table(
         collection_name=testing_collection_with_table,
@@ -901,7 +901,7 @@ def test_table_sample(tabsserver_connection, testing_collection_with_table):
 
 @pytest.mark.integration
 @pytest.mark.requires_internet
-def test_table_get_schema(tabsserver_connection, testing_collection_with_table):
+def test_table_get_schema_at(tabsserver_connection, testing_collection_with_table):
     epoch_ms = int(time.time() * 1000)  # Current time in milliseconds
     schema = tabsserver_connection.get_table_schema(
         collection_name=testing_collection_with_table,

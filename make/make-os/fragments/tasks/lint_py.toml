@@ -59,7 +59,7 @@ script = [
                     array_push ${mypy_plugin_command} ${argument}
                 end
                 array_push ${mypy_plugin_command} --config-file
-                array_push ${mypy_plugin_command} ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.cfg
+                array_push ${mypy_plugin_command} ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.linter.cfg
                 array_push ${mypy_plugin_command} --explicit-package-bases
                 array_push ${mypy_plugin_command} tabsdatak
                 mypy_plugin_exec_command = array_join ${mypy_plugin_command} " "
@@ -73,8 +73,8 @@ script = [
                 end
 
                 debug "🛡️ Running mypy builin checks"
-                debug "🚀 mypy --config-file ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.cfg --explicit-package-bases tabsdatak"
-                mypy_builtin_exit_code = exec --get-exit-code mypy --config-file ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.cfg --explicit-package-bases tabsdatak
+                debug "🚀 mypy --config-file ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.linter.cfg --explicit-package-bases tabsdatak"
+                mypy_builtin_exit_code = exec --get-exit-code mypy --config-file ${PROJECT_TABSDATA_ROOT_FOLDER}/.cargo/mypy.linter.cfg --explicit-package-bases tabsdatak
                 mypy_builtin_is_zero = eq ${mypy_builtin_exit_code} "0"
                 if not ${mypy_builtin_is_zero}
                     warn "⭕️️ The mypy builtin checks failed for '${package_root}' with exit code '${mypy_builtin_exit_code}' (non-fatal)"

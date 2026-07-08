@@ -52,7 +52,7 @@ def input_table_for_scales() -> pl.DataFrame:
 def dq_fn(
     classifiers: list[dq.Classifier], operators: list[dq.Operator]
 ) -> Callable[[td.TableFrame], td.TableFrame]:
-    @td.transformer(
+    @td.transformer(  # type: ignore[misc]
         input_tables=["ti"],
         output_tables=["to"],
         on_output_tables=[
@@ -179,18 +179,20 @@ def test_dq_enrich_on_missing_column(
         dq.IsNull(columns, on_missing_column=on_missing_column),
     ]
 
-    err = None
+    err: Exception | None = None
     res = None
     # noinspection PyBroadException
     try:
         fn = dq_fn(classifiers, [dq.Enrich()])
         res = tdfnrun(input_tables=input_df, function=fn)
-    except Exception:
+    except Exception as exception:
         ok = False
+        err = exception
     else:
         ok = True
 
     if expected_ok and not ok:
+        assert err is not None
         raise err
     elif not expected_ok and ok:
         raise Exception("Expected function failure, run OK")
@@ -1648,16 +1650,18 @@ def test_dq_fail_all_ok(
     )
 
     res = None
-    err = None
+    err: Exception | None = None
     # noinspection PyBroadException
     try:
         res = tdfnrun(input_tables=input_df, function=fn)
-    except Exception:
+    except Exception as exception:
         ok = False
+        err = exception
     else:
         ok = True
 
     if expected_ok and not ok:
+        assert err is not None
         raise err
     elif not expected_ok and ok:
         raise Exception("Expected function failure, run OK")

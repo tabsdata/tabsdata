@@ -174,14 +174,14 @@ def run_continuous_dml_test(
 ) -> None:
     output_names = [f"output_{i}" for i in range(len(tables))]
 
-    @td.publisher(
+    @td.publisher(  # type: ignore[misc]
         source=Stage(use_existing_data=True),
         tables=output_names,
         name=str(uuid.uuid4()),
         trigger_by=trigger,
     )
     def process(*tfs: list[td.TableFrame],) -> tuple[td.TableFrame, ...]:
-        return tuple(td.concat(tf_list) for tf_list in tfs)
+        return tuple(td.concat(tf_list) for tf_list in tfs)  # type: ignore[misc]
 
     def job():
         return tdfntrigger(trigger=trigger, function=process)

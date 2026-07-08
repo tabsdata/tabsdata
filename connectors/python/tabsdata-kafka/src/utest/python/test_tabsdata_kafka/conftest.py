@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._io.stage_trigger import LocalFileStageTriggerContext
@@ -203,11 +204,12 @@ def confluent_sr_mock_registry():
 @pytest.fixture
 def confluent_schema_registry():
     def _sr(config: KafkaConfig, _serde: KafkaSerde):
+        credentials = cast(UserPasswordCredentials, config.credentials)
         return ConfluentSchemaRegistry(
             url=config.schema_registry_url,
             credentials=UserPasswordCredentials(
-                user=config.credentials.user.secret_value,
-                password=config.credentials.password.secret_value,
+                user=credentials.user.secret_value,
+                password=credentials.password.secret_value,
             ),
             configs=None,
         )

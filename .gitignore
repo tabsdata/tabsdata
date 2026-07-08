@@ -20,6 +20,7 @@ __pypackages__/
 .idea/
 .installed.cfg
 .ipynb_checkpoints
+/.mypy/cache/
 .mypy_cache/
 .nox/
 .pdm-build/

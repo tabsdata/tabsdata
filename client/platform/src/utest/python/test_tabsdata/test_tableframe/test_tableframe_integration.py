@@ -3,7 +3,7 @@
 #
 
 import logging
-from typing import Callable, TypeAlias, Union
+from typing import Any, Callable, Protocol, TypeAlias, Union
 
 import polars as pl
 
@@ -28,7 +28,13 @@ logger.setLevel(logging.DEBUG)
 pretty_polars()
 
 # pk == Library Package
-pk: TypeAlias = Union[td, pl]
+class LibraryPackage(Protocol):
+    def col(self, *args: Any, **kwargs: Any) -> Any: ...
+
+    def lit(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
+pk: TypeAlias = LibraryPackage
 # ft = Frame Type
 ft: TypeAlias = Union[td.TableFrame, pl.LazyFrame]
 

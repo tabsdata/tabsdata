@@ -833,7 +833,7 @@ def _trigger(
     # trigger so test runs exercise the same conn-swap behavior as production.
     resolve_named_conn_if_needed(trigger, MOCK_PROJECT_ID)
 
-    trigger.return_on_end = True
+    trigger.return_on_end = True  # type: ignore[attr-defined]
     try:
         trigger.run(context)
         status = StageTriggerStatus.SUCCESS
