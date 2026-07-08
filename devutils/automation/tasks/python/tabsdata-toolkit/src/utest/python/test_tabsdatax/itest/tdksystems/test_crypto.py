@@ -1,4 +1,4 @@
-"""Tests for tabsdatax.itest.tdksystems.crypto — the $TD_DEV_PERSONAL_SECRET gate and the
+"""Tests for tabsdatax.itest.tdksystems.crypto — the $TD_BACKENDS_CRYPTO_KEY gate and the
 PEM-armored encrypt/decrypt used for descriptor files."""
 from __future__ import annotations
 
@@ -11,18 +11,18 @@ from tabsdatax.itest.tdksystems.errors import DatagenError
 # ---- require_secret --------------------------------------------------------
 
 def test_require_secret_ok(monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "abcdefghijkl")   # exactly 12
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "abcdefghijkl")   # exactly 12
     assert crypto.require_secret() == "abcdefghijkl"
 
 
 def test_require_secret_missing(monkeypatch):
-    monkeypatch.delenv("TD_DEV_PERSONAL_SECRET", raising=False)
-    with pytest.raises(DatagenError, match="TD_DEV_PERSONAL_SECRET must be set"):
+    monkeypatch.delenv("TD_BACKENDS_CRYPTO_KEY", raising=False)
+    with pytest.raises(DatagenError, match="TD_BACKENDS_CRYPTO_KEY must be set"):
         crypto.require_secret()
 
 
 def test_require_secret_too_short(monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "short")          # < 12
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "short")          # < 12
     with pytest.raises(DatagenError, match="at least 12 characters"):
         crypto.require_secret()
 
@@ -30,13 +30,13 @@ def test_require_secret_too_short(monkeypatch):
 # ---- encrypt / decrypt -----------------------------------------------------
 
 def test_roundtrip(monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "a-good-dev-secret")
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "a-good-dev-secret")
     pem = crypto.encrypt(b'{"hello": "world"}')
     assert crypto.decrypt(pem) == b'{"hello": "world"}'
 
 
 def test_output_is_pem(monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "a-good-dev-secret")
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "a-good-dev-secret")
     pem = crypto.encrypt(b"payload")
     assert pem.startswith("-----BEGIN TD_GEN DESCRIPTOR-----")
     assert pem.strip().endswith("-----END TD_GEN DESCRIPTOR-----")
@@ -47,27 +47,27 @@ def test_output_is_pem(monkeypatch):
 
 
 def test_nonce_makes_ciphertext_nondeterministic(monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "a-good-dev-secret")
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "a-good-dev-secret")
     assert crypto.encrypt(b"same") != crypto.encrypt(b"same")
 
 
 def test_wrong_secret_fails_to_decrypt(monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "the-right-secret")
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "the-right-secret")
     pem = crypto.encrypt(b"secret data")
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "a-different-secret")
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "a-different-secret")
     with pytest.raises(DatagenError, match="could not decrypt"):
         crypto.decrypt(pem)
 
 
 def test_decrypt_rejects_non_pem(monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "a-good-dev-secret")
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "a-good-dev-secret")
     with pytest.raises(DatagenError, match="not an encrypted descriptor"):
         crypto.decrypt("plain text")
 
 
 def test_encrypt_requires_secret(monkeypatch):
-    monkeypatch.delenv("TD_DEV_PERSONAL_SECRET", raising=False)
-    with pytest.raises(DatagenError, match="TD_DEV_PERSONAL_SECRET"):
+    monkeypatch.delenv("TD_BACKENDS_CRYPTO_KEY", raising=False)
+    with pytest.raises(DatagenError, match="TD_BACKENDS_CRYPTO_KEY"):
         crypto.encrypt(b"x")
 
 
@@ -90,11 +90,11 @@ def test_descriptor_file_is_encrypted(tmp_path):
 
 def test_load_wrong_secret_reports_it(tmp_path, monkeypatch):
     out = tmp_path / "s.json"
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "created-with-this")
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "created-with-this")
     descriptor.write_cloud_system(
         out=str(out), storage_type="fs", system_kind="file", label="fs",
         sys_path="/tmp/x", sys_path_env=None, forwarded=[],
         strip_sys_path_slash=False)
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "reading-with-that")
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "reading-with-that")
     with pytest.raises(DatagenError, match="could not decrypt"):
         descriptor.load(out)

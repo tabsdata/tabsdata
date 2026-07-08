@@ -65,34 +65,35 @@ def test_saas_system_lifecycle(slug, prefix, vault_env, itest_dir):
     if missing:
         pytest.skip(f"vault {VAULT!r} missing 1p item for {slug}: {missing}")
 
-    sys_desc = itest_dir / f"{slug}.json"
-    dom_desc = itest_dir / f"{slug}_dom.json"
+    sysdir, domdir = itest_dir / "systems", itest_dir / "domains"
+    S = ("--sys-dir", str(sysdir))
+    D = ("--domain-dir", str(domdir))
+    sysname = f"{slug}_sys"
 
     cp = run_cmd(
         "tdx-system", "create", "--type", slug,
-        "--sys", str(sys_desc), "--name", f"{slug}_sys",
-        "--env-prefix", prefix, "--force",
+        "--sys", sysname, *S, "--env-prefix", prefix, "--force",
         env=vault_env,
     )
     assert_ok(cp, f"tdx-system create {slug} --env-prefix {prefix}")
-    assert sys_desc.is_file()
+    assert (sysdir / sysname).is_file()
 
-    cp = run_cmd("tdx-system", "status", "--sys", str(sys_desc), env=vault_env)
+    cp = run_cmd("tdx-system", "status", "--sys", sysname, *S, env=vault_env)
     assert_ok(cp, f"{slug} status")
     assert "ready" in cp.stdout.lower()
 
     # A random suffix so concurrent runs / leaked state can't collide.
     name = f"itest_smoke_{secrets.token_hex(4)}"
     try:
-        cp = run_cmd("tdx-domain", "create", "--sys", str(sys_desc),
-                     "--domain", str(dom_desc), "--name", name, "--force",
+        cp = run_cmd("tdx-domain", "create", "--sys", sysname, *S,
+                     "--domain", name, *D, "--force",
                      env=vault_env)
         assert_ok(cp, f"{slug} create domain {name}")
-        assert dom_desc.is_file()
+        assert (domdir / name).is_file()
 
-        cp = run_cmd("tdx-domain", "info", "--domain", str(dom_desc),
+        cp = run_cmd("tdx-domain", "info", "--domain", name, *D,
                      "--format", "json", env=vault_env)
         assert_ok(cp, f"{slug} domain info")
     finally:
-        run_cmd("tdx-domain", "destroy", "--domain", str(dom_desc), env=vault_env)
-        run_cmd("tdx-system", "destroy", "--sys", str(sys_desc), env=vault_env)
+        run_cmd("tdx-domain", "destroy", "--domain", name, *D, env=vault_env)
+        run_cmd("tdx-system", "destroy", "--sys", sysname, *S, env=vault_env)

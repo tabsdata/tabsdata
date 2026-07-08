@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdatax.itest.tdksystems import crypto, descriptor, ssh, tdx
+from tabsdatax.itest.tdksystems import crypto, descriptor, ssh, store, tdx
 from tabsdatax.itest.tdksystems.errors import DatagenError
 
-SERVER_SECRET_ENV = "TD_DEV_PERSONAL_SECRET_SERVER"
+SERVER_SECRET_ENV = "TD_BACKENDS_CRYPTO_KEY_SERVER"
 
 
 @pytest.fixture(autouse=True)
@@ -43,7 +43,7 @@ def test_parse_remote_spec_variants():
 
 
 def test_using_secret_env_round_trip(monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "client-secret-123456")
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "client-secret-123456")
     monkeypatch.setenv(SERVER_SECRET_ENV, "server-secret-123456")
     with crypto.using_secret_env(SERVER_SECRET_ENV):
         blob = crypto.encrypt(b"hi")
@@ -54,10 +54,10 @@ def test_using_secret_env_round_trip(monkeypatch):
         crypto.decrypt(blob)   # active var reset to client -> wrong key
 
 
-def test_connect_writes_local_tunnel_descriptor(tmp_path, monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "client-secret-123456")
+def test_connect_writes_local_tunnel_descriptor(stores, monkeypatch):
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "client-secret-123456")
     monkeypatch.setenv(SERVER_SECRET_ENV, "server-secret-123456")
-    remote = tmp_path / "remote_mysql.tdx"
+    remote = stores / "remote_mysql.tdx"
     _write_remote_mysql(remote, SERVER_SECRET_ENV)
     remote_text = remote.read_text()
 
@@ -68,10 +68,9 @@ def test_connect_writes_local_tunnel_descriptor(tmp_path, monkeypatch):
                         lambda ep, local, target, log, **kw:
                         seen.update(local=local, target=target) or 424242)
 
-    local = tmp_path / "local_mysql.tdx"
     rc = tdx._sys_connect([
         "--remote-sys", "me@server.example:/srv/remote_mysql.tdx",
-        "--sys", str(local),
+        "--sys", "local_mysql",
         "--ssh-port", "2222", "--remote-secret-env", SERVER_SECRET_ENV])
     assert rc == 0
     assert seen["path"] == "/srv/remote_mysql.tdx"
@@ -79,7 +78,7 @@ def test_connect_writes_local_tunnel_descriptor(tmp_path, monkeypatch):
     assert seen["target"] == 53306
 
     # The local descriptor reads back under the CLIENT secret and points at the tunnel.
-    meta = descriptor.resolve(descriptor.load(str(local)))
+    meta = descriptor.resolve(descriptor.load(str(store.system_path("local_mysql"))))
     assert meta["HOST"] == "localhost"
     assert meta["PORT"] == str(seen["local"])
     assert meta["SSH_TUNNEL_PID"] == "424242"
@@ -92,23 +91,32 @@ def test_connect_writes_local_tunnel_descriptor(tmp_path, monkeypatch):
     assert meta["USER"] == "root" and meta["PASSWORD"] == "rootpw"
 
 
-def test_connect_rejects_non_container(tmp_path, monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "client-secret-123456")
-    remote = tmp_path / "s3.tdx"
+def test_connect_requires_remote_secret_env(stores, monkeypatch):
+    # --remote-secret-env is mandatory: argparse rejects its absence.
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "client-secret-123456")
+    with pytest.raises(SystemExit):
+        tdx._sys_connect(["--remote-sys", "h:/x.tdx", "--sys", "l"])
+
+
+def test_connect_rejects_non_container(stores, monkeypatch):
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "client-secret-123456")
+    remote = stores / "s3.tdx"
     descriptor.write_cloud_system(
         out=str(remote), storage_type="s3", system_kind="file", label="S3",
         sys_path="data", sys_path_env=None, forwarded=[("BUCKET", "b", None)])
     descriptor.stamp(str(remote), name="store", started="t")
     monkeypatch.setattr(ssh, "fetch_remote_file", lambda ep, p: remote.read_text())
     monkeypatch.setattr(ssh, "open_tunnel", lambda *a, **k: 1)
+    # The remote s3 descriptor was written under the (default) client secret, so
+    # read it back under that same env var (--remote-secret-env is mandatory).
     with pytest.raises(DatagenError, match="container-only"):
-        tdx._sys_connect(["--remote-sys", "h:/s3.tdx",
-                          "--sys", str(tmp_path / "l.tdx")])
+        tdx._sys_connect(["--remote-sys", "h:/s3.tdx", "--sys", "l",
+                          "--remote-secret-env", "TD_BACKENDS_CRYPTO_KEY"])
 
 
-def test_destroy_connected_stops_tunnel_not_docker(tmp_path, monkeypatch):
-    monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "client-secret-123456")
-    local = tmp_path / "local.tdx"
+def test_destroy_connected_stops_tunnel_not_docker(stores, monkeypatch):
+    monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "client-secret-123456")
+    local = store.system_path("shop")
     descriptor.write_container_system(
         out=str(local), system_type="mysql", system_kind="sql", label="MySQL",
         container="shop_db", host="localhost", port="49999", user="root",
@@ -127,7 +135,7 @@ def test_destroy_connected_stops_tunnel_not_docker(tmp_path, monkeypatch):
         raise AssertionError("docker must not be touched for a tunnel handle")
     monkeypatch.setattr(cont, "container_state", _boom)
 
-    rc = tdx._sys_destroy(["--sys", str(local)])
+    rc = tdx._sys_destroy(["--sys", "shop"])
     assert rc == 0
     assert killed["pid"] == 777777
-    assert not local.exists()
+    assert not store.system_path("shop").exists()

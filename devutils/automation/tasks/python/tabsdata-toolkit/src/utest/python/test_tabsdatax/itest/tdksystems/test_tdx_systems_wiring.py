@@ -3,11 +3,9 @@
 the real tdx verb functions with the docker / boto3 / connector layers faked."""
 from __future__ import annotations
 
-import os
-
 import pytest
 
-from tabsdatax.itest.tdksystems import data_gen, descriptor, systems, tdx
+from tabsdatax.itest.tdksystems import data_gen, descriptor, store, systems, tdx
 from tabsdatax.itest.tdksystems.errors import DatagenError
 from tabsdatax.itest.tdksystems.shell import ArgumentParser
 from tabsdatax.itest.tdksystems.systems.base import System
@@ -76,78 +74,76 @@ def test_every_system_loads_and_declares_create_options(slug):
 
 # ---- s3 (cloud) -----------------------------------------------------------
 
-def test_s3_lifecycle_through_tdx(tmp_path, fake_s3):
-    sysf, domf = str(tmp_path / "s3.json"), str(tmp_path / "s3_dom.json")
-    assert tdx._sys_create(["--type", "s3", "--sys", sysf, "--name", "store",
+def test_s3_lifecycle_through_tdx(stores, fake_s3):
+    assert tdx._sys_create(["--type", "s3", "--sys", "store",
                             *_S3_CREATE]) == 0
-    doc = descriptor.load(sysf)
+    doc = descriptor.load(store.system_path("store"))
     assert (doc["category"], doc["system"], doc["role"]) == ("cloud", "s3", "sys")
-    assert tdx._sys_status(["--sys", sysf]) == 0
-    assert tdx._domain_create(["--sys", sysf, "--domain", domf,
-                               "--name", "inbox", "-f"]) == 0
-    m = descriptor.read_meta(domf)
+    assert tdx._sys_status(["--sys", "store"]) == 0
+    assert tdx._domain_create(["--sys", "store", "--domain", "inbox", "-f"]) == 0
+    m = descriptor.read_meta(store.domain_path("inbox"))
     assert m["KIND"] == "cloud-domain"
     assert m["STORAGE_TYPE"] == "s3"      # cli.py's cloud loader still finds it
     assert m["BASE_PATH"] == "data/inbox"
-    assert tdx._domain_destroy(["--domain", domf]) == 0 and not os.path.exists(domf)
-    assert tdx._sys_destroy(["--sys", sysf]) == 0 and not os.path.exists(sysf)
+    assert tdx._domain_destroy(["--domain", "inbox"]) == 0
+    assert not store.domain_path("inbox").exists()
+    assert tdx._sys_destroy(["--sys", "store"]) == 0
+    assert not store.system_path("store").exists()
 
 
-def test_s3_descriptor_matches_old_writer(tmp_path, fake_s3):
+def test_s3_descriptor_matches_old_writer(tmp_path, stores, fake_s3):
     """descriptor.write reproduces the pre-migration descriptor exactly."""
-    sysf, ref = str(tmp_path / "s3.json"), str(tmp_path / "ref.json")
-    tdx._sys_create(["--type", "s3", "--sys", sysf, "--name", "store", *_S3_CREATE])
+    ref = str(tmp_path / "ref.json")
+    tdx._sys_create(["--type", "s3", "--sys", "store", *_S3_CREATE])
     descriptor.write_cloud_system(
         out=ref, storage_type="s3", system_kind="file", label="S3",
         sys_path="data", sys_path_env=None,
         forwarded=[("BUCKET", "b", None), ("REGION", "r", None),
                    ("ACCESS_KEY", "AK", None), ("SECRET_KEY", "SK", None)],
         strip_sys_path_slash=True)
-    a, b = descriptor.load(sysf), descriptor.load(ref)
+    a, b = descriptor.load(store.system_path("store")), descriptor.load(ref)
     for key in ("kind", "category", "system", "role", "meta", "exported", "strip_slash"):
         assert a[key] == b[key], key
 
 
 # ---- mysql (container) — domain via tdx; system descriptor built directly -
 
-def test_mysql_domain_through_tdx(tmp_path, monkeypatch):
+def test_mysql_domain_through_tdx(stores, monkeypatch):
     # Admin runs over TCP now; stub the SQL helpers so no real DB is needed.
     monkeypatch.setattr(MysqlSystem, "_run_admin_sql",
                         lambda self, admin, statements: None)
     monkeypatch.setattr(MysqlSystem, "_query_admin_names",
                         lambda self, admin, query: [])
-    sysf, domf = str(tmp_path / "my.json"), str(tmp_path / "my_dom.json")
+    sysf = store.system_path("mydb")
     descriptor.write_container_system(
-        out=sysf, system_type="mysql", system_kind="sql", label="MySQL",
+        out=str(sysf), system_type="mysql", system_kind="sql", label="MySQL",
         container="mydb", host="localhost", port="3306", user="root",
         password="rootpw", domain_desc="db")
-    descriptor.stamp(sysf, name="mydb", started="t")
-    assert tdx._domain_create(["--sys", sysf, "--domain", domf,
-                               "--name", "finance", "-f"]) == 0
-    m = descriptor.read_meta(domf)
+    descriptor.stamp(str(sysf), name="mydb", started="t")
+    assert tdx._domain_create(["--sys", "mydb", "--domain", "finance", "-f"]) == 0
+    m = descriptor.read_meta(store.domain_path("finance"))
     assert m["KIND"] == "container-domain" and m["DB"] == "finance"
     assert m["SYS_CONTAINER"] == "mydb"        # back-ref for destroy
     assert m["SQLALCHEMY_URI"].startswith("mysql+mysqlconnector://finance:")
-    assert tdx._domain_destroy(["--domain", domf]) == 0 and not os.path.exists(domf)
+    assert tdx._domain_destroy(["--domain", "finance"]) == 0
+    assert not store.domain_path("finance").exists()
 
 
 # ---- snowflake (saas) -----------------------------------------------------
 
-def test_snowflake_lifecycle_through_tdx(tmp_path, fake_sf):
-    sysf, domf = str(tmp_path / "sf.json"), str(tmp_path / "sf_dom.json")
-    tdx._sys_create(["--type", "snowflake", "--sys", sysf, "--name", "snow",
+def test_snowflake_lifecycle_through_tdx(stores, fake_sf):
+    tdx._sys_create(["--type", "snowflake", "--sys", "snow",
                      "--account", "ac", "--username", "u", "--pat", "tok",
                      "--warehouse", "wh", "--database", "ANALYTICS", "-f"])
-    assert descriptor.load(sysf)["category"] == "saas"
-    assert tdx._sys_status(["--sys", sysf]) == 0
-    assert tdx._domain_create(["--sys", sysf, "--domain", domf,
-                               "--name", "finance", "-f"]) == 0
-    assert descriptor.read_meta(domf)["SCHEMA"] == "finance"
+    assert descriptor.load(store.system_path("snow"))["category"] == "saas"
+    assert tdx._sys_status(["--sys", "snow"]) == 0
+    assert tdx._domain_create(["--sys", "snow", "--domain", "finance", "-f"]) == 0
+    assert descriptor.read_meta(store.domain_path("finance"))["SCHEMA"] == "finance"
     # pause is container-only — capability flag, surfaced as a clear error.
     with pytest.raises(DatagenError, match="only applies to container"):
-        tdx._sys_pause(["--sys", sysf])
-    assert tdx._domain_destroy(["--domain", domf]) == 0
-    assert tdx._sys_destroy(["--sys", sysf]) == 0
+        tdx._sys_pause(["--sys", "snow"])
+    assert tdx._domain_destroy(["--domain", "finance"]) == 0
+    assert tdx._sys_destroy(["--sys", "snow"]) == 0
 
 
 # ---- create --help advertises the available choices -----------------------

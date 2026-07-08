@@ -24,27 +24,27 @@ _MODELS = [m for m in data_gen.list_models()
 
 @pytest.fixture(scope="module")
 def fs_system_for_models():
-    """One fs system shared across all model tests (cheaper than per-model)."""
+    """One fs system shared across all model tests (cheaper than per-model).
+    Returns the fs root and the per-suite system/domain store dirs."""
     base = ITEST_ROOT / "models_fs"
     if base.exists():
         import shutil
         shutil.rmtree(base)
     base.mkdir(parents=True)
     fs_root = base / "root"
-    fs_desc = base / "fs.json"
-    cp = run_cmd("tdx-system", "create", "--type", "fs", "--sys", str(fs_desc),
-                 "--name", "models_fs", "--sys-path", str(fs_root), "--force")
+    sysdir, domdir = base / "systems", base / "domains"
+    cp = run_cmd("tdx-system", "create", "--type", "fs", "--sys", "models_fs",
+                 "--sys-dir", str(sysdir), "--sys-path", str(fs_root), "--force")
     assert_ok(cp, "tdx-system create fs (shared)")
-    return fs_root, fs_desc
+    return fs_root, sysdir, domdir
 
 
 @pytest.mark.parametrize("model", _MODELS)
 def test_model_loads_into_fs_domain(model, fs_system_for_models):
-    fs_root, fs_desc = fs_system_for_models
-    dom_desc = fs_desc.parent / f"{model}.json"
+    fs_root, sysdir, domdir = fs_system_for_models
     # create-domain writes CSVs (data create is a no-op for fs; --data loads).
-    cp = run_cmd("tdx-domain", "create", "--sys", str(fs_desc),
-                 "--domain", str(dom_desc), "--name", model,
+    cp = run_cmd("tdx-domain", "create", "--sys", "models_fs", "--sys-dir", str(sysdir),
+                 "--domain", model, "--domain-dir", str(domdir),
                  "--model", model, "--data", "xs", "--force")
     assert_ok(cp, f"tdx-domain create + data model={model}")
 

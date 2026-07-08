@@ -28,7 +28,7 @@ What the framework (not the System) owns
   * Persisting descriptors: `create_system` / `create_domain` RETURN the
     settings to bake; `descriptor.write(sys_obj, role, out, settings)` persists
     them (the one systems -> descriptor serialization step).
-  * The `$TD_DEV_PERSONAL_SECRET` gate, the venv bootstrap, and model data
+  * The `$TD_BACKENDS_CRYPTO_KEY` gate, the venv bootstrap, and model data
     *generation* (model-layer, keyed off `System.kind`).
 """
 from __future__ import annotations
@@ -103,7 +103,7 @@ class Health:
 
 @dataclass
 class CreateSystemSpec:
-    name: str                          # logical --name (identity + info prefix)
+    name: str                          # logical name (= --sys file name); identity
     out: str                           # descriptor path to write
     force: bool = False
     settings: dict[str, Setting] = field(default_factory=dict)  # resolved options
@@ -117,7 +117,7 @@ class CreateDomainSpec:
     name: str
     out: str
     force: bool = False
-    # Extra per-system domain inputs beyond --name (e.g. bigquery's DATASET /
+    # Extra per-system domain inputs beyond the name (e.g. bigquery's DATASET /
     # DOMAIN_PATH), resolved from the system's `domain_options`.
     options: dict[str, str] = field(default_factory=dict)
 
@@ -190,7 +190,7 @@ class System(ABC):
     supports_models: bool = True       # accepts --model/--data on domain create
                                        # (False -> tdx-domain rejects them)
     domain_options: tuple[Option, ...] = ()   # extra create-domain inputs a
-                                       # system needs beyond --name (bigquery:
+                                       # system needs beyond the name (bigquery:
                                        # --dataset / --domain-path)
 
     @property
@@ -326,10 +326,10 @@ class System(ABC):
         return out
 
     def add_domain_options(self, parser: argparse.ArgumentParser) -> None:
-        """Add any per-system `create-domain` args beyond --name (e.g. bigquery's
-        --dataset / --domain-path). Default: none. tdx.py calls this once it has
-        loaded the target system, so `tdx-domain create --sys FILE -h` lists
-        them."""
+        """Add any per-system `create-domain` args beyond the name (e.g.
+        bigquery's --dataset / --domain-path). Default: none. tdx.py calls this
+        once it has loaded the target system, so `tdx-domain create --sys NAME
+        -h` lists them."""
         for opt in self.domain_options:
             parser.add_argument(
                 f"--{opt.cli_flag}", dest=f"dom_{opt.name}", required=True,

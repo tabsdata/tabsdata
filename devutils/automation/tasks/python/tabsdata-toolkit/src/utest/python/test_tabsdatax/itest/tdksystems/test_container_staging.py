@@ -34,7 +34,7 @@ def test_system_descriptor_bakes_and_exports_sys_path_literal(tmp_path):
         sys_path="/xp-staging", sys_path_env=None,
     )
     assert _meta(out)["SYS_PATH"] == "xp-staging"          # leading slash stripped
-    assert _info_json(out, "clickhouse")["CLICKHOUSE__SYS_PATH"] == "xp-staging"
+    assert _info_json(out, "clickhouse")["SYS_PATH"] == "xp-staging"
 
 
 def test_system_descriptor_sys_path_env_reference(tmp_path, monkeypatch):
@@ -75,8 +75,8 @@ def test_domain_descriptor_bakes_full_base_path(tmp_path):
     )
     assert _meta(out)["BASE_PATH"] == "xp-staging/clickhouse_OUT"
     info = _info_json(out, "clickhouse_out")
-    assert info["CLICKHOUSE_OUT__SYS_PATH"] == "xp-staging"
-    assert info["CLICKHOUSE_OUT__BASE_PATH"] == "xp-staging/clickhouse_OUT"
+    assert info["SYS_PATH"] == "xp-staging"
+    assert info["BASE_PATH"] == "xp-staging/clickhouse_OUT"
 
 
 def test_domain_descriptor_without_staging_has_no_base_path(tmp_path):

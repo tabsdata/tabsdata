@@ -40,11 +40,11 @@ def _ensure_itest_root_exists():
 
 @pytest.fixture(autouse=True)
 def _td_dev_secret(monkeypatch):
-    """Descriptors are encrypted with $TD_DEV_PERSONAL_SECRET, so tdx-system / tdx-domain
+    """Descriptors are encrypted with $TD_BACKENDS_CRYPTO_KEY, so tdx-system / tdx-domain
     need it set. Provide one for the suite unless the environment already has
     a (valid) one — so the descriptors the tests create can be read back."""
-    if len(os.environ.get("TD_DEV_PERSONAL_SECRET", "")) < 12:
-        monkeypatch.setenv("TD_DEV_PERSONAL_SECRET", "itest-dev-secret")
+    if len(os.environ.get("TD_BACKENDS_CRYPTO_KEY", "")) < 12:
+        monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "itest-dev-secret")
 
 
 @pytest.fixture

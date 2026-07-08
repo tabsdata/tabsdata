@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdatax.itest.tdksystems import descriptor, tdx
+from tabsdatax.itest.tdksystems import descriptor, store, tdx
 from tabsdatax.itest.tdksystems.errors import DatagenError
 from tabsdatax.itest.tdksystems.systems.bigquery.system import BigQuerySystem
 
@@ -40,48 +40,41 @@ def bq(monkeypatch):
     return state
 
 
-def test_bigquery_lifecycle_through_tdx(tmp_path, bq):
-    sysf, domf = str(tmp_path / "bq.json"), str(tmp_path / "bq_dom.json")
-
+def test_bigquery_lifecycle_through_tdx(stores, bq):
     # system: project / creds / bucket / sys-path
-    assert tdx._sys_create(["--type", "bigquery", "--sys", sysf, "--name", "wh",
+    assert tdx._sys_create(["--type", "bigquery", "--sys", "wh",
                             *_SYS_CREATE]) == 0
-    doc = descriptor.load(sysf)
+    doc = descriptor.load(store.system_path("wh"))
     assert (doc["category"], doc["system"], doc["role"]) == ("saas", "bigquery", "sys")
-    assert tdx._sys_status(["--sys", sysf]) == 0
+    assert tdx._sys_status(["--sys", "wh"]) == 0
 
     # domain: dataset + domain-path (relative to sys-path)
     assert tdx._domain_create([
-        "--sys", sysf, "--domain", domf, "--name", "inbox",
+        "--sys", "wh", "--domain", "inbox",
         "--dataset", "sales", "--domain-path", "d1", "-f"]) == 0
-    m = descriptor.read_meta(domf)
+    m = descriptor.read_meta(store.domain_path("inbox"))
     assert m["DATASET"] == "sales"
     assert m["DOMAIN_PATH"] == "d1"
     assert m["BASE_PATH"] == "staging/d1"        # domain-path under sys-path
     assert "sales" in bq["datasets"]
 
     # destroy: the dataset is dropped AND the prefix is cleared
-    assert tdx._domain_destroy(["--domain", domf]) == 0
+    assert tdx._domain_destroy(["--domain", "inbox"]) == 0
     assert "sales" not in bq["datasets"]
     assert "staging/d1" in bq["cleared"]
-    assert tdx._sys_destroy(["--sys", sysf]) == 0
+    assert tdx._sys_destroy(["--sys", "wh"]) == 0
 
 
-def test_bigquery_domain_requires_dataset_and_domain_path(tmp_path, bq):
-    sysf = str(tmp_path / "bq.json")
-    tdx._sys_create(["--type", "bigquery", "--sys", sysf, "--name", "wh",
-                     *_SYS_CREATE])
+def test_bigquery_domain_requires_dataset_and_domain_path(stores, bq):
+    tdx._sys_create(["--type", "bigquery", "--sys", "wh", *_SYS_CREATE])
     # add_domain_options makes both required -> argparse exits (SystemExit).
     with pytest.raises(SystemExit):
-        tdx._domain_create(["--sys", sysf, "--domain", str(tmp_path / "d.json"),
-                            "--name", "inbox", "-f"])
+        tdx._domain_create(["--sys", "wh", "--domain", "inbox", "-f"])
 
 
-def test_bigquery_rejects_models_and_data(tmp_path, bq):
-    sysf = str(tmp_path / "bq.json")
-    tdx._sys_create(["--type", "bigquery", "--sys", sysf, "--name", "wh",
-                     *_SYS_CREATE])
+def test_bigquery_rejects_models_and_data(stores, bq):
+    tdx._sys_create(["--type", "bigquery", "--sys", "wh", *_SYS_CREATE])
     with pytest.raises(DatagenError, match="does not support --model"):
         tdx._domain_create([
-            "--sys", sysf, "--domain", str(tmp_path / "d.json"), "--name", "inbox",
+            "--sys", "wh", "--domain", "inbox",
             "--dataset", "sales", "--domain-path", "d1", "--model", "sakila", "-f"])

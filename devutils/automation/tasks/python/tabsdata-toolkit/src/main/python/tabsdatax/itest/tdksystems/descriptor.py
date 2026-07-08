@@ -4,8 +4,8 @@
 external system or domain; `tdx-system` / `tdx-domain` read it and act on the
 external system it names. The descriptor is a JSON document, but it is stored
 **encrypted at rest** — an AES-256-GCM ciphertext in PEM armor, keyed by
-``$TD_DEV_PERSONAL_SECRET`` (see :mod:`tabsdatax.itest.tdksystems.crypto`). Every write encrypts
-and every read decrypts, so nothing runs without the secret.
+``$TD_BACKENDS_CRYPTO_KEY`` (see :mod:`tabsdatax.itest.tdksystems.crypto`). Every
+write encrypts and every read decrypts, so nothing runs without the secret.
 
 The decrypted JSON is::
 
@@ -15,9 +15,8 @@ The decrypted JSON is::
       "category": "container|cloud|saas", # which helper module family handles it
       "system":   "<slug>",               # external system (mysql, s3, snowflake…)
       "role":     "sys|env",              # system descriptor vs domain descriptor
-      "name":     "<logical-name>",       # the --name (identifier); info-key prefix
+      "name":     "<logical-name>",       # the descriptor's file name (an identifier)
       "started":  "<ISO-8601 UTC>",       # when the system/domain was created
-      "prefix":   "<PREFIX>",             # info-key prefix (<PREFIX>__<KEY>) = upper(name)
       "model":    "<model>",              # domains only, if a model was installed
       "data":     "<size>",               # domains only, if data was loaded
       "meta": [                           # baked settings, in order
@@ -56,11 +55,12 @@ _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def validate_name(name: str) -> None:
-    """A logical --name must be a plain identifier (so `<NAME>__<KEY>` is a
-    valid env-var name and resource identifiers stay portable)."""
+    """A system/domain name must be a plain identifier — it is the descriptor's
+    file name and its logical name (so it stays a portable resource identifier
+    and can't reach outside its store directory)."""
     if not name or not _IDENT_RE.match(name):
         raise DatagenError(
-            f"--name must be an identifier — letters, digits and underscores, "
+            f"name must be an identifier — letters, digits and underscores, "
             f"not starting with a digit (got: {name!r})"
         )
 
@@ -68,16 +68,6 @@ def validate_name(name: str) -> None:
 def now_stamp() -> str:
     """Current time as an ISO-8601 UTC string, for the descriptor's `started`."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _prefix_from_name(name: str) -> str:
-    """Info-key prefix from a logical name: uppercased, non-[A-Z0-9_] -> '_',
-    leading digit gets a '_'."""
-    upper = name.upper()
-    out = "".join(c if c.isalnum() or c == "_" else "_" for c in upper)
-    if out and out[0].isdigit():
-        out = "_" + out
-    return out
 
 
 def _meta_entries(
@@ -99,16 +89,15 @@ def _write(
     exported: list[str],
     strip_slash: list[tuple[str, bool]],
 ) -> None:
-    # `name` / `started` / `prefix` are filled in by stamp() right after this,
-    # once the CLI knows the logical --name; the backend only bakes the
-    # connection settings here.
+    # `name` / `started` are filled in by stamp() right after this, once the CLI
+    # knows the descriptor's name; the backend only bakes the connection
+    # settings here.
     doc = {
         "generator": GENERATOR,
         "kind": kind,
         "category": category,
         "system": system,
         "role": role,
-        "prefix": "",
         "meta": _meta_entries(meta),
         "exported": list(exported),
         "strip_slash": [[n, bool(w)] for n, w in strip_slash],
@@ -168,7 +157,7 @@ def write_container_system(
     `meta` and the prefixed export set so `info` shows it.
     `sys_path` / `sys_path_env` — for file-staging systems, the staging-root
     path (literal, or the name of an env var read at run time), exported as
-    `<PREFIX>__SYS_PATH` and forwarded so domain creation derives BASE_PATH.
+    `SYS_PATH` and forwarded so domain creation derives BASE_PATH.
     `extra_vars` — extra metadata surfaced in `meta` and the delegate env (e.g.
     redpanda's REGISTRY_PORT); not part of the prefixed export set.
     `location` — SYSTEM_LOCATION marker: "container" for a locally-run system,
@@ -230,8 +219,8 @@ def write_container_domain(
     `image` — the docker image:tag of the system the domain lives on; recorded
     in `meta` and the prefixed export set so `info` shows it.
     `base_path` (+ `sys_path` / `sys_path_env`) — for file-staging systems, the
-    domain's full staging prefix, exported as `<PREFIX>__BASE_PATH` alongside
-    the root `SYS_PATH`. `extra_vars` — extra metadata surfaced in `meta` (e.g.
+    domain's full staging prefix, exported as `BASE_PATH` alongside the root
+    `SYS_PATH`. `extra_vars` — extra metadata surfaced in `meta` (e.g.
     redpanda's KAFKA_BROKERS / SCHEMA_REGISTRY_URL)."""
     extra = extra_vars or {}
     staging = base_path is not None
@@ -476,7 +465,7 @@ def _parse(path: str | Path):
 
 def is_descriptor(path: str | Path) -> bool:
     """True if `path` is an encrypted tdx descriptor (decryptable with the
-    current $TD_DEV_PERSONAL_SECRET and carrying the generator marker)."""
+    current $TD_BACKENDS_CRYPTO_KEY and carrying the generator marker)."""
     doc = _parse(path)
     return isinstance(doc, dict) and doc.get("generator") == GENERATOR
 
@@ -484,7 +473,7 @@ def is_descriptor(path: str | Path) -> bool:
 def load(path: str | Path) -> dict:
     """Read, decrypt and validate a descriptor. Raises DatagenError with a
     specific message for: unreadable file, not an encrypted descriptor, wrong
-    $TD_DEV_PERSONAL_SECRET, or not a tdx descriptor."""
+    $TD_BACKENDS_CRYPTO_KEY, or not a tdx descriptor."""
     try:
         text = Path(path).read_text(encoding="utf-8")
     except OSError as exc:
@@ -568,13 +557,12 @@ def stamp(
 ) -> dict:
     """Attach the tdx identity to a freshly-written descriptor and rewrite it.
 
-    Sets `name` / `started` and the info-key `prefix` (= upper(name)); records
-    `model` / `data` for domains; and appends `extra_meta` literals (e.g. a
-    container domain's admin back-reference, so it can destroy itself)."""
+    Sets `name` / `started`; records `model` / `data` for domains; and appends
+    `extra_meta` literals (e.g. a container domain's admin back-reference, so it
+    can destroy itself)."""
     doc = load(path)
     doc["name"] = name
     doc["started"] = started
-    doc["prefix"] = _prefix_from_name(name)
     if model is not None:
         doc["model"] = model
     if data is not None:
@@ -589,24 +577,24 @@ def stamp(
 
 
 # ---------------------------------------------------------------------------
-# info: name / type / started (+ model / data) + connection keys, prefixed
+# info: name / type / started (+ model / data) + connection keys
 # ---------------------------------------------------------------------------
 
 def _info_pairs(doc: dict) -> list[tuple[str, str]]:
-    """(key, value) pairs for `info`, every key prefixed by the logical name:
-    the identity fields, then the connection settings (`exported`)."""
-    prefix = doc.get("prefix") or _prefix_from_name(doc.get("name", ""))
+    """(key, value) pairs for `info`: the identity fields, then the connection
+    settings (`exported`). Keys are unprefixed — the descriptor's file name
+    already identifies the system/domain."""
     meta = resolve(doc)
     pairs = [
-        (f"{prefix}__NAME", doc.get("name", "")),
-        (f"{prefix}__TYPE", doc.get("system", "")),
-        (f"{prefix}__STARTED", doc.get("started", "")),
+        ("NAME", doc.get("name", "")),
+        ("TYPE", doc.get("system", "")),
+        ("STARTED", doc.get("started", "")),
     ]
     if "model" in doc:
-        pairs.append((f"{prefix}__MODEL", doc.get("model") or ""))
+        pairs.append(("MODEL", doc.get("model") or ""))
     if "data" in doc:
-        pairs.append((f"{prefix}__DATA", doc.get("data") or ""))
-    pairs += [(f"{prefix}__{n}", meta[n]) for n in doc.get("exported", [])]
+        pairs.append(("DATA", doc.get("data") or ""))
+    pairs += [(n, meta[n]) for n in doc.get("exported", [])]
     return pairs
 
 
@@ -616,9 +604,9 @@ VALID_INFO_FORMATS = ("json", "export", "unset")
 def info(doc: dict, fmt: str) -> str:
     """Render a descriptor's info in `fmt`:
 
-    - ``json``   — a JSON object of `<NAME>__<KEY>: value` (identity + connect)
-    - ``export`` — `export <NAME>__<KEY>=<value>` lines to source (unix)
-    - ``unset``  — `unset <NAME>__<KEY>` lines to source (unix)
+    - ``json``   — a JSON object of `<KEY>: value` (identity + connection)
+    - ``export`` — `export <KEY>=<value>` lines to source (unix)
+    - ``unset``  — `unset <KEY>` lines to source (unix)
     """
     if fmt not in VALID_INFO_FORMATS:
         raise DatagenError(

@@ -31,43 +31,52 @@ def test_connect_tunnel_lifecycle_over_localhost(itest_dir):
     if not _ssh_localhost_ok():
         pytest.skip("passwordless ssh to localhost not available")
 
-    remote_sys = itest_dir / "remote_mysql.tdx"
-    local_sys = itest_dir / "local_mysql.tdx"
-    dom = itest_dir / "dom.tdx"
+    # Separate stores for the "remote" server and the local (connected) handle.
+    remote_dir, local_dir, dom_dir = (itest_dir / "remote-systems",
+                                      itest_dir / "systems", itest_dir / "domains")
+    RS = ("--sys-dir", str(remote_dir))
+    LS = ("--sys-dir", str(local_dir))
+    D = ("--domain-dir", str(dom_dir))
+    remote_path = remote_dir / "shop"     # scp-style --remote-sys needs the path
+    local_path, dom_path = local_dir / "local_mysql", dom_dir / "smoke"
     user = getpass.getuser()
 
     # 1. The "server": a real mysql container + its system descriptor.
     assert_ok(run_cmd("tdx-system", "create", "--type", "mysql",
-                      "--sys", str(remote_sys), "--name", "shop", "--force",
+                      "--sys", "shop", *RS, "--force",
                       "--ready-timeout", "120"), "create remote mysql")
     try:
         # 2. Connect over ssh-to-localhost: opens the tunnel + writes the handle.
+        #    The remote was created under $TD_BACKENDS_CRYPTO_KEY; --remote-secret-env
+        #    (mandatory) names the env var to decrypt it with.
         assert_ok(run_cmd("tdx-system", "connect",
-                          "--remote-sys", f"{user}@localhost:{remote_sys}",
-                          "--sys", str(local_sys), "--force"),
+                          "--remote-sys", f"{user}@localhost:{remote_path}",
+                          "--sys", "local_mysql", *LS,
+                          "--remote-secret-env", "TD_BACKENDS_CRYPTO_KEY",
+                          "--force"),
                   "tdx-system connect")
-        assert local_sys.is_file()
+        assert local_path.is_file()
 
         # status of the connected handle checks the tunnel (not a container).
-        cp = run_cmd("tdx-system", "status", "--sys", str(local_sys))
+        cp = run_cmd("tdx-system", "status", "--sys", "local_mysql", *LS)
         assert_ok(cp, "connected status")
         assert "ready" in cp.stdout.lower()
 
         # 3. Provision a domain THROUGH THE TUNNEL (TCP admin, no local docker).
-        assert_ok(run_cmd("tdx-domain", "create", "--sys", str(local_sys),
-                          "--domain", str(dom), "--name", "smoke", "--force"),
+        assert_ok(run_cmd("tdx-domain", "create", "--sys", "local_mysql", *LS,
+                          "--domain", "smoke", *D, "--force"),
                   "create domain over tunnel")
-        assert dom.is_file()
-        assert_ok(run_cmd("tdx-domain", "status", "--domain", str(dom)),
+        assert dom_path.is_file()
+        assert_ok(run_cmd("tdx-domain", "status", "--domain", "smoke", *D),
                   "domain status over tunnel")
-        assert_ok(run_cmd("tdx-domain", "destroy", "--domain", str(dom)),
+        assert_ok(run_cmd("tdx-domain", "destroy", "--domain", "smoke", *D),
                   "destroy domain over tunnel")
 
         # 4. Destroying the local handle stops the tunnel (container untouched).
-        assert_ok(run_cmd("tdx-system", "destroy", "--sys", str(local_sys)),
+        assert_ok(run_cmd("tdx-system", "destroy", "--sys", "local_mysql", *LS),
                   "destroy connected handle")
-        assert not local_sys.exists()
+        assert not local_path.exists()
     finally:
         # Best-effort: stop a leaked tunnel, then remove the container.
-        run_cmd("tdx-system", "destroy", "--sys", str(local_sys))
-        run_cmd("tdx-system", "destroy", "--sys", str(remote_sys))
+        run_cmd("tdx-system", "destroy", "--sys", "local_mysql", *LS)
+        run_cmd("tdx-system", "destroy", "--sys", "shop", *RS)

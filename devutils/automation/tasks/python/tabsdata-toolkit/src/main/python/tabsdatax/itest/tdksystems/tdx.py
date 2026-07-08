@@ -1,28 +1,36 @@
 """`tdx-system` / `tdx-domain` — manage external systems and their domains.
 
-    tdx-system create  --type TYPE --sys FILE --name NAME [type config]
-    tdx-system destroy --sys FILE          # tear down + remove the descriptor
-    tdx-system status  --sys FILE
-    tdx-system info    --sys FILE --format json|export|unset
-    tdx-system pause | resume --sys FILE   # stop / start a container (data persists)
+    tdx-system create  --type TYPE --sys NAME [--sys-dir DIR] [type config]
+    tdx-system list    [--sys-dir DIR]              # names + types in the store
+    tdx-system destroy --sys NAME [--sys-dir DIR]   # tear down + remove descriptor
+    tdx-system status  --sys NAME [--sys-dir DIR]
+    tdx-system info    --sys NAME [--sys-dir DIR] --format json|export|unset
+    tdx-system pause | resume --sys NAME [--sys-dir DIR]  # stop / start container
     tdx-system secrets --get 1p:VAULT --out json|export|unset   # pull creds
-    tdx-system connect --remote-sys [user@]HOST:REMOTE_SYS --sys FILE  # ssh-tunnel
-                       [--remote-secret-env VAR]           # container system; destroy
-                                                           # stops the tunnel
+    tdx-system connect --remote-sys [user@]HOST:REMOTE_SYS --sys NAME [--sys-dir DIR]
+                       --remote-secret-env VAR      # ssh-tunnel; container system;
+                                                    # destroy stops the tunnel
 
-    tdx-domain create  --sys FILE --domain FILE --name NAME \\
+    tdx-domain create  --sys NAME [--sys-dir DIR] --domain NAME [--domain-dir DIR] \\
                        [--model MODEL [--data xs|s|m|l|xl]]
-    tdx-domain destroy --domain FILE
-    tdx-domain status  --domain FILE
-    tdx-domain info    --domain FILE --format json|export|unset
+    tdx-domain list    [--domain-dir DIR]           # names + types + model/data
+    tdx-domain destroy --domain NAME [--domain-dir DIR]
+    tdx-domain status  --domain NAME [--domain-dir DIR]
+    tdx-domain info    --domain NAME [--domain-dir DIR] --format json|export|unset
+
+Systems and domains are addressed by *name* (a plain identifier), not by path:
+each name is a file in a *store directory* (see the `store` module):
+`--sys-dir`/`--domain-dir`, else `${TD_BACKENDS_DIR}/{systems,domains}`, else
+`~/.tabsdatax/{systems,domains}`. The file name is also the descriptor's
+logical name, so the `info` keys are unprefixed.
 
 Each `create` writes a *descriptor* — a JSON document stored as an encrypted
-file (AES-256-GCM in PEM armor, keyed by $TD_DEV_PERSONAL_SECRET; see
-:mod:`tabsdatax.itest.tdksystems.descriptor` / :mod:`tabsdatax.itest.tdksystems.crypto`). The other
-verbs read that file. `--type` names the external system — every backend in the
+file (AES-256-GCM in PEM armor, keyed by the personal secret; see the
+`descriptor` / `crypto` modules). Every descriptor verb reads that secret from
+the env var named by `--secret-env` (default $TD_BACKENDS_CRYPTO_KEY) and fails
+if it is unset. `--type` names the external system — every backend in the
 `container` / `cloud` / `saas` helper packages is a valid type, so adding a new
-system is just a new helper module. `--name` is the logical name (an
-identifier): it names the resource and prefixes the `info` keys.
+system is just a new module.
 """
 from __future__ import annotations
 
@@ -31,7 +39,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import _venv, cli, crypto, data_gen, descriptor, secret, ssh, systems
+from . import _venv, cli, crypto, data_gen, descriptor, secret, ssh, store, systems
 from .errors import DatagenError, run
 from .shell import ArgumentParser as _ArgumentParser, find_free_port
 from .systems.base import (
@@ -62,14 +70,85 @@ def _all_models() -> str:
 
 
 def _extract_opt(argv: list[str], name: str) -> str | None:
-    """The value of `--name X` / `--name=X` in argv (first hit), or None. Lets
-    `_sys_create` peek at --type before adding the type-specific options."""
+    """The value of `<name> X` / `<name>=X` in argv (first hit), or None. Lets
+    `_sys_create` peek at --type / `_domain_create` peek at --sys before adding
+    the type-specific options."""
     for i, tok in enumerate(argv):
         if tok == name and i + 1 < len(argv):
             return argv[i + 1]
         if tok.startswith(name + "="):
             return tok.split("=", 1)[1]
     return None
+
+
+# --- name-based descriptor locators ---------------------------------------
+# Systems and domains are addressed by name; `store` maps a name (+ optional
+# --sys-dir/--domain-dir) to its descriptor path. These add the flags, and
+# resolve+validate the name to a path (see `store` for the precedence).
+
+def _add_sys_dir(p: _ArgumentParser) -> None:
+    p.add_argument("--sys-dir", dest="sys_dir", default=None, metavar="DIR",
+                   help=f"system store dir (default: ${store.BACKENDS_DIR_ENV}"
+                        f"/systems or {store.DEFAULT_BACKENDS_DIR}/systems)")
+
+
+def _add_domain_dir(p: _ArgumentParser) -> None:
+    p.add_argument("--domain-dir", dest="domain_dir", default=None, metavar="DIR",
+                   help=f"domain store dir (default: ${store.BACKENDS_DIR_ENV}"
+                        f"/domains or {store.DEFAULT_BACKENDS_DIR}/domains)")
+
+
+def _add_secret_env(p: _ArgumentParser) -> None:
+    """The `--secret-env` option carried by every descriptor verb: names the env
+    var holding the personal secret, defaulting to $TD_BACKENDS_CRYPTO_KEY."""
+    p.add_argument("--secret-env", dest="secret_env", default=crypto.ENV_VAR,
+                   metavar="VAR",
+                   help=f"env var holding the personal secret that "
+                        f"encrypts/decrypts the descriptor "
+                        f"(default: {crypto.ENV_VAR})")
+
+
+def _apply_secret(ns) -> None:
+    """Point crypto at the verb's `--secret-env` and require it: fails if that
+    env var (default $TD_BACKENDS_CRYPTO_KEY) is unset or shorter than 12 chars.
+    Every descriptor verb calls this right after parsing, before any I/O."""
+    crypto.use_secret_env(ns.secret_env)
+    crypto.require_secret()
+
+
+def _add_sys_locator(p: _ArgumentParser) -> None:
+    p.add_argument("--sys", required=True, metavar="NAME",
+                   help="system name (a file in the system store dir)")
+    _add_sys_dir(p)
+
+
+def _add_domain_locator(p: _ArgumentParser) -> None:
+    p.add_argument("--domain", required=True, metavar="NAME",
+                   help="domain name (a file in the domain store dir)")
+    _add_domain_dir(p)
+
+
+def _sys_target(ns) -> str:
+    """Validate the --sys name and resolve it to a descriptor path."""
+    descriptor.validate_name(ns.sys)
+    return str(store.system_path(ns.sys, ns.sys_dir))
+
+
+def _domain_target(ns) -> str:
+    """Validate the --domain name and resolve it to a descriptor path."""
+    descriptor.validate_name(ns.domain)
+    return str(store.domain_path(ns.domain, ns.domain_dir))
+
+
+def _sys_hint(ns) -> str:
+    """`--sys NAME [--sys-dir DIR]` for a runnable post-create hint."""
+    return f"--sys {ns.sys}" + (f" --sys-dir {ns.sys_dir}" if ns.sys_dir else "")
+
+
+def _domain_hint(ns) -> str:
+    """`--domain NAME [--domain-dir DIR]` for a runnable post-create hint."""
+    return (f"--domain {ns.domain}"
+            + (f" --domain-dir {ns.domain_dir}" if ns.domain_dir else ""))
 
 
 def _require_role(doc: dict, role: str, this_cmd: str, other_cmd: str) -> None:
@@ -84,7 +163,7 @@ def _setenv(meta: dict[str, str]) -> None:
     os.environ.update({k: v for k, v in meta.items() if k != "KIND"})
 
 
-def _print_created(kind: str, path: str) -> None:
+def _print_created(kind: str, path: str, hint: str) -> None:
     doc = descriptor.load(path)
     print()
     print(f">>> {kind} '{doc['name']}' ({doc['system']}) created")
@@ -95,10 +174,41 @@ def _print_created(kind: str, path: str) -> None:
         print(f"    model/data: {model} / {data}")
     print(f"    descriptor: {path}")
     print()
-    if kind == "domain":
-        print(f"    info:  tdx-domain info --domain {path} --format json")
-    else:
-        print(f"    info:  tdx-system info --sys {path} --format json")
+    verb = "tdx-domain" if kind == "domain" else "tdx-system"
+    print(f"    info:  {verb} info {hint} --format json")
+    print()
+
+
+def _print_listing(kind: str, directory: Path, *, role: str) -> None:
+    """List the `role` descriptors in `directory`: name + type, plus model/data
+    for domains. Files that aren't a readable descriptor of that role (sidecars,
+    a system file in the domain store, ones under a different secret) are
+    skipped. Missing / empty dir prints a friendly note."""
+    entries: list[tuple[str, dict]] = []
+    if directory.is_dir():
+        for path in sorted(directory.iterdir()):
+            if not path.is_file():
+                continue
+            try:
+                doc = descriptor.load(path)
+            except DatagenError:
+                continue   # not a descriptor / wrong secret / sidecar
+            if doc.get("role") == role:
+                entries.append((path.name, doc))
+    print()
+    if not entries:
+        print(f"no {kind}s in {directory}")
+        print()
+        return
+    print(f"{kind}s in {directory}:")
+    width = max(len(name) for name, _ in entries)
+    for name, doc in entries:
+        line = f"  {name:<{width}}  {doc.get('system', '?')}"
+        if role == "env":
+            extras = [f"{k}={doc[k]}" for k in ("model", "data") if doc.get(k)]
+            if extras:
+                line += "   " + " ".join(extras)
+        print(line)
     print()
 
 
@@ -164,13 +274,11 @@ def _sys_create(rest: list[str]) -> int:
         prog="tdx-system create", add_help=True,
         description="Provision an external system and write its descriptor.\n"
                     "The descriptor is an encrypted file (AES-256-GCM in PEM\n"
-                    "armor, keyed by $TD_DEV_PERSONAL_SECRET).")
+                    "armor, keyed by $TD_BACKENDS_CRYPTO_KEY).")
     p.add_argument("--type", required=True, metavar="TYPE",
                    help=f"external system type ({_all_types()})")
-    p.add_argument("--sys", required=True, metavar="FILE",
-                   help="path of the (encrypted) system descriptor file to write")
-    p.add_argument("--name", required=True,
-                   help="logical system name (an identifier); info-key prefix")
+    _add_sys_locator(p)
+    _add_secret_env(p)
     p.add_argument("-f", "--force", action="store_true",
                    help="recreate if it already exists")
     # Pull --type out of the raw args (not via parse_known_args, which would
@@ -193,44 +301,46 @@ def _sys_create_unified(p: _ArgumentParser, rest: list[str], slug: str) -> int:
     sysobj = systems.get(slug)
     sysobj.add_create_options(p)
     args = p.parse_args(rest)
-    descriptor.validate_name(args.name)
-    _prepare_descriptor_path(args.sys, args.force)
+    _apply_secret(args)
+    out = _sys_target(args)
+    _prepare_descriptor_path(out, args.force)
     started = descriptor.now_stamp()
     baked = sysobj.create_system(CreateSystemSpec(
-        name=args.name, out=args.sys, force=args.force,
+        name=args.sys, out=out, force=args.force,
         settings=sysobj.resolve_create_settings(args),
         host_port=getattr(args, "port", None),
         ready_timeout=getattr(args, "ready_timeout", 300)))
     # The system is provisioned now; if persisting its descriptor fails, tear
     # it back down rather than leaking a running container / created resource.
     try:
-        descriptor.write(sysobj, "sys", args.sys, baked)
-        descriptor.stamp(args.sys, name=args.name, started=started)
+        descriptor.write(sysobj, "sys", out, baked)
+        descriptor.stamp(out, name=args.sys, started=started)
     except BaseException:
-        _cleanup_after_failed_create("system", sysobj, args.name, args.sys, baked)
+        _cleanup_after_failed_create("system", sysobj, args.sys, out, baked)
         raise
-    _print_created("system", args.sys)
+    _print_created("system", out, _sys_hint(args))
     return 0
 
 
 def _sys_destroy(rest: list[str]) -> int:
-    args = _one_desc_parser("tdx-system destroy", "--sys", rest)
-    doc = descriptor.load(args.sys)
+    args = _locator_ns("tdx-system destroy", "sys", rest)
+    path = _sys_target(args)
+    doc = descriptor.load(path)
     _require_role(doc, "sys", "tdx-system", "tdx-domain")
     meta = descriptor.resolve(doc)
     _setenv(meta)
     slug = doc["system"]
     systems.get(slug).destroy_system(SystemContext(slug, doc["name"], meta))
-    os.remove(args.sys)
+    os.remove(path)
     print()
-    print(f">>> destroyed system '{doc['name']}' ({slug}); removed {args.sys}")
+    print(f">>> destroyed system '{doc['name']}' ({slug}); removed {path}")
     print()
     return 0
 
 
 def _sys_status(rest: list[str]) -> int:
-    args = _one_desc_parser("tdx-system status", "--sys", rest)
-    doc = descriptor.load(args.sys)
+    args = _locator_ns("tdx-system status", "sys", rest)
+    doc = descriptor.load(_sys_target(args))
     _require_role(doc, "sys", "tdx-system", "tdx-domain")
     meta = descriptor.resolve(doc)
     _setenv(meta)
@@ -240,8 +350,8 @@ def _sys_status(rest: list[str]) -> int:
 
 
 def _sys_info(rest: list[str]) -> int:
-    args = _info_parser("tdx-system info", "--sys", rest)
-    doc = descriptor.load(args.sys)
+    args = _locator_ns("tdx-system info", "sys", rest, want_format=True)
+    doc = descriptor.load(_sys_target(args))
     _require_role(doc, "sys", "tdx-system", "tdx-domain")
     print(descriptor.info(doc, args.format))
     return 0
@@ -258,8 +368,8 @@ def _sys_resume(rest: list[str]) -> int:
 def _sys_lifecycle(rest: list[str], verb: str) -> int:
     """pause / resume a container system (stop / start the container; its data
     persists). Only container systems have a process to pause."""
-    args = _one_desc_parser(f"tdx-system {verb}", "--sys", rest)
-    doc = descriptor.load(args.sys)
+    args = _locator_ns(f"tdx-system {verb}", "sys", rest)
+    doc = descriptor.load(_sys_target(args))
     _require_role(doc, "sys", "tdx-system", "tdx-domain")
     slug = doc["system"]
     meta = descriptor.resolve(doc)
@@ -280,7 +390,7 @@ def _sys_lifecycle(rest: list[str], verb: str) -> int:
 
 def _sys_secrets(rest: list[str]) -> int:
     """Fetch credentials from a pluggable secret provider and print them for
-    the shell. Descriptor-free — no $TD_DEV_PERSONAL_SECRET, no managed venv; the
+    the shell. Descriptor-free — no $TD_BACKENDS_CRYPTO_KEY, no managed venv; the
     provider (e.g. `1p`) just shells out to its own CLI (e.g. `op`)."""
     p = _ArgumentParser(
         prog="tdx-system secrets", add_help=True,
@@ -325,22 +435,22 @@ def _sys_connect(rest: list[str]) -> int:
                    metavar="[user@]HOST:REMOTE_SYS_PATH",
                    help="ssh endpoint + path to the remote (encrypted) system "
                         "descriptor")
-    p.add_argument("--sys", required=True, metavar="FILE",
-                   help="path of the local (encrypted) system descriptor to write")
-    p.add_argument("--name", default=None,
-                   help="logical name for the local handle (default: the remote's name)")
+    _add_sys_locator(p)   # local handle: --sys NAME [--sys-dir DIR]
+    _add_secret_env(p)    # the local descriptor is written under this secret
     p.add_argument("--ssh-port", type=int, default=22,
                    help="ssh port (default: 22)")
     p.add_argument("--identity", default=None, metavar="KEYFILE",
                    help="ssh identity file (ssh -i)")
-    p.add_argument("--remote-secret-env", default=crypto.ENV_VAR, metavar="VAR",
-                   help=f"env var holding the secret that decrypts the remote "
-                        f"descriptor (default: {crypto.ENV_VAR}); the local "
-                        f"descriptor is written under ${crypto.ENV_VAR}")
+    p.add_argument("--remote-secret-env", required=True, metavar="VAR",
+                   help="env var holding the secret that decrypts the REMOTE "
+                        "descriptor (required); the local descriptor is written "
+                        "under --secret-env")
     p.add_argument("-f", "--force", action="store_true",
                    help="overwrite the local descriptor if it exists")
     args = p.parse_args(rest)
-    _prepare_descriptor_path(args.sys, args.force)
+    _apply_secret(args)   # local (client) secret
+    local_path = _sys_target(args)
+    _prepare_descriptor_path(local_path, args.force)
 
     ep, remote_path = ssh.parse_remote_spec(args.remote_sys)
     ep.port = args.ssh_port
@@ -365,12 +475,11 @@ def _sys_connect(rest: list[str]) -> int:
     if not target_port.isdigit():
         raise DatagenError(
             f"remote descriptor has no numeric PORT to tunnel to (got {target_port!r})")
-    name = args.name or remote_doc.get("name") or slug
-    descriptor.validate_name(name)
+    name = args.sys   # the local handle's name is its file name (already validated)
 
     # 2. Allocate a local port and open the background tunnel.
     local_port = find_free_port()
-    log_path = Path(args.sys).with_suffix("").as_posix() + ".ssh.log"
+    log_path = Path(local_path).with_suffix("").as_posix() + ".ssh.log"
     print()
     print(f">>> opening ssh tunnel to {ep.target}: localhost:{local_port} -> "
           f"localhost:{target_port} (container {remote_meta.get('CONTAINER', '?')})")
@@ -381,7 +490,7 @@ def _sys_connect(rest: list[str]) -> int:
     started = descriptor.now_stamp()
     try:
         descriptor.write_container_system(
-            out=args.sys, system_type=slug,
+            out=local_path, system_type=slug,
             system_kind=remote_meta.get("SYSTEM_KIND", ""), label=sysobj.label,
             container=remote_meta.get("CONTAINER", ""),
             host="localhost", port=str(local_port),
@@ -396,12 +505,25 @@ def _sys_connect(rest: list[str]) -> int:
                 "SSH_TARGET_PORT": target_port,
                 "SSH_TUNNEL_PID": str(pid),
             })
-        descriptor.stamp(args.sys, name=name, started=started)
+        descriptor.stamp(local_path, name=name, started=started)
     except BaseException:
         ssh.close_tunnel(pid)
-        _safe_remove(args.sys)
+        _safe_remove(local_path)
         raise
-    _print_created("system", args.sys)
+    _print_created("system", local_path, _sys_hint(args))
+    return 0
+
+
+def _sys_list(rest: list[str]) -> int:
+    """List the systems in the system store dir (name + type)."""
+    p = _ArgumentParser(
+        prog="tdx-system list", add_help=True,
+        description="List the systems in the system store dir (name + type).")
+    _add_sys_dir(p)
+    _add_secret_env(p)
+    args = p.parse_args(rest)
+    _apply_secret(args)
+    _print_listing("system", store.system_dir(args.sys_dir), role="sys")
     return 0
 
 
@@ -414,13 +536,10 @@ def _domain_create(rest: list[str]) -> int:
         prog="tdx-domain create", add_help=True,
         description="Create a domain and write its descriptor. Reads and writes "
                     "encrypted files (AES-256-GCM in PEM armor, keyed by "
-                    "$TD_DEV_PERSONAL_SECRET).")
-    p.add_argument("--sys", required=True, metavar="FILE",
-                   help="the (encrypted) system descriptor file to create the domain in")
-    p.add_argument("--domain", required=True, metavar="FILE",
-                   help="path of the (encrypted) domain descriptor file to write")
-    p.add_argument("--name", required=True,
-                   help="logical domain name (an identifier); info-key prefix")
+                    "$TD_BACKENDS_CRYPTO_KEY).")
+    _add_sys_locator(p)      # the system to create the domain in
+    _add_domain_locator(p)   # the domain to write
+    _add_secret_env(p)
     p.add_argument("--model", default=None,
                    help=f"install this model's schema into the domain "
                         f"({_all_models()})")
@@ -428,24 +547,33 @@ def _domain_create(rest: list[str]) -> int:
                    help="also load model data at this size (requires --model)")
     p.add_argument("-f", "--force", action="store_true",
                    help="recreate if it already exists")
-    # Peek --sys so the target system can contribute its own create-domain
-    # options (e.g. bigquery --dataset / --domain-path) before we parse, so
-    # `tdx-domain create --sys FILE -h` lists them (mirrors --type peeking in
-    # _sys_create).
+    # Peek --sys / --sys-dir so the target system can contribute its own
+    # create-domain options (e.g. bigquery --dataset / --domain-path) before we
+    # parse, so `tdx-domain create --sys NAME -h` lists them (mirrors --type
+    # peeking in _sys_create). The peek decrypts the system descriptor, so point
+    # crypto at --secret-env first (best-effort: a missing secret is caught here
+    # and re-raised cleanly by _apply_secret once we've parsed).
+    crypto.use_secret_env(_extract_opt(rest, "--secret-env"))
     sys_peek = _extract_opt(rest, "--sys")
     peeked_sys = None
-    if sys_peek and Path(sys_peek).exists():
-        peek_doc = descriptor.load(sys_peek)
-        if peek_doc.get("system") in systems.all_slugs():
+    if sys_peek:
+        peek_path = store.system_path(sys_peek, _extract_opt(rest, "--sys-dir"))
+        try:
+            peek_doc = descriptor.load(peek_path) if peek_path.exists() else None
+        except DatagenError:
+            peek_doc = None
+        if peek_doc and peek_doc.get("system") in systems.all_slugs():
             peeked_sys = systems.get(peek_doc["system"])
             peeked_sys.add_domain_options(p)
     args = p.parse_args(rest)
+    _apply_secret(args)
     if args.data and not args.model:
         raise DatagenError("--data requires --model")
-    descriptor.validate_name(args.name)
-    _prepare_descriptor_path(args.domain, args.force)
+    sys_path = _sys_target(args)
+    domain_path = _domain_target(args)
+    _prepare_descriptor_path(domain_path, args.force)
 
-    sysdoc = descriptor.load(args.sys)
+    sysdoc = descriptor.load(sys_path)
     _require_role(sysdoc, "sys", "tdx-system", "tdx-domain")
     sysmeta = descriptor.resolve(sysdoc)
     _setenv(sysmeta)
@@ -457,56 +585,57 @@ def _domain_create(rest: list[str]) -> int:
         raise DatagenError(f"{slug} does not support --model / --data")
     baked = sysobj.create_domain(
         SystemContext(slug, sysdoc["name"], sysmeta),
-        CreateDomainSpec(name=args.name, out=args.domain, force=args.force,
+        CreateDomainSpec(name=args.domain, out=domain_path, force=args.force,
                          options=sysobj.resolve_domain_options(args)))
     # The domain resource (database / schema / prefix) exists now. If writing
     # its descriptor OR the optional schema-install / data-load fails, drop the
     # resource and remove the descriptor so nothing half-created is left behind.
     try:
-        descriptor.write(sysobj, "env", args.domain, baked)
-        descriptor.stamp(args.domain, name=args.name, started=started,
+        descriptor.write(sysobj, "env", domain_path, baked)
+        descriptor.stamp(domain_path, name=args.domain, started=started,
                          model=args.model, data=args.data)
 
         # Optional model + data — reuse the data pipeline (reads the descriptor
         # we just wrote). `data create` installs the schema; `data load` fills it.
         if args.model:
             cli._run_data_create(argparse.Namespace(
-                model=args.model, domain=args.domain, force=args.force))
+                model=args.model, domain=domain_path, force=args.force))
         if args.data:
             # Fixed-data models have no size (they'd reject one); sizeable models
             # take the requested bucket.
             size = args.data if data_gen.is_sizeable(args.model) else None
-            schemas_dir = Path(args.domain).with_suffix("").as_posix() + "-schemas"
+            schemas_dir = Path(domain_path).with_suffix("").as_posix() + "-schemas"
             cli._run_data_load(argparse.Namespace(
-                model=args.model, domain=args.domain, size=size,
+                model=args.model, domain=domain_path, size=size,
                 force=args.force, format=None, chunks=None,
                 ser="json", schemas=schemas_dir, use_schema_registry=False))
     except BaseException:
-        _cleanup_after_failed_create("domain", sysobj, args.name, args.domain, baked)
+        _cleanup_after_failed_create("domain", sysobj, args.domain, domain_path, baked)
         raise
     # Announced only once the domain (and any model/data) is fully in place.
-    _print_created("domain", args.domain)
+    _print_created("domain", domain_path, _domain_hint(args))
     return 0
 
 
 def _domain_destroy(rest: list[str]) -> int:
-    args = _one_desc_parser("tdx-domain destroy", "--domain", rest)
-    doc = descriptor.load(args.domain)
+    args = _locator_ns("tdx-domain destroy", "domain", rest)
+    path = _domain_target(args)
+    doc = descriptor.load(path)
     _require_role(doc, "env", "tdx-domain", "tdx-system")
     meta = descriptor.resolve(doc)
     _setenv(meta)
     slug = doc["system"]
     systems.get(slug).destroy_domain(DomainContext(slug, doc["name"], meta))
-    os.remove(args.domain)
+    os.remove(path)
     print()
-    print(f">>> destroyed domain '{doc['name']}' ({slug}); removed {args.domain}")
+    print(f">>> destroyed domain '{doc['name']}' ({slug}); removed {path}")
     print()
     return 0
 
 
 def _domain_status(rest: list[str]) -> int:
-    args = _one_desc_parser("tdx-domain status", "--domain", rest)
-    doc = descriptor.load(args.domain)
+    args = _locator_ns("tdx-domain status", "domain", rest)
+    doc = descriptor.load(_domain_target(args))
     _require_role(doc, "env", "tdx-domain", "tdx-system")
     meta = descriptor.resolve(doc)
     _setenv(meta)
@@ -516,10 +645,24 @@ def _domain_status(rest: list[str]) -> int:
 
 
 def _domain_info(rest: list[str]) -> int:
-    args = _info_parser("tdx-domain info", "--domain", rest)
-    doc = descriptor.load(args.domain)
+    args = _locator_ns("tdx-domain info", "domain", rest, want_format=True)
+    doc = descriptor.load(_domain_target(args))
     _require_role(doc, "env", "tdx-domain", "tdx-system")
     print(descriptor.info(doc, args.format))
+    return 0
+
+
+def _domain_list(rest: list[str]) -> int:
+    """List the domains in the domain store dir (name + type + model/data)."""
+    p = _ArgumentParser(
+        prog="tdx-domain list", add_help=True,
+        description="List the domains in the domain store dir "
+                    "(name + type, plus the model/data each carries).")
+    _add_domain_dir(p)
+    _add_secret_env(p)
+    args = p.parse_args(rest)
+    _apply_secret(args)
+    _print_listing("domain", store.domain_dir(args.domain_dir), role="env")
     return 0
 
 
@@ -527,60 +670,78 @@ def _domain_info(rest: list[str]) -> int:
 # small parsers shared by destroy/status/info
 # =====================================================================
 
-_ENCRYPTED_DESC = "the (encrypted) descriptor file, keyed by $TD_DEV_PERSONAL_SECRET"
+_ENCRYPTED_DESC = ("the named system/domain's (encrypted) descriptor, keyed by "
+                   "$TD_BACKENDS_CRYPTO_KEY")
 
 
-def _one_desc_parser(prog: str, flag: str, rest: list[str]) -> argparse.Namespace:
+def _locator_ns(prog: str, kind: str, rest: list[str], *,
+                want_format: bool = False) -> argparse.Namespace:
+    """Parse a read-verb's `--sys`/`--domain` name (+ its `--…-dir` and
+    `--secret-env`), and `--format` for info. `kind` is "sys" or "domain".
+    Applies the secret before returning, so callers can do I/O immediately."""
     p = _ArgumentParser(prog=prog, add_help=True,
                         description=f"Reads {_ENCRYPTED_DESC}.")
-    p.add_argument(flag, dest="sys" if flag == "--sys" else "domain",
-                   required=True, metavar="FILE", help=_ENCRYPTED_DESC)
-    return p.parse_args(rest)
-
-
-def _info_parser(prog: str, flag: str, rest: list[str]) -> argparse.Namespace:
-    p = _ArgumentParser(prog=prog, add_help=True,
-                        description=f"Reads {_ENCRYPTED_DESC}.")
-    p.add_argument(flag, dest="sys" if flag == "--sys" else "domain",
-                   required=True, metavar="FILE", help=_ENCRYPTED_DESC)
-    p.add_argument("--format", required=True,
-                   choices=list(descriptor.VALID_INFO_FORMATS),
-                   help="json | export | unset")
-    return p.parse_args(rest)
+    if kind == "sys":
+        _add_sys_locator(p)
+    else:
+        _add_domain_locator(p)
+    if want_format:
+        p.add_argument("--format", required=True,
+                       choices=list(descriptor.VALID_INFO_FORMATS),
+                       help="json | export | unset")
+    _add_secret_env(p)
+    args = p.parse_args(rest)
+    _apply_secret(args)
+    return args
 
 
 # =====================================================================
 # entry points
 # =====================================================================
 
-_SYS_VERBS = {"create": _sys_create, "destroy": _sys_destroy,
+_SYS_VERBS = {"create": _sys_create, "list": _sys_list, "destroy": _sys_destroy,
               "status": _sys_status, "info": _sys_info,
               "pause": _sys_pause, "resume": _sys_resume,
               "secrets": _sys_secrets, "connect": _sys_connect}
-_DOMAIN_VERBS = {"create": _domain_create, "destroy": _domain_destroy,
-                 "status": _domain_status, "info": _domain_info}
+_DOMAIN_VERBS = {"create": _domain_create, "list": _domain_list,
+                 "destroy": _domain_destroy, "status": _domain_status,
+                 "info": _domain_info}
 
-# Verbs that touch no (encrypted) descriptor, so they don't need $TD_DEV_PERSONAL_SECRET
+# Verbs that touch no (encrypted) descriptor, so they don't need $TD_BACKENDS_CRYPTO_KEY
 # and don't need the managed runtime venv (they only shell out to a provider
 # CLI, e.g. `secrets` -> `op`).
 _NO_DESCRIPTOR_VERBS = {"secrets"}
+
+
+def _store_help(cmd: str) -> str:
+    """The store-dir fallback blurb for the top-level `tdx-system`/`tdx-domain`
+    help (the per-verb `-h` already documents the flags)."""
+    sys_line = (f"--sys-dir, else ${store.BACKENDS_DIR_ENV}/systems, "
+                f"else {store.DEFAULT_BACKENDS_DIR}/systems")
+    dom_line = (f"--domain-dir, else ${store.BACKENDS_DIR_ENV}/domains, "
+                f"else {store.DEFAULT_BACKENDS_DIR}/domains")
+    if cmd == "tdx-domain":
+        return ("Systems/domains are addressed by name in a store dir:\n"
+                f"  system: {sys_line}\n"
+                f"  domain: {dom_line}")
+    return ("Systems are addressed by name in a store dir:\n"
+            f"  {sys_line}")
 
 
 def _dispatch(cmd: str, verbs: dict, argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help"):
         print(f"Usage: {cmd} {{{'|'.join(verbs)}}} [args...]  "
               f"(add -h to a verb for its options)")
+        print()
+        print(_store_help(cmd))
         return 0 if argv else 2
     verb, rest = argv[0], argv[1:]
     if verb not in verbs:
         raise DatagenError(f"unknown {cmd} subcommand: {verb!r} "
                            f"(expected {', '.join(verbs)})")
-    # Descriptor verbs read or write an (encrypted) descriptor — gate on the
-    # secret up front so the error is clear before any argument parsing. `-h`
-    # / `--help` is exempt so the options are always discoverable.
-    if verb not in _NO_DESCRIPTOR_VERBS and not any(
-            a in ("-h", "--help") for a in rest):
-        crypto.require_secret()
+    # Each descriptor verb applies its own `--secret-env` and requires the secret
+    # right after parsing (see `_apply_secret`); the descriptor-free `secrets`
+    # verb needs no secret. So the dispatcher just routes.
     return verbs[verb](rest)
 
 

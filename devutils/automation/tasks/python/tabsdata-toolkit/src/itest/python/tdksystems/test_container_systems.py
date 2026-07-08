@@ -50,8 +50,10 @@ def test_container_system_lifecycle(slug, itest_dir):
         # never reports Alive=true, so readiness times out. Known image quirk.
         pytest.skip("starrocks allin1 BE does not run under arm64 emulation")
 
-    sys_desc = itest_dir / f"{slug}.json"
-    dom_desc = itest_dir / f"{slug}_dom.json"
+    sysdir, domdir = itest_dir / "systems", itest_dir / "domains"
+    S = ("--sys-dir", str(sysdir))
+    D = ("--domain-dir", str(domdir))
+    sysname = f"{slug}_sys"
 
     # File-staging systems (clickhouse / starrocks) require a staging root.
     staging = (["--sys-path", str(itest_dir / "staging")]
@@ -59,32 +61,32 @@ def test_container_system_lifecycle(slug, itest_dir):
 
     cp = run_cmd(
         "tdx-system", "create", "--type", slug,
-        "--sys", str(sys_desc), "--name", f"{slug}_sys",
+        "--sys", sysname, *S,
         "--force", "--ready-timeout", str(_ready_timeout(slug)), *staging,
     )
     assert_ok(cp, f"tdx-system create {slug}")
-    assert sys_desc.is_file()
+    assert (sysdir / sysname).is_file()
 
     try:
         # status: container should be ready immediately after create returns.
-        cp = run_cmd("tdx-system", "status", "--sys", str(sys_desc))
+        cp = run_cmd("tdx-system", "status", "--sys", sysname, *S)
         assert_ok(cp, f"{slug} status")
         assert "ready" in cp.stdout.lower()
 
         # Create a domain (a database / topic / collection, per backend).
-        cp = run_cmd("tdx-domain", "create", "--sys", str(sys_desc),
-                     "--domain", str(dom_desc), "--name", "smoke", "--force")
+        cp = run_cmd("tdx-domain", "create", "--sys", sysname, *S,
+                     "--domain", "smoke", *D, "--force")
         assert_ok(cp, f"{slug} create domain")
-        assert dom_desc.is_file()
+        assert (domdir / "smoke").is_file()
 
-        cp = run_cmd("tdx-domain", "status", "--domain", str(dom_desc))
+        cp = run_cmd("tdx-domain", "status", "--domain", "smoke", *D)
         assert_ok(cp, f"{slug} domain status")
 
-        assert_ok(run_cmd("tdx-domain", "destroy", "--domain", str(dom_desc)),
+        assert_ok(run_cmd("tdx-domain", "destroy", "--domain", "smoke", *D),
                   f"{slug} destroy domain")
     finally:
         # Always tear the container down, even if a step above failed.
-        run_cmd("tdx-system", "destroy", "--sys", str(sys_desc))
+        run_cmd("tdx-system", "destroy", "--sys", sysname, *S)
 
 
 @pytest.mark.parametrize("slug", ["mysql", "postgres", "mssqlserver"])
@@ -93,27 +95,29 @@ def test_data_create_load_against_sql_system(slug, itest_dir):
     if not have_docker_running():
         pytest.skip("docker daemon not reachable")
 
-    sys_desc = itest_dir / f"{slug}.json"
-    dom_desc = itest_dir / f"{slug}_db.json"
+    sysdir, domdir = itest_dir / "systems", itest_dir / "domains"
+    S = ("--sys-dir", str(sysdir))
+    D = ("--domain-dir", str(domdir))
+    sysname = f"{slug}_sys"
 
     cp = run_cmd(
         "tdx-system", "create", "--type", slug,
-        "--sys", str(sys_desc), "--name", f"{slug}_sys",
+        "--sys", sysname, *S,
         "--force", "--ready-timeout", str(_ready_timeout(slug)),
     )
     assert_ok(cp, f"tdx-system create {slug}")
 
     try:
         # create-domain installs the model schema (DDL) and loads its data.
-        cp = run_cmd("tdx-domain", "create", "--sys", str(sys_desc),
-                     "--domain", str(dom_desc), "--name", "smoke",
+        cp = run_cmd("tdx-domain", "create", "--sys", sysname, *S,
+                     "--domain", "smoke", *D,
                      "--model", SQL_MODEL, "--data", "xs", "--force")
         assert_ok(cp, "create domain + model + data")
 
-        cp = run_cmd("tdx-domain", "info", "--domain", str(dom_desc),
+        cp = run_cmd("tdx-domain", "info", "--domain", "smoke", *D,
                      "--format", "json")
         assert_ok(cp, "domain info")
         assert SQL_MODEL in cp.stdout      # descriptor records the model
     finally:
-        run_cmd("tdx-domain", "destroy", "--domain", str(dom_desc))
-        run_cmd("tdx-system", "destroy", "--sys", str(sys_desc))
+        run_cmd("tdx-domain", "destroy", "--domain", "smoke", *D)
+        run_cmd("tdx-system", "destroy", "--sys", sysname, *S)

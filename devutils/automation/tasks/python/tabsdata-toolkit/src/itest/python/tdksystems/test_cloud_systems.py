@@ -46,27 +46,28 @@ def vault_env():
 
 def test_fs_system_lifecycle_no_creds_needed(itest_dir):
     fs_root = itest_dir / "fs-root"
-    fs_desc = itest_dir / "fs.json"
-    dom_desc = itest_dir / "fs_dom.json"
+    sysdir, domdir = itest_dir / "systems", itest_dir / "domains"
+    S = ("--sys-dir", str(sysdir))
+    D = ("--domain-dir", str(domdir))
 
-    cp = run_cmd("tdx-system", "create", "--type", "fs", "--sys", str(fs_desc),
-                 "--name", "fs_sys", "--sys-path", str(fs_root), "--force")
+    cp = run_cmd("tdx-system", "create", "--type", "fs", "--sys", "fs_sys", *S,
+                 "--sys-path", str(fs_root), "--force")
     assert_ok(cp, "tdx-system create fs")
 
     # Create the domain and load the `world` model's data (CSV) into it.
-    cp = run_cmd("tdx-domain", "create", "--sys", str(fs_desc),
-                 "--domain", str(dom_desc), "--name", "inbox",
+    cp = run_cmd("tdx-domain", "create", "--sys", "fs_sys", *S,
+                 "--domain", "inbox", *D,
                  "--model", "world", "--data", "xs", "--force")
     assert_ok(cp, "create fs domain + data")
     assert (fs_root / "inbox" / "wld_city.csv").is_file()
 
-    cp = run_cmd("tdx-domain", "info", "--domain", str(dom_desc), "--format", "json")
+    cp = run_cmd("tdx-domain", "info", "--domain", "inbox", *D, "--format", "json")
     assert_ok(cp, "fs domain info")
 
-    assert_ok(run_cmd("tdx-domain", "destroy", "--domain", str(dom_desc)),
+    assert_ok(run_cmd("tdx-domain", "destroy", "--domain", "inbox", *D),
               "fs domain destroy")
     assert not (fs_root / "inbox").exists()
-    assert_ok(run_cmd("tdx-system", "destroy", "--sys", str(fs_desc)),
+    assert_ok(run_cmd("tdx-system", "destroy", "--sys", "fs_sys", *S),
               "fs system destroy")
 
 
@@ -94,34 +95,35 @@ def test_cloud_system_lifecycle(slug, prefix, vault_env, itest_dir):
     if missing:
         pytest.skip(f"vault {VAULT!r} missing 1p item for {slug}: {missing}")
 
-    sys_desc = itest_dir / f"{slug}.json"
-    dom_desc = itest_dir / f"{slug}_dom.json"
+    sysdir, domdir = itest_dir / "systems", itest_dir / "domains"
+    S = ("--sys-dir", str(sysdir))
+    D = ("--domain-dir", str(domdir))
+    sysname = f"{slug}_sys"
 
     cp = run_cmd(
         "tdx-system", "create", "--type", slug,
-        "--sys", str(sys_desc), "--name", f"{slug}_sys",
-        "--env-prefix", prefix, "--force",
+        "--sys", sysname, *S, "--env-prefix", prefix, "--force",
         env=vault_env,
     )
     assert_ok(cp, f"tdx-system create {slug} --env-prefix {prefix}")
-    assert sys_desc.is_file()
+    assert (sysdir / sysname).is_file()
 
     try:
-        cp = run_cmd("tdx-system", "status", "--sys", str(sys_desc), env=vault_env)
+        cp = run_cmd("tdx-system", "status", "--sys", sysname, *S, env=vault_env)
         assert_ok(cp, f"{slug} status")
         assert "ready" in cp.stdout.lower()
 
-        cp = run_cmd("tdx-domain", "create", "--sys", str(sys_desc),
-                     "--domain", str(dom_desc), "--name", "inbox",
+        cp = run_cmd("tdx-domain", "create", "--sys", sysname, *S,
+                     "--domain", "inbox", *D,
                      "--model", "world", "--data", "xs", "--force",
                      env=vault_env)
         assert_ok(cp, f"{slug} create domain + data")
-        assert dom_desc.is_file()
+        assert (domdir / "inbox").is_file()
 
-        cp = run_cmd("tdx-domain", "info", "--domain", str(dom_desc),
+        cp = run_cmd("tdx-domain", "info", "--domain", "inbox", *D,
                      "--format", "json", env=vault_env)
         assert_ok(cp, f"{slug} domain info")
     finally:
         # Tear down whatever we wrote to the prefix, then the system.
-        run_cmd("tdx-domain", "destroy", "--domain", str(dom_desc), env=vault_env)
-        run_cmd("tdx-system", "destroy", "--sys", str(sys_desc), env=vault_env)
+        run_cmd("tdx-domain", "destroy", "--domain", "inbox", *D, env=vault_env)
+        run_cmd("tdx-system", "destroy", "--sys", sysname, *S, env=vault_env)

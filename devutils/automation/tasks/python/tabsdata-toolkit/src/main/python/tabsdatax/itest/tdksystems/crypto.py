@@ -1,9 +1,9 @@
-"""Encryption for the descriptor files, keyed by ``$TD_DEV_PERSONAL_SECRET``.
+"""Encryption for the descriptor files, keyed by ``$TD_BACKENDS_CRYPTO_KEY``.
 
 Descriptors hold connection settings (hosts, users, sometimes passwords), so
 they're stored **encrypted at rest** as PEM-armored AES-256-GCM ciphertext
 rather than plaintext JSON. The `tdx-system` / `tdx-domain` commands only run when
-``TD_DEV_PERSONAL_SECRET`` is set (and at least 12 characters), and the same secret is
+``TD_BACKENDS_CRYPTO_KEY`` is set (and at least 12 characters), and the same secret is
 used to encrypt on write and decrypt on read.
 
 The key is derived from the secret with PBKDF2-HMAC-SHA256 over a fixed
@@ -25,10 +25,10 @@ import textwrap
 
 from .errors import DatagenError
 
-ENV_VAR = "TD_DEV_PERSONAL_SECRET"
+ENV_VAR = "TD_BACKENDS_CRYPTO_KEY"
 MIN_SECRET_LEN = 12
 
-# Which env var holds the active personal secret. Defaults to TD_DEV_PERSONAL_SECRET;
+# Which env var holds the active personal secret. Defaults to TD_BACKENDS_CRYPTO_KEY;
 # `tdx-system connect` points it at the server's secret var (--remote-secret-env)
 # while it reads the copied remote descriptor, then resets it to write the local
 # one under the client's own secret.
@@ -37,7 +37,7 @@ _active_env_var = ENV_VAR
 
 def use_secret_env(name: str | None) -> None:
     """Point crypto at env var `name` for the personal secret; `None` resets to
-    the default TD_DEV_PERSONAL_SECRET."""
+    the default TD_BACKENDS_CRYPTO_KEY."""
     global _active_env_var
     _active_env_var = name or ENV_VAR
 
@@ -66,7 +66,7 @@ _key_cache: dict[str, bytes] = {}
 
 def require_secret() -> str:
     """Return the active personal secret, or raise if it's unset / shorter than
-    12 chars. The active env var is TD_DEV_PERSONAL_SECRET unless overridden via
+    12 chars. The active env var is TD_BACKENDS_CRYPTO_KEY unless overridden via
     :func:`use_secret_env` / :func:`using_secret_env`.
 
     This is the gate for every `tdx-system` / `tdx-domain` action and for reading
@@ -96,7 +96,7 @@ def is_pem(text: str) -> bool:
 
 
 def encrypt(plaintext: bytes) -> str:
-    """Encrypt `plaintext` under $TD_DEV_PERSONAL_SECRET and return a PEM string."""
+    """Encrypt `plaintext` under $TD_BACKENDS_CRYPTO_KEY and return a PEM string."""
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     key = _key(require_secret())
     nonce = os.urandom(_NONCE_LEN)

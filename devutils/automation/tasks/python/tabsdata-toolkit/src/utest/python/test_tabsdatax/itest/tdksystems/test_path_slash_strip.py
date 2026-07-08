@@ -34,8 +34,8 @@ def test_cloud_domain_strips_leading_slash_and_warns(tmp_path, capsys):
     # Only SYS_PATH warns; BASE_PATH is corrected silently (single notice).
     assert err.count("WARNING") == 1
     info = _info(out, "s3_out")
-    assert info["S3_OUT__SYS_PATH"] == "xp-s3"
-    assert info["S3_OUT__BASE_PATH"] == "xp-s3/s3_OUT"
+    assert info["SYS_PATH"] == "xp-s3"
+    assert info["BASE_PATH"] == "xp-s3/s3_OUT"
 
 
 def test_cloud_domain_clean_value_is_silent(tmp_path, capsys):

@@ -1,6 +1,6 @@
 """Tests for tabsdatax.itest.tdksystems.descriptor — writing connection settings, the
-`stamp` that attaches the tdx identity (name/started/prefix/model/data), and
-the `info` renderer (json/export/unset, keyed by the logical name)."""
+`stamp` that attaches the tdx identity (name/started/model/data), and the
+`info` renderer (json/export/unset, with unprefixed keys)."""
 from __future__ import annotations
 
 import json
@@ -11,16 +11,7 @@ from tabsdatax.itest.tdksystems import descriptor
 from tabsdatax.itest.tdksystems.errors import DatagenError
 
 
-# ---- name validation + prefix ---------------------------------------------
-
-@pytest.mark.parametrize("name,prefix", [
-    ("my_db", "MY_DB"),
-    ("inbox", "INBOX"),
-    ("s3_out", "S3_OUT"),
-])
-def test_prefix_from_name(name, prefix):
-    assert descriptor._prefix_from_name(name) == prefix
-
+# ---- name validation -------------------------------------------------------
 
 @pytest.mark.parametrize("bad", ["", "not-an-ident", "1leading", "a b", "x.y"])
 def test_validate_name_rejects_non_identifiers(bad):
@@ -53,11 +44,10 @@ def test_container_system_descriptor_shape(tmp_path):
     assert doc["system"] == "mysql"         # picks the specific backend
     assert doc["role"] == "sys"
     # Fresh write has no identity yet — stamp attaches it.
-    assert doc["prefix"] == "" and "name" not in doc
+    assert "name" not in doc
     descriptor.stamp(out, name="my_db", started="2026-07-01T00:00:00Z")
     doc = _load(out)
     assert doc["name"] == "my_db"
-    assert doc["prefix"] == "MY_DB"
     assert doc["started"] == "2026-07-01T00:00:00Z"
     meta = {e["name"]: e.get("value") for e in doc["meta"]}
     assert meta["CONTAINER"] == "mysmoke" and meta["PASSWORD"] == "secret"
@@ -124,7 +114,7 @@ def test_resolve_strips_leading_slash(tmp_path, capsys):
     assert capsys.readouterr().err.count("WARNING") == 1
 
 
-# ---- info: json / export / unset, all keyed by the logical name -----------
+# ---- info: json / export / unset, all with unprefixed keys ----------------
 
 def _stamped_domain(tmp_path):
     out = tmp_path / "mydb.json"
@@ -139,18 +129,18 @@ def _stamped_domain(tmp_path):
 
 def test_info_json_has_identity_and_connection(tmp_path):
     obj = json.loads(descriptor.info(_stamped_domain(tmp_path), "json"))
-    assert obj["INBOX__NAME"] == "inbox"
-    assert obj["INBOX__TYPE"] == "mysql"
-    assert obj["INBOX__STARTED"] == "2026-07-01T00:00:00Z"
-    assert obj["INBOX__MODEL"] == "world"
-    assert obj["INBOX__DATA"] == "xs"
-    assert obj["INBOX__DB"] == "mydb"
+    assert obj["NAME"] == "inbox"
+    assert obj["TYPE"] == "mysql"
+    assert obj["STARTED"] == "2026-07-01T00:00:00Z"
+    assert obj["MODEL"] == "world"
+    assert obj["DATA"] == "xs"
+    assert obj["DB"] == "mydb"
 
 
 def test_info_export_is_shell_quoted(tmp_path):
     text = descriptor.info(_stamped_domain(tmp_path), "export")
-    assert "export INBOX__NAME=inbox" in text
-    assert "export INBOX__PASSWORD='it'\"'\"'s a secret'" in text
+    assert "export NAME=inbox" in text
+    assert "export PASSWORD='it'\"'\"'s a secret'" in text
 
 
 def test_info_unset_lists_same_keys(tmp_path):
