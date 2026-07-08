@@ -521,7 +521,7 @@ run_task = [
 [tasks.test]
 plugin = "td-task-tracker"
 category = "04 - Test"
-description = "Run unit tests"
+description = "Run tests"
 run_task = [
     { name = [
         "test_rs",
@@ -576,7 +576,34 @@ run_task = [
 [tasks.test_py]
 plugin = "td-task-tracker"
 category = "04 - Test"
-description = "Task 'test' for Python projects"
+description = "Task 'test' for Python projects: unit tests (utest_py), then integration tests (itest_py)"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    unset_env TD_UMBRELLA_SERVER_START
+    unset_env TD_UMBRELLA_SERVER_STATUS
+    set_env TD_UMBRELLA_SERVER_STOP "false"
+
+    cm_run_task utest_py
+
+    set_env TD_UMBRELLA_SERVER_START "false"
+    set_env TD_UMBRELLA_SERVER_STATUS "false"
+    unset_env TD_UMBRELLA_SERVER_STOP
+
+    cm_run_task itest_py
+
+    unset_env TD_UMBRELLA_SERVER_START
+    unset_env TD_UMBRELLA_SERVER_STATUS
+    unset_env TD_UMBRELLA_SERVER_STOP
+    ''']
+
+[tasks.utest_py]
+plugin = "td-task-tracker"
+category = "04 - Test"
+description = "Task 'unit test' for Python projects"
+env = { TD_TEST_INSTANCES_ARENA = "pytest" }
 dependencies = ["__os__set_mode_test_py"]
 run_task = [
     { name = [
@@ -589,46 +616,50 @@ run_task = [
         "__os__setup_test_py",
         "__os__start_test_py",
         "__os__check_hydrate_py",
-        "test_parallel_py",
+        "utest_parallel_py",
         "__os__stop_test_py",
         "__os__cleanup_test_py"
     ], condition = { env = { "TD_TEST_PY_PARALLEL" = "true" } } },
     { name = [
         "__os__setup_test_py",
         "__os__start_test_py",
-        "test_serial_py",
+        "utest_serial_py",
         "__os__stop_test_py",
         "__os__cleanup_test_py"
     ] }
 ]
 
-[tasks.testi_py]
+[tasks.itest_py]
 plugin = "td-task-tracker"
 category = "04 - Test"
 description = "Task 'integration test' for Python projects"
+env = { TD_TEST_INSTANCES_ARENA = "pytest" }
 dependencies = ["__os__set_mode_test_py"]
 run_task = [
     { name = [
-        "__os__setup_testi_py",
+        "__os__setup_itest_py",
         "__os__start_test_py",
         "__os__stop_test_py",
-        "__os__cleanup_testi_py"
+        "__os__cleanup_itest_py"
     ], condition = { env = { "TD_WITH_TESTS_RUN" = "false" } } },
     { name = [
-        "__os__setup_testi_py",
+        "__os__setup_itest_py",
         "__os__start_test_py",
         "__os__check_hydrate_py",
-        "testi_parallel_py",
+        "itest_parallel_py",
         "__os__stop_test_py",
-        "__os__cleanup_testi_py"
+        "__os__cleanup_itest_py"
     ] }
 ]
 
-[tasks.test_serial_py]
+[tasks.utest_serial_py]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
 run_task = [
+    { name = [
+        "__os__test_py_tabsdatak",
+    ], condition = { env = { "TD_TABSDATA_GENERATION" = "2" } } },
     { name = [
         "__os__test_py_tabsdata",
         "__os__test_py_tabsdatak",
@@ -644,7 +675,7 @@ run_task = [
     ] }
 ]
 
-[tasks.test_parallel_py]
+[tasks.utest_parallel_py]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -707,10 +738,10 @@ script = [
 
     if ${help}
         info ""
-        info "🧪 test_py — Run the Python test suite in parallel with pytest and xdist."
+        info "🧪 utest_py — Run the Python unit test suite in parallel with pytest and xdist."
         info ""
         info "🛟 Usage:"
-        info "   cargo make test_py [-- <options>]"
+        info "   cargo make utest_py [-- <options>]"
         info ""
         info "🛟 Test options:"
         info "   --packages=<list>  Comma-separated package names to test."
@@ -723,7 +754,7 @@ script = [
         info "   --preview          List the test folders (packages and modules) that would be selected, then exit without running any test."
         info "   --collect          Run pytest in collect-only mode (no test execution, no parallelism, no coverage) to surface collection/import errors early."
         info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting."
-        info "   --skipe test_py    Report test failures as a diagnostic summary instead of failing the task."
+        info "   --skipe utest_py    Report test failures as a diagnostic summary instead of failing the task."
         info "   -h, --help         Show this help and exit."
         info ""
         info "🛟 Build mode flags (handled before the tests run; they shape the wrapping build):"
@@ -747,16 +778,17 @@ script = [
         info "   --stop             Only run teardown: setup without starting, then stop the tabsdata servers. No tests."
         info "   --status           Do setup and report the tabsdata servers status, then exit. No start, no stop, no tests."
         info "                      '--start', '--stop' and '--status' are mutually exclusive."
+        info "   --verbose          Show the servers output while managing the instances (silenced with a spinner by default, always shown on failure and on GA)."
         info ""
         info "🛟 Examples:"
-        info "   cargo make test_py"
-        info "   cargo make test_py --packages=tabsdata,conn-mysql"
-        info "   cargo make test_py --packages=conn-* --modules=tabsdata/api --preview"
-        info "   cargo make test_py --packages=tabsdata --modules=tabsdata/api/test_x.py::test_case"
-        info "   cargo make test_py --fast --tb=short"
-        info "   cargo make test_py --start"
-        info "   cargo make test_py --stop"
-        info "   cargo make test_py --status"
+        info "   cargo make utest_py"
+        info "   cargo make utest_py --packages=tabsdata,conn-mysql"
+        info "   cargo make utest_py --packages=conn-* --modules=tabsdata/api --preview"
+        info "   cargo make utest_py --packages=tabsdata --modules=tabsdata/api/test_x.py::test_case"
+        info "   cargo make utest_py --fast --tb=short"
+        info "   cargo make utest_py --start"
+        info "   cargo make utest_py --stop"
+        info "   cargo make utest_py --status"
         info ""
         exit 0
     end
@@ -904,6 +936,45 @@ script = [
         selected_tests_folders = set ${module_narrowed_folders}
     end
 
+    generation = get_env TD_TABSDATA_GENERATION
+    if eq ${generation} "2"
+        generation_folders = array
+        dropped_folders = set ""
+        for selected_tests_folder in ${selected_tests_folders}
+            in_tabsdatak = contains ${selected_tests_folder} "test_tabsdatak"
+            if ${in_tabsdatak}
+                array_push ${generation_folders} ${selected_tests_folder}
+            else
+                tabsdatak_subtree = normalize ${selected_tests_folder}/test_tabsdatak
+                tabsdatak_subtree_exists = is_path_exists ${tabsdatak_subtree}
+                if ${tabsdatak_subtree_exists}
+                    array_push ${generation_folders} ${tabsdatak_subtree}
+                else
+                    dropped_folders = concat ${dropped_folders} " " ${selected_tests_folder}
+                end
+            end
+        end
+        if not is_empty ${dropped_folders}
+            filters_given = set false
+            if not is_empty ${packages_filter}
+                filters_given = set true
+            end
+            if not is_empty ${modules_filter}
+                filters_given = set true
+            end
+            if ${filters_given}
+                warn "🧬 Generation 2: only tabsdatak tests run; dropping selection:${dropped_folders}"
+            end
+        end
+        generation_folders_count = array_length ${generation_folders}
+        if eq ${generation_folders_count} 0
+            tabsdatak_folder = normalize ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/utest/python/test_tabsdatak
+            array_push ${generation_folders} ${tabsdatak_folder}
+        end
+        selected_tests_folders = set ${generation_folders}
+        ignore_args = set ""
+    end
+
     no_packages = is_empty ${packages_filter}
     no_modules = is_empty ${modules_filter}
     if ${no_packages}
@@ -984,8 +1055,8 @@ script = [
         info "⌛️ Pytest finished with zero-or-five exit code: '${exit_code}'"
     else
         info "⌛️ Pytest finished with non-zero-or-five exit code: '${exit_code}'"
-        skipe_test_py = get_env skipe_test_py
-        if not is_empty ${skipe_test_py}
+        skipe_utest_py = get_env skipe_utest_py
+        if not is_empty ${skipe_utest_py}
             if is_error
                 echo ""
             end
@@ -993,7 +1064,7 @@ script = [
 
             error ""
 
-            error "🧨 TASK 'test_parallel_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
+            error "🧨 TASK 'utest_parallel_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
 
             error ""
 
@@ -1052,7 +1123,7 @@ script = [
     end
     ''']
 
-[tasks.testi_parallel_py]
+[tasks.itest_parallel_py]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -1115,10 +1186,10 @@ script = [
 
     if ${help}
         info ""
-        info "🧪 testi_py — Run the Python test suite in parallel with pytest and xdist."
+        info "🧪 itest_py — Run the Python integration test suite in parallel with pytest and xdist."
         info ""
         info "🛟 Usage:"
-        info "   cargo make testi_py [-- <options>]"
+        info "   cargo make itest_py [-- <options>]"
         info ""
         info "🛟 Test options:"
         info "   --packages=<list>  Comma-separated package names to test."
@@ -1131,8 +1202,7 @@ script = [
         info "   --preview          List the test folders (packages and modules) that would be selected, then exit without running any test."
         info "   --collect          Run pytest in collect-only mode (no test execution, no parallelism, no coverage) to surface collection/import errors early."
         info "   --tb=<style>       Forward the pytest traceback style (for example, '--tb=short') and enable immediate per-failure reporting."
-        info "   --skipe testi_py   Report test failures as a diagnostic summary instead of failing the task."
-        info "   --quietk           Silence the tdkserver output while managing the instances, showing it only on failure."
+        info "   --skipe itest_py   Report test failures as a diagnostic summary instead of failing the task."
         info "   -h, --help         Show this help and exit."
         info ""
         info "🛟 Build mode flags (handled before the tests run; they shape the wrapping build):"
@@ -1156,16 +1226,17 @@ script = [
         info "   --stop             Only run teardown: setup without starting, then stop the tabsdata servers. No tests."
         info "   --status           Do setup and report the tabsdata servers status, then exit. No start, no stop, no tests."
         info "                      '--start', '--stop' and '--status' are mutually exclusive."
+        info "   --verbose          Show the servers output while managing the instances (silenced with a spinner by default, always shown on failure and on GA)."
         info ""
         info "🛟 Examples:"
-        info "   cargo make testi_py"
-        info "   cargo make testi_py --packages=tabsdata,conn-mysql"
-        info "   cargo make testi_py --packages=conn-* --modules=tabsdata/api --preview"
-        info "   cargo make testi_py --packages=tabsdata --modules=tabsdata/api/test_x.py::test_case"
-        info "   cargo make testi_py --fast --tb=short"
-        info "   cargo make testi_py --start"
-        info "   cargo make testi_py --stop"
-        info "   cargo make testi_py --status"
+        info "   cargo make itest_py"
+        info "   cargo make itest_py --packages=tabsdata,conn-mysql"
+        info "   cargo make itest_py --packages=conn-* --modules=tabsdata/api --preview"
+        info "   cargo make itest_py --packages=tabsdata --modules=tabsdata/api/test_x.py::test_case"
+        info "   cargo make itest_py --fast --tb=short"
+        info "   cargo make itest_py --start"
+        info "   cargo make itest_py --stop"
+        info "   cargo make itest_py --status"
         info ""
         exit 0
     end
@@ -1313,6 +1384,45 @@ script = [
         selected_tests_folders = set ${module_narrowed_folders}
     end
 
+    generation = get_env TD_TABSDATA_GENERATION
+    if eq ${generation} "2"
+        generation_folders = array
+        dropped_folders = set ""
+        for selected_tests_folder in ${selected_tests_folders}
+            in_tabsdatak = contains ${selected_tests_folder} "testi_tabsdatak"
+            if ${in_tabsdatak}
+                array_push ${generation_folders} ${selected_tests_folder}
+            else
+                tabsdatak_subtree = normalize ${selected_tests_folder}/testi_tabsdatak
+                tabsdatak_subtree_exists = is_path_exists ${tabsdatak_subtree}
+                if ${tabsdatak_subtree_exists}
+                    array_push ${generation_folders} ${tabsdatak_subtree}
+                else
+                    dropped_folders = concat ${dropped_folders} " " ${selected_tests_folder}
+                end
+            end
+        end
+        if not is_empty ${dropped_folders}
+            filters_given = set false
+            if not is_empty ${packages_filter}
+                filters_given = set true
+            end
+            if not is_empty ${modules_filter}
+                filters_given = set true
+            end
+            if ${filters_given}
+                warn "🧬 Generation 2: only tabsdatak tests run; dropping selection:${dropped_folders}"
+            end
+        end
+        generation_folders_count = array_length ${generation_folders}
+        if eq ${generation_folders_count} 0
+            tabsdatak_folder = normalize ${PROJECT_PY_TD_TABSDATA_FOLDER}/src/itest/python/testi_tabsdatak
+            array_push ${generation_folders} ${tabsdatak_folder}
+        end
+        selected_tests_folders = set ${generation_folders}
+        ignore_args = set ""
+    end
+
     no_packages = is_empty ${packages_filter}
     no_modules = is_empty ${modules_filter}
     if ${no_packages}
@@ -1393,8 +1503,8 @@ script = [
         info "⌛️ Pytest finished with zero-or-five exit code: '${exit_code}'"
     else
         info "⌛️ Pytest finished with non-zero-or-five exit code: '${exit_code}'"
-        skipe_testi_py = get_env skipe_testi_py
-        if not is_empty ${skipe_testi_py}
+        skipe_itest_py = get_env skipe_itest_py
+        if not is_empty ${skipe_itest_py}
             if is_error
                 echo ""
             end
@@ -1402,7 +1512,7 @@ script = [
 
             error ""
 
-            error "🧨 TASK 'testi_parallel_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
+            error "🧨 TASK 'itest_parallel_py' FAILED with exit code '${exit_code}' — error skipped (--skipe)"
 
             error ""
 

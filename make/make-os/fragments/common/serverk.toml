@@ -54,6 +54,9 @@ script = [
     else
         warn "🚚 Binary for tdkserver not available. Skipping tdkserver list."
     end
+
+    debug "🚀 tdx-itest ps"
+    exec tdx-itest ps
     ''']
 
 [tasks.__os__start_pytest_tabsdatak_servers]
@@ -65,21 +68,22 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
 
     debug "🔷 _____ Starting tabsdata kubernetes testing servers..."
 
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
 
-    quietk = set false
+    verbose = set false
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
-        if eq ${argument} "--quietk"
-            quietk = set true
+        if eq ${argument} "--verbose"
+            verbose = set true
         end
     end
     if ${on_ga_true}
-        quietk = set false
+        verbose = set true
     end
 
     cm_run_task __os__set_venv_env
@@ -91,7 +95,8 @@ script = [
 
         for instance_type in ${instance_types}
             instance_type = trim ${instance_type}
-            if not is_empty ${instance_type}
+            in_arena = instance_in_arena ${instance_type}
+            if ${in_arena}
                 resolved_arguments = exec tdx-itest arguments ${ITEST_INSTANCES_CONFIG} ${instance_type}
                 if not eq ${resolved_arguments.code} "0"
                     error "🚫 Could not resolve arguments for instance type '${instance_type}' (exit code ${resolved_arguments.code})."
@@ -114,7 +119,8 @@ script = [
                 end
                 base_port = trim ${base_port.stdout}
 
-                exec tdx-itest banner --color blue "🔅 Starting instance: ${instance} (type ${instance_type}, base port ${base_port})"
+                generation = get_env TD_TABSDATA_GENERATION
+                exec tdx-itest banner --color blue "🔅 Starting kubernetes instance: ${instance} (type ${instance_type}, base port ${base_port}, generation ${generation})"
 
                 instance_arguments = array
                 array_push ${instance_arguments} ${ITEST_TDKSERVER_BINARY}
@@ -140,7 +146,7 @@ script = [
                 command = array_join ${instance_arguments} " "
                 debug "🚀 ${command}"
 
-                if ${quietk}
+                if not ${verbose}
                     spinner = spawn python ${SPINNER_SCRIPT} "Starting instance ${instance}..."
                     output = exec %{command}
                     exec kill ${spinner}
@@ -181,6 +187,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
 
     debug "🔷 _____ Checking tabsdata kubernetes testing servers..."
 
@@ -193,7 +200,8 @@ script = [
 
         for instance in ${instances}
             instance = trim ${instance}
-            if not is_empty ${instance}
+            in_arena = instance_in_arena ${instance}
+            if ${in_arena}
                 info "🎯 Checking instance: ${instance}"
 
                 status_timeout = calc 5 * 60
@@ -240,6 +248,8 @@ script = [
         warn "🚚 Binary for tdkserver not available. Skipping tdkserver status."
     end
 
+    cm_run_task __os__ps_pytest_tabsdatak_servers
+
     cm_run_task __os__reset_venv_env
     ''']
 
@@ -252,21 +262,22 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
 
     debug "🔷 _____ Stopping tabsdata kubernetes testing servers..."
 
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
 
-    quietk = set false
+    verbose = set false
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
-        if eq ${argument} "--quietk"
-            quietk = set true
+        if eq ${argument} "--verbose"
+            verbose = set true
         end
     end
     if ${on_ga_true}
-        quietk = set false
+        verbose = set true
     end
 
     cm_run_task __os__set_venv_env
@@ -278,10 +289,12 @@ script = [
 
         for instance in ${instances}
             instance = trim ${instance}
-            if not is_empty ${instance}
-                exec tdx-itest banner --color dark_orange "🔅 Stopping instance: ${instance}"
+            in_arena = instance_in_arena ${instance}
+            if ${in_arena}
+                generation = get_env TD_TABSDATA_GENERATION
+                exec tdx-itest banner --color dark_orange "🔅 Stopping kubernetes instance: ${instance} (generation ${generation})"
                 debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y stop --instance ${instance} --yes"
-                if ${quietk}
+                if not ${verbose}
                     spinner = spawn python ${SPINNER_SCRIPT} "Stopping instance ${instance}..."
                     output = exec ${ITEST_TDKSERVER_BINARY} --accept-terms y stop --instance ${instance} --yes
                     exec kill ${spinner}
@@ -300,6 +313,8 @@ script = [
         warn "🚚 Binary for tdkserver not available. Skipping tdkserver stop."
     end
 
+    cm_run_task __os__ps_pytest_tabsdatak_servers
+
     cm_run_task __os__reset_venv_env
     ''']
 
@@ -312,21 +327,22 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
 
     debug "🔷 _____ Trashing tabsdata kubernetes testing servers..."
 
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
 
-    quietk = set false
+    verbose = set false
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
-        if eq ${argument} "--quietk"
-            quietk = set true
+        if eq ${argument} "--verbose"
+            verbose = set true
         end
     end
     if ${on_ga_true}
-        quietk = set false
+        verbose = set true
     end
 
     cm_run_task __os__set_venv_env
@@ -338,10 +354,12 @@ script = [
 
         for instance in ${instances}
             instance = trim ${instance}
-            if not is_empty ${instance}
-                exec tdx-itest banner --color red "🔅 Trashing instance: ${instance}"
+            in_arena = instance_in_arena ${instance}
+            if ${in_arena}
+                generation = get_env TD_TABSDATA_GENERATION
+                exec tdx-itest banner --color red "🔅 Trashing kubernetes instance: ${instance} (generation ${generation})"
                 debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y trash --instance ${instance} --yes"
-                if ${quietk}
+                if not ${verbose}
                     spinner = spawn python ${SPINNER_SCRIPT} "Trashing instance ${instance}..."
                     output = exec ${ITEST_TDKSERVER_BINARY} --accept-terms y trash --instance ${instance} --yes
                     exec kill ${spinner}
@@ -354,13 +372,14 @@ script = [
                 else
                     exec ${ITEST_TDKSERVER_BINARY} --accept-terms y trash --instance ${instance} --yes
                 end
+                exec tdx-itest registry remove ${ITEST_REGISTRY_FILE} ${instance}
             end
         end
     else
         warn "🚚 Binary for tdkserver not available. Skipping tdkserver trash."
     end
 
-    exec tdx-itest registry clear ${ITEST_REGISTRY_FILE}
+    cm_run_task __os__ps_pytest_tabsdatak_servers
 
     cm_run_task __os__reset_venv_env
     ''']

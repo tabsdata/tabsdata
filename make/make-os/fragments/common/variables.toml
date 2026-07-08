@@ -43,6 +43,7 @@ script = [
     seen_start = set false
     seen_stop = set false
     seen_status = set false
+    seen_help = set false
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -96,6 +97,26 @@ script = [
         if eq ${argument} "--warp"
             at_warp = set true
         end
+        if eq ${argument} "--help"
+            seen_help = set true
+        end
+        if eq ${argument} "-h"
+            seen_help = set true
+        end
+    end
+
+    if ${seen_help}
+        set_env TD_WITH_HELP "true"
+        set_env TD_TEST_PY_PARALLEL "true"
+        set_env TD_WITH_LICENSE "false"
+        set_env TD_WITH_COMPILE "false"
+        set_env TD_WITH_DEPLOY "false"
+        set_env TD_WITH_PERMIT "false"
+        set_env TD_WITH_SERVER_START "false"
+        set_env TD_WITH_SERVER_STOP "false"
+        set_env TD_WITH_SERVER_STATUS "false"
+    else
+        set_env TD_WITH_HELP "false"
     end
 
     lifecycle_count = set 0
@@ -221,6 +242,22 @@ script = [
     TD_WITH_SERVER_STATUS = get_env TD_WITH_SERVER_STATUS
     debug "🔅 Using td with server status: '${TD_WITH_SERVER_STATUS}'"
 
+    umbrella_server_start = get_env TD_UMBRELLA_SERVER_START
+    if not is_empty ${umbrella_server_start}
+        set_env TD_WITH_SERVER_START ${umbrella_server_start}
+        debug "🔅 Umbrella override for server start: '${umbrella_server_start}'"
+    end
+    umbrella_server_stop = get_env TD_UMBRELLA_SERVER_STOP
+    if not is_empty ${umbrella_server_stop}
+        set_env TD_WITH_SERVER_STOP ${umbrella_server_stop}
+        debug "🔅 Umbrella override for server stop: '${umbrella_server_stop}'"
+    end
+    umbrella_server_status = get_env TD_UMBRELLA_SERVER_STATUS
+    if not is_empty ${umbrella_server_status}
+        set_env TD_WITH_SERVER_STATUS ${umbrella_server_status}
+        debug "🔅 Umbrella override for server status: '${umbrella_server_status}'"
+    end
+
     with_tests_run = get_env TD_WITH_TESTS_RUN
     with_tests_run_empty = is_empty ${with_tests_run}
     with_tests_run_true = eq ${with_tests_run} "true"
@@ -264,6 +301,33 @@ script = [
     else
         info "🚆 _____ The Python tests will run in parallel mode"
         set_env TD_TEST_PY_PARALLEL true
+    end
+
+    tabsdata_generation = get_env TD_TABSDATA_GENERATION
+    tabsdata_generation = trim ${tabsdata_generation}
+    if is_empty ${tabsdata_generation}
+        tabsdata_generation = set "2"
+    end
+    generation_one = eq ${tabsdata_generation} "1"
+    generation_two = eq ${tabsdata_generation} "2"
+    generation_valid = set ${generation_one} or ${generation_two}
+    if not ${generation_valid}
+        error ""
+        error "🧨 Invalid TD_TABSDATA_GENERATION: '${tabsdata_generation}'. Valid values are '1' and '2'."
+        error ""
+        error "🛟 Generation 1 manages tdserver and tdkserver instances and runs all the Python tests."
+        error "🛟 Generation 2 manages only tdkserver instances and runs only the tabsdatak Python tests."
+        error ""
+        assert false
+    end
+    set_env TD_TABSDATA_GENERATION ${tabsdata_generation}
+    if ${generation_one}
+        info "🧬 _____ Using tabsdata Generation 1: tdserver & tdkserver instances, all Python tests"
+    elseif ${generation_two}
+        info "🧬 _____ Using tabsdata Generation 2: tdkserver instances only, tabsdatak Python tests only"
+    else
+        error "🧨 Unhandled tabsdata Generation: '${tabsdata_generation}'."
+        assert false
     end
     ''']
 

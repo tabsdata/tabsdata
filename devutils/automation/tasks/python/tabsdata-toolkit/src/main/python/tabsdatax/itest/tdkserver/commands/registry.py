@@ -56,6 +56,17 @@ def append_name(registry_file: Path, name: str):
     save_names(registry_file, names)
 
 
+@registry.command(name="remove")
+@click.argument("registry_file", type=click.Path(path_type=Path))
+@click.argument("name")
+def remove_name(registry_file: Path, name: str):
+    """Delete an instance name from the registry."""
+    names = load_names(registry_file)
+    if name in names:
+        names.remove(name)
+        save_names(registry_file, names)
+
+
 @registry.command(name="clear")
 @click.argument("registry_file", type=click.Path(path_type=Path))
 def clear_names(registry_file: Path):

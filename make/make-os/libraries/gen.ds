@@ -1,0 +1,54 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+fn assert_tabsdata_generation
+    realm = trim ${1}
+    generation = get_env TD_TABSDATA_GENERATION
+    generation = trim ${generation}
+    if is_empty ${generation}
+        generation = set "2"
+    end
+    if eq ${generation} "1"
+        result = set true
+    elseif eq ${generation} "2"
+        if eq ${realm} "tdkserver"
+            result = set true
+        else
+            error ""
+            error "🧨 The ${realm} lifecycle is disabled under tabsdata Generation 2: only tdkserver instances are managed."
+            error ""
+            error "🛟 Set TD_TABSDATA_GENERATION=1 to manage ${realm} instances too."
+            error ""
+            assert false
+        end
+    else
+        error "🧨 Unhandled tabsdata Generation: '${generation}'."
+        assert false
+    end
+end
+
+fn instance_in_arena
+    instance = trim ${1}
+    if is_empty ${instance}
+        return false
+    end
+    arena = get_env TD_TEST_INSTANCES_ARENA
+    arena = trim ${arena}
+    if is_empty ${arena}
+        return true
+    end
+    parts = split ${instance} -
+    role = array_get ${parts} 0
+    release ${parts}
+    matched = set false
+    allowed_list = split ${arena} ,
+    for allowed in ${allowed_list}
+        allowed = trim ${allowed}
+        if eq ${allowed} ${role}
+            matched = set true
+        end
+    end
+    release ${allowed_list}
+    return ${matched}
+end

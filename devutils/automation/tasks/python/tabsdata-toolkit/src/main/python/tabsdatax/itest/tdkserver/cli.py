@@ -8,6 +8,7 @@ from tabsdatax.itest.tdkserver.commands.arguments import arguments
 from tabsdatax.itest.tdkserver.commands.banner import banner
 from tabsdatax.itest.tdkserver.commands.name import name
 from tabsdatax.itest.tdkserver.commands.port import port
+from tabsdatax.itest.tdkserver.commands.ps import ps
 from tabsdatax.itest.tdkserver.commands.ready import ready
 from tabsdatax.itest.tdkserver.commands.registry import registry
 from tabsdatax.itest.tdkserver.commands.types import types
@@ -26,6 +27,7 @@ main.add_command(arguments)
 main.add_command(banner)
 main.add_command(name)
 main.add_command(port)
+main.add_command(ps)
 main.add_command(ready)
 main.add_command(registry)
 

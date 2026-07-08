@@ -85,7 +85,7 @@ def ps():  # noqa: C901
     )
     arguments = parser.parse_args()
 
-    logger.info(f"{Color.UNDERLINE}Running tabsdata instances{Color.END}")
+    logger.info(f"{Color.UNDERLINE}Running tabsdata supervisor instances{Color.END}")
     logger.info("")
 
     processes = {

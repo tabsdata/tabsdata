@@ -58,6 +58,12 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    with_help = get_env TD_WITH_HELP
+    if eq ${with_help} "true"
+        debug "🛟 Help requested; skipping setup."
+        exit 0
+    end
+
     set_env TD_INHERIT_TABSDATA_PACKAGES "true"
     set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
     set_env TD_BUILD_TIMESTAMP "0"
@@ -85,24 +91,24 @@ script = [
 
     with_server_start = get_env TD_WITH_SERVER_START
     if eq ${with_server_start} "true"
-        debug "🔷 _____ Starting tabsdata server (pytest)..."
+        debug "🔷 _____ Starting tabsdata servers (pytest)..."
 
         set_env TD_INHERIT_TABSDATA_PACKAGES "true"
         set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
         set_env TD_BUILD_TIMESTAMP "0"
 
-        cm_run_task __os__stop_pytest_tabsdata_servers
-        cm_run_task __os__drop_pytest_tabsdata_servers
-        cm_run_task __os__start_pytest_tabsdata_servers
-        cm_run_task __os__status_pytest_tabsdata_servers
+        cm_run_task __os__stop_pytest_servers
+        cm_run_task __os__drop_pytest_servers
+        cm_run_task __os__start_pytest_servers
+        cm_run_task __os__status_pytest_servers
     else
-        info "🚜 Starting tabsdata server skipped."
+        info "🚜 Starting tabsdata servers skipped."
     end
 
     with_server_status = get_env TD_WITH_SERVER_STATUS
     if eq ${with_server_status} "true"
-        debug "🔷 _____ Reporting tabsdata server status (pytest)..."
-        cm_run_task __os__ps_pytest_tabsdata_servers
+        debug "🔷 _____ Reporting tabsdata servers status (pytest)..."
+        cm_run_task __os__ps_pytest_servers
     end
     ''']
 
@@ -118,14 +124,14 @@ script = [
 
     with_server_stop = get_env TD_WITH_SERVER_STOP
     if eq ${with_server_stop} "true"
-        debug "🔷 _____ Stopping tabsdata server (pytest)..."
-        cm_run_task __os__stop_pytest_tabsdata_servers
+        debug "🔷 _____ Stopping tabsdata servers (pytest)..."
+        cm_run_task __os__stop_pytest_servers
     else
-        info "🚜 Stopping tabsdata server skipped."
+        info "🚜 Stopping tabsdata servers skipped."
     end
     ''']
 
-[tasks.__os__setup_testi_py]
+[tasks.__os__setup_itest_py]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -134,6 +140,12 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+
+    with_help = get_env TD_WITH_HELP
+    if eq ${with_help} "true"
+        debug "🛟 Help requested; skipping setup."
+        exit 0
+    end
 
     set_env TD_INHERIT_TABSDATA_PACKAGES "true"
     set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
@@ -162,28 +174,28 @@ script = [
 
     with_server_start = get_env TD_WITH_SERVER_START
     if eq ${with_server_start} "true"
-        debug "🔷 _____ Starting tabsdata kubernetes server (itest)..."
+        debug "🔷 _____ Starting tabsdata servers (itest)..."
 
         set_env TD_INHERIT_TABSDATA_PACKAGES "true"
         set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
         set_env TD_BUILD_TIMESTAMP "0"
 
-        cm_run_task __os__stop_pytest_tabsdatak_servers
-        cm_run_task __os__drop_pytest_tabsdatak_servers
-        cm_run_task __os__start_pytest_tabsdatak_servers
-        cm_run_task __os__status_pytest_tabsdatak_servers
+        cm_run_task __os__stop_pytest_servers
+        cm_run_task __os__drop_pytest_servers
+        cm_run_task __os__start_pytest_servers
+        cm_run_task __os__status_pytest_servers
     else
-        info "🚜 Starting tabsdata kubernetes server skipped."
+        info "🚜 Starting tabsdata servers skipped."
     end
 
     with_server_status = get_env TD_WITH_SERVER_STATUS
     if eq ${with_server_status} "true"
-        debug "🔷 _____ Reporting tabsdata kubernetes server status (itest)..."
-        cm_run_task __os__ps_pytest_tabsdatak_servers
+        debug "🔷 _____ Reporting tabsdata servers status (itest)..."
+        cm_run_task __os__ps_pytest_servers
     end
     ''']
 
-[tasks.__os__cleanup_testi_py]
+[tasks.__os__cleanup_itest_py]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -195,11 +207,11 @@ script = [
 
     with_server_stop = get_env TD_WITH_SERVER_STOP
     if eq ${with_server_stop} "true"
-        debug "🔷 _____ Stopping tabsdata kubernetes server (itest)..."
-        cm_run_task __os__stop_pytest_tabsdatak_servers
-        cm_run_task __os__drop_pytest_tabsdatak_servers
+        debug "🔷 _____ Stopping tabsdata servers (itest)..."
+        cm_run_task __os__stop_pytest_servers
+        cm_run_task __os__drop_pytest_servers
     else
-        info "🚜 Stopping tabsdata kubernetes server skipped."
+        info "🚜 Stopping tabsdata servers skipped."
     end
     ''']
 

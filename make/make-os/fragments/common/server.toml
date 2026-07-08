@@ -174,6 +174,9 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    assert_tabsdata_generation tdserver
 
     debug "🚀 python ${PS_SUPERVISORS_SCRIPT}"
     exec --fail-on-error python ${PS_SUPERVISORS_SCRIPT}
@@ -187,8 +190,25 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    assert_tabsdata_generation tdserver
 
     debug "🔷 _____ Starting tabsdata testing servers..."
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    verbose = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--verbose"
+            verbose = set true
+        end
+    end
+    if ${on_ga_true}
+        verbose = set true
+    end
+    debug "🔅 Using verbose mode: ${verbose}"
 
     debug "🔴️ Before set..."
     cm_run_task __os__show_venv_env
@@ -228,9 +248,8 @@ script = [
 
         for instance in ${instances}
             instance = trim ${instance}
-            if not is_empty ${instance}
-                info "🔅 Starting instance: ${instance}"
-
+            in_arena = instance_in_arena ${instance}
+            if ${in_arena}
                 database_port = exec --fail-on-error python ${TESTING_DATABASE_SCRIPT} ${TESTING_SUPERVISORS_CONFIG} ${instance}
                 database_port = trim ${database_port.stdout}
                 debug "🔅 Database port for ${instance}: ${database_port}"
@@ -238,6 +257,9 @@ script = [
                 apiserver_port = exec --fail-on-error python ${TESTING_APISERVER_SCRIPT} ${TESTING_SUPERVISORS_CONFIG} ${instance}
                 apiserver_port = trim ${apiserver_port.stdout}
                 debug "🔅 Apiserver port for ${instance}: ${apiserver_port}"
+
+                generation = get_env TD_TABSDATA_GENERATION
+                exec tdx-itest banner --color blue "🔅 Starting supervisor instance: ${instance} (apiserver port ${apiserver_port}, database port ${database_port}, generation ${generation})"
 
                 temp_folder = temp_dir
                 profile_folder = set ${temp_folder}/td-testing-profile/${instance}
@@ -353,6 +375,9 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    assert_tabsdata_generation tdserver
 
     debug "🔷 _____ Checking tabsdata testing servers..."
 
@@ -394,7 +419,8 @@ script = [
 
         for instance in ${instances}
             instance = trim ${instance}
-            if not is_empty ${instance}
+            in_arena = instance_in_arena ${instance}
+            if ${in_arena}
                 info "🎯 Checking instance: ${instance}"
 
                 supervisor_workers_config_folder_exists = is_path_exists ${SUPERVISOR_WORKERS_CONFIG_FOLDER}
@@ -512,8 +538,25 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    assert_tabsdata_generation tdserver
 
     debug "🔷 _____ Stopping tabsdata testing servers..."
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    verbose = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--verbose"
+            verbose = set true
+        end
+    end
+    if ${on_ga_true}
+        verbose = set true
+    end
+    debug "🔅 Using verbose mode: ${verbose}"
 
     debug "🔴️ Before set..."
     cm_run_task __os__show_venv_env
@@ -553,8 +596,10 @@ script = [
 
         for instance in ${instances}
             instance = trim ${instance}
-            if not is_empty ${instance}
-                info "🔅 Stopping instance: ${instance}"
+            in_arena = instance_in_arena ${instance}
+            if ${in_arena}
+                generation = get_env TD_TABSDATA_GENERATION
+                exec tdx-itest banner --color dark_orange "🔅 Stopping supervisor instance: ${instance} (generation ${generation})"
 
                 debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} --accept-terms y stop --instance ${instance}"
 
@@ -591,8 +636,25 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    assert_tabsdata_generation tdserver
 
     debug "🔷 _____ Deleteing tabsdata testing servers..."
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    verbose = set false
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--verbose"
+            verbose = set true
+        end
+    end
+    if ${on_ga_true}
+        verbose = set true
+    end
+    debug "🔅 Using verbose mode: ${verbose}"
 
     home_folder = set ${HOME}
 
@@ -601,8 +663,10 @@ script = [
 
     for instance in ${instances}
         instance = trim ${instance}
-        if not is_empty ${instance}
-            info "🔅 Droping instance: ${instance}"
+        in_arena = instance_in_arena ${instance}
+        if ${in_arena}
+            generation = get_env TD_TABSDATA_GENERATION
+            exec tdx-itest banner --color red "🔅 Dropping supervisor instance: ${instance} (generation ${generation})"
 
             instance_folder = set ${home_folder}/.tabsdata/instances/${instance}
             debug "✅ The tabsdata instance ${instance} folder is: ${instance_folder}"
