@@ -2,9 +2,6 @@
 #  Copyright 2026 Tabs Data Inc.
 #
 
-#
-#
-
 import pytest
 from tabsdatax.itest.fixture.instances.tabsdata import (
     Instance,
@@ -35,8 +32,8 @@ def test_introduce_named(instance_tdtest: Instance) -> None:
     assert instance_tdtest.name in instance_tdtest.introduce()
 
 
-def test_introduce_via_fixture(td_instance: Instance) -> None:
-    assert td_instance.name in td_instance.introduce()
+def test_introduce_via_fixture(td_tabsdata_instance: Instance) -> None:
+    assert td_tabsdata_instance.name in td_tabsdata_instance.introduce()
 
 
 @pytest.mark.skipif(

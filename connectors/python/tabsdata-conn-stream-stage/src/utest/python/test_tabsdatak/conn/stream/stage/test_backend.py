@@ -4,9 +4,9 @@
 
 """Unit tests for the stage-backend abstraction (``_backend.py``).
 
-These don't touch the ``td_transporter`` binary -- they exercise slot
+These don't touch the ``td_transporter2`` binary -- they exercise slot
 resolution, location building, the credential env, and the object-store
-flag directly, so they run regardless of ``TD_TRANSPORTER_BIN``.
+flag directly, so they run even when the binary is absent.
 """
 
 from __future__ import annotations

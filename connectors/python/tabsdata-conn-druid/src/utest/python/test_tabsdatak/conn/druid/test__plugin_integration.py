@@ -3,7 +3,7 @@
 The Druid pipeline is two-stage:
 
   1. Upload parquet to a cloud staging area (S3 / GCS / Azure) using the
-     ``td_transporter`` binary; the staging credentials come from the
+     ``td_transporter2`` binary; the staging credentials come from the
      ``DruidDestConn.staging`` CloudLocation.
   2. Submit a native batch ``index_parallel`` ingestion task to the
      Druid Overlord and poll until it terminates.
@@ -14,9 +14,10 @@ micro-quickstart stack so no DRUID__* env vars are required. The
 S3 staging side still pulls from the shared ``S30__*`` bundle so the
 test continues to use the team's existing CI bucket.
 
-External prerequisites still gated by env vars:
+The ``td_transporter2`` binary must be installed in the active Python
+environment's scripts folder. External prerequisites still gated by
+env vars:
 
-  - ``TD_TRANSPORTER_BIN`` -- path to a built ``td_transporter`` binary
   - ``S30__S3_URI``        -- ``s3://bucket[/path/prefix]`` for staging
   - ``S30__S3_REGION``     -- AWS region for staging bucket
   - ``S30__S3_ACCESS_KEY`` / ``S30__S3_SECRET_KEY``
@@ -40,6 +41,9 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+from tabsdatak.common._interpreter.python.venv import PythonEnvironment
+from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     UserPassword,
@@ -59,7 +63,10 @@ pytestmark = pytest.mark.druid
 # ---------------------------------------------------------------------------
 
 
-_TRANSPORTER_BIN = os.environ.get("TD_TRANSPORTER_BIN")
+try:
+    TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
+except BinaryNotFoundError:
+    TRANSPORTER_BINARY = None
 
 _S3_URI = os.environ.get("S30__S3_URI")
 _S3_REGION = os.environ.get("S30__S3_REGION")
@@ -68,15 +75,15 @@ _S3_SECRET_KEY = os.environ.get("S30__S3_SECRET_KEY")
 
 
 _skip_reason = (
-    "Druid integration tests require TD_TRANSPORTER_BIN plus an S3 staging "
-    "bundle (S30__S3_URI, S30__S3_REGION, S30__S3_ACCESS_KEY, "
-    "S30__S3_SECRET_KEY)"
+    f"Druid integration tests require the {TRANSPORTER_BINARY_NAME} binary "
+    "plus an S3 staging bundle (S30__S3_URI, S30__S3_REGION, "
+    "S30__S3_ACCESS_KEY, S30__S3_SECRET_KEY)"
 )
 
 
 def _staging_gates_ok() -> bool:
     return all([
-        _TRANSPORTER_BIN and Path(_TRANSPORTER_BIN).is_file(),
+        TRANSPORTER_BINARY is not None,
         _S3_URI,
         _S3_REGION,
         _S3_ACCESS_KEY,

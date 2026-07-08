@@ -2,9 +2,6 @@
 #  Copyright 2026 Tabs Data Inc.
 #
 
-#
-#
-
 from pathlib import Path
 
 import pytest
@@ -75,9 +72,9 @@ def test_yield_fixture_layered_on_instance(
 
 @tabsdata_instance(consumer="tdtest")
 def test_sugar_and_named_are_same(
-    td_instance: Instance, instance_tdtest: Instance
+    td_tabsdata_instance: Instance, instance_tdtest: Instance
 ) -> None:
-    assert td_instance is instance_tdtest
+    assert td_tabsdata_instance is instance_tdtest
 
 
 @pytest.mark.skipif(

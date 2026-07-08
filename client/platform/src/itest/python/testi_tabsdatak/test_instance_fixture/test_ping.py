@@ -2,9 +2,6 @@
 #  Copyright 2026 Tabs Data Inc.
 #
 
-#
-#
-
 import pytest
 from tabsdatax.itest.fixture.instances.tabsdata import (
     Instance,
@@ -40,9 +37,9 @@ def test_ping_named(instance_tdtest: Instance) -> None:
     assert consumer_of(instance_tdtest.name) == "tdtest"
 
 
-def test_ping_via_fixture(td_instance: Instance) -> None:
-    td_instance.ping()
-    assert consumer_of(td_instance.name) == "tdtest"
+def test_ping_via_fixture(td_tabsdata_instance: Instance) -> None:
+    td_tabsdata_instance.ping()
+    assert consumer_of(td_tabsdata_instance.name) == "tdtest"
 
 
 @pytest.mark.skipif(

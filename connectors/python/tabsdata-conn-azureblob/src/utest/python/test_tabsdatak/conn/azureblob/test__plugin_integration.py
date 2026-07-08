@@ -1,7 +1,8 @@
-"""End-to-end Azure Blob integration tests: invoke ``td_transporter``
-against a real container. Skipped unless ALL of these are set:
+"""End-to-end Azure Blob integration tests: invoke ``td_transporter2``
+against a real container. The ``td_transporter2`` binary must be
+installed in the active Python environment's scripts folder. Skipped
+unless ALL of these env vars are set:
 
-  - ``TD_TRANSPORTER_BIN``    -- path to a built transporter binary
   - ``AZ0__AZ_URI``           -- ``az://container[/path/prefix]``
   - ``AZ0__AZ_ACCOUNT_NAME``  -- storage account name
   - ``AZ0__AZ_ACCOUNT_KEY``   -- storage account key
@@ -22,6 +23,9 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+from tabsdatak.common._interpreter.python.venv import PythonEnvironment
+from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.common.types import AzureAccountKey
 from tabsdatak.conn.azureblob import AzureBlobDest, AzureBlobDestConn, AzureBlobSrc, AzureBlobSrcConn
 # noinspection PyProtectedMember
@@ -32,21 +36,25 @@ import tabsdatak.conn.azureblob._plugin as plugin
 pytestmark = pytest.mark.azureblob
 
 
-_TRANSPORTER_BIN = os.environ.get("TD_TRANSPORTER_BIN")
+try:
+    TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
+except BinaryNotFoundError:
+    TRANSPORTER_BINARY = None
+
 _URI = os.environ.get("AZ0__AZ_URI")
 _ACCT_NAME = os.environ.get("AZ0__AZ_ACCOUNT_NAME")
 _ACCT_KEY = os.environ.get("AZ0__AZ_ACCOUNT_KEY")
 
 
 _skip_reason = (
-    "Azure Blob integration tests require TD_TRANSPORTER_BIN + "
-    "AZ0__AZ_URI + AZ0__AZ_ACCOUNT_NAME + AZ0__AZ_ACCOUNT_KEY"
+    f"Azure Blob integration tests require the {TRANSPORTER_BINARY_NAME} "
+    "binary + AZ0__AZ_URI + AZ0__AZ_ACCOUNT_NAME + AZ0__AZ_ACCOUNT_KEY"
 )
 
 
 def _gates_ok() -> bool:
     return all([
-        _TRANSPORTER_BIN and Path(_TRANSPORTER_BIN).is_file(),
+        TRANSPORTER_BINARY is not None,
         _URI, _ACCT_NAME, _ACCT_KEY,
     ])
 

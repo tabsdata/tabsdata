@@ -1,7 +1,8 @@
-"""End-to-end GCS integration tests: invoke ``td_transporter`` against
-a real GCS bucket. Skipped unless ALL of these are set:
+"""End-to-end GCS integration tests: invoke ``td_transporter2`` against
+a real GCS bucket. The ``td_transporter2`` binary must be installed in
+the active Python environment's scripts folder. Skipped unless ALL of
+these env vars are set:
 
-  - ``TD_TRANSPORTER_BIN``               -- path to a built transporter
   - ``GCP0__GCP_STORAGE_URI``            -- ``gs://bucket[/path/prefix]``
   - ``GCP0__GCP_SERVICE_ACCOUNT_KEY``    -- JSON-encoded service-account
                                             credentials (the whole blob,
@@ -23,6 +24,9 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+from tabsdatak.common._interpreter.python.venv import PythonEnvironment
+from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn, GCSDest, GCSSrc
 # noinspection PyProtectedMember
@@ -33,20 +37,24 @@ import tabsdatak.conn.gcs._plugin as plugin
 pytestmark = pytest.mark.gcs
 
 
-_TRANSPORTER_BIN = os.environ.get("TD_TRANSPORTER_BIN")
+try:
+    TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
+except BinaryNotFoundError:
+    TRANSPORTER_BINARY = None
+
 _URI = os.environ.get("GCP0__GCP_STORAGE_URI")
 _SA_JSON = os.environ.get("GCP0__GCP_SERVICE_ACCOUNT_KEY")
 
 
 _skip_reason = (
-    "GCS integration tests require TD_TRANSPORTER_BIN + "
+    f"GCS integration tests require the {TRANSPORTER_BINARY_NAME} binary + "
     "GCP0__GCP_STORAGE_URI + GCP0__GCP_SERVICE_ACCOUNT_KEY"
 )
 
 
 def _gates_ok() -> bool:
     return all([
-        _TRANSPORTER_BIN and Path(_TRANSPORTER_BIN).is_file(),
+        TRANSPORTER_BINARY is not None,
         _URI, _SA_JSON,
     ])
 

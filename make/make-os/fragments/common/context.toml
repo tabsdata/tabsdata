@@ -158,24 +158,6 @@ script = [
     #     debug "🔅 tabsdata agent development python package location set to: ${set_td_tabsdata_agent_dev_pkg}"
     # end
 
-    debug "🔷 _____ Setting up tabsdata transporter binary..."
-
-    transporter_bin = get_env TD_TRANSPORTER_BIN
-    if is_empty ${transporter_bin}
-        scripts_folder = exec --fail-on-error python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
-        scripts_folder = trim ${scripts_folder.stdout}
-        os_family = os_family
-        if eq ${os_family} "windows"
-            transporter_bin = set ${scripts_folder}/td_transporter2.exe
-        else
-            transporter_bin = set ${scripts_folder}/td_transporter2
-        end
-        set_env TD_TRANSPORTER_BIN ${transporter_bin}
-        debug "🔅 TD_TRANSPORTER_BIN set to: ${transporter_bin}"
-    else
-        debug "🔅 TD_TRANSPORTER_BIN already set: ${transporter_bin}"
-    end
-
     with_deploy = get_env TD_WITH_DEPLOY
     if eq ${with_deploy} "true"
         cm_run_task __os__check_hydrate_py

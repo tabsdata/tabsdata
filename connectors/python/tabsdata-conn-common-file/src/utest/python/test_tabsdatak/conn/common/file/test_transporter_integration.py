@@ -1,10 +1,8 @@
-"""Integration tests that invoke the real ``td_transporter`` binary.
+"""Integration tests that invoke the real ``td_transporter2`` binary.
 
-These tests are skipped unless ``TD_TRANSPORTER_BIN`` is set in the
-environment and points at an existing executable. Set it once before
-running pytest::
+These tests are skipped unless the ``td_transporter2`` binary is
+installed in the active Python environment's scripts folder::
 
-    export TD_TRANSPORTER_BIN=/path/to/td_transporter
     pytest packages/tabsdata-conn-common-file/src/utest/python -k integration
 
 Everything else in the conn-common-file test suite mocks the
@@ -14,7 +12,6 @@ binary handshake (request YAML round-trip + report parsing).
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import polars as pl
@@ -26,10 +23,13 @@ from tabsdatak.conn.common.file import _input as _input_module
 from tabsdatak.conn.common.file import _output as _output_module
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin
+from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+from tabsdatak.common._interpreter.python.venv import PythonEnvironment
 from tabsdatak.common._transporter.facade import (
     TRANSPORTER_MODE_LEGACY,
     make_handler,
 )
+from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     DestFileFormat,
@@ -43,13 +43,16 @@ from tabsdatak.spi import DestContext, SrcPluginCtx
 # ---------------------------------------------------------------------------
 
 
-_TRANSPORTER_BIN = os.environ.get("TD_TRANSPORTER_BIN")
+try:
+    TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
+except BinaryNotFoundError:
+    TRANSPORTER_BINARY = None
 
 pytestmark = pytest.mark.skipif(
-    not _TRANSPORTER_BIN or not Path(_TRANSPORTER_BIN).is_file(),
+    TRANSPORTER_BINARY is None,
     reason=(
-        "TD_TRANSPORTER_BIN env var is unset or doesn't point at an "
-        "existing file; integration tests skipped"
+        f"{TRANSPORTER_BINARY_NAME} binary not found in the active Python "
+        "environment; integration tests skipped"
     ),
 )
 

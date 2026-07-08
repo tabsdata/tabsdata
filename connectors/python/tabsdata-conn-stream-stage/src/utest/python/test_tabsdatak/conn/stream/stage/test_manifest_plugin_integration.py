@@ -3,11 +3,11 @@
 #
 
 """Integration tests for :class:`ManifestStageSrcPlugin` against the
-real ``td_transporter`` binary, exercised over the local-file backend.
+real ``td_transporter2`` binary, exercised over the local-file backend.
 
-Skipped unless ``TD_TRANSPORTER_BIN`` points at the binary::
+Skipped unless the ``td_transporter2`` binary is installed in the
+active Python environment's scripts folder::
 
-    export TD_TRANSPORTER_BIN=/path/to/td_transporter
     pytest .../test_tabsdatak/connector/_stream -k integration
 
 ``ManifestStageConn`` is the read-side scaffolding; its concrete kwargs
@@ -21,13 +21,15 @@ it gains its ``@_api.dataclass`` decorator.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import polars as pl
 import pytest
 
+from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+from tabsdatak.common._interpreter.python.venv import PythonEnvironment
+from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.localfile import LocalFileSrcConn
 
@@ -37,13 +39,16 @@ from tabsdatak.conn.stream.stage import (
     ManifestStageSrcPlugin,
 )
 
-_TRANSPORTER_BIN = os.environ.get("TD_TRANSPORTER_BIN")
+try:
+    TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
+except BinaryNotFoundError:
+    TRANSPORTER_BINARY = None
 
 pytestmark = pytest.mark.skipif(
-    not _TRANSPORTER_BIN or not Path(_TRANSPORTER_BIN).is_file(),
+    TRANSPORTER_BINARY is None,
     reason=(
-        "TD_TRANSPORTER_BIN env var is unset or doesn't point at an "
-        "existing file; integration tests skipped"
+        f"{TRANSPORTER_BINARY_NAME} binary not found in the active Python "
+        "environment; integration tests skipped"
     ),
 )
 

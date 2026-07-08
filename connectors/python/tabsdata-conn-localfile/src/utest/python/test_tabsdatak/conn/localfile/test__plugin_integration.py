@@ -1,11 +1,8 @@
-"""End-to-end LocalFile integration tests: invoke ``td_transporter``
-against real filesystem paths. Skipped unless ``TD_TRANSPORTER_BIN``
-is set and points at an existing executable.
+"""End-to-end LocalFile integration tests: invoke ``td_transporter2``
+against real filesystem paths. Skipped unless the ``td_transporter2``
+binary is installed in the active Python environment's scripts folder.
 
-Unlike the cloud variants, no credentials are required. Set the
-binary path once::
-
-    export TD_TRANSPORTER_BIN=/path/to/td_transporter
+Unlike the cloud variants, no credentials are required.
 """
 
 from __future__ import annotations
@@ -17,6 +14,9 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+from tabsdatak.common._interpreter.python.venv import PythonEnvironment
+from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
 from tabsdatak.conn.localfile import LocalFileDest, LocalFileDestConn, LocalFileSrc, LocalFileSrcConn
 # noinspection PyProtectedMember
@@ -27,13 +27,16 @@ from tabsdatak.spi import DestContext, SrcPluginCtx
 pytestmark = pytest.mark.localfile
 
 
-_TRANSPORTER_BIN = os.environ.get("TD_TRANSPORTER_BIN")
+try:
+    TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
+except BinaryNotFoundError:
+    TRANSPORTER_BINARY = None
 
 pytestmark = [pytestmark, pytest.mark.skipif(
-    not _TRANSPORTER_BIN or not Path(_TRANSPORTER_BIN).is_file(),
+    TRANSPORTER_BINARY is None,
     reason=(
-        "TD_TRANSPORTER_BIN env var is unset or doesn't point at an "
-        "existing file; integration tests skipped"
+        f"{TRANSPORTER_BINARY_NAME} binary not found in the active Python "
+        "environment; integration tests skipped"
     ),
 )]
 
