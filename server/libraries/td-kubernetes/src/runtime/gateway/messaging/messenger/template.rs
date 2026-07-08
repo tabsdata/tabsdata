@@ -23,7 +23,7 @@ pub enum TemplateKind {
 }
 
 impl TemplateKind {
-    fn from_kind(kind: &str) -> Option<Self> {
+    pub fn from_kind(kind: &str) -> Option<Self> {
         match kind {
             "Pod" => Some(Self::Pod),
             "Job" => Some(Self::Job),

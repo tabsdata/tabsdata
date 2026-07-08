@@ -15,7 +15,7 @@ use std::future::Future;
 use async_trait::async_trait;
 use clap_derive::ValueEnum;
 use indicatif::MultiProgress;
-use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use kube::Config;
 use serde::{Deserialize, Serialize};
@@ -154,6 +154,37 @@ impl ClusterProvider {
         let _ = job;
         Ok(())
     }
+
+    pub fn validate_regular_cronjob(self, cronjob: &CronJob) -> Vec<ValidationError> {
+        let Some(pod) = cronjob_pod_template(cronjob) else {
+            return Vec::new();
+        };
+        match self.workload() {
+            Workload::Process => process_pod::validate(&pod),
+            Workload::Container => container_pod::validate(&pod),
+        }
+    }
+
+    pub fn enrich_regular_cronjob(self, cronjob: &mut CronJob) -> CommandResult {
+        let _ = cronjob;
+        Ok(())
+    }
+}
+
+fn cronjob_pod_template(cronjob: &CronJob) -> Option<Pod> {
+    let template = cronjob
+        .spec
+        .as_ref()?
+        .job_template
+        .spec
+        .as_ref()?
+        .template
+        .clone();
+    Some(Pod {
+        metadata: template.metadata.unwrap_or_default(),
+        spec: template.spec,
+        status: None,
+    })
 }
 
 pub trait Transaction: Send {

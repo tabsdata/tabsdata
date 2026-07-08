@@ -3,21 +3,24 @@
 //
 
 use indicatif::MultiProgress;
-use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use kube::runtime::wait::Condition;
 use serde::de::DeserializeOwned;
 
-use crate::base::constants::{POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, TIER_LABEL};
+use crate::base::constants::{
+    POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, TIER_LABEL,
+};
 use crate::base::error::launcher::LauncherError;
 use crate::client::tdkserver::widgets::{phase_spinner_in, spinner};
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
-use crate::kube::api::{job as job_api, pod as pod_api};
+use crate::kube::api::{cronjob as cronjob_api, job as job_api, pod as pod_api};
 use crate::kube::context::KubeContext;
+use crate::runtime::gateway::messaging::messenger::template::TemplateKind;
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::injection::{
-    inject_into_job, inject_into_pod, list_available_secrets,
+    inject_into_cronjob, inject_into_job, inject_into_pod, list_available_secrets,
 };
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::tier::Tier;
@@ -45,9 +48,9 @@ pub async fn start_workload(
     wait_service_phase(context, &service_pods, multi).await?;
     let init_jobs = apply_init_phase(context, cluster_provider, system, profile, multi).await?;
     wait_init_phase(context, &init_jobs, multi).await?;
-    let regular_pods =
+    let regular_workloads =
         apply_regular_phase(context, cluster_provider, system, profile, multi).await?;
-    wait_regular_phase(context, &regular_pods, multi).await?;
+    wait_regular_phase(context, &regular_workloads, multi).await?;
     Ok(())
 }
 
@@ -298,46 +301,97 @@ async fn deserialize_pod_entry<T: DeserializeOwned>(
     })
 }
 
+enum RegularWorkload {
+    Pod(Box<Pod>),
+    CronJob(Box<CronJob>),
+}
+
 pub async fn apply_regular_phase(
     context: &KubeContext,
     cluster_provider: ClusterProvider,
     system: &SystemValues,
     profile: &Profile,
     multi: &MultiProgress,
-) -> CommandResult<Vec<String>> {
+) -> CommandResult<Vec<(TemplateKind, String)>> {
     let available_secrets = list_available_secrets(context).await?;
-    let mut prepared: Vec<(String, Pod)> = Vec::new();
+    let mut prepared: Vec<(String, RegularWorkload)> = Vec::new();
     for (key, yaml) in pods_for_tier(profile, Tier::Regular)? {
-        let mut pod = deserialize_pod_entry::<Pod>(key, yaml, Tier::Regular, system).await?;
-        cluster_provider.enrich_regular_pod(&mut pod)?;
-        inject_into_pod(profile, key, &mut pod, &available_secrets)?;
-        validate_pod(key, cluster_provider.validate_regular_pod(&pod))?;
-        prepared.push((key.to_owned(), pod));
+        match kind_of_entry(key, yaml)? {
+            TemplateKind::CronJob => {
+                let mut cronjob =
+                    deserialize_pod_entry::<CronJob>(key, yaml, Tier::Regular, system).await?;
+                cluster_provider.enrich_regular_cronjob(&mut cronjob)?;
+                inject_into_cronjob(profile, key, &mut cronjob, &available_secrets)?;
+                validate_pod(key, cluster_provider.validate_regular_cronjob(&cronjob))?;
+                prepared.push((key.to_owned(), RegularWorkload::CronJob(Box::new(cronjob))));
+            }
+            TemplateKind::Pod | TemplateKind::Job => {
+                let mut pod =
+                    deserialize_pod_entry::<Pod>(key, yaml, Tier::Regular, system).await?;
+                cluster_provider.enrich_regular_pod(&mut pod)?;
+                inject_into_pod(profile, key, &mut pod, &available_secrets)?;
+                validate_pod(key, cluster_provider.validate_regular_pod(&pod))?;
+                prepared.push((key.to_owned(), RegularWorkload::Pod(Box::new(pod))));
+            }
+        }
     }
     let phase = phase_spinner_in(
         multi,
-        &format!("Applying {} regular pod(s)", prepared.len()),
+        &format!("Applying {} regular workload(s)", prepared.len()),
     );
-    let creates = prepared.into_iter().map(|(key, pod)| {
+    let creates = prepared.into_iter().map(|(key, workload)| {
         let context = context.clone();
         let bar = phase.add_resource(&key);
         async move {
-            let created =
-                match pod_api::create_pod(&context, &pod, Vec::new(), Vec::new(), None).await {
-                    Ok(created) => created,
-                    Err(error) => {
-                        bar.finish_with_message(format!("{key} (failed)"));
-                        return Err::<String, CommandError>(error.into());
+            match workload {
+                RegularWorkload::Pod(pod) => {
+                    let created =
+                        match pod_api::create_pod(&context, &pod, Vec::new(), Vec::new(), None)
+                            .await
+                        {
+                            Ok(created) => created,
+                            Err(error) => {
+                                bar.finish_with_message(format!("{key} (failed)"));
+                                return Err::<(TemplateKind, String), CommandError>(error.into());
+                            }
+                        };
+                    match created.metadata.name {
+                        Some(name) => {
+                            bar.finish_with_message(format!("{key} (applied)"));
+                            Ok((TemplateKind::Pod, name))
+                        }
+                        None => {
+                            bar.finish_with_message(format!("{key} (no name)"));
+                            Err(LauncherError::PodMissingName { key: key.clone() }.into())
+                        }
                     }
-                };
-            match created.metadata.name {
-                Some(name) => {
-                    bar.finish_with_message(format!("{key} (applied)"));
-                    Ok(name)
                 }
-                None => {
-                    bar.finish_with_message(format!("{key} (no name)"));
-                    Err(LauncherError::PodMissingName { key: key.clone() }.into())
+                RegularWorkload::CronJob(cronjob) => {
+                    let created = match cronjob_api::create_cronjob(
+                        &context,
+                        &cronjob,
+                        Vec::new(),
+                        Vec::new(),
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(created) => created,
+                        Err(error) => {
+                            bar.finish_with_message(format!("{key} (failed)"));
+                            return Err(error.into());
+                        }
+                    };
+                    match created.metadata.name {
+                        Some(name) => {
+                            bar.finish_with_message(format!("{key} (applied)"));
+                            Ok((TemplateKind::CronJob, name))
+                        }
+                        None => {
+                            bar.finish_with_message(format!("{key} (no name)"));
+                            Err(LauncherError::CronJobMissingName { key: key.clone() }.into())
+                        }
+                    }
                 }
             }
         }
@@ -349,40 +403,94 @@ pub async fn apply_regular_phase(
 
 pub async fn wait_regular_phase(
     context: &KubeContext,
-    pods: &[String],
+    workloads: &[(TemplateKind, String)],
     multi: &MultiProgress,
 ) -> CommandResult {
-    let phase = phase_spinner_in(multi, &format!("Waiting for {} regular pod(s)", pods.len()));
-    let waits = pods.iter().map(|name| {
+    let phase = phase_spinner_in(
+        multi,
+        &format!("Waiting for {} regular workload(s)", workloads.len()),
+    );
+    let waits = workloads.iter().map(|(kind, name)| {
         let context = context.clone();
         let bar = phase.add_resource(name);
         async move {
-            let settled = match pod_api::await_pod_condition(&context, name, is_pod_settled()).await
-            {
-                Ok(Some(pod)) => pod,
-                Ok(None) => {
-                    bar.finish_with_message(format!("{name} (deleted)"));
-                    return Err::<(), CommandError>(
-                        LauncherError::PodDeletedBeforeReady { name: name.clone() }.into(),
-                    );
+            match kind {
+                TemplateKind::CronJob => {
+                    match cronjob_api::await_cronjob_condition(&context, name, cronjob_exists())
+                        .await
+                    {
+                        Ok(Some(_)) => {
+                            bar.finish_with_message(format!("{name} (scheduled)"));
+                            Ok(())
+                        }
+                        Ok(None) => {
+                            bar.finish_with_message(format!("{name} (deleted)"));
+                            Err::<(), CommandError>(
+                                LauncherError::CronJobDeletedBeforeScheduled { name: name.clone() }
+                                    .into(),
+                            )
+                        }
+                        Err(error) => {
+                            bar.finish_with_message(format!("{name} (errored)"));
+                            Err(error.into())
+                        }
+                    }
                 }
-                Err(error) => {
-                    bar.finish_with_message(format!("{name} (errored)"));
-                    return Err(error.into());
+                TemplateKind::Pod | TemplateKind::Job => {
+                    let settled = match pod_api::await_pod_condition(
+                        &context,
+                        name,
+                        is_pod_settled(),
+                    )
+                    .await
+                    {
+                        Ok(Some(pod)) => pod,
+                        Ok(None) => {
+                            bar.finish_with_message(format!("{name} (deleted)"));
+                            return Err::<(), CommandError>(
+                                LauncherError::PodDeletedBeforeReady { name: name.clone() }.into(),
+                            );
+                        }
+                        Err(error) => {
+                            bar.finish_with_message(format!("{name} (errored)"));
+                            return Err(error.into());
+                        }
+                    };
+                    if has_failed_phase(&settled) {
+                        bar.finish_with_message(format!("{name} (failed)"));
+                        return Err(LauncherError::PodFailed { name: name.clone() }.into());
+                    }
+                    bar.finish_with_message(format!("{name} (ready)"));
+                    Ok(())
                 }
-            };
-            if has_failed_phase(&settled) {
-                bar.finish_with_message(format!("{name} (failed)"));
-                return Err(LauncherError::PodFailed { name: name.clone() }.into());
             }
-            bar.finish_with_message(format!("{name} (ready)"));
-            Ok(())
         }
     });
     let result = futures::future::try_join_all(waits).await;
     drop(phase);
     result?;
     Ok(())
+}
+
+fn cronjob_exists() -> impl Condition<CronJob> {
+    |cronjob: Option<&CronJob>| cronjob.is_some()
+}
+
+fn kind_of_entry(key: &str, yaml: &str) -> Result<TemplateKind, LauncherError> {
+    let value: serde_yaml::Value =
+        serde_yaml::from_str(yaml).map_err(|error| LauncherError::PodYamlParseFailed {
+            key: key.to_owned(),
+            cause: error.to_string(),
+        })?;
+    let kind_text = value
+        .get(POD_YAML_FIELD_KIND)
+        .and_then(serde_yaml::Value::as_str)
+        .unwrap_or_default();
+    TemplateKind::from_kind(kind_text).ok_or_else(|| LauncherError::PodDeserializeFailed {
+        key: key.to_owned(),
+        tier: Tier::Regular.to_string(),
+        cause: format!("unsupported kind '{kind_text}'"),
+    })
 }
 
 pub async fn provision_database(
@@ -558,6 +666,7 @@ async fn delete_workload(context: &KubeContext, multi: &MultiProgress) -> Comman
     let phase = phase_spinner_in(multi, "Deleting tabsdata workload");
     let pods_bar = phase.add_resource("Pods");
     let jobs_bar = phase.add_resource("Jobs");
+    let cronjobs_bar = phase.add_resource("CronJobs");
     let pods_delete = async {
         match pod_api::delete_pods(context).await {
             Ok(()) => {
@@ -582,7 +691,19 @@ async fn delete_workload(context: &KubeContext, multi: &MultiProgress) -> Comman
             }
         }
     };
-    let result = futures::future::try_join(pods_delete, jobs_delete).await;
+    let cronjobs_delete = async {
+        match cronjob_api::delete_cronjobs(context).await {
+            Ok(()) => {
+                cronjobs_bar.finish_with_message("CronJobs (deleted)");
+                Ok(())
+            }
+            Err(error) => {
+                cronjobs_bar.finish_with_message("CronJobs (failed)");
+                Err(CommandError::from(error))
+            }
+        }
+    };
+    let result = futures::future::try_join3(pods_delete, jobs_delete, cronjobs_delete).await;
     drop(phase);
     result?;
     Ok(())
@@ -609,6 +730,12 @@ async fn workload_exists_inner(context: &KubeContext) -> CommandResult<bool> {
             .await
             .map(|jobs| !jobs.is_empty())
     };
-    let (pods_exist, jobs_exist) = futures::future::try_join(pods_list, jobs_list).await?;
-    Ok(pods_exist || jobs_exist)
+    let cronjobs_list = async {
+        cronjob_api::list_cronjobs(context)
+            .await
+            .map(|cronjobs| !cronjobs.is_empty())
+    };
+    let (pods_exist, jobs_exist, cronjobs_exist) =
+        futures::future::try_join3(pods_list, jobs_list, cronjobs_list).await?;
+    Ok(pods_exist || jobs_exist || cronjobs_exist)
 }

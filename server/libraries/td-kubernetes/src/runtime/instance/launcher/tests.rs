@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use chrono::Utc;
-use k8s_openapi::api::batch::v1::{Job, JobCondition, JobStatus};
+use k8s_openapi::api::batch::v1::{CronJob, Job, JobCondition, JobStatus};
 use k8s_openapi::api::core::v1::{Pod, PodCondition, PodStatus};
 use kube::runtime::wait::Condition;
 
@@ -96,6 +96,77 @@ spec:
       image: tabsdata/apiserver
 "
     )
+}
+
+fn cronjob_yaml(name: &str, tier: &str) -> String {
+    format!(
+        "apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {name}
+  labels:
+    tabsdata.com/tier: {tier}
+spec:
+  schedule: \"*/5 * * * *\"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: cron
+              image: busybox
+"
+    )
+}
+
+#[test]
+fn kind_of_entry_reads_cronjob() {
+    let yaml = cronjob_yaml("cron-publisher", "regular");
+    assert_eq!(
+        kind_of_entry("cron-publisher.yaml", &yaml).expect("kind"),
+        TemplateKind::CronJob
+    );
+}
+
+#[test]
+fn kind_of_entry_reads_pod() {
+    let yaml = pod_yaml("apiserver", "regular");
+    assert_eq!(
+        kind_of_entry("apiserver.yaml", &yaml).expect("kind"),
+        TemplateKind::Pod
+    );
+}
+
+#[test]
+fn kind_of_entry_rejects_unknown_kind() {
+    let yaml = "\
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage
+";
+    assert!(kind_of_entry("storage.yaml", yaml).is_err());
+}
+
+#[tokio::test]
+async fn deserialize_pod_entry_parses_valid_cronjob() {
+    let yaml = cronjob_yaml("cron-publisher", "regular");
+    let cronjob: CronJob = deserialize_pod_entry(
+        "cron-publisher.yaml",
+        &yaml,
+        Tier::Regular,
+        &SystemValues::default(),
+    )
+    .await
+    .expect("valid CronJob");
+    assert_eq!(cronjob.metadata.name.as_deref(), Some("cron-publisher"));
+}
+
+#[test]
+fn cronjob_exists_matches_present_and_absent() {
+    assert!(cronjob_exists().matches_object(Some(&CronJob::default())));
+    assert!(!cronjob_exists().matches_object(None));
 }
 
 #[test]

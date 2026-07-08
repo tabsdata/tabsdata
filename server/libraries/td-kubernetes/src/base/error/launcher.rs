@@ -40,6 +40,8 @@ pub enum LauncherError {
     JobFailed { name: String } = 5,
     #[error("Regular pod '{name}' failed.")]
     PodFailed { name: String } = 6,
+    #[error("Regular cronjob '{name}' failed.")]
+    CronJobFailed { name: String } = 7,
     #[error("Init job from '{key}' was created without a metadata.name.")]
     JobMissingName { key: String } = 5000,
     #[error("Regular pod from '{key}' was created without a metadata.name.")]
@@ -48,6 +50,10 @@ pub enum LauncherError {
     JobDeletedBeforeCompletion { name: String } = 5002,
     #[error("Regular pod '{name}' was deleted before becoming ready.")]
     PodDeletedBeforeReady { name: String } = 5003,
+    #[error("Regular cronjob from '{key}' was created without a metadata.name.")]
+    CronJobMissingName { key: String } = 5010,
+    #[error("Regular cronjob '{name}' was deleted before being scheduled.")]
+    CronJobDeletedBeforeScheduled { name: String } = 5011,
     #[error(transparent)]
     Kubernetes(#[from] KubernetesError) = 5004,
     #[error("Could not parse config '{config}' while preparing secret env injection: {cause}.")]
