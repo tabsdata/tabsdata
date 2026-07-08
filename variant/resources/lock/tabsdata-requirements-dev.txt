@@ -31,7 +31,7 @@ cattrs==24.1.3
 certifi==2026.6.17
 cffi==2.0.0
 chameleon==4.6.0
-charset-normalizer==3.4.7
+charset-normalizer==3.4.8
 check-manifest==0.51
 click==8.3.1
 colorama==0.4.6
@@ -74,7 +74,7 @@ google-crc32c==1.8.0
 google-resumable-media==2.10.0
 googleapis-common-protos==1.75.0
 greenlet==3.5.3 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
-grimp==3.14
+grimp==3.15
 gtts==2.2.4
 h11==0.16.0
 halo==0.0.31
@@ -99,7 +99,7 @@ kafka-python==2.3.0
 keyring==25.7.0 ; platform_machine != 'ppc64le' and platform_machine != 's390x'
 kiwisolver==1.5.0
 kubernetes==35.0.0
-lazy==1.6
+lazy==2.0
 leather==0.4.1
 legacy-cgi==2.6.4 ; python_full_version >= '3.13'
 librt==0.12.0 ; platform_python_implementation != 'PyPy'
@@ -189,7 +189,7 @@ pytest-reporter-html1==0.9.5
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
 python-dateutil==2.9.0.post0
-python-discovery==1.4.2
+python-discovery==1.4.3
 python-dotenv==1.2.2
 python-on-whales==0.81.0
 python-slugify==8.0.4
@@ -204,7 +204,7 @@ questionary==2.1.1
 readme-renderer==45.0
 repoze-lru==0.8
 requests==2.32.5
-requests-cache==1.3.2
+requests-cache==1.3.3
 requests-oauthlib==2.0.0
 requests-toolbelt==1.0.0
 requirements-parser==0.13.1

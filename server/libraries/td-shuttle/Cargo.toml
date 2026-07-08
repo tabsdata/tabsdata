@@ -83,6 +83,7 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
+csv = { workspace = true }
 derive_builder = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
@@ -94,6 +95,7 @@ pin-project-lite = { workspace = true }
 polars = { workspace = true, features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"] }
 polars-io = { workspace = true, features = ["cloud"] }
 polars-parquet-format = { workspace = true }
+regex = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

@@ -393,6 +393,9 @@ version = "0.29.0"
 [workspace.dependencies.crossterm_terminal]
 version = "0.3.2"
 
+[workspace.dependencies.csv]
+version = "1.4.0"
+
 [workspace.dependencies.ctor]
 version = "1.0.6"
 

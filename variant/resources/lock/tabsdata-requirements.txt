@@ -19,7 +19,7 @@ build==1.5.0
 cachetools==6.2.6
 certifi==2026.6.17
 cffi==2.0.0 ; platform_python_implementation != 'PyPy'
-charset-normalizer==3.4.7
+charset-normalizer==3.4.8
 click==8.3.1
 click-repl==0.3.0
 clickhouse-connect==0.14.1
@@ -49,8 +49,8 @@ google-resumable-media==2.10.0
 googleapis-common-protos==1.75.0
 greenlet==3.5.3 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
 grpc-google-iam-v1==0.14.4
-grpcio==1.81.1
-grpcio-status==1.81.1
+grpcio==1.82.0
+grpcio-status==1.82.0
 grpcio-tools==1.80.0
 h11==0.16.0
 httpcore==1.0.9
@@ -129,7 +129,7 @@ rich-click==1.9.7
 rpds-py==2026.6.3
 ruamel-yaml==0.19.1
 s3transfer==0.16.1
-setuptools==82.0.1
+setuptools==83.0.0
 simple-salesforce==1.12.9
 six==1.17.0
 snowflake-connector-python==4.4.0
