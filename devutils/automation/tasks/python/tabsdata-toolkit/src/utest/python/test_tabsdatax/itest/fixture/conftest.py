@@ -63,7 +63,7 @@ def _mock_provisioning(monkeypatch, sysobj):
     elif sysobj.slug == "bigquery":
         monkeypatch.setattr(cls, "_bq", lambda self, values: _FakeBq())
         monkeypatch.setattr(cls, "_gcs", lambda self, values: _FakeStore())
-    elif cat == "cloud":                    # s3 / gcs / azureblob (fs is real)
+    elif cat in ("cloud", "native"):        # s3 / gcs / azureblob (fs is real)
         monkeypatch.setattr(cls, "_backend", lambda self, values: _FakeStore())
     elif cat == "saas":                     # snowflake / databricks / salesforce
         monkeypatch.setattr(cls, "_ping", lambda self, values: None)

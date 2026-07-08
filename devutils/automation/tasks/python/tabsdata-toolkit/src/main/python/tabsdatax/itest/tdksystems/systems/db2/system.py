@@ -127,16 +127,37 @@ class Db2System(ContainerBase):
         )
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
-        # ADMIN_DROP_SCHEMA drops the schema and all its objects (plain DROP
-        # SCHEMA … RESTRICT refuses a non-empty schema). Best-effort on
-        # teardown; the shared XP database is left for the other domains.
+        # Drop the schema's objects, then the (now empty) schema. We avoid
+        # SYSPROC.ADMIN_DROP_SCHEMA: on the community image it demands a
+        # caller-managed error table and still fails (SQL0443N), and a bare CALL
+        # with NULL error-table params is rejected (SQL0469N — its error-table
+        # parameters are INOUT). Dropping objects then DROP SCHEMA … RESTRICT
+        # needs no admin routine (the approach tabsdata-conn-db2 uses). The
+        # shared XP database is left for the other domains.
         schema = db2_schema_name(name)
-        try:
-            self._run_admin_sql(
-                admin, [f"CALL SYSPROC.ADMIN_DROP_SCHEMA('{schema}', NULL, NULL, NULL)"]
-            )
-        except DatagenError as exc:
-            print(f">>> db2: could not drop schema {schema}: {exc}")
+        views = self._query_admin_names(
+            admin, f"SELECT viewname FROM syscat.views WHERE viewschema = '{schema}'"
+        )
+        if views:
+            self._run_admin_sql(admin, [f"DROP VIEW {schema}.{v}" for v in views])
+        # Tables, in FK-dependency order: retry until a pass drops nothing new
+        # (a table referenced by an FK can only go after its dependants).
+        remaining = self._query_admin_names(
+            admin,
+            f"SELECT tabname FROM syscat.tables "
+            f"WHERE tabschema = '{schema}' AND type = 'T'",
+        )
+        while remaining:
+            blocked: list[str] = []
+            for tbl in remaining:
+                try:
+                    self._run_admin_sql(admin, [f"DROP TABLE {schema}.{tbl}"])
+                except DatagenError:
+                    blocked.append(tbl)  # referenced by an FK — retry next pass
+            if len(blocked) == len(remaining):
+                break  # no progress — let DROP SCHEMA surface what's left
+            remaining = blocked
+        self._run_admin_sql(admin, [f"DROP SCHEMA {schema} RESTRICT"])
 
     def do_list(self, admin: AdminConn) -> list[str]:
         return self._query_admin_names(

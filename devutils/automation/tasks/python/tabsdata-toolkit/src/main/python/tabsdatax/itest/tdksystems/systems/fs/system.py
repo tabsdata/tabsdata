@@ -50,7 +50,8 @@ def _validate_fs_root(root: str) -> None:
 class FsSystem(CloudBase):
     slug = "fs"
     label = "fs"
-    category = "cloud"  # descriptor.write routes fs via write_cloud_*
+    category = "native"  # local filesystem, not a cloud object store; still
+    # persisted via write_cloud_* (descriptor kind stays "cloud-*")
     relative_sys_path = False  # absolute roots are valid — don't strip slash
     options = ()  # only --sys-path (the root)
 
@@ -58,9 +59,31 @@ class FsSystem(CloudBase):
         _validate_fs_root(values.get("SYS_PATH", ""))
         return FsBackend(values)
 
+    # fs is local, so — unlike the object stores — its root is a plain
+    # `--sys-path` option (no `$FS__SYS_PATH` env fallback), defaulting to
+    # `target/backends/<system name>` relative to the current directory.
+    def add_create_options(self, parser) -> None:
+        parser.add_argument(
+            "--sys-path",
+            dest="lit_SYS_PATH",
+            default=None,
+            metavar="DIR",
+            help="root dir (default: target/backends/<system name>, relative to "
+            "the current directory)",
+        )
+
+    def resolve_create_settings(self, ns) -> dict[str, Setting]:
+        return {
+            "SYS_PATH": Setting(
+                "SYS_PATH", value=getattr(ns, "lit_SYS_PATH", None), is_path=True
+            )
+        }
+
     # fs creates its root dir rather than checking a remote bucket.
     def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
-        root = self.resolve_values(spec.settings).get("SYS_PATH", "")
+        root = _normalize_path(
+            spec.settings["SYS_PATH"].value or f"target/backends/{spec.name}"
+        )
         _validate_fs_root(root)
         root_p = Path(root)
         if root_p.exists():
@@ -72,7 +95,7 @@ class FsSystem(CloudBase):
                     f"root path already exists: '{root}' (use --force to clear)"
                 )
         root_p.mkdir(parents=True)
-        return dict(spec.settings)
+        return {"SYS_PATH": Setting("SYS_PATH", value=root, is_path=True)}
 
     def destroy_system(self, ctx: SystemContext) -> None:
         p = Path(ctx.meta.get("SYS_PATH", ""))

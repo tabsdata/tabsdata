@@ -69,16 +69,17 @@ def test_sql_systems_support_sql(slug):
 
 # ---- cloud: every system declares slug/label and options -----------------
 
-CLOUD_SLUGS = ("s3", "gcs", "azureblob", "fs")
+CLOUD_SLUGS = ("s3", "gcs", "azureblob")
 
 
 def test_cloud_slugs_present_and_categorised():
-    """Same as the container check: cloud/fs slugs are in the unified registry
-    and self-report category == "cloud"."""
+    """The object-store slugs are in the unified registry and self-report
+    category == "cloud". fs is a local filesystem — category "native"."""
     known = set(systems.all_slugs())
     assert set(CLOUD_SLUGS) <= known
     for slug in CLOUD_SLUGS:
         assert systems.get(slug).category == "cloud", slug
+    assert systems.get("fs").category == "native"
 
 
 @pytest.mark.parametrize("slug", CLOUD_SLUGS)

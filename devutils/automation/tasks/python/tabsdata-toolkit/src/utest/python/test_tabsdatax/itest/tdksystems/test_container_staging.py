@@ -9,7 +9,7 @@ from tabsdatax.itest.tdksystems import cli, descriptor, systems
 from tabsdatax.itest.tdksystems.errors import DatagenError
 from tabsdatax.itest.tdksystems.systems._container import ContainerBase, DomainResult
 from tabsdatax.itest.tdksystems.systems.base import (
-    CreateDomainSpec, CreateSystemSpec, SystemContext,
+    CreateDomainSpec, CreateSystemSpec, Setting, SystemContext,
 )
 
 
@@ -90,13 +90,21 @@ def test_domain_descriptor_without_staging_has_no_base_path(tmp_path):
     assert "BASE_PATH" not in _meta(out)
 
 
-# ---- create_system: staging root required iff the system stages files ----
+# ---- create_system: staging root defaults to the system name -------------
 
-def test_create_system_requires_staging_root():
-    # clickhouse is a file-staging system; no SYS_PATH -> fails before docker.
+def test_staging_root_defaults_to_system_name():
+    # clickhouse is a file-staging system; with no --sys-path / env, its
+    # staging root defaults to the system name (baked as a literal, not a ref).
     sysobj = systems.get("clickhouse")
-    with pytest.raises(DatagenError, match="staging root is required"):
-        sysobj.create_system(CreateSystemSpec(name="c", out="/tmp/x", settings={}))
+    st = sysobj._staging_setting(CreateSystemSpec(name="c", out="/tmp/x", settings={}))
+    assert st.value == "c" and st.env_var is None
+
+
+def test_staging_root_uses_explicit_sys_path():
+    sysobj = systems.get("clickhouse")
+    spec = CreateSystemSpec(name="c", out="/tmp/x",
+                            settings={"SYS_PATH": Setting("SYS_PATH", value="xp")})
+    assert sysobj._staging_setting(spec).value == "xp"
 
 
 # ---- create_domain: derives BASE_PATH = SYS_PATH/<domain> ----------------

@@ -8,7 +8,7 @@ import subprocess
 
 from ...errors import DatagenError
 from ...shell import docker_run, gen_password
-from .._container import AdminConn, ContainerBase, DomainResult
+from .._container import AdminConn, ContainerBase, DomainContext, DomainResult
 
 
 class MongodbSystem(ContainerBase):
@@ -105,3 +105,18 @@ class MongodbSystem(ContainerBase):
         finally:
             client.close()
         return [n for n in names if n not in ("admin", "local", "config")]
+
+    def reset_domain(self, ctx: DomainContext) -> None:
+        """Drop every (non-system) collection in the domain database, REUSING
+        the database, its user and password — the entity container is emptied
+        without minting new credentials; `recreate` then replays the data."""
+        client = self._client(self._admin_from_domain_meta(ctx.meta))
+        try:
+            db = client[ctx.name]
+            for coll in db.list_collection_names():
+                if not coll.startswith("system."):
+                    db.drop_collection(coll)
+        except Exception as exc:  # noqa: BLE001
+            raise DatagenError(f"mongodb reset '{ctx.name}' failed: {exc}") from exc
+        finally:
+            client.close()

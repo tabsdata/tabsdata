@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import time
 
 from ...errors import DatagenError
@@ -23,10 +24,17 @@ class StarrocksSystem(ContainerBase):
     supports_sql = True
     uses_file_staging = True
 
+    # Run the native image for the host arch. The x86-64 BE needs AVX2, so
+    # forcing linux/amd64 under emulation on Apple Silicon (arm64) crash-loops
+    # it; the arm64 build has no such dependency (as tabsdata-conn-starrocks
+    # relies on). Pinned to the latest 3.x (3.4.8), which ships an arm64 variant.
     image = (
-        f"starrocks/allin1-ubuntu:{os.environ.get('STARROCKS_IMAGE_VERSION', '4.0.8')}"
+        "starrocks/allin1-ubuntu:"
+        f"{os.environ.get('STARROCKS_IMAGE_VERSION', '3.4.8')}"
     )
-    image_platform = "linux/amd64"
+    image_platform = (
+        "linux/arm64" if platform.machine() in ("arm64", "aarch64") else "linux/amd64"
+    )
     internal_port = 9030
     system_user = "root"
     password_env_name = ""  # allin1 doesn't accept a root password env
@@ -41,15 +49,18 @@ class StarrocksSystem(ContainerBase):
         return docker_run(self._build_docker_args(container, host_port, password))
 
     def _readiness_fatal(self, container: str, password: str) -> str | None:
-        # The BE (backend) needs an x86-64 CPU with AVX2; under emulation on
-        # Apple Silicon (arm64) it crash-loops and supervisord marks it FATAL.
-        # Detect that and fail fast rather than waiting out the full timeout.
+        # Fail fast if the BE (backend) crash-loops (supervisord marks it FATAL)
+        # rather than waiting out the full timeout. The usual cause is running
+        # the x86-64 BE under emulation (it needs AVX2): this image now
+        # auto-selects the native arch, so on Apple Silicon check that the
+        # arm64 variant was pulled (not forced amd64 via STARROCKS/-platform).
         cp = docker_exec(container, "supervisorctl", "status", "beservice")
         if "FATAL" in (cp.stdout or "") or "EXITED" in (cp.stdout or ""):
             return (
-                "the StarRocks BE failed to start (beservice FATAL) — it needs "
-                "an x86-64 CPU with AVX2, which isn't available under emulation "
-                "on Apple Silicon (arm64). StarRocks can't run on this host."
+                "the StarRocks BE failed to start (beservice FATAL). The x86-64 "
+                "BE needs AVX2, so it can't run under x86 emulation on Apple "
+                "Silicon — this image auto-selects the native arm64 build; check "
+                f"`docker logs {container}` for the underlying cause."
             )
         return None
 

@@ -67,11 +67,21 @@ def test_post_start_skips_when_shared_db_exists(monkeypatch):
     assert scripts == []
 
 
-def test_do_delete_drops_the_schema(monkeypatch):
+def test_do_delete_drops_objects_then_the_schema(monkeypatch):
     sysobj = Db2System()
     statements: list[str] = []
     monkeypatch.setattr(sysobj, "_run_admin_sql",
                         lambda admin, stmts: statements.extend(stmts))
+    # one view + two tables in the schema; the schema is dropped last.
+    monkeypatch.setattr(
+        sysobj, "_query_admin_names",
+        lambda admin, sql: (["V1"] if "syscat.views" in sql
+                            else ["T1", "T2"] if "syscat.tables" in sql else []))
     sysobj.do_delete(_admin(), "D_20260615T091316Z_tucu_db2_IN")
-    joined = "\n".join(statements)
-    assert "ADMIN_DROP_SCHEMA('D_20260615T091316Z_TUCU_DB2_IN'" in joined
+    schema = "D_20260615T091316Z_TUCU_DB2_IN"
+    assert f"DROP VIEW {schema}.V1" in statements
+    assert f"DROP TABLE {schema}.T1" in statements
+    assert f"DROP TABLE {schema}.T2" in statements
+    # the (now empty) schema is dropped last, with RESTRICT (no admin routine).
+    assert statements[-1] == f"DROP SCHEMA {schema} RESTRICT"
+    assert not any("ADMIN_DROP_SCHEMA" in s for s in statements)

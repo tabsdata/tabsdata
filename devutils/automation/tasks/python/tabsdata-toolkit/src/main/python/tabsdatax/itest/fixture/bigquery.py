@@ -29,8 +29,7 @@ class BigqueryDomain(Domain):
     service_account_key: str
     bucket: str
     sys_path: Path
-    dataset: str
-    domain_path: Path
+    dataset: str  # == the domain name
     base_path: Path
 
 

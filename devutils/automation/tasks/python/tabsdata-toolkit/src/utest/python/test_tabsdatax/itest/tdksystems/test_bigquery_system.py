@@ -1,8 +1,9 @@
 """bigquery: a managed warehouse (datasets) staged through a GCS bucket. The
-system takes project / service-account-key / bucket / sys-path; a domain takes a
-dataset and a domain-path (relative to sys-path) -> BASE_PATH; destroying the
-domain drops the dataset AND clears the prefix. No models/data. The BigQuery and
-GCS clients are faked here; the real ones are exercised by the itest."""
+system takes project / service-account-key / bucket / sys-path; a domain is
+named like every other system — the domain NAME is both the dataset and the GCS
+prefix segment (BASE_PATH = SYS_PATH/<name>); destroying the domain drops the
+dataset AND clears the prefix. No models/data. The BigQuery and GCS clients are
+faked here; the real ones are exercised by the itest."""
 from __future__ import annotations
 
 import pytest
@@ -48,33 +49,33 @@ def test_bigquery_lifecycle_through_tdx(stores, bq):
     assert (doc["category"], doc["system"], doc["role"]) == ("saas", "bigquery", "sys")
     assert tdx._sys_status(["--sys", "wh"]) == 0
 
-    # domain: dataset + domain-path (relative to sys-path)
-    assert tdx._domain_create([
-        "--sys", "wh", "--domain", "inbox",
-        "--dataset", "sales", "--domain-path", "d1", "-f"]) == 0
+    # domain: named like any other system — the domain NAME is the dataset and
+    # the GCS prefix segment (BASE_PATH = SYS_PATH/<name>). No extra options.
+    assert tdx._domain_create(["--sys", "wh", "--domain", "inbox", "-f"]) == 0
     m = descriptor.read_meta(store.domain_path("inbox"))
-    assert m["DATASET"] == "sales"
-    assert m["DOMAIN_PATH"] == "d1"
-    assert m["BASE_PATH"] == "staging/d1"        # domain-path under sys-path
-    assert "sales" in bq["datasets"]
+    assert m["DATASET"] == "inbox"
+    assert m["BASE_PATH"] == "staging/inbox"      # <name> under sys-path
+    assert "DOMAIN_PATH" not in m                 # no longer a separate option
+    assert "inbox" in bq["datasets"]
 
     # destroy: the dataset is dropped AND the prefix is cleared
     assert tdx._domain_destroy(["--domain", "inbox"]) == 0
-    assert "sales" not in bq["datasets"]
-    assert "staging/d1" in bq["cleared"]
+    assert "inbox" not in bq["datasets"]
+    assert "staging/inbox" in bq["cleared"]
     assert tdx._sys_destroy(["--sys", "wh"]) == 0
 
 
-def test_bigquery_domain_requires_dataset_and_domain_path(stores, bq):
+def test_bigquery_domain_needs_no_extra_options(stores, bq):
+    # No --dataset / --domain-path: the domain name supplies both, consistent
+    # with every other system.
     tdx._sys_create(["--type", "bigquery", "--sys", "wh", *_SYS_CREATE])
-    # add_domain_options makes both required -> argparse exits (SystemExit).
-    with pytest.raises(SystemExit):
-        tdx._domain_create(["--sys", "wh", "--domain", "inbox", "-f"])
+    assert tdx._domain_create(["--sys", "wh", "--domain", "sales", "-f"]) == 0
+    m = descriptor.read_meta(store.domain_path("sales"))
+    assert m["DATASET"] == "sales" and m["BASE_PATH"] == "staging/sales"
 
 
 def test_bigquery_rejects_models_and_data(stores, bq):
     tdx._sys_create(["--type", "bigquery", "--sys", "wh", *_SYS_CREATE])
     with pytest.raises(DatagenError, match="does not support --model"):
-        tdx._domain_create([
-            "--sys", "wh", "--domain", "inbox",
-            "--dataset", "sales", "--domain-path", "d1", "--model", "sakila", "-f"])
+        tdx._domain_create(
+            ["--sys", "wh", "--domain", "inbox", "--model", "sakila", "-f"])

@@ -67,9 +67,12 @@ def test_every_system_loads_and_declares_create_options(slug):
     if sysobj.staging_root:
         expected.add("SYS_PATH")
     assert set(settings) == expected
+    # Each declared credential option defaults to a $<PREFIX>__<OPT> ref, where
+    # PREFIX is the system's default env prefix (azureblob overrides it to AZ).
     for opt in sysobj.options:
         st = settings[opt.name]
-        assert st.value is None and st.env_var == f"{slug.upper()}__{opt.name}"
+        assert st.value is None
+        assert st.env_var == f"{sysobj.default_env_prefix}__{opt.name}"
 
 
 # ---- s3 (cloud) -----------------------------------------------------------

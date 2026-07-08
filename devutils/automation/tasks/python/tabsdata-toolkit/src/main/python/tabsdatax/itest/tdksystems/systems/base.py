@@ -184,7 +184,7 @@ class System(ABC):
     # ---- identity / declaration (class attributes) ----
     slug: str = ""  # --type value, dir name under systems/
     label: str = ""  # human name, e.g. "MySQL"
-    category: str = ""  # "container" | "cloud" | "fs" | "saas"
+    category: str = ""  # "container" | "cloud" | "native" | "saas"
     # descriptor field + --type grouping ONLY
     kind: str = ""  # data-plane compat tag: sql|file|kafka|
     # mongodb|salesforce (model-vs-system check)
@@ -203,11 +203,14 @@ class System(ABC):
     domain_options: tuple[Option, ...] = ()  # extra create-domain inputs a
     # system needs beyond the name (bigquery:
     # --dataset / --domain-path)
+    env_prefix: str = ""  # override the $<PREFIX>__ stem (else the slug
+    # upper-cased); azureblob -> AZ
 
     @property
     def default_env_prefix(self) -> str:
-        """Default `--env-prefix`: the slug upper-cased (s3 -> S3)."""
-        return self.slug.upper()
+        """Default `--env-prefix`: the explicit `env_prefix` if a system sets
+        one (azureblob -> AZ), else the slug upper-cased (s3 -> S3)."""
+        return self.env_prefix or self.slug.upper()
 
     # ==================================================================
     # System lifecycle
@@ -262,6 +265,15 @@ class System(ABC):
     @abstractmethod
     def domain_status(self, ctx: DomainContext) -> Health:
         """Is the domain reachable?"""
+
+    def reset_domain(self, ctx: DomainContext) -> None:
+        """Reset the domain's entity container to empty, REUSING its name and
+        credentials (drop the tables / collections), so `tdx-domain recreate`
+        can replay its DDL/data on a clean slate without minting new
+        credentials. Default: unsupported — `recreate` then falls back to
+        dropping and re-provisioning the resource (fine for systems with no
+        per-domain credentials, e.g. object stores / fs / kafka)."""
+        raise Unsupported(f"{self.slug} does not reset domains in place")
 
     # ==================================================================
     # Data plane (optional — defaults suit no-schema / no-load systems)

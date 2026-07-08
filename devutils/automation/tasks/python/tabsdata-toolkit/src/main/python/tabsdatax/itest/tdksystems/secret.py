@@ -27,6 +27,36 @@ _PROVIDERS: dict[str, str] = {
 
 _OUT_FORMATS = ("json", "export", "unset")
 
+# Set alongside the fetched secrets: the distinct env prefixes (the `<ITEM>`
+# part of each `<ITEM>__<FIELD>` name) that now have credentials. It names the
+# systems the secrets populate — the same values `tdx-system create --auto` /
+# `--env-prefix` use. Part of the `TD_BACKENDS_*` env family.
+SYSTEMS_ENV = "TD_BACKENDS_SYSTEMS"
+
+
+def _prefixes(secrets: dict[str, str]) -> list[str]:
+    """Distinct `<ITEM>` prefixes (the part before the first `__`) across the
+    fetched secret names, in first-seen order — the env prefixes the secrets
+    populate. Ignores the synthetic SYSTEMS_ENV entry (so it stays idempotent)."""
+    out: list[str] = []
+    for name in secrets:
+        if name == SYSTEMS_ENV:
+            continue
+        prefix = name.split("__", 1)[0]
+        if prefix and prefix not in out:
+            out.append(prefix)
+    return out
+
+
+def with_systems_var(secrets: dict[str, str]) -> dict[str, str]:
+    """`secrets` plus a synthetic ``TD_BACKENDS_SYSTEMS`` entry listing the
+    populated env prefixes (space-separated), so a consumer knows which systems
+    have credentials set. Skipped when there are no prefixes; idempotent."""
+    prefixes = _prefixes(secrets)
+    if not prefixes:
+        return secrets
+    return {**secrets, SYSTEMS_ENV: " ".join(prefixes)}
+
 
 def parse_ref(get: str) -> tuple[str, str]:
     """Split a `--get` value `<scheme>:<ref>` into (scheme, ref)."""

@@ -47,8 +47,8 @@ def test_bigquery(provision):
     assert sysobj.project == "x" and isinstance(sysobj.sys_path, Path)
     provision.domain("bigquery", "s", "d")
     dom = common.load("d", BigqueryDomain)
-    assert dom.dataset == "x"
-    assert isinstance(dom.domain_path, Path) and isinstance(dom.base_path, Path)
+    assert dom.dataset == "d"  # dataset == the domain name
+    assert isinstance(dom.base_path, Path)
 
 
 @pytest.fixture

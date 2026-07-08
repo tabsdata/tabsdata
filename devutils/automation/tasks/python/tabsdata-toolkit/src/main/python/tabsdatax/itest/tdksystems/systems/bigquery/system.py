@@ -3,9 +3,10 @@
 Hybrid, so it subclasses `System` directly rather than a category mixin:
   * system: a GCP PROJECT + service-account CREDENTIALS + a GCS BUCKET and
     SYS_PATH staging prefix (the GCS side reuses `GcsBackend`);
-  * domain: a BigQuery DATASET *and* a GCS prefix (DOMAIN_PATH, relative to
-    SYS_PATH) -> BASE_PATH; destroying the domain drops the dataset and clears
-    the prefix.
+  * domain: named like every other system — the domain NAME is both the
+    BigQuery DATASET and the GCS staging prefix segment (BASE_PATH =
+    SYS_PATH/<name>); destroying the domain drops the dataset and clears the
+    prefix.
 No models/data (`supports_models = False`): it stages datasets/prefixes only.
 """
 
@@ -39,10 +40,8 @@ class BigQuerySystem(System):
         Option("SERVICE_ACCOUNT_KEY", "service-account-key", secret=True),
         Option("BUCKET", "bucket"),
     )
-    domain_options = (
-        Option("DATASET", "dataset"),
-        Option("DOMAIN_PATH", "domain-path", is_path=True),
-    )
+    # No extra domain options: like every other system, the domain NAME is the
+    # resource name (here the dataset + the GCS prefix segment).
 
     # ---- fakeable seams (mirror gcs._backend / snowflake._cursor) ----
 
@@ -111,13 +110,11 @@ class BigQuerySystem(System):
     ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
         values = self.resolve_values(settings)
-        dataset = spec.options.get("DATASET", "")
-        domain_path = spec.options.get("DOMAIN_PATH", "")
-        if not dataset:
-            raise DatagenError("domain --dataset is empty")
-        if not domain_path:
-            raise DatagenError("domain --domain-path is empty")
-        full = self._base_path(values, domain_path)
+        # The domain name is the dataset AND the staging prefix segment, so
+        # `tdx-domain create --sys wh --domain <name>` is all it takes — same as
+        # every other system (the name is already a validated identifier).
+        dataset = spec.name
+        full = self._base_path(values, dataset)
 
         self._bq(values).create_dataset(dataset, force=spec.force)
         # If the GCS prefix is dirty and we're not forcing, roll the dataset back
@@ -134,9 +131,6 @@ class BigQuerySystem(System):
                 )
 
         settings["DATASET"] = Setting("DATASET", value=dataset)
-        settings["DOMAIN_PATH"] = Setting(
-            "DOMAIN_PATH", value=domain_path, is_path=True
-        )
         settings["BASE_PATH"] = Setting("BASE_PATH", value=full, is_path=True)
         return settings
 

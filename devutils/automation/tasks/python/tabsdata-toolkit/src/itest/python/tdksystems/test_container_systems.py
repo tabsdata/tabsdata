@@ -6,8 +6,6 @@ when Docker isn't available."""
 
 from __future__ import annotations
 
-import platform
-
 import pytest
 from conftest import assert_ok, have_docker_running, run_cmd
 
@@ -44,11 +42,6 @@ def _ready_timeout(slug: str) -> int:
 def test_container_system_lifecycle(slug, itest_dir):
     if not have_docker_running():
         pytest.skip("docker daemon not reachable")
-    if slug == "starrocks" and platform.machine() == "arm64":
-        # The starrocks/allin1-ubuntu BE crashes under qemu-amd64 emulation on
-        # Apple Silicon ("beservice FATAL Exited too quickly") — `SHOW BACKENDS`
-        # never reports Alive=true, so readiness times out. Known image quirk.
-        pytest.skip("starrocks allin1 BE does not run under arm64 emulation")
 
     sysdir, domdir = itest_dir / "systems", itest_dir / "domains"
     S = ("--sys-dir", str(sysdir))

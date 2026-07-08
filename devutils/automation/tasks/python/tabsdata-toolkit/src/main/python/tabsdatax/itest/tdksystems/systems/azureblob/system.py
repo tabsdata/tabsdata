@@ -10,6 +10,7 @@ from .backend import AzureblobBackend
 class AzureblobSystem(CloudBase):
     slug = "azureblob"
     label = "Azure Blob"
+    env_prefix = "AZ"  # $AZ__CONTAINER / $AZ__ACCOUNT_NAME / $AZ__ACCOUNT_KEY
     options = (
         Option("CONTAINER", "container"),
         Option("ACCOUNT_NAME", "account-name"),

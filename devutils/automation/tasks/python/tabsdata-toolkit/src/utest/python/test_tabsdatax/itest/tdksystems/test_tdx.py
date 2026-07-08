@@ -73,7 +73,7 @@ def test_sys_create_writes_stamped_descriptor(stores, fs_root):
     tdx._sys_create(["--type", "fs", "--sys", "my_fs",
                      "--sys-path", str(fs_root), "-f"])
     doc = _read(store.system_path("my_fs"))
-    assert doc["category"] == "cloud" and doc["system"] == "fs"
+    assert doc["category"] == "native" and doc["system"] == "fs"
     assert doc["role"] == "sys"
     assert doc["name"] == "my_fs"
     assert "prefix" not in doc            # info keys are unprefixed now
@@ -249,3 +249,279 @@ def test_pause_resume_registered_and_container_only(stores, fs_root):
         tdx._sys_pause(["--sys", "my_fs"])
     with pytest.raises(DatagenError, match="resume only applies to container"):
         tdx._sys_resume(["--sys", "my_fs"])
+
+
+# ---- tdx-system types: list every registered system type -------------------
+
+def test_types_lists_all_systems(capsys):
+    from tabsdatax.itest.tdksystems import systems
+    # `types` is descriptor-free (no secret / venv needed) and just reads the
+    # registry.
+    assert "types" in tdx._SYS_VERBS and "types" in tdx._NO_DESCRIPTOR_VERBS
+    assert tdx._sys_types([]) == 0
+    out = capsys.readouterr().out
+    for slug in systems.all_slugs():
+        assert slug in out
+    assert f"{len(systems.all_slugs())} types" in out
+    # container systems show their platform then image (repo:tag); others don't.
+    mysql = systems.get("mysql")
+    assert f"{mysql.image_platform}  {mysql.image}" in out
+    assert "container" in out and "cloud" in out and "native" in out  # fs -> native
+
+
+# ---- create --auto: one system per type, named s_<type> --------------------
+
+def test_sys_create_auto_fs(stores, tmp_path, monkeypatch, capsys):
+    # fs takes no env: --auto defaults its root to target/backends/<system name>
+    # under the current directory (here, the tmp cwd).
+    monkeypatch.chdir(tmp_path)
+    assert tdx._sys_create(["--auto", "fs", "-f"]) == 0
+    doc = _read(store.system_path("s_fs"))
+    assert doc["system"] == "fs" and doc["name"] == "s_fs"
+    assert (tmp_path / "target" / "backends" / "s_fs").is_dir()
+    assert "created 1/1 systems" in capsys.readouterr().out
+
+
+def test_sys_create_auto_continues_on_failure(stores, tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert tdx._sys_create(["--auto", "fs", "-f"]) == 0
+    capsys.readouterr()
+    # Re-run without --force: s_fs already exists -> that item FAILs, but the
+    # batch keeps going and the non-zero rc reflects the failure.
+    assert tdx._sys_create(["--auto", "fs"]) == 1
+    out = capsys.readouterr().out
+    assert "FAIL" in out and "s_fs" in out and "already exists" in out
+
+
+def test_sys_create_auto_unknown_type_rejected(stores):
+    with pytest.raises(DatagenError, match="unknown type"):
+        tdx._sys_create(["--auto", "fs,nope"])
+
+
+def test_create_help_advertises_auto(capsys):
+    # `create -h` routes to single mode, so it must still document the batch
+    # --auto mode — otherwise it's undiscoverable (you'd have to already know to
+    # type `create --auto -h`).
+    for verb in (tdx._sys_create, tdx._domain_create):
+        with pytest.raises(SystemExit):
+            verb(["-h"])
+        assert "--auto" in capsys.readouterr().out
+
+
+def test_all_is_reserved_as_a_system_name(stores, fs_root):
+    with pytest.raises(DatagenError, match="reserved"):
+        tdx._sys_create(["--type", "fs", "--sys", "ALL",
+                         "--sys-path", str(fs_root), "-f"])
+
+
+# ---- status / destroy ALL + comma over many systems -----------------------
+
+def test_sys_status_and_destroy_all(stores, fs_root, capsys):
+    tdx._sys_create(["--type", "fs", "--sys", "alpha",
+                     "--sys-path", str(fs_root / "a"), "-f"])
+    tdx._sys_create(["--type", "fs", "--sys", "beta",
+                     "--sys-path", str(fs_root / "b"), "-f"])
+    capsys.readouterr()
+
+    assert tdx._sys_status(["--sys", "ALL"]) == 0
+    out = capsys.readouterr().out
+    assert "alpha" in out and "beta" in out and "2/2 systems ready" in out
+
+    # A comma list selects a subset.
+    assert tdx._sys_status(["--sys", "alpha,beta"]) == 0
+    capsys.readouterr()
+
+    assert tdx._sys_destroy(["--sys", "ALL"]) == 0
+    assert not store.system_path("alpha").exists()
+    assert not store.system_path("beta").exists()
+    assert "destroyed 2/2 systems" in capsys.readouterr().out
+
+
+# ---- tdx-domain create --auto: one domain per system ----------------------
+
+def test_domain_create_auto_derives_names(stores, fs_root, capsys):
+    # s_<x> -> d_<x>; a non-s_ system name is prefixed d_.
+    tdx._sys_create(["--type", "fs", "--sys", "s_alpha",
+                     "--sys-path", str(fs_root / "a"), "-f"])
+    tdx._sys_create(["--type", "fs", "--sys", "beta",
+                     "--sys-path", str(fs_root / "b"), "-f"])
+    capsys.readouterr()
+    assert tdx._domain_create(["--auto", "ALL", "-f"]) == 0
+    assert _read(store.domain_path("d_alpha"))["name"] == "d_alpha"
+    assert _read(store.domain_path("d_beta"))["name"] == "d_beta"
+    assert "created 2/2 domains" in capsys.readouterr().out
+
+
+def test_domain_create_single_rejects_multi_sys(stores, fs_root):
+    tdx._sys_create(["--type", "fs", "--sys", "a",
+                     "--sys-path", str(fs_root), "-f"])
+    with pytest.raises(DatagenError, match="single system"):
+        tdx._domain_create(["--sys", "a,b", "--domain", "x", "-f"])
+
+
+def test_all_is_reserved_as_a_domain_name(stores, fs_root):
+    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
+                     "--sys-path", str(fs_root), "-f"])
+    with pytest.raises(DatagenError, match="reserved"):
+        tdx._domain_create(["--sys", "my_fs", "--domain", "ALL", "-f"])
+
+
+def test_domain_status_and_destroy_all(stores, fs_root, capsys):
+    tdx._sys_create(["--type", "fs", "--sys", "a",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d1", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d2", "-f"])
+    capsys.readouterr()
+    assert tdx._domain_status(["--domain", "ALL"]) == 0
+    assert "2/2 domains ready" in capsys.readouterr().out
+    assert tdx._domain_destroy(["--domain", "ALL"]) == 0
+    assert not store.domain_path("d1").exists()
+    assert not store.domain_path("d2").exists()
+
+
+# ---- tdx-domain seed: DDL/data into an existing domain --------------------
+
+def test_seed_registered_and_rejects_multi_domain(stores):
+    assert "seed" in tdx._DOMAIN_VERBS
+    with pytest.raises(DatagenError, match="single domain"):
+        tdx._domain_seed(["--domain", "ALL", "--model", "world"])
+
+
+def test_seed_rejects_already_seeded_domain(stores, fs_root):
+    tdx._sys_create(["--type", "fs", "--sys", "a",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "inbox", "-f"])
+    # Mark it seeded (as a real --model create would), then seed must refuse.
+    descriptor.stamp(store.domain_path("inbox"), name="inbox", started="t",
+                     model="world", data="xs")
+    with pytest.raises(DatagenError, match="already seeded"):
+        tdx._domain_seed(["--domain", "inbox", "--model", "world"])
+
+
+# ---- secrets: TD_BACKENDS_SYSTEMS manifest --------------------------------
+
+def test_secrets_emits_systems_var():
+    from tabsdatax.itest.tdksystems import secret
+    fetched = {"MYSQL__USER": "u", "MYSQL__PASSWORD": "p", "S3__BUCKET": "b"}
+    out = secret.with_systems_var(fetched)
+    # distinct <ITEM> prefixes, first-seen order; originals preserved.
+    assert out[secret.SYSTEMS_ENV] == "MYSQL S3"
+    assert out["MYSQL__USER"] == "u"
+    # idempotent (the synthetic var doesn't become its own prefix).
+    assert secret.with_systems_var(out)[secret.SYSTEMS_ENV] == "MYSQL S3"
+    # nothing to list -> no var.
+    assert secret.SYSTEMS_ENV not in secret.with_systems_var({})
+    # rendered in every --out format.
+    assert f"export {secret.SYSTEMS_ENV}='MYSQL S3'" in secret.render(out, "export")
+    assert f'"{secret.SYSTEMS_ENV}": "MYSQL S3"' in secret.render(out, "json")
+    assert f"unset {secret.SYSTEMS_ENV}" in secret.render(out, "unset")
+
+
+# ---- tdx-domain recreate: reset to a clean initial state ------------------
+
+def test_recreate_registered():
+    assert "recreate" in tdx._DOMAIN_VERBS
+
+
+def test_system_meta_from_domain_remaps_container_backrefs():
+    # container domain: SYS_* back-refs -> the admin fields create_domain reads.
+    dmeta = {"HOST": "localhost", "PORT": "3306", "SYS_CONTAINER": "s_mysql",
+             "SYS_ADMIN_USER": "root", "SYS_ADMIN_PASSWORD": "pw", "DB": "d"}
+    m = tdx._system_meta_from_domain(dmeta)
+    assert m["CONTAINER"] == "s_mysql" and m["USER"] == "root" and m["PASSWORD"] == "pw"
+    # cloud/fs domain (no SYS_CONTAINER) already carries system settings -> as-is.
+    cmeta = {"SYS_PATH": "data", "BUCKET": "b"}
+    assert tdx._system_meta_from_domain(cmeta) == cmeta
+
+
+def test_domain_recreate_empty_wipes_contents(stores, fs_root, capsys):
+    tdx._sys_create(["--type", "fs", "--sys", "a",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "inbox", "-f"])
+    stray = fs_root / "inbox" / "stray.txt"
+    stray.write_text("x")
+    capsys.readouterr()
+    assert tdx._domain_recreate(["--domain", "inbox"]) == 0
+    # fs recreate rmtree+mkdir's the domain dir -> back to clean/empty.
+    assert (fs_root / "inbox").is_dir()
+    assert not stray.exists()
+    out = capsys.readouterr().out
+    assert "recreated domain 'inbox'" in out and "(empty)" in out
+
+
+def test_domain_recreate_replays_recorded_model(stores, fs_root):
+    tdx._sys_create(["--type", "fs", "--sys", "a",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "inbox", "-f"])
+    # Record a model (as a --model create would); recreate must preserve it.
+    descriptor.stamp(store.domain_path("inbox"), name="inbox", started="t",
+                     model="world")
+    assert tdx._domain_recreate(["--domain", "inbox"]) == 0
+    assert _read(store.domain_path("inbox")).get("model") == "world"
+    assert (fs_root / "inbox").is_dir()
+
+
+def test_domain_recreate_all(stores, fs_root, capsys):
+    tdx._sys_create(["--type", "fs", "--sys", "a",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d1", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d2", "-f"])
+    capsys.readouterr()
+    assert tdx._domain_recreate(["--domain", "ALL"]) == 0
+    assert "recreated 2/2 domains" in capsys.readouterr().out
+    assert (fs_root / "d1").is_dir() and (fs_root / "d2").is_dir()
+
+
+def test_recreate_reuses_credentials_for_sql(stores, monkeypatch):
+    # A SQL container resets in place (drop tables) using the domain's own URI,
+    # so the name + credentials are reused — no re-provision, no descriptor
+    # rewrite. Verify recreate takes that path (not create_domain).
+    from tabsdatax.itest.tdksystems.systems._container import ContainerBase
+    dropped = []
+    monkeypatch.setattr(ContainerBase, "_drop_all_tables",
+                        staticmethod(lambda uri: dropped.append(uri)))
+    my = tdx.systems.get("mysql")
+    from tabsdatax.itest.tdksystems.systems.base import DomainContext
+    my.reset_domain(DomainContext("mysql", "d", {"SQLALCHEMY_URI": "mysql://u:p@h/d"}))
+    assert dropped == ["mysql://u:p@h/d"]
+
+
+def test_reset_domain_unsupported_for_object_store():
+    from tabsdatax.itest.tdksystems.systems.base import DomainContext, Unsupported
+    # Object stores have no per-domain creds; reset falls back to re-provision.
+    with pytest.raises(Unsupported):
+        tdx.systems.get("s3").reset_domain(DomainContext("s3", "d", {}))
+
+
+# ---- fs: --sys-path is a local option (no env), default target/<name> ------
+
+def test_fs_default_sys_path_is_target_backends_name(stores, tmp_path, monkeypatch):
+    # No --sys-path -> root defaults to target/backends/<system name> under cwd;
+    # no $FS__SYS_PATH involved.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FS__SYS_PATH", "/tmp/should-be-ignored")
+    assert tdx._sys_create(["--type", "fs", "--sys", "myfs", "-f"]) == 0
+    doc = _read(store.system_path("myfs"))
+    assert descriptor.attributes(doc)["SYS_PATH"] == "target/backends/myfs"
+    assert (tmp_path / "target" / "backends" / "myfs").is_dir()
+
+
+def test_fs_create_has_no_env_options(stores):
+    # fs offers only --sys-path (no --env:sys-path / --env-prefix cloud machinery).
+    from tabsdatax.itest.tdksystems.shell import ArgumentParser
+    p = ArgumentParser(prog="tdx-system create --type fs")
+    tdx.systems.get("fs").add_create_options(p)
+    flags = {a for action in p._actions for a in action.option_strings}
+    assert "--sys-path" in flags
+    assert "--env:sys-path" not in flags and "--env-prefix" not in flags
+
+
+# ---- azureblob default env prefix is AZ ------------------------------------
+
+def test_azureblob_default_env_prefix_is_az():
+    import argparse
+    az = tdx.systems.get("azureblob")
+    assert az.default_env_prefix == "AZ"
+    settings = az.resolve_create_settings(argparse.Namespace(env_prefix="AZ"))
+    assert settings["CONTAINER"].env_var == "AZ__CONTAINER"
+    assert settings["ACCOUNT_KEY"].env_var == "AZ__ACCOUNT_KEY"

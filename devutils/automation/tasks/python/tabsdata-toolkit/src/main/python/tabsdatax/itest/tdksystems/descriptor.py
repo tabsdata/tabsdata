@@ -303,11 +303,15 @@ def write_cloud_system(
     sys_path_env: str | None,
     forwarded: list[tuple[str, str | None, str | None]],
     strip_sys_path_slash: bool = True,
+    category: str = "cloud",
 ) -> None:
     """Descriptor for a cloud-storage system (target/systems/s3.json, …).
 
     `strip_sys_path_slash` — when True (object stores) a leading slash on
-    SYS_PATH is stripped at run time; fs passes False (absolute roots valid)."""
+    SYS_PATH is stripped at run time; fs passes False (absolute roots valid).
+    `category` is the user-facing family (object stores are "cloud"; the local
+    filesystem passes "native"); the descriptor `kind` stays "cloud-*" either
+    way, so the data pipeline routes both the same."""
     meta: list[tuple[str, str | None, str | None]] = [
         ("STORAGE_TYPE", storage_type, None),
         ("SYSTEM_KIND", system_kind, None),
@@ -320,7 +324,7 @@ def write_cloud_system(
     strip = [("SYS_PATH", True)] if strip_sys_path_slash else []
     _write(
         out,
-        category="cloud",
+        category=category,
         system=storage_type,
         role="sys",
         kind="cloud-system",
@@ -340,9 +344,11 @@ def write_cloud_domain(
     base_path: str,
     forwarded: list[tuple[str, str | None, str | None]],
     strip_sys_path_slash: bool = True,
+    category: str = "cloud",
 ) -> None:
     """Descriptor for a cloud domain. `strip_sys_path_slash` — see
-    write_cloud_system; fs passes False."""
+    write_cloud_system; fs passes False. `category` — see write_cloud_system
+    (fs passes "native"); the descriptor `kind` stays "cloud-domain"."""
     meta: list[tuple[str, str | None, str | None]] = [
         ("STORAGE_TYPE", storage_type, None),
         ("SYSTEM_KIND", system_kind, None),
@@ -363,7 +369,7 @@ def write_cloud_domain(
     strip = [("SYS_PATH", True), ("BASE_PATH", False)] if strip_sys_path_slash else []
     _write(
         out,
-        category="cloud",
+        category=category,
         system=storage_type,
         role="env",
         kind="cloud-domain",
@@ -483,7 +489,7 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
                 sys_path=(sp.value if sp and sp.env_var is None else None),
                 sys_path_env=(sp.env_var if sp else None),
             )
-        elif cat == "cloud":
+        elif cat in ("cloud", "native"):  # object stores + local fs
             sp = settings["SYS_PATH"]
             write_cloud_system(
                 out=out,
@@ -494,6 +500,7 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
                 sys_path_env=sp.env_var,
                 forwarded=_settings_triples(settings, exclude=("SYS_PATH",)),
                 strip_sys_path_slash=getattr(sys_obj, "relative_sys_path", True),
+                category=cat,
             )
         else:
             write_saas_system(
@@ -524,7 +531,7 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
             image=v.get("IMAGE") or None,
             extra_vars=extra,
         )
-    elif cat == "cloud":
+    elif cat in ("cloud", "native"):  # object stores + local fs
         sp, bp = settings["SYS_PATH"], settings["BASE_PATH"]
         write_cloud_domain(
             out=out,
@@ -535,6 +542,7 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
             base_path=bp.value or "",
             forwarded=_settings_triples(settings, exclude=("SYS_PATH", "BASE_PATH")),
             strip_sys_path_slash=getattr(sys_obj, "relative_sys_path", True),
+            category=cat,
         )
     else:
         schema = settings.get("SCHEMA")

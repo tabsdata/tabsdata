@@ -111,22 +111,24 @@ class ContainerBase(System):
     # System lifecycle
     # ==================================================================
 
+    def _staging_setting(self, spec: CreateSystemSpec) -> Setting:
+        """The SYS_PATH setting to bake for a file-staging system. An explicit
+        ``--sys-path`` / a *set* ``$<PREFIX>__SYS_PATH`` is kept as given (a
+        literal, or a forwarded env ref that re-resolves at use time). Otherwise
+        the staging root defaults to the system name."""
+        sp = spec.settings.get("SYS_PATH")
+        try:
+            resolved = self.resolve_values({"SYS_PATH": sp})["SYS_PATH"] if sp else ""
+        except DatagenError:
+            resolved = ""  # its env ref points at an unset var
+        if sp and resolved:
+            return Setting("SYS_PATH", value=sp.value, env_var=sp.env_var, is_path=True)
+        return Setting("SYS_PATH", value=spec.name, is_path=True)
+
     def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
-        if self.uses_file_staging:
-            # SYS_PATH is always present as a Setting (the default-prefix
-            # fallback fills in an env ref), so a mere membership check is a
-            # no-op. Require it to actually *resolve* to a staging root now.
-            sp = spec.settings.get("SYS_PATH")
-            try:
-                root = self.resolve_values({"SYS_PATH": sp})["SYS_PATH"] if sp else ""
-            except DatagenError:
-                root = ""
-            if not root:
-                raise DatagenError(
-                    f"{self.slug} is a file-staging system: a staging root is "
-                    f"required (--sys-path PATH, --env:sys-path VAR, or "
-                    f"--env-prefix PREFIX defining $<PREFIX>__SYS_PATH)"
-                )
+        staging_setting = (
+            self._staging_setting(spec) if self.uses_file_staging else None
+        )
         require_docker()
         container = spec.name
         if container_exists(container):
@@ -168,11 +170,8 @@ class ContainerBase(System):
             "USER": Setting("USER", value=self.system_user),
             "PASSWORD": Setting("PASSWORD", value=password),
         }
-        if self.uses_file_staging:
-            sp = spec.settings["SYS_PATH"]
-            out["SYS_PATH"] = Setting(
-                "SYS_PATH", value=sp.value, env_var=sp.env_var, is_path=True
-            )
+        if staging_setting is not None:
+            out["SYS_PATH"] = staging_setting
         for k, v in self._system_extra_vars().items():
             out[k] = Setting(k, value=v)
         return out
@@ -292,6 +291,28 @@ class ContainerBase(System):
         for k, v in self._domain_extra_vars().items():
             out[k] = Setting(k, value=v)
         return out
+
+    @staticmethod
+    def _admin_from_domain_meta(meta: dict[str, str]) -> AdminConn:
+        """Rebuild the system admin connection from a DOMAIN's descriptor meta
+        (its SYS_* back-refs), for operations that re-touch the entity container
+        without loading the system descriptor."""
+        return AdminConn(
+            host=meta.get("HOST", "localhost"),
+            port=meta.get("PORT", ""),
+            user=meta.get("SYS_ADMIN_USER", ""),
+            password=meta.get("SYS_ADMIN_PASSWORD", ""),
+        )
+
+    def reset_domain(self, ctx: DomainContext) -> None:
+        """Reset the domain to empty, REUSING its name and credentials: for a
+        SQL container drop every table (the entity container), keeping the
+        database, its user and password — `recreate` then replays the DDL/data.
+        Non-SQL containers (kafka / mongo) fall back to the default (drop +
+        re-provision the topic / database)."""
+        if not self.supports_sql:
+            return super().reset_domain(ctx)
+        self._drop_all_tables(self._require_uri(ctx))
 
     def destroy_domain(self, ctx: DomainContext) -> None:
         admin = AdminConn(
