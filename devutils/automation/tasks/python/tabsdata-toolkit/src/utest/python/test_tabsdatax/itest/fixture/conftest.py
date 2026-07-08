@@ -9,8 +9,11 @@ helper whose `.system(slug, name)` / `.domain(slug, sys, dom)` drive
 (mkdir under /tmp); every other backend's provisioning (docker, boto3, cloud
 clients, SQL) is mocked out — the descriptor content is unaffected.
 
-`backends` (the fixture under test) is re-exported here so the fixture tests can
-request it exactly as a real caller would."""
+In a real run the ``system_<name>`` / ``domain_<name>`` fixtures generate at
+plugin import from the pre-existing store; here no store exists at import, so
+the names the injection tests declare are fed to the same fixture factories
+directly (mocked input), and each test provisions its descriptors through
+`provision` as usual."""
 from __future__ import annotations
 
 import shutil
@@ -18,9 +21,18 @@ from pathlib import Path
 
 import pytest
 
-from tabsdatax.itest.fixture.backend import backends  # noqa: F401  (re-export)
+from tabsdatax.itest.fixture import backend
 from tabsdatax.itest.tdksystems import crypto, store, systems, tdx
 from tabsdatax.itest.tdksystems.systems import _container
+
+for declared_system_name in ("my_fs", "alpha", "beta", "db", "store", "wh"):
+    globals()[f"system_{declared_system_name}"] = backend.system_fixture(
+        declared_system_name
+    )
+for declared_domain_name in ("inbox", "outbox", "archive", "shop", "sales"):
+    globals()[f"domain_{declared_domain_name}"] = backend.domain_fixture(
+        declared_domain_name
+    )
 
 
 class _FakeStore:

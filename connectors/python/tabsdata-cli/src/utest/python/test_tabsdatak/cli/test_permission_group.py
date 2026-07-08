@@ -62,14 +62,14 @@ def _client_for(
 
 
 @pytest.fixture
-def admin_client(instance: Instance) -> TabsdataServer:
+def admin_client(instance_tdtest: Instance) -> TabsdataServer:
     """Admin API client against the registered ``tdtest`` instance."""
-    superuser = instance.apiserver.superuser
-    return _client_for(instance, superuser.user, superuser.password)
+    superuser = instance_tdtest.apiserver.superuser
+    return _client_for(instance_tdtest, superuser.user, superuser.password)
 
 
 @pytest.fixture
-def regular_user(instance: Instance, admin_client):
+def regular_user(instance_tdtest: Instance, admin_client):
     """A freshly-created, enabled user holding only the auto-assigned
     ``default`` role (no ``manage_system`` / ``manage_project``), with an API
     client logged in as that user.
@@ -84,7 +84,7 @@ def regular_user(instance: Instance, admin_client):
     # changing the password (to the same value) so the user can authenticate.
     admin_client.change_password(name, _PASSWORD, _PASSWORD)
     try:
-        yield name, _client_for(instance, name)
+        yield name, _client_for(instance_tdtest, name)
     finally:
         admin_client.delete_user(name, raise_for_status=False)
 
@@ -189,7 +189,7 @@ def test_list_by_project_forbidden_for_non_privileged_user(regular_user):
 
 @pytest.mark.integration
 def test_manage_system_grant_enables_granting(
-    instance, admin_client, regular_user, other_user
+    instance_tdtest, admin_client, regular_user, other_user
 ):
     name, client = regular_user
 
@@ -201,7 +201,7 @@ def test_manage_system_grant_enables_granting(
     admin_client.grant_permission(name, "manage_system")
     try:
         # Re-login so the client carries a token issued after the grant.
-        elevated = _client_for(instance, name)
+        elevated = _client_for(instance_tdtest, name)
         # After: the user can now grant (effective permissions are the union
         # across the user's roles, evaluated live on each request).
         elevated.grant_permission(other_user, "create_projects")
@@ -265,7 +265,7 @@ def test_grant_project_permission_lists_under_project(
 
 @pytest.mark.integration
 def test_project_manager_can_grant_on_own_project_only(
-    instance, admin_client, created_project, regular_user, other_user
+    instance_tdtest, admin_client, created_project, regular_user, other_user
 ):
     name, client = regular_user
     # Make `name` a manager of the project (manage_project on it).
@@ -273,7 +273,7 @@ def test_project_manager_can_grant_on_own_project_only(
         name, "manage_project", project=created_project
     )
     try:
-        manager = _client_for(instance, name)
+        manager = _client_for(instance_tdtest, name)
         # Can grant a project permission on the project they manage.
         manager.grant_permission(
             other_user, "view_project", project=created_project

@@ -5,19 +5,23 @@
 """Inject tdx-provisioned systems / domains into tests as typed dataclasses.
 
 A test declares the backends it needs by name with the per-type decorators
-(`fs_system`, `mysql_domain`, …) and reads them from the `backends` fixture::
+(`fs_system`, `mysql_domain`, …) and receives each one through its own
+``system_<name>`` / ``domain_<name>`` fixture::
 
     @mysql_domain("orders")
     @s3_system("landing")
-    def test_pipeline(backends):
-        orders: MysqlDomain = backends["orders"]
-        landing: S3System = backends["landing"]
+    def test_pipeline(domain_orders: MysqlDomain, system_landing: S3System):
+        ...
 
-Each decorator records ``(name, dataclass)``; ``backends`` resolves the descriptor
-via the store (``$TD_BACKENDS_DIR/{systems,domains}/<name>``), decrypts it with
-``$TD_BACKENDS_CRYPTO_KEY``, checks its role + ``system_type`` match the dataclass,
-and builds it — each field pulled from the descriptor key of the same (upper-cased)
-name, pydantic coercing the type. Loads are lazy and cached for the session.
+Each decorator emits a ``tabsdata_backend(name, dataclass)`` marker; the
+``system_<name>`` / ``domain_<name>`` fixtures are generated at plugin import
+from the store (``$TD_BACKENDS_DIR/{systems,domains}/<name>``, populated by
+``tdx-system`` / ``tdx-domain`` before pytest starts) and enforce that the test
+declared the backend. Resolution decrypts the descriptor with
+``$TD_BACKENDS_CRYPTO_KEY``, checks its role + ``system_type`` match the
+dataclass, and builds it — each
+field pulled from the descriptor key of the same (upper-cased) name, pydantic
+coercing the type. Loads are lazy and cached for the session.
 
 Env: ``TD_TEST_ON_MISSING_BACKEND`` = ``skip`` | ``fail`` (default) when a
 descriptor is absent; ``TD_TEST_SKIP_BACKENDS`` = comma-separated vendor
@@ -42,7 +46,7 @@ SYSTEM = "system"
 DOMAIN = "domain"
 _DESCRIPTOR_ROLE = {SYSTEM: "sys", DOMAIN: "env"}
 
-_REQUESTED = "_tdx_backends"  # marker on a test fn: [(name, cls), …]
+MARKER = "tabsdata_backend"
 
 
 class System:
@@ -143,43 +147,69 @@ def _construct(cls, attrs: dict[str, str], *, name: str):
 
 def require(name: str, cls: type):
     """Decorator: declare the test needs backend `name`, loaded as `cls`. Stack to
-    request several; read them from the `backends` fixture by name."""
-
-    def deco(fn):
-        fn.__dict__.setdefault(_REQUESTED, []).append((name, cls))
-        return fn
-
-    return deco
+    request several; each one is injected through its ``system_<name>`` /
+    ``domain_<name>`` fixture."""
+    return getattr(pytest.mark, MARKER)(name, cls)
 
 
-class _Backends:
-    """Lazy read-only ``name -> loaded backend`` mapping; loads on first access and
-    caches, so repeated ``backends[name]`` returns the same object."""
-
-    def __init__(self, requested: list[tuple[str, type]]):
-        self._by_name = dict(requested)
-
-    def __getitem__(self, name: str):
-        try:
-            cls = self._by_name[name]
-        except KeyError:
-            raise KeyError(
-                f"no backend {name!r} declared — add a @<type>_system "
-                f"/ @<type>_domain decorator for it"
-            ) from None
-        return load(name, cls)
-
-    def __contains__(self, name: str) -> bool:
-        return name in self._by_name
-
-    def __iter__(self):
-        return iter(self._by_name)
-
-    def __len__(self) -> int:
-        return len(self._by_name)
+def declared_backends(request) -> dict[str, type]:
+    declared: dict[str, type] = {}
+    for marker in request.node.iter_markers(MARKER):
+        name, cls = marker.args
+        declared.setdefault(name, cls)
+    return declared
 
 
-@pytest.fixture
-def backends(request) -> _Backends:
-    """The backends declared on the test (by the per-type decorators), keyed by name."""
-    return _Backends(getattr(request.function, _REQUESTED, []))
+def resolve_declared(request, name: str, expected: type | None = None):
+    declared = declared_backends(request)
+    if name not in declared:
+        pytest.fail(
+            f"No backend {name!r} declared — add a @<type>_system / "
+            f"@<type>_domain decorator for it",
+            pytrace=False,
+        )
+    cls = declared[name]
+    if expected is not None and not issubclass(cls, expected):
+        pytest.fail(
+            f"Backend {name!r} is declared as {cls.__name__}, "
+            f"not a {expected.__name__.lower()}",
+            pytrace=False,
+        )
+    return load(name, cls)
+
+
+def stored_names(folder) -> list[str]:
+    if not folder.is_dir():
+        return []
+    return sorted(entry.name for entry in folder.iterdir() if entry.is_file())
+
+
+def system_fixture(name: str):
+    @pytest.fixture(name=f"system_{name}")
+    def fixture(request):
+        return resolve_declared(request, name, System)
+
+    return fixture
+
+
+def domain_fixture(name: str):
+    @pytest.fixture(name=f"domain_{name}")
+    def fixture(request):
+        return resolve_declared(request, name, Domain)
+
+    return fixture
+
+
+for stored_system_name in stored_names(store.system_dir()):
+    globals()[f"system_{stored_system_name}"] = system_fixture(stored_system_name)
+for stored_domain_name in stored_names(store.domain_dir()):
+    globals()[f"domain_{stored_domain_name}"] = domain_fixture(stored_domain_name)
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        f"{MARKER}(name, cls): the test uses the tdx-provisioned backend `name`"
+        " loaded as `cls`; read it through the `system_<name>` /"
+        " `domain_<name>` fixtures.",
+    )

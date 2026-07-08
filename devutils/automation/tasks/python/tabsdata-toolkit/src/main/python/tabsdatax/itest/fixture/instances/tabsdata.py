@@ -285,22 +285,24 @@ def declared_consumers(request) -> dict[str, bool]:
     return declared
 
 
-@pytest.fixture
-def instance(request) -> Instance:
+def shorthand_instance(request, consumer: str) -> Instance:
     declared = declared_consumers(request)
-    if not declared:
-        pytest.fail(
-            "No instance declared: decorate the test with @with_instance(...)",
-            pytrace=False,
-        )
-    if len(declared) > 1:
-        pytest.fail(
-            f"Multiple instances declared ({', '.join(declared)}): "
-            "use the `instance_<consumer>` fixtures instead",
-            pytrace=False,
-        )
-    consumer, check = next(iter(declared.items()))
-    return loaded_instance(consumer, check)
+    return loaded_instance(consumer, declared.get(consumer, True))
+
+
+@pytest.fixture
+def td_instance(request) -> Instance:
+    return shorthand_instance(request, CONSUMER_TDTEST)
+
+
+@pytest.fixture
+def ai_instance(request) -> Instance:
+    return shorthand_instance(request, CONSUMER_AITEST)
+
+
+@pytest.fixture
+def ui_instance(request) -> Instance:
+    return shorthand_instance(request, CONSUMER_UITEST)
 
 
 def consumer_instance_fixture(consumer: str):
@@ -328,7 +330,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         f"{MARKER}(consumer, check=True): the test uses the registered tabsdata"
-        " instance of `consumer`; read it through the `instance` fixture (single"
-        " declaration) or the `instance_<consumer>` fixtures (one per declared"
-        " consumer).",
+        " instance of `consumer`; read it through the `instance_<consumer>`"
+        " fixtures (one per declared consumer). The `td_instance` /"
+        " `ai_instance` / `ui_instance` shorthands need no declaration.",
     )

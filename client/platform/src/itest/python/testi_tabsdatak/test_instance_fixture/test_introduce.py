@@ -16,23 +16,27 @@ from tabsdatax.itest.fixture.instances.tabsdata import (
 
 
 @with_instance(consumer="tdtest")
-def test_introduce_declared(instance: Instance) -> None:
-    instance.introduce()
+def test_introduce_declared(instance_tdtest: Instance) -> None:
+    assert instance_tdtest.name in instance_tdtest.introduce()
 
 
 @with_instance()
-def test_introduce_default(instance: Instance) -> None:
-    instance.introduce()
+def test_introduce_default(instance_tdtest: Instance) -> None:
+    assert instance_tdtest.name in instance_tdtest.introduce()
 
 
 @with_instance(consumer="tdtest", check=False)
-def test_introduce_unchecked(instance: Instance) -> None:
-    instance.introduce()
+def test_introduce_unchecked(instance_tdtest: Instance) -> None:
+    assert instance_tdtest.name in instance_tdtest.introduce()
 
 
 @with_instance(consumer="tdtest")
 def test_introduce_named(instance_tdtest: Instance) -> None:
-    instance_tdtest.introduce()
+    assert instance_tdtest.name in instance_tdtest.introduce()
+
+
+def test_introduce_via_fixture(td_instance: Instance) -> None:
+    assert td_instance.name in td_instance.introduce()
 
 
 @pytest.mark.skipif(
@@ -44,8 +48,8 @@ def test_introduce_named(instance_tdtest: Instance) -> None:
 def test_introduce_two_at_once(
     instance_tdtest: Instance, instance_aitest: Instance
 ) -> None:
-    instance_tdtest.introduce()
-    instance_aitest.introduce()
+    assert instance_tdtest.name in instance_tdtest.introduce()
+    assert instance_aitest.name in instance_aitest.introduce()
 
 
 def pytest_generate_tests(metafunc) -> None:
@@ -57,4 +61,4 @@ def pytest_generate_tests(metafunc) -> None:
 def test_introduce_all_registered(consumer: str) -> None:
     instance = make_instance(consumer)
     verify_serving(instance)
-    instance.introduce()
+    assert instance.name in instance.introduce()

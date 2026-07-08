@@ -69,7 +69,9 @@ def mysql_ready(provision):
 
 @mysql_system("db")
 @mysql_domain("shop")
-def test_container_injection(backends, mysql_ready):
-    db: MysqlSystem = backends["db"]
-    shop: MysqlDomain = backends["shop"]
-    assert db.name == "db" and shop.name == "shop"
+def test_container_injection(
+    mysql_ready, system_db: MysqlSystem, domain_shop: MysqlDomain
+):
+    assert isinstance(system_db, MysqlSystem)
+    assert isinstance(domain_shop, MysqlDomain)
+    assert system_db.name == "db" and domain_shop.name == "shop"

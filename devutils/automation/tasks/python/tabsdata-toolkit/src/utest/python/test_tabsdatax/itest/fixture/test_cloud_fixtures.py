@@ -52,8 +52,8 @@ def s3_ready(provision):
 
 @s3_system("store")
 @s3_domain("inbox")
-def test_cloud_injection(backends, s3_ready):
-    store: S3System = backends["store"]
-    inbox: S3Domain = backends["inbox"]
-    assert store.name == "store" and store.bucket == "x"   # --bucket dummy
-    assert inbox.name == "inbox"
+def test_cloud_injection(s3_ready, system_store: S3System, domain_inbox: S3Domain):
+    assert isinstance(system_store, S3System)
+    assert isinstance(domain_inbox, S3Domain)
+    assert system_store.name == "store" and system_store.bucket == "x"
+    assert domain_inbox.name == "inbox"

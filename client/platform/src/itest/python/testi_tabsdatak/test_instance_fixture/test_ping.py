@@ -8,6 +8,7 @@
 import pytest
 from tabsdatax.itest.fixture.instances.tabsdata import (
     Instance,
+    consumer_of,
     make_instance,
     registered_consumers,
     verify_serving,
@@ -16,23 +17,32 @@ from tabsdatax.itest.fixture.instances.tabsdata import (
 
 
 @with_instance(consumer="tdtest")
-def test_ping_declared(instance: Instance) -> None:
-    instance.ping()
+def test_ping_declared(instance_tdtest: Instance) -> None:
+    instance_tdtest.ping()
+    assert consumer_of(instance_tdtest.name) == "tdtest"
 
 
 @with_instance()
-def test_ping_default(instance: Instance) -> None:
-    instance.ping()
+def test_ping_default(instance_tdtest: Instance) -> None:
+    instance_tdtest.ping()
+    assert consumer_of(instance_tdtest.name) == "tdtest"
 
 
 @with_instance(consumer="tdtest", check=False)
-def test_ping_unchecked(instance: Instance) -> None:
-    instance.ping()
+def test_ping_unchecked(instance_tdtest: Instance) -> None:
+    instance_tdtest.ping()
+    assert consumer_of(instance_tdtest.name) == "tdtest"
 
 
 @with_instance(consumer="tdtest")
 def test_ping_named(instance_tdtest: Instance) -> None:
     instance_tdtest.ping()
+    assert consumer_of(instance_tdtest.name) == "tdtest"
+
+
+def test_ping_via_fixture(td_instance: Instance) -> None:
+    td_instance.ping()
+    assert consumer_of(td_instance.name) == "tdtest"
 
 
 @pytest.mark.skipif(
@@ -44,6 +54,8 @@ def test_ping_named(instance_tdtest: Instance) -> None:
 def test_ping_two_at_once(instance_tdtest: Instance, instance_aitest: Instance) -> None:
     instance_tdtest.ping()
     instance_aitest.ping()
+    assert consumer_of(instance_tdtest.name) == "tdtest"
+    assert consumer_of(instance_aitest.name) == "aitest"
 
 
 def pytest_generate_tests(metafunc) -> None:
@@ -56,3 +68,4 @@ def test_ping_all_registered(consumer: str) -> None:
     instance = make_instance(consumer)
     verify_serving(instance)
     instance.ping()
+    assert consumer_of(instance.name) == consumer

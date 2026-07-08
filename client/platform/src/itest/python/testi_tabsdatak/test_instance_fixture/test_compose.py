@@ -36,23 +36,25 @@ def workspace(tmp_path: Path, instance_tdtest: Instance):
 
 
 @with_instance(consumer="tdtest")
-def test_single_with_plain_fixture(instance: Instance, greeting: str) -> None:
+def test_single_with_plain_fixture(instance_tdtest: Instance, greeting: str) -> None:
     assert greeting == "Hello"
-    assert instance.introduce().startswith(f"Instance '{instance.name}'")
+    assert instance_tdtest.introduce().startswith(f"Instance '{instance_tdtest.name}'")
 
 
 @pytest.mark.parametrize("word", WORDS)
 @with_instance(consumer="tdtest")
-def test_single_with_parametrized_argument(instance: Instance, word: str) -> None:
+def test_single_with_parametrized_argument(
+    instance_tdtest: Instance, word: str
+) -> None:
     assert word in WORDS
-    assert instance.name
+    assert instance_tdtest.name
 
 
 @with_instance(consumer="tdtest")
-def test_single_with_builtin_fixture(instance: Instance, tmp_path: Path) -> None:
-    record = tmp_path / f"{instance.name}.txt"
-    record.write_text(instance.introduce())
-    assert record.read_text().startswith(f"Instance '{instance.name}'")
+def test_single_with_builtin_fixture(instance_tdtest: Instance, tmp_path: Path) -> None:
+    record = tmp_path / f"{instance_tdtest.name}.txt"
+    record.write_text(instance_tdtest.introduce())
+    assert record.read_text().startswith(f"Instance '{instance_tdtest.name}'")
 
 
 @with_instance(consumer="tdtest")
@@ -73,9 +75,9 @@ def test_yield_fixture_layered_on_instance(
 
 @with_instance(consumer="tdtest")
 def test_sugar_and_named_are_same(
-    instance: Instance, instance_tdtest: Instance
+    td_instance: Instance, instance_tdtest: Instance
 ) -> None:
-    assert instance is instance_tdtest
+    assert td_instance is instance_tdtest
 
 
 @pytest.mark.skipif(

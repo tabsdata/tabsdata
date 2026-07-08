@@ -59,7 +59,10 @@ def snowflake_ready(provision):
 
 @snowflake_system("wh")
 @snowflake_domain("sales")
-def test_saas_injection(backends, snowflake_ready):
-    wh: SnowflakeSystem = backends["wh"]
-    sales: SnowflakeDomain = backends["sales"]
-    assert wh.name == "wh" and sales.name == "sales" and sales.schema == "sales"
+def test_saas_injection(
+    snowflake_ready, system_wh: SnowflakeSystem, domain_sales: SnowflakeDomain
+):
+    assert isinstance(system_wh, SnowflakeSystem)
+    assert isinstance(domain_sales, SnowflakeDomain)
+    assert system_wh.name == "wh"
+    assert domain_sales.name == "sales" and domain_sales.schema == "sales"
