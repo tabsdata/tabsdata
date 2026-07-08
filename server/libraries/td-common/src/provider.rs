@@ -33,6 +33,20 @@ impl<O, P> CachedProvider<O, P> {
             cache: Mutex::new(None),
         }
     }
+
+    /// Drop the cached value so the next [`Provider::get`] reloads from the
+    /// underlying provider.
+    ///
+    /// Unlike [`Provider::purge`], this needs no provider context (no DB
+    /// connection), so it can be run *after* a transaction commits — which is
+    /// the only point at which the reload is guaranteed to observe that
+    /// transaction's writes. Invalidating from inside the transaction races the
+    /// commit: a concurrent [`Provider::get`] can refill the cache from a
+    /// pre-commit snapshot that omits those writes, and the stale snapshot then
+    /// sticks until the next invalidation.
+    pub async fn invalidate(&self) {
+        *self.cache.lock().await = None;
+    }
 }
 
 impl<O, P> Default for CachedProvider<O, P>

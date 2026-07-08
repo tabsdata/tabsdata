@@ -12,6 +12,7 @@ pub mod from_fn;
 pub mod handler;
 #[cfg(feature = "test_tower_metadata")]
 pub mod metadata;
+pub mod post_commit;
 pub mod project_scope;
 pub mod service_macro;
 pub mod service_provider;

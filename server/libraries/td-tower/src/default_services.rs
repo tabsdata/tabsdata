@@ -11,6 +11,7 @@ use crate::error::{ConnectionError, FromHandlerError};
 use crate::handler::{Handler, IntoHandler};
 #[cfg(feature = "test_tower_metadata")]
 use crate::metadata::type_of;
+use crate::post_commit::PostCommitActions;
 use std::any::type_name;
 use std::future::Future;
 use std::marker::PhantomData;
@@ -374,10 +375,18 @@ where
                     "TransactionProviderService",
                     type_of::<DynamicConnection<'static>>(),
                 );
+                m.created_type(
+                    "TransactionProviderService",
+                    type_of::<PostCommitActions>(),
+                );
             }
 
             // Insert the connection into the handler
             handler.insert(connection);
+
+            // Inner layers may queue side effects that must observe committed
+            // state (e.g. cache invalidations). They run only after commit.
+            handler.insert(PostCommitActions::default());
 
             // Send it to the next service
             #[allow(unused_mut)]
@@ -392,6 +401,10 @@ where
                             "TransactionProviderService",
                             type_of::<DynamicConnection<'static>>(),
                         );
+                        m.remove_created(
+                            "TransactionProviderService",
+                            type_of::<PostCommitActions>(),
+                        );
                     }
 
                     // Remove connection from handler — MutRef auto-restored it
@@ -404,10 +417,18 @@ where
                     if let Err(e) = transaction.commit().await {
                         return Err(ConnectionError::CannotCommitTransaction(e).into());
                     }
+
+                    // Commit succeeded: writes are now visible on other
+                    // connections, so run any deferred post-commit actions
+                    // (e.g. cache invalidations) queued by inner layers.
+                    if let Some(actions) = handler.take::<PostCommitActions>() {
+                        actions.run().await;
+                    }
                     result
                 }
                 Err(e) => {
-                    // Transaction auto-rolls-back when dropped
+                    // Transaction auto-rolls-back when dropped; queued
+                    // post-commit actions are dropped with it, unrun.
                     Err(e)
                 }
             }

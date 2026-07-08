@@ -35,6 +35,12 @@ impl<T> Ref<T> {
     pub fn from_arc(arc: Arc<T>) -> Self {
         Self(arc)
     }
+
+    /// Clone out the inner `Arc`, e.g. to move a shared context into a `'static`
+    /// closure (such as a post-commit action).
+    pub fn arc(&self) -> Arc<T> {
+        self.0.clone()
+    }
 }
 
 impl<T> Deref for Ref<T> {
