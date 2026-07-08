@@ -11,26 +11,26 @@ from tabsdatax.itest.fixture.instances.tabsdata import (
     make_instance,
     registered_consumers,
     verify_serving,
-    with_instance,
+    tabsdata_instance,
 )
 
 
-@with_instance(consumer="tdtest")
+@tabsdata_instance(consumer="tdtest")
 def test_introduce_declared(instance_tdtest: Instance) -> None:
     assert instance_tdtest.name in instance_tdtest.introduce()
 
 
-@with_instance()
+@tabsdata_instance()
 def test_introduce_default(instance_tdtest: Instance) -> None:
     assert instance_tdtest.name in instance_tdtest.introduce()
 
 
-@with_instance(consumer="tdtest", check=False)
+@tabsdata_instance(consumer="tdtest", check=False)
 def test_introduce_unchecked(instance_tdtest: Instance) -> None:
     assert instance_tdtest.name in instance_tdtest.introduce()
 
 
-@with_instance(consumer="tdtest")
+@tabsdata_instance(consumer="tdtest")
 def test_introduce_named(instance_tdtest: Instance) -> None:
     assert instance_tdtest.name in instance_tdtest.introduce()
 
@@ -43,8 +43,8 @@ def test_introduce_via_fixture(td_instance: Instance) -> None:
     "aitest" not in registered_consumers(),
     reason="Consumer 'aitest' has no registered instance",
 )
-@with_instance(consumer="tdtest")
-@with_instance(consumer="aitest")
+@tabsdata_instance(consumer="tdtest")
+@tabsdata_instance(consumer="aitest")
 def test_introduce_two_at_once(
     instance_tdtest: Instance, instance_aitest: Instance
 ) -> None:

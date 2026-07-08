@@ -256,7 +256,7 @@ def verify_serving(instance: Instance) -> None:
             )
 
 
-def with_instance(consumer: Consumer = DEFAULT_INSTANCE, *, check: bool = True):
+def tabsdata_instance(consumer: Consumer = DEFAULT_INSTANCE, *, check: bool = True):
     return getattr(pytest.mark, MARKER)(consumer, check=check)
 
 
@@ -291,17 +291,17 @@ def shorthand_instance(request, consumer: str) -> Instance:
 
 
 @pytest.fixture
-def td_instance(request) -> Instance:
+def td_tabsdata_instance(request) -> Instance:
     return shorthand_instance(request, CONSUMER_TDTEST)
 
 
 @pytest.fixture
-def ai_instance(request) -> Instance:
+def ai_tabsdata_instance(request) -> Instance:
     return shorthand_instance(request, CONSUMER_AITEST)
 
 
 @pytest.fixture
-def ui_instance(request) -> Instance:
+def ui_tabsdata_instance(request) -> Instance:
     return shorthand_instance(request, CONSUMER_UITEST)
 
 
@@ -312,7 +312,7 @@ def consumer_instance_fixture(consumer: str):
         if consumer not in declared:
             pytest.fail(
                 f"Instance consumer {consumer!r} not declared: add "
-                f"@with_instance(consumer={consumer!r}) to the test",
+                f"@tabsdata_instance(consumer={consumer!r}) to the test",
                 pytrace=False,
             )
         return loaded_instance(consumer, declared[consumer])

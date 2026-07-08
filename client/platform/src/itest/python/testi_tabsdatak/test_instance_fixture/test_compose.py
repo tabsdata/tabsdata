@@ -11,7 +11,7 @@ import pytest
 from tabsdatax.itest.fixture.instances.tabsdata import (
     Instance,
     registered_consumers,
-    with_instance,
+    tabsdata_instance,
 )
 
 WORDS = ["alpha", "beta"]
@@ -35,14 +35,14 @@ def workspace(tmp_path: Path, instance_tdtest: Instance):
     yield folder
 
 
-@with_instance(consumer="tdtest")
+@tabsdata_instance(consumer="tdtest")
 def test_single_with_plain_fixture(instance_tdtest: Instance, greeting: str) -> None:
     assert greeting == "Hello"
     assert instance_tdtest.introduce().startswith(f"Instance '{instance_tdtest.name}'")
 
 
 @pytest.mark.parametrize("word", WORDS)
-@with_instance(consumer="tdtest")
+@tabsdata_instance(consumer="tdtest")
 def test_single_with_parametrized_argument(
     instance_tdtest: Instance, word: str
 ) -> None:
@@ -50,14 +50,14 @@ def test_single_with_parametrized_argument(
     assert instance_tdtest.name
 
 
-@with_instance(consumer="tdtest")
+@tabsdata_instance(consumer="tdtest")
 def test_single_with_builtin_fixture(instance_tdtest: Instance, tmp_path: Path) -> None:
     record = tmp_path / f"{instance_tdtest.name}.txt"
     record.write_text(instance_tdtest.introduce())
     assert record.read_text().startswith(f"Instance '{instance_tdtest.name}'")
 
 
-@with_instance(consumer="tdtest")
+@tabsdata_instance(consumer="tdtest")
 def test_fixture_layered_on_instance(
     apiserver_url: str, instance_tdtest: Instance
 ) -> None:
@@ -65,7 +65,7 @@ def test_fixture_layered_on_instance(
     assert apiserver_url == f"http://{server.host}:{server.port}"
 
 
-@with_instance(consumer="tdtest")
+@tabsdata_instance(consumer="tdtest")
 def test_yield_fixture_layered_on_instance(
     workspace: Path, instance_tdtest: Instance
 ) -> None:
@@ -73,7 +73,7 @@ def test_yield_fixture_layered_on_instance(
     assert workspace.is_dir()
 
 
-@with_instance(consumer="tdtest")
+@tabsdata_instance(consumer="tdtest")
 def test_sugar_and_named_are_same(
     td_instance: Instance, instance_tdtest: Instance
 ) -> None:
@@ -85,8 +85,8 @@ def test_sugar_and_named_are_same(
     reason="Consumer 'aitest' has no registered instance",
 )
 @pytest.mark.parametrize("word", WORDS)
-@with_instance(consumer="tdtest")
-@with_instance(consumer="aitest")
+@tabsdata_instance(consumer="tdtest")
+@tabsdata_instance(consumer="aitest")
 def test_multiple_with_parametrized_argument(
     instance_tdtest: Instance,
     instance_aitest: Instance,
@@ -103,8 +103,8 @@ def test_multiple_with_parametrized_argument(
     "aitest" not in registered_consumers(),
     reason="Consumer 'aitest' has no registered instance",
 )
-@with_instance(consumer="tdtest")
-@with_instance(consumer="aitest")
+@tabsdata_instance(consumer="tdtest")
+@tabsdata_instance(consumer="aitest")
 def test_multiple_with_layered_fixture(
     apiserver_url: str,
     instance_tdtest: Instance,

@@ -12,29 +12,29 @@ from tabsdatax.itest.fixture.instances.tabsdata import (
     make_instance,
     registered_consumers,
     verify_serving,
-    with_instance,
+    tabsdata_instance,
 )
 
 
-@with_instance(consumer="tdtest")
+@tabsdata_instance(consumer="tdtest")
 def test_ping_declared(instance_tdtest: Instance) -> None:
     instance_tdtest.ping()
     assert consumer_of(instance_tdtest.name) == "tdtest"
 
 
-@with_instance()
+@tabsdata_instance()
 def test_ping_default(instance_tdtest: Instance) -> None:
     instance_tdtest.ping()
     assert consumer_of(instance_tdtest.name) == "tdtest"
 
 
-@with_instance(consumer="tdtest", check=False)
+@tabsdata_instance(consumer="tdtest", check=False)
 def test_ping_unchecked(instance_tdtest: Instance) -> None:
     instance_tdtest.ping()
     assert consumer_of(instance_tdtest.name) == "tdtest"
 
 
-@with_instance(consumer="tdtest")
+@tabsdata_instance(consumer="tdtest")
 def test_ping_named(instance_tdtest: Instance) -> None:
     instance_tdtest.ping()
     assert consumer_of(instance_tdtest.name) == "tdtest"
@@ -49,8 +49,8 @@ def test_ping_via_fixture(td_instance: Instance) -> None:
     "aitest" not in registered_consumers(),
     reason="consumer 'aitest' has no registered instance",
 )
-@with_instance(consumer="tdtest")
-@with_instance(consumer="aitest")
+@tabsdata_instance(consumer="tdtest")
+@tabsdata_instance(consumer="aitest")
 def test_ping_two_at_once(instance_tdtest: Instance, instance_aitest: Instance) -> None:
     instance_tdtest.ping()
     instance_aitest.ping()

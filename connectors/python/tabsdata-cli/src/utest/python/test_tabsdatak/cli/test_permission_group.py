@@ -29,7 +29,7 @@ import pytest
 from tabsdatax.itest.fixture.instances.tabsdata import (
     CONSUMER_TDTEST,
     Instance,
-    with_instance,
+    tabsdata_instance,
 )
 
 from tabsdatak.sdk._apiserver import APIServerError
@@ -39,7 +39,7 @@ from tabsdatak.sdk.tabsdata_server import TabsdataServer
 # users, roles and grants, which race under ``--dist=loadgroup``.
 pytestmark = [
     pytest.mark.xdist_group("connector-permission_group_seq"),
-    with_instance(consumer=CONSUMER_TDTEST),
+    tabsdata_instance(consumer=CONSUMER_TDTEST),
 ]
 
 logger = logging.getLogger(__name__)
