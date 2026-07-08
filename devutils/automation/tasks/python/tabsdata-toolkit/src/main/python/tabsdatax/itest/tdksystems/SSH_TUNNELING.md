@@ -112,12 +112,12 @@ non-trivial refactor; everything else composes on top.
 > special for ssh"
 
 ```
-tdx-system connect [user@]host:REMOTE_PATH --sys LOCAL_FILE \
+tdx-system connect --remote-sys [user@]host:REMOTE_PATH --sys LOCAL_FILE \
     [--ssh-port N] [--identity KEYFILE] \
     [--remote-secret-env VAR] [--secret-env VAR]
 ```
 
-The positional is an **scp-style spec** `[user@]host:REMOTE_PATH`. `user`/`host`
+`--remote-sys` is an **scp-style spec** `[user@]host:REMOTE_PATH`. `user`/`host`
 are the SSH endpoint (reused for the tunnel *and* admin, §5); `REMOTE_PATH` is
 where the encrypted system file lives on the server.
 

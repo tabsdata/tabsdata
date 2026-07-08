@@ -18,6 +18,7 @@ nonce, stored alongside the ciphertext in the PEM body:
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import os
 import textwrap
@@ -26,6 +27,32 @@ from .errors import DatagenError
 
 ENV_VAR = "TD_DEV_PERSONAL_SECRET"
 MIN_SECRET_LEN = 12
+
+# Which env var holds the active personal secret. Defaults to TD_DEV_PERSONAL_SECRET;
+# `tdx-system connect` points it at the server's secret var (--remote-secret-env)
+# while it reads the copied remote descriptor, then resets it to write the local
+# one under the client's own secret.
+_active_env_var = ENV_VAR
+
+
+def use_secret_env(name: str | None) -> None:
+    """Point crypto at env var `name` for the personal secret; `None` resets to
+    the default TD_DEV_PERSONAL_SECRET."""
+    global _active_env_var
+    _active_env_var = name or ENV_VAR
+
+
+@contextlib.contextmanager
+def using_secret_env(name: str | None):
+    """Temporarily read the personal secret from env var `name`, restoring the
+    previous choice on exit (so a two-secret command like `connect` can read the
+    remote descriptor under one secret and write the local one under another)."""
+    prev = _active_env_var
+    use_secret_env(name)
+    try:
+        yield
+    finally:
+        use_secret_env(prev)
 
 _PEM_LABEL = "TD_GEN DESCRIPTOR"
 _BEGIN = f"-----BEGIN {_PEM_LABEL}-----"
@@ -38,15 +65,18 @@ _key_cache: dict[str, bytes] = {}
 
 
 def require_secret() -> str:
-    """Return $TD_DEV_PERSONAL_SECRET, or raise if it's unset / shorter than 12 chars.
+    """Return the active personal secret, or raise if it's unset / shorter than
+    12 chars. The active env var is TD_DEV_PERSONAL_SECRET unless overridden via
+    :func:`use_secret_env` / :func:`using_secret_env`.
 
     This is the gate for every `tdx-system` / `tdx-domain` action and for reading
     or writing any descriptor."""
-    secret = os.environ.get(ENV_VAR, "")
+    secret = os.environ.get(_active_env_var, "")
     if len(secret) < MIN_SECRET_LEN:
         raise DatagenError(
-            f"{ENV_VAR} must be set and at least {MIN_SECRET_LEN} characters "
-            f"long to run tdx-system / tdx-domain (it encrypts the descriptors)."
+            f"{_active_env_var} must be set and at least {MIN_SECRET_LEN} "
+            f"characters long to run tdx-system / tdx-domain (it encrypts the "
+            f"descriptors)."
         )
     return secret
 

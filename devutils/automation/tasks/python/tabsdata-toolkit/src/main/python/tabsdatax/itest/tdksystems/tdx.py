@@ -6,6 +6,9 @@
     tdx-system info    --sys FILE --format json|export|unset
     tdx-system pause | resume --sys FILE   # stop / start a container (data persists)
     tdx-system secrets --get 1p:VAULT --out json|export|unset   # pull creds
+    tdx-system connect --remote-sys [user@]HOST:REMOTE_SYS --sys FILE  # ssh-tunnel
+                       [--remote-secret-env VAR]           # container system; destroy
+                                                           # stops the tunnel
 
     tdx-domain create  --sys FILE --domain FILE --name NAME \\
                        [--model MODEL [--data xs|s|m|l|xl]]
@@ -28,9 +31,9 @@ import os
 import sys
 from pathlib import Path
 
-from . import cli, crypto, data_gen, descriptor, secret, systems, _venv
+from . import cli, crypto, data_gen, descriptor, secret, ssh, systems, _venv
 from .errors import DatagenError, run
-from .shell import ArgumentParser as _ArgumentParser
+from .shell import ArgumentParser as _ArgumentParser, find_free_port
 from .systems.base import (
     CreateDomainSpec, CreateSystemSpec, DomainContext, SystemContext, Unsupported,
 )
@@ -95,13 +98,18 @@ def _print_created(kind: str, path: str) -> None:
     print()
 
 
-def _fail_if_descriptor_exists(path: str, force: bool) -> None:
-    """Refuse to clobber an existing descriptor on create unless -f/--force."""
+def _prepare_descriptor_path(path: str, force: bool) -> None:
+    """Prepare a path to write a descriptor at: refuse to clobber an existing
+    one (unless -f/--force), then create its parent directory. The mkdir means a
+    ``<dir>/<file>`` target with a not-yet-existing ``<dir>`` works -- both for
+    the descriptor itself and for sibling artifacts written before it (e.g. the
+    connect ``.ssh.log``, opened by the tunnel before the descriptor is)."""
     if Path(path).exists() and not force:
         raise DatagenError(
             f"descriptor file already exists: {path} "
             f"(use -f/--force to overwrite, or destroy it first)"
         )
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
 
 
 def _report_status(ok: bool, msg: str) -> int:
@@ -182,7 +190,7 @@ def _sys_create_unified(p: _ArgumentParser, rest: list[str], slug: str) -> int:
     sysobj.add_create_options(p)
     args = p.parse_args(rest)
     descriptor.validate_name(args.name)
-    _fail_if_descriptor_exists(args.sys, args.force)
+    _prepare_descriptor_path(args.sys, args.force)
     started = descriptor.now_stamp()
     baked = sysobj.create_system(CreateSystemSpec(
         name=args.name, out=args.sys, force=args.force,
@@ -293,6 +301,106 @@ def _sys_secrets(rest: list[str]) -> int:
     return 0
 
 
+def _sys_connect(rest: list[str]) -> int:
+    """Open an SSH tunnel to a remote container system and write a *local*
+    system descriptor that reaches it via localhost:<random-port>. Domains
+    created against the local descriptor run their admin + data over the tunnel
+    (TCP) — no local Docker daemon needed. `tdx-system destroy` on the local
+    descriptor stops the tunnel."""
+    p = _ArgumentParser(
+        prog="tdx-system connect", add_help=True,
+        description="Open an SSH tunnel to a remote container system and write a "
+                    "local system descriptor reaching it via localhost:<port>. "
+                    "Container systems only: cloud and SaaS systems have no TCP "
+                    "endpoint to tunnel and are rejected.\n"
+                    "The server does nothing SSH-specific: the endpoint and the "
+                    "path to its (encrypted) system descriptor are given here as "
+                    "an scp-style [user@]HOST:PATH.",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--remote-sys", required=True,
+                   metavar="[user@]HOST:REMOTE_SYS_PATH",
+                   help="ssh endpoint + path to the remote (encrypted) system "
+                        "descriptor")
+    p.add_argument("--sys", required=True, metavar="FILE",
+                   help="path of the local (encrypted) system descriptor to write")
+    p.add_argument("--name", default=None,
+                   help="logical name for the local handle (default: the remote's name)")
+    p.add_argument("--ssh-port", type=int, default=22,
+                   help="ssh port (default: 22)")
+    p.add_argument("--identity", default=None, metavar="KEYFILE",
+                   help="ssh identity file (ssh -i)")
+    p.add_argument("--remote-secret-env", default=crypto.ENV_VAR, metavar="VAR",
+                   help=f"env var holding the secret that decrypts the remote "
+                        f"descriptor (default: {crypto.ENV_VAR}); the local "
+                        f"descriptor is written under ${crypto.ENV_VAR}")
+    p.add_argument("-f", "--force", action="store_true",
+                   help="overwrite the local descriptor if it exists")
+    args = p.parse_args(rest)
+    _prepare_descriptor_path(args.sys, args.force)
+
+    ep, remote_path = ssh.parse_remote_spec(args.remote_sys)
+    ep.port = args.ssh_port
+    ep.identity = args.identity
+
+    # 1. Fetch + decrypt the remote descriptor under the server's secret.
+    with crypto.using_secret_env(args.remote_secret_env):
+        remote_doc = descriptor.loads(ssh.fetch_remote_file(ep, remote_path))
+        remote_meta = descriptor.resolve(remote_doc)
+
+    if remote_doc.get("role") != "sys" or remote_doc.get("category") != "container":
+        raise DatagenError(
+            f"{args.remote_sys} is not a container system descriptor "
+            f"(tdx-system connect is container-only)")
+    slug = remote_doc["system"]
+    sysobj = systems.get(slug)
+    if getattr(sysobj, "uses_file_staging", False):
+        raise DatagenError(
+            f"{slug} is a file-staging system: its staging root is a server-side "
+            f"filesystem path a TCP tunnel can't reach — connect is not supported")
+    target_port = remote_meta.get("PORT", "")
+    if not target_port.isdigit():
+        raise DatagenError(
+            f"remote descriptor has no numeric PORT to tunnel to (got {target_port!r})")
+    name = args.name or remote_doc.get("name") or slug
+    descriptor.validate_name(name)
+
+    # 2. Allocate a local port and open the background tunnel.
+    local_port = find_free_port()
+    log_path = Path(args.sys).with_suffix("").as_posix() + ".ssh.log"
+    print()
+    print(f">>> opening ssh tunnel to {ep.target}: localhost:{local_port} -> "
+          f"localhost:{target_port} (container {remote_meta.get('CONTAINER', '?')})")
+    pid = ssh.open_tunnel(ep, local_port, int(target_port), log_path)
+
+    # 3. Write the local (connected) descriptor under the client's own secret,
+    #    pointing HOST/PORT at the tunnel; tear the tunnel down if that fails.
+    started = descriptor.now_stamp()
+    try:
+        descriptor.write_container_system(
+            out=args.sys, system_type=slug,
+            system_kind=remote_meta.get("SYSTEM_KIND", ""), label=sysobj.label,
+            container=remote_meta.get("CONTAINER", ""),
+            host="localhost", port=str(local_port),
+            user=remote_meta.get("USER", ""), password=remote_meta.get("PASSWORD", ""),
+            domain_desc=remote_meta.get("DOMAIN_DESC", ""),
+            image=remote_meta.get("IMAGE") or None,
+            location="ssh-tunnel",
+            extra_vars={
+                "SSH_HOST": ep.host,
+                "SSH_USER": ep.user or "",
+                "SSH_PORT": str(ep.port),
+                "SSH_TARGET_PORT": target_port,
+                "SSH_TUNNEL_PID": str(pid),
+            })
+        descriptor.stamp(args.sys, name=name, started=started)
+    except BaseException:
+        ssh.close_tunnel(pid)
+        _safe_remove(args.sys)
+        raise
+    _print_created("system", args.sys)
+    return 0
+
+
 # =====================================================================
 # tdx-domain
 # =====================================================================
@@ -320,7 +428,7 @@ def _domain_create(rest: list[str]) -> int:
     if args.data and not args.model:
         raise DatagenError("--data requires --model")
     descriptor.validate_name(args.name)
-    _fail_if_descriptor_exists(args.domain, args.force)
+    _prepare_descriptor_path(args.domain, args.force)
 
     sysdoc = descriptor.load(args.sys)
     _require_role(sysdoc, "sys", "tdx-system", "tdx-domain")
@@ -430,7 +538,7 @@ def _info_parser(prog: str, flag: str, rest: list[str]) -> argparse.Namespace:
 _SYS_VERBS = {"create": _sys_create, "destroy": _sys_destroy,
               "status": _sys_status, "info": _sys_info,
               "pause": _sys_pause, "resume": _sys_resume,
-              "secrets": _sys_secrets}
+              "secrets": _sys_secrets, "connect": _sys_connect}
 _DOMAIN_VERBS = {"create": _domain_create, "destroy": _domain_destroy,
                  "status": _domain_status, "info": _domain_info}
 

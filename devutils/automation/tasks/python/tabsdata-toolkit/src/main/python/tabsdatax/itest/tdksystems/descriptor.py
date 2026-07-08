@@ -160,6 +160,7 @@ def write_container_system(
     sys_path: str | None = None,
     sys_path_env: str | None = None,
     extra_vars: dict[str, str] | None = None,
+    location: str = "container",
 ) -> None:
     """Descriptor for a container system (target/systems/mysql.json, …).
 
@@ -169,13 +170,16 @@ def write_container_system(
     path (literal, or the name of an env var read at run time), exported as
     `<PREFIX>__SYS_PATH` and forwarded so domain creation derives BASE_PATH.
     `extra_vars` — extra metadata surfaced in `meta` and the delegate env (e.g.
-    redpanda's REGISTRY_PORT); not part of the prefixed export set."""
+    redpanda's REGISTRY_PORT); not part of the prefixed export set.
+    `location` — SYSTEM_LOCATION marker: "container" for a locally-run system,
+    "ssh-tunnel" for a `tdx-system connect` handle (carries SSH_* extra_vars and
+    HOST/PORT pointing at the local tunnel end)."""
     extra = extra_vars or {}
     staging = sys_path is not None or sys_path_env is not None
     meta: list[tuple[str, str | None, str | None]] = [
         ("SYSTEM_TYPE", system_type, None),
         ("SYSTEM_KIND", system_kind, None),
-        ("SYSTEM_LOCATION", "container", None),
+        ("SYSTEM_LOCATION", location, None),
         ("CONTAINER", container, None),
         ("HOST", host, None),
         ("PORT", port, None),
@@ -497,6 +501,24 @@ def load(path: str | Path) -> dict:
         raise DatagenError(f"descriptor {path} did not decrypt to valid JSON")
     if not isinstance(doc, dict) or doc.get("generator") != GENERATOR:
         raise DatagenError(f"not a tdx descriptor: {path}")
+    return doc
+
+
+def loads(text: str) -> dict:
+    """Decrypt + validate an in-memory descriptor string — the disk-free twin of
+    :func:`load`, for content fetched over SSH by `tdx-system connect`. Uses the
+    active personal secret (see :func:`crypto.using_secret_env`)."""
+    if not crypto.is_pem(text):
+        raise DatagenError(
+            "not a tdx descriptor (no PEM armor) — was it written by "
+            "`tdx-system create`?")
+    plaintext = crypto.decrypt(text)   # raises on wrong secret / corrupt blob
+    try:
+        doc = json.loads(plaintext)
+    except ValueError:
+        raise DatagenError("descriptor did not decrypt to valid JSON")
+    if not isinstance(doc, dict) or doc.get("generator") != GENERATOR:
+        raise DatagenError("not a tdx descriptor")
     return doc
 
 

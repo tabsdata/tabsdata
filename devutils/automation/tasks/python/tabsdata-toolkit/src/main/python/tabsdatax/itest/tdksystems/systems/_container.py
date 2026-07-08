@@ -149,6 +149,14 @@ class ContainerBase(System):
         return out
 
     def destroy_system(self, ctx: SystemContext) -> None:
+        pid = ctx.meta.get("SSH_TUNNEL_PID")
+        if pid:
+            # A `tdx-system connect` handle: stop the SSH tunnel, don't touch
+            # Docker (the container lives on the server — destroy the remote
+            # descriptor there to remove it).
+            from .. import ssh
+            ssh.close_tunnel(int(pid))
+            return
         cname = ctx.meta["CONTAINER"]
         st = container_state(cname)
         if st is None:
@@ -158,6 +166,15 @@ class ContainerBase(System):
         docker_rm(cname)
 
     def system_status(self, ctx: SystemContext) -> Health:
+        pid = ctx.meta.get("SSH_TUNNEL_PID")
+        if pid:
+            from .. import ssh
+            host = ctx.meta.get("HOST", "localhost")
+            port = ctx.meta.get("PORT", "")
+            up = (ssh.tunnel_alive(int(pid))
+                  and port.isdigit() and port_open(host, int(port)))
+            return Health(up, f"ssh tunnel (pid {pid}) -> {host}:{port} "
+                              f"{'up' if up else 'down'}")
         cname = ctx.meta["CONTAINER"]
         st = container_state(cname)
         if st is None:
