@@ -4,7 +4,7 @@
 
 //! Scope the connection to the just-created project.
 
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::types::basic::ProjectId;
 use td_tower::error::ConnectionError;
@@ -23,10 +23,12 @@ use td_tower::extractors::{MutRef, Ref};
 /// `seed_default_groups`' field-less `GroupDB` rows default to the new project
 /// and RLS `WITH CHECK` genuinely enforces it. No-op on non-PostgreSQL backends.
 pub async fn scope_to_created_project(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     project_id: Ref<ProjectId>,
 ) -> Result<(), TdError> {
-    conn.set_project_scope(&project_id.to_string())
+    conn.get()
+        .await?
+        .set_project_scope(&project_id.to_string())
         .await
         .map_err(ConnectionError::CannotSetProjectScope)?;
     Ok(())

@@ -230,6 +230,7 @@ async fn assert_indices(db: &TdPool) {
         "triggers_current___trigger_by_function_id___idx",
         "users___enabled___idx",
         "users___name___idx",
+        "users___system___idx",
     ];
 
     let backend_truncate = match db.kind() {

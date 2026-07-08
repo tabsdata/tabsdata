@@ -18,7 +18,7 @@
 //! and `ProjectId` is in context.
 
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::{PermissionDB, PermissionDBBuilder};
@@ -68,7 +68,7 @@ fn per_project_role_name(project: &ProjectName, suffix: &str) -> Result<RoleName
 }
 
 pub async fn seed_project_roles(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     context: Ref<RequestContext>,
     project_id: Ref<ProjectId>,
     project: Ref<ProjectCreateDB>,

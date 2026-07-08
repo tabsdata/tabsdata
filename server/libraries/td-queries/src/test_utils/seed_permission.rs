@@ -4,6 +4,7 @@
 
 use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, TryUpdater};
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::{PermissionCreate, PermissionDB, PermissionDBBuilder};
@@ -11,7 +12,7 @@ use td_objects::dxo::role::RoleDB;
 use td_objects::types::basic::{AccessTokenId, EntityId, EntityName, PermissionType, UserId};
 
 pub async fn seed_permission(
-    db: impl QueryExecutor,
+    db: impl QueryExecutor + Domained<Domain = Apiserver>,
     permission_type: PermissionType,
     entity_name: Option<EntityName>,
     entity_id: Option<EntityId>,

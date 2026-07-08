@@ -11,7 +11,7 @@ use crate::logical::layers::index_lfrs_by_exec_fn;
 use itertools::Itertools;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionDB;
@@ -69,7 +69,7 @@ impl DispatchPrefetch {
 
 /// Pre-fetch the tick-wide batches the per-FR builder reads from.
 pub(crate) async fn prefetch_dispatch(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     physical_function_runs: &[PhysicalFunctionRunToExecute],
     at: &AtTime,
 ) -> Result<DispatchPrefetch, TdError> {
@@ -181,7 +181,7 @@ pub(crate) async fn prefetch_dispatch(
 /// Resolve one FR's input tables to physical versions + locations,
 /// partitioned into (system, user) by dependency position.
 pub(crate) async fn resolve_input_tables(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     storage: &Storage,
     f: &PhysicalFunctionRunToExecute,
     prefetch: &DispatchPrefetch,

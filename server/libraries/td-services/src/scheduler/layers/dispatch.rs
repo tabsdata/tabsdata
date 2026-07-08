@@ -12,7 +12,7 @@ use td_bridge::messaging::{
     OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue,
 };
 use td_common::worker::{MessageAction, RequestMessagePayload, WorkerName};
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::SchedulerNotify;
 use td_objects::and;
@@ -41,7 +41,7 @@ pub async fn notify_dispatcher(notify: Ref<SchedulerNotify>) -> Result<(), TdErr
 )]
 pub async fn unlock_workers_request(
     bridge: Ref<BridgeProviderHandle>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
 ) -> Result<(), TdError> {
     unlock_workers_request_infallible(bridge.message_queue(), &mut conn).await;
     Ok(())
@@ -49,7 +49,7 @@ pub async fn unlock_workers_request(
 
 async fn unlock_workers_request_infallible(
     message_queue: &dyn OrchestratorMessageQueue,
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
 ) {
     let messages = message_queue.locked_messages().await;
 
@@ -141,7 +141,7 @@ async fn unlock_workers_request_infallible(
     err(Debug)
 )]
 pub async fn unlock_function_runner_worker(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -237,7 +237,7 @@ impl DispatchBranch {
 }
 
 async fn commit_unlock(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: &WorkerId,
@@ -288,7 +288,7 @@ async fn commit_unlock(
 }
 
 async fn rollback_initial_function_run(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     message_id: &WorkerId,
     lfr_id: &LogicalFunctionRunId,
 ) {
@@ -333,7 +333,7 @@ async fn rollback_initial_function_run(
     err(Debug)
 )]
 pub async fn unlock_cron_trigger_workers(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -358,7 +358,7 @@ pub async fn unlock_cron_trigger_workers(
     err(Debug)
 )]
 pub async fn unlock_stage_trigger_workers(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -376,7 +376,7 @@ pub async fn unlock_stage_trigger_workers(
 }
 
 async fn unlock_simple_worker(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,

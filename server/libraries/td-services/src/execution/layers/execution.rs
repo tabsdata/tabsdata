@@ -7,7 +7,7 @@ use petgraph::prelude::EdgeRef;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::{
     EXECUTION_GRAPH_OPTIONS, ExecutionPlan, ExecutionPlanner, ResolvedExecutionPlan, TransactionBy,
@@ -300,7 +300,7 @@ pub async fn build_initial_mint_ltdv_pointers(
 }
 
 pub async fn resolve_execution_plan_versions(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     execution: Ref<ExecutionDB>,
     execution_plan: Ref<ExecutionPlan>,
 ) -> Result<ResolvedExecutionPlan, TdError> {
@@ -503,7 +503,7 @@ pub async fn resolve_execution_plan_versions(
 /// then the committed LTDV timeline. Every concrete TDV has an LTDV by
 /// construction, so resolution never falls off the end of the timeline.
 pub async fn build_logical_function_run_inputs(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     transaction_by: Ref<TransactionBy>,
     transaction_map: Ref<TransactionMap<TransactionBy>>,
     execution_plan: Ref<ExecutionPlan>,
@@ -644,7 +644,7 @@ pub async fn build_logical_function_run_inputs(
     err(Debug)
 )]
 pub async fn update_initial_function_run_status(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     execution: Ref<ExecutionDB>,
     at_time: Ref<AtTime>,
 ) -> Result<(), TdError> {

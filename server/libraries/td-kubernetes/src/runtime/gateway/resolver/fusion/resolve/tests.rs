@@ -176,8 +176,7 @@ fn embedded_system_placeholder_splices_into_surrounding_text() {
         ..SystemValues::default()
     };
     let auto = HashMap::new();
-    let outcome =
-        resolve_config_file(template, init, &system, &auto).expect("resolve embedded");
+    let outcome = resolve_config_file(template, init, &system, &auto).expect("resolve embedded");
     assert!(outcome.rendered.contains("0.0.0.0:2457"));
 }
 

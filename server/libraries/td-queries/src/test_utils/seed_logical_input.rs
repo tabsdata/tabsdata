@@ -5,6 +5,7 @@
 use crate::LiveEntry;
 use crate::QueryExecutor;
 use ta_objects::Buildable;
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::collection::CollectionDB;
@@ -30,7 +31,7 @@ use td_objects::types::basic::{
 /// explicitly.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn seed_logical_input(
-    mut executor: impl QueryExecutor,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,

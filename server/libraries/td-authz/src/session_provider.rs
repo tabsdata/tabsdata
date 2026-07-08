@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use td_common::provider::{CachedProvider, Provider};
+use td_database::domain::{Apiserver, Domained};
 use td_error::{TdError, td_error};
 use td_objects::dxo::auth::SessionDBWithNames;
 use td_objects::types::basic::{AccessTokenId, SessionStatus};
@@ -46,8 +47,8 @@ impl SqlSessionProvider {
     }
 }
 
-impl<E: QueryExecutor + Send> Provider<HashMap<AccessTokenId, Arc<Session>>, E>
-    for SqlSessionProvider
+impl<E: QueryExecutor + Domained<Domain = Apiserver> + Send>
+    Provider<HashMap<AccessTokenId, Arc<Session>>, E> for SqlSessionProvider
 {
     async fn get(&self, conn: E) -> Result<Arc<HashMap<AccessTokenId, Arc<Session>>>, TdError> {
         let sessions: Vec<Session> = conn.live().fetch_all(&SessionStatus::Active).await?;

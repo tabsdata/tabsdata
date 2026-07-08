@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::domain::Domained;
 use crate::dynamic::{
     DynamicConnection, DynamicDecode, DynamicFromRow, DynamicPool, DynamicQueryResult, DynamicRow,
     DynamicType,
@@ -14,10 +15,11 @@ use futures_util::stream::BoxStream;
 use futures_util::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use sqlx::{Either, Error};
 
-/// Sqlx executor for SeaQueries.
-pub trait SeaExecutor: DatabaseKind {
+/// Sqlx executor for SeaQueries; serves exactly one database domain
+/// ([`Domained`] supertrait).
+pub trait SeaExecutor: DatabaseKind + Domained {
     /// A short-lived executor obtained by reborrowing `self`.
-    type Reused<'a>: SeaExecutor + Send
+    type Reused<'a>: SeaExecutor + Send + Domained<Domain = Self::Domain>
     where
         Self: 'a;
 

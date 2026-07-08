@@ -22,7 +22,7 @@
 //! deleted before the role rows.
 
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::role::RoleDB;
@@ -32,7 +32,7 @@ use td_queries::LiveEntry;
 use td_tower::extractors::{MutRef, Ref};
 
 pub async fn delete_project_roles(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     project_id: Ref<ProjectId>,
 ) -> Result<(), TdError> {
     // The `roles.project_id` column is `Option<ProjectId>`; its SQL condition

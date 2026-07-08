@@ -17,7 +17,7 @@
 
 use crate::rbac::SqlRbacSource;
 use crate::rbac::source::RbacSource;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_tower::extractors::{MutRef, Ref};
 use tracing::instrument;
@@ -39,7 +39,7 @@ pub type AuthzContext = SqlRbacSource;
 #[instrument(name = "authz.refresh", skip_all, level = "debug", err(Debug))]
 pub async fn refresh_authz_context(
     context: Ref<AuthzContext>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut slot: MutRef<DomainConnection<Apiserver>>,
 ) -> Result<(), TdError> {
-    context.refresh(&mut conn).await
+    context.refresh(&mut slot).await
 }

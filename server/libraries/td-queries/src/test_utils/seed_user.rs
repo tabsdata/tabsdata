@@ -4,6 +4,7 @@
 
 use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, TryUpdater};
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::{UserCreate, UserDB};
@@ -14,7 +15,7 @@ use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
 
 pub(crate) async fn seed_user(
-    db: impl QueryExecutor,
+    db: impl QueryExecutor + Domained<Domain = Apiserver>,
     name: &UserName,
     enabled: &UserEnabled,
 ) -> Result<UserDB, TdError> {
@@ -25,14 +26,14 @@ pub(crate) async fn seed_user(
 /// `system` flag drives for service users). Enabled so tests prove the
 /// row is hidden by the `system` flag rather than by `enabled`.
 pub(crate) async fn seed_system_user(
-    db: impl QueryExecutor,
+    db: impl QueryExecutor + Domained<Domain = Apiserver>,
     name: &UserName,
 ) -> Result<UserDB, TdError> {
     seed_user_with(db, name, &UserEnabled::from(true), &UserSystem::TRUE).await
 }
 
 async fn seed_user_with(
-    db: impl QueryExecutor,
+    db: impl QueryExecutor + Domained<Domain = Apiserver>,
     name: &UserName,
     enabled: &UserEnabled,
     system: &UserSystem,

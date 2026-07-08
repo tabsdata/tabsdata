@@ -68,7 +68,10 @@ fn placeholder_occurrences_collects_in_order() {
     let occurrences = placeholder_occurrences("${{a}}:${{b:cat}}/${{c?}}");
     assert_eq!(occurrences.len(), 3);
     assert_eq!(occurrences[0], placeholder("a", None, Rule::Mandatory));
-    assert_eq!(occurrences[1], placeholder("b", Some("cat"), Rule::Mandatory));
+    assert_eq!(
+        occurrences[1],
+        placeholder("b", Some("cat"), Rule::Mandatory)
+    );
     assert_eq!(occurrences[2], placeholder("c", None, Rule::Optional));
 }
 
@@ -233,7 +236,10 @@ fn walk_rejects_first_key_mismatch() {
                 - id: A\n  v: ${{secret}}\n\
                 - name: B\n  v: ${{secret}}\n";
     let error = walk_error(yaml);
-    assert!(matches!(error, ResolverError::SequenceFirstKeyMismatch { .. }));
+    assert!(matches!(
+        error,
+        ResolverError::SequenceFirstKeyMismatch { .. }
+    ));
 }
 
 #[test]

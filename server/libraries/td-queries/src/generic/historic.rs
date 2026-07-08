@@ -19,7 +19,8 @@ use sea_query::Condition;
 use std::marker::PhantomData;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{ListDto, ListFilter, StateFilter, VersionedDao};
+use ta_objects::{DaoCore, ListDto, ListFilter, StateFilter, VersionedDao};
+use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
 
@@ -85,6 +86,7 @@ where
     pub async fn fetch_one<D>(self, condition: impl SqlCondition) -> Result<D, SqlError>
     where
         D: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = D::Db>,
     {
         self.with_dao::<D>().fetch_one(condition).await
     }
@@ -96,6 +98,7 @@ where
     ) -> Result<Option<D>, SqlError>
     where
         D: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = D::Db>,
     {
         self.with_dao::<D>().fetch_optional(condition).await
     }
@@ -104,6 +107,7 @@ where
     pub async fn fetch_all<D>(self, condition: impl SqlCondition) -> Result<Vec<D>, SqlError>
     where
         D: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = D::Db>,
     {
         self.with_dao::<D>().fetch_all(condition).await
     }
@@ -123,6 +127,7 @@ where
     ) -> Result<Vec<D>, SqlError>
     where
         D: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = D::Db>,
     {
         self.with_dao::<D>().fetch_all_chunked(values).await
     }
@@ -137,6 +142,7 @@ where
     where
         D: ListDto,
         <D as ListDto>::Dao: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = <<D as ListDto>::Dao as DaoCore>::Db>,
     {
         self.with_dao::<<D as ListDto>::Dao>()
             .list_versions(condition, filter, params)
@@ -153,6 +159,7 @@ where
     where
         D: ListDto,
         <D as ListDto>::Dao: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = <<D as ListDto>::Dao as DaoCore>::Db>,
     {
         self.with_dao::<<D as ListDto>::Dao>()
             .list_full(condition, filter, params)
@@ -167,7 +174,7 @@ where
 impl<'a, T, D, E> Historic<'a, T, E, Bound<D>>
 where
     D: VersionedDao<VersionOrder = T>,
-    E: QueryExecutor,
+    E: QueryExecutor + Domained<Domain = D::Db>,
 {
     /// Latest row matching `condition` and the bound state.
     pub async fn fetch_one(self, condition: impl SqlCondition) -> Result<D, SqlError> {

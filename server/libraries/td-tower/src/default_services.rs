@@ -17,7 +17,7 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{DbDomain, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::TdError;
 use tower::{Layer, Service};
@@ -231,40 +231,48 @@ where
     }
 }
 
-/// ConnectionProvider is a layer wrapping ConnectionProviderService.
+/// Opens a read-path connection on `D`'s pool and inserts it ready
+/// (the `connection = ConnectionProvider<D>` layer).
 #[derive(Clone)]
-pub struct ConnectionProvider {
+pub struct ConnectionProvider<D: DbDomain> {
     db: TdPool,
+    _d: PhantomData<D>,
 }
 
-impl ConnectionProvider {
-    pub fn new(db: TdPool) -> ConnectionProvider {
-        ConnectionProvider { db }
+impl<D: DbDomain> ConnectionProvider<D> {
+    pub fn new(db: TdPool) -> Self {
+        Self {
+            db,
+            _d: PhantomData,
+        }
     }
 }
 
-impl<S> Layer<S> for ConnectionProvider {
-    type Service = ConnectionProviderService<S>;
+impl<S, D: DbDomain> Layer<S> for ConnectionProvider<D> {
+    type Service = ConnectionProviderService<S, D>;
 
     fn layer(&self, service: S) -> Self::Service {
         ConnectionProviderService {
             inner: service,
             db: self.db.clone(),
+            _d: PhantomData,
         }
     }
 }
 
-/// ConnectionProviderService is a service that will create and insert a pool connection into the handler.
+/// The service backing [`ConnectionProvider`].
 #[derive(Clone)]
-pub struct ConnectionProviderService<S> {
+pub struct ConnectionProviderService<S, D: DbDomain> {
     inner: S,
     db: TdPool,
+    _d: PhantomData<D>,
 }
 
-impl<S, Err> Service<Handler> for ConnectionProviderService<S>
+impl<S, D, Err> Service<Handler> for ConnectionProviderService<S, D>
 where
     S: Service<Handler, Response = Handler, Error = Err> + Clone + Send + 'static,
     S::Future: Send,
+    D: DbDomain,
     Err: From<TdError>,
 {
     type Response = S::Response;
@@ -284,10 +292,6 @@ where
 
         let db = self.db.clone();
         Box::pin(async move {
-            // Backend-appropriate read-path connection: a rolled-back ro
-            // transaction on PostgreSQL (so per-request `SET LOCAL` can scope),
-            // the bare pooled connection elsewhere. Dispatch lives in
-            // td-database; this layer stays backend-agnostic.
             let connection = db
                 .acquire_for_read()
                 .await
@@ -296,54 +300,60 @@ where
             if let Some(m) = crate::metadata::Metadata::extract(&mut handler) {
                 m.created_type(
                     "ConnectionProviderService",
-                    type_of::<DynamicConnection<'static>>(),
+                    type_of::<DomainConnection<D>>(),
                 );
             }
 
-            // Add it to the handler
-            handler.insert(connection);
+            handler.insert(DomainConnection::<D>::ready(connection));
 
-            // And send it to the next service
             inner.call(handler).await
         })
     }
 }
 
-/// TransactionProvider is a layer wrapping TransactionProviderService.
+/// Begins a transaction on `D`'s pool, inserts it ready, and commits (rolls
+/// back on error) when the stack completes
+/// (the `connection = TransactionProvider<D>` layer).
 #[derive(Clone)]
-pub struct TransactionProvider {
+pub struct TransactionProvider<D: DbDomain> {
     db: TdPool,
+    _d: PhantomData<D>,
 }
 
-impl TransactionProvider {
-    pub fn new(db: TdPool) -> TransactionProvider {
-        TransactionProvider { db }
+impl<D: DbDomain> TransactionProvider<D> {
+    pub fn new(db: TdPool) -> Self {
+        Self {
+            db,
+            _d: PhantomData,
+        }
     }
 }
 
-impl<S> Layer<S> for TransactionProvider {
-    type Service = TransactionProviderService<S>;
+impl<S, D: DbDomain> Layer<S> for TransactionProvider<D> {
+    type Service = TransactionProviderService<S, D>;
 
     fn layer(&self, service: S) -> Self::Service {
         TransactionProviderService {
             inner: service,
             db: self.db.clone(),
+            _d: PhantomData,
         }
     }
 }
 
-/// TransactionProviderService is a service that will create and insert a transaction into the handler.
-/// It will also handle the commit or rollback based on the result of the services chain.
+/// The service backing [`TransactionProvider`].
 #[derive(Clone)]
-pub struct TransactionProviderService<S> {
+pub struct TransactionProviderService<S, D: DbDomain> {
     inner: S,
     db: TdPool,
+    _d: PhantomData<D>,
 }
 
-impl<S> Service<Handler> for TransactionProviderService<S>
+impl<S, D> Service<Handler> for TransactionProviderService<S, D>
 where
     S: Service<Handler, Response = Handler, Error = TdError> + Clone + Send + 'static,
     S::Future: Send,
+    D: DbDomain,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -360,9 +370,8 @@ where
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
-        let db = self.db.clone(); // this is not cloning the pool, just its arc
+        let db = self.db.clone();
         Box::pin(async move {
-            // Create transaction
             let transaction = db
                 .begin()
                 .await
@@ -373,7 +382,7 @@ where
             if let Some(m) = crate::metadata::Metadata::extract(&mut handler) {
                 m.created_type(
                     "TransactionProviderService",
-                    type_of::<DynamicConnection<'static>>(),
+                    type_of::<DomainConnection<D>>(),
                 );
                 m.created_type(
                     "TransactionProviderService",
@@ -381,25 +390,22 @@ where
                 );
             }
 
-            // Insert the connection into the handler
-            handler.insert(connection);
+            handler.insert(DomainConnection::<D>::ready(connection));
 
             // Inner layers may queue side effects that must observe committed
             // state (e.g. cache invalidations). They run only after commit.
             handler.insert(PostCommitActions::default());
 
-            // Send it to the next service
             #[allow(unused_mut)]
             let mut result = inner.call(handler).await;
 
-            // Handle commit or rollback based on the result
             match result {
                 Ok(ref mut handler) => {
                     #[cfg(feature = "test_tower_metadata")]
                     if let Some(m) = crate::metadata::Metadata::extract(handler) {
                         m.remove_created(
                             "TransactionProviderService",
-                            type_of::<DynamicConnection<'static>>(),
+                            type_of::<DomainConnection<D>>(),
                         );
                         m.remove_created(
                             "TransactionProviderService",
@@ -407,12 +413,9 @@ where
                         );
                     }
 
-                    // Remove connection from handler — MutRef auto-restored it
-                    let connection = handler
-                        .take::<DynamicConnection<'static>>()
-                        .ok_or(ConnectionError::ConnectionLost)?;
-                    let transaction = connection
-                        .into_transaction()
+                    let transaction = handler
+                        .take::<DomainConnection<D>>()
+                        .and_then(DomainConnection::into_transaction)
                         .ok_or(ConnectionError::ConnectionLost)?;
                     if let Err(e) = transaction.commit().await {
                         return Err(ConnectionError::CannotCommitTransaction(e).into());
@@ -433,6 +436,74 @@ where
                 }
             }
         })
+    }
+}
+
+/// Puts a latent [`DomainConnection<D>`] in the handler (the
+/// `read_connection = D` layer).
+#[derive(Clone)]
+pub struct LatentConnectionProvider<D: DbDomain> {
+    db: TdPool,
+    _d: PhantomData<D>,
+}
+
+impl<D: DbDomain> LatentConnectionProvider<D> {
+    pub fn new(db: TdPool) -> Self {
+        Self {
+            db,
+            _d: PhantomData,
+        }
+    }
+}
+
+impl<S, D: DbDomain> Layer<S> for LatentConnectionProvider<D> {
+    type Service = LatentConnectionProviderService<S, D>;
+
+    fn layer(&self, service: S) -> Self::Service {
+        LatentConnectionProviderService {
+            inner: service,
+            db: self.db.clone(),
+            _d: PhantomData,
+        }
+    }
+}
+
+/// The service backing [`LatentConnectionProvider`].
+#[derive(Clone)]
+pub struct LatentConnectionProviderService<S, D: DbDomain> {
+    inner: S,
+    db: TdPool,
+    _d: PhantomData<D>,
+}
+
+impl<S, D> Service<Handler> for LatentConnectionProviderService<S, D>
+where
+    S: Service<Handler, Response = Handler>,
+    D: DbDomain,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = S::Future;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut handler: Handler) -> Self::Future {
+        #[cfg(feature = "test_tower_metadata")]
+        if let Some(m) = crate::metadata::Metadata::extract(&mut handler) {
+            m.created_type(
+                "LatentConnectionProviderService",
+                type_of::<DomainConnection<D>>(),
+            );
+        }
+
+        handler.insert(DomainConnection::<D>::latent(self.db.clone()));
+
+        self.inner.call(handler)
     }
 }
 
@@ -655,7 +726,7 @@ mod tests {
     use crate::from_fn::from_fn;
     use std::ops::Deref;
     use std::sync::Arc;
-    use td_database::dynamic::DynamicConnection;
+    use td_database::domain::Apiserver;
     use td_error::TdError;
     use tower::{ServiceBuilder, ServiceExt};
 
@@ -705,12 +776,40 @@ mod tests {
     async fn test_connection_provider_layer(db: TdPool) {
         let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
-            .layer(ConnectionProvider::new(db))
+            .layer(ConnectionProvider::<Apiserver>::new(db))
             .layer(from_fn(
-                |mut conn: MutRef<DynamicConnection<'static>>| async move {
-                    let is_ok = conn.ping().await.is_ok();
+                |mut conn: MutRef<DomainConnection<Apiserver>>| async move {
+                    let is_ok = conn.get().await?.ping().await.is_ok();
                     assert!(is_ok);
                     Ok::<_, TdError>(is_ok)
+                },
+            ))
+            .service(ServiceReturn);
+
+        let res: bool = service.raw_oneshot(()).await.unwrap();
+        assert!(res);
+    }
+
+    #[td_test::test(db)]
+    async fn test_domain_connection_layers(db: TdPool) {
+        // The test pool caps at 2 connections: primary + materialized latent.
+        #[derive(Debug, Clone, Copy)]
+        struct OtherDomain;
+        impl DbDomain for OtherDomain {
+            const SCHEMA_KEY: &'static str = "other";
+        }
+
+        let service = ServiceBuilder::new()
+            .layer(ServiceEntry::default())
+            .layer(ConnectionProvider::<Apiserver>::new(db.clone()))
+            .layer(LatentConnectionProvider::<OtherDomain>::new(db))
+            .layer(from_fn(
+                |mut primary: MutRef<DomainConnection<Apiserver>>,
+                 mut latent: MutRef<DomainConnection<OtherDomain>>| async move {
+                    primary.get().await?.ping().await.unwrap();
+                    latent.get().await?.ping().await.unwrap();
+                    latent.get().await?.ping().await.unwrap();
+                    Ok::<_, TdError>(true)
                 },
             ))
             .service(ServiceReturn);
@@ -723,10 +822,10 @@ mod tests {
     async fn test_transaction_provider_layer(db: TdPool) {
         let service = ServiceBuilder::new()
             .layer(ServiceEntry::default())
-            .layer(TransactionProvider::new(db))
+            .layer(TransactionProvider::<Apiserver>::new(db))
             .layer(from_fn(
-                |mut conn: MutRef<DynamicConnection<'static>>| async move {
-                    let is_ok = conn.ping().await.is_ok();
+                |mut conn: MutRef<DomainConnection<Apiserver>>| async move {
+                    let is_ok = conn.get().await?.ping().await.is_ok();
                     assert!(is_ok);
                     Ok::<_, TdError>(is_ok)
                 },

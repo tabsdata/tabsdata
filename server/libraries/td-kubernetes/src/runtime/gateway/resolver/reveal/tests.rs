@@ -56,8 +56,14 @@ fn secret_with_values_shows_resolved_secret() {
     let mut secret_values = HashMap::new();
     let key = encode_secret_key(SECRET_CONSUMER, &["password".to_owned()]).expect("key");
     secret_values.insert(key, "topsecret".to_owned());
-    let rendered =
-        reveal(template, configmap, &Schema::default(), true, &secret_values).expect("reveal");
+    let rendered = reveal(
+        template,
+        configmap,
+        &Schema::default(),
+        true,
+        &secret_values,
+    )
+    .expect("reveal");
     assert!(rendered.contains("password: topsecret"));
 }
 
@@ -65,8 +71,14 @@ fn secret_with_values_shows_resolved_secret() {
 fn secret_with_values_but_missing_entry_falls_back_to_token() {
     let template = "password: ${{secret}}\n";
     let configmap = "password: ${{secret}}\n";
-    let rendered =
-        reveal(template, configmap, &Schema::default(), true, &HashMap::new()).expect("reveal");
+    let rendered = reveal(
+        template,
+        configmap,
+        &Schema::default(),
+        true,
+        &HashMap::new(),
+    )
+    .expect("reveal");
     assert!(rendered.contains("password: ${{secret}}"));
 }
 

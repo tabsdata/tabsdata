@@ -6,15 +6,15 @@ use super::shared::{internal_get_callback, internal_post_callback, internal_requ
 use crate::scheduler::message_builder::build_external_location;
 use http::Method;
 use std::collections::HashMap;
-use td_common::jwt::JwtConfig;
 use td_bridge::messaging::{
     OrchestratorMessagePayload, StageTriggerRequest, StageTriggerStartRequest,
     StageTriggerStopRequest,
 };
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::id;
+use td_common::jwt::JwtConfig;
 use td_common::worker::{Callback, MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::TaggedExt;
 use td_objects::dxo::function::FunctionDBWithBundleBasePath;
@@ -44,7 +44,7 @@ pub async fn create_locked_stage_trigger_workers_start_request(
     storage: Ref<Storage>,
     server_addresses: Ref<InternalServerAddresses>,
     jwt: Ref<JwtConfig>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     stage_trigger_workers: Ref<Vec<WorkerDBWithNames>>,
 ) -> Result<(), TdError> {
     // Both orchestrators need the function's external storage locations

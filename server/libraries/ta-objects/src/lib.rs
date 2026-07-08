@@ -22,6 +22,8 @@ pub use {
     list_filter::ListFilterStr,
     sea_value::{NullableSeaValue, SeaValue},
     tagged::{Tagged, TaggedExt},
+    // re-exported so the `Dao` macro's emitted `type Db` default resolves
+    td_database::domain::Apiserver,
 };
 
 // external macros

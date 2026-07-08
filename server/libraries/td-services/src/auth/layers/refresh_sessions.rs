@@ -4,7 +4,7 @@
 
 use td_authz::session_provider::Sessions;
 use td_common::provider::Provider;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_tower::extractors::{MutRef, Ref};
 use td_tower::post_commit::PostCommitActions;
@@ -26,7 +26,7 @@ use td_tower::post_commit::PostCommitActions;
 /// invalidation to a post-commit action.
 pub async fn refresh_sessions(
     sessions: Ref<Sessions>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     mut post_commit: MutRef<PostCommitActions>,
 ) -> Result<(), TdError> {
     // Housekeeping only: delete expired session rows (throttled, ~hourly).

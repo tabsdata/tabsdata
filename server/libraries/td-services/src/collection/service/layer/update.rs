@@ -5,7 +5,7 @@
 use crate::collection::CollectionError;
 use crate::collection::service::connection::ensure_collection_name_free;
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::{
     CollectionDB, CollectionDBWithNames, CollectionRead, CollectionReadBuilder, CollectionUpdate,
@@ -75,7 +75,7 @@ pub struct ConnectionRename {
 }
 
 pub async fn plan_collection_update(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     collection: Ref<CollectionDB>,
     update: Ref<CollectionUpdate>,
     update_db: Ref<CollectionUpdateDB>,
@@ -110,7 +110,7 @@ pub async fn plan_collection_update(
 /// The update transaction: apply the (store-confirmed) update and read the
 /// result back.
 pub async fn apply_collection_update(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     plan: Ref<CollectionUpdatePlan>,
 ) -> Result<CollectionRead, TdError> {
     conn.live()

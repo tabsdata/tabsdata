@@ -2,6 +2,9 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+//! Generic tower layer fns; each extracts its DAO's domain slot, so a query
+//! cannot reach the wrong pool.
+
 use crate::ChunkedQueries;
 use crate::{CurrentEntry, HistoricEntry, LiveEntry};
 use std::marker::PhantomData;
@@ -12,25 +15,27 @@ use ta_objects::{
     CurrentDao, Dao, DaoCore, DaoUpdate, ListDto, ListFilterExtract, ListRef, LiveDao, StateFilter,
     States, VersionedDao,
 };
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::DomainConnection;
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListParams, ListResponse};
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
 use td_tower::extractors::{MutRef, Ref};
 
-pub async fn insert<D: Dao>(
-    mut conn: MutRef<DynamicConnection<'static>>,
-    dao: Ref<D>,
-) -> Result<(), TdError> {
+type SlotOf<D> = DomainConnection<<D as DaoCore>::Db>;
+
+pub async fn insert<D>(mut conn: MutRef<SlotOf<D>>, dao: Ref<D>) -> Result<(), TdError>
+where
+    D: Dao,
+{
     conn.live().insert(dao.deref()).await?;
     Ok(())
 }
 
-pub async fn insert_vec<D: Dao>(
-    mut conn: MutRef<DynamicConnection<'static>>,
-    daos: Ref<Vec<D>>,
-) -> Result<(), TdError> {
+pub async fn insert_vec<D>(mut conn: MutRef<SlotOf<D>>, daos: Ref<Vec<D>>) -> Result<(), TdError>
+where
+    D: Dao,
+{
     conn.insert_vec::<D>(daos.deref()).await?;
     Ok(())
 }
@@ -43,10 +48,7 @@ impl<E> By<E>
 where
     E: ConditionExtract,
 {
-    pub async fn fetch_one<D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
-        by: SqlRef<E>,
-    ) -> Result<D, TdError>
+    pub async fn fetch_one<D>(mut conn: MutRef<SlotOf<D>>, by: SqlRef<E>) -> Result<D, TdError>
     where
         D: LiveDao,
     {
@@ -55,7 +57,7 @@ where
     }
 
     pub async fn fetch_optional<D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         by: SqlRef<E>,
     ) -> Result<Option<D>, TdError>
     where
@@ -65,10 +67,7 @@ where
         Ok(result)
     }
 
-    pub async fn fetch_all<D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
-        by: SqlRef<E>,
-    ) -> Result<Vec<D>, TdError>
+    pub async fn fetch_all<D>(mut conn: MutRef<SlotOf<D>>, by: SqlRef<E>) -> Result<Vec<D>, TdError>
     where
         D: LiveDao,
     {
@@ -77,7 +76,7 @@ where
     }
 
     pub async fn fetch_all_in<const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         by: SqlRef<E>,
     ) -> Result<Vec<D>, TdError>
     where
@@ -91,7 +90,7 @@ where
     }
 
     pub async fn update<U, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<U>>,
         update: Ref<U>,
         by: SqlRef<E>,
     ) -> Result<(), TdError>
@@ -103,10 +102,7 @@ where
         Ok(())
     }
 
-    pub async fn delete<D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
-        by: SqlRef<E>,
-    ) -> Result<(), TdError>
+    pub async fn delete<D>(mut conn: MutRef<SlotOf<D>>, by: SqlRef<E>) -> Result<(), TdError>
     where
         D: DaoCore,
     {
@@ -114,10 +110,7 @@ where
         Ok(())
     }
 
-    pub async fn assert_exists<D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
-        by: SqlRef<E>,
-    ) -> Result<(), TdError>
+    pub async fn assert_exists<D>(mut conn: MutRef<SlotOf<D>>, by: SqlRef<E>) -> Result<(), TdError>
     where
         D: LiveDao,
     {
@@ -136,7 +129,7 @@ where
     }
 
     pub async fn assert_not_exists<D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         by: SqlRef<E>,
     ) -> Result<(), TdError>
     where
@@ -157,7 +150,7 @@ where
     }
 
     pub async fn assert_version_not_exists<const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         on: Ref<D::VersionOrder>,
         by: SqlRef<E>,
     ) -> Result<(), TdError>
@@ -183,7 +176,7 @@ where
     }
 
     pub async fn historic_fetch_one<const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         on: Ref<D::VersionOrder>,
         by: SqlRef<E>,
     ) -> Result<D, TdError>
@@ -199,7 +192,7 @@ where
     }
 
     pub async fn historic_fetch_all<const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         on: Ref<D::VersionOrder>,
         by: SqlRef<E>,
     ) -> Result<Vec<D>, TdError>
@@ -215,7 +208,7 @@ where
     }
 
     pub async fn list<F: ListFilterExtract, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<<D as ListDto>::Dao>>,
         by: SqlRef<E>,
         filter: ListRef<F>,
         list_params: Ref<ListParams>,
@@ -233,7 +226,7 @@ where
     }
 
     pub async fn historic_list_versions<F: ListFilterExtract, const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<<D as ListDto>::Dao>>,
         by: SqlRef<E>,
         filter: ListRef<F>,
         on: Ref<<<D as ListDto>::Dao as VersionedDao>::VersionOrder>,
@@ -253,7 +246,7 @@ where
     }
 
     pub async fn historic_list_full<F: ListFilterExtract, const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<<D as ListDto>::Dao>>,
         by: SqlRef<E>,
         filter: ListRef<F>,
         on: Ref<<<D as ListDto>::Dao as VersionedDao>::VersionOrder>,
@@ -273,7 +266,7 @@ where
     }
 
     pub async fn fetch_one_current<const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         by: SqlRef<E>,
     ) -> Result<D, TdError>
     where
@@ -288,7 +281,7 @@ where
     }
 
     pub async fn fetch_optional_current<const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         by: SqlRef<E>,
     ) -> Result<Option<D>, TdError>
     where
@@ -303,7 +296,7 @@ where
     }
 
     pub async fn fetch_all_current<const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         by: SqlRef<E>,
     ) -> Result<Vec<D>, TdError>
     where
@@ -318,7 +311,7 @@ where
     }
 
     pub async fn list_current<F: ListFilterExtract, const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<<D as ListDto>::Dao>>,
         by: SqlRef<E>,
         filter: ListRef<F>,
         list_params: Ref<ListParams>,
@@ -343,7 +336,7 @@ where
 
 impl<T: SqlCondition + 'static> By<Vec<T>> {
     pub async fn fetch_all_chunked<D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         values: Ref<Vec<T>>,
     ) -> Result<Vec<D>, TdError>
     where
@@ -353,7 +346,7 @@ impl<T: SqlCondition + 'static> By<Vec<T>> {
     }
 
     pub async fn update_chunked<U, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<U>>,
         update: Ref<U>,
         values: Ref<Vec<T>>,
     ) -> Result<(), TdError>
@@ -367,7 +360,7 @@ impl<T: SqlCondition + 'static> By<Vec<T>> {
     }
 
     pub async fn historic_fetch_all_chunked<const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         on: Ref<D::VersionOrder>,
         values: Ref<Vec<T>>,
     ) -> Result<Vec<D>, TdError>
@@ -382,7 +375,7 @@ impl<T: SqlCondition + 'static> By<Vec<T>> {
     }
 
     pub async fn fetch_all_current_chunked<const S: u8, D>(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<SlotOf<D>>,
         values: Ref<Vec<T>>,
     ) -> Result<Vec<D>, TdError>
     where

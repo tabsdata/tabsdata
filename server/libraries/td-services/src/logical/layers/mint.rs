@@ -11,7 +11,7 @@
 //! the same DB tx.
 
 use crate::function::layers::topology::RunnableVersion;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
@@ -29,7 +29,7 @@ use td_queries::{ChunkedQueries, LfrEntry, LiveEntry};
 /// collection's `base_path`. Stamped (frozen) onto every output TDV at
 /// mint so reads never recompute it.
 pub async fn resolve_output_base_path(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     function_version_id: &FunctionVersionId,
 ) -> Result<BasePath, TdError> {
     let effective = conn
@@ -70,7 +70,7 @@ pub fn build_function_run(
 }
 
 pub async fn mint_function_run(
-    conn: &mut DynamicConnection<'static>,
+    conn: &mut DomainConnection<Apiserver>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     at: &AtTime,
@@ -116,7 +116,7 @@ pub fn build_output_table_data_versions(
 }
 
 pub async fn mint_output_table_data_versions(
-    conn: &mut DynamicConnection<'static>,
+    conn: &mut DomainConnection<Apiserver>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     fr: &PhysicalFunctionRunDB,

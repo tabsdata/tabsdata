@@ -184,7 +184,10 @@ fn secret_auto_unknown_generator_errors() {
     let system = SystemValues::default();
     let context = context(&bar, &path, None, None, &system);
     let result = resolver.resolve(&context);
-    assert!(matches!(result, Err(ResolverError::UnknownGenerator { .. })));
+    assert!(matches!(
+        result,
+        Err(ResolverError::UnknownGenerator { .. })
+    ));
 }
 
 #[test]

@@ -12,7 +12,7 @@ use crate::function::layers::topology::{RunnableVersion, latest_patch_or_head_ba
 use crate::logical::layers::mint::{build_function_run, build_output_table_data_versions};
 use std::collections::HashMap;
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunPointerDB, LogicalTableDataVersionDB,
@@ -46,7 +46,7 @@ pub struct MintedDispatch {
     err(Debug)
 )]
 pub async fn mint_function_runs_on_dispatch(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     ready_lfrs: Ref<Vec<LogicalFunctionRunDB>>,
     at: Ref<AtTime>,
 ) -> Result<Vec<MintedDispatch>, TdError> {
@@ -415,7 +415,9 @@ mod tests {
         let fvid_a = lfr_a.function_version_id.clone();
         let fvid_b = lfr_b.function_version_id.clone();
 
-        let conn = MutRef::new(db.begin().await.unwrap().into_connection());
+        let conn = MutRef::new(DomainConnection::ready(
+            db.begin().await.unwrap().into_connection(),
+        ));
         let ready = Ref::new(vec![lfr_a, lfr_b]);
         let at = Ref::new(AtTime::now());
         let minted = mint_function_runs_on_dispatch(conn, ready, at).await?;

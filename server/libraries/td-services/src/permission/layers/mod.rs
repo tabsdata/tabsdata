@@ -9,7 +9,7 @@ use td_authz::rbac::{
     ManageAccess, ManageProject, On, Project, RbacError, RbacSource, System, SystemEntity, enforce,
     identity_grants,
 };
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::{
@@ -27,7 +27,7 @@ use td_tower::extractors::{MutRef, Ref};
 pub trait PermissionBuildService {
     fn build_permission_db(
         source: Ref<AuthzContext>,
-        conn: MutRef<DynamicConnection<'static>>,
+        conn: MutRef<DomainConnection<Apiserver>>,
         input: Ref<PermissionDBBuilder>,
         permission_create: Ref<PermissionCreate>,
     ) -> impl Future<Output = Result<PermissionDB, TdError>>;
@@ -36,7 +36,7 @@ pub trait PermissionBuildService {
 impl PermissionBuildService for With<PermissionDBBuilder> {
     async fn build_permission_db(
         source: Ref<AuthzContext>,
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<DomainConnection<Apiserver>>,
         input: Ref<PermissionDBBuilder>,
         permission_create: Ref<PermissionCreate>,
     ) -> Result<PermissionDB, TdError> {
@@ -165,7 +165,7 @@ impl PermissionTarget for PermissionDBWithNames {
 /// so no [`Scope`](td_authz::rbac::Scope) needs to be set in context.
 pub async fn authorize_permission_target<P>(
     source: Ref<AuthzContext>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     request: Ref<RequestContext>,
     permission: Ref<P>,
 ) -> Result<(), TdError>

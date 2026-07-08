@@ -6,7 +6,7 @@ use crate::scheduler::message_builder::{
     build_cron_input, build_function_v2, build_streamer_input, prefetch_dispatch,
 };
 use ta_services::factory::service_factory;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::dxo::worker::{UpdateWorkerMessageStatusDB, WorkerDB, WorkerDBWithNames};
@@ -55,7 +55,7 @@ fn service() {
     err(Debug)
 )]
 pub async fn resolve_worker_message(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     storage: Ref<Storage>,
     worker_id: Ref<WorkerId>,
     at: Ref<AtTime>,

@@ -3,7 +3,7 @@
 //
 
 use crate::group::GroupError;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::DaoCore;
 use td_objects::dxo::group::{GroupDB, GroupDBWithNames, GroupUpdate};
@@ -28,7 +28,7 @@ pub async fn assert_not_system(group: Ref<GroupDBWithNames>) -> Result<(), TdErr
 /// The connection is project-scoped, matching the `(project_id, name)` unique
 /// index — names collide only within a project.
 pub async fn assert_group_rename_available(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     update: Ref<GroupUpdate>,
     current: Ref<GroupDBWithNames>,
 ) -> Result<(), TdError> {

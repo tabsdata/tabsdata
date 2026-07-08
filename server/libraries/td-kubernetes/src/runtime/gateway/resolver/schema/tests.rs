@@ -145,8 +145,11 @@ fn missing_treat_is_rejected() {
 
 #[test]
 fn leading_wildcard_matches_any_first_segment() {
-    let schema = Schema::parse("x.yamls", "directives:\n  - at: '*.token'\n    treat: secret\n")
-        .expect("parse");
+    let schema = Schema::parse(
+        "x.yamls",
+        "directives:\n  - at: '*.token'\n    treat: secret\n",
+    )
+    .expect("parse");
     assert!(schema.secret_at(&path(&["alpha", "token"])));
     assert!(schema.secret_at(&path(&["beta", "token"])));
     assert!(!schema.secret_at(&path(&["alpha", "value"])));
@@ -155,8 +158,8 @@ fn leading_wildcard_matches_any_first_segment() {
 
 #[test]
 fn mid_path_wildcard_matches_single_segment() {
-    let schema = Schema::parse("x.yamls", "directives:\n  - at: a.*.c\n    treat: secret\n")
-        .expect("parse");
+    let schema =
+        Schema::parse("x.yamls", "directives:\n  - at: a.*.c\n    treat: secret\n").expect("parse");
     assert!(schema.secret_at(&path(&["a", "anything", "c"])));
     assert!(!schema.secret_at(&path(&["a", "c"])));
     assert!(!schema.secret_at(&path(&["a", "x", "y", "c"])));
@@ -171,8 +174,11 @@ fn pattern_longer_than_path_does_not_full_match() {
 
 #[test]
 fn list_wildcard_suffix_expands_to_literal_then_wildcard() {
-    let schema = Schema::parse("x.yamls", "directives:\n  - at: items[*].pw\n    treat: secret\n")
-        .expect("parse");
+    let schema = Schema::parse(
+        "x.yamls",
+        "directives:\n  - at: items[*].pw\n    treat: secret\n",
+    )
+    .expect("parse");
     assert!(schema.secret_at(&path(&["items", "0", "pw"])));
     assert!(schema.secret_at(&path(&["items", "NAME", "pw"])));
     assert!(!schema.secret_at(&path(&["items", "pw"])));

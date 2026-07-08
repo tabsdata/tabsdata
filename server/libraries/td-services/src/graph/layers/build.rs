@@ -6,7 +6,7 @@ use crate::graph::layers::{FunctionOrTable, GraphConfig};
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
@@ -41,7 +41,7 @@ pub struct GraphBuilder<C: GraphConfig> {
 
 impl<C: GraphConfig> GraphBuilder<C> {
     pub async fn find_recursive_trigger_graph(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<DomainConnection<Apiserver>>,
         at_time: Ref<AtTime>,
         function_or_table: Ref<FunctionOrTable>,
         recursion_options: Ref<RecursionOptions>,
@@ -81,7 +81,7 @@ impl<C: GraphConfig> GraphBuilder<C> {
     }
 
     pub async fn find_recursive_dependency_graph(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<DomainConnection<Apiserver>>,
         at_time: Ref<AtTime>,
         function_or_table: Ref<FunctionOrTable>,
         recursion_options: Ref<RecursionOptions>,
@@ -115,7 +115,7 @@ impl<C: GraphConfig> GraphBuilder<C> {
     }
 
     pub async fn main_function_id(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<DomainConnection<Apiserver>>,
         at_time: Ref<AtTime>,
         function_or_table: Ref<FunctionOrTable>,
     ) -> Result<FunctionId, TdError> {
@@ -169,7 +169,7 @@ impl<C: GraphConfig> GraphBuilder<C> {
     }
 
     pub async fn find_triggered_functions_dependency_graph(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<DomainConnection<Apiserver>>,
         at_time: Ref<AtTime>,
         triggered_functions: Ref<Vec<FunctionId>>,
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
@@ -185,7 +185,7 @@ impl<C: GraphConfig> GraphBuilder<C> {
     }
 
     pub async fn find_functions_output_tables(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<DomainConnection<Apiserver>>,
         at_time: Ref<AtTime>,
         functions: Ref<Vec<FunctionId>>,
     ) -> Result<Vec<TableDBWithNames>, TdError> {
@@ -202,7 +202,7 @@ impl<C: GraphConfig> GraphBuilder<C> {
     }
 
     pub async fn find_all_tables_map(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<DomainConnection<Apiserver>>,
         at_time: Ref<AtTime>,
         trigger_graph: Ref<Vec<TriggerDBWithNames>>,
         dep_graph: Ref<Vec<DependencyDBWithNames>>,
@@ -234,7 +234,7 @@ impl<C: GraphConfig> GraphBuilder<C> {
     }
 
     pub async fn find_all_functions_map(
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut conn: MutRef<DomainConnection<Apiserver>>,
         at_time: Ref<AtTime>,
         trigger_graph: Ref<Vec<TriggerDBWithNames>>,
         dep_graph: Ref<Vec<DependencyDBWithNames>>,

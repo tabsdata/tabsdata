@@ -3,7 +3,7 @@
 //
 
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::FunctionDB;
@@ -54,7 +54,7 @@ pub async fn build_deleted_tables(
 }
 
 pub async fn update_deleted_workers(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     collection_id: Ref<CollectionId>,
 ) -> Result<(), TdError> {
     let update = UpdateWorkerDB::stop_scheduled().await?;

@@ -32,6 +32,7 @@ use crate::test_utils::seed_transaction::seed_transaction;
 use crate::test_utils::seed_user::{seed_system_user, seed_user};
 use crate::test_utils::seed_user_role::seed_user_role;
 use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
+use td_database::domain::{Apiserver, Domained};
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
@@ -75,7 +76,7 @@ pub struct Seed<E> {
     pub(crate) executor: E,
 }
 
-impl<E: QueryExecutor> Seed<E> {
+impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
     pub async fn collection(
         self,
         collection_name: &CollectionName,

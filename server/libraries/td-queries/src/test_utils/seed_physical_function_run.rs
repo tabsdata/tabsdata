@@ -5,6 +5,7 @@
 use crate::QueryExecutor;
 use crate::{CurrentEntry, LiveEntry};
 use ta_objects::{Buildable, and};
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
@@ -22,7 +23,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_physical_function_run(
-    mut executor: impl QueryExecutor,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     collection: &CollectionDB,
     function_version: &FunctionDB,
     execution: &ExecutionDB,

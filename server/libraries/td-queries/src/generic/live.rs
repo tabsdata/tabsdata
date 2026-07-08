@@ -23,6 +23,7 @@ use sea_query::{Query, SelectStatement};
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::{SqlCondition, resolve_condition};
 use ta_objects::{Dao, DaoCore, DaoUpdate, ListDto, ListFilter, LiveDao, StateFilter};
+use td_database::domain::Domained;
 use td_database::dynamic::DynamicQueryResult;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
@@ -47,7 +48,10 @@ where
     E: QueryExecutor,
 {
     /// Insert one row.
-    pub async fn insert<D: Dao>(self, dao: &D) -> Result<DynamicQueryResult, SqlError> {
+    pub async fn insert<D: Dao>(self, dao: &D) -> Result<DynamicQueryResult, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         let r = insert_query::<D>(dao)?
             .build_query()
             .execute(self.executor)
@@ -57,7 +61,10 @@ where
     }
 
     /// Fetch the single row matching `condition`. Errors if missing.
-    pub async fn fetch_one<D: LiveDao>(self, condition: impl SqlCondition) -> Result<D, SqlError> {
+    pub async fn fetch_one<D: LiveDao>(self, condition: impl SqlCondition) -> Result<D, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         let r = select::<D>(condition)?
             .limit(1)
             .build_query_as()
@@ -71,7 +78,10 @@ where
     pub async fn fetch_optional<D: LiveDao>(
         self,
         condition: impl SqlCondition,
-    ) -> Result<Option<D>, SqlError> {
+    ) -> Result<Option<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         let r = select::<D>(condition)?
             .limit(1)
             .build_query_as()
@@ -85,7 +95,10 @@ where
     pub async fn fetch_all<D: LiveDao>(
         self,
         condition: impl SqlCondition,
-    ) -> Result<Vec<D>, SqlError> {
+    ) -> Result<Vec<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         let r = select::<D>(condition)?
             .build_query_as()
             .fetch_all(self.executor)
@@ -99,7 +112,10 @@ where
         self,
         dao: &U,
         condition: impl SqlCondition,
-    ) -> Result<DynamicQueryResult, SqlError> {
+    ) -> Result<DynamicQueryResult, SqlError>
+    where
+        E: Domained<Domain = U::Db>,
+    {
         let r = update_query::<U, D>(dao, condition)?
             .build_query()
             .execute(self.executor)
@@ -112,7 +128,10 @@ where
     pub async fn delete<D: DaoCore>(
         self,
         condition: impl SqlCondition,
-    ) -> Result<DynamicQueryResult, SqlError> {
+    ) -> Result<DynamicQueryResult, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         let r = delete_query::<D>(condition)?
             .build_query()
             .execute(self.executor)
@@ -132,6 +151,7 @@ where
     where
         D: ListDto,
         <D as ListDto>::Dao: LiveDao,
+        E: Domained<Domain = <<D as ListDto>::Dao as DaoCore>::Db>,
     {
         let base = Query::select()
             .columns(<D as ListDto>::Dao::columns())
@@ -155,7 +175,10 @@ where
         self,
         state: StateFilter<D>,
         condition: impl SqlCondition,
-    ) -> Result<Vec<D>, SqlError> {
+    ) -> Result<Vec<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         let r = select_in::<D>(&state, condition)?
             .build_query_as()
             .fetch_all(self.executor)
@@ -172,7 +195,10 @@ where
         state: StateFilter<D>,
         condition: impl SqlCondition,
         offset: u64,
-    ) -> Result<Option<D>, SqlError> {
+    ) -> Result<Option<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         let r = select_latest_before::<D>(&state, condition, offset)?
             .build_query_as()
             .fetch_optional(self.executor)

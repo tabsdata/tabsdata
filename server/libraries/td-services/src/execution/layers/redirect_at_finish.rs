@@ -12,7 +12,7 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::ops::Deref;
 use td_common::execution_status::WorkerCallbackStatus;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunPointerDB, LogicalTableDataVersionDB,
@@ -36,7 +36,7 @@ use tracing::{debug, instrument};
     err(Debug)
 )]
 pub async fn redirect_pointers_at_finish(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     physical_function_runs: Ref<Vec<PhysicalFunctionRunDB>>,
     update: Ref<UpdateWorkerExecution>,
     at: Ref<AtTime>,

@@ -10,7 +10,7 @@
 use crate::function::layers::topology::{RunnableVersion, latest_patch_or_head};
 use crate::logical::layers::mint::{mint_function_run, mint_output_table_data_versions};
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::Buildable;
 use td_objects::dxo::logical::{
@@ -53,7 +53,7 @@ pub enum ReplayError {
     err(Debug)
 )]
 pub async fn load_bound_function_run_id(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     lfr: Ref<LogicalFunctionRunDB>,
     at: Ref<AtTime>,
 ) -> Result<PhysicalFunctionRunId, TdError> {
@@ -79,7 +79,7 @@ pub async fn load_bound_function_run_id(
     err(Debug)
 )]
 pub async fn assert_no_concurrent_replay(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     lfr: Ref<LogicalFunctionRunDB>,
     bound: Ref<PhysicalFunctionRunId>,
 ) -> Result<(), TdError> {
@@ -127,7 +127,7 @@ pub async fn assert_lfr_terminal(lfr: Ref<LogicalFunctionRunDB>) -> Result<(), T
 /// replay request and the dispatch tick won't be silently picked up.
 #[instrument(name = "replay.resolve_fvid", skip_all, level = "debug", err(Debug))]
 pub async fn resolve_replay_function_version_id(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     lfr: Ref<LogicalFunctionRunDB>,
     at: Ref<AtTime>,
 ) -> Result<RunnableVersion, TdError> {
@@ -144,7 +144,7 @@ pub async fn resolve_replay_function_version_id(
 
 #[instrument(name = "replay.mint_fr_new", skip_all, level = "debug", err(Debug))]
 pub async fn mint_replay_function_run(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     lfr: Ref<LogicalFunctionRunDB>,
     runnable: Ref<RunnableVersion>,
     at: Ref<AtTime>,
@@ -154,7 +154,7 @@ pub async fn mint_replay_function_run(
 
 #[instrument(name = "replay.mint_tdvs_new", skip_all, level = "debug", err(Debug))]
 pub async fn mint_replay_table_data_versions(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     lfr: Ref<LogicalFunctionRunDB>,
     runnable: Ref<RunnableVersion>,
     fr_new: Ref<PhysicalFunctionRunDB>,

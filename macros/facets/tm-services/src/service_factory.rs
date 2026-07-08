@@ -28,8 +28,13 @@ struct ProviderArgs {
     name: Ident,
     request: Type,
     response: Type,
+    /// The primary connection provider, optionally domain-typed
+    /// (`TransactionProvider<AiAgent>`); bare means the apiserver's.
     connection: Option<Type>,
     context: Vec<Type>,
+    /// Additional domains this service may read from (repeatable); each gets
+    /// a latent `DomainConnection`. Requires a domain-typed `connection`.
+    read_connection: Vec<Type>,
     scope: Option<Scope>,
 }
 
@@ -40,6 +45,7 @@ impl Parse for ProviderArgs {
         let mut response = None;
         let mut connection = None;
         let mut context = Vec::new();
+        let mut read_connection = Vec::new();
         let mut scope = None;
 
         while !input.is_empty() {
@@ -54,6 +60,10 @@ impl Parse for ProviderArgs {
                 "context" => {
                     let ctx: Type = input.parse()?;
                     context.push(ctx);
+                }
+                "read_connection" => {
+                    let domain: Type = input.parse()?;
+                    read_connection.push(domain);
                 }
                 "scope" => {
                     let value: syn::LitStr = input.parse()?;
@@ -100,9 +110,25 @@ impl Parse for ProviderArgs {
                 .ok_or_else(|| syn::Error::new(input.span(), "Missing `response`"))?,
             connection,
             context,
+            read_connection,
             scope,
         })
     }
+}
+
+/// Splits `TransactionProvider<AiAgent>` into base and domain.
+fn split_domain(ty: &Type) -> (Type, Option<Type>) {
+    if let Type::Path(tp) = ty
+        && let Some(last) = tp.path.segments.last()
+        && let syn::PathArguments::AngleBracketed(args) = &last.arguments
+        && args.args.len() == 1
+        && let Some(syn::GenericArgument::Type(domain)) = args.args.first()
+    {
+        let mut base = tp.clone();
+        base.path.segments.last_mut().unwrap().arguments = syn::PathArguments::None;
+        return (Type::Path(base), Some(domain.clone()));
+    }
+    (ty.clone(), None)
 }
 
 pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -196,30 +222,76 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     //     the rest of the stack.
     //   - Global: the input is the bare request; the provider bypasses scope.
     //   - no scope (no connection): no scope layer, bare request.
+    let (connection_base, connection_domain) = match &args.connection {
+        Some(ty) => {
+            let (base, domain) = split_domain(ty);
+            (Some(base), domain)
+        }
+        None => (None, None),
+    };
+    if !args.read_connection.is_empty() && connection_domain.is_none() {
+        return syn::Error::new_spanned(
+            &args.name,
+            "`read_connection` requires a domain-typed `connection` (e.g. `connection = TransactionProvider<SomeDomain>`)",
+        )
+        .to_compile_error()
+        .into();
+    }
+
+    let scope_domain = match &connection_domain {
+        None => quote! { ::td_database::domain::Apiserver },
+        Some(domain) => quote! { #domain },
+    };
     let (actual_req, project_scope_provider) = match &args.scope {
         None => (quote! { #req_ty }, vec![]),
         Some(Scope::Project) => (
             quote! { ::td_database::pool::scoped::Scoped<#req_ty, ::td_objects::types::basic::ProjectId> },
             vec![quote! {
-                ::td_tower::project_scope::ProjectScopeProvider::<#req_ty, ::td_objects::types::basic::ProjectId>::new()
+                ::td_tower::project_scope::ProjectScopeProvider::<#req_ty, ::td_objects::types::basic::ProjectId, #scope_domain>::new()
             }],
         ),
         Some(Scope::Global) => (
             quote! { #req_ty },
-            vec![quote! { ::td_tower::project_scope::GlobalScopeProvider::new() }],
+            vec![quote! { ::td_tower::project_scope::GlobalScopeProvider::<#scope_domain>::new() }],
         ),
     };
 
     let (mut factory_args, mut factory_types) = (vec![], vec![]);
-    let (db_input, db_arg, db_provider) = match &args.connection {
-        None => (None, None, vec![]),
-        Some(prov) => {
+    let (db_input, db_arg, db_provider) = match (&connection_base, &connection_domain) {
+        (None, _) => (vec![], None, vec![]),
+        // No domain named: the apiserver's, with the single pool as `db: TdPool`.
+        (Some(prov), None) => {
             factory_args.push(quote! { ::td_database::pool::TdPool::get_field(ctx) });
             factory_types.push(quote! { ::td_database::pool::TdPool });
             (
-                Some(quote! { db: ::td_database::pool::TdPool, }),
+                vec![quote! { db: ::td_database::pool::TdPool }],
                 Some(quote! { db.clone(), }),
-                vec![quote! { #prov::new(db), }],
+                vec![quote! {
+                    #prov::<::td_database::domain::Apiserver>::new(db),
+                }],
+            )
+        }
+        // Named domain: the pools travel as one `DomainPools` parameter; a
+        // missing domain pool is a boot-time wiring error, so panic.
+        (Some(prov), Some(domain)) => {
+            factory_args.push(quote! { ::td_database::domain::DomainPools::get_field(ctx) });
+            factory_types.push(quote! { ::td_database::domain::DomainPools });
+            let mut providers = vec![quote! {
+                #prov::<#domain>::new(
+                    pools.get::<#domain>().expect("service domain pool not configured").clone(),
+                ),
+            }];
+            for read_domain in &args.read_connection {
+                providers.push(quote! {
+                    ::td_tower::default_services::LatentConnectionProvider::<#read_domain>::new(
+                        pools.get::<#read_domain>().expect("service read_connection pool not configured").clone(),
+                    ),
+                });
+            }
+            (
+                vec![quote! { pools: ::td_database::domain::DomainPools }],
+                Some(quote! { pools.clone(), }),
+                providers,
             )
         }
     };
@@ -248,10 +320,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Override function input with connection and context arguments
     func.sig.inputs = {
         let mut inputs = Punctuated::<FnArg, Comma>::new();
-        if db_input.is_some() {
-            inputs.push(parse_quote! { db: ::td_database::pool::TdPool });
-        }
-        for input in &ctx_input {
+        for input in db_input.iter().chain(&ctx_input) {
             inputs.push(parse_quote! { #input });
         }
         inputs
@@ -307,7 +376,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         #[allow(non_snake_case)]
         impl #impl_generics #name #ty_generics #where_clause {
-            pub fn new(#db_input #(#ctx_input),*) -> Self {
+            pub fn new(#(#db_input,)* #(#ctx_input),*) -> Self {
                 Self {
                     provider: Self::#func_name(#db_arg #(#ctx_arg.clone()),*),
                     #[cfg(feature = "test_tower_metadata")]
@@ -317,7 +386,7 @@ pub fn service_factory(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             #[cfg(feature = "test-utils")]
-            pub fn with_defaults(#db_input) -> Self {
+            pub fn with_defaults(#(#db_input),*) -> Self {
                 Self {
                     provider: Self::#func_name(#db_arg #(std::sync::Arc::new(#ctx_ty::default())),*),
                     #[cfg(feature = "test_tower_metadata")]

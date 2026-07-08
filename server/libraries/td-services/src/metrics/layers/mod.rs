@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 use td_authz::rbac::VisibleProjects;
 use td_common::bucket::{WindowUnit as BucketUnit, floor_unit_ms};
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::metrics::{
@@ -29,7 +29,7 @@ use td_tower::extractors::{MutRef, Ref};
 
 pub async fn build_inflight_response(
     req: Ref<InflightRequest>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
 ) -> Result<InflightResponse, TdError> {
     // Project-scoped: RLS already isolates to the project in scope.
     inflight_response(&req, &VisibleProjects::All, &mut conn).await
@@ -37,7 +37,7 @@ pub async fn build_inflight_response(
 
 pub async fn build_metrics_response(
     req: Ref<MetricsRequest>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
 ) -> Result<MetricsResponse, TdError> {
     // Project-scoped: RLS already isolates to the project in scope.
     metrics_response(&req, &VisibleProjects::All, &mut conn).await
@@ -45,7 +45,7 @@ pub async fn build_metrics_response(
 
 pub async fn build_snapshot_response(
     req: Ref<SnapshotRequest>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
 ) -> Result<SnapshotResponse, TdError> {
     // Project-scoped: RLS already isolates to the project in scope.
     let metrics = metrics_response(&req.metrics, &VisibleProjects::All, &mut conn).await?;
@@ -60,7 +60,7 @@ pub async fn build_snapshot_response(
 pub async fn build_inflight_response_global(
     req: Ref<InflightRequest>,
     visible: Ref<VisibleProjects>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
 ) -> Result<InflightResponse, TdError> {
     inflight_response(&req, &visible, &mut conn).await
 }
@@ -70,7 +70,7 @@ pub async fn build_inflight_response_global(
 pub async fn build_metrics_response_global(
     req: Ref<MetricsRequest>,
     visible: Ref<VisibleProjects>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
 ) -> Result<MetricsResponse, TdError> {
     metrics_response(&req, &visible, &mut conn).await
 }
@@ -80,7 +80,7 @@ pub async fn build_metrics_response_global(
 pub async fn build_snapshot_response_global(
     req: Ref<SnapshotRequest>,
     visible: Ref<VisibleProjects>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
 ) -> Result<SnapshotResponse, TdError> {
     let metrics = metrics_response(&req.metrics, &visible, &mut conn).await?;
     let inflight = inflight_response(&req.inflight, &visible, &mut conn).await?;
@@ -90,7 +90,7 @@ pub async fn build_snapshot_response_global(
 async fn inflight_response(
     req: &InflightRequest,
     visible: &VisibleProjects,
-    conn: &mut DynamicConnection<'static>,
+    conn: &mut DomainConnection<Apiserver>,
 ) -> Result<InflightResponse, TdError> {
     let mut rows = conn.metrics().inflight(req).await?;
     // Cross-project (global) reads span every tenant; drop rows for projects
@@ -102,7 +102,7 @@ async fn inflight_response(
 async fn metrics_response(
     req: &MetricsRequest,
     visible: &VisibleProjects,
-    conn: &mut DynamicConnection<'static>,
+    conn: &mut DomainConnection<Apiserver>,
 ) -> Result<MetricsResponse, TdError> {
     let mut raw_nodes = conn.metrics().metrics_nodes(req).await?;
     let mut raw_edges = conn.metrics().metrics_edges(req).await?;

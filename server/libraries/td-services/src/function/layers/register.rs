@@ -6,7 +6,7 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_bridge::{BridgeProviderHandle, Orchestrator};
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::DisplayVec;
 use td_error::{ApiError, TdError, api_error, td_error};
 use td_execution::VersionResolver;
@@ -82,7 +82,7 @@ pub async fn bundle_registered() -> Result<BundleRegisteredDB, TdError> {
 /// guard below skips the check. Remove the guard once the legacy client is
 /// retired, so the check applies under every orchestrator.
 pub async fn ensure_connection_kind_matches(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     bridge: Ref<BridgeProviderHandle>,
     function: Ref<FunctionDB>,
     collection: Ref<CollectionDB>,
@@ -120,7 +120,7 @@ pub async fn ensure_connection_kind_matches(
 }
 
 pub async fn validate_tables_do_not_exist(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     collection_id: Ref<CollectionId>,
     collection_name: Ref<CollectionName>,
     existing_versions: Ref<Vec<TableDB>>,
@@ -307,7 +307,7 @@ pub async fn build_table_versions(
 }
 
 pub async fn build_tables_trigger_versions(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     at_time: Ref<AtTime>,
     new_table_versions: Ref<Vec<TableDB>>,
 ) -> Result<Vec<TriggerDB>, TdError> {
@@ -373,7 +373,7 @@ pub async fn build_tables_trigger_versions(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_dependency_versions(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     existing_versions: Ref<Vec<DependencyDB>>,
     new_dependencies: Ref<Option<Vec<TableDependencyDto>>>,
     collection_in_context: Ref<CollectionName>,
@@ -556,7 +556,7 @@ pub async fn build_dependency_versions(
 
 #[allow(clippy::too_many_arguments)]
 pub async fn build_trigger_versions(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     existing_versions: Ref<Vec<TriggerDBWithNames>>,
     new_tables: Ref<Option<Vec<TableNameDto>>>,
     new_triggers: Ref<Option<Vec<TableTriggerDto>>>,
@@ -695,7 +695,7 @@ pub async fn build_trigger_versions(
 }
 
 pub async fn stop_current_workers(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     function_version_id: Ref<Option<FunctionVersionId>>,
 ) -> Result<(), TdError> {
     if let Some(function_version_id) = function_version_id.deref() {
@@ -747,7 +747,7 @@ pub async fn stop_current_workers(
 }
 
 pub async fn build_workers(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     builder: Ref<WorkerDBBuilder>,
     function_version_id: Ref<Option<FunctionVersionId>>,
     new: Ref<Option<HashMap<WorkerTypeDto, WorkerConfig>>>,

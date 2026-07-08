@@ -25,6 +25,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use ta_objects::errors::SqlError;
+use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_error::{ApiError, TdError, api_error};
 use td_objects::SeaValue;
@@ -69,7 +70,7 @@ impl<E, P: LogicalPointerDao> LogicalPointers<E, P> {
 
 impl<E, P> LogicalPointers<E, P>
 where
-    E: QueryExecutor,
+    E: QueryExecutor + Domained<Domain = P::Db>,
     P: LogicalPointerDao,
 {
     /// Concrete id this logical pointer is *currently* bound to.
@@ -161,7 +162,7 @@ pub struct PointersAt<'a, E, P: LogicalPointerDao> {
 
 impl<'a, E, P> PointersAt<'a, E, P>
 where
-    E: QueryExecutor,
+    E: QueryExecutor + Domained<Domain = P::Db>,
     P: LogicalPointerDao,
 {
     /// Concrete id this logical pointer was *bound to* on or before

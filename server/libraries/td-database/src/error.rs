@@ -2,6 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use sqlx::Error as SqlxError;
 use td_error::td_error;
 
 #[td_error]
@@ -198,4 +199,6 @@ pub enum DbError {
          that schema. (Missing: {0})"
     )]
     UpgraderLacksPermissions(String) = 5022,
+    #[error("Cannot get a connection from the domain's pool: {0}")]
+    CannotGetDomainConnection(SqlxError) = 5024,
 }

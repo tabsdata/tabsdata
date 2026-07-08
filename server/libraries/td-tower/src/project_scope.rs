@@ -57,18 +57,27 @@ use tower::{Layer, Service};
 
 use crate::error::ConnectionError;
 use crate::handler::Handler;
+use td_database::domain::{DbDomain, DomainConnection};
 use td_database::pool::scoped::Scoped;
+
+/// The service's primary connection: the `DomainConnection<D>` slot (always
+/// ready — scope layers run right after the primary provider).
+fn primary_conn<D: DbDomain>(handler: &mut Handler) -> Option<&mut DynamicConnection<'static>> {
+    handler
+        .get_mut::<DomainConnection<D>>()
+        .and_then(DomainConnection::ready_mut)
+}
 
 /// Bypass project scope on the handler's connection (`SET LOCAL app.bypass_rls
 /// = on`) for cross-project (global) work. The connection already runs as the
 /// non-bypass [`APP_ROLE`](td_database::APP_ROLE) (set at pool connect), so RLS
 /// is otherwise enforced; this opts the global service out of it.
-async fn enter_global_scope<Err>(handler: &mut Handler) -> Result<(), Err>
+async fn enter_global_scope<Err, D>(handler: &mut Handler) -> Result<(), Err>
 where
     Err: From<TdError>,
+    D: DbDomain,
 {
-    let conn = handler
-        .get_mut::<DynamicConnection<'static>>()
+    let conn = primary_conn::<D>(handler)
         .ok_or_else(|| Err::from(TdError::from(ConnectionError::ConnectionLost)))?;
     conn.bypass_project_scope()
         .await
@@ -82,11 +91,11 @@ where
 /// Layer for `scope = Project` services. Unwraps the [`Scoped`] input, scopes
 /// the connection to its project (`SET LOCAL app.project_id`), and puts the
 /// bare request and the project id back on the handler for downstream layers.
-pub struct ProjectScopeProvider<R, P> {
-    _marker: PhantomData<(R, P)>,
+pub struct ProjectScopeProvider<R, P, D> {
+    _marker: PhantomData<(R, P, D)>,
 }
 
-impl<R, P> ProjectScopeProvider<R, P> {
+impl<R, P, D> ProjectScopeProvider<R, P, D> {
     pub fn new() -> Self {
         Self {
             _marker: PhantomData,
@@ -94,20 +103,20 @@ impl<R, P> ProjectScopeProvider<R, P> {
     }
 }
 
-impl<R, P> Default for ProjectScopeProvider<R, P> {
+impl<R, P, D> Default for ProjectScopeProvider<R, P, D> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<R, P> Clone for ProjectScopeProvider<R, P> {
+impl<R, P, D> Clone for ProjectScopeProvider<R, P, D> {
     fn clone(&self) -> Self {
         Self::new()
     }
 }
 
-impl<S, R, P> Layer<S> for ProjectScopeProvider<R, P> {
-    type Service = ProjectScopeProviderService<S, R, P>;
+impl<S, R, P, D> Layer<S> for ProjectScopeProvider<R, P, D> {
+    type Service = ProjectScopeProviderService<S, R, P, D>;
 
     fn layer(&self, inner: S) -> Self::Service {
         ProjectScopeProviderService {
@@ -117,12 +126,12 @@ impl<S, R, P> Layer<S> for ProjectScopeProvider<R, P> {
     }
 }
 
-pub struct ProjectScopeProviderService<S, R, P> {
+pub struct ProjectScopeProviderService<S, R, P, D> {
     inner: S,
-    _marker: PhantomData<(R, P)>,
+    _marker: PhantomData<(R, P, D)>,
 }
 
-impl<S: Clone, R, P> Clone for ProjectScopeProviderService<S, R, P> {
+impl<S: Clone, R, P, D> Clone for ProjectScopeProviderService<S, R, P, D> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -131,12 +140,13 @@ impl<S: Clone, R, P> Clone for ProjectScopeProviderService<S, R, P> {
     }
 }
 
-impl<S, R, P, Err> Service<Handler> for ProjectScopeProviderService<S, R, P>
+impl<S, R, P, D, Err> Service<Handler> for ProjectScopeProviderService<S, R, P, D>
 where
     S: Service<Handler, Response = Handler, Error = Err> + Clone + Send + 'static,
     S::Future: Send,
     R: Send + Sync + 'static,
     P: std::fmt::Display + Send + Sync + 'static,
+    D: DbDomain,
     Err: From<TdError>,
 {
     type Response = Handler;
@@ -184,8 +194,7 @@ where
                 .take::<Scoped<R, P>>()
                 .ok_or_else(|| Err::from(TdError::from(ConnectionError::ProjectScopeUnresolved)))?;
 
-            let conn = handler
-                .get_mut::<DynamicConnection<'static>>()
+            let conn = primary_conn::<D>(&mut handler)
                 .ok_or_else(|| Err::from(TdError::from(ConnectionError::ConnectionLost)))?;
             let project = scoped.project.to_string();
             conn.set_project_scope(&project)
@@ -208,43 +217,60 @@ where
 // ---------------------------------------------------------------------------
 
 /// Layer for `scope = Global` services. Unconditionally bypasses project scope.
-pub struct GlobalScopeProvider;
+pub struct GlobalScopeProvider<D> {
+    _marker: PhantomData<D>,
+}
 
-impl GlobalScopeProvider {
+impl<D> GlobalScopeProvider<D> {
     pub fn new() -> Self {
-        Self
+        Self {
+            _marker: PhantomData,
+        }
     }
 }
 
-impl Default for GlobalScopeProvider {
+impl<D> Default for GlobalScopeProvider<D> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Clone for GlobalScopeProvider {
+impl<D> Clone for GlobalScopeProvider<D> {
     fn clone(&self) -> Self {
-        Self
+        Self::new()
     }
 }
 
-impl<S> Layer<S> for GlobalScopeProvider {
-    type Service = GlobalScopeProviderService<S>;
+impl<S, D> Layer<S> for GlobalScopeProvider<D> {
+    type Service = GlobalScopeProviderService<S, D>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        GlobalScopeProviderService { inner }
+        GlobalScopeProviderService {
+            inner,
+            _marker: PhantomData,
+        }
     }
 }
 
-#[derive(Clone)]
-pub struct GlobalScopeProviderService<S> {
+pub struct GlobalScopeProviderService<S, D> {
     inner: S,
+    _marker: PhantomData<D>,
 }
 
-impl<S, Err> Service<Handler> for GlobalScopeProviderService<S>
+impl<S: Clone, D> Clone for GlobalScopeProviderService<S, D> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<S, D, Err> Service<Handler> for GlobalScopeProviderService<S, D>
 where
     S: Service<Handler, Response = Handler, Error = Err> + Clone + Send + 'static,
     S::Future: Send,
+    D: DbDomain,
     Err: From<TdError>,
 {
     type Response = Handler;
@@ -263,7 +289,7 @@ where
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
         Box::pin(async move {
-            enter_global_scope::<Err>(&mut handler).await?;
+            enter_global_scope::<Err, D>(&mut handler).await?;
             inner.call(handler).await
         })
     }

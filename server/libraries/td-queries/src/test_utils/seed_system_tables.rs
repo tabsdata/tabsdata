@@ -6,6 +6,7 @@ use crate::QueryExecutor;
 use crate::{CurrentEntry, LiveEntry};
 use ta_objects::TryUpdater;
 use ta_objects::and;
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::dependency::DependencyDBBuilder;
@@ -26,7 +27,7 @@ use td_objects::types::table_ref::Versions;
 // (`db.scoped(p)`), the field-less rows default their `project_id` from that
 // scope.
 pub(crate) async fn seed_system_tables(
-    mut executor: impl QueryExecutor,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());

@@ -24,6 +24,7 @@
 //! *definitions*, not on who is in which role.
 
 use std::collections::HashMap;
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::role::RoleDB;
@@ -86,7 +87,7 @@ fn row_matches(perm: &PermissionDB, (et, on_all, pt): &(&str, bool, &str)) -> bo
 /// because each `.live()` consumes the executor and the check issues two reads;
 /// `&TdPool` (and the connection references) are `Copy`.
 pub async fn check_representability(
-    db: impl QueryExecutor + Copy,
+    db: impl QueryExecutor + Domained<Domain = Apiserver> + Copy,
     sys_admin_extras: &[(&str, &str)],
 ) -> Result<Vec<String>, TdError> {
     let roles = db.live().fetch_all::<RoleDB>(()).await?;

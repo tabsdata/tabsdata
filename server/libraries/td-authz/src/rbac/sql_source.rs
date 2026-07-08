@@ -28,7 +28,7 @@ use crate::rbac::registry::AuthzRegistry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_common::provider::{CachedProvider, Provider};
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::user_role::UserRoleDB;
@@ -79,7 +79,7 @@ impl SqlRbacGrantsProvider {
     #[instrument(name = "authz.rbac.role_grants", skip_all, level = "debug", err(Debug))]
     async fn role_grants(
         &self,
-        conn: &mut DynamicConnection<'_>,
+        conn: &mut DomainConnection<Apiserver>,
     ) -> Result<HashMap<RoleId, Grants>, TdError> {
         let permissions = conn.live().fetch_all::<PermissionDB>(()).await?;
         let total = permissions.len();
@@ -99,11 +99,16 @@ impl SqlRbacGrantsProvider {
     }
 }
 
-impl<'a, 'c> Provider<UserGrants, &'a mut DynamicConnection<'c>> for SqlRbacGrantsProvider {
+// Runs only on a cache miss (`CachedProvider` decides), so a warm cache never
+// materializes a latent slot.
+impl<'a> Provider<UserGrants, &'a mut DomainConnection<Apiserver>> for SqlRbacGrantsProvider {
     #[instrument(name = "authz.rbac.get", skip_all, level = "debug", err(Debug))]
-    async fn get(&self, conn: &'a mut DynamicConnection<'c>) -> Result<Arc<UserGrants>, TdError> {
-        let role_grants = self.role_grants(&mut *conn).await?;
-        let user_roles = conn.live().fetch_all::<UserRoleDB>(()).await?;
+    async fn get(
+        &self,
+        slot: &'a mut DomainConnection<Apiserver>,
+    ) -> Result<Arc<UserGrants>, TdError> {
+        let role_grants = self.role_grants(&mut *slot).await?;
+        let user_roles = slot.live().fetch_all::<UserRoleDB>(()).await?;
 
         // effective grants of a user = union across all the roles they hold.
         let mut by_user: HashMap<UserId, Grants> = HashMap::new();
@@ -127,7 +132,7 @@ impl<'a, 'c> Provider<UserGrants, &'a mut DynamicConnection<'c>> for SqlRbacGran
         Ok(Arc::new(by_user))
     }
 
-    async fn purge(&self, _conn: &'a mut DynamicConnection<'c>) -> Result<(), TdError> {
+    async fn purge(&self, _slot: &'a mut DomainConnection<Apiserver>) -> Result<(), TdError> {
         Ok(())
     }
 }
@@ -173,18 +178,18 @@ impl SqlRbacSource {
 impl super::source::RbacSource for SqlRbacSource {
     async fn user_grants(
         &self,
-        conn: &mut DynamicConnection<'_>,
+        slot: &mut DomainConnection<Apiserver>,
         user: &UserId,
     ) -> Result<Arc<Grants>, TdError> {
-        let by_user = self.provider.get(conn).await?;
+        let by_user = self.provider.get(slot).await?;
         Ok(by_user
             .get(user)
             .cloned()
             .unwrap_or_else(|| self.empty.clone()))
     }
 
-    async fn refresh(&self, conn: &mut DynamicConnection<'_>) -> Result<(), TdError> {
-        self.provider.purge(conn).await
+    async fn refresh(&self, slot: &mut DomainConnection<Apiserver>) -> Result<(), TdError> {
+        self.provider.purge(slot).await
     }
 }
 
@@ -201,9 +206,9 @@ mod tests {
         // The bootstrap seeds the `admin` user into the `sys_admin` and
         // `default` roles; its effective grants are the union of both.
         let source = SqlRbacSource::default();
-        let mut conn = db.acquire().await.unwrap();
+        let mut slot = DomainConnection::<Apiserver>::ready(db.acquire().await.unwrap());
 
-        let grants = source.user_grants(&mut conn, &UserId::admin()).await?;
+        let grants = source.user_grants(&mut slot, &UserId::admin()).await?;
         // sys_admin role -> all system permissions
         assert!(grants.allows(&Requires::system(SystemPermission::ManageAccess)));
         assert!(grants.allows(&Requires::system(SystemPermission::CreateProjects)));
@@ -212,8 +217,23 @@ mod tests {
         assert!(grants.allows(&Requires::<Project>::all(ProjectPermission::ManageProject)));
 
         // an unknown user resolves to empty grants, not an error.
-        let unknown = source.user_grants(&mut conn, &UserId::default()).await?;
+        let unknown = source.user_grants(&mut slot, &UserId::default()).await?;
         assert!(!unknown.allows(&Requires::system(SystemPermission::ManageAccess)));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_user_grants_latent_slot(db: TdPool) -> Result<(), TdError> {
+        let source = SqlRbacSource::default();
+
+        let mut slot = DomainConnection::<Apiserver>::latent(db.clone());
+        let grants = source.user_grants(&mut slot, &UserId::admin()).await?;
+        assert!(grants.allows(&Requires::system(SystemPermission::ManageAccess)));
+
+        // warm cache: a fresh latent slot is not materialized
+        let mut slot = DomainConnection::<Apiserver>::latent(db);
+        let grants = source.user_grants(&mut slot, &UserId::admin()).await?;
+        assert!(grants.allows(&Requires::system(SystemPermission::ManageAccess)));
         Ok(())
     }
 }

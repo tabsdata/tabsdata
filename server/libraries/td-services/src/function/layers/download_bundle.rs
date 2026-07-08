@@ -4,7 +4,7 @@
 
 use futures::TryStreamExt;
 use sync_wrapper::SyncStream;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::bundle::BundleDB;
@@ -34,7 +34,7 @@ pub struct BundleDownload {
 /// scan, since the partition (`FunctionId`) is not known at the call site.
 /// Restricted to Active or Frozen versions.
 pub async fn resolve_function_with_names(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     collection: Ref<CollectionIdName>,
     function: Ref<FunctionIdName>,
     at: Ref<Option<AtTime>>,
@@ -58,7 +58,7 @@ pub async fn resolve_function_with_names(
 }
 
 pub async fn build_bundle_download(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     storage: Ref<Storage>,
     function: Ref<FunctionDBWithNames>,
 ) -> Result<BundleDownload, TdError> {

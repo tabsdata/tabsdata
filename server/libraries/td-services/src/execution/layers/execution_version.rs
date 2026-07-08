@@ -4,7 +4,7 @@
 
 use http::StatusCode;
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
 use td_objects::dxo::execution::ExecutionDB;
@@ -49,7 +49,7 @@ pub async fn assert_function_version(
     err(Debug)
 )]
 pub async fn reject_if_running(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     function_version_id: Ref<FunctionVersionId>,
     skip_if_running: Ref<SkipIfRunning>,
     latest_execution: Ref<Option<ExecutionDB>>,
@@ -104,13 +104,15 @@ pub async fn reject_if_running(
     err(Debug)
 )]
 pub async fn dedup_lock(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     function_id: Ref<FunctionId>,
     external_uid: Ref<Option<ExternalUid>>,
 ) -> Result<(), TdError> {
     if let Some(external_uid) = external_uid.deref() {
         let key = format!("execution_dedup:{}:{}", *function_id, external_uid);
-        conn.advisory_xact_lock_text(&key)
+        conn.get()
+            .await?
+            .advisory_xact_lock_text(&key)
             .await
             .map_err(|e| api_error!(ApiError::InternalError, "dedup advisory lock failed: {e}"))?;
     }
@@ -134,7 +136,7 @@ pub async fn dedup_lock(
     err(Debug)
 )]
 pub async fn reject_if_external_uid_in_use(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     function_id: Ref<FunctionId>,
     external_uid: Ref<Option<ExternalUid>>,
 ) -> Result<(), TdError> {

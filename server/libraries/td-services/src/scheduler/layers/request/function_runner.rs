@@ -8,11 +8,11 @@ use crate::logical::layers::dispatch_mint::MintedDispatch;
 use crate::logical::layers::index_lfrs_by_exec_fn;
 use crate::scheduler::message_builder::{build_function_v2, prefetch_dispatch};
 use std::collections::HashMap;
-use td_common::jwt::JwtConfig;
 use td_bridge::messaging::{FunctionRequest, FunctionStartRequest, OrchestratorMessagePayload};
 use td_bridge::{BridgeProviderHandle, Orchestrator};
+use td_common::jwt::JwtConfig;
 use td_common::worker::{MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::TaggedExt;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
@@ -39,7 +39,7 @@ use tracing::{debug, instrument};
     err(Debug)
 )]
 pub async fn fetch_lfr_to_dispatch(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     at: Ref<AtTime>,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     let result = conn.lfr().to_execute(&at).await?;
@@ -66,7 +66,7 @@ pub async fn fetch_lfr_to_dispatch(
     err(Debug)
 )]
 pub async fn fetch_pfrs_to_dispatch(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
 ) -> Result<Vec<PhysicalFunctionRunDB>, TdError> {
     let result = conn.pfr().to_dispatch().await?;
     if result.is_empty() {
@@ -91,7 +91,7 @@ pub async fn fetch_pfrs_to_dispatch(
     err(Debug)
 )]
 pub async fn materialize_replay_dispatch(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     pfrs: Ref<Vec<PhysicalFunctionRunDB>>,
 ) -> Result<Vec<MintedDispatch>, TdError> {
     if pfrs.is_empty() {
@@ -170,7 +170,7 @@ pub async fn materialize_replay_dispatch(
     err(Debug)
 )]
 pub async fn enrich_minted_dispatch(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     minted: Ref<Vec<MintedDispatch>>,
 ) -> Result<Vec<PhysicalFunctionRunToExecute>, TdError> {
     if minted.is_empty() {
@@ -213,7 +213,7 @@ pub async fn create_locked_function_runner_workers_start_request(
     bridge: Ref<BridgeProviderHandle>,
     storage: Ref<Storage>,
     server_addresses: Ref<InternalServerAddresses>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     at: Ref<AtTime>,
     jwt: Ref<JwtConfig>,
     physical_function_runs: Ref<Vec<PhysicalFunctionRunToExecute>>,

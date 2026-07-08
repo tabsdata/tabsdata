@@ -5,27 +5,28 @@
 use crate::LiveEntry;
 use crate::QueryExecutor;
 use ta_objects::Buildable;
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::types::basic::{ExecutionName, TriggerType, TriggeredOn, UserId};
 
 pub(crate) async fn seed_execution(
-    executor: impl QueryExecutor,
+    executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     function_version: &FunctionDB,
 ) -> Result<ExecutionDB, TdError> {
     _seed_execution(executor, function_version, TriggerType::Manual).await
 }
 
 pub(crate) async fn seed_cron_execution(
-    executor: impl QueryExecutor,
+    executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     function_version: &FunctionDB,
 ) -> Result<ExecutionDB, TdError> {
     _seed_execution(executor, function_version, TriggerType::CronTrigger).await
 }
 
 async fn _seed_execution(
-    executor: impl QueryExecutor,
+    executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     function_version: &FunctionDB,
     trigger_type: TriggerType,
 ) -> Result<ExecutionDB, TdError> {

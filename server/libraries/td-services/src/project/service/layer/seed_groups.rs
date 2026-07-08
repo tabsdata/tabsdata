@@ -3,7 +3,7 @@
 //
 
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
@@ -27,7 +27,7 @@ use td_tower::extractors::{MutRef, Ref};
 /// `project_id` from that GUC. Bypass (`Global` scope) keeps RLS `WITH CHECK`
 /// satisfied; the GUC only feeds the column default.
 pub async fn seed_default_groups(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     context: Ref<RequestContext>,
 ) -> Result<(), TdError> {
     let mut rows = Vec::with_capacity(SYSTEM_GROUPS.len());

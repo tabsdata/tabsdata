@@ -3,7 +3,7 @@
 //
 
 use super::build_external_location;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::dxo::yaml::stream::{StreamerInfo, StreamerInput};
@@ -19,7 +19,7 @@ use td_storage::location::StorageLocation;
 /// addresses, so the resolve endpoint can call it from its request-serving
 /// context.
 pub(crate) async fn build_streamer_input(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     storage: &Storage,
     worker: &WorkerDBWithNames,
 ) -> Result<StreamerInput, TdError> {

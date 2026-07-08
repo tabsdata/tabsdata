@@ -5,6 +5,7 @@
 use crate::LiveEntry;
 use crate::QueryExecutor;
 use ta_objects::Buildable;
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
@@ -15,7 +16,7 @@ use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{WorkerMessageStatus, WorkerStatus, WorkerType};
 
 pub(crate) async fn seed_worker(
-    mut executor: impl QueryExecutor,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     collection: &CollectionDB,
     function: &FunctionDB,
     worker_type: &WorkerType,
@@ -47,7 +48,7 @@ pub(crate) async fn seed_worker(
 }
 
 pub(crate) async fn seed_function_runner_worker(
-    mut executor: impl QueryExecutor,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     physical_function_run: &PhysicalFunctionRunDB,

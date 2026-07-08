@@ -13,7 +13,7 @@
 use crate::rbac::model::{Grant, Grants, IdentityClaim, User};
 use std::collections::HashMap;
 use std::sync::Arc;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::UserId;
@@ -24,12 +24,12 @@ use td_objects::types::basic::UserId;
 /// `Arc<Grants>` snapshot", so the per-check cost is a map lookup plus a
 /// clone of the `Arc`.
 pub trait RbacSource: Send + Sync {
-    /// The effective grants for the user: the union of the grants of every
-    /// role the user is assigned to. A user with no grants returns an empty
-    /// [`Grants`], not an error.
+    /// The effective grants for the user: the union across their assigned
+    /// roles; no grants is an empty [`Grants`], not an error. The slot may be
+    /// latent — implementations should touch it only on a cache miss.
     fn user_grants(
         &self,
-        conn: &mut DynamicConnection<'_>,
+        slot: &mut DomainConnection<Apiserver>,
         user: &UserId,
     ) -> impl Future<Output = Result<Arc<Grants>, TdError>> + Send;
 
@@ -37,7 +37,7 @@ pub trait RbacSource: Send + Sync {
     /// role permissions change.
     fn refresh(
         &self,
-        conn: &mut DynamicConnection<'_>,
+        slot: &mut DomainConnection<Apiserver>,
     ) -> impl Future<Output = Result<(), TdError>> + Send;
 }
 
@@ -87,13 +87,13 @@ impl FixedRbacSource {
 impl RbacSource for FixedRbacSource {
     async fn user_grants(
         &self,
-        _conn: &mut DynamicConnection<'_>,
+        _slot: &mut DomainConnection<Apiserver>,
         user: &UserId,
     ) -> Result<Arc<Grants>, TdError> {
         Ok(self.users.get(user).unwrap_or(&self.empty).clone())
     }
 
-    async fn refresh(&self, _conn: &mut DynamicConnection<'_>) -> Result<(), TdError> {
+    async fn refresh(&self, _slot: &mut DomainConnection<Apiserver>) -> Result<(), TdError> {
         Ok(())
     }
 }

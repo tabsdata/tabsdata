@@ -3,7 +3,7 @@
 //
 
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListParams, ListResponse};
 use td_objects::dxo::execution::Execution;
@@ -14,7 +14,7 @@ use td_queries::ExecutionsEntry;
 use td_tower::extractors::{MutRef, Ref};
 
 pub async fn list_executions_by_tdv(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     tdv_id: Ref<Option<PhysicalTableDataVersionId>>,
     list_params: Ref<ListParams>,
     query_params: Ref<ListQueryParams<Execution>>,
@@ -27,7 +27,7 @@ pub async fn list_executions_by_tdv(
 }
 
 pub async fn list_executions_by_fv(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     fv_id: Ref<FunctionVersionId>,
     list_params: Ref<ListParams>,
     query_params: Ref<ListQueryParams<Execution>>,

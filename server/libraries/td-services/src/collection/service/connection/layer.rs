@@ -14,7 +14,7 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::ops::Deref;
 use td_authz::rbac::{ManageProject, Project, Rbac, Scope, SqlRbacSource};
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::collection::{
     CollectionCreate, CollectionCreateDBBuilder, CollectionDB, CollectionDBWithNames,
@@ -36,7 +36,7 @@ use td_tower::extractors::{MutRef, Ref};
 /// pipeline already checked.
 pub(crate) async fn escalate_for_connected(
     source: Ref<SqlRbacSource>,
-    conn: MutRef<DynamicConnection<'static>>,
+    conn: MutRef<DomainConnection<Apiserver>>,
     request: Ref<RequestContext>,
     scope: Ref<Scope<Project>>,
     collection_type: Ref<CollectionType>,
@@ -185,7 +185,7 @@ pub struct ConnectionResolution {
 /// exists by construction (created with the collection); its connector kind
 /// is immutable — content was stored under it.
 pub async fn resolve_connection(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     collection: Ref<CollectionDB>,
     document: Ref<ConnectionDocument>,
 ) -> Result<ConnectionResolution, TdError> {
@@ -233,7 +233,7 @@ pub async fn require_connection_id(collection: Ref<CollectionDB>) -> Result<Conn
 /// Source/Destination collections REQUIRE a connection — they are 1:1 with
 /// it and cannot exist without one; a DataFactory cannot carry one.
 pub async fn plan_collection_create(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     request_context: Ref<RequestContext>,
     create: Ref<CollectionCreate>,
     group_id: Ref<GroupId>,
@@ -299,7 +299,7 @@ pub async fn plan_collection_create(
 /// cleanup would then delete it). The store's own name-ownership guard covers
 /// the remaining race.
 pub(crate) async fn ensure_collection_name_free(
-    conn: &mut DynamicConnection<'static>,
+    conn: &mut DomainConnection<Apiserver>,
     name: &CollectionName,
 ) -> Result<(), TdError> {
     let existing: Vec<CollectionDB> = conn.live().fetch_all(name).await?;
@@ -330,7 +330,7 @@ pub struct CollectionCreatePlan {
 /// The create transaction: insert the (store-confirmed) connection row, then
 /// the collection pointing at it, and read the result back.
 pub async fn insert_collection_with_connection(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     request_context: Ref<RequestContext>,
     plan: Ref<CollectionCreatePlan>,
 ) -> Result<CollectionRead, TdError> {

@@ -11,7 +11,7 @@ use crate::permission::{PermissionTarget, PermissionTargetScope};
 use crate::simple_permission::SimplePermissionError;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListParams, ListResponse, ListResponseBuilder};
 use td_objects::dxo::permission::PermissionDB;
@@ -80,7 +80,7 @@ pub async fn assert_simple_permission_valid(
 /// - `manage_system`: the `sys_admin` role, which holds the whole system bundle
 ///   (user/role administration plus authority over all projects).
 pub async fn resolve_grant(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     grant: Ref<SimplePermissionGrant>,
 ) -> Result<ResolvedGrant, TdError> {
     // Resolve the user by name (the grant surface carries a UserName).
@@ -183,7 +183,7 @@ pub fn project_role_permission(role: &RoleDB) -> Option<SimplePermissionType> {
 /// `project_id -> project_name`, for resolving project-scoped permission rows
 /// to a human name without an extra query per row.
 async fn project_names(
-    conn: &mut DynamicConnection<'static>,
+    conn: &mut DomainConnection<Apiserver>,
 ) -> Result<HashMap<ProjectId, ProjectName>, TdError> {
     let projects = conn.live().fetch_all::<ProjectDB>(()).await?;
     Ok(projects.into_iter().map(|p| (p.id, p.name)).collect())
@@ -207,7 +207,7 @@ fn list_response<T: Clone>(data: Vec<T>) -> Result<ListResponse<T>, TdError> {
 /// The target user is taken as an already-resolved `UserId` (the service
 /// resolves it up front for the scope/authz check).
 pub async fn flatten_user_permissions(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     user_id: Ref<UserId>,
 ) -> Result<ListResponse<SimplePermission>, TdError> {
     let user_roles = conn.live().fetch_all::<UserRoleDB>(()).await?;
@@ -293,7 +293,7 @@ fn simple_permission_of(
 ///   `(project:__all__, manage_project)` (i.e. system admins), mapped to
 ///   `manage_system`.
 pub async fn list_project_access(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     project_id_name: Ref<ProjectIdName>,
 ) -> Result<ListResponse<SimpleProjectAccess>, TdError> {
     let project = conn
@@ -306,10 +306,7 @@ pub async fn list_project_access(
     let user_roles = conn.live().fetch_all::<UserRoleDB>(()).await?;
     // Exclude system users (built-in `system` and other service users) from the
     // project roster.
-    let users = conn
-        .live()
-        .fetch_all::<UserDB>(UserSystem::FALSE)
-        .await?;
+    let users = conn.live().fetch_all::<UserDB>(UserSystem::FALSE).await?;
     let user_names: HashMap<UserId, UserName> = users.into_iter().map(|u| (u.id, u.name)).collect();
 
     // Project-source roles: the three per-project roles bound to this project,

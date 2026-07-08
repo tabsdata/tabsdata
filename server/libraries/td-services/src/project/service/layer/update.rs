@@ -4,7 +4,7 @@
 
 use crate::project::ProjectError;
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::DaoCore;
 use td_objects::dxo::project::{ProjectDB, ProjectUpdate, ProjectUpdateDBBuilder};
@@ -27,7 +27,7 @@ pub async fn update_project_validate(update: Ref<ProjectUpdate>) -> Result<(), T
 /// of the raw unique-constraint violation from the update write. Renaming a
 /// project to its own current name is a no-op and is not a collision.
 pub async fn assert_project_rename_available(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     update: Ref<ProjectUpdate>,
     current: Ref<ProjectDB>,
 ) -> Result<(), TdError> {

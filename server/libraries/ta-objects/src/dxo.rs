@@ -93,6 +93,10 @@ pub trait TypedColumns {
 
 /// Minimal structural metadata shared by all DAO types (read, write, update).
 pub trait DaoCore: Buildable + TypedColumns + Send + Sync + std::fmt::Debug {
+    /// The domain this DAO's table lives in; `#[dao(db = ...)]`, default
+    /// [`Apiserver`](td_database::domain::Apiserver).
+    type Db: td_database::domain::DbDomain;
+
     /// Table identifier.
     fn table() -> Self::Iden;
 

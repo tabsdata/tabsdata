@@ -21,6 +21,7 @@ use sea_query::Condition;
 use std::marker::PhantomData;
 use ta_objects::errors::SqlError;
 use ta_objects::{SeaValue, StateFilter, VersionedDao};
+use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 
 query_handle! {
@@ -87,6 +88,7 @@ where
     pub async fn fetch_one<D>(self, partition: &D::Partition) -> Result<D, SqlError>
     where
         D: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = D::Db>,
     {
         self.with_dao::<D>().fetch_one(partition).await
     }
@@ -95,6 +97,7 @@ where
     pub async fn fetch_optional<D>(self, partition: &D::Partition) -> Result<Option<D>, SqlError>
     where
         D: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = D::Db>,
     {
         self.with_dao::<D>().fetch_optional(partition).await
     }
@@ -110,6 +113,7 @@ where
     where
         D: VersionedDao<VersionOrder = T>,
         T: SeaValue,
+        E: Domained<Domain = D::Db>,
     {
         use sea_query::{Expr, ExprTrait, Query};
         let r: Vec<D> = Query::select()
@@ -129,6 +133,7 @@ where
     pub async fn fetch_all_chunked<D>(self, partitions: &[D::Partition]) -> Result<Vec<D>, SqlError>
     where
         D: VersionedDao<VersionOrder = T>,
+        E: Domained<Domain = D::Db>,
     {
         self.with_dao::<D>().fetch_all_chunked(partitions).await
     }
@@ -141,7 +146,7 @@ where
 impl<'a, T, D, E> Versioned<'a, T, E, Bound<D>>
 where
     D: VersionedDao<VersionOrder = T>,
-    E: QueryExecutor,
+    E: QueryExecutor + Domained<Domain = D::Db>,
 {
     /// Latest version in `partition` at `on` matching the bound state.
     pub async fn fetch_one(self, partition: &D::Partition) -> Result<D, SqlError> {

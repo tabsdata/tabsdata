@@ -23,6 +23,7 @@ pub use component::*;
 pub use pool::SystemPool;
 
 use crate::config::{ComponentOverride, DatabaseConfig, DatabaseDescriptor, DatabaseResolver};
+use crate::domain::DomainPools;
 use crate::error::DbError;
 use crate::pool::TdPool;
 use std::collections::BTreeMap;
@@ -249,6 +250,12 @@ impl ServingPools {
         for pool in self.0.values() {
             pool.shutdown().await;
         }
+    }
+
+    /// These pools keyed by domain (component keys are the domains'
+    /// `SCHEMA_KEY`s).
+    pub fn domain_pools(&self) -> DomainPools {
+        DomainPools::from_map(self.0.clone())
     }
 }
 

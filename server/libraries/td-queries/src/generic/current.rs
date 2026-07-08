@@ -11,7 +11,8 @@ use sea_query::{Condition, Query, SelectStatement};
 use std::marker::PhantomData;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::{SqlCondition, resolve_condition};
-use ta_objects::{CurrentDao, ListDto, ListFilter, StateFilter};
+use ta_objects::{CurrentDao, DaoCore, ListDto, ListFilter, StateFilter};
+use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
 
@@ -72,10 +73,10 @@ where
     E: QueryExecutor,
 {
     /// Fetch the single row matching `condition` (All state).
-    pub async fn fetch_one<D: CurrentDao>(
-        self,
-        condition: impl SqlCondition,
-    ) -> Result<D, SqlError> {
+    pub async fn fetch_one<D: CurrentDao>(self, condition: impl SqlCondition) -> Result<D, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         self.with_dao::<D>().fetch_one(condition).await
     }
 
@@ -83,7 +84,10 @@ where
     pub async fn fetch_optional<D: CurrentDao>(
         self,
         condition: impl SqlCondition,
-    ) -> Result<Option<D>, SqlError> {
+    ) -> Result<Option<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         self.with_dao::<D>().fetch_optional(condition).await
     }
 
@@ -91,7 +95,10 @@ where
     pub async fn fetch_all<D: CurrentDao>(
         self,
         condition: impl SqlCondition,
-    ) -> Result<Vec<D>, SqlError> {
+    ) -> Result<Vec<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         self.with_dao::<D>().fetch_all(condition).await
     }
 
@@ -99,7 +106,10 @@ where
     pub async fn fetch_all_chunked<D: CurrentDao, V: SqlCondition>(
         self,
         values: &[V],
-    ) -> Result<Vec<D>, SqlError> {
+    ) -> Result<Vec<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+    {
         self.with_dao::<D>().fetch_all_chunked(values).await
     }
 
@@ -113,6 +123,7 @@ where
     where
         D: ListDto,
         <D as ListDto>::Dao: CurrentDao,
+        E: Domained<Domain = <<D as ListDto>::Dao as DaoCore>::Db>,
     {
         self.with_dao::<<D as ListDto>::Dao>()
             .list(condition, filter, params)
@@ -127,7 +138,7 @@ where
 impl<D, E> Current<E, Bound<D>>
 where
     D: CurrentDao,
-    E: QueryExecutor,
+    E: QueryExecutor + Domained<Domain = D::Db>,
 {
     /// Fetch the single row matching `condition` and the bound state.
     pub async fn fetch_one(self, condition: impl SqlCondition) -> Result<D, SqlError> {

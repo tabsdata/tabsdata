@@ -9,7 +9,7 @@
 //! "which fvid to run" is purely a head-vs-latest-patch choice.
 
 use std::collections::{HashMap, HashSet};
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::function::{FunctionDB, FunctionPatchDB};
 use td_objects::types::basic::{AtTime, FunctionVersionId};
@@ -18,8 +18,8 @@ use td_queries::{ChunkedQueries, LiveEntry, VersionedEntry};
 /// Resolve a fvid to its canonical head: try `functions` first, fall
 /// back to `function_patches`. Returns the parent fvid for patches and
 /// the row's own id for canonicals.
-pub async fn head_of<'c>(
-    conn: &mut DynamicConnection<'c>,
+pub async fn head_of(
+    conn: &mut DomainConnection<Apiserver>,
     fvid: &FunctionVersionId,
 ) -> Result<FunctionVersionId, TdError> {
     if let Some(row) = conn.live().fetch_optional::<FunctionDB>(fvid).await? {
@@ -55,8 +55,8 @@ impl RunnableVersion {
 /// Plan-build (request time = plan trigger) and replay (request time =
 /// replay request) both call this with their own `at`, so patches
 /// registered later don't backfill into earlier mints.
-pub async fn latest_patch_or_head<'c>(
-    conn: &mut DynamicConnection<'c>,
+pub async fn latest_patch_or_head(
+    conn: &mut DomainConnection<Apiserver>,
     fvid: &FunctionVersionId,
     at: &AtTime,
 ) -> Result<RunnableVersion, TdError> {
@@ -75,8 +75,8 @@ pub async fn latest_patch_or_head<'c>(
 /// Batched `latest_patch_or_head` for many fvids in one tick, pinned
 /// to time `at`. Returns a map keyed by the *input* fvid so callers
 /// can look up the runnable for each LFR they're minting.
-pub async fn latest_patch_or_head_batch<'c>(
-    conn: &mut DynamicConnection<'c>,
+pub async fn latest_patch_or_head_batch(
+    conn: &mut DomainConnection<Apiserver>,
     fvids: Vec<FunctionVersionId>,
     at: &AtTime,
 ) -> Result<HashMap<FunctionVersionId, RunnableVersion>, TdError> {
@@ -241,7 +241,8 @@ mod tests {
         let p1 = insert_patch(&db, &head, t1, "p1").await?;
         let p2 = insert_patch(&db, &head, t2, "p2").await?;
 
-        let mut conn = db.begin().await.unwrap().into_connection();
+        let mut conn =
+            DomainConnection::<Apiserver>::ready(db.begin().await.unwrap().into_connection());
 
         // At T1: p1 exists; p2 does not yet.
         let at_t1 = latest_patch_or_head(&mut conn, &head.id, &t1).await?;
@@ -274,7 +275,8 @@ mod tests {
         let p_a = insert_patch(&db, &head_a, now, "p-a").await?;
         let p_b = insert_patch(&db, &head_b, now, "p-b").await?;
 
-        let mut conn = db.begin().await.unwrap().into_connection();
+        let mut conn =
+            DomainConnection::<Apiserver>::ready(db.begin().await.unwrap().into_connection());
         let map =
             latest_patch_or_head_batch(&mut conn, vec![head_a.id.clone(), head_b.id.clone()], &now)
                 .await?;

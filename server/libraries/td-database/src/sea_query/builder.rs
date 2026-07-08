@@ -35,6 +35,12 @@ where
     }
 }
 
+impl SeaQuerySqlxBuild for (String, SqlxValues) {
+    fn build_sea_query(self, _db: impl DatabaseKind) -> (String, SqlxValues) {
+        self
+    }
+}
+
 impl SeaQuerySqlxBuild for RawSeaQuery {
     fn build_sea_query(self, _db: impl DatabaseKind) -> (String, SqlxValues) {
         let (sql, values) = self.0.into_parts();

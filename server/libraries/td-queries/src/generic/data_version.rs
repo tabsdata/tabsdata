@@ -12,6 +12,7 @@ use sea_query::{
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use ta_objects::{DataVersionDao, VersionedDao};
+use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::types::basic::LogicalTableDataVersionId;
 use td_objects::types::table_ref::{Version, Versions};
@@ -244,6 +245,7 @@ where
     where
         D: DataVersionDao,
         D: VersionedDao<VersionOrder = T, Partition = P>,
+        E: Domained<Domain = D::Db>,
     {
         let where_cond = self.where_cond::<D>(versions)?;
         let r = Query::select()
@@ -265,6 +267,7 @@ where
     where
         D: DataVersionDao,
         D: VersionedDao<VersionOrder = T, Partition = P>,
+        E: Domained<Domain = D::Db>,
     {
         let where_cond = self.where_cond::<D>(versions)?;
         let r = Query::select()
@@ -287,6 +290,7 @@ where
     where
         D: DataVersionDao,
         D: VersionedDao<VersionOrder = T, Partition = P>,
+        E: Domained<Domain = D::Db>,
     {
         let where_cond = self.where_cond::<D>(versions)?;
         let mut q = Query::select();
@@ -320,6 +324,7 @@ where
     where
         D: DataVersionDao,
         D: VersionedDao<VersionOrder = T, Partition = P>,
+        E: Domained<Domain = D::Db>,
     {
         let mut where_cond = Condition::all().add(single_version_expr::<D>(version)?);
         if let Some(s) = &self.state_cond {

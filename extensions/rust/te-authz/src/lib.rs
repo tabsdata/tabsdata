@@ -14,6 +14,7 @@
 use std::sync::Arc;
 
 use td_authz::rbac::AuthzRegistry;
+use td_database::domain::{Apiserver, DomainConnection, DomainPool};
 use td_database::pool::TdPool;
 use td_error::{TdError, td_error};
 use td_security::config::PasswordHashingConfig;
@@ -55,19 +56,19 @@ pub async fn enable_extensions(
 
     // Writes go through the read-write pool's transaction (the read-only
     // `acquire()` would reject the INSERTs).
-    let mut tx = db
+    let tx = db
         .begin()
         .await
         .map_err(|e| AuthzBootstrapError::TransactionBegin(e.to_string()))?;
-    {
-        let mut conn = tx.as_mut_conn();
-        td_authz::security::sys_admin::ensure_sys_admin_permissions(
-            &mut conn,
-            registry.sys_admin_permissions(),
-        )
-        .await?;
-    }
-    tx.commit()
+    let mut conn = DomainConnection::from_transaction(tx);
+    td_authz::security::sys_admin::ensure_sys_admin_permissions(
+        &mut conn,
+        registry.sys_admin_permissions(),
+    )
+    .await?;
+    conn.into_transaction()
+        .expect("owned boot transaction")
+        .commit()
         .await
         .map_err(|e| AuthzBootstrapError::TransactionCommit(e.to_string()))?;
 
@@ -85,7 +86,7 @@ pub async fn enable_extensions(
 /// the offending rows so the operator can revert or boot in `rbac` mode.
 async fn ensure_representable(db: &TdPool, registry: &AuthzRegistry) -> Result<(), TdError> {
     let reasons = td_authz::security::representability::check_representability(
-        db,
+        DomainPool::<Apiserver>::over(db),
         registry.sys_admin_permissions(),
     )
     .await?;

@@ -3,7 +3,7 @@
 //
 
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::and;
 use td_objects::dxo::function::{FunctionDBBuilder, FunctionDBWithNames, FunctionUpdate};
@@ -20,7 +20,7 @@ enum UpdateFunctionError {
 }
 
 pub async fn assert_function_name_not_exists(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     collection_id: Ref<CollectionId>,
     collection_name: Ref<CollectionName>,
     function: Ref<FunctionDBWithNames>,

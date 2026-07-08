@@ -15,7 +15,7 @@
 //! check read the same `sys_admin_permissions()` list, so they stay consistent.
 
 use std::collections::HashSet;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::TryUpdater;
 use td_objects::dxo::crudl::RequestContext;
@@ -30,7 +30,7 @@ use td_queries::LiveEntry;
 /// already present are skipped; the extension rows are stored like the built-in
 /// system rows — on `__all__`, system-granted, `fixed = true`.
 pub async fn ensure_sys_admin_permissions(
-    conn: &mut DynamicConnection<'_>,
+    conn: &mut DomainConnection<Apiserver>,
     sys_admin_extras: &[(&str, &str)],
 ) -> Result<(), TdError> {
     if sys_admin_extras.is_empty() {
@@ -78,12 +78,10 @@ mod tests {
         // Run the reconciler in a committed read-write transaction (the
         // production startup path) so the row persists between calls.
         async fn reconcile(db: &TdPool, extras: &[(&str, &str)]) -> Result<(), TdError> {
-            let mut tx = db.begin().await.unwrap();
-            {
-                let mut conn = tx.as_mut_conn();
-                ensure_sys_admin_permissions(&mut conn, extras).await?;
-            }
-            tx.commit().await.unwrap();
+            let tx = db.begin().await.unwrap();
+            let mut conn = DomainConnection::from_transaction(tx);
+            ensure_sys_admin_permissions(&mut conn, extras).await?;
+            conn.into_transaction().unwrap().commit().await.unwrap();
             Ok(())
         }
 

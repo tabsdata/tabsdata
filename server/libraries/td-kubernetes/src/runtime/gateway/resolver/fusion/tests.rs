@@ -66,7 +66,11 @@ fn compare_family_accepts_exact_match() {
 #[test]
 fn compare_family_rejects_extra_file() {
     let temp = tempfile::tempdir().expect("tempdir");
-    write_family(temp.path(), "configs", &[("a.yaml", "x"), ("extra.yaml", "z")]);
+    write_family(
+        temp.path(),
+        "configs",
+        &[("a.yaml", "x"), ("extra.yaml", "z")],
+    );
     let canonical = configs(&[("a.yaml", "x")]);
     let error = compare_family(temp.path(), "configs", &canonical, false)
         .expect_err("extra file must be rejected");

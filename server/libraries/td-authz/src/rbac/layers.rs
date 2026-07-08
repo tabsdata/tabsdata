@@ -49,7 +49,7 @@ use crate::rbac::model::{
 use crate::rbac::source::{RbacSource, identity_grants};
 use std::any::type_name;
 use std::marker::PhantomData;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::UserId;
@@ -243,28 +243,22 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
     ///
     /// The requester's user is taken from the [`RequestContext`]; their
     /// effective grants come from the [`RbacSource`] (union across the
-    /// user's assigned roles), plus the implicit identity grants.
+    /// user's assigned roles), plus the implicit identity grants. Grants
+    /// resolve through the [`Apiserver`]-domain slot — the primary for an
+    /// apiserver service, the `read_connection = Apiserver` slot elsewhere.
     pub async fn check(
         source: Ref<S>,
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut slot: MutRef<DomainConnection<Apiserver>>,
         request: Ref<RequestContext>,
         scope: Ref<Scope<E>>,
     ) -> Result<(), TdError> {
-        // Internal-token-authenticated callers reach handlers with the
-        // `UserId::system()` identity (set by the apiserver's
-        // `internal_token_layer`, which replaces the prior loopback-IP
-        // trust gate). The token itself binds `(method, scope, bindings)`
-        // to the exact request -- THAT is the authorization boundary
-        // for internal callers; RBAC on top would over-constrain it
-        // (the system user has no role grants, so every internal call
-        // would 403, e.g. the streamer pod's manifest-trigger sidecar
-        // hitting `function_version_execute`). Short-circuit RBAC for
-        // the system user; external callers continue through the
-        // normal grant check below.
+        // Internal-token callers (`UserId::system()`) bypass RBAC: the token
+        // itself binds `(method, scope, bindings)` and the system user holds
+        // no role grants, so RBAC on top would 403 every internal call.
         if request.user_id == UserId::system() {
             return Ok(());
         }
-        let user_grants = source.user_grants(&mut conn, &request.user_id).await?;
+        let user_grants = source.user_grants(&mut slot, &request.user_id).await?;
         let request_grants = identity_grants(&request);
         if enforce::<E, R>(&user_grants, &request_grants, &scope.0) {
             Ok(())
@@ -291,10 +285,10 @@ impl<S: RbacSource> VisibleProjectsResolver<S> {
     /// effective grants (union across the user's assigned roles).
     pub async fn projects(
         source: Ref<S>,
-        mut conn: MutRef<DynamicConnection<'static>>,
+        mut slot: MutRef<DomainConnection<Apiserver>>,
         request: Ref<RequestContext>,
     ) -> Result<VisibleProjects, TdError> {
-        let user_grants = source.user_grants(&mut conn, &request.user_id).await?;
+        let user_grants = source.user_grants(&mut slot, &request.user_id).await?;
         Ok(VisibleProjects::from_grants(&user_grants))
     }
 }
@@ -498,7 +492,7 @@ mod tests {
         let scope = Arc::new(Scope::<Project>(On::Entity(p)));
 
         // develop_project on p: allowed
-        let conn = MutRef::new(db.acquire().await.unwrap());
+        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
         Enforce::<FixedRbacSource, Project, DevelopProject>::check(
             Ref::from_arc(source.clone()),
             conn,
@@ -509,7 +503,7 @@ mod tests {
         .unwrap();
 
         // manage_project on p: forbidden
-        let conn = MutRef::new(db.acquire().await.unwrap());
+        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
         let err = Enforce::<FixedRbacSource, Project, ManageProject>::check(
             Ref::from_arc(source.clone()),
             conn,
@@ -524,7 +518,7 @@ mod tests {
         assert_eq!(scope_str, &format!("project:{p}"));
 
         // manage_access OR manage_project: still forbidden for this user
-        let conn = MutRef::new(db.acquire().await.unwrap());
+        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
         Enforce::<FixedRbacSource, Project, (ManageAccess, ManageProject)>::check(
             Ref::from_arc(source.clone()),
             conn,
@@ -539,12 +533,46 @@ mod tests {
             AccessTokenId::default(),
             UserId::default(),
         ));
-        let conn = MutRef::new(db.acquire().await.unwrap());
+        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
         Enforce::<FixedRbacSource, Project, ViewProject>::check(
             Ref::from_arc(source.clone()),
             conn,
             Ref::from_arc(unknown),
             Ref::from_arc(scope.clone()),
+        )
+        .await
+        .unwrap_err();
+    }
+
+    #[td_test::test(db)]
+    async fn test_enforce_layer_check_latent_slot(db: td_database::pool::TdPool) {
+        use std::sync::Arc;
+
+        // The slot stays latent end-to-end: FixedRbacSource answers from
+        // memory, so no connection is ever acquired.
+        let user_id = UserId::default();
+        let p = ProjectId::default();
+        let source =
+            Arc::new(FixedRbacSource::new().with_user_roles(user_id, [ProjectRole::Dev.grants(p)]));
+        let request = Arc::new(request(user_id));
+        let scope = Arc::new(Scope::<Project>(On::Entity(p)));
+
+        let slot = MutRef::new(DomainConnection::<Apiserver>::latent(db.clone()));
+        Enforce::<FixedRbacSource, Project, DevelopProject>::check(
+            Ref::from_arc(source.clone()),
+            slot,
+            Ref::from_arc(request.clone()),
+            Ref::from_arc(scope.clone()),
+        )
+        .await
+        .unwrap();
+
+        let slot = MutRef::new(DomainConnection::<Apiserver>::latent(db));
+        Enforce::<FixedRbacSource, Project, ManageProject>::check(
+            Ref::from_arc(source),
+            slot,
+            Ref::from_arc(request),
+            Ref::from_arc(scope),
         )
         .await
         .unwrap_err();
@@ -570,7 +598,7 @@ mod tests {
         let source = Arc::new(FixedRbacSource::new()); // empty: system has no grants
         let scope = Arc::new(Scope::<Project>(On::Entity(p)));
 
-        let conn = MutRef::new(db.acquire().await.unwrap());
+        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
         Enforce::<FixedRbacSource, Project, DevelopProject>::check(
             Ref::from_arc(source.clone()),
             conn,
@@ -581,7 +609,7 @@ mod tests {
         .unwrap();
 
         // Even the strictest requirement passes for the system user.
-        let conn = MutRef::new(db.acquire().await.unwrap());
+        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
         Enforce::<FixedRbacSource, Project, ManageProject>::check(
             Ref::from_arc(source.clone()),
             conn,

@@ -33,6 +33,8 @@ use syn::{DeriveInput, Expr, Fields, ItemStruct, Type, parse_macro_input};
 pub struct DaoArguments {
     update: Flag,
     sql_table: Option<String>,
+    /// The table's `DbDomain`; absent = `ta_objects::Apiserver`.
+    db: Option<syn::Path>,
     order_by: Option<OrderByArguments>,
     versioned: Option<VersionedArguments>,
     recursive: Option<RecursiveArguments>,
@@ -57,6 +59,9 @@ impl ToTokens for DaoArguments {
         }
         if let Some(sql_table) = &self.sql_table {
             args.push(quote! { sql_table = #sql_table });
+        }
+        if let Some(db) = &self.db {
+            args.push(quote! { db = #db });
         }
         if let Some(order_by) = &self.order_by {
             let OrderByArguments { col, dir } = order_by;
@@ -133,6 +138,7 @@ impl DaoArguments {
                 self.update
             },
             sql_table: other.sql_table.or(self.sql_table),
+            db: other.db.or(self.db),
             order_by: other.order_by.or(self.order_by),
             versioned: match (self.versioned, other.versioned) {
                 (Some(base), Some(child)) => Some(base.override_with(child)),
@@ -374,8 +380,13 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
 
     // ---- DaoCore (minimal) -------------------------------------------------
     let display_name = struct_name_to_display_name(&ident.to_string());
+    let db_domain = match &parsed.db {
+        Some(path) => quote! { #path },
+        None => quote! { ta_objects::Apiserver },
+    };
     let dao_core = quote! {
         impl #impl_generics ta_objects::DaoCore for #ident #ty_generics #where_clause {
+            type Db = #db_domain;
             fn table() -> Self::Iden {
                 #table_iden::Table
             }

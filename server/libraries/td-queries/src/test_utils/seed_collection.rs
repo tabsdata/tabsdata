@@ -5,6 +5,7 @@
 use crate::LiveEntry;
 use crate::QueryExecutor;
 use ta_objects::Buildable;
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionCreateDB, CollectionDB};
 use td_objects::dxo::group::GroupDB;
@@ -13,7 +14,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_collection(
-    mut executor: impl QueryExecutor,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     collection_name: &CollectionName,
     created_by: &UserId,
 ) -> Result<CollectionDB, TdError> {
@@ -35,7 +36,7 @@ pub(crate) async fn seed_collection(
 /// field-less `CollectionCreateDB` defaults its `project_id` from the
 /// executor's scope, so the caller picks the project via `db.scoped(p)`.
 pub(crate) async fn seed_collection_in_group(
-    mut executor: impl QueryExecutor,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     collection_name: &CollectionName,
     created_by: &UserId,
     group_id: GroupId,

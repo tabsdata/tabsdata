@@ -5,13 +5,14 @@
 use crate::LiveEntry;
 use crate::QueryExecutor;
 use ta_objects::{Buildable, TryUpdater};
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
 use td_objects::types::basic::{AccessTokenId, Description, GroupName, UserId};
 
 pub(crate) async fn seed_group(
-    mut executor: impl QueryExecutor,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     name: GroupName,
     description: Description,
 ) -> Result<GroupDB, TdError> {

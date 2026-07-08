@@ -16,7 +16,7 @@
 //! RLS phase in `td-schema`).
 
 use crate::project::ProjectError;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::types::basic::ProjectId;
@@ -27,7 +27,7 @@ use td_tower::extractors::{MutRef, Ref};
 /// none. On PostgreSQL sandbox is an ordinary, deletable project, so this is a
 /// no-op there.
 pub async fn reject_delete_sandbox_on_single_project_backend(
-    conn: MutRef<DynamicConnection<'static>>,
+    conn: MutRef<DomainConnection<Apiserver>>,
     project_id: Ref<ProjectId>,
 ) -> Result<(), TdError> {
     if !conn.is_postgres() && project_id.is_sandbox() {

@@ -14,7 +14,8 @@ use std::marker::PhantomData;
 use ta_objects::SeaValue;
 use ta_objects::StateFilter;
 use ta_objects::errors::SqlError;
-use ta_objects::{CurrentDao, Dao, Recursive, VersionedDao};
+use ta_objects::{CurrentDao, Dao, DaoCore, Recursive, VersionedDao};
+use td_database::domain::Domained;
 use td_objects::types::recursion::RecursionOptions;
 
 query_handle! {
@@ -113,7 +114,11 @@ where
         self
     }
 
-    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError> {
+    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+        R: DaoCore<Db = D::Db>,
+    {
         let up_enabled = is_direction_enabled(self.recursion.max_upstream_depth());
         let down_enabled = is_direction_enabled(self.recursion.max_downstream_depth());
 
@@ -198,7 +203,11 @@ where
         self
     }
 
-    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError> {
+    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+        R: DaoCore<Db = D::Db>,
+    {
         let up_enabled = is_direction_enabled(self.recursion.max_upstream_depth());
         let down_enabled = is_direction_enabled(self.recursion.max_downstream_depth());
 
@@ -317,7 +326,11 @@ where
         self
     }
 
-    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError> {
+    pub async fn fetch_all(self) -> Result<Vec<D>, SqlError>
+    where
+        E: Domained<Domain = D::Db>,
+        R: DaoCore<Db = D::Db>,
+    {
         let up_enabled = is_direction_enabled(self.recursion.max_upstream_depth());
         let down_enabled = is_direction_enabled(self.recursion.max_downstream_depth());
 
@@ -1333,13 +1346,17 @@ mod tests {
     #[td_test::test(db)]
     async fn test_select_active_versions_at_types(db: TdPool) -> Result<(), TdError> {
         use ta_objects::States;
+        use td_database::domain::Apiserver;
         async fn test_query<const DS: u8, D, const RS: u8, R>(
             db: &TdPool,
             recursion_ref: &dyn SeaValue,
         ) -> Result<(), TdError>
         where
-            D: VersionedDao<VersionOrder = AtTime> + Recursive + States<DS>,
-            R: VersionedDao<VersionOrder = AtTime> + States<RS>,
+            D: VersionedDao<VersionOrder = AtTime>
+                + Recursive
+                + States<DS>
+                + DaoCore<Db = Apiserver>,
+            R: VersionedDao<VersionOrder = AtTime> + States<RS> + DaoCore<Db = Apiserver>,
         {
             let _result: Vec<D> = db
                 .historic(&*LATER)

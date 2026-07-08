@@ -11,13 +11,13 @@
 //! backend-independent and lives in [`super::guards`].)
 
 use crate::project::ProjectError;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_tower::extractors::MutRef;
 
 /// Reject create on a non-PostgreSQL backend: only `sandbox` is allowed there.
 pub async fn reject_create_on_single_project_backend(
-    conn: MutRef<DynamicConnection<'static>>,
+    conn: MutRef<DomainConnection<Apiserver>>,
 ) -> Result<(), TdError> {
     if !conn.is_postgres() {
         Err(ProjectError::SingleProjectBackend)?;

@@ -9,9 +9,10 @@ use axum::response::Response;
 use std::string::ToString;
 use std::sync::Arc;
 use ta_apiserver::status::error_status::ErrorStatus;
-use td_common::jwt::{JwtConfig, decode_token};
 use td_authz::session_provider::{Session, SessionError, Sessions};
+use td_common::jwt::{JwtConfig, decode_token};
 use td_common::provider::Provider;
+use td_database::domain::{Apiserver, DomainPool};
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -70,7 +71,7 @@ pub async fn authorization_layer(
 
     // Get user_id from session
     let session = sessions
-        .get(&db)
+        .get(DomainPool::<Apiserver>::over(&db))
         .await
         .map_err(|e| {
             error!("Could not get session: {e:#?}");

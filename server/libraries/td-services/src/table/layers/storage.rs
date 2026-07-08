@@ -3,7 +3,7 @@
 //
 
 use polars::prelude::PolarsError;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
 use td_objects::types::basic::{TableId, TriggeredOn, UncommittedStatus};
@@ -23,7 +23,7 @@ pub enum StorageServiceError {
 }
 
 pub async fn resolve_table_location(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     triggered_on: Ref<TriggeredOn>,
     table_id: Ref<TableId>,
     uncommitted: Ref<UncommittedStatus>,
@@ -432,7 +432,7 @@ mod tests {
         // The resolver reads RLS-scoped tables. In tests the serving pool
         // defaults the session scope to sandbox, where the seeds land, so a
         // plain connection already reads the right rows.
-        let connection = db.begin().await.unwrap().into_connection();
+        let connection = DomainConnection::ready(db.begin().await.unwrap().into_connection());
         resolve_table_location(
             MutRef::new(connection),
             Ref::new(TriggeredOn::now()),

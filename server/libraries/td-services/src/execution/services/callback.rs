@@ -10,7 +10,7 @@ use crate::logical::layers::index_lfrs_by_exec_fn;
 use crate::scheduler::layers::request::notify_scheduler;
 use std::collections::HashSet;
 use ta_services::factory::service_factory;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
@@ -44,7 +44,7 @@ use td_tower::layers;
 /// yet) but accepting them is harmless. Terminal statuses (Done /
 /// Failed / Error) indicate a late or duplicate callback — drop.
 async fn resolve_logical_function_runs(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     physical_function_runs: Ref<Vec<PhysicalFunctionRunDB>>,
 ) -> Result<Vec<LogicalFunctionRunDB>, TdError> {
     if physical_function_runs.is_empty() {
@@ -79,7 +79,7 @@ async fn resolve_logical_function_runs(
 /// (no sticky semantics on FR); the LFR's sticky-Committed gate is
 /// enforced separately in `update_function_run_status`.
 async fn update_function_run_audit(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     physical_function_runs: Ref<Vec<PhysicalFunctionRunDB>>,
     update: Ref<UpdatePhysicalFunctionRunDB>,
 ) -> Result<(), TdError> {

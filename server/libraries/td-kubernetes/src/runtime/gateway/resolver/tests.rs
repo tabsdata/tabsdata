@@ -228,5 +228,8 @@ async fn optional_secret_materializes_to_empty_when_absent() {
     let yaml = "td_resolve_test_optional:\n  secret: ${{secret?}}\n";
     let resolved = resolver.materialize(yaml).await.expect("materialize");
     let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
-    assert_eq!(parsed["td_resolve_test_optional"]["secret"].as_str(), Some(""));
+    assert_eq!(
+        parsed["td_resolve_test_optional"]["secret"].as_str(),
+        Some("")
+    );
 }

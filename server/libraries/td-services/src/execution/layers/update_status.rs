@@ -5,7 +5,7 @@
 use itertools::Itertools;
 use std::collections::HashSet;
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::logical::{
     CommitLogicalFunctionRunDB, LogicalFunctionRunDB, UpdateLogicalFunctionRunDB,
@@ -50,7 +50,7 @@ enum UpdateStatusRunError {
     err(Debug)
 )]
 pub async fn update_worker_status(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     update: Ref<UpdateWorkerDB>,
     worker_id: Ref<WorkerId>,
 ) -> Result<(), TdError> {
@@ -73,7 +73,7 @@ pub async fn update_worker_status(
 )]
 pub async fn update_function_run_status(
     mut ctx: MutRef<ReqCtx>,
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
     update: Ref<UpdateLogicalFunctionRunDB>,
 ) -> Result<(), TdError> {
@@ -284,7 +284,7 @@ pub async fn update_function_run_status(
 /// union of all reachable downstream LFRs, excluding the starting set
 /// itself.
 async fn bfs_downstream_lfrs(
-    conn: &mut DynamicConnection<'static>,
+    conn: &mut DomainConnection<Apiserver>,
     starting: &[LogicalFunctionRunId],
 ) -> Result<Vec<LogicalFunctionRunId>, TdError> {
     let starting_set: HashSet<LogicalFunctionRunId> = starting.iter().cloned().collect();
@@ -311,7 +311,7 @@ async fn bfs_downstream_lfrs(
 }
 
 pub async fn update_table_data_version_status(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     physical_function_run_id: Ref<PhysicalFunctionRunId>,
     callback: Ref<CallbackRequest>,
 ) -> Result<(), TdError> {

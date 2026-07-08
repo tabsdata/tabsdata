@@ -116,8 +116,8 @@ mod tests {
     use axum::middleware::from_fn_with_state;
     use axum::routing::get;
     use std::collections::BTreeMap;
-    use td_common::jwt::{INTERNAL_TOKEN_KIND, encode_internal_token};
     use td_common::id;
+    use td_common::jwt::{INTERNAL_TOKEN_KIND, encode_internal_token};
     use td_objects::rest_urls::internal::RESOLVE_FUNCTION_RUN_WORKER;
     use td_objects::rest_urls::{BASE_API_URL, BASE_URL, V1};
     use tower::ServiceExt;

@@ -3,7 +3,7 @@
 //
 
 use std::ops::Deref;
-use td_database::dynamic::DynamicConnection;
+use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
@@ -23,7 +23,7 @@ use tracing::instrument;
     err(Debug)
 )]
 pub async fn resolve_bound_function_run(
-    mut conn: MutRef<DynamicConnection<'static>>,
+    mut conn: MutRef<DomainConnection<Apiserver>>,
     execution_id: Ref<ExecutionId>,
     function_version_id: Ref<FunctionVersionId>,
 ) -> Result<PhysicalFunctionRunDBWithNames, TdError> {

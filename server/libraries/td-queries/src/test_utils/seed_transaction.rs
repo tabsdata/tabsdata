@@ -5,6 +5,7 @@
 use crate::LiveEntry;
 use crate::QueryExecutor;
 use ta_objects::Buildable;
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
@@ -12,7 +13,7 @@ use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{TransactionId, TransactionKey};
 
 pub(crate) async fn seed_transaction(
-    mut executor: impl QueryExecutor,
+    mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     execution: &ExecutionDB,
     transaction_key: &TransactionKey,
 ) -> Result<TransactionDB, TdError> {

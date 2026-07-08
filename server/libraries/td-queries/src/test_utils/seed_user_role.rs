@@ -4,13 +4,14 @@
 
 use crate::{LiveEntry, QueryExecutor};
 use ta_objects::{Buildable, Setter, TryUpdater};
+use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::{AccessTokenId, RoleId, UserId};
 
 pub(crate) async fn seed_user_role(
-    db: impl QueryExecutor,
+    db: impl QueryExecutor + Domained<Domain = Apiserver>,
     user: &UserId,
     role: &RoleId,
 ) -> Result<UserRoleDB, TdError> {

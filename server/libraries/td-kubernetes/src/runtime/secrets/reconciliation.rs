@@ -136,10 +136,12 @@ async fn fill_generated_keys(
         .collect();
     // Topological fill: each step takes a generator whose deps are all resolved
     // and produces it. Whatever is left has a missing or cyclic dependency.
-    while let Some(index) = needs_fill
-        .iter()
-        .position(|(_, generator)| generator.deps().iter().all(|dep| resolved.contains_key(dep)))
-    {
+    while let Some(index) = needs_fill.iter().position(|(_, generator)| {
+        generator
+            .deps()
+            .iter()
+            .all(|dep| resolved.contains_key(dep))
+    }) {
         let (key, generator) = needs_fill.remove(index);
         let value = generator.generate(&resolved)?;
         resolved.insert(generator, value.clone());

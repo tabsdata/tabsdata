@@ -25,6 +25,7 @@ pub const APP_ROLE: &str = "td_app";
 // carried on the live pool via `TdPool::schema`.
 
 pub mod config;
+pub mod domain;
 pub mod dynamic;
 #[cfg(feature = "embedded-postgres")]
 pub mod embedded;
