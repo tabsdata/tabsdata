@@ -23,6 +23,7 @@ them (``rm -rf ~/.uv/envs/tdx-system-*``) to force a clean reinstall.
 Set ``TD_GEN_NO_BOOTSTRAP=1`` to disable all of this and run in the current
 interpreter (e.g. for tests, or when you manage the environment yourself).
 """
+
 from __future__ import annotations
 
 import os
@@ -37,8 +38,8 @@ ENVS_DIR = Path.home() / ".uv" / "envs"
 MAIN_VENV = ENVS_DIR / "tdx-system-default"
 SALESFORCE_VENV = ENVS_DIR / "tdx-system-salesforce"
 
-_MARKER = ".tdx-system-ready"      # written once an install completes
-_DISABLE = "TD_GEN_NO_BOOTSTRAP"   # escape hatch: run in the current interpreter
+_MARKER = ".tdx-system-ready"  # written once an install completes
+_DISABLE = "TD_GEN_NO_BOOTSTRAP"  # escape hatch: run in the current interpreter
 
 
 def _disabled() -> bool:
@@ -88,30 +89,33 @@ def _in_venv(venv: Path) -> bool:
         return False
 
 
-def _ensure(venv: Path, *, editable_extra: str | None,
-            packages: tuple[str, ...] = ()) -> Path:
+def _ensure(
+    venv: Path, *, editable_extra: str | None, packages: tuple[str, ...] = ()
+) -> Path:
     """Create ``venv`` (if absent) and install into it, idempotently. A marker
     file records a completed install so later runs skip straight through."""
     if (venv / _MARKER).is_file():
         return venv
     uv = _uv()
     label = venv.name
-    print(f">>> setting up uv venv '{label}' at {venv} (one-time) ...",
-          file=sys.stderr)
+    print(f">>> setting up uv venv '{label}' at {venv} (one-time) ...", file=sys.stderr)
     venv.parent.mkdir(parents=True, exist_ok=True)
     _run([uv, "venv", str(venv)], what=f"creating venv '{label}'")
     py = str(_venv_python(venv))
     if editable_extra is not None:
         proj = _project_dir()
         spec = f"{proj}[{editable_extra}]" if editable_extra else str(proj)
-        _run([uv, "pip", "install", "--python", py, "-e", spec],
-             what=f"installing datagen into '{label}'")
+        _run(
+            [uv, "pip", "install", "--python", py, "-e", spec],
+            what=f"installing datagen into '{label}'",
+        )
     if packages:
-        _run([uv, "pip", "install", "--python", py, *packages],
-             what=f"installing {', '.join(packages)} into '{label}'")
+        _run(
+            [uv, "pip", "install", "--python", py, *packages],
+            what=f"installing {', '.join(packages)} into '{label}'",
+        )
     (venv / _MARKER).write_text(
-        "tdx-system managed venv — delete this directory to force a "
-        "clean reinstall\n"
+        "tdx-system managed venv — delete this directory to force a clean reinstall\n"
     )
     print(f">>> '{label}' ready", file=sys.stderr)
     return venv
@@ -188,9 +192,11 @@ def delete_venvs() -> int:
             print(f">>> (absent) {venv}")
     print()
     if removed:
-        print(">>> done — the next `tdx-system` run recreates and reinstalls "
-              "the default venv\n    (the salesforce venv is recreated when a "
-              "salesforce command needs it).")
+        print(
+            ">>> done — the next `tdx-system` run recreates and reinstalls "
+            "the default venv\n    (the salesforce venv is recreated when a "
+            "salesforce command needs it)."
+        )
     else:
         print(">>> nothing to delete.")
     return 0

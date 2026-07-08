@@ -14,6 +14,7 @@ DBAPI / SQLAlchemy errors are converted into ``DatagenError`` so the
 top-level handler prints just the database's own message instead of a
 multi-frame Python traceback.
 """
+
 from __future__ import annotations
 
 import sys
@@ -30,6 +31,7 @@ def split_sql_statements(sql: str) -> list[str]:
     the saas-sql (databricks/snowflake) DDL+INSERT execution paths."""
     try:
         import sqlparse
+
         parts = sqlparse.split(sql)
     except ImportError:
         # Degraded fallback (sqlparse is normally a hard dep): drop full-line
@@ -48,7 +50,10 @@ def split_sql_statements(sql: str) -> list[str]:
 
 
 def run_sql_text(
-    uri: str, sql: str, label: str = "sql", out: IO[str] | None = None,
+    uri: str,
+    sql: str,
+    label: str = "sql",
+    out: IO[str] | None = None,
 ) -> None:
     """Execute the given SQL text. ``label`` is used in error messages.
 
@@ -86,7 +91,9 @@ def run_sql_text(
 
 
 def run_sql_file(
-    uri: str, sql_path: str | Path, out: IO[str] | None = None,
+    uri: str,
+    sql_path: str | Path,
+    out: IO[str] | None = None,
 ) -> None:
     p = Path(sql_path)
     if not p.is_file():

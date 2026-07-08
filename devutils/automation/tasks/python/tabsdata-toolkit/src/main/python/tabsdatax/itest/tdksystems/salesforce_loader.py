@@ -15,6 +15,7 @@ This module imports `snowfakery`, `simple_salesforce` and `yaml`, which live
 only in the salesforce venv — so it is imported lazily, after the CLI has
 re-exec'd there (see `_venv`).
 """
+
 from __future__ import annotations
 
 import datetime
@@ -43,6 +44,7 @@ def _domain_from_url(url: str) -> str:
 
 def _client(meta: dict):
     from simple_salesforce import Salesforce  # salesforce-venv only
+
     url = (meta.get("URL") or "").rstrip("/")
     user, pwd, token = meta.get("USERNAME"), meta.get("PASSWORD"), meta.get("TOKEN")
     if not (url and user and pwd and token):
@@ -50,8 +52,9 @@ def _client(meta: dict):
             "salesforce load needs URL, USERNAME, PASSWORD and TOKEN in the "
             "domain (source the domain script / set the SALESFORCE__* vars)."
         )
-    return Salesforce(username=user, password=pwd, security_token=token,
-                      domain=_domain_from_url(url))
+    return Salesforce(
+        username=user, password=pwd, security_token=token, domain=_domain_from_url(url)
+    )
 
 
 def _find_one(model_dir: Path, suffix: str) -> Path:
@@ -84,6 +87,7 @@ def _load_mapping(path: Path) -> list[dict]:
     object, the snowfakery source table, the fields to load and any lookups
     (lookup-field -> source table)."""
     import yaml  # pyyaml ships with snowfakery
+
     raw = yaml.safe_load(path.read_text()) or {}
     steps = []
     for name, spec in raw.items():
@@ -113,8 +117,9 @@ def _wipe(sf, objects: list[str], log) -> None:
     outside this dataset) are left in place and surfaced, not silently
     assumed gone."""
     for obj in objects:
-        ids = [{"Id": r["Id"]}
-               for r in sf.query_all(f"SELECT Id FROM {obj}")["records"]]
+        ids = [
+            {"Id": r["Id"]} for r in sf.query_all(f"SELECT Id FROM {obj}")["records"]
+        ]
         if not ids:
             log(f"    {obj}: nothing to delete")
             continue
@@ -122,8 +127,16 @@ def _wipe(sf, objects: list[str], log) -> None:
         ok = sum(1 for r in results if r.get("success"))
         msg = f"    {obj}: deleted {ok}/{len(ids)} record(s)"
         if ok < len(ids):
-            reason = next((e.get("statusCode") for r in results if not r.get("success")
-                           for e in (r.get("errors") or []) if e.get("statusCode")), "")
+            reason = next(
+                (
+                    e.get("statusCode")
+                    for r in results
+                    if not r.get("success")
+                    for e in (r.get("errors") or [])
+                    if e.get("statusCode")
+                ),
+                "",
+            )
             msg += f" ({len(ids) - ok} left{f': {reason}' if reason else ''})"
         log(msg)
 
@@ -156,20 +169,24 @@ def load(model_dir: Path, meta: dict, *, log=print) -> int:
 
         log(">>> uploading ...")
         total = 0
-        id_maps: dict[str, dict] = {}   # source table -> {snowfakery id: SF Id}
+        id_maps: dict[str, dict] = {}  # source table -> {snowfakery id: SF Id}
         for step in steps:
             obj, table = step["object"], step["table"]
             src_rows = _read_table(db, table)
             records = []
             for row in src_rows:
-                rec = {f: _coerce(row[f]) for f in step["fields"]
-                       if row.get(f) is not None}
+                rec = {
+                    f: _coerce(row[f]) for f in step["fields"] if row.get(f) is not None
+                }
                 for fld, ref_table in step["lookups"].items():
                     ref = row.get(fld)
                     # snowfakery stores the PK as int but references it as a
                     # string, so key the id-map by str on both sides.
-                    rec[fld] = (id_maps.get(ref_table, {}).get(str(ref))
-                                if ref is not None else None)
+                    rec[fld] = (
+                        id_maps.get(ref_table, {}).get(str(ref))
+                        if ref is not None
+                        else None
+                    )
                 records.append(rec)
             if not records:
                 log(f"    {obj}: nothing to upload")

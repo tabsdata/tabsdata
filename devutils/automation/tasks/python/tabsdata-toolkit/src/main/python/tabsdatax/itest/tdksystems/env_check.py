@@ -7,6 +7,7 @@ metadata (i.e. pyproject.toml's `[project] dependencies`) via
 Honours `; platform_machine != "aarch64"` markers (so ibm_db et al. don't
 fail on Apple Silicon when those wheels aren't published). Skips
 optional-dependency entries (`; extra == "..."`)."""
+
 from __future__ import annotations
 
 import importlib
@@ -19,12 +20,12 @@ from .errors import DatagenError
 DIST_NAME = "td_gen"
 
 _IMPORT_OVERRIDES: dict[str, str] = {
-    "psycopg2-binary":        "psycopg2",
+    "psycopg2-binary": "psycopg2",
     "mysql-connector-python": "mysql.connector",
-    "clickhouse-sqlalchemy":  "clickhouse_sqlalchemy",
-    "google-cloud-storage":   "google.cloud.storage",
-    "google-cloud-bigquery":  "google.cloud.bigquery",
-    "azure-storage-blob":     "azure.storage.blob",
+    "clickhouse-sqlalchemy": "clickhouse_sqlalchemy",
+    "google-cloud-storage": "google.cloud.storage",
+    "google-cloud-bigquery": "google.cloud.bigquery",
+    "azure-storage-blob": "azure.storage.blob",
     "snowflake-connector-python": "snowflake.connector",
 }
 
@@ -90,7 +91,8 @@ def check_requirements() -> None:
         return
     deps = _parse_requires(requires)
     missing = [
-        d for d in deps
+        d
+        for d in deps
         if importlib.util.find_spec(_import_name(d)) is None  # type: ignore[attr-defined]
     ]
     if missing:

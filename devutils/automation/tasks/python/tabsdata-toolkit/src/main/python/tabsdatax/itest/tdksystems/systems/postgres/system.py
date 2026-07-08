@@ -1,11 +1,12 @@
 """PostgreSQL — community 17.x. Single-DB-with-dedicated-user domain model."""
+
 from __future__ import annotations
 
 import os
 import platform
 
-from .._container import AdminConn, ContainerBase, DomainResult
 from ...shell import docker_exec_check, docker_run, gen_password
+from .._container import AdminConn, ContainerBase, DomainResult
 
 
 class PostgresSystem(ContainerBase):
@@ -32,32 +33,50 @@ class PostgresSystem(ContainerBase):
 
     def check_ready(self, container: str, password: str) -> bool:
         return docker_exec_check(
-            container, "pg_isready", "-U", self.system_user, "-h", "localhost", "-q",
+            container,
+            "pg_isready",
+            "-U",
+            self.system_user,
+            "-h",
+            "localhost",
+            "-q",
         )
 
     def _admin_url(self, admin: AdminConn) -> str:
-        return (f"postgresql+psycopg2://{admin.user}:{admin.password}"
-                f"@{admin.host}:{admin.port}/postgres")
+        return (
+            f"postgresql+psycopg2://{admin.user}:{admin.password}"
+            f"@{admin.host}:{admin.port}/postgres"
+        )
 
     def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         pw = gen_password()
-        self._run_admin_sql(admin, [
-            f'CREATE DATABASE "{name}"',
-            f'CREATE USER "{name}" WITH PASSWORD \'{pw}\'',
-            f'ALTER DATABASE "{name}" OWNER TO "{name}"',
-            f'GRANT ALL PRIVILEGES ON DATABASE "{name}" TO "{name}"',
-        ])
+        self._run_admin_sql(
+            admin,
+            [
+                f'CREATE DATABASE "{name}"',
+                f"CREATE USER \"{name}\" WITH PASSWORD '{pw}'",
+                f'ALTER DATABASE "{name}" OWNER TO "{name}"',
+                f'GRANT ALL PRIVILEGES ON DATABASE "{name}" TO "{name}"',
+            ],
+        )
         uri = f"postgresql+psycopg2://{name}:{pw}@{admin.host}:{admin.port}/{name}"
         return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
-        self._run_admin_sql(admin, [
-            f'DROP DATABASE IF EXISTS "{name}"',
-            f'DROP USER IF EXISTS "{name}"',
-        ])
+        self._run_admin_sql(
+            admin,
+            [
+                f'DROP DATABASE IF EXISTS "{name}"',
+                f'DROP USER IF EXISTS "{name}"',
+            ],
+        )
 
     def do_list(self, admin: AdminConn) -> list[str]:
-        return self._query_admin_names(admin, (
-            "SELECT datname FROM pg_database "
-            "WHERE datistemplate = false AND datname <> 'postgres' "
-            "ORDER BY datname"))
+        return self._query_admin_names(
+            admin,
+            (
+                "SELECT datname FROM pg_database "
+                "WHERE datistemplate = false AND datname <> 'postgres' "
+                "ORDER BY datname"
+            ),
+        )

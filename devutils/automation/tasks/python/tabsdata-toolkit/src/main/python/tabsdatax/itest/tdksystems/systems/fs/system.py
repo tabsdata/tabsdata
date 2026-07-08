@@ -5,17 +5,22 @@ Diverges from the object stores: the root and each domain are real dirs
 never rmtree a sensitive path. Absolute roots are valid, so `relative_sys_path`
 is False (no leading-slash strip).
 """
+
 from __future__ import annotations
 
 import shutil
 from pathlib import Path
 
+from ...errors import DatagenError
 from .._cloud import CloudBase
 from ..base import (
-    CreateDomainSpec, CreateSystemSpec, DomainContext, Setting, SystemContext,
-    _normalize_path, _validate_path,
+    CreateDomainSpec,
+    CreateSystemSpec,
+    Setting,
+    SystemContext,
+    _normalize_path,
+    _validate_path,
 )
-from ...errors import DatagenError
 from .backend import FsBackend
 
 
@@ -30,12 +35,14 @@ def _validate_fs_root(root: str) -> None:
         if first not in ("tmp", "home", "Users"):
             raise DatagenError(
                 f"absolute root path must start with /tmp/, /home/, or "
-                f"/Users/ (got: '{root}')")
+                f"/Users/ (got: '{root}')"
+            )
     else:
         if parts and parts[0] in ("usr", "opt"):
             raise DatagenError(
                 f"relative root path's first element cannot be 'usr' or "
-                f"'opt' (got: '{root}')")
+                f"'opt' (got: '{root}')"
+            )
     if len(parts) < 2:
         raise DatagenError(f"root path must have at least 2 elements (got: '{root}')")
 
@@ -43,9 +50,9 @@ def _validate_fs_root(root: str) -> None:
 class FsSystem(CloudBase):
     slug = "fs"
     label = "fs"
-    category = "cloud"           # descriptor.write routes fs via write_cloud_*
-    relative_sys_path = False    # absolute roots are valid — don't strip slash
-    options = ()                 # only --sys-path (the root)
+    category = "cloud"  # descriptor.write routes fs via write_cloud_*
+    relative_sys_path = False  # absolute roots are valid — don't strip slash
+    options = ()  # only --sys-path (the root)
 
     def _backend(self, values: dict[str, str]) -> FsBackend:
         _validate_fs_root(values.get("SYS_PATH", ""))
@@ -62,7 +69,8 @@ class FsSystem(CloudBase):
                 print(f">>> --force: removed existing root path '{root}'")
             else:
                 raise DatagenError(
-                    f"root path already exists: '{root}' (use --force to clear)")
+                    f"root path already exists: '{root}' (use --force to clear)"
+                )
         root_p.mkdir(parents=True)
         return dict(spec.settings)
 
@@ -72,7 +80,9 @@ class FsSystem(CloudBase):
             shutil.rmtree(p)
 
     # fs materialises the domain as a real directory (mkdir).
-    def create_domain(self, ctx: SystemContext, spec: CreateDomainSpec) -> dict[str, Setting]:
+    def create_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec
+    ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
         root = self.resolve_values(settings).get("SYS_PATH", "")
         base = _normalize_path(spec.name)
@@ -86,7 +96,8 @@ class FsSystem(CloudBase):
                 shutil.rmtree(full_p)
             else:
                 raise DatagenError(
-                    f"domain already exists: {full} (use --force to recreate)")
+                    f"domain already exists: {full} (use --force to recreate)"
+                )
         full_p.mkdir(parents=True)
         settings["BASE_PATH"] = Setting("BASE_PATH", value=full, is_path=True)
         return settings

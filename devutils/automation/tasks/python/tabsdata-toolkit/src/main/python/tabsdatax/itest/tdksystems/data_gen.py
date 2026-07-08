@@ -1,11 +1,13 @@
 """Generate per-table data files for a bundled model.
 
-Models live in ``src/main/python/tabsdatax.itest.tdksystems/models/<name>/`` (shipped as package_data).
-Each model has:
-  - ``datagen.py`` — the source generator (calls ``tabsdatax.itest.tdksystems.emit.write_tables``)
+Models live in ``src/main/python/tabsdatax.itest.tdksystems/models/<name>/``
+(shipped as package_data). Each model has:
+  - ``datagen.py`` — the source generator (calls
+    ``tabsdatax.itest.tdksystems.emit.write_tables``)
   - ``sizing.json`` — scaling configuration
   - ``<system>.ddl`` — schema definitions (mysql, postgres, …)
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -21,7 +23,11 @@ from typing import Iterator
 from .errors import DatagenError
 
 SIZE_BUCKETS: dict[str, int] = {
-    "xs": 100, "s": 1000, "m": 10000, "l": 100000, "xl": 1000000,
+    "xs": 100,
+    "s": 1000,
+    "m": 10000,
+    "l": 100000,
+    "xl": 1000000,
 }
 VALID_FORMATS = ("sql", "csv", "json", "parquet")
 
@@ -30,8 +36,10 @@ VALID_FORMATS = ("sql", "csv", "json", "parquet")
 # Model resolution — bundled with the package
 # ---------------------------------------------------------------------------
 
+
 def _models_root() -> Path:
-    """Path to ``src/main/python/tabsdatax.itest.tdksystems/models/`` (or its installed equivalent)."""
+    """Path to ``src/main/python/tabsdatax.itest.tdksystems/models/`` (or its
+    installed equivalent)."""
     root = importlib.resources.files("tabsdatax.itest.tdksystems") / "models"
     return Path(str(root))
 
@@ -41,8 +49,7 @@ def list_models() -> list[str]:
     if not root.is_dir():
         return []
     return sorted(
-        p.name for p in root.iterdir()
-        if p.is_dir() and (p / "datagen.py").is_file()
+        p.name for p in root.iterdir() if p.is_dir() and (p / "datagen.py").is_file()
     )
 
 
@@ -100,9 +107,14 @@ def model_kinds(name: str) -> list[str]:
 # Generation
 # ---------------------------------------------------------------------------
 
+
 def generate(
-    sourcedir: Path, size: str | None, output: Path, fmt: str,
-    chunks: int | None = None, engine: str | None = None,
+    sourcedir: Path,
+    size: str | None,
+    output: Path,
+    fmt: str,
+    chunks: int | None = None,
+    engine: str | None = None,
     schema_sidecar: bool = False,
 ) -> None:
     """Generate the model into `output`.
@@ -125,9 +137,13 @@ def generate(
     from the otherwise type-erased json output.
     """
     if size is not None and size not in SIZE_BUCKETS:
-        raise DatagenError(f"unknown size '{size}'; expected one of {list(SIZE_BUCKETS)}")
+        raise DatagenError(
+            f"unknown size '{size}'; expected one of {list(SIZE_BUCKETS)}"
+        )
     if fmt not in VALID_FORMATS:
-        raise DatagenError(f"unknown format '{fmt}'; expected one of {list(VALID_FORMATS)}")
+        raise DatagenError(
+            f"unknown format '{fmt}'; expected one of {list(VALID_FORMATS)}"
+        )
     if chunks is not None and chunks < 1:
         raise DatagenError(f"--chunks must be >= 1 (got {chunks})")
 
@@ -164,8 +180,11 @@ def generate(
     module = _load_datagen(datagen_path)
     if not hasattr(module, "main"):
         raise DatagenError(f"{datagen_path} has no main() entry point")
-    with _patched_argv(argv), _patched_engine_env(engine), \
-            _patched_env("TD_GEN_SCHEMA_SIDECAR", "1" if schema_sidecar else None):
+    with (
+        _patched_argv(argv),
+        _patched_engine_env(engine),
+        _patched_env("TD_GEN_SCHEMA_SIDECAR", "1" if schema_sidecar else None),
+    ):
         module.main()
 
 

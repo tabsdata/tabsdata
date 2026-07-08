@@ -38,7 +38,7 @@ colorama==0.4.6
 colorlog==6.10.1
 comrak==0.0.12
 contourpy==1.3.3
-coverage==7.14.3
+coverage==7.15.0
 cryptography==47.0.0
 csvkit==2.2.0
 cycler==0.12.1

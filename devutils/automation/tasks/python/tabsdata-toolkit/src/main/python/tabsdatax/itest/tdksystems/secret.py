@@ -11,6 +11,7 @@ Adding a provider (ghsecrets, hashicorp, …) is just dropping a
 ``secret_<scheme>.py`` module that exposes ``fetch(ref) -> dict[str, str]``
 and registering its scheme in ``_PROVIDERS`` below.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -64,8 +65,9 @@ def render(secrets: dict[str, str], out: str) -> str:
     if out == "json":
         return json.dumps(secrets, indent=2)
     if out == "export":
-        return "\n".join(f"export {name}={shlex.quote(str(v))}"
-                         for name, v in secrets.items())
+        return "\n".join(
+            f"export {name}={shlex.quote(str(v))}" for name, v in secrets.items()
+        )
     if out == "unset":
         return "\n".join(f"unset {name}" for name in secrets)
     raise DatagenError(

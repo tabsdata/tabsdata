@@ -6,6 +6,7 @@ non-`expires` field. Names are normalised to valid env-var names, matching
 the ``<ITEM>__<FIELD>`` convention `tdx-system create --env-prefix` reads.
 Prints nothing itself — the caller renders the result to stdout.
 """
+
 from __future__ import annotations
 
 import json
@@ -36,7 +37,8 @@ def fetch(vault: str) -> dict[str, str]:
     _require("op")
     cp = subprocess.run(
         ["op", "--vault", vault, "item", "list", "--format=json"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if cp.returncode != 0:
         raise DatagenError(
@@ -54,7 +56,8 @@ def fetch(vault: str) -> dict[str, str]:
             continue
         cp = subprocess.run(
             ["op", "--vault", vault, "item", "get", title, "--format=json"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if cp.returncode != 0:
             continue

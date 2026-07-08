@@ -5,6 +5,7 @@ failures. `run()` always prints `ERROR: <reason>` (with surrounding blank
 lines) for any exception so nothing is silently swallowed — including
 unexpected ones, which print a traceback for diagnosis.
 """
+
 from __future__ import annotations
 
 import sys

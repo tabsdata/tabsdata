@@ -15,6 +15,7 @@ nonce, stored alongside the ciphertext in the PEM body:
     <base64(nonce || ciphertext+tag)>
     -----END TD_GEN DESCRIPTOR-----
 """
+
 from __future__ import annotations
 
 import base64
@@ -54,10 +55,11 @@ def using_secret_env(name: str | None):
     finally:
         use_secret_env(prev)
 
+
 _PEM_LABEL = "TD_GEN DESCRIPTOR"
 _BEGIN = f"-----BEGIN {_PEM_LABEL}-----"
 _END = f"-----END {_PEM_LABEL}-----"
-_SALT = b"tabsdata-datagen/descriptor/v1"   # fixed: one dev secret, symmetric
+_SALT = b"tabsdata-datagen/descriptor/v1"  # fixed: one dev secret, symmetric
 _ITERATIONS = 200_000
 _NONCE_LEN = 12
 
@@ -84,8 +86,9 @@ def require_secret() -> str:
 def _key(secret: str) -> bytes:
     cached = _key_cache.get(secret)
     if cached is None:
-        cached = hashlib.pbkdf2_hmac("sha256", secret.encode("utf-8"),
-                                     _SALT, _ITERATIONS, dklen=32)
+        cached = hashlib.pbkdf2_hmac(
+            "sha256", secret.encode("utf-8"), _SALT, _ITERATIONS, dklen=32
+        )
         _key_cache[secret] = cached
     return cached
 
@@ -98,6 +101,7 @@ def is_pem(text: str) -> bool:
 def encrypt(plaintext: bytes) -> str:
     """Encrypt `plaintext` under $TD_BACKENDS_CRYPTO_KEY and return a PEM string."""
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
     key = _key(require_secret())
     nonce = os.urandom(_NONCE_LEN)
     ct = AESGCM(key).encrypt(nonce, plaintext, None)
@@ -109,12 +113,10 @@ def decrypt(pem: str) -> bytes:
     """Decrypt a PEM string produced by :func:`encrypt`. Raises DatagenError
     if it isn't our PEM or the secret is wrong."""
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
     if not is_pem(pem):
         raise DatagenError("not an encrypted descriptor (no PEM armor)")
-    b64 = "".join(
-        ln for ln in pem.splitlines()
-        if ln and not ln.startswith("-----")
-    )
+    b64 = "".join(ln for ln in pem.splitlines() if ln and not ln.startswith("-----"))
     try:
         blob = base64.b64decode(b64)
         nonce, ct = blob[:_NONCE_LEN], blob[_NONCE_LEN:]
@@ -123,6 +125,5 @@ def decrypt(pem: str) -> bytes:
         raise
     except Exception:  # noqa: BLE001 - corrupt blob or wrong key
         raise DatagenError(
-            f"could not decrypt descriptor — is {ENV_VAR} the one it was "
-            f"created with?"
+            f"could not decrypt descriptor — is {ENV_VAR} the one it was created with?"
         )

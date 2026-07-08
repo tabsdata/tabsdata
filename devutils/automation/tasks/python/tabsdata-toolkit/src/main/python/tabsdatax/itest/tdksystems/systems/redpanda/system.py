@@ -1,14 +1,15 @@
 """Redpanda broker. Domain == topic. No SASL in this setup."""
+
 from __future__ import annotations
 
 import os
 import platform
 import subprocess
 
-from .._container import AdminConn, ContainerBase, DomainResult
-from ..base import DomainContext, LoadRequest
 from ...errors import DatagenError
 from ...shell import docker_run, find_free_port
+from .._container import AdminConn, ContainerBase, DomainResult
+from ..base import DomainContext, LoadRequest
 
 
 class RedpandaSystem(ContainerBase):
@@ -19,7 +20,9 @@ class RedpandaSystem(ContainerBase):
     supports_sql = False
     kind = "kafka"
 
-    image = f"redpandadata/redpanda:{os.environ.get('REDPANDA_IMAGE_VERSION', 'v24.3.5')}"
+    image = (
+        f"redpandadata/redpanda:{os.environ.get('REDPANDA_IMAGE_VERSION', 'v24.3.5')}"
+    )
     image_platform = (
         "linux/arm64" if platform.machine() in ("arm64", "aarch64") else "linux/amd64"
     )
@@ -40,25 +43,35 @@ class RedpandaSystem(ContainerBase):
     def load_data(self, ctx: DomainContext, req: LoadRequest) -> int:
         """One topic per entity (`<domain>.<entity>`), one message per row,
         serialized as `req.ser`; schema files written to `req.schemas_dir`."""
-        from ...emit import read_structured
         from ... import kafka_producer
+        from ...emit import read_structured
+
         if not req.ser:
             raise DatagenError(
                 f"--ser is required for kafka domains "
-                f"(one of {', '.join(kafka_producer.SER_FORMATS)})")
+                f"(one of {', '.join(kafka_producer.SER_FORMATS)})"
+            )
         if not req.schemas_dir:
             raise DatagenError("--schemas DIR is required for a kafka domain")
         meta = ctx.meta
         structured = read_structured(req.data_dir)
         brokers = meta.get("KAFKA_BROKERS") or (
-            f"{meta.get('HOST', 'localhost')}:{meta.get('PORT', '9092')}")
+            f"{meta.get('HOST', 'localhost')}:{meta.get('PORT', '9092')}"
+        )
         registry_url = meta.get("SCHEMA_REGISTRY_URL") or None
-        print(f">>> producing to kafka {brokers} (ser={req.ser}, "
-              f"schema-registry={'on' if req.use_schema_registry else 'off'}) ...")
+        print(
+            f">>> producing to kafka {brokers} (ser={req.ser}, "
+            f"schema-registry={'on' if req.use_schema_registry else 'off'}) ..."
+        )
         counts = kafka_producer.produce_model(
-            structured=structured, brokers=brokers, domain=meta.get("DB", ""),
-            ser=req.ser, schemas_dir=req.schemas_dir,
-            use_schema_registry=req.use_schema_registry, registry_url=registry_url)
+            structured=structured,
+            brokers=brokers,
+            domain=meta.get("DB", ""),
+            ser=req.ser,
+            schemas_dir=req.schemas_dir,
+            use_schema_registry=req.use_schema_registry,
+            registry_url=registry_url,
+        )
         for topic, n in counts.items():
             print(f"    {topic}: {n} message(s)")
         print(f">>> schema files written to {req.schemas_dir}")
@@ -75,13 +88,22 @@ class RedpandaSystem(ContainerBase):
         self._registry_port = find_free_port()
         args = [
             "-d",
-            "--platform", self.image_platform,
-            "-p", f"{host_port}:{host_port}",
-            "-p", f"{self._registry_port}:{self.schema_registry_internal_port}",
-            "--name", container,
+            "--platform",
+            self.image_platform,
+            "-p",
+            f"{host_port}:{host_port}",
+            "-p",
+            f"{self._registry_port}:{self.schema_registry_internal_port}",
+            "--name",
+            container,
             self.image,
-            "redpanda", "start",
-            "--smp", "1", "--memory", "1G", "--overprovisioned",
+            "redpanda",
+            "start",
+            "--smp",
+            "1",
+            "--memory",
+            "1G",
+            "--overprovisioned",
             "--kafka-addr",
             f"internal://0.0.0.0:9092,external://0.0.0.0:{host_port}",
             "--advertise-kafka-addr",
@@ -108,31 +130,40 @@ class RedpandaSystem(ContainerBase):
         }
 
     def check_ready(self, container: str, password: str) -> bool:
-        return subprocess.run(
-            ["docker", "exec", container, "rpk", "cluster", "info"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        ).returncode == 0
+        return (
+            subprocess.run(
+                ["docker", "exec", container, "rpk", "cluster", "info"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            ).returncode
+            == 0
+        )
 
     def _admin_client(self, admin: AdminConn):
         from confluent_kafka.admin import AdminClient
+
         return AdminClient({"bootstrap.servers": f"{admin.host}:{admin.port}"})
 
     def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         from confluent_kafka.admin import NewTopic
+
         # Keep `client` referenced until the future resolves — if the
         # AdminClient is GC'd first, librdkafka tears the broker handle down
         # ("Handle is terminating") and the future fails.
         client = self._admin_client(admin)
-        futures = client.create_topics(
-            [NewTopic(name, num_partitions=1, replication_factor=1)])
+        futures = client.create_topics([
+            NewTopic(name, num_partitions=1, replication_factor=1)
+        ])
         try:
-            futures[name].result()   # block until created; raises on failure
+            futures[name].result()  # block until created; raises on failure
         except Exception as exc:
-            raise DatagenError(
-                f"kafka create topic '{name}' failed: {exc}") from exc
+            raise DatagenError(f"kafka create topic '{name}' failed: {exc}") from exc
         return DomainResult(
-            db=name, user="", password="",
-            sqlalchemy_uri=f"kafka://{admin.host}:{admin.port}/{name}")
+            db=name,
+            user="",
+            password="",
+            sqlalchemy_uri=f"kafka://{admin.host}:{admin.port}/{name}",
+        )
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
         client = self._admin_client(admin)
@@ -140,8 +171,7 @@ class RedpandaSystem(ContainerBase):
         try:
             futures[name].result()
         except Exception as exc:
-            raise DatagenError(
-                f"kafka delete topic '{name}' failed: {exc}") from exc
+            raise DatagenError(f"kafka delete topic '{name}' failed: {exc}") from exc
 
     def do_list(self, admin: AdminConn) -> list[str]:
         client = self._admin_client(admin)

@@ -1,14 +1,18 @@
 """StarRocks all-in-one image. MySQL-protocol-compatible on 9030."""
+
 from __future__ import annotations
 
 import os
 import time
 
-from .._container import AdminConn, ContainerBase, DomainResult
 from ...errors import DatagenError
 from ...shell import (
-    docker_exec, docker_exec_check, docker_run, gen_password,
+    docker_exec,
+    docker_exec_check,
+    docker_run,
+    gen_password,
 )
+from .._container import AdminConn, ContainerBase, DomainResult
 
 
 class StarrocksSystem(ContainerBase):
@@ -19,7 +23,9 @@ class StarrocksSystem(ContainerBase):
     supports_sql = True
     uses_file_staging = True
 
-    image = f"starrocks/allin1-ubuntu:{os.environ.get('STARROCKS_IMAGE_VERSION', '4.0.8')}"
+    image = (
+        f"starrocks/allin1-ubuntu:{os.environ.get('STARROCKS_IMAGE_VERSION', '4.0.8')}"
+    )
     image_platform = "linux/amd64"
     internal_port = 9030
     system_user = "root"
@@ -50,13 +56,31 @@ class StarrocksSystem(ContainerBase):
     def check_ready(self, container: str, password: str) -> bool:
         # FE accepts SELECT 1, AND every BE in SHOW BACKENDS reports Alive=true.
         if not docker_exec_check(
-            container, "mysql", "-h", "127.0.0.1", "-P", "9030", "-u", "root",
-            f"--password={password}", "-e", "SELECT 1",
+            container,
+            "mysql",
+            "-h",
+            "127.0.0.1",
+            "-P",
+            "9030",
+            "-u",
+            "root",
+            f"--password={password}",
+            "-e",
+            "SELECT 1",
         ):
             return False
         cp = docker_exec(
-            container, "mysql", "-h", "127.0.0.1", "-P", "9030", "-u", "root",
-            f"--password={password}", "-BNe", "SHOW BACKENDS",
+            container,
+            "mysql",
+            "-h",
+            "127.0.0.1",
+            "-P",
+            "9030",
+            "-u",
+            "root",
+            f"--password={password}",
+            "-BNe",
+            "SHOW BACKENDS",
         )
         if cp.returncode != 0 or not cp.stdout.strip():
             return False
@@ -72,7 +96,14 @@ class StarrocksSystem(ContainerBase):
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             cp = docker_exec(
-                container, "mysql", "-h", "127.0.0.1", "-P", "9030", "-u", "root",
+                container,
+                "mysql",
+                "-h",
+                "127.0.0.1",
+                "-P",
+                "9030",
+                "-u",
+                "root",
                 f"--password={password}",
                 input='admin set frontend config ("default_replication_num" = "1");\n',
             )
@@ -82,27 +113,39 @@ class StarrocksSystem(ContainerBase):
         raise DatagenError("could not set default_replication_num=1 on StarRocks FE")
 
     def _admin_url(self, admin: AdminConn) -> str:
-        return (f"mysql+mysqlconnector://{admin.user}:{admin.password}"
-                f"@{admin.host}:{admin.port}")
+        return (
+            f"mysql+mysqlconnector://{admin.user}:{admin.password}"
+            f"@{admin.host}:{admin.port}"
+        )
 
     def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         pw = gen_password()
-        self._run_admin_sql(admin, [
-            f"CREATE DATABASE `{name}`",
-            f"CREATE USER '{name}'@'%' IDENTIFIED BY '{pw}'",
-            f"GRANT ALL ON `{name}`.* TO '{name}'@'%'",
-        ])
+        self._run_admin_sql(
+            admin,
+            [
+                f"CREATE DATABASE `{name}`",
+                f"CREATE USER '{name}'@'%' IDENTIFIED BY '{pw}'",
+                f"GRANT ALL ON `{name}`.* TO '{name}'@'%'",
+            ],
+        )
         uri = f"mysql+mysqlconnector://{name}:{pw}@{admin.host}:{admin.port}/{name}"
         return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
-        self._run_admin_sql(admin, [
-            f"DROP DATABASE IF EXISTS `{name}`",
-            f"DROP USER IF EXISTS '{name}'@'%'",
-        ])
+        self._run_admin_sql(
+            admin,
+            [
+                f"DROP DATABASE IF EXISTS `{name}`",
+                f"DROP USER IF EXISTS '{name}'@'%'",
+            ],
+        )
 
     def do_list(self, admin: AdminConn) -> list[str]:
-        return self._query_admin_names(admin, (
-            "SELECT schema_name FROM information_schema.schemata "
-            "WHERE schema_name NOT IN ('information_schema','_statistics_','sys') "
-            "ORDER BY schema_name"))
+        return self._query_admin_names(
+            admin,
+            (
+                "SELECT schema_name FROM information_schema.schemata "
+                "WHERE schema_name NOT IN ('information_schema','_statistics_','sys') "
+                "ORDER BY schema_name"
+            ),
+        )

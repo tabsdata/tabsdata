@@ -19,6 +19,7 @@ install the ``kafka`` extra (``pip install 'td_gen[kafka]'``) to use this.
 The schema-derivation and serialization helpers are pure and unit-tested; the
 admin/produce/registry calls require a live broker + registry.
 """
+
 from __future__ import annotations
 
 import io
@@ -41,6 +42,7 @@ _SCHEMA_EXT = {"json": "schema.json", "avro": "avsc", "protobuf": "proto"}
 # to the JSON representation actually present in the data.
 # ---------------------------------------------------------------------------
 
+
 def _kind_of(sql_type: str) -> str:
     """Return one of: int | long | bool | float | double | string."""
     t = _norm(sql_type)
@@ -54,8 +56,8 @@ def _kind_of(sql_type: str) -> str:
     if t == "double":
         return "double"
     if _is_decimal(t):
-        return "double"          # json data carries decimals as float
-    return "string"              # varchar/char/text + date/time/datetime (ISO str)
+        return "double"  # json data carries decimals as float
+    return "string"  # varchar/char/text + date/time/datetime (ISO str)
 
 
 def _safe_name(name: str) -> str:
@@ -70,12 +72,30 @@ def _safe_name(name: str) -> str:
 # Schema generation (pure)
 # ---------------------------------------------------------------------------
 
-_AVRO = {"int": "int", "long": "long", "bool": "boolean",
-         "float": "float", "double": "double", "string": "string"}
-_JSON = {"int": "integer", "long": "integer", "bool": "boolean",
-         "float": "number", "double": "number", "string": "string"}
-_PROTO = {"int": "int32", "long": "int64", "bool": "bool",
-          "float": "float", "double": "double", "string": "string"}
+_AVRO = {
+    "int": "int",
+    "long": "long",
+    "bool": "boolean",
+    "float": "float",
+    "double": "double",
+    "string": "string",
+}
+_JSON = {
+    "int": "integer",
+    "long": "integer",
+    "bool": "boolean",
+    "float": "number",
+    "double": "number",
+    "string": "string",
+}
+_PROTO = {
+    "int": "int32",
+    "long": "int64",
+    "bool": "bool",
+    "float": "float",
+    "double": "double",
+    "string": "string",
+}
 
 
 def avro_schema(table: str, columns: list[Column]) -> dict:
@@ -126,8 +146,9 @@ def schema_text(table: str, columns: list[Column], ser: str) -> str:
     raise DatagenError(f"unknown --ser {ser!r}; expected one of {SER_FORMATS}")
 
 
-def write_schema_file(schemas_dir: Path, table: str, columns: list[Column],
-                      ser: str) -> Path:
+def write_schema_file(
+    schemas_dir: Path, table: str, columns: list[Column], ser: str
+) -> Path:
     path = Path(schemas_dir) / f"{table}.{_SCHEMA_EXT[ser]}"
     path.write_text(schema_text(table, columns, ser))
     return path
@@ -142,6 +163,7 @@ def topic_name(domain: str, table: str) -> str:
 # Lazy dependency loading
 # ---------------------------------------------------------------------------
 
+
 def _require(mod: str, extra_hint: str):
     try:
         return __import__(mod)
@@ -155,6 +177,7 @@ def _require(mod: str, extra_hint: str):
 # ---------------------------------------------------------------------------
 # Plain (no-registry) serializers — return bytes for one row
 # ---------------------------------------------------------------------------
+
 
 def _plain_json_serializer(table, columns) -> Callable[[dict], bytes]:
     return lambda row: json.dumps(row, default=str, separators=(",", ":")).encode()
@@ -231,9 +254,9 @@ def _dynamic_proto_class(table: str, columns: list[Column]):
     pool = descriptor_pool.DescriptorPool()
     file_desc = pool.Add(fdp)
     msg_desc = file_desc.message_types_by_name[msg_name]
-    try:                                            # protobuf >= 3.20
+    try:  # protobuf >= 3.20
         return message_factory.GetMessageClass(msg_desc)
-    except AttributeError:                          # older protobuf
+    except AttributeError:  # older protobuf
         return message_factory.MessageFactory(pool).GetPrototype(msg_desc)
 
 
@@ -248,30 +271,32 @@ _PLAIN_SERIALIZERS = {
 # Schema-registry serializers (Confluent wire format)
 # ---------------------------------------------------------------------------
 
+
 def _registry_serializer(ser: str, table, columns, sr_client):
     """Return a callable (row, ctx) -> bytes using the Confluent serializers,
     which register the schema and prepend the magic byte + schema id."""
-    sr = __import__("confluent_kafka.schema_registry",
-                    fromlist=["__name__"])
+    sr = __import__("confluent_kafka.schema_registry", fromlist=["__name__"])  # noqa: F841
     if ser == "json":
         from confluent_kafka.schema_registry.json_schema import JSONSerializer
-        from confluent_kafka.schema_registry import Schema
+
         schema_str = json.dumps(json_schema(table, columns))
-        s = JSONSerializer(schema_str, sr_client,
-                           conf={"auto.register.schemas": True})
+        s = JSONSerializer(schema_str, sr_client, conf={"auto.register.schemas": True})
         return lambda row, ctx: s(row, ctx)
     if ser == "avro":
         from confluent_kafka.schema_registry.avro import AvroSerializer
+
         schema_str = json.dumps(avro_schema(table, columns))
-        s = AvroSerializer(sr_client, schema_str,
-                           conf={"auto.register.schemas": True})
+        s = AvroSerializer(sr_client, schema_str, conf={"auto.register.schemas": True})
         return lambda row, ctx: s(_avro_record(row, columns), ctx)
     if ser == "protobuf":
         from confluent_kafka.schema_registry.protobuf import ProtobufSerializer
+
         msg_cls = _dynamic_proto_class(table, columns)
-        s = ProtobufSerializer(msg_cls, sr_client,
-                               conf={"auto.register.schemas": True,
-                                     "use.deprecated.format": False})
+        s = ProtobufSerializer(
+            msg_cls,
+            sr_client,
+            conf={"auto.register.schemas": True, "use.deprecated.format": False},
+        )
 
         def ser_fn(row, ctx):
             msg = msg_cls()
@@ -280,6 +305,7 @@ def _registry_serializer(ser: str, table, columns, sr_client):
                 if v is not None:
                     setattr(msg, c.name, _proto_coerce(v, c.sql_type))
             return s(msg, ctx)
+
         return ser_fn
     raise DatagenError(f"unknown --ser {ser!r}; expected one of {SER_FORMATS}")
 
@@ -287,6 +313,7 @@ def _registry_serializer(ser: str, table, columns, sr_client):
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
+
 
 def produce_model(
     *,
@@ -317,6 +344,7 @@ def produce_model(
     confluent = _require("confluent_kafka", "kafka produce")
     Producer = confluent.Producer
     from confluent_kafka.admin import AdminClient, NewTopic
+
     producer = Producer({"bootstrap.servers": brokers})
     admin = AdminClient({"bootstrap.servers": brokers})
     topics = {table: topic_name(domain, table) for table, _, _ in structured}
@@ -332,9 +360,11 @@ def produce_model(
                 "system so it publishes the registry)"
             )
         from confluent_kafka.schema_registry import SchemaRegistryClient
+
         sr_client = SchemaRegistryClient({"url": registry_url})
         from confluent_kafka.serialization import (
-            MessageField, SerializationContext,
+            MessageField,
+            SerializationContext,
         )
 
     # 4. Produce.
@@ -344,7 +374,10 @@ def produce_model(
         if use_schema_registry:
             serialize = _registry_serializer(ser, table, cols, sr_client)
             ctx = SerializationContext(topic, MessageField.VALUE)
-            encode = lambda row, _s=serialize, _c=ctx: _s(row, _c)
+
+            def encode(row, _s=serialize, _c=ctx):
+                return _s(row, _c)
+
         else:
             plain = _PLAIN_SERIALIZERS[ser](table, cols)
             encode = plain
@@ -364,9 +397,9 @@ def _row_key(row: dict, columns: list[Column]) -> bytes | None:
 
 
 def _create_topics(admin, NewTopic, names: list[str]) -> None:
-    futures = admin.create_topics(
-        [NewTopic(n, num_partitions=1, replication_factor=1) for n in names]
-    )
+    futures = admin.create_topics([
+        NewTopic(n, num_partitions=1, replication_factor=1) for n in names
+    ])
     for name, fut in futures.items():
         try:
             fut.result()

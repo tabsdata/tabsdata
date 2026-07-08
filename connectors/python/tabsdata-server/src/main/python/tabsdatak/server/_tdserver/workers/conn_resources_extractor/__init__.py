@@ -119,8 +119,7 @@ class ConnResourcesExtractor(Worker):
                 continue
             self.copied += 1
             logger.info(
-                f"Extracted '{icon}' -> {icon_target.name} "
-                f"(+ {metadata_target.name})."
+                f"Extracted '{icon}' -> {icon_target.name} (+ {metadata_target.name})."
             )
         if self.failures:
             raise ConnResourcesExtractorErrorCode.CONN_RESOURCES_1.exception(

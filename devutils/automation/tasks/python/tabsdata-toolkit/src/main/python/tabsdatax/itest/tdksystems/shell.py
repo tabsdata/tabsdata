@@ -5,18 +5,16 @@ required env vars (with a clear error if missing). Also defines the
 `ArgumentParser` subclass used everywhere so help/usage/error output
 gets a leading and trailing blank line.
 """
+
 from __future__ import annotations
 
 import argparse
-import getpass
 import os
-import re
 import secrets
 import socket
 import string
 import subprocess
 import sys
-from datetime import datetime, timezone
 
 from .errors import DatagenError
 
@@ -86,24 +84,32 @@ def port_open(host: str, port: int, timeout: float = 3.0) -> bool:
 
 
 def require_docker() -> None:
-    if subprocess.run(
-        ["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    ).returncode != 0:
+    if (
+        subprocess.run(
+            ["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        ).returncode
+        != 0
+    ):
         raise DatagenError("docker not found in PATH or daemon not running")
 
 
 def container_exists(name: str) -> bool:
-    return subprocess.run(
-        ["docker", "container", "inspect", name],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    ).returncode == 0
+    return (
+        subprocess.run(
+            ["docker", "container", "inspect", name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
 
 
 def container_state(name: str) -> str | None:
     """`running`/`exited`/`created`/etc., or None if container doesn't exist."""
     cp = subprocess.run(
         ["docker", "container", "inspect", "-f", "{{.State.Status}}", name],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if cp.returncode != 0:
         return None
@@ -113,7 +119,9 @@ def container_state(name: str) -> str | None:
 def docker_run(args: list[str]) -> str:
     cp = subprocess.run(["docker", "run"] + args, capture_output=True, text=True)
     if cp.returncode != 0:
-        raise DatagenError(f"docker run failed: {cp.stderr.strip() or cp.stdout.strip()}")
+        raise DatagenError(
+            f"docker run failed: {cp.stderr.strip() or cp.stdout.strip()}"
+        )
     cid = cp.stdout.strip()
     if not cid:
         raise DatagenError("docker run produced no container id")
@@ -127,25 +135,19 @@ def docker_rm(name: str, force: bool = False) -> None:
     args.append(name)
     cp = subprocess.run(args, capture_output=True, text=True)
     if cp.returncode != 0:
-        raise DatagenError(
-            f"could not remove container {name}: {cp.stderr.strip() or cp.stdout.strip()}"
-        )
+        detail = cp.stderr.strip() or cp.stdout.strip()
+        raise DatagenError(f"could not remove container {name}: {detail}")
 
 
 def docker_start(name: str) -> None:
-    cp = subprocess.run(
-        ["docker", "start", name], capture_output=True, text=True
-    )
+    cp = subprocess.run(["docker", "start", name], capture_output=True, text=True)
     if cp.returncode != 0:
-        raise DatagenError(
-            f"could not start container {name}: {cp.stderr.strip() or cp.stdout.strip()}"
-        )
+        detail = cp.stderr.strip() or cp.stdout.strip()
+        raise DatagenError(f"could not start container {name}: {detail}")
 
 
 def docker_stop(name: str) -> None:
-    cp = subprocess.run(
-        ["docker", "stop", name], capture_output=True, text=True
-    )
+    cp = subprocess.run(["docker", "stop", name], capture_output=True, text=True)
     if cp.returncode != 0:
         raise DatagenError(
             f"could not stop container {name}: {cp.stderr.strip() or cp.stdout.strip()}"
@@ -153,8 +155,11 @@ def docker_stop(name: str) -> None:
 
 
 def docker_exec(
-    container: str, *cmd: str, input: str | None = None,
-    user: str | None = None, env: dict[str, str] | None = None,
+    container: str,
+    *cmd: str,
+    input: str | None = None,
+    user: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
     args = ["docker", "exec", "-i"]
     if user is not None:
@@ -168,10 +173,14 @@ def docker_exec(
 
 def docker_exec_check(container: str, *cmd: str) -> bool:
     """Run a check command; return True iff exit code 0."""
-    return subprocess.run(
-        ["docker", "exec", container] + list(cmd),
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    ).returncode == 0
+    return (
+        subprocess.run(
+            ["docker", "exec", container] + list(cmd),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
 
 
 def env_required(name: str) -> str:

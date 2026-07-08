@@ -6,23 +6,30 @@ schema-domain systems (databricks/snowflake) — `create_schema` /
 no provisioning / teardown / pause. `salesforce` sets `domain_is_named = False`
 (a credentials clone, no schema) and `supports_sql = False` (manual workflow).
 """
+
 from __future__ import annotations
 
 import re
 
-from .base import (
-    CreateDomainSpec, CreateSystemSpec, DomainContext, Health, LoadRequest,
-    Setting, System, SystemContext,
-)
 from ..errors import DatagenError
 from ..shell import validate_name
+from .base import (
+    CreateDomainSpec,
+    CreateSystemSpec,
+    DomainContext,
+    Health,
+    LoadRequest,
+    Setting,
+    System,
+    SystemContext,
+)
 
 
 class SaasBase(System):
     category = "saas"
     kind = "sql"
     supports_sql = True
-    domain_is_named = True       # schema domains; salesforce overrides to False
+    domain_is_named = True  # schema domains; salesforce overrides to False
 
     # ---- system lifecycle (account is external: verify, don't provision) ----
 
@@ -38,12 +45,15 @@ class SaasBase(System):
 
     # ---- domain lifecycle ----
 
-    def create_domain(self, ctx: SystemContext, spec: CreateDomainSpec) -> dict[str, Setting]:
+    def create_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec
+    ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
         if self.domain_is_named:
             validate_name(spec.name, label="schema")
-            self.create_schema(self.resolve_values(settings), spec.name,
-                               force=spec.force)
+            self.create_schema(
+                self.resolve_values(settings), spec.name, force=spec.force
+            )
             settings["SCHEMA"] = Setting("SCHEMA", value=spec.name)
         return settings
 
@@ -51,11 +61,13 @@ class SaasBase(System):
         schema = ctx.meta.get("SCHEMA")
         if schema:
             self.drop_schema(
-                self.resolve_values(self.settings_from_meta(ctx.meta)), schema)
+                self.resolve_values(self.settings_from_meta(ctx.meta)), schema
+            )
 
     def domain_status(self, ctx: DomainContext) -> Health:
         return self._reachable(
-            ctx.meta, f"{self.slug} domain '{ctx.meta.get('SCHEMA', ctx.name)}'")
+            ctx.meta, f"{self.slug} domain '{ctx.meta.get('SCHEMA', ctx.name)}'"
+        )
 
     # ---- data plane (SQL against the schema) ----
 
@@ -63,18 +75,23 @@ class SaasBase(System):
     # Databricks overrides to backtick. (Our names are bare, so it rarely fires.)
     ident_quote = '"'
 
-    _INSERT_BATCH = 500   # rows per multi-row INSERT for the bulk load
+    _INSERT_BATCH = 500  # rows per multi-row INSERT for the bulk load
 
-    def install_schema(self, ctx: DomainContext, model: str, *, force: bool = False) -> None:
+    def install_schema(
+        self, ctx: DomainContext, model: str, *, force: bool = False
+    ) -> None:
         if not self.supports_sql:
             raise DatagenError(f"{self.slug} has no SQL schema to install")
         statements = self._split(self._model_ddl_text(model))
         if force:
-            drops = [f"DROP TABLE IF EXISTS {t}"
-                     for t in self._ddl_table_names(statements)]
+            drops = [
+                f"DROP TABLE IF EXISTS {t}" for t in self._ddl_table_names(statements)
+            ]
             if drops:
-                print(f">>> --force: dropping {len(drops)} existing table(s) "
-                      f"on {self.slug} ...")
+                print(
+                    f">>> --force: dropping {len(drops)} existing table(s) "
+                    f"on {self.slug} ..."
+                )
                 self.exec_statements(ctx, drops)
         print(f">>> creating schema from {self.slug}.ddl on {self.slug} ...")
         self.exec_statements(ctx, statements)
@@ -84,23 +101,29 @@ class SaasBase(System):
         if not self.supports_sql:
             raise DatagenError(f"{self.slug} data load is a manual workflow")
         from ..emit import iter_insert_statements, read_structured
+
         if req.force:
             self.install_schema(ctx, req.model, force=True)
         print(f">>> loading data via the {self.slug} SQL API ...")
         total = 0
         for table, cols, rows in read_structured(req.data_dir):
-            stmts = list(iter_insert_statements(
-                table, cols, rows, batch=self._INSERT_BATCH, quote=self.ident_quote))
+            stmts = list(
+                iter_insert_statements(
+                    table, cols, rows, batch=self._INSERT_BATCH, quote=self.ident_quote
+                )
+            )
             if stmts:
                 self.exec_statements(ctx, stmts)
             total += len(rows)
             print(f"    {table}: {len(rows)} row(s)")
-        print(f">>> load complete ({total} row(s) into "
-              f"schema '{ctx.meta.get('SCHEMA')}')")
+        print(
+            f">>> load complete ({total} row(s) into schema '{ctx.meta.get('SCHEMA')}')"
+        )
         return total
 
     _CREATE_TABLE_RE = re.compile(
-        r"create\s+table\s+(?:if\s+not\s+exists\s+)?[`\"]?([A-Za-z0-9_]+)", re.I)
+        r"create\s+table\s+(?:if\s+not\s+exists\s+)?[`\"]?([A-Za-z0-9_]+)", re.I
+    )
 
     @classmethod
     def _ddl_table_names(cls, statements: list[str]) -> list[str]:
@@ -133,10 +156,11 @@ class SaasBase(System):
             return Health(True, f"{what} reachable")
         except DatagenError:
             raise
-        except Exception as exc:                        # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             return Health(False, f"cannot reach {self.slug}: {exc}")
 
     @staticmethod
     def _split(sql: str) -> list[str]:
         import sqlparse
+
         return [s for s in sqlparse.split(sql) if s.strip()]

@@ -8,6 +8,7 @@ Hybrid, so it subclasses `System` directly rather than a category mixin:
     the prefix.
 No models/data (`supports_models = False`): it stages datasets/prefixes only.
 """
+
 from __future__ import annotations
 
 from ...errors import DatagenError
@@ -28,10 +29,10 @@ from . import client
 class BigQuerySystem(System):
     slug = "bigquery"
     label = "BigQuery"
-    category = "saas"            # managed account, externally owned (no container)
-    kind = "file"               # GCS-staged; no SQL data-load path
-    staging_root = True          # -> base adds the SYS_PATH (--sys-path) option
-    supports_models = False      # datasets + prefixes only; no schema/data load
+    category = "saas"  # managed account, externally owned (no container)
+    kind = "file"  # GCS-staged; no SQL data-load path
+    staging_root = True  # -> base adds the SYS_PATH (--sys-path) option
+    supports_models = False  # datasets + prefixes only; no schema/data load
 
     options = (
         Option("PROJECT", "project"),
@@ -61,30 +62,34 @@ class BigQuerySystem(System):
         values = self.resolve_values(spec.settings)
         try:
             self._bq(values).ping()
-        except Exception as exc:                        # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             raise DatagenError(
-                f"could not reach BigQuery project "
-                f"'{values.get('PROJECT', '')}': {exc}")
+                f"could not reach BigQuery project '{values.get('PROJECT', '')}': {exc}"
+            )
         gcs = self._gcs(values)
         try:
             gcs.status()
-        except Exception as exc:                        # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             raise DatagenError(
-                f"could not reach GCS bucket '{values.get('BUCKET', '')}': {exc}")
+                f"could not reach GCS bucket '{values.get('BUCKET', '')}': {exc}"
+            )
         root = values.get("SYS_PATH", "")
         if gcs.exists(root):
             if spec.force:
                 gcs.clear(root)
-                print(f">>> --force: cleared existing root prefix "
-                      f"gs://{values.get('BUCKET', '')}/{root}")
+                print(
+                    f">>> --force: cleared existing root prefix "
+                    f"gs://{values.get('BUCKET', '')}/{root}"
+                )
             else:
                 raise DatagenError(
                     f"root prefix has objects: gs://{values.get('BUCKET', '')}/"
-                    f"{root} (use --force to clear)")
+                    f"{root} (use --force to clear)"
+                )
         return dict(spec.settings)
 
     def destroy_system(self, ctx: SystemContext) -> None:
-        return None                                     # project/bucket external
+        return None  # project/bucket external
 
     def system_status(self, ctx: SystemContext) -> Health:
         values = self.resolve_values(self.settings_from_meta(ctx.meta))
@@ -94,13 +99,16 @@ class BigQuerySystem(System):
             return Health(
                 True,
                 f"bigquery project '{values.get('PROJECT', '')}' + "
-                f"gs://{values.get('BUCKET', '')} reachable")
-        except Exception as exc:                        # noqa: BLE001
+                f"gs://{values.get('BUCKET', '')} reachable",
+            )
+        except Exception as exc:  # noqa: BLE001
             return Health(False, f"cannot reach bigquery: {exc}")
 
     # ---- domain lifecycle ----
 
-    def create_domain(self, ctx: SystemContext, spec: CreateDomainSpec) -> dict[str, Setting]:
+    def create_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec
+    ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
         values = self.resolve_values(settings)
         dataset = spec.options.get("DATASET", "")
@@ -122,11 +130,13 @@ class BigQuerySystem(System):
                 self._bq(values).delete_dataset(dataset)
                 raise DatagenError(
                     f"domain prefix has objects: gs://{values.get('BUCKET', '')}/"
-                    f"{full} (use --force to clear)")
+                    f"{full} (use --force to clear)"
+                )
 
         settings["DATASET"] = Setting("DATASET", value=dataset)
         settings["DOMAIN_PATH"] = Setting(
-            "DOMAIN_PATH", value=domain_path, is_path=True)
+            "DOMAIN_PATH", value=domain_path, is_path=True
+        )
         settings["BASE_PATH"] = Setting("BASE_PATH", value=full, is_path=True)
         return settings
 
@@ -146,7 +156,7 @@ class BigQuerySystem(System):
             ok = self._bq(values).dataset_exists(dataset)
             self._gcs(values).status()
             return Health(
-                ok, f"bigquery dataset '{dataset}' "
-                    f"{'reachable' if ok else 'missing'}")
-        except Exception as exc:                        # noqa: BLE001
+                ok, f"bigquery dataset '{dataset}' {'reachable' if ok else 'missing'}"
+            )
+        except Exception as exc:  # noqa: BLE001
             return Health(False, f"cannot reach bigquery domain: {exc}")

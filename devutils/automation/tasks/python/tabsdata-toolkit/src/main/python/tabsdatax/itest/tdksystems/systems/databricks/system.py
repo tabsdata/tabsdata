@@ -4,6 +4,7 @@ Domain == schema (`<catalog>.<name>`), created via the SQL Statement
 Execution REST API. The `VOLUME` option is included for downstream use
 (Unity Catalog Volume name) but isn't touched by the schema lifecycle here.
 """
+
 from __future__ import annotations
 
 from .._saas import SaasBase
@@ -14,7 +15,7 @@ from . import connection
 class DatabricksSystem(SaasBase):
     slug = "databricks"
     label = "Databricks"
-    ident_quote = "`"          # Databricks quotes identifiers with backticks
+    ident_quote = "`"  # Databricks quotes identifiers with backticks
     options = (
         Option("HOST", "host"),
         Option("TOKEN", "token", secret=True),
@@ -35,15 +36,26 @@ class DatabricksSystem(SaasBase):
     def create_schema(self, values: dict[str, str], name: str, *, force: bool) -> None:
         host, token, wh_id, catalog = self._resolve(values)
         if force:
-            connection.exec_sql(host, token, wh_id, catalog,
-                                 f"DROP SCHEMA IF EXISTS `{catalog}`.`{name}` CASCADE")
-        connection.exec_sql(host, token, wh_id, catalog,
-                            f"CREATE SCHEMA `{catalog}`.`{name}`")
+            connection.exec_sql(
+                host,
+                token,
+                wh_id,
+                catalog,
+                f"DROP SCHEMA IF EXISTS `{catalog}`.`{name}` CASCADE",
+            )
+        connection.exec_sql(
+            host, token, wh_id, catalog, f"CREATE SCHEMA `{catalog}`.`{name}`"
+        )
 
     def drop_schema(self, values: dict[str, str], name: str) -> None:
         host, token, wh_id, catalog = self._resolve(values)
-        connection.exec_sql(host, token, wh_id, catalog,
-                            f"DROP SCHEMA IF EXISTS `{catalog}`.`{name}` CASCADE")
+        connection.exec_sql(
+            host,
+            token,
+            wh_id,
+            catalog,
+            f"DROP SCHEMA IF EXISTS `{catalog}`.`{name}` CASCADE",
+        )
 
     def exec_statements(self, ctx: DomainContext, statements: list[str]) -> None:
         values = self.resolve_values(self.settings_from_meta(ctx.meta))

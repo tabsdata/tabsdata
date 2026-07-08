@@ -3,6 +3,7 @@
 
 (The `normalise_prefix` / `walk_paths` helpers are imported from the current
 `cloud/_backend.py`; in the full reorg they'd move to a `systems/_shared.py`.)"""
+
 from __future__ import annotations
 
 import sys
@@ -17,6 +18,7 @@ class AzureblobBackend:
 
     def __init__(self, values: dict[str, str]) -> None:
         from azure.storage.blob import BlobServiceClient
+
         self.account = values.get("ACCOUNT_NAME") or ""
         self.key = values.get("ACCOUNT_KEY") or ""
         self.container_name = values.get("CONTAINER") or ""
@@ -39,7 +41,7 @@ class AzureblobBackend:
         if not names:
             return
         for i in range(0, len(names), 256):
-            self.container.delete_blobs(*names[i:i+256])
+            self.container.delete_blobs(*names[i : i + 256])
 
     def upload(self, prefix: str, local_paths: list[str]) -> int:
         p = normalise_prefix(prefix)

@@ -944,9 +944,7 @@ def _project_body(name: str) -> list[str]:
         "        u_args = unwrap(exprs)",
         "        u_named = unwrap(named_exprs)",
         f'        return compute("{name}", (self,), '
-        '{"exprs": u_args, "named": u_named, "replace_all": '
-        + replace_all
-        + "},",
+        '{"exprs": u_args, "named": u_named, "replace_all": ' + replace_all + "},",
         f"            call=lambda lf: lf.{name}(*u_args, **u_named))",
         "",
     ]

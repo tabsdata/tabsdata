@@ -3,6 +3,7 @@
 Domain == schema (`<database>.<name>`). Auth uses a Personal Access Token
 (PAT) passed as the connector's `password`.
 """
+
 from __future__ import annotations
 
 from .._saas import SaasBase

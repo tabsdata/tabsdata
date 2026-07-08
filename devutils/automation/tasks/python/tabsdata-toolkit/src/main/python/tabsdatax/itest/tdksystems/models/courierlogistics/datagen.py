@@ -28,75 +28,169 @@ BASE_SEED = 42
 # ---------------------------------------------------------------------------
 HUB_DATA = [
     # (code, city, country, street)
-    ("MAD-01","Madrid",    "ES","Calle Industria 40, Vallecas"),
-    ("BCN-01","Barcelona", "ES","Carrer de la Logística 12, Zona Franca"),
-    ("VLC-01","Valencia",  "ES","Polígono Fuente del Jarro, Nave 8"),
-    ("SEV-01","Seville",   "ES","Pol. Ind. Carretera Amarilla s/n"),
-    ("BIL-01","Bilbao",    "ES","Muelle de Axpe 14"),
-    ("ZGZ-01","Zaragoza",  "ES","Polígono Cogullada, Nave 22"),
-    ("MAL-01","Malaga",    "ES","Pol. Ind. Santa Bárbara, Nave 5"),
-    ("VLL-01","Valladolid","ES","Carretera de Salamanca km 3"),
-    ("ALC-01","Alicante",  "ES","Pol. Ind. Pla de la Vallonga, Nave 9"),
-    ("MUR-01","Murcia",    "ES","Pol. Ind. El Palmar, Calle B"),
-    ("LIS-01","Lisbon",    "PT","Rua da Logística 20, Sacavém"),
-    ("OPO-01","Porto",     "PT","Rua do Freixo 100, Maia"),
-    ("PAR-01","Paris",     "FR","ZAC de la Haute Borne, Villeneuve d'Ascq"),
-    ("LYO-01","Lyon",      "FR","Rue de la Cartoucherie 10, Vénissieux"),
-    ("AMS-01","Amsterdam", "NL","Schipholweg 55, Badhoevedorp"),
+    ("MAD-01", "Madrid", "ES", "Calle Industria 40, Vallecas"),
+    ("BCN-01", "Barcelona", "ES", "Carrer de la Logística 12, Zona Franca"),
+    ("VLC-01", "Valencia", "ES", "Polígono Fuente del Jarro, Nave 8"),
+    ("SEV-01", "Seville", "ES", "Pol. Ind. Carretera Amarilla s/n"),
+    ("BIL-01", "Bilbao", "ES", "Muelle de Axpe 14"),
+    ("ZGZ-01", "Zaragoza", "ES", "Polígono Cogullada, Nave 22"),
+    ("MAL-01", "Malaga", "ES", "Pol. Ind. Santa Bárbara, Nave 5"),
+    ("VLL-01", "Valladolid", "ES", "Carretera de Salamanca km 3"),
+    ("ALC-01", "Alicante", "ES", "Pol. Ind. Pla de la Vallonga, Nave 9"),
+    ("MUR-01", "Murcia", "ES", "Pol. Ind. El Palmar, Calle B"),
+    ("LIS-01", "Lisbon", "PT", "Rua da Logística 20, Sacavém"),
+    ("OPO-01", "Porto", "PT", "Rua do Freixo 100, Maia"),
+    ("PAR-01", "Paris", "FR", "ZAC de la Haute Borne, Villeneuve d'Ascq"),
+    ("LYO-01", "Lyon", "FR", "Rue de la Cartoucherie 10, Vénissieux"),
+    ("AMS-01", "Amsterdam", "NL", "Schipholweg 55, Badhoevedorp"),
 ]
 
-VEHICLE_TYPES = ["bicycle","motorbike","van","truck"]
-VEH_WEIGHTS   = [10, 20, 50, 20]
+VEHICLE_TYPES = ["bicycle", "motorbike", "van", "truck"]
+VEH_WEIGHTS = [10, 20, 50, 20]
 
-FIRST_M = ["Lucas","Andreu","Roberto","Javier","Miguel","Tomás","Pablo","Carlos","Iñigo","Sérgio"]
-FIRST_F = ["Marta","Beatriz","Laura","Ana","Elena","Sofía","Claudia","Isabel","Raquel","Catarina"]
-LAST    = ["García","Soler","Puig","Lemos","Nunes","Martín","López","Sánchez","Fernández","González",
-           "Rodríguez","Pérez","Gómez","Ruiz","Díaz","Alves","Ferreira","Costa","Santos","Oliveira"]
+FIRST_M = [
+    "Lucas",
+    "Andreu",
+    "Roberto",
+    "Javier",
+    "Miguel",
+    "Tomás",
+    "Pablo",
+    "Carlos",
+    "Iñigo",
+    "Sérgio",
+]
+FIRST_F = [
+    "Marta",
+    "Beatriz",
+    "Laura",
+    "Ana",
+    "Elena",
+    "Sofía",
+    "Claudia",
+    "Isabel",
+    "Raquel",
+    "Catarina",
+]
+LAST = [
+    "García",
+    "Soler",
+    "Puig",
+    "Lemos",
+    "Nunes",
+    "Martín",
+    "López",
+    "Sánchez",
+    "Fernández",
+    "González",
+    "Rodríguez",
+    "Pérez",
+    "Gómez",
+    "Ruiz",
+    "Díaz",
+    "Alves",
+    "Ferreira",
+    "Costa",
+    "Santos",
+    "Oliveira",
+]
 
 BUSSINESS_NAMES = [
-    "Tecnología Rápida S.L.","ElectroShop Online S.A.","ModaMujer S.L.",
-    "Farmacia Digital S.L.","LibrosDireto S.A.","AutoPiezas Express","Joyería Online S.L.",
-    "SportGear Pro S.A.","HomeDecor Plus S.L.","BabyShop Online S.A.",
-    "Óptica Virtual S.L.","MascotaFeliz S.A.","TechGadgets S.L.","VinoPremium S.A.",
-    "FloristeríaNet S.L.","IndustrialParts S.A.","OficinaTotal S.L.","GourmetBox S.A.",
+    "Tecnología Rápida S.L.",
+    "ElectroShop Online S.A.",
+    "ModaMujer S.L.",
+    "Farmacia Digital S.L.",
+    "LibrosDireto S.A.",
+    "AutoPiezas Express",
+    "Joyería Online S.L.",
+    "SportGear Pro S.A.",
+    "HomeDecor Plus S.L.",
+    "BabyShop Online S.A.",
+    "Óptica Virtual S.L.",
+    "MascotaFeliz S.A.",
+    "TechGadgets S.L.",
+    "VinoPremium S.A.",
+    "FloristeríaNet S.L.",
+    "IndustrialParts S.A.",
+    "OficinaTotal S.L.",
+    "GourmetBox S.A.",
 ]
 
-SERVICE_TYPES = ["standard","express","overnight","economy"]
-STYPE_W       = [45, 25, 10, 20]
+SERVICE_TYPES = ["standard", "express", "overnight", "economy"]
+STYPE_W = [45, 25, 10, 20]
 
-STATUSES = ["picked_up","in_transit","at_hub","out_for_delivery","delivered","failed","returned"]
+STATUSES = [
+    "picked_up",
+    "in_transit",
+    "at_hub",
+    "out_for_delivery",
+    "delivered",
+    "failed",
+    "returned",
+]
 # We'll compute status from tracking events instead of random
 
-STREETS = ["Calle Mayor","Av. Principal","Paseo Central","Calle Real","Av. del Parque",
-           "Calle Nueva","Passeig de Gràcia","Calle Gran Vía","Rambla Principal",
-           "Av. de la Constitución"]
+STREETS = [
+    "Calle Mayor",
+    "Av. Principal",
+    "Paseo Central",
+    "Calle Real",
+    "Av. del Parque",
+    "Calle Nueva",
+    "Passeig de Gràcia",
+    "Calle Gran Vía",
+    "Rambla Principal",
+    "Av. de la Constitución",
+]
+
+CITIES = ["Madrid", "Barcelona", "Valencia", "Seville", "Bilbao"]
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def esc(s):     return s.replace("'", "''")
-def sql_str(s): return f"'{esc(str(s))}'" if s is not None else "NULL"
-def sql_int(v): return str(v) if v is not None else "NULL"
+def esc(s):
+    return s.replace("'", "''")
+
+
+def sql_str(s):
+    return f"'{esc(str(s))}'" if s is not None else "NULL"
+
+
+def sql_int(v):
+    return str(v) if v is not None else "NULL"
+
 
 def rand_date(start, end):
     delta = end - start
-    return start + timedelta(hours=random.randint(0, int(delta.total_seconds()//3600)))
+    return start + timedelta(
+        hours=random.randint(0, int(delta.total_seconds() // 3600))
+    )
 
-def fmt_date(d): return d.strftime("%Y-%m-%d")
-def fmt_dt(d):   return d.strftime("%Y-%m-%d %H:%M:%S")
+
+def fmt_date(d):
+    return d.strftime("%Y-%m-%d")
+
+
+def fmt_dt(d):
+    return d.strftime("%Y-%m-%d %H:%M:%S")
+
 
 def rand_name(sex="M"):
     first = random.choice(FIRST_M if sex == "M" else FIRST_F)
     return f"{first} {random.choice(LAST)}"
+
 
 def chunk_inserts(rows, table, columns, chunk=500):
     # One row per INSERT — portable across PostgreSQL, MySQL,
     # MSSQL, Oracle, and DB2 (Oracle doesn't accept multi-row VALUES).
     return [f"INSERT INTO {table} ({columns}) VALUES ({r});" for r in rows]
 
+
 # ---------------------------------------------------------------------------
 # Generators
 # ---------------------------------------------------------------------------
+
 
 def gen_hubs(n):
     rows = []
@@ -104,34 +198,42 @@ def gen_hubs(n):
     for i in range(1, n + 1):
         code, city, country, street = pool[i - 1]
         rows.append({
-            "hub_id":  i,
-            "code":    code if i <= len(HUB_DATA) else f"HUB-{i:02d}",
-            "name":    f"{city} {'Central' if i % 3 == 1 else 'Distribution'} Hub",
+            "hub_id": i,
+            "code": code if i <= len(HUB_DATA) else f"HUB-{i:02d}",
+            "name": f"{city} {'Central' if i % 3 == 1 else 'Distribution'} Hub",
             "address": street,
-            "city":    city,
+            "city": city,
             "country": country,
         })
     return rows
 
+
 def gen_couriers(n, hubs):
     rows = []
     for i in range(1, n + 1):
-        sex   = random.choice(["M","F"])
-        name  = rand_name(sex)
+        sex = random.choice(["M", "F"])
+        name = rand_name(sex)
         vtype = random.choices(VEHICLE_TYPES, weights=VEH_WEIGHTS)[0]
         plate = None
-        if vtype in ("motorbike","van","truck"):
-            plate = f"{random.choice(['M','B','V','SE'])}-{random.randint(1000,9999)}-{random.choice('ABCDEFGHJ')}{random.choice('KLMNPRSTV')}"
+        if vtype in ("motorbike", "van", "truck"):
+            plate = (
+                f"{random.choice(['M', 'B', 'V', 'SE'])}-"
+                f"{random.randint(1000, 9999)}-"
+                f"{random.choice('ABCDEFGHJ')}{random.choice('KLMNPRSTV')}"
+            )
         rows.append({
-            "courier_id":  i,
+            "courier_id": i,
             "employee_no": f"COU-{i:03d}",
-            "name":        name,
-            "phone":       f"+34 6{random.randint(00,99):02d} {random.randint(100000,999999)}",
-            "vehicle_type":vtype,
-            "vehicle_plate":plate,
+            "name": name,
+            "phone": (
+                f"+34 6{random.randint(0, 99):02d} {random.randint(100000, 999999)}"
+            ),
+            "vehicle_type": vtype,
+            "vehicle_plate": plate,
             "home_hub_id": random.choice(hubs)["hub_id"],
         })
     return rows
+
 
 def gen_customers(n):
     rows = []
@@ -141,29 +243,35 @@ def gen_customers(n):
             name = random.choice(BUSSINESS_NAMES)
             email = f"logistica@{name.split()[0].lower()}{i}.es"
         else:
-            sex  = random.choice(["M","F"])
+            sex = random.choice(["M", "F"])
             name = rand_name(sex)
             last = name.split()[-1].lower()
             email = f"{last}{i}@gmail.com"
         rows.append({
-            "customer_id":   i,
-            "name":          name,
-            "phone":         f"+34 6{random.randint(11,99):02d} {random.randint(100000,999999)}",
-            "email":         email,
-            "default_address":f"{random.choice(STREETS)} {random.randint(1,200)}, {random.choice(['Madrid','Barcelona','Valencia','Seville','Bilbao'])}",
-            "account_type":  "business" if is_biz else "personal",
+            "customer_id": i,
+            "name": name,
+            "phone": (
+                f"+34 6{random.randint(11, 99):02d} {random.randint(100000, 999999)}"
+            ),
+            "email": email,
+            "default_address": (
+                f"{random.choice(STREETS)} {random.randint(1, 200)}, "
+                f"{random.choice(CITIES)}"
+            ),
+            "account_type": "business" if is_biz else "personal",
         })
     return rows
+
 
 def gen_shipments(n, customers, hubs):
     rows = []
     start = datetime(2023, 1, 1)
-    end   = datetime(2024, 11, 30)
+    end = datetime(2024, 11, 30)
     for i in range(1, n + 1):
-        sender  = random.choice(customers)
-        oh      = random.choice(hubs)
-        dh      = random.choice([h for h in hubs if h["hub_id"] != oh["hub_id"]])
-        stype   = random.choices(SERVICE_TYPES, weights=STYPE_W)[0]
+        sender = random.choice(customers)
+        oh = random.choice(hubs)
+        dh = random.choice([h for h in hubs if h["hub_id"] != oh["hub_id"]])
+        stype = random.choices(SERVICE_TYPES, weights=STYPE_W)[0]
         created = rand_date(start, end)
         if stype == "overnight":
             transit_days = 1
@@ -174,29 +282,40 @@ def gen_shipments(n, customers, hubs):
         else:
             transit_days = random.randint(5, 10)
         est_delivery = created + timedelta(days=transit_days)
-        sex  = random.choice(["M","F"])
+        sex = random.choice(["M", "F"])
         rname = rand_name(sex)
         weight = round(random.uniform(0.1, 30.0), 3)
-        l,w,h  = random.randint(10,80), random.randint(10,60), random.randint(5,50)
+        length, width, height = (
+            random.randint(10, 80),
+            random.randint(10, 60),
+            random.randint(5, 50),
+        )
         rows.append({
-            "shipment_id":      i,
-            "tracking_no":      f"TRK-{oh['country']}-{created.year}-{i:06d}",
-            "sender_id":        sender["customer_id"],
-            "recipient_name":   rname,
-            "recipient_phone":  f"+34 6{random.randint(11,99):02d} {random.randint(100000,999999)}",
-            "recipient_addr":   f"{random.choice(STREETS)} {random.randint(1,200)}, {dh['city']}",
-            "origin_hub_id":    oh["hub_id"],
-            "dest_hub_id":      dh["hub_id"],
-            "weight_kg":        weight,
-            "dimensions_cm":    f"{l}x{w}x{h}",
-            "service_type":     stype,
-            "declared_value":   round(random.uniform(10, 2000), 2) if random.random() < 0.7 else None,
-            "created_at":       fmt_dt(created),
-            "estimated_delivery":fmt_date(est_delivery),
-            "_created_dt":      created,          # kept for event generation
-            "_transit_days":    transit_days,
+            "shipment_id": i,
+            "tracking_no": f"TRK-{oh['country']}-{created.year}-{i:06d}",
+            "sender_id": sender["customer_id"],
+            "recipient_name": rname,
+            "recipient_phone": (
+                f"+34 6{random.randint(11, 99):02d} {random.randint(100000, 999999)}"
+            ),
+            "recipient_addr": (
+                f"{random.choice(STREETS)} {random.randint(1, 200)}, {dh['city']}"
+            ),
+            "origin_hub_id": oh["hub_id"],
+            "dest_hub_id": dh["hub_id"],
+            "weight_kg": weight,
+            "dimensions_cm": f"{length}x{width}x{height}",
+            "service_type": stype,
+            "declared_value": round(random.uniform(10, 2000), 2)
+            if random.random() < 0.7
+            else None,
+            "created_at": fmt_dt(created),
+            "estimated_delivery": fmt_date(est_delivery),
+            "_created_dt": created,  # kept for event generation
+            "_transit_days": transit_days,
         })
     return sorted(rows, key=lambda r: r["created_at"])
+
 
 def gen_tracking_events(shipments, hubs, couriers):
     """Generate a realistic event chain per shipment."""
@@ -206,38 +325,44 @@ def gen_tracking_events(shipments, hubs, couriers):
 
     for shi in shipments:
         created = shi["_created_dt"]
-        oh_id   = shi["origin_hub_id"]
-        dh_id   = shi["dest_hub_id"]
-        td      = shi["_transit_days"]
+        oh_id = shi["origin_hub_id"]
+        dh_id = shi["dest_hub_id"]
+        td = shi["_transit_days"]  # noqa: F841
         courier = random.choice(couriers)
 
         # Roll final outcome
         outcome = random.choices(
-            ["delivered","failed","returned","in_transit"],
-            weights=[75, 8, 5, 12]
+            ["delivered", "failed", "returned", "in_transit"], weights=[75, 8, 5, 12]
         )[0]
 
         t = created
 
         # 1. Picked up
         rows.append({
-            "event_id":    eid, "shipment_id": shi["shipment_id"],
-            "hub_id": oh_id, "courier_id": courier["courier_id"],
-            "event_type":  "picked_up",
+            "event_id": eid,
+            "shipment_id": shi["shipment_id"],
+            "hub_id": oh_id,
+            "courier_id": courier["courier_id"],
+            "event_type": "picked_up",
             "location_desc": hub_map[oh_id]["name"],
-            "notes": None, "occurred_at": fmt_dt(t),
-        }); eid += 1
+            "notes": None,
+            "occurred_at": fmt_dt(t),
+        })
+        eid += 1
         t += timedelta(hours=random.randint(1, 4))
 
         # 2. Departed origin hub
         rows.append({
-            "event_id": eid, "shipment_id": shi["shipment_id"],
-            "hub_id": oh_id, "courier_id": courier["courier_id"],
+            "event_id": eid,
+            "shipment_id": shi["shipment_id"],
+            "hub_id": oh_id,
+            "courier_id": courier["courier_id"],
             "event_type": "departed_hub",
             "location_desc": hub_map[oh_id]["name"],
             "notes": f"En route to {hub_map[dh_id]['city']}",
             "occurred_at": fmt_dt(t),
-        }); eid += 1
+        })
+        eid += 1
         t += timedelta(hours=random.randint(4, 24))
 
         # 3. Possibly transit hub
@@ -246,60 +371,81 @@ def gen_tracking_events(shipments, hubs, couriers):
             if transit_candidates:
                 th = random.choice(transit_candidates)
                 rows.append({
-                    "event_id": eid, "shipment_id": shi["shipment_id"],
-                    "hub_id": th["hub_id"], "courier_id": None,
+                    "event_id": eid,
+                    "shipment_id": shi["shipment_id"],
+                    "hub_id": th["hub_id"],
+                    "courier_id": None,
                     "event_type": "arrived_hub",
-                    "location_desc": th["name"], "notes": None,
+                    "location_desc": th["name"],
+                    "notes": None,
                     "occurred_at": fmt_dt(t),
-                }); eid += 1
+                })
+                eid += 1
                 t += timedelta(hours=random.randint(2, 8))
                 rows.append({
-                    "event_id": eid, "shipment_id": shi["shipment_id"],
-                    "hub_id": th["hub_id"], "courier_id": None,
+                    "event_id": eid,
+                    "shipment_id": shi["shipment_id"],
+                    "hub_id": th["hub_id"],
+                    "courier_id": None,
                     "event_type": "departed_hub",
                     "location_desc": th["name"],
                     "notes": f"En route to {hub_map[dh_id]['city']}",
                     "occurred_at": fmt_dt(t),
-                }); eid += 1
+                })
+                eid += 1
                 t += timedelta(hours=random.randint(4, 18))
 
         if outcome == "in_transit":
             # Stop here — shipment still in transit
             rows.append({
-                "event_id": eid, "shipment_id": shi["shipment_id"],
-                "hub_id": dh_id, "courier_id": None,
+                "event_id": eid,
+                "shipment_id": shi["shipment_id"],
+                "hub_id": dh_id,
+                "courier_id": None,
                 "event_type": "arrived_hub",
-                "location_desc": hub_map[dh_id]["name"], "notes": None,
+                "location_desc": hub_map[dh_id]["name"],
+                "notes": None,
                 "occurred_at": fmt_dt(t),
-            }); eid += 1
+            })
+            eid += 1
             continue
 
         # 4. Arrived destination hub
         rows.append({
-            "event_id": eid, "shipment_id": shi["shipment_id"],
-            "hub_id": dh_id, "courier_id": None,
+            "event_id": eid,
+            "shipment_id": shi["shipment_id"],
+            "hub_id": dh_id,
+            "courier_id": None,
             "event_type": "arrived_hub",
-            "location_desc": hub_map[dh_id]["name"], "notes": None,
+            "location_desc": hub_map[dh_id]["name"],
+            "notes": None,
             "occurred_at": fmt_dt(t),
-        }); eid += 1
+        })
+        eid += 1
         t += timedelta(hours=random.randint(2, 8))
 
         # 5. Out for delivery
         del_courier = random.choice(couriers)
         rows.append({
-            "event_id": eid, "shipment_id": shi["shipment_id"],
-            "hub_id": dh_id, "courier_id": del_courier["courier_id"],
+            "event_id": eid,
+            "shipment_id": shi["shipment_id"],
+            "hub_id": dh_id,
+            "courier_id": del_courier["courier_id"],
             "event_type": "out_for_delivery",
-            "location_desc": hub_map[dh_id]["name"], "notes": None,
+            "location_desc": hub_map[dh_id]["name"],
+            "notes": None,
             "occurred_at": fmt_dt(t),
-        }); eid += 1
+        })
+        eid += 1
         t += timedelta(hours=random.randint(2, 6))
 
         if outcome == "delivered":
             recipient = shi["recipient_name"].split()[-1]
             rows.append({
-                "event_id": eid, "shipment_id": shi["shipment_id"],
-                "hub_id": None, "courier_id": del_courier["courier_id"],
+                "event_id": eid,
+                "shipment_id": shi["shipment_id"],
+                "hub_id": None,
+                "courier_id": del_courier["courier_id"],
                 "event_type": "delivered",
                 "location_desc": shi["recipient_addr"],
                 "notes": random.choice([
@@ -309,38 +455,53 @@ def gen_tracking_events(shipments, hubs, couriers):
                     "Received by concierge",
                 ]),
                 "occurred_at": fmt_dt(t),
-            }); eid += 1
+            })
+            eid += 1
 
         elif outcome == "failed":
             rows.append({
-                "event_id": eid, "shipment_id": shi["shipment_id"],
-                "hub_id": None, "courier_id": del_courier["courier_id"],
+                "event_id": eid,
+                "shipment_id": shi["shipment_id"],
+                "hub_id": None,
+                "courier_id": del_courier["courier_id"],
                 "event_type": "delivery_attempted",
                 "location_desc": shi["recipient_addr"],
-                "notes": random.choice(["No answer; card left","Address not found","Recipient refused delivery"]),
+                "notes": random.choice([
+                    "No answer; card left",
+                    "Address not found",
+                    "Recipient refused delivery",
+                ]),
                 "occurred_at": fmt_dt(t),
-            }); eid += 1
+            })
+            eid += 1
             t += timedelta(hours=random.randint(24, 48))
             rows.append({
-                "event_id": eid, "shipment_id": shi["shipment_id"],
-                "hub_id": None, "courier_id": del_courier["courier_id"],
+                "event_id": eid,
+                "shipment_id": shi["shipment_id"],
+                "hub_id": None,
+                "courier_id": del_courier["courier_id"],
                 "event_type": "exception",
                 "location_desc": shi["recipient_addr"],
                 "notes": "Second attempt failed; held at hub for collection",
                 "occurred_at": fmt_dt(t),
-            }); eid += 1
+            })
+            eid += 1
 
         elif outcome == "returned":
             rows.append({
-                "event_id": eid, "shipment_id": shi["shipment_id"],
-                "hub_id": dh_id, "courier_id": del_courier["courier_id"],
+                "event_id": eid,
+                "shipment_id": shi["shipment_id"],
+                "hub_id": dh_id,
+                "courier_id": del_courier["courier_id"],
                 "event_type": "returned",
                 "location_desc": hub_map[dh_id]["name"],
                 "notes": "Returned to hub; customer requested return",
                 "occurred_at": fmt_dt(t),
-            }); eid += 1
+            })
+            eid += 1
 
     return rows
+
 
 # Determine final status from events
 def final_status(events_for_shipment):
@@ -348,84 +509,86 @@ def final_status(events_for_shipment):
         return "picked_up"
     last_type = events_for_shipment[-1]["event_type"]
     mapping = {
-        "delivered":          "delivered",
-        "exception":          "failed",
-        "returned":           "returned",
-        "out_for_delivery":   "out_for_delivery",
-        "arrived_hub":        "at_hub",
-        "departed_hub":       "in_transit",
-        "picked_up":          "picked_up",
+        "delivered": "delivered",
+        "exception": "failed",
+        "returned": "returned",
+        "out_for_delivery": "out_for_delivery",
+        "arrived_hub": "at_hub",
+        "departed_hub": "in_transit",
+        "picked_up": "picked_up",
         "delivery_attempted": "failed",
     }
     return mapping.get(last_type, "in_transit")
+
 
 # ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
 
 HUB_COLS = [
-    Column("hub_id",  "int",          nullable=False, auto=True),
-    Column("code",    "varchar(20)",  nullable=False),
-    Column("name",    "varchar(100)", nullable=False),
+    Column("hub_id", "int", nullable=False, auto=True),
+    Column("code", "varchar(20)", nullable=False),
+    Column("name", "varchar(100)", nullable=False),
     Column("address", "varchar(200)", nullable=False),
-    Column("city",    "varchar(80)",  nullable=False),
-    Column("country", "char(2)",      nullable=False),
+    Column("city", "varchar(80)", nullable=False),
+    Column("country", "char(2)", nullable=False),
 ]
 COURIER_COLS = [
-    Column("courier_id",    "int",          nullable=False, auto=True),
-    Column("employee_no",   "varchar(20)",  nullable=False),
-    Column("name",          "varchar(100)", nullable=False),
-    Column("phone",         "varchar(30)"),
-    Column("vehicle_type",  "varchar(20)",  nullable=False),
+    Column("courier_id", "int", nullable=False, auto=True),
+    Column("employee_no", "varchar(20)", nullable=False),
+    Column("name", "varchar(100)", nullable=False),
+    Column("phone", "varchar(30)"),
+    Column("vehicle_type", "varchar(20)", nullable=False),
     Column("vehicle_plate", "varchar(20)"),
-    Column("home_hub_id",   "int",          nullable=False),
+    Column("home_hub_id", "int", nullable=False),
 ]
 CUSTOMER_COLS = [
-    Column("customer_id",     "int",          nullable=False, auto=True),
-    Column("name",            "varchar(150)", nullable=False),
-    Column("phone",           "varchar(30)"),
-    Column("email",           "varchar(255)"),
+    Column("customer_id", "int", nullable=False, auto=True),
+    Column("name", "varchar(150)", nullable=False),
+    Column("phone", "varchar(30)"),
+    Column("email", "varchar(255)"),
     Column("default_address", "varchar(300)"),
-    Column("account_type",    "varchar(20)",  nullable=False),
+    Column("account_type", "varchar(20)", nullable=False),
 ]
 SHIPMENT_COLS = [
-    Column("shipment_id",        "int",          nullable=False, auto=True),
-    Column("tracking_no",        "varchar(50)",  nullable=False),
-    Column("sender_id",          "int",          nullable=False),
-    Column("recipient_name",     "varchar(150)", nullable=False),
-    Column("recipient_phone",    "varchar(30)"),
-    Column("recipient_addr",     "varchar(300)", nullable=False),
-    Column("origin_hub_id",      "int",          nullable=False),
-    Column("dest_hub_id",        "int",          nullable=False),
-    Column("weight_kg",          "decimal(8,3)", nullable=False),
-    Column("dimensions_cm",      "varchar(20)"),
-    Column("service_type",       "varchar(20)",  nullable=False),
-    Column("declared_value",     "decimal(10,2)"),
-    Column("status",             "varchar(20)",  nullable=False),
-    Column("created_at",         "datetime",     nullable=False),
+    Column("shipment_id", "int", nullable=False, auto=True),
+    Column("tracking_no", "varchar(50)", nullable=False),
+    Column("sender_id", "int", nullable=False),
+    Column("recipient_name", "varchar(150)", nullable=False),
+    Column("recipient_phone", "varchar(30)"),
+    Column("recipient_addr", "varchar(300)", nullable=False),
+    Column("origin_hub_id", "int", nullable=False),
+    Column("dest_hub_id", "int", nullable=False),
+    Column("weight_kg", "decimal(8,3)", nullable=False),
+    Column("dimensions_cm", "varchar(20)"),
+    Column("service_type", "varchar(20)", nullable=False),
+    Column("declared_value", "decimal(10,2)"),
+    Column("status", "varchar(20)", nullable=False),
+    Column("created_at", "datetime", nullable=False),
     Column("estimated_delivery", "date"),
 ]
 EVENT_COLS = [
-    Column("event_id",     "int",          nullable=False, auto=True),
-    Column("shipment_id",  "int",          nullable=False),
-    Column("hub_id",       "int"),
-    Column("courier_id",   "int"),
-    Column("event_type",   "varchar(30)",  nullable=False),
-    Column("location_desc","varchar(200)"),
-    Column("notes",        "varchar(300)"),
-    Column("occurred_at",  "datetime",     nullable=False),
+    Column("event_id", "int", nullable=False, auto=True),
+    Column("shipment_id", "int", nullable=False),
+    Column("hub_id", "int"),
+    Column("courier_id", "int"),
+    Column("event_type", "varchar(30)", nullable=False),
+    Column("location_desc", "varchar(200)"),
+    Column("notes", "varchar(300)"),
+    Column("occurred_at", "datetime", nullable=False),
 ]
 
 
 def build_tables(args):
     from collections import defaultdict
+
     random.seed(args.seed)
 
     print("Generating courier logistics data...", file=sys.stderr)
-    hubs            = gen_hubs(args.hubs)
-    couriers        = gen_couriers(args.couriers, hubs)
-    customers       = gen_customers(args.customers)
-    shipments       = gen_shipments(args.shipments, customers, hubs)
+    hubs = gen_hubs(args.hubs)
+    couriers = gen_couriers(args.couriers, hubs)
+    customers = gen_customers(args.customers)
+    shipments = gen_shipments(args.shipments, customers, hubs)
     tracking_events = gen_tracking_events(shipments, hubs, couriers)
 
     events_by_ship = defaultdict(list)
@@ -436,28 +599,32 @@ def build_tables(args):
         s.pop("_created_dt", None)
         s.pop("_transit_days", None)
 
-    print(f"  hubs={len(hubs)} couriers={len(couriers)} customers={len(customers)} "
-          f"shipments={len(shipments)} events={len(tracking_events)}", file=sys.stderr)
+    print(
+        f"  hubs={len(hubs)} couriers={len(couriers)} customers={len(customers)} "
+        f"shipments={len(shipments)} events={len(tracking_events)}",
+        file=sys.stderr,
+    )
 
     return [
-        Table("cou_hubs",            HUB_COLS,      hubs),
-        Table("cou_couriers",        COURIER_COLS,  couriers),
-        Table("cou_customers",       CUSTOMER_COLS, customers),
-        Table("cou_shipments",       SHIPMENT_COLS, shipments),
-        Table("cou_tracking_events", EVENT_COLS,    tracking_events),
+        Table("cou_hubs", HUB_COLS, hubs),
+        Table("cou_couriers", COURIER_COLS, couriers),
+        Table("cou_customers", CUSTOMER_COLS, customers),
+        Table("cou_shipments", SHIPMENT_COLS, shipments),
+        Table("cou_tracking_events", EVENT_COLS, tracking_events),
     ]
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--shipments", type=int, default=1000)
     p.add_argument("--customers", type=int, default=200)
-    p.add_argument("--couriers",  type=int, default=50)
-    p.add_argument("--hubs",      type=int, default=10)
-    p.add_argument("--format",    choices=("sql", "csv", "json", "parquet"), default="sql")
-    p.add_argument("--seed",      type=int, default=BASE_SEED)
-    p.add_argument("--out",       required=True)
+    p.add_argument("--couriers", type=int, default=50)
+    p.add_argument("--hubs", type=int, default=10)
+    p.add_argument("--format", choices=("sql", "csv", "json", "parquet"), default="sql")
+    p.add_argument("--seed", type=int, default=BASE_SEED)
+    p.add_argument("--out", required=True)
     p.add_argument("--chunks", type=int, default=None)
     return p.parse_args()
 
@@ -465,7 +632,13 @@ def parse_args():
 def main():
     args = parse_args()
     tables = build_tables(args)
-    write_tables(tables, args.out, args.format, source_dir=Path(__file__).parent, chunks=args.chunks)
+    write_tables(
+        tables,
+        args.out,
+        args.format,
+        source_dir=Path(__file__).parent,
+        chunks=args.chunks,
+    )
 
 
 if __name__ == "__main__":

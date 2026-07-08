@@ -53,6 +53,7 @@ Usage:
     --batches N      Number of batches per table  (required)
     --batch-size M   Rows per batch               (default: 100)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -65,15 +66,35 @@ from pathlib import Path
 
 from tabsdatax.itest.tdksystems.emit import Column, Table, write_tables
 
-
-BASE_SEED  = 42
-TENANTS    = ["T01", "T02", "T03"]
-NAMES      = [
-    "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta",
-    "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron",
-    "pi", "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega",
+BASE_SEED = 42
+TENANTS = ["T01", "T02", "T03"]
+NAMES = [
+    "alpha",
+    "beta",
+    "gamma",
+    "delta",
+    "epsilon",
+    "zeta",
+    "eta",
+    "theta",
+    "iota",
+    "kappa",
+    "lambda",
+    "mu",
+    "nu",
+    "xi",
+    "omicron",
+    "pi",
+    "rho",
+    "sigma",
+    "tau",
+    "upsilon",
+    "phi",
+    "chi",
+    "psi",
+    "omega",
 ]
-STATUSES   = ["active", "pending", "review", "archived", "draft"]
+STATUSES = ["active", "pending", "review", "archived", "draft"]
 CATEGORIES = ["A", "B", "C", "D", "E"]
 
 HERE = Path(__file__).resolve().parent
@@ -87,21 +108,20 @@ def _rand_ts(now: datetime, span: timedelta) -> datetime:
     return now - timedelta(seconds=random.randint(0, int(span.total_seconds())))
 
 
-def _payload(tenant_id: str, entity_id: int,
-             now: datetime, span: timedelta) -> dict:
+def _payload(tenant_id: str, entity_id: int, now: datetime, span: timedelta) -> dict:
     """A source-row payload — the 10 'data' columns each arrival
     pattern emits, and the same shape that CDC tracks old/new for.
     is_active defaults to 1; soft-delete swaps it for `deleted`."""
     return {
         "tenant_id": tenant_id,
         "entity_id": entity_id,
-        "data_ts":   _fmt_dt(_rand_ts(now, span)),
-        "name":      random.choice(NAMES),
-        "status":    random.choice(STATUSES),
-        "category":  random.choice(CATEGORIES),
-        "amount":    round(random.uniform(0, 10000), 2),
-        "quantity":  random.randint(0, 1000),
-        "score":     round(random.uniform(0, 1), 6),
+        "data_ts": _fmt_dt(_rand_ts(now, span)),
+        "name": random.choice(NAMES),
+        "status": random.choice(STATUSES),
+        "category": random.choice(CATEGORIES),
+        "amount": round(random.uniform(0, 10000), 2),
+        "quantity": random.randint(0, 1000),
+        "score": round(random.uniform(0, 1), 6),
         "is_active": 1,
     }
 
@@ -125,6 +145,7 @@ class _KeyMint:
 # ---------------------------------------------------------------------------
 # Per-pattern row generators
 # ---------------------------------------------------------------------------
+
 
 def _gen_full_snapshot(batches, batch_size, now, span):
     mint = _KeyMint(TENANTS)
@@ -152,14 +173,18 @@ def _gen_insup_soft_delete(batches, batch_size, now, span):
             counter += 1
             roll = random.random()
             if not pool or roll < 0.4:
-                key = mint.new(); pool.append(key); deleted = 0
+                key = mint.new()
+                pool.append(key)
+                deleted = 0
             elif roll < 0.8:
-                key = random.choice(pool); deleted = 0
+                key = random.choice(pool)
+                deleted = 0
             else:
-                key = pool.pop(random.randrange(len(pool))); deleted = 1
+                key = pool.pop(random.randrange(len(pool)))
+                deleted = 1
             r = _payload(key[0], key[1], now, span)
             r.pop("is_active")
-            r["deleted"]     = deleted
+            r["deleted"] = deleted
             r["sim_counter"] = counter
             rows.append(r)
     return rows
@@ -173,7 +198,8 @@ def _gen_insup_no_delete(batches, batch_size, now, span):
         for _ in range(batch_size):
             counter += 1
             if not pool or random.random() < 0.5:
-                key = mint.new(); pool.append(key)
+                key = mint.new()
+                pool.append(key)
             else:
                 key = random.choice(pool)
             r = _payload(key[0], key[1], now, span)
@@ -204,13 +230,13 @@ def _gen_append_events(batches, batch_size, now, span):
 SOURCE_COLS: list[tuple[str, str]] = [
     ("tenant_id", "varchar(20)"),
     ("entity_id", "bigint"),
-    ("data_ts",   "datetime"),
-    ("name",      "varchar(80)"),
-    ("status",    "varchar(20)"),
-    ("category",  "varchar(20)"),
-    ("amount",    "decimal(12,2)"),
-    ("quantity",  "int"),
-    ("score",     "double"),
+    ("data_ts", "datetime"),
+    ("name", "varchar(80)"),
+    ("status", "varchar(20)"),
+    ("category", "varchar(20)"),
+    ("amount", "decimal(12,2)"),
+    ("quantity", "int"),
+    ("score", "double"),
     ("is_active", "smallint"),
 ]
 
@@ -259,7 +285,7 @@ def _gen_cdc_stream(batches, batch_size, now, span):
                 old_state = None
 
             r: dict = {
-                "sim_counter":     counter,
+                "sim_counter": counter,
                 "@td.cdc.meta.op": op,
                 "@td.cdc.meta.tx": tx_id,
                 "@td.cdc.meta.sq": tx_seq,
@@ -279,30 +305,31 @@ def _gen_cdc_stream(batches, batch_size, now, span):
 # Schema
 # ---------------------------------------------------------------------------
 
+
 def _data_cols(flag_name: str) -> list[Column]:
     """10 payload columns for the non-CDC tables. The first two —
     tenant_id + entity_id — form a composite business key, intentionally
     NOT enforced. The soft-delete table swaps `is_active` for `deleted`."""
     return [
-        Column("tenant_id", "varchar(20)",   nullable=False),
-        Column("entity_id", "bigint",        nullable=False),
-        Column("data_ts",   "datetime",      nullable=False),
-        Column("name",      "varchar(80)"),
-        Column("status",    "varchar(20)"),
-        Column("category",  "varchar(20)"),
-        Column("amount",    "decimal(12,2)"),
-        Column("quantity",  "int"),
-        Column("score",     "double"),
-        Column(flag_name,   "smallint",      nullable=False),
+        Column("tenant_id", "varchar(20)", nullable=False),
+        Column("entity_id", "bigint", nullable=False),
+        Column("data_ts", "datetime", nullable=False),
+        Column("name", "varchar(80)"),
+        Column("status", "varchar(20)"),
+        Column("category", "varchar(20)"),
+        Column("amount", "decimal(12,2)"),
+        Column("quantity", "int"),
+        Column("score", "double"),
+        Column(flag_name, "smallint", nullable=False),
     ]
 
 
 def _cdc_cols() -> list[Column]:
     cols: list[Column] = [
-        Column("sim_counter",     "bigint",      nullable=False),
-        Column("@td.cdc.meta.op", "char(1)",     nullable=False),
+        Column("sim_counter", "bigint", nullable=False),
+        Column("@td.cdc.meta.op", "char(1)", nullable=False),
         Column("@td.cdc.meta.tx", "varchar(36)", nullable=False),
-        Column("@td.cdc.meta.sq", "int",         nullable=False),
+        Column("@td.cdc.meta.sq", "int", nullable=False),
     ]
     for src_col, src_type in SOURCE_COLS:
         cols.append(Column(f"@td.cdc.data.col.old.{src_col}", src_type))
@@ -319,26 +346,39 @@ def build_tables(args):
     if args.batch_size < 1:
         raise ValueError(f"--batch-size must be >= 1 (got {args.batch_size})")
     random.seed(args.seed)
-    now  = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+    now = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
     span = timedelta(days=365)
-    print(f"Generating bronze data: batches={args.batches} "
-          f"batch_size={args.batch_size} seed={args.seed}", file=sys.stderr)
+    print(
+        f"Generating bronze data: batches={args.batches} "
+        f"batch_size={args.batch_size} seed={args.seed}",
+        file=sys.stderr,
+    )
     return [
-        Table("brz_full_snapshot",
-              [SIM_COUNTER, *_data_cols("is_active")],
-              _gen_full_snapshot     (args.batches, args.batch_size, now, span)),
-        Table("brz_insup_soft_delete",
-              [SIM_COUNTER, *_data_cols("deleted")],
-              _gen_insup_soft_delete (args.batches, args.batch_size, now, span)),
-        Table("brz_insup_no_delete",
-              [SIM_COUNTER, *_data_cols("is_active")],
-              _gen_insup_no_delete   (args.batches, args.batch_size, now, span)),
-        Table("brz_cdc_stream",
-              _cdc_cols(),
-              _gen_cdc_stream        (args.batches, args.batch_size, now, span)),
-        Table("brz_append_events",
-              [SIM_COUNTER, *_data_cols("is_active")],
-              _gen_append_events     (args.batches, args.batch_size, now, span)),
+        Table(
+            "brz_full_snapshot",
+            [SIM_COUNTER, *_data_cols("is_active")],
+            _gen_full_snapshot(args.batches, args.batch_size, now, span),
+        ),
+        Table(
+            "brz_insup_soft_delete",
+            [SIM_COUNTER, *_data_cols("deleted")],
+            _gen_insup_soft_delete(args.batches, args.batch_size, now, span),
+        ),
+        Table(
+            "brz_insup_no_delete",
+            [SIM_COUNTER, *_data_cols("is_active")],
+            _gen_insup_no_delete(args.batches, args.batch_size, now, span),
+        ),
+        Table(
+            "brz_cdc_stream",
+            _cdc_cols(),
+            _gen_cdc_stream(args.batches, args.batch_size, now, span),
+        ),
+        Table(
+            "brz_append_events",
+            [SIM_COUNTER, *_data_cols("is_active")],
+            _gen_append_events(args.batches, args.batch_size, now, span),
+        ),
     ]
 
 
@@ -349,22 +389,31 @@ def _quote_char_for_engine(engine: str | None) -> str:
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--batches",    type=int, required=True,
-                   help="number of batches per table — required, so the "
-                        "caller is explicit about how many arrivals to "
-                        "simulate (when loaded, the "
-                        "--size bucket supplies this)")
-    p.add_argument("--batch-size", dest="batch_size", type=int, default=100,
-                   help="rows per batch (default: 100) — large enough that "
-                        "CDC and INSUP batches typically carry multiple "
-                        "changes against the same composite key")
-    p.add_argument("--format",     choices=("sql", "csv", "json", "parquet"),
-                   default="sql")
-    p.add_argument("--seed",       type=int, default=BASE_SEED)
-    p.add_argument("--out",        required=True)
-    p.add_argument("--chunks",     type=int, default=None)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument(
+        "--batches",
+        type=int,
+        required=True,
+        help="number of batches per table — required, so the "
+        "caller is explicit about how many arrivals to "
+        "simulate (when loaded, the "
+        "--size bucket supplies this)",
+    )
+    p.add_argument(
+        "--batch-size",
+        dest="batch_size",
+        type=int,
+        default=100,
+        help="rows per batch (default: 100) — large enough that "
+        "CDC and INSUP batches typically carry multiple "
+        "changes against the same composite key",
+    )
+    p.add_argument("--format", choices=("sql", "csv", "json", "parquet"), default="sql")
+    p.add_argument("--seed", type=int, default=BASE_SEED)
+    p.add_argument("--out", required=True)
+    p.add_argument("--chunks", type=int, default=None)
     return p.parse_args()
 
 
@@ -373,8 +422,11 @@ def main():
     tables = build_tables(args)
     engine = os.environ.get("TD_GEN_ENGINE")
     write_tables(
-        tables, args.out, args.format,
-        source_dir=HERE, chunks=args.chunks,
+        tables,
+        args.out,
+        args.format,
+        source_dir=HERE,
+        chunks=args.chunks,
         sql_quote_char=_quote_char_for_engine(engine),
     )
 

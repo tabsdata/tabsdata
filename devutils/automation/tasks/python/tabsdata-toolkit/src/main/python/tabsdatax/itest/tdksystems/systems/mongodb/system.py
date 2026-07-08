@@ -1,13 +1,14 @@
 """MongoDB. Domain == database with a dbOwner user; no SQL."""
+
 from __future__ import annotations
 
 import os
 import platform
 import subprocess
 
-from .._container import AdminConn, ContainerBase, DomainResult
 from ...errors import DatagenError
 from ...shell import docker_run, gen_password
+from .._container import AdminConn, ContainerBase, DomainResult
 
 
 class MongodbSystem(ContainerBase):
@@ -32,20 +33,40 @@ class MongodbSystem(ContainerBase):
         return docker_run(self._build_docker_args(container, host_port, password))
 
     def check_ready(self, container: str, password: str) -> bool:
-        return subprocess.run(
-            ["docker", "exec", container, "mongosh", "--quiet",
-             "-u", self.system_user, "-p", password,
-             "--authenticationDatabase", "admin",
-             "--eval", "db.adminCommand({ping:1})"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        ).returncode == 0
+        return (
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    container,
+                    "mongosh",
+                    "--quiet",
+                    "-u",
+                    self.system_user,
+                    "-p",
+                    password,
+                    "--authenticationDatabase",
+                    "admin",
+                    "--eval",
+                    "db.adminCommand({ping:1})",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            ).returncode
+            == 0
+        )
 
     def _client(self, admin: AdminConn):
         from pymongo import MongoClient
+
         return MongoClient(
-            host=admin.host, port=int(admin.port),
-            username=admin.user, password=admin.password,
-            authSource="admin", serverSelectionTimeoutMS=10000)
+            host=admin.host,
+            port=int(admin.port),
+            username=admin.user,
+            password=admin.password,
+            authSource="admin",
+            serverSelectionTimeoutMS=10000,
+        )
 
     def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         pw = gen_password()
@@ -53,7 +74,7 @@ class MongodbSystem(ContainerBase):
         try:
             db = client[name]
             db.command("createUser", name, pwd=pw, roles=["dbOwner"])
-            db.create_collection("_init")   # materialise DB so it lists
+            db.create_collection("_init")  # materialise DB so it lists
         except Exception as exc:
             raise DatagenError(f"mongodb create '{name}' failed: {exc}") from exc
         finally:
@@ -67,7 +88,7 @@ class MongodbSystem(ContainerBase):
             db = client[name]
             try:
                 db.command("dropUser", name)
-            except Exception as exc:       # user may not exist — best-effort
+            except Exception as exc:  # user may not exist — best-effort
                 print(f">>> mongodb dropUser {name}: {exc}")
             client.drop_database(name)
         except Exception as exc:

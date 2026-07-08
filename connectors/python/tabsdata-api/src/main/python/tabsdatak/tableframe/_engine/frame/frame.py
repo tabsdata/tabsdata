@@ -288,4 +288,3 @@ class EngineFrame(BaseFrame):
             .collect(no_optimization=True)
             .to_dict(as_series=False)
         )
-

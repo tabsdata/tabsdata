@@ -3,6 +3,7 @@ contract needs: status / exists / clear / upload.
 
 (The `normalise_prefix` / `walk_paths` helpers are imported from the current
 `cloud/_backend.py`; in the full reorg they'd move to a `systems/_shared.py`.)"""
+
 from __future__ import annotations
 
 import sys
@@ -25,6 +26,7 @@ class GcsBackend:
         import json
 
         from google.cloud import storage
+
         self.bucket_name = values.get("BUCKET") or ""
         sa_key = values.get("SERVICE_ACCOUNT_KEY") or ""
         if _is_inline_json(sa_key):

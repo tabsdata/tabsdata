@@ -11,11 +11,11 @@ invocation. See SALESFORCE.md.
 Companion model ``finance`` joins back to the Accounts loaded here via
 ``customers.salesforce_account_id``.
 """
+
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-
 
 HERE = Path(__file__).resolve().parent
 README = HERE / "SALESFORCE.md"

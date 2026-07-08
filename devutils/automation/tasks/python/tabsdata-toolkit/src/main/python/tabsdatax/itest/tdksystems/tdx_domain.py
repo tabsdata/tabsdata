@@ -1,4 +1,5 @@
 """`tdx-domain` console entry — see :mod:`tabsdatax.itest.tdksystems.tdx`."""
+
 from __future__ import annotations
 
 from . import tdx

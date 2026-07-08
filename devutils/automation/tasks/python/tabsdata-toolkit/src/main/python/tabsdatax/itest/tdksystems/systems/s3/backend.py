@@ -3,6 +3,7 @@ status / exists / clear / upload.
 
 (`normalise_prefix` / `walk_paths` are shared object-store helpers in
 `systems/_backend.py`.)"""
+
 from __future__ import annotations
 
 import sys
@@ -17,6 +18,7 @@ class S3Backend:
 
     def __init__(self, values: dict[str, str]) -> None:
         import boto3
+
         self.bucket = values.get("BUCKET", "")
         self.client = boto3.client(
             "s3",
@@ -40,7 +42,8 @@ class S3Backend:
             objs = [{"Key": o["Key"]} for o in page.get("Contents", []) or []]
             for i in range(0, len(objs), 1000):
                 self.client.delete_objects(
-                    Bucket=self.bucket, Delete={"Objects": objs[i:i + 1000]})
+                    Bucket=self.bucket, Delete={"Objects": objs[i : i + 1000]}
+                )
 
     def upload(self, prefix: str, local_paths: list[str]) -> int:
         p = normalise_prefix(prefix)

@@ -6,11 +6,12 @@ is implemented here: a basic HTTPS reachability check on the configured
 instance URL (we can't do a real auth probe without an OAuth flow + connected
 app, which the credentials don't carry).
 """
+
 from __future__ import annotations
 
+from ...errors import DatagenError
 from .._saas import SaasBase
 from ..base import DomainContext, LoadRequest, Option
-from ...errors import DatagenError
 
 
 class SalesforceSystem(SaasBase):
@@ -30,6 +31,7 @@ class SalesforceSystem(SaasBase):
         """Wipe + upload the model's data to the org via the cci/snowfakery
         loader (which lives in the salesforce venv the CLI re-execs into)."""
         from ... import data_gen, salesforce_loader
+
         print()
         salesforce_loader.load(data_gen.model_dir(req.model), ctx.meta)
         print()

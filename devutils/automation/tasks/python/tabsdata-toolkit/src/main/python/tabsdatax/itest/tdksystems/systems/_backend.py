@@ -1,5 +1,6 @@
 """Common helpers for cloud backends (walking local paths, normalising
 prefixes for object listings)."""
+
 from __future__ import annotations
 
 from pathlib import Path

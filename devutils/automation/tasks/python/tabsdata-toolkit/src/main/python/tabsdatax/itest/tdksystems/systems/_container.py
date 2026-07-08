@@ -7,26 +7,42 @@ optional `_post_start` / `generate_password` / `_readiness_fatal` /
 lifecycle and the SQL data plane around those hooks; each `systems/<slug>/`
 subclass supplies only the hooks.
 """
+
 from __future__ import annotations
 
 import os
 import time
 from dataclasses import dataclass
 
-from .base import (
-    CreateDomainSpec, CreateSystemSpec, DomainContext, Health, LoadRequest,
-    Setting, System, SystemContext,
-)
 from ..errors import DatagenError
 from ..shell import (
-    container_exists, container_state, docker_rm, docker_start, docker_stop,
-    find_free_port, gen_password, port_open, require_docker, validate_name,
+    container_exists,
+    container_state,
+    docker_rm,
+    docker_start,
+    docker_stop,
+    find_free_port,
+    gen_password,
+    port_open,
+    require_docker,
+    validate_name,
+)
+from .base import (
+    CreateDomainSpec,
+    CreateSystemSpec,
+    DomainContext,
+    Health,
+    LoadRequest,
+    Setting,
+    System,
+    SystemContext,
 )
 
 
 @dataclass
 class DomainResult:
     """Outcome of `do_create` — the domain's connection info."""
+
     db: str
     user: str
     password: str
@@ -43,6 +59,7 @@ class AdminConn:
     `do_delete` / `do_list` hooks. Because admin now travels over TCP (not a
     local Docker socket), a client with only network reach — e.g. through an
     SSH tunnel — can provision domains without a local Docker daemon."""
+
     host: str
     port: str
     user: str
@@ -53,10 +70,10 @@ class ContainerBase(System):
     category = "container"
     kind = "sql"
     supports_pause = True
-    domain_flag = "database"        # --name names a database/schema/topic
+    domain_flag = "database"  # --name names a database/schema/topic
     supports_sql = True
     domain_desc = ""
-    options = ()                    # port is allocated, password generated
+    options = ()  # port is allocated, password generated
 
     # --- image / docker config (subclass attributes) ---
     image = ""
@@ -72,16 +89,23 @@ class ContainerBase(System):
     uses_file_staging = False
 
     @property
-    def staging_root(self) -> bool:            # base adds the SYS_PATH option
+    def staging_root(self) -> bool:  # base adds the SYS_PATH option
         return self.uses_file_staging
 
     def add_create_options(self, parser) -> None:
-        super().add_create_options(parser)     # --sys-path/--env-prefix if staging
-        parser.add_argument("--port", type=int, default=None,
-                            help="optional; host port (default: a free port)")
-        parser.add_argument("--ready-timeout", type=int, default=300,
-                            help="optional; seconds to wait for readiness "
-                                 "(default: 300)")
+        super().add_create_options(parser)  # --sys-path/--env-prefix if staging
+        parser.add_argument(
+            "--port",
+            type=int,
+            default=None,
+            help="optional; host port (default: a free port)",
+        )
+        parser.add_argument(
+            "--ready-timeout",
+            type=int,
+            default=300,
+            help="optional; seconds to wait for readiness (default: 300)",
+        )
 
     # ==================================================================
     # System lifecycle
@@ -101,7 +125,8 @@ class ContainerBase(System):
                 raise DatagenError(
                     f"{self.slug} is a file-staging system: a staging root is "
                     f"required (--sys-path PATH, --env:sys-path VAR, or "
-                    f"--env-prefix PREFIX defining $<PREFIX>__SYS_PATH)")
+                    f"--env-prefix PREFIX defining $<PREFIX>__SYS_PATH)"
+                )
         require_docker()
         container = spec.name
         if container_exists(container):
@@ -110,7 +135,8 @@ class ContainerBase(System):
                 print(f">>> --force: removed existing container {container}")
             else:
                 raise DatagenError(
-                    f"container already exists: {container} (use --force)")
+                    f"container already exists: {container} (use --force)"
+                )
         password = self.generate_password()
         port = spec.host_port or find_free_port()
         print(f">>> starting container {container} from image {self.image}")
@@ -118,8 +144,10 @@ class ContainerBase(System):
         # Once the container is up, any failure (readiness timeout, a failing
         # _post_start, or a Ctrl-C) must not leave it running.
         try:
-            print(f">>> waiting for {self.label} to become ready "
-                  f"(timeout: {spec.ready_timeout}s)…")
+            print(
+                f">>> waiting for {self.label} to become ready "
+                f"(timeout: {spec.ready_timeout}s)…"
+            )
             self._wait_ready(container, password, spec.ready_timeout)
             # Export PORT so hooks (do_create URIs, staging) that read env work.
             os.environ["PORT"] = str(port)
@@ -142,8 +170,9 @@ class ContainerBase(System):
         }
         if self.uses_file_staging:
             sp = spec.settings["SYS_PATH"]
-            out["SYS_PATH"] = Setting("SYS_PATH", value=sp.value,
-                                      env_var=sp.env_var, is_path=True)
+            out["SYS_PATH"] = Setting(
+                "SYS_PATH", value=sp.value, env_var=sp.env_var, is_path=True
+            )
         for k, v in self._system_extra_vars().items():
             out[k] = Setting(k, value=v)
         return out
@@ -155,6 +184,7 @@ class ContainerBase(System):
             # Docker (the container lives on the server — destroy the remote
             # descriptor there to remove it).
             from .. import ssh
+
             ssh.close_tunnel(int(pid))
             return
         cname = ctx.meta["CONTAINER"]
@@ -169,12 +199,17 @@ class ContainerBase(System):
         pid = ctx.meta.get("SSH_TUNNEL_PID")
         if pid:
             from .. import ssh
+
             host = ctx.meta.get("HOST", "localhost")
             port = ctx.meta.get("PORT", "")
-            up = (ssh.tunnel_alive(int(pid))
-                  and port.isdigit() and port_open(host, int(port)))
-            return Health(up, f"ssh tunnel (pid {pid}) -> {host}:{port} "
-                              f"{'up' if up else 'down'}")
+            up = (
+                ssh.tunnel_alive(int(pid))
+                and port.isdigit()
+                and port_open(host, int(port))
+            )
+            return Health(
+                up, f"ssh tunnel (pid {pid}) -> {host}:{port} {'up' if up else 'down'}"
+            )
         cname = ctx.meta["CONTAINER"]
         st = container_state(cname)
         if st is None:
@@ -183,8 +218,9 @@ class ContainerBase(System):
             return Health(False, f"container {cname} is {st}")
         if self.check_ready(cname, ctx.meta.get("PASSWORD", "")):
             return Health(True, f"{self.label} on localhost")
-        return Health(False, f"{self.label} container is up but not "
-                             f"yet accepting connections")
+        return Health(
+            False, f"{self.label} container is up but not yet accepting connections"
+        )
 
     def pause(self, ctx: SystemContext) -> str:
         cname = ctx.meta["CONTAINER"]
@@ -208,7 +244,9 @@ class ContainerBase(System):
     # Domain lifecycle
     # ==================================================================
 
-    def create_domain(self, ctx: SystemContext, spec: CreateDomainSpec) -> dict[str, Setting]:
+    def create_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec
+    ) -> dict[str, Setting]:
         cname = ctx.meta.get("CONTAINER", "")
         validate_name(spec.name, label=self.domain_flag)
         # Domain admin runs over TCP as the superuser on the published host port
@@ -217,7 +255,8 @@ class ContainerBase(System):
             host=ctx.meta.get("HOST", "localhost"),
             port=ctx.meta.get("PORT", os.environ.get("PORT", "")),
             user=ctx.meta.get("USER", ""),
-            password=ctx.meta.get("PASSWORD", ""))
+            password=ctx.meta.get("PASSWORD", ""),
+        )
         # Some hooks still read PORT / CONTAINER from env (e.g. redpanda's
         # broker / schema-registry extra vars); keep exporting them.
         os.environ["PORT"] = admin.port
@@ -225,12 +264,11 @@ class ContainerBase(System):
         if any(d.lower() == spec.name.lower() for d in self.do_list(admin)):
             if spec.force:
                 self.do_delete(admin, spec.name)
-                print(f">>> --force: removed existing {self.domain_flag} "
-                      f"'{spec.name}'")
+                print(f">>> --force: removed existing {self.domain_flag} '{spec.name}'")
             else:
                 raise DatagenError(
-                    f"{self.domain_flag} '{spec.name}' already exists "
-                    f"(use --force)")
+                    f"{self.domain_flag} '{spec.name}' already exists (use --force)"
+                )
         result = self.do_create(admin, spec.name)
         out: dict[str, Setting] = {
             "HOST": Setting("HOST", value="localhost"),
@@ -260,7 +298,8 @@ class ContainerBase(System):
             host=ctx.meta.get("HOST", "localhost"),
             port=ctx.meta.get("PORT", ""),
             user=ctx.meta.get("SYS_ADMIN_USER", ""),
-            password=ctx.meta.get("SYS_ADMIN_PASSWORD", ""))
+            password=ctx.meta.get("SYS_ADMIN_PASSWORD", ""),
+        )
         self.do_delete(admin, ctx.meta["DB"])
 
     def domain_status(self, ctx: DomainContext) -> Health:
@@ -268,17 +307,21 @@ class ContainerBase(System):
         host = ctx.meta.get("HOST", "localhost")
         port = ctx.meta.get("PORT", "")
         ok = port.isdigit() and port_open(host, int(port))
-        return Health(ok, f"{self.label} at {host}:{port} "
-                          f"{'reachable' if ok else 'unreachable'}")
+        return Health(
+            ok, f"{self.label} at {host}:{port} {'reachable' if ok else 'unreachable'}"
+        )
 
     # ==================================================================
     # Data plane (SQL) — run the model's DDL / INSERTs against the domain
     # ==================================================================
 
-    def install_schema(self, ctx: DomainContext, model: str, *, force: bool = False) -> None:
+    def install_schema(
+        self, ctx: DomainContext, model: str, *, force: bool = False
+    ) -> None:
         if not self.supports_sql:
             raise DatagenError(f"{self.slug} has no SQL schema to install")
         from ..sql_runner import run_sql_text
+
         uri = self._require_uri(ctx)
         if force:
             self._drop_all_tables(uri)
@@ -290,8 +333,10 @@ class ContainerBase(System):
         if not self.supports_sql:
             raise DatagenError(
                 f"'data load' into {self.slug} domains is not supported "
-                f"(no SQL backend)")
+                f"(no SQL backend)"
+            )
         from ..sql_runner import run_sql_file, run_sql_text
+
         uri = self._require_uri(ctx)
         if req.force:
             self._drop_all_tables(uri)
@@ -308,8 +353,8 @@ class ContainerBase(System):
                 continue
             if not line.endswith(".sql"):
                 raise DatagenError(
-                    f"{line} is not a .sql file (load only handles "
-                    f"--format sql output)")
+                    f"{line} is not a .sql file (load only handles --format sql output)"
+                )
             path = req.data_dir / line
             if not path.is_file():
                 raise DatagenError(f"missing data file: {path}")
@@ -329,6 +374,7 @@ class ContainerBase(System):
     @staticmethod
     def _drop_all_tables(uri: str) -> None:
         from sqlalchemy import MetaData, create_engine
+
         print(">>> --force: dropping existing tables ...")
         engine = create_engine(uri)
         md = MetaData()
@@ -348,8 +394,8 @@ class ContainerBase(System):
     # supply `_admin_url`; non-SQL systems (redpanda / mongodb) override the
     # do_* hooks to talk their own admin protocol.
 
-    admin_autocommit = False    # True where CREATE DATABASE can't run inside a
-                                # transaction (postgres / sql server)
+    admin_autocommit = False  # True where CREATE DATABASE can't run inside a
+    # transaction (postgres / sql server)
 
     def _admin_url(self, admin: AdminConn) -> str:
         """SQLAlchemy URL for the superuser admin connection. SQL subclasses
@@ -361,11 +407,11 @@ class ContainerBase(System):
         run each statement outside a transaction (CREATE DATABASE can't be
         transactional there); the rest commit once at the end."""
         from sqlalchemy import create_engine
+
         engine = create_engine(self._admin_url(admin))
         try:
             if self.admin_autocommit:
-                conn = engine.connect().execution_options(
-                    isolation_level="AUTOCOMMIT")
+                conn = engine.connect().execution_options(isolation_level="AUTOCOMMIT")
                 with conn:
                     for st in statements:
                         conn.exec_driver_sql(st)
@@ -373,9 +419,8 @@ class ContainerBase(System):
                 with engine.begin() as conn:
                     for st in statements:
                         conn.exec_driver_sql(st)
-        except Exception as exc:   # surface the DB's own message, no traceback
-            raise DatagenError(
-                f"{self.label} admin SQL failed: {exc}") from exc
+        except Exception as exc:  # surface the DB's own message, no traceback
+            raise DatagenError(f"{self.label} admin SQL failed: {exc}") from exc
         finally:
             engine.dispose()
 
@@ -383,13 +428,13 @@ class ContainerBase(System):
         """Run a single-column admin query over TCP; return the trimmed
         first-column values (used by `do_list`)."""
         from sqlalchemy import create_engine
+
         engine = create_engine(self._admin_url(admin))
         try:
             with engine.connect() as conn:
                 rows = conn.exec_driver_sql(query).fetchall()
         except Exception as exc:
-            raise DatagenError(
-                f"{self.label} admin query failed: {exc}") from exc
+            raise DatagenError(f"{self.label} admin query failed: {exc}") from exc
         finally:
             engine.dispose()
         return [str(r[0]).strip() for r in rows if r and r[0] is not None]
@@ -398,9 +443,18 @@ class ContainerBase(System):
     # Per-system hooks — subclasses implement
     # ==================================================================
 
-    def _build_docker_args(self, container: str, host_port: int, password: str) -> list[str]:
-        args = ["-d", "-p", f"{host_port}:{self.internal_port}",
-                "--name", container, "--platform", self.image_platform]
+    def _build_docker_args(
+        self, container: str, host_port: int, password: str
+    ) -> list[str]:
+        args = [
+            "-d",
+            "-p",
+            f"{host_port}:{self.internal_port}",
+            "--name",
+            container,
+            "--platform",
+            self.image_platform,
+        ]
         args.extend(self.extra_flags)
         for k, v in self.extra_env:
             args.extend(["-e", f"{k}={v}"])
@@ -436,7 +490,8 @@ class ContainerBase(System):
             time.sleep(2)
         raise DatagenError(
             f"{self.label} did not become ready within {timeout}s "
-            f"(container {container} is up but not accepting connections)")
+            f"(container {container} is up but not accepting connections)"
+        )
 
     # Abstract-ish hooks (subclasses must provide):
     def _docker_run(self, container: str, host_port: int, password: str) -> str:

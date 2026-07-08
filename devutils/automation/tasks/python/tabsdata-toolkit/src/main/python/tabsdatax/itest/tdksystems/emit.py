@@ -30,7 +30,7 @@ import re
 import shutil
 import sys
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable
@@ -42,6 +42,7 @@ from typing import Any, Iterable
 # ---------------------------------------------------------------------------
 # Schema types
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Column:
@@ -80,9 +81,13 @@ def _is_string(t: str) -> bool:
 
 
 def _is_int(t: str) -> str | None:
-    return {"tinyint": "int8", "smallint": "int16",
-            "int": "int32", "integer": "int32",
-            "bigint": "int64"}.get(t.strip().lower())
+    return {
+        "tinyint": "int8",
+        "smallint": "int16",
+        "int": "int32",
+        "integer": "int32",
+        "bigint": "int64",
+    }.get(t.strip().lower())
 
 
 def _norm(t: str) -> str:
@@ -134,12 +139,14 @@ def write_tables(
 
     pairs = _chunk_tables(tables, chunks)
     if fmt == "sql":
+
         def writer(basename, view, out_path):
             _write_sql_pair(basename, view, out_path, quote=sql_quote_char)
+
     else:
         writer = {
-            "csv":     _write_csv_pair,
-            "json":    _write_json_pair,
+            "csv": _write_csv_pair,
+            "json": _write_json_pair,
             "parquet": _write_parquet_pair,
         }[fmt]
     for basename, view in pairs:
@@ -179,8 +186,12 @@ def _write_schema_sidecar(tables: list[Table], out: Path) -> None:
             {
                 "name": t.name,
                 "columns": [
-                    {"name": c.name, "sql_type": c.sql_type,
-                     "nullable": c.nullable, "auto": c.auto}
+                    {
+                        "name": c.name,
+                        "sql_type": c.sql_type,
+                        "nullable": c.nullable,
+                        "auto": c.auto,
+                    }
                     for c in t.columns
                 ],
             }
@@ -204,8 +215,7 @@ def read_structured(data_dir: str | Path) -> list[tuple[str, list[Column], list[
         raise FileNotFoundError(f"missing schema sidecar: {schema_path}")
     schema = json.loads(schema_path.read_text())
     cols_by_table = {
-        t["name"]: [Column(**c) for c in t["columns"]]
-        for t in schema["tables"]
+        t["name"]: [Column(**c) for c in t["columns"]] for t in schema["tables"]
     }
     result: list[tuple[str, list[Column], list[dict]]] = []
     for line in (data_dir / "run-order.txt").read_text().splitlines():
@@ -223,7 +233,8 @@ def read_structured(data_dir: str | Path) -> list[tuple[str, list[Column], list[
 
 
 def _chunk_tables(
-    tables: list[Table], chunks: int | None,
+    tables: list[Table],
+    chunks: int | None,
 ) -> list[tuple[str, Table]]:
     """Yield (file_basename, table_view) pairs. table_view.name remains the
     real entity name so SQL INSERT statements still reference the correct
@@ -236,18 +247,22 @@ def _chunk_tables(
         if not tbl.rows:
             # Still emit one (empty) chunk so the entity always has at least
             # one file — keeps run-order.txt consistent.
-            pairs.append(
-                (f"{tbl.name}-00001",
-                 Table(name=tbl.name, columns=tbl.columns, rows=[],
-                       sql_post=tbl.sql_post)))
+            pairs.append((
+                f"{tbl.name}-00001",
+                Table(
+                    name=tbl.name, columns=tbl.columns, rows=[], sql_post=tbl.sql_post
+                ),
+            ))
             continue
         idx = 0
         for start in range(0, len(tbl.rows), chunks):
             idx += 1
-            slice_rows = tbl.rows[start:start + chunks]
+            slice_rows = tbl.rows[start : start + chunks]
             is_last = start + chunks >= len(tbl.rows)
             view = Table(
-                name=tbl.name, columns=tbl.columns, rows=slice_rows,
+                name=tbl.name,
+                columns=tbl.columns,
+                rows=slice_rows,
                 sql_post=tbl.sql_post if is_last else [],
             )
             pairs.append((f"{tbl.name}-{idx:05d}", view))
@@ -359,7 +374,7 @@ def iter_insert_statements(
     for start in range(0, len(rows), batch):
         tuples = ",".join(
             "(" + ",".join(_sql_literal(r.get(c.name), c.sql_type) for c in cols) + ")"
-            for r in rows[start:start + batch]
+            for r in rows[start : start + batch]
         )
         yield f"INSERT INTO {table_name} ({col_names}) VALUES {tuples}"
 
@@ -379,6 +394,7 @@ def _write_sql_pair(basename: str, tbl: Table, out: Path, quote: str = '"') -> N
 # ---------------------------------------------------------------------------
 # CSV / JSON helpers — coerce a row to a JSON-ready dict
 # ---------------------------------------------------------------------------
+
 
 def _coerce_for_serial(v: Any, sql_type: str):
     """Convert a row value to a CSV/JSON-friendly representation.
@@ -408,13 +424,15 @@ def _coerce_for_serial(v: Any, sql_type: str):
 
 
 def _coerce_row(row: dict, columns: list[Column]) -> dict:
-    return {c.name: _coerce_for_serial(row.get(c.name), c.sql_type)
-            for c in columns}
+    return {c.name: _coerce_for_serial(row.get(c.name), c.sql_type) for c in columns}
 
 
 _PANDAS_INT_DTYPE = {
-    "tinyint": "Int8", "smallint": "Int16",
-    "int": "Int32", "integer": "Int32", "bigint": "Int64",
+    "tinyint": "Int8",
+    "smallint": "Int16",
+    "int": "Int32",
+    "integer": "Int32",
+    "bigint": "Int64",
 }
 
 
@@ -442,8 +460,9 @@ def _write_csv_pair(basename: str, tbl: Table, out: Path) -> None:
 def _write_json_pair(basename: str, tbl: Table, out: Path) -> None:
     rows = [_coerce_row(r, tbl.columns) for r in tbl.rows]
     with (out / f"{basename}.json").open("w") as f:
-        json.dump(rows, f, ensure_ascii=False, indent=None,
-                  separators=(",", ":"), default=str)
+        json.dump(
+            rows, f, ensure_ascii=False, indent=None, separators=(",", ":"), default=str
+        )
         f.write("\n")
 
 
@@ -451,13 +470,18 @@ def _write_json_pair(basename: str, tbl: Table, out: Path) -> None:
 # Parquet — keep SQL-ish types
 # ---------------------------------------------------------------------------
 
+
 def _arrow_type_for(sql_type: str):
     import pyarrow as pa
 
     t = _norm(sql_type)
-    int_map = {"tinyint": pa.int8(), "smallint": pa.int16(),
-               "int": pa.int32(), "integer": pa.int32(),
-               "bigint": pa.int64()}
+    int_map = {
+        "tinyint": pa.int8(),
+        "smallint": pa.int16(),
+        "int": pa.int32(),
+        "integer": pa.int32(),
+        "bigint": pa.int64(),
+    }
     if t in int_map:
         return int_map[t]
     if t in ("boolean", "bool"):

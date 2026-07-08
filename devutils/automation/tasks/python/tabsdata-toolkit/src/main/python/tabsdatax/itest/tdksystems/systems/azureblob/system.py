@@ -1,4 +1,5 @@
 """Azure Blob object-store system — hooks only; the lifecycle is in CloudBase."""
+
 from __future__ import annotations
 
 from .._cloud import CloudBase

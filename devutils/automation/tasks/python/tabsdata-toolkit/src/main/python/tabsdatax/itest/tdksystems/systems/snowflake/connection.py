@@ -1,5 +1,6 @@
 """Snowflake connection (snowflake-connector-python). Built from a resolved
 `{OPTION: value}` dict — no argparse / descriptor coupling."""
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -13,11 +14,12 @@ def connect(values: dict[str, str]):
     except ImportError as exc:
         raise DatagenError(
             "snowflake-connector-python is not installed "
-            "(pip install snowflake-connector-python)") from exc
+            "(pip install snowflake-connector-python)"
+        ) from exc
     return snowflake.connector.connect(
         account=values.get("ACCOUNT", ""),
         user=values.get("USERNAME", ""),
-        password=values.get("PAT", ""),          # PAT passed as password
+        password=values.get("PAT", ""),  # PAT passed as password
         warehouse=values.get("WAREHOUSE", ""),
         database=values.get("DATABASE", ""),
         client_session_keep_alive=False,

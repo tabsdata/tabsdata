@@ -1,11 +1,12 @@
 """ClickHouse container system — hooks only; the lifecycle is in ContainerBase."""
+
 from __future__ import annotations
 
 import os
 import platform
 
-from .._container import AdminConn, ContainerBase, DomainResult
 from ...shell import docker_exec_check, docker_run, gen_password
+from .._container import AdminConn, ContainerBase, DomainResult
 
 
 class ClickhouseSystem(ContainerBase):
@@ -16,7 +17,10 @@ class ClickhouseSystem(ContainerBase):
     supports_sql = True
     uses_file_staging = True
 
-    image = f"clickhouse/clickhouse-server:{os.environ.get('CLICKHOUSE_IMAGE_VERSION', '24.8')}"
+    image = (
+        "clickhouse/clickhouse-server:"
+        f"{os.environ.get('CLICKHOUSE_IMAGE_VERSION', '24.8')}"
+    )
     image_platform = (
         "linux/arm64" if platform.machine() in ("arm64", "aarch64") else "linux/amd64"
     )
@@ -33,33 +37,48 @@ class ClickhouseSystem(ContainerBase):
 
     def check_ready(self, container: str, password: str) -> bool:
         return docker_exec_check(
-            container, "clickhouse-client",
-            f"--user={self.system_user}", f"--password={password}",
-            "-q", "SELECT 1",
+            container,
+            "clickhouse-client",
+            f"--user={self.system_user}",
+            f"--password={password}",
+            "-q",
+            "SELECT 1",
         )
 
     def _admin_url(self, admin: AdminConn) -> str:
-        return (f"clickhouse+http://{admin.user}:{admin.password}"
-                f"@{admin.host}:{admin.port}/default")
+        return (
+            f"clickhouse+http://{admin.user}:{admin.password}"
+            f"@{admin.host}:{admin.port}/default"
+        )
 
     def do_create(self, admin: AdminConn, name: str) -> DomainResult:
         pw = gen_password()
-        self._run_admin_sql(admin, [
-            f'CREATE DATABASE "{name}"',
-            f'CREATE USER "{name}" IDENTIFIED WITH plaintext_password BY \'{pw}\'',
-            f'GRANT ALL ON "{name}".* TO "{name}"',
-        ])
+        self._run_admin_sql(
+            admin,
+            [
+                f'CREATE DATABASE "{name}"',
+                f"CREATE USER \"{name}\" IDENTIFIED WITH plaintext_password BY '{pw}'",
+                f'GRANT ALL ON "{name}".* TO "{name}"',
+            ],
+        )
         uri = f"clickhouse+http://{name}:{pw}@{admin.host}:{admin.port}/{name}"
         return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
-        self._run_admin_sql(admin, [
-            f'DROP USER IF EXISTS "{name}"',
-            f'DROP DATABASE IF EXISTS "{name}"',
-        ])
+        self._run_admin_sql(
+            admin,
+            [
+                f'DROP USER IF EXISTS "{name}"',
+                f'DROP DATABASE IF EXISTS "{name}"',
+            ],
+        )
 
     def do_list(self, admin: AdminConn) -> list[str]:
-        return self._query_admin_names(admin, (
-            "SELECT name FROM system.databases WHERE name NOT IN "
-            "('system','INFORMATION_SCHEMA','information_schema','default') "
-            "ORDER BY name"))
+        return self._query_admin_names(
+            admin,
+            (
+                "SELECT name FROM system.databases WHERE name NOT IN "
+                "('system','INFORMATION_SCHEMA','information_schema','default') "
+                "ORDER BY name"
+            ),
+        )

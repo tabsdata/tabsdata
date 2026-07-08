@@ -1,4 +1,5 @@
 """Local-filesystem storage ops — the four the System contract needs."""
+
 from __future__ import annotations
 
 import shutil
@@ -27,6 +28,7 @@ class FsBackend:
 
     def upload(self, prefix: str, local_paths: list[str]) -> int:
         from .._backend import walk_paths
+
         dst_base = Path(prefix)
         dst_base.mkdir(parents=True, exist_ok=True)
         n = 0

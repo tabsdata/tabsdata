@@ -3,6 +3,7 @@ needs: ping / dataset_exists / create_dataset / delete_dataset. Built from a
 plain `{OPTION: value}` dict of resolved connection values, like GcsBackend, so
 create-time and run-time callers construct it the same way. The client library
 is imported lazily so it is only required when BigQuery is actually used."""
+
 from __future__ import annotations
 
 
@@ -22,10 +23,12 @@ class BigQueryClient:
         sa_key = values.get("SERVICE_ACCOUNT_KEY") or ""
         if _is_inline_json(sa_key):
             self.client = bigquery.Client.from_service_account_info(
-                json.loads(sa_key), project=self.project)
+                json.loads(sa_key), project=self.project
+            )
         else:
             self.client = bigquery.Client.from_service_account_json(
-                sa_key, project=self.project)
+                sa_key, project=self.project
+            )
 
     def _ref(self, dataset: str) -> str:
         return f"{self.project}.{dataset}"
@@ -36,6 +39,7 @@ class BigQueryClient:
 
     def dataset_exists(self, dataset: str) -> bool:
         from google.cloud.exceptions import NotFound
+
         try:
             self.client.get_dataset(self._ref(dataset))
             return True
@@ -44,12 +48,13 @@ class BigQueryClient:
 
     def create_dataset(self, dataset: str, *, force: bool = False) -> None:
         from google.cloud import bigquery
+
         ref = self._ref(dataset)
         if force:
-            self.client.delete_dataset(
-                ref, delete_contents=True, not_found_ok=True)
+            self.client.delete_dataset(ref, delete_contents=True, not_found_ok=True)
         self.client.create_dataset(bigquery.Dataset(ref))
 
     def delete_dataset(self, dataset: str) -> None:
         self.client.delete_dataset(
-            self._ref(dataset), delete_contents=True, not_found_ok=True)
+            self._ref(dataset), delete_contents=True, not_found_ok=True
+        )

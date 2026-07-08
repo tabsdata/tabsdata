@@ -1,6 +1,7 @@
 """Databricks connection — schema ops via the SQL Statement Execution REST
 API (stdlib `urllib`, no DB-API driver). Built from a resolved
 `{OPTION: value}` dict — no argparse / descriptor coupling."""
+
 from __future__ import annotations
 
 import json
@@ -17,13 +18,14 @@ def _host(url_or_host: str) -> str:
     s = url_or_host.strip()
     for scheme in ("https://", "http://"):
         if s.startswith(scheme):
-            s = s[len(scheme):]
+            s = s[len(scheme) :]
             break
     return s.rstrip("/")
 
 
-def _api(host: str, token: str, method: str, path: str,
-         body: dict | None = None) -> dict:
+def _api(
+    host: str, token: str, method: str, path: str, body: dict | None = None
+) -> dict:
     url = f"https://{host}{path}"
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
@@ -45,8 +47,14 @@ def _api(host: str, token: str, method: str, path: str,
     return json.loads(payload)
 
 
-def exec_sql(host: str, token: str, warehouse_id: str, catalog: str,
-             statement: str, schema: str | None = None) -> list[list[str]]:
+def exec_sql(
+    host: str,
+    token: str,
+    warehouse_id: str,
+    catalog: str,
+    statement: str,
+    schema: str | None = None,
+) -> list[list[str]]:
     """Run a SQL statement on the warehouse and return rows (as strings).
     Polls until the statement reaches a terminal state. When `schema` is
     given, unqualified table names resolve under `<catalog>.<schema>`."""
@@ -62,6 +70,7 @@ def exec_sql(host: str, token: str, warehouse_id: str, catalog: str,
     sid = resp.get("statement_id")
     state = (resp.get("status") or {}).get("state", "")
     import time
+
     while state in ("PENDING", "RUNNING"):
         time.sleep(1)
         resp = _api(host, token, "GET", f"/api/2.0/sql/statements/{sid}")
@@ -72,7 +81,7 @@ def exec_sql(host: str, token: str, warehouse_id: str, catalog: str,
             f"databricks SQL {statement!r} ended in state {state!r}: "
             f"{err.get('message', '(no error message)')}"
         )
-    rows = ((resp.get("result") or {}).get("data_array") or [])
+    rows = (resp.get("result") or {}).get("data_array") or []
     return rows
 
 

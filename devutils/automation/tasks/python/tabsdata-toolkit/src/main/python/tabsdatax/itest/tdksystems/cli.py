@@ -7,6 +7,7 @@ descriptor. It generates a model's rows and hands them to the domain's
 mechanics (SQL run-order, cloud upload, kafka produce, saas INSERTs,
 salesforce cci) live on the backends under `systems/`.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,6 +54,7 @@ def _resolve_staging_root(sys_obj, args) -> tuple[str | None, str | None]:
             )
         envv = f"{prefix}__SYS_PATH"
     from .systems.base import _normalize_path, _validate_path
+
     if envv is not None:
         if not re.fullmatch(r"[A-Za-z0-9_]+", envv):
             raise DatagenError(f"--env:sys-path expects an env-var name (got: {envv})")
@@ -105,24 +107,33 @@ def _run_data_create(args: argparse.Namespace) -> int:
     kind = meta.get("KIND", "")
     if kind.startswith("cloud"):
         print()
-        print(f"data create: no schema needed for {kind} domains "
-              f"(skipping for {meta.get('STORAGE_TYPE')}://"
-              f"{meta.get('BASE_PATH', '')})")
+        print(
+            f"data create: no schema needed for {kind} domains "
+            f"(skipping for {meta.get('STORAGE_TYPE')}://"
+            f"{meta.get('BASE_PATH', '')})"
+        )
         print()
         return 0
     if not sysobj.supports_sql:
         if kind.startswith("saas") and ctx.slug == "salesforce":
             print()
-            print(">>> salesforce has no schema to create — objects already "
-                  "exist in the org.")
-            print(">>> use `tdx-domain create --model salesforce --data …` to "
-                  "wipe + upload the data.")
+            print(
+                ">>> salesforce has no schema to create — objects already "
+                "exist in the org."
+            )
+            print(
+                ">>> use `tdx-domain create --model salesforce --data …` to "
+                "wipe + upload the data."
+            )
             print()
             return 0
         if kind.startswith("saas"):
-            return _print_saas_model_instructions(args.model, meta, action="data create")
+            return _print_saas_model_instructions(
+                args.model, meta, action="data create"
+            )
         raise DatagenError(
-            f"'data create' is not supported for {ctx.slug} (no SQL backend)")
+            f"'data create' is not supported for {ctx.slug} (no SQL backend)"
+        )
     print()
     sysobj.install_schema(ctx, args.model, force=args.force)
     print()
@@ -143,17 +154,20 @@ def _run_data_load(args: argparse.Namespace) -> int:
     if kind.startswith("saas") and not sysobj.supports_sql:
         if ctx.slug == "salesforce":
             return sysobj.load_data(
-                ctx, LoadRequest(model=args.model, data_dir=Path("."), size=None))
+                ctx, LoadRequest(model=args.model, data_dir=Path("."), size=None)
+            )
         return _print_saas_model_instructions(args.model, meta, action="data load")
 
     if is_kafka:
         if not args.schemas:
             raise DatagenError(
-                "--schemas DIR is required when loading into a kafka domain")
+                "--schemas DIR is required when loading into a kafka domain"
+            )
         if not args.ser:
             raise DatagenError(
                 f"--ser is required for kafka domains "
-                f"(one of {', '.join(kafka_producer.SER_FORMATS)})")
+                f"(one of {', '.join(kafka_producer.SER_FORMATS)})"
+            )
 
     size = _resolve_size(args.model, args.size)
     # kafka + saas-SQL build messages / INSERTs from the json + schema sidecar;
@@ -162,7 +176,9 @@ def _run_data_load(args: argparse.Namespace) -> int:
         fmt, sidecar, gen_chunks = "json", True, None
     else:
         fmt, sidecar, gen_chunks = (
-            args.format or _default_format_for(kind, meta), False, args.chunks,
+            args.format or _default_format_for(kind, meta),
+            False,
+            args.chunks,
         )
 
     with tempfile.TemporaryDirectory(prefix="td_gen-load-") as tmp:
@@ -170,32 +186,56 @@ def _run_data_load(args: argparse.Namespace) -> int:
         print()
         size_msg = f"size={size}, " if size else ""
         chunks_msg = f", chunks={gen_chunks}" if gen_chunks else ""
-        print(f">>> generating model='{args.model}' "
-              f"({size_msg}format={fmt}{chunks_msg}) ...")
+        print(
+            f">>> generating model='{args.model}' "
+            f"({size_msg}format={fmt}{chunks_msg}) ..."
+        )
         data_gen.generate(
-            data_gen.model_dir(args.model), size, tmp_out, fmt, chunks=gen_chunks,
-            engine=(ctx.slug if kind.startswith("container") and not is_kafka
-                    else None),
+            data_gen.model_dir(args.model),
+            size,
+            tmp_out,
+            fmt,
+            chunks=gen_chunks,
+            engine=(
+                ctx.slug if kind.startswith("container") and not is_kafka else None
+            ),
             schema_sidecar=sidecar,
         )
         print()
-        sysobj.load_data(ctx, LoadRequest(
-            model=args.model, data_dir=tmp_out, size=size, force=args.force,
-            ser=args.ser, schemas_dir=args.schemas,
-            use_schema_registry=args.use_schema_registry))
+        sysobj.load_data(
+            ctx,
+            LoadRequest(
+                model=args.model,
+                data_dir=tmp_out,
+                size=size,
+                force=args.force,
+                ser=args.ser,
+                schemas_dir=args.schemas,
+                use_schema_registry=args.use_schema_registry,
+            ),
+        )
         print()
         return 0
 
 
 def _print_saas_model_instructions(
-    model: str, meta: dict[str, str], *, action: str,
+    model: str,
+    meta: dict[str, str],
+    *,
+    action: str,
 ) -> int:
     """Saas domains with no automatic create/load — print the model's README
     (e.g. SALESFORCE.md) so the user knows the manual steps."""
     src = data_gen.model_dir(model)
     saas_type = meta.get("SAAS_TYPE", "")
-    readme = next((p for p in (src / f"{saas_type.upper()}.md", src / "README.md")
-                   if p.is_file()), None)
+    readme = next(
+        (
+            p
+            for p in (src / f"{saas_type.upper()}.md", src / "README.md")
+            if p.is_file()
+        ),
+        None,
+    )
     print()
     print(f">>> '{action}' on a {saas_type} (saas) domain is a manual workflow")
     if readme is not None:
@@ -226,7 +266,8 @@ def _default_format_for(kind: str, meta: dict[str, str]) -> str:
         if meta.get("SUPPORTS_SQL") != "1":
             raise DatagenError(
                 f"loading into {meta.get('SYSTEM_TYPE')} requires non-SQL format; "
-                f"please pass --format explicitly")
+                f"please pass --format explicitly"
+            )
         return "sql"
     return "csv"
 

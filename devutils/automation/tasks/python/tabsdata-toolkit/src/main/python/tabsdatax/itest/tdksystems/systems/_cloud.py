@@ -5,20 +5,29 @@ object with `status` / `exists` / `clear` / `upload`. The local-filesystem
 backend (`fs`) overrides the create/destroy methods (mkdir / rmtree instead of
 prefix checks) and sets `relative_sys_path = False`.
 """
+
 from __future__ import annotations
 
-from .base import (
-    CreateDomainSpec, CreateSystemSpec, DomainContext, Health, LoadRequest,
-    Setting, System, SystemContext, _normalize_path, _validate_path,
-)
 from ..errors import DatagenError
+from .base import (
+    CreateDomainSpec,
+    CreateSystemSpec,
+    DomainContext,
+    Health,
+    LoadRequest,
+    Setting,
+    System,
+    SystemContext,
+    _normalize_path,
+    _validate_path,
+)
 
 
 class CloudBase(System):
     category = "cloud"
     kind = "file"
-    staging_root = True          # -> base adds the SYS_PATH (--sys-path) option
-    relative_sys_path = True     # object-store prefix: strip a leading slash
+    staging_root = True  # -> base adds the SYS_PATH (--sys-path) option
+    relative_sys_path = True  # object-store prefix: strip a leading slash
 
     def _backend(self, values: dict[str, str]):
         raise NotImplementedError
@@ -30,31 +39,33 @@ class CloudBase(System):
         backend = self._backend(values)
         try:
             backend.status()
-        except Exception as exc:                        # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             raise DatagenError(f"could not reach {self.slug}: {exc}")
         root = values.get("SYS_PATH", "")
         if backend.exists(root):
             if spec.force:
                 backend.clear(root)
-                print(f">>> --force: cleared existing root prefix "
-                      f"{self.slug}://{root}")
+                print(f">>> --force: cleared existing root prefix {self.slug}://{root}")
             else:
                 raise DatagenError(
                     f"root prefix has objects: {self.slug}://{root} "
-                    f"(use --force to clear)")
+                    f"(use --force to clear)"
+                )
         return dict(spec.settings)
 
     def destroy_system(self, ctx: SystemContext) -> None:
-        return None                                     # externally owned
+        return None  # externally owned
 
     def system_status(self, ctx: SystemContext) -> Health:
-        return self._reachable(ctx.meta,
-                               f"{self.slug} storage "
-                               f"(root='{ctx.meta.get('SYS_PATH', '')}')")
+        return self._reachable(
+            ctx.meta, f"{self.slug} storage (root='{ctx.meta.get('SYS_PATH', '')}')"
+        )
 
     # ---- domain lifecycle ----
 
-    def create_domain(self, ctx: SystemContext, spec: CreateDomainSpec) -> dict[str, Setting]:
+    def create_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec
+    ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
         values = self.resolve_values(settings)
         base = _normalize_path(spec.name)
@@ -70,7 +81,8 @@ class CloudBase(System):
             else:
                 raise DatagenError(
                     f"domain prefix has objects: {self.slug}://{full} "
-                    f"(use --force to clear)")
+                    f"(use --force to clear)"
+                )
         settings["BASE_PATH"] = Setting("BASE_PATH", value=full, is_path=True)
         return settings
 
@@ -102,5 +114,5 @@ class CloudBase(System):
         try:
             self._backend(values).status()
             return Health(True, f"{what} reachable")
-        except Exception as exc:                        # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             return Health(False, f"cannot reach {self.slug}: {exc}")
