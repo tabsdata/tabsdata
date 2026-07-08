@@ -8,17 +8,16 @@ All test artefacts (generated JSON descriptors, fs roots, data dirs)
 land under `target/itest/<test-id>/` so they're trivially cleanable
 with `rm -rf target`.
 """
+
 from __future__ import annotations
 
 import os
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
-
 
 # The tests do `from conftest import ...`; under the toolkit's
 # `--import-mode=importlib` the test folder is not on sys.path, so make this
@@ -26,7 +25,8 @@ import pytest
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# Resolve the project root from this conftest's location: src/itest/python/tdksystems/conftest.py.
+# Resolve the project root from this conftest's location:
+# src/itest/python/tdksystems/conftest.py.
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 TARGET = PROJECT_ROOT / "target"
 ITEST_ROOT = TARGET / "itest"
@@ -40,9 +40,10 @@ def _ensure_itest_root_exists():
 
 @pytest.fixture(autouse=True)
 def _td_dev_secret(monkeypatch):
-    """Descriptors are encrypted with $TD_BACKENDS_CRYPTO_KEY, so tdx-system / tdx-domain
-    need it set. Provide one for the suite unless the environment already has
-    a (valid) one — so the descriptors the tests create can be read back."""
+    """Descriptors are encrypted with the TD_BACKENDS_CRYPTO_KEY environment
+    variable, so tdx-system / tdx-domain need it set. Provide one for the suite
+    unless the environment already has a (valid) one — so the descriptors the
+    tests create can be read back."""
     if len(os.environ.get("TD_BACKENDS_CRYPTO_KEY", "")) < 12:
         monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "itest-dev-secret")
 
@@ -59,17 +60,18 @@ def itest_dir(request) -> Path:
 
 
 def have_cmd(name: str) -> bool:
-    return subprocess.run(
-        ["which", name], capture_output=True
-    ).returncode == 0
+    return subprocess.run(["which", name], capture_output=True).returncode == 0
 
 
 def have_docker_running() -> bool:
     if not have_cmd("docker"):
         return False
-    return subprocess.run(
-        ["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    ).returncode == 0
+    return (
+        subprocess.run(
+            ["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        ).returncode
+        == 0
+    )
 
 
 def have_op_vault(vault: str) -> bool:
@@ -78,10 +80,13 @@ def have_op_vault(vault: str) -> bool:
     by `test_cloud_systems.py` per cloud)."""
     if not have_cmd("op"):
         return False
-    return subprocess.run(
-        ["op", "--vault", vault, "item", "list", "--format=json"],
-        capture_output=True
-    ).returncode == 0
+    return (
+        subprocess.run(
+            ["op", "--vault", vault, "item", "list", "--format=json"],
+            capture_output=True,
+        ).returncode
+        == 0
+    )
 
 
 def run_cmd(*args, env=None, check=False) -> subprocess.CompletedProcess:
@@ -112,7 +117,7 @@ def source_1p_env(vault: str) -> dict:
         line = line.strip()
         if not line.startswith("export "):
             continue
-        kv = line[len("export "):]
+        kv = line[len("export ") :]
         if "=" not in kv:
             continue
         k, _, v = kv.partition("=")

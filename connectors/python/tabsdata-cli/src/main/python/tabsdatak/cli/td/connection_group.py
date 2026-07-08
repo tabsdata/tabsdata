@@ -91,9 +91,7 @@ def _emit(document, file):
 # the point, and JSON can't carry them), so there is no output *format* to pick
 # here -- ``-o/--output`` is reserved CLI-wide for that. Use ``--file``/``-f``
 # for the output path, matching validate/table/exe.
-@click.option(
-    "--file", "-f", help="Write the template to this file instead of stdout."
-)
+@click.option("--file", "-f", help="Write the template to this file instead of stdout.")
 @click.pass_context
 def template_(ctx, type_, file):
     """Print a fill-in connection template for a connector type"""

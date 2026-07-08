@@ -3,6 +3,7 @@
 Self-contained — uses a tmp directory under /tmp (so it satisfies fs's
 safe-root validation) and shells out to the installed `tdx-system` / `tdx-domain`
 commands."""
+
 from __future__ import annotations
 
 import json
@@ -43,8 +44,18 @@ def test_full_fs_lifecycle(fs_root, tmp_path):
     sysd, domd = sysdir / "my_fs", domdir / "inbox"
 
     # 1. Create the fs system.
-    cp = _run("tdx-system", "create", "--type", "fs", "--sys", "my_fs", *S,
-              "--sys-path", str(fs_root), "--force")
+    cp = _run(
+        "tdx-system",
+        "create",
+        "--type",
+        "fs",
+        "--sys",
+        "my_fs",
+        *S,
+        "--sys-path",
+        str(fs_root),
+        "--force",
+    )
     _ok(cp, "tdx-system create fs")
     assert sysd.is_file() and fs_root.is_dir()
 
@@ -62,8 +73,21 @@ def test_full_fs_lifecycle(fs_root, tmp_path):
     assert "my_fs" in cp.stdout and "fs" in cp.stdout
 
     # 3. Create a domain and load the `world` model's data into it.
-    cp = _run("tdx-domain", "create", "--sys", "my_fs", *S, "--domain", "inbox", *D,
-              "--model", "world", "--data", "xs", "--force")
+    cp = _run(
+        "tdx-domain",
+        "create",
+        "--sys",
+        "my_fs",
+        *S,
+        "--domain",
+        "inbox",
+        *D,
+        "--model",
+        "world",
+        "--data",
+        "xs",
+        "--force",
+    )
     _ok(cp, "tdx-domain create + data")
     assert domd.is_file()
     dom_root = fs_root / "inbox"
@@ -81,7 +105,9 @@ def test_full_fs_lifecycle(fs_root, tmp_path):
     # list shows the domain with its type + model/data.
     cp = _run("tdx-domain", "list", *D)
     _ok(cp, "domain list")
-    assert "inbox" in cp.stdout and "model=world" in cp.stdout and "data=xs" in cp.stdout
+    assert (
+        "inbox" in cp.stdout and "model=world" in cp.stdout and "data=xs" in cp.stdout
+    )
 
     # 4. Destroy the domain (removes objects + descriptor).
     _ok(_run("tdx-domain", "destroy", "--domain", "inbox", *D), "domain destroy")

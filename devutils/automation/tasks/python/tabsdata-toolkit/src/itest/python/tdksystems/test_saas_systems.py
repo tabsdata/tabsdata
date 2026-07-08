@@ -12,18 +12,21 @@ cloud tests, with `--env-prefix <SYS>` (resolves to `<SYS>__<FIELD>`).
 Skipped when:
   - the `op` CLI / vault isn't accessible,
   - the per-system 1Password item isn't fully populated."""
+
 from __future__ import annotations
 
 import secrets
-from pathlib import Path
 
 import pytest
+from conftest import (
+    assert_ok,
+    have_cmd,
+    have_op_vault,
+    run_cmd,
+    source_1p_env,
+)
 
 from tabsdatax.itest.tdksystems import systems
-
-from conftest import (
-    assert_ok, have_op_vault, have_cmd, run_cmd, source_1p_env,
-)
 
 pytestmark = pytest.mark.integration
 
@@ -45,7 +48,7 @@ def vault_env():
 
 SAAS_PARAMS = [
     pytest.param("databricks", "DATABRICKS", id="databricks"),
-    pytest.param("snowflake",  "SNOWFLAKE",  id="snowflake"),
+    pytest.param("snowflake", "SNOWFLAKE", id="snowflake"),
     pytest.param("salesforce", "SALESFORCE", id="salesforce"),
 ]
 
@@ -71,8 +74,16 @@ def test_saas_system_lifecycle(slug, prefix, vault_env, itest_dir):
     sysname = f"{slug}_sys"
 
     cp = run_cmd(
-        "tdx-system", "create", "--type", slug,
-        "--sys", sysname, *S, "--env-prefix", prefix, "--force",
+        "tdx-system",
+        "create",
+        "--type",
+        slug,
+        "--sys",
+        sysname,
+        *S,
+        "--env-prefix",
+        prefix,
+        "--force",
         env=vault_env,
     )
     assert_ok(cp, f"tdx-system create {slug} --env-prefix {prefix}")
@@ -85,14 +96,31 @@ def test_saas_system_lifecycle(slug, prefix, vault_env, itest_dir):
     # A random suffix so concurrent runs / leaked state can't collide.
     name = f"itest_smoke_{secrets.token_hex(4)}"
     try:
-        cp = run_cmd("tdx-domain", "create", "--sys", sysname, *S,
-                     "--domain", name, *D, "--force",
-                     env=vault_env)
+        cp = run_cmd(
+            "tdx-domain",
+            "create",
+            "--sys",
+            sysname,
+            *S,
+            "--domain",
+            name,
+            *D,
+            "--force",
+            env=vault_env,
+        )
         assert_ok(cp, f"{slug} create domain {name}")
         assert (domdir / name).is_file()
 
-        cp = run_cmd("tdx-domain", "info", "--domain", name, *D,
-                     "--format", "json", env=vault_env)
+        cp = run_cmd(
+            "tdx-domain",
+            "info",
+            "--domain",
+            name,
+            *D,
+            "--format",
+            "json",
+            env=vault_env,
+        )
         assert_ok(cp, f"{slug} domain info")
     finally:
         run_cmd("tdx-domain", "destroy", "--domain", name, *D, env=vault_env)

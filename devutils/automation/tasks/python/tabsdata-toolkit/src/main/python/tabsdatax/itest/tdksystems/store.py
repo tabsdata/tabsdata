@@ -13,6 +13,7 @@ explicit ``--sys-dir`` / ``--domain-dir`` overrides the store directly:
 This module is the single place that precedence lives, so the CLI and the test
 fixtures resolve a name to a path identically. ``~`` is expanded; the directory
 is not created here (the writer's ``mkdir`` does that on first use)."""
+
 from __future__ import annotations
 
 import os

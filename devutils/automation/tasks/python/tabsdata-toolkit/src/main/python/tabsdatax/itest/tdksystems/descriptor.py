@@ -34,6 +34,7 @@ values (`{"env": VAR}`) are resolved at *use* time — a missing/empty one is a
 hard error. Storage prefixes listed in `strip_slash` get a leading slash
 stripped at resolve time (with a warning when the flag is true).
 """
+
 from __future__ import annotations
 
 import json
@@ -84,7 +85,12 @@ def _meta_entries(
 
 
 def _write(
-    out: str, *, category: str, system: str, role: str, kind: str,
+    out: str,
+    *,
+    category: str,
+    system: str,
+    role: str,
+    kind: str,
     meta: list[tuple[str, str | None, str | None]],
     exported: list[str],
     strip_slash: list[tuple[str, bool]],
@@ -133,6 +139,7 @@ def _forwarded(
 # Writers (one per system/domain shape) — called by the backend base classes.
 # ---------------------------------------------------------------------------
 
+
 def write_container_system(
     *,
     out: str,
@@ -177,22 +184,37 @@ def write_container_system(
         ("DOMAIN_DESC", domain_desc, None),
     ]
     if image:
-        meta.insert(4, ("IMAGE", image, None))   # after CONTAINER
+        meta.insert(4, ("IMAGE", image, None))  # after CONTAINER
     if staging:
         meta.append(("SYS_PATH", sys_path, sys_path_env))
         meta.append(("FORWARDED_SYS_PATH_ENV", sys_path_env or "", None))
     for k, v in extra.items():
         meta.append((k, v, None))
-    exported = ["SYSTEM_TYPE", "SYSTEM_KIND", "SYSTEM_LOCATION",
-                "CONTAINER", "HOST", "PORT", "USER", "PASSWORD"]
+    exported = [
+        "SYSTEM_TYPE",
+        "SYSTEM_KIND",
+        "SYSTEM_LOCATION",
+        "CONTAINER",
+        "HOST",
+        "PORT",
+        "USER",
+        "PASSWORD",
+    ]
     if image:
-        exported.insert(4, "IMAGE")               # after CONTAINER
+        exported.insert(4, "IMAGE")  # after CONTAINER
     if staging:
         exported.append("SYS_PATH")
     strip = [("SYS_PATH", True)] if staging else []
-    _write(out, category="container", system=system_type, role="sys",
-           kind="container-system", meta=meta, exported=exported,
-           strip_slash=strip)
+    _write(
+        out,
+        category="container",
+        system=system_type,
+        role="sys",
+        kind="container-system",
+        meta=meta,
+        exported=exported,
+        strip_slash=strip,
+    )
 
 
 def write_container_domain(
@@ -237,23 +259,38 @@ def write_container_domain(
         ("SUPPORTS_SQL", "1" if supports_sql else "0", None),
     ]
     if image:
-        meta.insert(2, ("IMAGE", image, None))    # after SYSTEM_KIND
+        meta.insert(2, ("IMAGE", image, None))  # after SYSTEM_KIND
     if staging:
         meta.append(("SYS_PATH", sys_path, sys_path_env))
         meta.append(("FORWARDED_SYS_PATH_ENV", sys_path_env or "", None))
         meta.append(("BASE_PATH", base_path, None))
     for k, v in extra.items():
         meta.append((k, v, None))
-    exported = ["SYSTEM_TYPE", "SYSTEM_KIND", "HOST", "PORT", "USER",
-                "PASSWORD", "DB", "SQLALCHEMY_URI"]
+    exported = [
+        "SYSTEM_TYPE",
+        "SYSTEM_KIND",
+        "HOST",
+        "PORT",
+        "USER",
+        "PASSWORD",
+        "DB",
+        "SQLALCHEMY_URI",
+    ]
     if image:
-        exported.insert(2, "IMAGE")                # after SYSTEM_KIND
+        exported.insert(2, "IMAGE")  # after SYSTEM_KIND
     if staging:
         exported += ["SYS_PATH", "BASE_PATH"]
     strip = [("SYS_PATH", True), ("BASE_PATH", False)] if staging else []
-    _write(out, category="container", system=system_type, role="env",
-           kind="container-domain", meta=meta, exported=exported,
-           strip_slash=strip)
+    _write(
+        out,
+        category="container",
+        system=system_type,
+        role="env",
+        kind="container-domain",
+        meta=meta,
+        exported=exported,
+        strip_slash=strip,
+    )
 
 
 def write_cloud_system(
@@ -281,8 +318,16 @@ def write_cloud_system(
     forwarded_names = [t[0] for t in forwarded]
     exported = ["STORAGE_TYPE", "SYSTEM_KIND", "SYS_PATH"] + forwarded_names
     strip = [("SYS_PATH", True)] if strip_sys_path_slash else []
-    _write(out, category="cloud", system=storage_type, role="sys",
-           kind="cloud-system", meta=meta, exported=exported, strip_slash=strip)
+    _write(
+        out,
+        category="cloud",
+        system=storage_type,
+        role="sys",
+        kind="cloud-system",
+        meta=meta,
+        exported=exported,
+        strip_slash=strip,
+    )
 
 
 def write_cloud_domain(
@@ -307,14 +352,25 @@ def write_cloud_domain(
     ]
     meta += _forwarded(forwarded)
     forwarded_names = [t[0] for t in forwarded]
-    exported = (["STORAGE_TYPE", "SYSTEM_KIND", "SYS_PATH", "BASE_PATH"]
-                + forwarded_names)
+    exported = [
+        "STORAGE_TYPE",
+        "SYSTEM_KIND",
+        "SYS_PATH",
+        "BASE_PATH",
+    ] + forwarded_names
     # BASE_PATH = SYS_PATH/<segment>, so it only leads with '/' when SYS_PATH
     # does — warn once (on SYS_PATH) and strip BASE_PATH silently.
-    strip = ([("SYS_PATH", True), ("BASE_PATH", False)]
-             if strip_sys_path_slash else [])
-    _write(out, category="cloud", system=storage_type, role="env",
-           kind="cloud-domain", meta=meta, exported=exported, strip_slash=strip)
+    strip = [("SYS_PATH", True), ("BASE_PATH", False)] if strip_sys_path_slash else []
+    _write(
+        out,
+        category="cloud",
+        system=storage_type,
+        role="env",
+        kind="cloud-domain",
+        meta=meta,
+        exported=exported,
+        strip_slash=strip,
+    )
 
 
 def write_saas_system(
@@ -335,8 +391,16 @@ def write_saas_system(
     meta += _forwarded(forwarded)
     forwarded_names = [t[0] for t in forwarded]
     exported = ["SAAS_TYPE", "SYSTEM_KIND"] + forwarded_names
-    _write(out, category="saas", system=saas_type, role="sys",
-           kind="saas-system", meta=meta, exported=exported, strip_slash=[])
+    _write(
+        out,
+        category="saas",
+        system=saas_type,
+        role="sys",
+        kind="saas-system",
+        meta=meta,
+        exported=exported,
+        strip_slash=[],
+    )
 
 
 def write_saas_domain(
@@ -361,14 +425,23 @@ def write_saas_domain(
     if schema is not None:
         exported.append("SCHEMA")
     exported += forwarded_names
-    _write(out, category="saas", system=saas_type, role="env",
-           kind="saas-domain", meta=meta, exported=exported, strip_slash=[])
+    _write(
+        out,
+        category="saas",
+        system=saas_type,
+        role="env",
+        kind="saas-domain",
+        meta=meta,
+        exported=exported,
+        strip_slash=[],
+    )
 
 
 # ---------------------------------------------------------------------------
 # write: persist a System backend's returned settings (the one systems ->
 # descriptor serialization step; the write_* above are its primitives).
 # ---------------------------------------------------------------------------
+
 
 def _settings_literals(settings: dict) -> dict[str, str]:
     return {name: (s.value or "") for name, s in settings.items()}
@@ -377,8 +450,11 @@ def _settings_literals(settings: dict) -> dict[str, str]:
 def _settings_triples(settings: dict, *, exclude: tuple[str, ...] = ()):
     """(name, literal|None, env_var|None) for the writers' `forwarded` param —
     env wins, so a forwarded reference is stored as a ref (secret never baked)."""
-    return [(s.name, None if s.env_var else s.value, s.env_var)
-            for s in settings.values() if s.name not in exclude]
+    return [
+        (s.name, None if s.env_var else s.value, s.env_var)
+        for s in settings.values()
+        if s.name not in exclude
+    ]
 
 
 def write(sys_obj, role: str, out: str, settings: dict) -> None:
@@ -393,59 +469,88 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
             v = _settings_literals(settings)
             sp = settings.get("SYS_PATH")
             write_container_system(
-                out=out, system_type=sys_obj.slug, system_kind=sys_obj.kind,
-                label=sys_obj.label, container=v["CONTAINER"], host=v["HOST"],
-                port=v["PORT"], user=v["USER"], password=v["PASSWORD"],
+                out=out,
+                system_type=sys_obj.slug,
+                system_kind=sys_obj.kind,
+                label=sys_obj.label,
+                container=v["CONTAINER"],
+                host=v["HOST"],
+                port=v["PORT"],
+                user=v["USER"],
+                password=v["PASSWORD"],
                 domain_desc=getattr(sys_obj, "domain_desc", ""),
                 image=v.get("IMAGE") or None,
                 sys_path=(sp.value if sp and sp.env_var is None else None),
-                sys_path_env=(sp.env_var if sp else None))
+                sys_path_env=(sp.env_var if sp else None),
+            )
         elif cat == "cloud":
             sp = settings["SYS_PATH"]
             write_cloud_system(
-                out=out, storage_type=sys_obj.slug, system_kind=sys_obj.kind,
+                out=out,
+                storage_type=sys_obj.slug,
+                system_kind=sys_obj.kind,
                 label=sys_obj.label,
                 sys_path=(sp.value if sp.env_var is None else None),
                 sys_path_env=sp.env_var,
                 forwarded=_settings_triples(settings, exclude=("SYS_PATH",)),
-                strip_sys_path_slash=getattr(sys_obj, "relative_sys_path", True))
+                strip_sys_path_slash=getattr(sys_obj, "relative_sys_path", True),
+            )
         else:
             write_saas_system(
-                out=out, saas_type=sys_obj.slug, system_kind=sys_obj.kind,
-                label=sys_obj.label, forwarded=_settings_triples(settings))
+                out=out,
+                saas_type=sys_obj.slug,
+                system_kind=sys_obj.kind,
+                label=sys_obj.label,
+                forwarded=_settings_triples(settings),
+            )
         return
     # role == "env" (domain)
     if cat == "container":
         v = _settings_literals(settings)
-        known = {"HOST", "PORT", "USER", "PASSWORD", "DB", "SQLALCHEMY_URI",
-                 "IMAGE"}
+        known = {"HOST", "PORT", "USER", "PASSWORD", "DB", "SQLALCHEMY_URI", "IMAGE"}
         extra = {k: val for k, val in v.items() if k not in known}  # SYS_* back-refs
         write_container_domain(
-            out=out, system_type=sys_obj.slug, system_kind=sys_obj.kind,
-            host=v["HOST"], port=v["PORT"], user=v["USER"], password=v["PASSWORD"],
-            db=v["DB"], sqlalchemy_uri=v["SQLALCHEMY_URI"],
+            out=out,
+            system_type=sys_obj.slug,
+            system_kind=sys_obj.kind,
+            host=v["HOST"],
+            port=v["PORT"],
+            user=v["USER"],
+            password=v["PASSWORD"],
+            db=v["DB"],
+            sqlalchemy_uri=v["SQLALCHEMY_URI"],
             domain_desc=getattr(sys_obj, "domain_desc", ""),
-            supports_sql=sys_obj.supports_sql, image=v.get("IMAGE") or None,
-            extra_vars=extra)
+            supports_sql=sys_obj.supports_sql,
+            image=v.get("IMAGE") or None,
+            extra_vars=extra,
+        )
     elif cat == "cloud":
         sp, bp = settings["SYS_PATH"], settings["BASE_PATH"]
         write_cloud_domain(
-            out=out, storage_type=sys_obj.slug, system_kind=sys_obj.kind,
+            out=out,
+            storage_type=sys_obj.slug,
+            system_kind=sys_obj.kind,
             sys_path=(sp.value if sp.env_var is None else None),
-            sys_path_env=sp.env_var, base_path=bp.value or "",
+            sys_path_env=sp.env_var,
+            base_path=bp.value or "",
             forwarded=_settings_triples(settings, exclude=("SYS_PATH", "BASE_PATH")),
-            strip_sys_path_slash=getattr(sys_obj, "relative_sys_path", True))
+            strip_sys_path_slash=getattr(sys_obj, "relative_sys_path", True),
+        )
     else:
         schema = settings.get("SCHEMA")
         write_saas_domain(
-            out=out, saas_type=sys_obj.slug, system_kind=sys_obj.kind,
+            out=out,
+            saas_type=sys_obj.slug,
+            system_kind=sys_obj.kind,
             schema=(schema.value if schema else None),
-            forwarded=_settings_triples(settings, exclude=("SCHEMA",)))
+            forwarded=_settings_triples(settings, exclude=("SCHEMA",)),
+        )
 
 
 # ---------------------------------------------------------------------------
 # Reading / resolving
 # ---------------------------------------------------------------------------
+
 
 def _parse(path: str | Path):
     """Decrypt + parse a descriptor, or None if it can't be read as one
@@ -483,7 +588,7 @@ def load(path: str | Path) -> dict:
             f"not a tdx descriptor: {path} "
             f"(was it written by `tdx-system create` / `tdx-domain create`?)"
         )
-    plaintext = crypto.decrypt(text)   # raises on wrong secret / corrupt blob
+    plaintext = crypto.decrypt(text)  # raises on wrong secret / corrupt blob
     try:
         doc = json.loads(plaintext)
     except ValueError:
@@ -500,8 +605,9 @@ def loads(text: str) -> dict:
     if not crypto.is_pem(text):
         raise DatagenError(
             "not a tdx descriptor (no PEM armor) — was it written by "
-            "`tdx-system create`?")
-    plaintext = crypto.decrypt(text)   # raises on wrong secret / corrupt blob
+            "`tdx-system create`?"
+        )
+    plaintext = crypto.decrypt(text)  # raises on wrong secret / corrupt blob
     try:
         doc = json.loads(plaintext)
     except ValueError:
@@ -534,7 +640,9 @@ def resolve(doc: dict, *, warn: bool = False) -> dict[str, str]:
                 print(
                     f"WARNING: {name} value {v!r} must not start with '/' "
                     f"(storage prefixes are relative) - removing the leading "
-                    f"slash.", file=sys.stderr)
+                    f"slash.",
+                    file=sys.stderr,
+                )
             meta[name] = v.lstrip("/")
     return meta
 
@@ -550,9 +658,14 @@ def read_meta(path: str | Path) -> dict[str, str]:
 # Identity: attach name/started/model/data after the backend writes settings
 # ---------------------------------------------------------------------------
 
+
 def stamp(
-    path: str | Path, *, name: str, started: str,
-    model: str | None = None, data: str | None = None,
+    path: str | Path,
+    *,
+    name: str,
+    started: str,
+    model: str | None = None,
+    data: str | None = None,
     extra_meta: dict[str, str] | None = None,
 ) -> dict:
     """Attach the tdx identity to a freshly-written descriptor and rewrite it.
@@ -579,6 +692,7 @@ def stamp(
 # ---------------------------------------------------------------------------
 # info: name / type / started (+ model / data) + connection keys
 # ---------------------------------------------------------------------------
+
 
 def _info_pairs(doc: dict) -> list[tuple[str, str]]:
     """(key, value) pairs for `info`: the identity fields, then the connection

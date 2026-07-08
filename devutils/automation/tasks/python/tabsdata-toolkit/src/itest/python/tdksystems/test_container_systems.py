@@ -3,27 +3,27 @@ through its tdx lifecycle (create, status, create domain, destroy).
 
 All artefacts land under `target/itest/<test-id>/`. Skips entirely
 when Docker isn't available."""
+
 from __future__ import annotations
 
 import platform
-from pathlib import Path
 
 import pytest
+from conftest import assert_ok, have_docker_running, run_cmd
 
 from tabsdatax.itest.tdksystems import systems
 
 
 def _container_slugs() -> list[str]:
-    return [s for s in systems.all_slugs()
-            if systems.get(s).category == "container"]
+    return [s for s in systems.all_slugs() if systems.get(s).category == "container"]
 
-from conftest import assert_ok, have_docker_running, run_cmd
 
 pytestmark = pytest.mark.integration
 
 
 pytest.importorskip(
-    "docker", reason="Docker SDK not installed",
+    "docker",
+    reason="Docker SDK not installed",
 ) if False else None  # we only need the docker daemon; no SDK required.
 
 
@@ -33,9 +33,9 @@ SQL_MODEL = "courierlogistics"  # ships DDL for mysql/postgres/mssqlserver/oracl
 def _ready_timeout(slug: str) -> int:
     """Some images are slow to come up — give them more headroom."""
     return {
-        "oracle":   600,
+        "oracle": 600,
         "mssqlserver": 300,
-        "db2":      900,
+        "db2": 900,
         "starrocks": 300,
     }.get(slug, 120)
 
@@ -56,13 +56,24 @@ def test_container_system_lifecycle(slug, itest_dir):
     sysname = f"{slug}_sys"
 
     # File-staging systems (clickhouse / starrocks) require a staging root.
-    staging = (["--sys-path", str(itest_dir / "staging")]
-               if systems.get(slug).staging_root else [])
+    staging = (
+        ["--sys-path", str(itest_dir / "staging")]
+        if systems.get(slug).staging_root
+        else []
+    )
 
     cp = run_cmd(
-        "tdx-system", "create", "--type", slug,
-        "--sys", sysname, *S,
-        "--force", "--ready-timeout", str(_ready_timeout(slug)), *staging,
+        "tdx-system",
+        "create",
+        "--type",
+        slug,
+        "--sys",
+        sysname,
+        *S,
+        "--force",
+        "--ready-timeout",
+        str(_ready_timeout(slug)),
+        *staging,
     )
     assert_ok(cp, f"tdx-system create {slug}")
     assert (sysdir / sysname).is_file()
@@ -74,16 +85,27 @@ def test_container_system_lifecycle(slug, itest_dir):
         assert "ready" in cp.stdout.lower()
 
         # Create a domain (a database / topic / collection, per backend).
-        cp = run_cmd("tdx-domain", "create", "--sys", sysname, *S,
-                     "--domain", "smoke", *D, "--force")
+        cp = run_cmd(
+            "tdx-domain",
+            "create",
+            "--sys",
+            sysname,
+            *S,
+            "--domain",
+            "smoke",
+            *D,
+            "--force",
+        )
         assert_ok(cp, f"{slug} create domain")
         assert (domdir / "smoke").is_file()
 
         cp = run_cmd("tdx-domain", "status", "--domain", "smoke", *D)
         assert_ok(cp, f"{slug} domain status")
 
-        assert_ok(run_cmd("tdx-domain", "destroy", "--domain", "smoke", *D),
-                  f"{slug} destroy domain")
+        assert_ok(
+            run_cmd("tdx-domain", "destroy", "--domain", "smoke", *D),
+            f"{slug} destroy domain",
+        )
     finally:
         # Always tear the container down, even if a step above failed.
         run_cmd("tdx-system", "destroy", "--sys", sysname, *S)
@@ -101,23 +123,41 @@ def test_data_create_load_against_sql_system(slug, itest_dir):
     sysname = f"{slug}_sys"
 
     cp = run_cmd(
-        "tdx-system", "create", "--type", slug,
-        "--sys", sysname, *S,
-        "--force", "--ready-timeout", str(_ready_timeout(slug)),
+        "tdx-system",
+        "create",
+        "--type",
+        slug,
+        "--sys",
+        sysname,
+        *S,
+        "--force",
+        "--ready-timeout",
+        str(_ready_timeout(slug)),
     )
     assert_ok(cp, f"tdx-system create {slug}")
 
     try:
         # create-domain installs the model schema (DDL) and loads its data.
-        cp = run_cmd("tdx-domain", "create", "--sys", sysname, *S,
-                     "--domain", "smoke", *D,
-                     "--model", SQL_MODEL, "--data", "xs", "--force")
+        cp = run_cmd(
+            "tdx-domain",
+            "create",
+            "--sys",
+            sysname,
+            *S,
+            "--domain",
+            "smoke",
+            *D,
+            "--model",
+            SQL_MODEL,
+            "--data",
+            "xs",
+            "--force",
+        )
         assert_ok(cp, "create domain + model + data")
 
-        cp = run_cmd("tdx-domain", "info", "--domain", "smoke", *D,
-                     "--format", "json")
+        cp = run_cmd("tdx-domain", "info", "--domain", "smoke", *D, "--format", "json")
         assert_ok(cp, "domain info")
-        assert SQL_MODEL in cp.stdout      # descriptor records the model
+        assert SQL_MODEL in cp.stdout  # descriptor records the model
     finally:
         run_cmd("tdx-domain", "destroy", "--domain", "smoke", *D)
         run_cmd("tdx-system", "destroy", "--sys", sysname, *S)
