@@ -9,29 +9,44 @@ fn keys(items: &[&str]) -> BTreeSet<String> {
 }
 
 #[test]
-fn no_leaves_and_no_secret_is_ok() {
+fn no_leaves_and_empty_secret_is_ok() {
+    let input = Settlement {
+        config: "noseed.yaml",
+        config_yaml: "name: noseed\nhost: example.com\n",
+        secret: "td-app-noseed-secret-config-noseed.yaml",
+        actual_keys: Some(keys(&[])),
+    };
+    settle_secret_keys(&input).expect("ok when no leaves and empty secret");
+}
+
+#[test]
+fn no_leaves_and_no_secret_fails() {
     let input = Settlement {
         config: "noseed.yaml",
         config_yaml: "name: noseed\nhost: example.com\n",
         secret: "td-app-noseed-secret-config-noseed.yaml",
         actual_keys: None,
     };
-    settle_secret_keys(&input).expect("ok when no leaves and no secret");
+    let error = settle_secret_keys(&input).expect_err("missing secret");
+    assert!(matches!(error, SecretError::SettlementSecretMissing { .. }));
 }
 
 #[test]
-fn no_leaves_but_secret_exists_fails() {
+fn no_leaves_but_secret_has_keys_fails() {
     let input = Settlement {
         config: "noseed.yaml",
         config_yaml: "name: noseed\nhost: example.com\n",
         secret: "td-app-noseed-secret-config-noseed.yaml",
         actual_keys: Some(keys(&["STRAY"])),
     };
-    let error = settle_secret_keys(&input).expect_err("unexpected secret");
-    assert!(matches!(
-        error,
-        SecretError::SettlementSecretUnexpected { .. }
-    ));
+    let error = settle_secret_keys(&input).expect_err("stray keys");
+    match error {
+        SecretError::SettlementKeysMismatch { extra, missing, .. } => {
+            assert!(extra.contains("STRAY"));
+            assert_eq!(missing.trim(), "none.");
+        }
+        other => panic!("unexpected variant: {other:?}"),
+    }
 }
 
 #[test]

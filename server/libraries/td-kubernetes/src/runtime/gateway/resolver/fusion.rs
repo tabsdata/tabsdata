@@ -168,9 +168,7 @@ fn resolve_configs_files(
         let template = bake_schema_secrets(file, template, &profile.configs)?;
         let outcome = resolve_config_file(&template, &init_content, system, auto, &vault)?;
         write_staged(&stage_configs.join(file), &outcome.rendered)?;
-        if !outcome.secrets.is_empty() {
-            by_file.push((file.clone(), outcome.secrets));
-        }
+        by_file.push((file.clone(), outcome.secrets));
     }
     Ok(FusedSecrets { by_file })
 }

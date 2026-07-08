@@ -104,7 +104,8 @@ pub enum SecretError {
     )]
     ManifestMissingName { file: String } = 5009,
     #[error(
-        "Config '{config}' declares secret keys but the matching secret '{secret}' is missing.\n\
+        "Config '{config}' has no matching secret '{secret}'. Every config requires its \
+         secret, even when it declares no secret keys.\n\
          Expected keys:{expected}"
     )]
     SettlementSecretMissing {
@@ -112,11 +113,6 @@ pub enum SecretError {
         secret: String,
         expected: String,
     } = 5011,
-    #[error(
-        "Config '{config}' declares no secret keys but a matching secret '{secret}' exists. \
-         Delete the orphan secret or add the corresponding '${{secret}}' placeholders to the config."
-    )]
-    SettlementSecretUnexpected { config: String, secret: String } = 5012,
     #[error(
         "Secret '{secret}' keys do not match those declared by config '{config}'.\n\
          Extra keys:{extra}\n\

@@ -31,18 +31,13 @@ pub fn settle_secret_keys(input: &Settlement<'_>) -> Result<(), SecretError> {
     let leaves = extract_secret_leaves(input.config, &mut yaml)?;
     let expected: BTreeSet<String> = leaves.into_iter().map(|leaf| leaf.key).collect();
 
-    match (&input.actual_keys, expected.is_empty()) {
-        (None, true) => Ok(()),
-        (None, false) => Err(SecretError::SettlementSecretMissing {
+    match &input.actual_keys {
+        None => Err(SecretError::SettlementSecretMissing {
             config: input.config.to_owned(),
             secret: input.secret.to_owned(),
             expected: sorted_join(&expected),
         }),
-        (Some(_), true) => Err(SecretError::SettlementSecretUnexpected {
-            config: input.config.to_owned(),
-            secret: input.secret.to_owned(),
-        }),
-        (Some(actual), false) => {
+        Some(actual) => {
             let extra: BTreeSet<&str> = actual.difference(&expected).map(String::as_str).collect();
             let missing: BTreeSet<&str> = expected.difference(actual).map(String::as_str).collect();
             if extra.is_empty() && missing.is_empty() {
