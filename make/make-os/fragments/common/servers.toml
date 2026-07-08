@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-[tasks.__os__ps_pytest_servers]
+[tasks.__os__ps_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -13,17 +13,17 @@ script = [
 
     generation = get_env TD_TABSDATA_GENERATION
     if eq ${generation} "1"
-        cm_run_task __os__ps_pytest_tabsdata_servers
-        cm_run_task __os__ps_pytest_tabsdatak_servers
+        cm_run_task __os__ps_tabsdata_instances
+        cm_run_task __os__ps_tabsdatak_instances
     elseif eq ${generation} "2"
-        cm_run_task __os__ps_pytest_tabsdatak_servers
+        cm_run_task __os__ps_tabsdatak_instances
     else
         error "🧨 Unhandled tabsdata Generation: '${generation}'."
         assert false
     end
     ''']
 
-[tasks.__os__start_pytest_servers]
+[tasks.__os__start_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -34,17 +34,17 @@ script = [
 
     generation = get_env TD_TABSDATA_GENERATION
     if eq ${generation} "1"
-        cm_run_task __os__start_pytest_tabsdata_servers
-        cm_run_task __os__start_pytest_tabsdatak_servers
+        cm_run_task __os__start_tabsdata_instances
+        cm_run_task __os__start_tabsdatak_instances
     elseif eq ${generation} "2"
-        cm_run_task __os__start_pytest_tabsdatak_servers
+        cm_run_task __os__start_tabsdatak_instances
     else
         error "🧨 Unhandled tabsdata Generation: '${generation}'."
         assert false
     end
     ''']
 
-[tasks.__os__status_pytest_servers]
+[tasks.__os__status_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -55,17 +55,17 @@ script = [
 
     generation = get_env TD_TABSDATA_GENERATION
     if eq ${generation} "1"
-        cm_run_task __os__status_pytest_tabsdata_servers
-        cm_run_task __os__status_pytest_tabsdatak_servers
+        cm_run_task __os__status_tabsdata_instances
+        cm_run_task __os__status_tabsdatak_instances
     elseif eq ${generation} "2"
-        cm_run_task __os__status_pytest_tabsdatak_servers
+        cm_run_task __os__status_tabsdatak_instances
     else
         error "🧨 Unhandled tabsdata Generation: '${generation}'."
         assert false
     end
     ''']
 
-[tasks.__os__stop_pytest_servers]
+[tasks.__os__report_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -76,17 +76,17 @@ script = [
 
     generation = get_env TD_TABSDATA_GENERATION
     if eq ${generation} "1"
-        cm_run_task __os__stop_pytest_tabsdata_servers
-        cm_run_task __os__stop_pytest_tabsdatak_servers
+        cm_run_task __os__report_tabsdata_instances
+        cm_run_task __os__report_tabsdatak_instances
     elseif eq ${generation} "2"
-        cm_run_task __os__stop_pytest_tabsdatak_servers
+        cm_run_task __os__report_tabsdatak_instances
     else
         error "🧨 Unhandled tabsdata Generation: '${generation}'."
         assert false
     end
     ''']
 
-[tasks.__os__drop_pytest_servers]
+[tasks.__os__info_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -97,10 +97,73 @@ script = [
 
     generation = get_env TD_TABSDATA_GENERATION
     if eq ${generation} "1"
-        cm_run_task __os__drop_pytest_tabsdata_servers
-        cm_run_task __os__drop_pytest_tabsdatak_servers
+        cm_run_task __os__info_tabsdata_instances
+        cm_run_task __os__info_tabsdatak_instances
     elseif eq ${generation} "2"
-        cm_run_task __os__drop_pytest_tabsdatak_servers
+        cm_run_task __os__info_tabsdatak_instances
+    else
+        error "🧨 Unhandled tabsdata Generation: '${generation}'."
+        assert false
+    end
+    ''']
+
+[tasks.__os__list_instances]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    generation = get_env TD_TABSDATA_GENERATION
+    if eq ${generation} "1"
+        cm_run_task __os__list_tabsdata_instances
+        cm_run_task __os__list_tabsdatak_instances
+    elseif eq ${generation} "2"
+        cm_run_task __os__list_tabsdatak_instances
+    else
+        error "🧨 Unhandled tabsdata Generation: '${generation}'."
+        assert false
+    end
+    ''']
+
+[tasks.__os__stop_instances]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    generation = get_env TD_TABSDATA_GENERATION
+    if eq ${generation} "1"
+        cm_run_task __os__stop_tabsdata_instances
+        cm_run_task __os__stop_tabsdatak_instances
+    elseif eq ${generation} "2"
+        cm_run_task __os__stop_tabsdatak_instances
+    else
+        error "🧨 Unhandled tabsdata Generation: '${generation}'."
+        assert false
+    end
+    ''']
+
+[tasks.__os__drop_instances]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    generation = get_env TD_TABSDATA_GENERATION
+    if eq ${generation} "1"
+        cm_run_task __os__drop_tabsdata_instances
+        cm_run_task __os__drop_tabsdatak_instances
+    elseif eq ${generation} "2"
+        cm_run_task __os__drop_tabsdatak_instances
     else
         error "🧨 Unhandled tabsdata Generation: '${generation}'."
         assert false

@@ -66,6 +66,9 @@ script = [
         if eq ${argument} "--no-server-stop"
             set_env TD_WITH_SERVER_STOP "false"
         end
+        if eq ${argument} "--no-domains"
+            set_env TD_WITH_DOMAINS "false"
+        end
         if eq ${argument} "--start"
             seen_start = set true
             set_env TD_WITH_SERVER_START "true"
@@ -115,6 +118,7 @@ script = [
         set_env TD_WITH_SERVER_START "false"
         set_env TD_WITH_SERVER_STOP "false"
         set_env TD_WITH_SERVER_STATUS "false"
+        set_env TD_WITH_DOMAINS "false"
     else
         set_env TD_WITH_HELP "false"
     end
@@ -252,6 +256,18 @@ script = [
         set_env TD_WITH_SERVER_STOP ${umbrella_server_stop}
         debug "🔅 Umbrella override for server stop: '${umbrella_server_stop}'"
     end
+    with_domains = get_env TD_WITH_DOMAINS
+    with_domains_empty = is_empty ${with_domains}
+    with_domains_true = eq ${with_domains} "true"
+    with_domains = set ${with_domains_empty} or ${with_domains_true}
+    if ${with_domains}
+        set_env TD_WITH_DOMAINS "true"
+    else
+        set_env TD_WITH_DOMAINS "false"
+    end
+    TD_WITH_DOMAINS = get_env TD_WITH_DOMAINS
+    debug "🔅 Using td with domains: '${TD_WITH_DOMAINS}'"
+
     umbrella_server_status = get_env TD_UMBRELLA_SERVER_STATUS
     if not is_empty ${umbrella_server_status}
         set_env TD_WITH_SERVER_STATUS ${umbrella_server_status}
@@ -302,6 +318,18 @@ script = [
         info "🚆 _____ The Python tests will run in parallel mode"
         set_env TD_TEST_PY_PARALLEL true
     end
+
+    cm_run_task __os__set_generation
+    ''']
+
+[tasks.__os__set_generation]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
 
     tabsdata_generation = get_env TD_TABSDATA_GENERATION
     tabsdata_generation = trim ${tabsdata_generation}

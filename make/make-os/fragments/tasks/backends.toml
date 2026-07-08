@@ -1,0 +1,511 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+[tasks.__os__set_mode_backends]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env TD_AT_FAST "true"
+    set_env TD_WITH_PERMIT "false"
+    set_env TD_WITH_LICENSE "false"
+    set_env TD_WITH_COMPILE "false"
+    set_env TD_WITH_DEPLOY "false"
+    set_env TD_MAKE_WITH_BANNERS "false"
+    set_env TD_MAKE_WITH_RESPONSIVE "false"
+
+    set_env TD_INHERIT_TABSDATA_PACKAGES "true"
+    set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
+    set_env TD_BUILD_TIMESTAMP "0"
+
+    unset_env TD_TEST_INSTANCES_ARENA
+
+    cm_run_task __os__set_generation
+    ''']
+
+[tasks.__os__set_crypto]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    crypto_key = get_env TD_BACKENDS_CRYPTO_KEY
+    crypto_key = trim ${crypto_key}
+    if is_empty ${crypto_key}
+        vault = get_env ONE_PASSWORD_EMPLOYEE_VAULT
+        vault = trim ${vault}
+        if is_empty ${vault}
+            vault = set "Employee"
+        end
+
+        info "🔑 Loading personal development secrets from 1Password vault '${vault}'..."
+        debug "🚀 op read op://${vault}/DevSecrets/TD_BACKENDS_CRYPTO_KEY"
+        output = exec op read op://${vault}/DevSecrets/TD_BACKENDS_CRYPTO_KEY
+        if not eq ${output.code} "0"
+            error "🚫 Could not read TD_BACKENDS_CRYPTO_KEY from item 'DevSecrets' in 1Password vault '${vault}' (exit code ${output.code})."
+            error "\n${output.stderr}"
+            assert_fail
+        end
+        crypto_key = trim ${output.stdout}
+        set_env TD_BACKENDS_CRYPTO_KEY ${crypto_key}
+        info "🔑 Loaded personal development secrets"
+    else
+        debug "🔑 TD_BACKENDS_CRYPTO_KEY already set; keeping the current value"
+    end
+
+    crypto_key_size = length ${crypto_key}
+    crypto_key_short = less_than ${crypto_key_size} 12
+    if ${crypto_key_short}
+        error "🚫 TD_BACKENDS_CRYPTO_KEY must be at least 12 characters long (got ${crypto_key_size})."
+        assert_fail
+    end
+    ''']
+
+[tasks.__os__start_tabsdata]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__stop_instances
+    cm_run_task __os__drop_instances
+    cm_run_task __os__start_instances
+    ''']
+
+[tasks.__os__stop_tabsdata]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__stop_instances
+    ''']
+
+[tasks.__os__drop_tabsdata]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__stop_instances
+    cm_run_task __os__drop_instances
+    ''']
+
+[tasks.__os__status_tabsdata]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__ps_instances
+    cm_run_task __os__report_instances
+    ''']
+
+[tasks.__os__info_tabsdata]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__info_instances
+    ''']
+
+[tasks.__os__list_tabsdata]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__list_instances
+    ''']
+
+[tasks.__os__set_secrets]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    systems_marker = get_env TD_BACKENDS_SYSTEMS
+    systems_marker = trim ${systems_marker}
+    if is_empty ${systems_marker}
+        vault = get_env ONE_PASSWORD_DEV_XP_VAULT
+        vault = trim ${vault}
+        if is_empty ${vault}
+            error ""
+            error "🧨 ONE_PASSWORD_DEV_XP_VAULT is not set."
+            error ""
+            error "🛟 Set it to the 1Password vault holding the backend systems secrets."
+            error ""
+            assert false
+        end
+
+        info "🔐 Loading backend systems secrets from 1Password vault '${vault}'..."
+        debug "🚀 tdx-system secrets --get 1p:${vault} --out json"
+        secrets_json = exec tdx-system secrets --get 1p:${vault} --out json
+        if not eq ${secrets_json.code} "0"
+            error "🚫 Could not load backend systems secrets from 1Password vault '${vault}' (exit code ${secrets_json.code})."
+            error "\n${secrets_json.stderr}"
+            assert_fail
+        end
+
+        secrets = json_parse --collection ${secrets_json.stdout}
+        secrets_names = map_keys ${secrets}
+        secrets_count = set 0
+        for secret_name in ${secrets_names}
+            secret_value = map_get ${secrets} ${secret_name}
+            set_env ${secret_name} ${secret_value}
+            secrets_count = calc ${secrets_count} + 1
+        end
+        release ${secrets}
+        info "🔐 Loaded ${secrets_count} secret environment variables"
+    else
+        info "🔐 Backend systems secrets already set (TD_BACKENDS_SYSTEMS present); skipping the 1Password load"
+    end
+    ''']
+
+[tasks.__os__create_systems]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__set_secrets
+
+    info "🛠️ Creating backend systems..."
+    debug "🚀 tdx-system create --auto ALL -f"
+    exec --fail-on-error tdx-system create --auto ALL -f
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__destroy_systems]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__set_secrets
+
+    info "💥 Destroying backend systems..."
+    debug "🚀 tdx-system destroy --sys ALL"
+    exec --fail-on-error tdx-system destroy --sys ALL
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__status_systems]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__set_secrets
+
+    exec tdx-itest banner --color green "🚥 Status for backend systems"
+
+    debug "🚀 tdx-system status --sys ALL"
+    status_code = exec --get-exit-code tdx-system status --sys ALL
+    if not eq ${status_code} "0"
+        warn "⚠️ Some backend systems reported an unhealthy status (exit code ${status_code})."
+    end
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__info_systems]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__set_secrets
+
+    exec tdx-itest banner --color cyan "📇 Info for backend systems"
+
+    systems_folder = get_env TD_BACKENDS_DIR
+    systems_folder = trim ${systems_folder}
+    if is_empty ${systems_folder}
+        home = get_env HOME
+        systems_folder = set ${home}/.tabsdatax/systems
+    else
+        systems_folder = set ${systems_folder}/systems
+    end
+
+    documents = array
+    systems_folder_exists = is_path_exists ${systems_folder}
+    if ${systems_folder_exists}
+        systems = glob_array ${systems_folder}/*
+        for system in ${systems}
+            system_is_file = is_file ${system}
+            if ${system_is_file}
+                system_name = basename ${system}
+                debug "🚀 tdx-system info --sys ${system_name} --format json"
+                output = exec tdx-system info --sys ${system_name} --format json
+                if eq ${output.code} "0"
+                    document = map
+                    content = trim ${output.stdout}
+                    map_put ${document} title ${system_name}
+                    map_put ${document} content ${content}
+                    array_push ${documents} ${document}
+                else
+                    debug "➖ Skipping non-descriptor file: ${system_name}"
+                end
+            end
+        end
+    end
+
+    documents_count = array_length ${documents}
+    if eq ${documents_count} "0"
+        info "🚜 No backend systems found in ${systems_folder}."
+    else
+        payload = json_encode --collection ${documents}
+        set_env TD_RENDER_PAYLOAD ${payload}
+        exec --fail-on-error tdx-json --env TD_RENDER_PAYLOAD
+        unset_env TD_RENDER_PAYLOAD
+    end
+    release --recursive ${documents}
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__list_systems]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+
+    exec tdx-itest banner --color magenta "📋 List of backend systems"
+
+    debug "🚀 tdx-system list"
+    exec --fail-on-error tdx-system list
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__generate_domains]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__set_secrets
+
+    info "🛠️ Creating backend domains..."
+    debug "🚀 tdx-domain create --auto ALL -f"
+    exec --fail-on-error tdx-domain create --auto ALL -f
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__create_domains]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__generate_domains
+    ''']
+
+[tasks.__os__destroy_domains]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__set_secrets
+
+    info "💥 Destroying backend domains..."
+    debug "🚀 tdx-domain destroy --auto ALL"
+    exec --fail-on-error tdx-domain destroy --auto ALL
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__status_domains]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__set_secrets
+
+    exec tdx-itest banner --color green "🚥 Status for backend domains"
+
+    debug "🚀 tdx-domain status --auto ALL"
+    status_code = exec --get-exit-code tdx-domain status --auto ALL
+    if not eq ${status_code} "0"
+        warn "⚠️ Some backend domains reported an unhealthy status (exit code ${status_code})."
+    end
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__info_domains]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+    cm_run_task __os__set_secrets
+
+    exec tdx-itest banner --color cyan "📇 Info for backend domains"
+
+    domains_folder = get_env TD_BACKENDS_DIR
+    domains_folder = trim ${domains_folder}
+    if is_empty ${domains_folder}
+        home = get_env HOME
+        domains_folder = set ${home}/.tabsdatax/domains
+    else
+        domains_folder = set ${domains_folder}/domains
+    end
+
+    documents = array
+    domains_folder_exists = is_path_exists ${domains_folder}
+    if ${domains_folder_exists}
+        domains = glob_array ${domains_folder}/*
+        for domain in ${domains}
+            domain_is_file = is_file ${domain}
+            if ${domain_is_file}
+                domain_name = basename ${domain}
+                debug "🚀 tdx-domain info --domain ${domain_name} --format json"
+                output = exec tdx-domain info --domain ${domain_name} --format json
+                if eq ${output.code} "0"
+                    document = map
+                    content = trim ${output.stdout}
+                    map_put ${document} title ${domain_name}
+                    map_put ${document} content ${content}
+                    array_push ${documents} ${document}
+                else
+                    debug "➖ Skipping non-descriptor file: ${domain_name}"
+                end
+            end
+        end
+    end
+
+    documents_count = array_length ${documents}
+    if eq ${documents_count} "0"
+        info "🚜 No backend domains found in ${domains_folder}."
+    else
+        payload = json_encode --collection ${documents}
+        set_env TD_RENDER_PAYLOAD ${payload}
+        exec --fail-on-error tdx-json --env TD_RENDER_PAYLOAD
+        unset_env TD_RENDER_PAYLOAD
+    end
+    release --recursive ${documents}
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__list_domains]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+private = true
+dependencies = ["__os__set_mode_backends"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    cm_run_task __os__set_venv_env
+    cm_run_task __os__set_crypto
+
+    exec tdx-itest banner --color magenta "📋 List of backend domains"
+
+    debug "🚀 tdx-domain list"
+    exec --fail-on-error tdx-domain list
+
+    cm_run_task __os__reset_venv_env
+    ''']

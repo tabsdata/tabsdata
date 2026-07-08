@@ -596,7 +596,7 @@ def load(path: str | Path) -> dict:
     $TD_BACKENDS_CRYPTO_KEY, or not a tdx descriptor."""
     try:
         text = Path(path).read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise DatagenError(f"cannot read descriptor {path}: {exc}")
     if not crypto.is_pem(text):
         raise DatagenError(

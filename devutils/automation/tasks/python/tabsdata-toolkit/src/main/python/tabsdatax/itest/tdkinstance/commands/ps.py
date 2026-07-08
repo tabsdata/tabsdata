@@ -2,6 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+import logging
 import os
 from pathlib import Path
 
@@ -14,6 +15,7 @@ WORKER_EMOJI = "⚙️"
 ACTOR_EMOJI = "🛞"
 
 CYAN = "\033[96m"
+GREEN = "\033[32m"
 UNDERLINE = "\033[4m"
 END = "\033[0m"
 
@@ -28,6 +30,20 @@ PROCESS_COLORS = [
 KM_PROCESS_NAMES = ("km", "km.exe")
 WORKDIR_ARGUMENT = "--workdir"
 CLUSTER_FOLDER = "cluster"
+
+
+def get_logger() -> logging.Logger:
+    log_level = os.getenv("PYTHON_LOG_LEVEL", "INFO").upper()
+    formatter = logging.Formatter(f"{GREEN}[%(levelname)s] %(message)s{END}")
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    logger = logging.getLogger(__name__)
+    logger.setLevel(log_level)
+    logger.addHandler(handler)
+    return logger
+
+
+logger = get_logger()
 
 
 def instance_of(cmdline: list[str]) -> str:
@@ -58,8 +74,8 @@ def process_name(process: dict) -> str:
 @click.command(name="ps")
 def ps():
     """List km processes and their components for each kubernetes instance."""
-    click.echo(f"{UNDERLINE}Running tabsdata kubernetes instances{END}")
-    click.echo("")
+    logger.info(f"{UNDERLINE}Running tabsdata kubernetes instances{END}")
+    logger.info("")
 
     processes = {
         process.pid: process.info
@@ -86,7 +102,7 @@ def ps():
             emoji = WORKER_EMOJI
         else:
             emoji = ACTOR_EMOJI
-        click.echo(
+        logger.info(
             f"{indent}{color}{emoji} "
             f"{process['pid']:>6} "
             f"{process['ppid']:>6} "
@@ -96,6 +112,6 @@ def ps():
             print_process_tree(child, level + 1, indent)
 
     for pid, instance in sorted(roots.items()):
-        click.echo(f"{INSTANCE_EMOJI} {CYAN}Instance: {instance}{END}")
+        logger.info(f"{INSTANCE_EMOJI} {CYAN}Instance: {instance}{END}")
         print_process_tree(pid)
-        click.echo("")
+        logger.info("")

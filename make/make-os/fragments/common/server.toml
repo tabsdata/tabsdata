@@ -166,7 +166,7 @@ script = [
     debug "   PATH=${__path}"
     ''']
 
-[tasks.__os__ps_pytest_tabsdata_servers]
+[tasks.__os__ps_tabsdata_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -178,11 +178,13 @@ script = [
 
     assert_tabsdata_generation tdserver
 
+    exec tdx-itest banner --color green "👀 Processes for supervisor instances (generation 1)"
+
     debug "🚀 python ${PS_SUPERVISORS_SCRIPT}"
     exec --fail-on-error python ${PS_SUPERVISORS_SCRIPT}
     ''']
 
-[tasks.__os__start_pytest_tabsdata_servers]
+[tasks.__os__start_tabsdata_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -356,7 +358,7 @@ script = [
         warn "🚚 Binaries for tdserver not available. Skipping tabsdata start."
     end
 
-    cm_run_task __os__ps_pytest_tabsdata_servers
+    cm_run_task __os__ps_tabsdata_instances
 
     debug "🟢️ Before reset..."
     cm_run_task __os__show_venv_env
@@ -367,7 +369,7 @@ script = [
     cm_run_task __os__show_venv_env
     ''']
 
-[tasks.__os__status_pytest_tabsdata_servers]
+[tasks.__os__status_tabsdata_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -519,7 +521,7 @@ script = [
         warn "🚚 Binaries for tdserver not available. Skipping tabsdata status."
     end
 
-    cm_run_task __os__ps_pytest_tabsdata_servers
+    cm_run_task __os__ps_tabsdata_instances
 
     debug "🟢️ Before reset..."
     cm_run_task __os__show_venv_env
@@ -530,7 +532,200 @@ script = [
     cm_run_task __os__show_venv_env
     ''']
 
-[tasks.__os__stop_pytest_tabsdata_servers]
+[tasks.__os__report_tabsdata_instances]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    assert_tabsdata_generation tdserver
+
+    cm_run_task __os__set_venv_env
+
+    exec tdx-itest banner --color green "🚥 Status for supervisor instances (generation 1)"
+
+    if is_empty ${profile}
+        build-folder = set "debug"
+    else
+        is_dev = eq ${profile} "dev"
+        if ${is_dev}
+            build-folder = set "debug"
+        else
+            build-folder = set ${profile}
+        end
+    end
+    if not is_empty ${td-target}
+        build-folder = set ${td-target}/${build-folder}
+    end
+    os_family = os_family
+    if eq ${os_family} "windows"
+        tdserver = set "tdserver.exe"
+    else
+        tdserver = set "tdserver"
+    end
+
+    exists = is_path_exists ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver}
+    if ${exists}
+        instances = exec --fail-on-error python ${TESTING_INSTANCES_SCRIPT} ${TESTING_SUPERVISORS_CONFIG}
+        instances = split ${instances.stdout} "\n"
+
+        for instance in ${instances}
+            instance = trim ${instance}
+            in_arena = instance_in_arena ${instance}
+            if ${in_arena}
+                info "🎯 Status of supervisor instance: ${instance}"
+                debug "🚀 ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} --accept-terms y status --instance ${instance}"
+                exec ${PROJECT_TABSDATA_ROOT_FOLDER}/target/${build-folder}/${tdserver} --accept-terms y status --instance ${instance}
+            end
+        end
+    else
+        warn "🚚 Binaries for tdserver not available. Skipping tabsdata status."
+    end
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__info_tabsdata_instances]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    assert_tabsdata_generation tdserver
+
+    cm_run_task __os__set_venv_env
+
+    exec tdx-itest banner --color cyan "📇 Info for supervisor instances (generation 1)"
+
+    home = get_env HOME
+    instances_folder = set ${home}/.tabsdata/instances
+
+    documents = array
+    instances_folder_exists = is_path_exists ${instances_folder}
+    if ${instances_folder_exists}
+        instances = glob_array ${instances_folder}/*
+        for instance_folder in ${instances}
+            instance_is_folder = is_dir ${instance_folder}
+            if ${instance_is_folder}
+                instance_name = basename ${instance_folder}
+                in_arena = instance_in_arena ${instance_name}
+                if ${in_arena}
+                    version_file = set ${instance_folder}/.version
+                    version_file_exists = is_file ${version_file}
+                    if ${version_file_exists}
+                        content = readfile ${version_file}
+                        content = trim ${content}
+                        document = map
+                        map_put ${document} title ${instance_name}
+                        map_put ${document} content ${content}
+                        array_push ${documents} ${document}
+                    else
+                        debug "➖ Skipping versionless instance: ${instance_name}"
+                    end
+                end
+            end
+        end
+    end
+
+    documents_count = array_length ${documents}
+    if eq ${documents_count} "0"
+        info "🚜 No supervisor instances found in ${instances_folder}."
+    else
+        payload = json_encode --collection ${documents}
+        set_env TD_RENDER_PAYLOAD ${payload}
+        exec --fail-on-error tdx-json --env TD_RENDER_PAYLOAD
+        unset_env TD_RENDER_PAYLOAD
+    end
+    release --recursive ${documents}
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__list_tabsdata_instances]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    assert_tabsdata_generation tdserver
+
+    cm_run_task __os__set_venv_env
+
+    exec tdx-itest banner --color magenta "📋 List of supervisor instances (generation 1)"
+
+    home = get_env HOME
+    instances_folder = set ${home}/.tabsdata/instances
+
+    rows = array
+    instances_folder_exists = is_path_exists ${instances_folder}
+    if ${instances_folder_exists}
+        instances = glob_array ${instances_folder}/*
+        for instance_folder in ${instances}
+            instance_is_folder = is_dir ${instance_folder}
+            if ${instance_is_folder}
+                instance_name = basename ${instance_folder}
+                in_arena = instance_in_arena ${instance_name}
+                if ${in_arena}
+                    version_file = set ${instance_folder}/.version
+                    version_file_exists = is_file ${version_file}
+                    if ${version_file_exists}
+                        version = readfile ${version_file}
+                        version = trim ${version}
+                        row = array
+                        array_push ${row} ${instance_name}
+                        array_push ${row} ${version}
+                        array_push ${row} ${instance_folder}
+                        array_push ${rows} ${row}
+                    else
+                        debug "➖ Skipping versionless instance: ${instance_name}"
+                    end
+                end
+            end
+        end
+    end
+
+    rows_count = array_length ${rows}
+    if eq ${rows_count} "0"
+        info "🚜 No supervisor instances found in ${instances_folder}."
+    else
+        columns = array
+        column = map
+        map_put ${column} name "Name"
+        array_push ${columns} ${column}
+        column = map
+        map_put ${column} name "Version"
+        array_push ${columns} ${column}
+        column = map
+        map_put ${column} name "Folder"
+        array_push ${columns} ${column}
+
+        table = map
+        map_put ${table} columns ${columns}
+        map_put ${table} rows ${rows}
+
+        payload = json_encode --collection ${table}
+        set_env TD_RENDER_PAYLOAD ${payload}
+        exec --fail-on-error tdx-table --env TD_RENDER_PAYLOAD
+        unset_env TD_RENDER_PAYLOAD
+        release --recursive ${table}
+    end
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__stop_tabsdata_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -617,7 +812,7 @@ script = [
         warn "🚚 Binaries for tdserver not available. Skipping tabsdata status."
     end
 
-    cm_run_task __os__ps_pytest_tabsdata_servers
+    cm_run_task __os__ps_tabsdata_instances
 
     debug "🟢️ Before reset..."
     cm_run_task __os__show_venv_env
@@ -628,7 +823,7 @@ script = [
     cm_run_task __os__show_venv_env
     ''']
 
-[tasks.__os__drop_pytest_tabsdata_servers]
+[tasks.__os__drop_tabsdata_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true

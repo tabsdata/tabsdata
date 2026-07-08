@@ -4,7 +4,7 @@
 
 [tasks.docker]
 plugin = "td-task-tracker"
-category = "12 - Docker"
+category = "13 - Docker"
 description = "Build and manage Tabsdata Docker images"
 command = "tdkdocker"
 args = ["${@}"]

@@ -128,6 +128,30 @@ script = [
             at_warp = set true
         end
     end
+    make_task = get_env CARGO_MAKE_TASK
+    backends_tasks = map
+    map_put ${backends_tasks} tabsdata_start true
+    map_put ${backends_tasks} tabsdata_stop true
+    map_put ${backends_tasks} tabsdata_drop true
+    map_put ${backends_tasks} tabsdata_status true
+    map_put ${backends_tasks} tabsdata_info true
+    map_put ${backends_tasks} tabsdata_list true
+    map_put ${backends_tasks} systems_create true
+    map_put ${backends_tasks} systems_destroy true
+    map_put ${backends_tasks} systems_status true
+    map_put ${backends_tasks} systems_info true
+    map_put ${backends_tasks} systems_list true
+    map_put ${backends_tasks} domains_create true
+    map_put ${backends_tasks} domains_destroy true
+    map_put ${backends_tasks} domains_status true
+    map_put ${backends_tasks} domains_info true
+    map_put ${backends_tasks} domains_list true
+    is_backends_task = map_contains_key ${backends_tasks} ${make_task}
+    release ${backends_tasks}
+    if ${is_backends_task}
+        at_fast = set true
+    end
+
     if ${at_warp}
         at_fast = set true
     end
@@ -149,7 +173,6 @@ script = [
         set_env TD_WITH_PERMIT "false"
     end
 
-    make_task = get_env CARGO_MAKE_TASK
     is_permit_task = starts_with ${make_task} "permit"
     if eq ${make_task} "docs"
         noop

@@ -37,7 +37,7 @@ script = [
     debug "🔅 Using tdkserver binary: ${tdkserver_binary}"
     ''']
 
-[tasks.__os__ps_pytest_tabsdatak_servers]
+[tasks.__os__ps_tabsdatak_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -46,6 +46,8 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+
+    exec tdx-itest banner --color green "👀 Processes for kubernetes instances (generation 2)"
 
     exists = is_path_exists ${ITEST_TDKSERVER_BINARY}
     if ${exists}
@@ -59,7 +61,7 @@ script = [
     exec tdx-itest ps
     ''']
 
-[tasks.__os__start_pytest_tabsdatak_servers]
+[tasks.__os__start_tabsdatak_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -173,12 +175,12 @@ script = [
         warn "🚚 Binary for tdkserver not available. Skipping tdkserver start."
     end
 
-    cm_run_task __os__ps_pytest_tabsdatak_servers
+    cm_run_task __os__ps_tabsdatak_instances
 
     cm_run_task __os__reset_venv_env
     ''']
 
-[tasks.__os__status_pytest_tabsdatak_servers]
+[tasks.__os__status_tabsdatak_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -248,12 +250,206 @@ script = [
         warn "🚚 Binary for tdkserver not available. Skipping tdkserver status."
     end
 
-    cm_run_task __os__ps_pytest_tabsdatak_servers
+    cm_run_task __os__ps_tabsdatak_instances
 
     cm_run_task __os__reset_venv_env
     ''']
 
-[tasks.__os__stop_pytest_tabsdatak_servers]
+[tasks.__os__report_tabsdatak_instances]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+dependencies = ["__os__tdkserver_binary"]
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    cm_run_task __os__set_venv_env
+
+    exec tdx-itest banner --color green "🚥 Status for kubernetes instances (generation 2)"
+
+    exists = is_path_exists ${ITEST_TDKSERVER_BINARY}
+    if ${exists}
+        instances = exec tdx-itest registry list ${ITEST_REGISTRY_FILE}
+        instances = split ${instances.stdout} "\n"
+
+        for instance in ${instances}
+            instance = trim ${instance}
+            in_arena = instance_in_arena ${instance}
+            if ${in_arena}
+                info "🎯 Status of kubernetes instance: ${instance}"
+                debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y status --instance ${instance}"
+                exec ${ITEST_TDKSERVER_BINARY} --accept-terms y status --instance ${instance}
+            end
+        end
+    else
+        warn "🚚 Binary for tdkserver not available. Skipping tdkserver status."
+    end
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__info_tabsdatak_instances]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    cm_run_task __os__set_venv_env
+
+    exec tdx-itest banner --color cyan "📇 Info for kubernetes instances (generation 2)"
+
+    home = get_env HOME
+    instances_folder = set ${home}/.tabsdata/instances
+
+    documents = array
+    instances_folder_exists = is_path_exists ${instances_folder}
+    if ${instances_folder_exists}
+        instances = glob_array ${instances_folder}/*
+        for instance_folder in ${instances}
+            instance_is_folder = is_dir ${instance_folder}
+            if ${instance_is_folder}
+                instance_name = basename ${instance_folder}
+                in_arena = instance_in_arena ${instance_name}
+                if ${in_arena}
+                    settings_file = set ${instance_folder}/.settings.json
+                    settings_file_exists = is_file ${settings_file}
+                    if ${settings_file_exists}
+                        content = readfile ${settings_file}
+                        content = trim ${content}
+                        document = map
+                        map_put ${document} title ${instance_name}
+                        map_put ${document} content ${content}
+                        array_push ${documents} ${document}
+                    else
+                        debug "➖ Skipping non-kubernetes instance: ${instance_name}"
+                    end
+                end
+            end
+        end
+    end
+
+    documents_count = array_length ${documents}
+    if eq ${documents_count} "0"
+        info "🚜 No kubernetes instances found in ${instances_folder}."
+    else
+        payload = json_encode --collection ${documents}
+        set_env TD_RENDER_PAYLOAD ${payload}
+        exec --fail-on-error tdx-json --env TD_RENDER_PAYLOAD
+        unset_env TD_RENDER_PAYLOAD
+    end
+    release --recursive ${documents}
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__list_tabsdatak_instances]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/gen.ds
+
+    cm_run_task __os__set_venv_env
+
+    exec tdx-itest banner --color magenta "📋 List of kubernetes instances (generation 2)"
+
+    home = get_env HOME
+    instances_folder = set ${home}/.tabsdata/instances
+
+    rows = array
+    instances_folder_exists = is_path_exists ${instances_folder}
+    if ${instances_folder_exists}
+        instances = glob_array ${instances_folder}/*
+        for instance_folder in ${instances}
+            instance_is_folder = is_dir ${instance_folder}
+            if ${instance_is_folder}
+                instance_name = basename ${instance_folder}
+                in_arena = instance_in_arena ${instance_name}
+                if ${in_arena}
+                    settings_file = set ${instance_folder}/.settings.json
+                    settings_file_exists = is_file ${settings_file}
+                    if ${settings_file_exists}
+                        content = readfile ${settings_file}
+                        settings = json_parse --collection ${content}
+                        provider = map_get ${settings} provider
+                        state = map_get ${settings} state
+                        locality = map_get ${settings} locality
+                        apiserver_port = set ""
+                        ports = map_get ${settings} ports
+                        for port_entry in ${ports}
+                            port_role = map_get ${port_entry} role
+                            if eq ${port_role} "apiserver_public_port"
+                                apiserver_port = map_get ${port_entry} port
+                            end
+                        end
+                        release --recursive ${settings}
+
+                        row = array
+                        array_push ${row} ${instance_name}
+                        array_push ${row} ${provider}
+                        array_push ${row} ${state}
+                        array_push ${row} ${locality}
+                        array_push ${row} ${apiserver_port}
+                        array_push ${row} ${instance_folder}
+                        array_push ${rows} ${row}
+                    else
+                        debug "➖ Skipping non-kubernetes instance: ${instance_name}"
+                    end
+                end
+            end
+        end
+    end
+
+    rows_count = array_length ${rows}
+    if eq ${rows_count} "0"
+        info "🚜 No kubernetes instances found in ${instances_folder}."
+    else
+        columns = array
+        column = map
+        map_put ${column} name "Name"
+        array_push ${columns} ${column}
+        column = map
+        map_put ${column} name "Provider"
+        array_push ${columns} ${column}
+        column = map
+        map_put ${column} name "State"
+        map_put ${column} color_scheme "status"
+        array_push ${columns} ${column}
+        column = map
+        map_put ${column} name "Locality"
+        array_push ${columns} ${column}
+        column = map
+        map_put ${column} name "API Server Port"
+        array_push ${columns} ${column}
+        column = map
+        map_put ${column} name "Folder"
+        array_push ${columns} ${column}
+
+        table = map
+        map_put ${table} columns ${columns}
+        map_put ${table} rows ${rows}
+
+        payload = json_encode --collection ${table}
+        set_env TD_RENDER_PAYLOAD ${payload}
+        exec --fail-on-error tdx-table --env TD_RENDER_PAYLOAD
+        unset_env TD_RENDER_PAYLOAD
+        release --recursive ${table}
+    end
+
+    cm_run_task __os__reset_venv_env
+    ''']
+
+[tasks.__os__stop_tabsdatak_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -313,12 +509,12 @@ script = [
         warn "🚚 Binary for tdkserver not available. Skipping tdkserver stop."
     end
 
-    cm_run_task __os__ps_pytest_tabsdatak_servers
+    cm_run_task __os__ps_tabsdatak_instances
 
     cm_run_task __os__reset_venv_env
     ''']
 
-[tasks.__os__drop_pytest_tabsdatak_servers]
+[tasks.__os__drop_tabsdatak_instances]
 plugin = "td-task-tracker"
 category = "04 - Test"
 private = true
@@ -379,7 +575,7 @@ script = [
         warn "🚚 Binary for tdkserver not available. Skipping tdkserver trash."
     end
 
-    cm_run_task __os__ps_pytest_tabsdatak_servers
+    cm_run_task __os__ps_tabsdatak_instances
 
     cm_run_task __os__reset_venv_env
     ''']

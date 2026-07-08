@@ -97,10 +97,18 @@ script = [
         set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
         set_env TD_BUILD_TIMESTAMP "0"
 
-        cm_run_task __os__stop_pytest_servers
-        cm_run_task __os__drop_pytest_servers
-        cm_run_task __os__start_pytest_servers
-        cm_run_task __os__status_pytest_servers
+        cm_run_task __os__stop_instances
+        cm_run_task __os__drop_instances
+        cm_run_task __os__start_instances
+        cm_run_task __os__status_instances
+
+        with_domains = get_env TD_WITH_DOMAINS
+        if eq ${with_domains} "true"
+            debug "🔷 _____ Creating backend domains..."
+            cm_run_task __os__generate_domains
+        else
+            info "🚜 Creating backend domains skipped."
+        end
     else
         info "🚜 Starting tabsdata servers skipped."
     end
@@ -108,7 +116,7 @@ script = [
     with_server_status = get_env TD_WITH_SERVER_STATUS
     if eq ${with_server_status} "true"
         debug "🔷 _____ Reporting tabsdata servers status (pytest)..."
-        cm_run_task __os__ps_pytest_servers
+        cm_run_task __os__ps_instances
     end
     ''']
 
@@ -125,7 +133,7 @@ script = [
     with_server_stop = get_env TD_WITH_SERVER_STOP
     if eq ${with_server_stop} "true"
         debug "🔷 _____ Stopping tabsdata servers (pytest)..."
-        cm_run_task __os__stop_pytest_servers
+        cm_run_task __os__stop_instances
     else
         info "🚜 Stopping tabsdata servers skipped."
     end
@@ -180,10 +188,18 @@ script = [
         set_env TD_OVERRIDE_BUILD_TIMESTAMP "true"
         set_env TD_BUILD_TIMESTAMP "0"
 
-        cm_run_task __os__stop_pytest_servers
-        cm_run_task __os__drop_pytest_servers
-        cm_run_task __os__start_pytest_servers
-        cm_run_task __os__status_pytest_servers
+        cm_run_task __os__stop_instances
+        cm_run_task __os__drop_instances
+        cm_run_task __os__start_instances
+        cm_run_task __os__status_instances
+
+        with_domains = get_env TD_WITH_DOMAINS
+        if eq ${with_domains} "true"
+            debug "🔷 _____ Creating backend domains..."
+            cm_run_task __os__generate_domains
+        else
+            info "🚜 Creating backend domains skipped."
+        end
     else
         info "🚜 Starting tabsdata servers skipped."
     end
@@ -191,7 +207,7 @@ script = [
     with_server_status = get_env TD_WITH_SERVER_STATUS
     if eq ${with_server_status} "true"
         debug "🔷 _____ Reporting tabsdata servers status (itest)..."
-        cm_run_task __os__ps_pytest_servers
+        cm_run_task __os__ps_instances
     end
     ''']
 
@@ -208,8 +224,8 @@ script = [
     with_server_stop = get_env TD_WITH_SERVER_STOP
     if eq ${with_server_stop} "true"
         debug "🔷 _____ Stopping tabsdata servers (itest)..."
-        cm_run_task __os__stop_pytest_servers
-        cm_run_task __os__drop_pytest_servers
+        cm_run_task __os__stop_instances
+        cm_run_task __os__drop_instances
     else
         info "🚜 Stopping tabsdata servers skipped."
     end

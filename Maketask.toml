@@ -774,6 +774,7 @@ script = [
         info "   --no-server-start  Do all setup but never start the tabsdata servers (they are still stopped afterwards)."
         info "   --no-server-stop   Never stop the tabsdata servers afterwards, whether or not this run started them."
         info "   --no-server        Equivalent to '--no-server-start --no-server-stop'."
+        info "   --no-domains       Skip creating the backend domains when the servers are started (created by default)."
         info "   --start            Do setup and start the tabsdata servers, then exit. No tests, no filtering, no stop."
         info "   --stop             Only run teardown: setup without starting, then stop the tabsdata servers. No tests."
         info "   --status           Do setup and report the tabsdata servers status, then exit. No start, no stop, no tests."
@@ -1222,6 +1223,7 @@ script = [
         info "   --no-server-start  Do all setup but never start the tabsdata servers (they are still stopped afterwards)."
         info "   --no-server-stop   Never stop the tabsdata servers afterwards, whether or not this run started them."
         info "   --no-server        Equivalent to '--no-server-start --no-server-stop'."
+        info "   --no-domains       Skip creating the backend domains when the servers are started (created by default)."
         info "   --start            Do setup and start the tabsdata servers, then exit. No tests, no filtering, no stop."
         info "   --stop             Only run teardown: setup without starting, then stop the tabsdata servers. No tests."
         info "   --status           Do setup and report the tabsdata servers status, then exit. No start, no stop, no tests."
@@ -2225,6 +2227,166 @@ run_task = [
     { name = [
         "__os__uninstall_py_tabsdata",
         "__os__uninstall_py_connectors"
+    ] }
+]
+
+[tasks.tabsdata_start]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Start the tabsdata instances"
+run_task = [
+    { name = [
+        "__os__start_tabsdata"
+    ] }
+]
+
+[tasks.tabsdata_stop]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Stop the tabsdata instances"
+run_task = [
+    { name = [
+        "__os__stop_tabsdata"
+    ] }
+]
+
+[tasks.tabsdata_drop]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Drop the tabsdata instances"
+run_task = [
+    { name = [
+        "__os__drop_tabsdata"
+    ] }
+]
+
+[tasks.tabsdata_status]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Report the status of the tabsdata instances"
+run_task = [
+    { name = [
+        "__os__status_tabsdata"
+    ] }
+]
+
+[tasks.tabsdata_info]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Show detailed information of the tabsdata instances"
+run_task = [
+    { name = [
+        "__os__info_tabsdata"
+    ] }
+]
+
+[tasks.tabsdata_list]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "List the tabsdata instances"
+run_task = [
+    { name = [
+        "__os__list_tabsdata"
+    ] }
+]
+
+[tasks.systems_create]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Create the backend systems"
+run_task = [
+    { name = [
+        "__os__create_systems"
+    ] }
+]
+
+[tasks.systems_destroy]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Destroy the backend systems"
+run_task = [
+    { name = [
+        "__os__destroy_systems"
+    ] }
+]
+
+[tasks.systems_status]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Report the status of the backend systems"
+run_task = [
+    { name = [
+        "__os__status_systems"
+    ] }
+]
+
+[tasks.systems_info]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Show detailed information of the backend systems"
+run_task = [
+    { name = [
+        "__os__info_systems"
+    ] }
+]
+
+[tasks.systems_list]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "List the backend systems"
+run_task = [
+    { name = [
+        "__os__list_systems"
+    ] }
+]
+
+[tasks.domains_create]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Create the backend domains"
+run_task = [
+    { name = [
+        "__os__create_domains"
+    ] }
+]
+
+[tasks.domains_destroy]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Destroy the backend domains"
+run_task = [
+    { name = [
+        "__os__destroy_domains"
+    ] }
+]
+
+[tasks.domains_status]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Report the status of the backend domains"
+run_task = [
+    { name = [
+        "__os__status_domains"
+    ] }
+]
+
+[tasks.domains_info]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "Show detailed information of the backend domains"
+run_task = [
+    { name = [
+        "__os__info_domains"
+    ] }
+]
+
+[tasks.domains_list]
+plugin = "td-task-tracker"
+category = "12 - Backends"
+description = "List the backend domains"
+run_task = [
+    { name = [
+        "__os__list_domains"
     ] }
 ]
 
