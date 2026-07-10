@@ -1,6 +1,7 @@
 """End-to-end LocalFile integration tests: invoke ``td_transporter2``
-against real filesystem paths. Skipped unless the ``td_transporter2``
-binary is installed in the active Python environment's scripts folder.
+against real filesystem paths. Requires the ``td_transporter2`` binary in the
+active Python environment's scripts folder (hydration is mandatory; a missing
+binary fails loudly rather than skipping).
 
 Unlike the cloud variants, no credentials are required.
 """
@@ -14,31 +15,22 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from tabsdatak.common._interpreter.python.error import BinaryNotFoundError
+# noinspection PyProtectedMember
+import tabsdatak.conn.localfile._plugin as plugin
 from tabsdatak.common._interpreter.python.venv import PythonEnvironment
 from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
-from tabsdatak.conn.localfile import LocalFileDest, LocalFileDestConn, LocalFileSrc, LocalFileSrcConn
-# noinspection PyProtectedMember
-import tabsdatak.conn.localfile._plugin as plugin
+from tabsdatak.conn.localfile import (
+    LocalFileDest,
+    LocalFileDestConn,
+    LocalFileSrc,
+    LocalFileSrcConn,
+)
 from tabsdatak.spi import DestContext, SrcPluginCtx
-
 
 pytestmark = pytest.mark.localfile
 
-
-try:
-    TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
-except BinaryNotFoundError:
-    TRANSPORTER_BINARY = None
-
-pytestmark = [pytestmark, pytest.mark.skipif(
-    TRANSPORTER_BINARY is None,
-    reason=(
-        f"{TRANSPORTER_BINARY_NAME} binary not found in the active Python "
-        "environment; integration tests skipped"
-    ),
-)]
+TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +83,7 @@ class _SrcCtx(SrcPluginCtx):
     def add_metadata(self, attr, val):
         pass
 
+
 class _DestCtx(DestContext):
     def __init__(self, work_dir: Path) -> None:
         self._work_dir = work_dir
@@ -135,6 +128,7 @@ class _DestCtx(DestContext):
 
     def add_metadata(self, attr, val):
         pass
+
 
 # ---------------------------------------------------------------------------
 # Round-trip via LocalFile{Src,Dest} plugins
@@ -209,11 +203,13 @@ def test_src_wildcard_in_basename_matches_multiple_files(tmp_path: Path):
     base.mkdir()
     for name in ("a.parquet", "b.parquet", "c.parquet"):
         pl.DataFrame([{"name": name}]).write_parquet(
-            base / name, use_pyarrow=True,
+            base / name,
+            use_pyarrow=True,
         )
     # A non-matching neighbour: must NOT show up in the output
     pl.DataFrame([{"name": "skip.csv"}]).write_parquet(
-        base / "skip.csv", use_pyarrow=True,
+        base / "skip.csv",
+        use_pyarrow=True,
     )
 
     conn = LocalFileSrcConn(base_path=str(base))
@@ -226,9 +222,7 @@ def test_src_wildcard_in_basename_matches_multiple_files(tmp_path: Path):
     assert len(out) == 1
     # Three parquet inputs -> at least three target files in the report
     assert len(out[0]) >= 3
-    names = sorted(
-        pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0]
-    )
+    names = sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0])
     assert names == ["a.parquet", "b.parquet", "c.parquet"]
 
 
@@ -236,7 +230,8 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(tmp_path: Path):
     base = tmp_path / "store"
     base.mkdir()
     pl.DataFrame([{"name": "x"}]).write_parquet(
-        base / "x.csv", use_pyarrow=True,
+        base / "x.csv",
+        use_pyarrow=True,
     )
 
     conn = LocalFileSrcConn(base_path=str(base))
@@ -289,9 +284,7 @@ def test_src_initial_last_modified_filters_out_older_files(tmp_path: Path):
     work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
 
-    names = sorted(
-        pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0]
-    )
+    names = sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0])
     assert names == ["new"]
 
 
@@ -317,9 +310,7 @@ def test_src_initial_last_modified_at_or_before_oldest_returns_all(
     work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
 
-    names = sorted(
-        pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0]
-    )
+    names = sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0])
     assert names == ["a", "b"]
 
 
@@ -428,7 +419,8 @@ def test_src_format_auto_infers_parquet_from_extension(tmp_path: Path):
     base = tmp_path / "store"
     base.mkdir()
     pl.DataFrame([{"id": 1, "name": "alice"}]).write_parquet(
-        base / "users.parquet", use_pyarrow=True,
+        base / "users.parquet",
+        use_pyarrow=True,
     )
 
     conn = LocalFileSrcConn(base_path=str(base))
@@ -471,7 +463,8 @@ def test_dest_format_csv_writes_csv_file(tmp_path: Path):
     base = tmp_path / "store"
     base.mkdir()
     src_parquet = _stage_input_parquet(
-        tmp_path, [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
+        tmp_path,
+        [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     )
 
     conn = LocalFileSrcConn(base_path=str(base))
@@ -482,7 +475,10 @@ def test_dest_format_csv_writes_csv_file(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), conn, dest, [Path(src_parquet)],
+        _DestCtx(work),
+        conn,
+        dest,
+        [Path(src_parquet)],
     )
 
     out_file = base / "users.csv"
@@ -498,7 +494,8 @@ def test_dest_format_csv_honours_separator_option(tmp_path: Path):
     base = tmp_path / "store"
     base.mkdir()
     src_parquet = _stage_input_parquet(
-        tmp_path, [{"id": 1, "name": "alice"}],
+        tmp_path,
+        [{"id": 1, "name": "alice"}],
     )
 
     conn = LocalFileDestConn(base_path=str(base))
@@ -510,7 +507,10 @@ def test_dest_format_csv_honours_separator_option(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), conn, dest, [Path(src_parquet)],
+        _DestCtx(work),
+        conn,
+        dest,
+        [Path(src_parquet)],
     )
 
     raw = (base / "users.csv").read_text()
@@ -523,7 +523,8 @@ def test_dest_format_json_writes_json_file(tmp_path: Path):
     base = tmp_path / "store"
     base.mkdir()
     src_parquet = _stage_input_parquet(
-        tmp_path, [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
+        tmp_path,
+        [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     )
 
     conn = LocalFileDestConn(base_path=str(base))
@@ -534,7 +535,10 @@ def test_dest_format_json_writes_json_file(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), conn, dest, [Path(src_parquet)],
+        _DestCtx(work),
+        conn,
+        dest,
+        [Path(src_parquet)],
     )
 
     out_file = base / "users.json"
@@ -552,7 +556,8 @@ def test_dest_format_avro_writes_avro_file(tmp_path: Path):
     base = tmp_path / "store"
     base.mkdir()
     src_parquet = _stage_input_parquet(
-        tmp_path, [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
+        tmp_path,
+        [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     )
 
     conn = LocalFileDestConn(base_path=str(base))
@@ -563,7 +568,10 @@ def test_dest_format_avro_writes_avro_file(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), conn, dest, [Path(src_parquet)],
+        _DestCtx(work),
+        conn,
+        dest,
+        [Path(src_parquet)],
     )
 
     out_file = base / "users.avro"
@@ -579,7 +587,8 @@ def test_dest_format_auto_defaults_to_parquet(tmp_path: Path):
     base = tmp_path / "store"
     base.mkdir()
     src_parquet = _stage_input_parquet(
-        tmp_path, [{"id": 1, "name": "alice"}],
+        tmp_path,
+        [{"id": 1, "name": "alice"}],
     )
 
     conn = LocalFileDestConn(base_path=str(base))
@@ -590,7 +599,10 @@ def test_dest_format_auto_defaults_to_parquet(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work), conn, dest, [Path(src_parquet)],
+        _DestCtx(work),
+        conn,
+        dest,
+        [Path(src_parquet)],
     )
 
     out_file = base / "users.parquet"

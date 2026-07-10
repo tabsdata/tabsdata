@@ -24,14 +24,15 @@ from .errors import DatagenError
 DIST_NAME = "tabsdata-toolkit"
 
 _IMPORT_OVERRIDES: dict[str, str] = {
+    "azure-storage-blob": "azure.storage.blob",
+    "clickhouse-sqlalchemy": "clickhouse_sqlalchemy",
+    "google-cloud-bigquery": "google.cloud.bigquery",
+    "google-cloud-storage": "google.cloud.storage",
+    "mysql-connector-python": "mysql.connector",
+    "protobuf": "google.protobuf",
+    "psycopg2-binary": "psycopg2",
     "py-cpuinfo": "cpuinfo",
     "pyyaml": "yaml",
-    "psycopg2-binary": "psycopg2",
-    "mysql-connector-python": "mysql.connector",
-    "clickhouse-sqlalchemy": "clickhouse_sqlalchemy",
-    "google-cloud-storage": "google.cloud.storage",
-    "google-cloud-bigquery": "google.cloud.bigquery",
-    "azure-storage-blob": "azure.storage.blob",
     "snowflake-connector-python": "snowflake.connector",
 }
 

@@ -146,7 +146,7 @@ class Collection:
         description: str | None = None,
         group: str | None = None,
         base_path: str | None = None,
-        connection_document: dict | None = None,
+        connection_document: str | None = None,
         secrets: list | None = None,
         variables: list | None = None,
         **kwargs,
@@ -3639,7 +3639,7 @@ class TabsdataServer:
         description: str = None,
         group: str | None = None,
         base_path: str | None = None,
-        connection: dict | None = None,
+        connection: str | None = None,
         secrets: list | None = None,
         variables: list | None = None,
         raise_for_status: bool = True,
@@ -3652,9 +3652,9 @@ class TabsdataServer:
             description (str, optional): The description of the collection.
             group (str, optional): The name of the group to assign. If
                 omitted, the server assigns the default group.
-            connection (dict, optional): Dehydrated connection document —
-                required when creating a source/destination collection (it is
-                created WITH its connection, 1:1).
+            connection (str, optional): Dehydrated connection document as a YAML
+                string — required when creating a source/destination collection
+                (it is created WITH its connection, 1:1).
             secrets (list, optional): ``{key, value}`` covering every
                 ``env:`` reference in the connection document.
             variables (list, optional): ``{key, value}`` non-secret values.
@@ -4699,14 +4699,14 @@ class TabsdataServer:
         )
 
     def create_project(
-        self, name: str, description: str = None, raise_for_status: bool = True
+        self, name: str, description: str, raise_for_status: bool = True
     ) -> Project:
         """
         Create a project in the server.
 
         Args:
             name (str): The name of the project.
-            description (str, optional): The description of the project.
+            description (str): The description of the project.
             raise_for_status (bool, optional): Whether to raise on a non-2xx response.
 
         Returns:

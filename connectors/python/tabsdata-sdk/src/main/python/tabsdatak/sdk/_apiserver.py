@@ -494,7 +494,7 @@ class APIServer:
         description: str,
         group: str | None = None,
         base_path: str | None = None,
-        connection: dict | None = None,
+        connection: str | None = None,
         secrets: list | None = None,
         variables: list | None = None,
         raise_for_status: bool = True,
@@ -1001,7 +1001,7 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def project_create(
-        self, name: str, description: str = None, raise_for_status: bool = True
+        self, name: str, description: str, raise_for_status: bool = True
     ):
         endpoint = "/projects"
         data = self.get_params_dict(["name", "description"], [name, description])
