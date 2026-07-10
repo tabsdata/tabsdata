@@ -26,7 +26,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # Resolve the project root from this conftest's location:
-# src/itest/python/tdksystems/conftest.py.
+# src/itest/python/testi_tabsdatax/conftest.py.
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 TARGET = PROJECT_ROOT / "target"
 ITEST_ROOT = TARGET / "itest"

@@ -58,9 +58,7 @@ class SaasBase(System):
         if self.domain_is_named:
             entity = spec.entity_name
             validate_name(entity, label="schema")
-            self.create_schema(
-                self.resolve_values(settings), entity, force=spec.force
-            )
+            self.create_schema(self.resolve_values(settings), entity, force=spec.force)
             settings["SCHEMA"] = Setting("SCHEMA", value=entity)
         return settings
 

@@ -1894,8 +1894,7 @@ def _require_single_domain(name: str) -> None:
     old `--domain ALL` form, then validate the (single) name."""
     if _is_multi(name):
         raise DatagenError(
-            "--domain takes a single domain here; use "
-            "--auto ALL|n1,n2,... for a batch"
+            "--domain takes a single domain here; use --auto ALL|n1,n2,... for a batch"
         )
     descriptor.validate_name(name)
 
