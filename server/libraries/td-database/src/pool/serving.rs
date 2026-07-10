@@ -77,6 +77,24 @@ impl TdPool {
         Ok(())
     }
 
+    /// This pool's [`Backend`], resolved from its live connection kind.
+    pub fn backend(&self) -> Backend {
+        self.kind().into()
+    }
+
+    /// Run `stmts` as one committed transaction on the serving pool — used by a
+    /// component's [`seed`](crate::components::SchemaComponent::seed) to apply
+    /// its idempotent baseline-content sync.
+    pub async fn execute_batch(&self, stmts: &[String]) -> Result<(), DbError> {
+        let mut tx = self.pool.begin().await.map_err(DbError::SqlError)?;
+        tx.as_mut_conn()
+            .execute_batch(stmts)
+            .await
+            .map_err(DbError::SqlError)?;
+        tx.commit().await.map_err(DbError::SqlError)?;
+        Ok(())
+    }
+
     /// Verify the schema's recorded `db_version` matches `source`'s current
     /// version. A plain read, so the serving pool can run it at startup without
     /// privileged access. See [`crate::pool::state`].

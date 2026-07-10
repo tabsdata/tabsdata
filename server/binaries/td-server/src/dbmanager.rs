@@ -121,10 +121,14 @@ async fn create(
         info!("Creating database");
         dbm::provision_all(components, admin).await?;
         dbm::upgrade_all(components).await?;
-        info!("Database created");
         Ok(())
     })
-    .await
+    .await?;
+    // Baseline *content* is seeded on the serving pools (not the privileged
+    // pool), so it runs after the schema structure is provisioned and upgraded.
+    dbm::seed_all(components).await?;
+    info!("Database created");
+    Ok(())
 }
 
 /// Runs as each schema's owner (DDL on its own schema) — no privileged pool.

@@ -55,6 +55,14 @@ pub trait SchemaComponent: Send + Sync + 'static {
     async fn check(&self, serving: &TdPool) -> Result<(), DbError> {
         serving.check_db_version(self.schema_source()).await
     }
+
+    /// Seed the release-baseline *content* on the serving [`TdPool`], after
+    /// `upgrade`. Idempotent full sync (re-seed prunes orphaned baseline rows,
+    /// keeps the user overlay). Default: no-op — most components ship schema
+    /// structure only and seed nothing.
+    async fn seed(&self, _serving: &TdPool) -> Result<(), DbError> {
+        Ok(())
+    }
 }
 
 /// Inventory registration slot, one submission per component.
