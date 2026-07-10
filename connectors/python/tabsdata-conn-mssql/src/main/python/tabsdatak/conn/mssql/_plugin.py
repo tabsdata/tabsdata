@@ -15,6 +15,7 @@ from tabsdatak.conn.mssql import (
     SrcCfgSpec,
 )
 from tabsdatak.conn.mssql.error import MssqlErrorCode
+from tabsdatak.conn.mssql._explorer import MSSQLServerConnectionExplorer
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -229,26 +230,6 @@ class MSSQLDestPlugin(DestPlugin[MSSQLDestConn, MSSQLDest]):
             )
 
 
-class MSSQLSrcExplorer(Explorer[MSSQLSrcConn]):
-    def metadata(self, conn: MSSQLSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: MSSQLSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
-class MSSQLDestExplorer(Explorer[MSSQLDestConn]):
-    def metadata(self, conn: MSSQLDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: MSSQLDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 MSSQL_SRC = SrcDef(
     conn=MSSQLSrcConn,
     type_="mssql-sql-in",
@@ -258,7 +239,7 @@ MSSQL_SRC = SrcDef(
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=MSSQLSrcPlugin,
-    explorer=MSSQLSrcExplorer,
+    explorer=MSSQLServerConnectionExplorer,
     icon="conn/mssql/resources/mssql-server.svg",
 )
 
@@ -270,6 +251,6 @@ MSSQL_DEST = DestDef(
     dest=MSSQLDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=MSSQLDestPlugin,
-    explorer=MSSQLDestExplorer,
+    explorer=MSSQLServerConnectionExplorer,
     icon="conn/mssql/resources/mssql-server.svg",
 )

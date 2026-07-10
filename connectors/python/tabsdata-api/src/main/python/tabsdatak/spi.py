@@ -447,6 +447,15 @@ class FunctionCtx(TrxCtx, FlowCtx, ABC):
     """
 
 
+class ConnMetaModel(ABC):
+    """Abstract base for a connection *kind* (SQL, objects, storage, …)."""
+
+    @abstractmethod
+    def entity_fqn(self, entity: dict) -> str:
+        """Format the fully qualified name of an entity."""
+
+
+@_api.dataclass(ApiErrorCode.API_23, config=_ARBITRARY)
 class Entity(ABC):
     """Abstract base for an entity within a connection.
 
@@ -456,7 +465,7 @@ class Entity(ABC):
     declared by the meta-model.
     """
 
-    connection_type: "ConnMetaModel"
+    connection_type: ConnMetaModel
 
     @abstractmethod
     def fqn(self) -> str:
@@ -484,10 +493,6 @@ class Entity(ABC):
         not serialized inside the dict — the meta-model instance is a
         runtime reference, not a persisted payload.
         """
-
-
-class ConnMetaModel(ABC):
-    """Abstract base for a connection *kind* (SQL, objects, storage, …)."""
 
 
 class Explorer[C: Conn](ABC):

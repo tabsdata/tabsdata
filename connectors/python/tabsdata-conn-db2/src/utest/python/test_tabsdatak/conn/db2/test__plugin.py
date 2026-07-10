@@ -29,7 +29,6 @@ from tabsdatak.conn.db2.error import (
 # noinspection PyProtectedMember
 from test_tabsdatak.conn.common.sql._testing import CtxStub
 
-
 pytestmark = pytest.mark.db2
 
 
@@ -176,20 +175,6 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_db2_9(
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    src_exp = plugin.Db2SrcExplorer()
-    assert src_exp.metadata(_bare_src_conn()) is None
-    assert src_exp.data(_bare_src_conn(), "SELECT 1 FROM SYSIBM.SYSDUMMY1") is None
-    dest_exp = plugin.Db2DestExplorer()
-    assert dest_exp.metadata(_bare_dest_conn()) is None
-    assert dest_exp.data(_bare_dest_conn(), "SELECT 1 FROM SYSIBM.SYSDUMMY1") is None
-
-
-# ---------------------------------------------------------------------------
 # SrcDef / DestDef wiring
 # ---------------------------------------------------------------------------
 
@@ -198,7 +183,7 @@ def test_db2_src_def_wires_plugin_and_explorer():
     assert plugin.DB2_SRC.conn is Db2SrcConn
     assert plugin.DB2_SRC.src is Db2Src
     assert plugin.DB2_SRC.plugin is plugin.Db2SrcPlugin
-    assert plugin.DB2_SRC.explorer is plugin.Db2SrcExplorer
+    assert plugin.DB2_SRC.explorer is plugin.Db2ConnectionExplorer
     assert plugin.DB2_SRC.type_ == "db2-sql-in"
 
 
@@ -206,7 +191,7 @@ def test_db2_dest_def_wires_plugin_and_explorer():
     assert plugin.DB2_DEST.conn is Db2DestConn
     assert plugin.DB2_DEST.dest is Db2Dest
     assert plugin.DB2_DEST.plugin is plugin.Db2DestPlugin
-    assert plugin.DB2_DEST.explorer is plugin.Db2DestExplorer
+    assert plugin.DB2_DEST.explorer is plugin.Db2ConnectionExplorer
     assert plugin.DB2_DEST.type_ == "db2-sql-out"
 
 
@@ -241,11 +226,13 @@ def test_resolve_src_cfg_returns_defaults_when_empty():
 
 
 def test_resolve_src_cfg_applies_overrides():
-    cfg = plugin._resolve_src_cfg({
-        "db2.logging_level": 20,
-        "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
-        "tabsdata.sql.chunkSize": 500,
-    })
+    cfg = plugin._resolve_src_cfg(
+        {
+            "db2.logging_level": 20,
+            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
+            "tabsdata.sql.chunkSize": 500,
+        }
+    )
     assert cfg.logging_level == 20
     assert cfg.read_engine == "polarsSqlAlchemyRead"
     assert cfg.chunk_size == 500
@@ -258,11 +245,13 @@ def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
 
 
 def test_resolve_dest_cfg_applies_overrides():
-    cfg = plugin._resolve_dest_cfg({
-        "db2.logging_level": 20,
-        "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
-        "tabsdata.sql.chunkSize": 500,
-    })
+    cfg = plugin._resolve_dest_cfg(
+        {
+            "db2.logging_level": 20,
+            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
+            "tabsdata.sql.chunkSize": 500,
+        }
+    )
     assert cfg.logging_level == 20
     assert cfg.write_engine == "polarsSqlAlchemyWrite"
     assert cfg.chunk_size == 500

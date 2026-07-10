@@ -25,10 +25,10 @@ from tabsdatak.conn.mssql.error import (
     MSSQLRuntimeException,
     MssqlErrorCode,
 )
+from tabsdatak.conn.mssql._explorer import MSSQLServerConnectionExplorer
 
 # noinspection PyProtectedMember
 from test_tabsdatak.conn.common.sql._testing import CtxStub
-
 
 pytestmark = pytest.mark.mssql
 
@@ -176,20 +176,6 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_mssql_9(
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    src_exp = plugin.MSSQLSrcExplorer()
-    assert src_exp.metadata(_bare_src_conn()) is None
-    assert src_exp.data(_bare_src_conn(), "SELECT 1") is None
-    dest_exp = plugin.MSSQLDestExplorer()
-    assert dest_exp.metadata(_bare_dest_conn()) is None
-    assert dest_exp.data(_bare_dest_conn(), "SELECT 1") is None
-
-
-# ---------------------------------------------------------------------------
 # SrcDef / DestDef wiring
 # ---------------------------------------------------------------------------
 
@@ -198,7 +184,7 @@ def test_mssql_src_def_wires_plugin_and_explorer():
     assert plugin.MSSQL_SRC.conn is MSSQLSrcConn
     assert plugin.MSSQL_SRC.src is MSSQLSrc
     assert plugin.MSSQL_SRC.plugin is plugin.MSSQLSrcPlugin
-    assert plugin.MSSQL_SRC.explorer is plugin.MSSQLSrcExplorer
+    assert plugin.MSSQL_SRC.explorer is MSSQLServerConnectionExplorer
     assert plugin.MSSQL_SRC.type_ == "mssql-sql-in"
 
 
@@ -206,7 +192,7 @@ def test_mssql_dest_def_wires_plugin_and_explorer():
     assert plugin.MSSQL_DEST.conn is MSSQLDestConn
     assert plugin.MSSQL_DEST.dest is MSSQLDest
     assert plugin.MSSQL_DEST.plugin is plugin.MSSQLDestPlugin
-    assert plugin.MSSQL_DEST.explorer is plugin.MSSQLDestExplorer
+    assert plugin.MSSQL_DEST.explorer is MSSQLServerConnectionExplorer
     assert plugin.MSSQL_DEST.type_ == "mssql-sql-out"
 
 
@@ -235,11 +221,13 @@ def test_resolve_src_cfg_returns_defaults_when_empty():
 
 
 def test_resolve_src_cfg_applies_overrides():
-    cfg = plugin._resolve_src_cfg({
-        "mssql.logging_level": 20,
-        "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
-        "tabsdata.sql.chunkSize": 500,
-    })
+    cfg = plugin._resolve_src_cfg(
+        {
+            "mssql.logging_level": 20,
+            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
+            "tabsdata.sql.chunkSize": 500,
+        }
+    )
     assert cfg.logging_level == 20
     assert cfg.read_engine == "polarsSqlAlchemyRead"
     assert cfg.chunk_size == 500
@@ -252,11 +240,13 @@ def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
 
 
 def test_resolve_dest_cfg_applies_overrides():
-    cfg = plugin._resolve_dest_cfg({
-        "mssql.logging_level": 20,
-        "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
-        "tabsdata.sql.chunkSize": 500,
-    })
+    cfg = plugin._resolve_dest_cfg(
+        {
+            "mssql.logging_level": 20,
+            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
+            "tabsdata.sql.chunkSize": 500,
+        }
+    )
     assert cfg.logging_level == 20
     assert cfg.write_engine == "polarsSqlAlchemyWrite"
     assert cfg.chunk_size == 500

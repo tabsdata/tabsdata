@@ -164,6 +164,18 @@ class DBConfig:
         )
 
     @property
+    def odbc_connection_string(self) -> str:
+        # Raw ODBC connection string (no ``://`` scheme). Credentials are
+        # deliberately NOT embedded -- the explorer supplies UID / PWD via
+        # connect_args from the conn's ``credentials``.
+        return (
+            f"DRIVER={{{_ODBC_DRIVER}}};"
+            f"SERVER={self.host},{self.port};"
+            f"DATABASE={self.database};"
+            "TrustServerCertificate=yes;"
+        )
+
+    @property
     def credentials(self) -> UserPassword:
         return UserPassword(
             user=Secret(self.user),

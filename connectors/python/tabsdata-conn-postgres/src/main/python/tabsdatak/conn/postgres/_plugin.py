@@ -15,6 +15,7 @@ from tabsdatak.conn.postgres import (
     SrcCfgSpec,
 )
 from tabsdatak.conn.postgres.error import PostgresErrorCode
+from tabsdatak.conn.postgres._explorer import PostgresConnectionExplorer
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -234,26 +235,6 @@ class PostgresDestPlugin(DestPlugin[PostgresDestConn, PostgresDest]):
             )
 
 
-class PostgresSrcExplorer(Explorer[PostgresSrcConn]):
-    def metadata(self, conn: PostgresSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: PostgresSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
-class PostgresDestExplorer(Explorer[PostgresDestConn]):
-    def metadata(self, conn: PostgresDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: PostgresDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 POSTGRES_SRC = SrcDef(
     conn=PostgresSrcConn,
     type_="postgres-sql-in",
@@ -263,7 +244,7 @@ POSTGRES_SRC = SrcDef(
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=PostgresSrcPlugin,
-    explorer=PostgresSrcExplorer,
+    explorer=PostgresConnectionExplorer,
     icon="conn/postgres/resources/postgresql.svg",
 )
 
@@ -275,6 +256,6 @@ POSTGRES_DEST = DestDef(
     dest=PostgresDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=PostgresDestPlugin,
-    explorer=PostgresDestExplorer,
+    explorer=PostgresConnectionExplorer,
     icon="conn/postgres/resources/postgresql.svg",
 )

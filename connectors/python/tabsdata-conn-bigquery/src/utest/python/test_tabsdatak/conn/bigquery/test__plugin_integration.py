@@ -35,14 +35,18 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from tabsdatak.api import Secret
-from tabsdatak.conn.bigquery import BigQueryDestConn, BigQueryDest, GCSLocation
+from tabsdatak.conn.bigquery import BigQueryDest
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _plugin as plugin
-from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.spi import DestContext
 
+# noinspection PyProtectedMember
+from test_tabsdatak.conn.bigquery._integration_helpers import (
+    _bq_client,
+    _conn_from,
+    _table_fqn,
+)
 
 pytestmark = pytest.mark.bigquery
 
@@ -99,6 +103,7 @@ class _DestCtx(DestContext):
     def add_metadata(self, attr, val):
         pass
 
+
 def _dest_ctx(work: Path) -> _DestCtx:
     return _DestCtx(work)
 
@@ -113,108 +118,6 @@ def work_dir(tmp_path: Path) -> Path:
     out = tmp_path / "work"
     out.mkdir()
     return out
-
-
-# ---------------------------------------------------------------------------
-# Real-BigQuery config fixture
-# ---------------------------------------------------------------------------
-
-
-_PREFIX = "GCP0"
-
-_REQUIRED_ENV = [
-    f"{_PREFIX}__GCP_SERVICE_ACCOUNT_KEY",
-    f"{_PREFIX}__BIGQUERY_PROJECT",
-    f"{_PREFIX}__BIGQUERY_DATASET",
-    f"{_PREFIX}__GCP_STORAGE_URI",
-]
-
-
-class _BqConfig:
-    def __init__(
-        self,
-        *,
-        sa_json: str,
-        project: str,
-        dataset: str,
-        bucket: str,
-        base_path: str,
-    ) -> None:
-        self.sa_json = sa_json
-        self.project = project
-        self.dataset = dataset
-        self.bucket = bucket
-        self.base_path = base_path
-
-
-def _split_gs_uri(uri: str) -> tuple[str, str]:
-    """Split ``gs://<bucket>[/<path>]`` into ``(bucket, base_path)``.
-
-    Path defaults to ``"staging/"`` when the URI carries only a bucket.
-    The returned ``base_path`` is normalized to always end with ``/``
-    so callers don't have to worry about ``GCSLocation.full_path``
-    join semantics.
-    """
-    prefix = "gs://"
-    if not uri.startswith(prefix):
-        raise ValueError(
-            f"{_PREFIX}__GCP_STORAGE_URI must start with gs://: {uri!r}"
-        )
-    rest = uri[len(prefix):].strip("/")
-    if "/" in rest:
-        bucket, base_path = rest.split("/", 1)
-        base_path = base_path.strip("/") + "/"
-    else:
-        bucket, base_path = rest, "staging/"
-    return bucket, base_path
-
-
-@pytest.fixture
-def fresh_bigquery() -> _BqConfig:
-    missing = [name for name in _REQUIRED_ENV if not os.environ.get(name)]
-    if missing:
-        pytest.skip(
-            "BigQuery integration tests require environment variables: "
-            + ", ".join(missing)
-        )
-    bucket, base_path = _split_gs_uri(os.environ[f"{_PREFIX}__GCP_STORAGE_URI"])
-    return _BqConfig(
-        sa_json=os.environ[f"{_PREFIX}__GCP_SERVICE_ACCOUNT_KEY"],
-        project=os.environ[f"{_PREFIX}__BIGQUERY_PROJECT"],
-        dataset=os.environ[f"{_PREFIX}__BIGQUERY_DATASET"],
-        bucket=bucket,
-        base_path=base_path,
-    )
-
-
-def _conn_from(cfg: _BqConfig) -> BigQueryDestConn:
-    return BigQueryDestConn(
-        staging=GCSLocation(
-            bucket=cfg.bucket,
-            credentials=GCPJson(json=Secret(cfg.sa_json)),
-            base_path=cfg.base_path,
-        ),
-        credentials=GCPJson(json=Secret(cfg.sa_json)),
-        project=cfg.project,
-        dataset=cfg.dataset,
-    )
-
-
-def _table_fqn(cfg: _BqConfig, table: str) -> str:
-    """Build the user-facing FQN (outer-only backticks per BigQuery
-    syntax). The plugin strips the wrapping backticks before
-    forwarding to the SDK."""
-    return f"`{cfg.project}.{cfg.dataset}.{table}`"
-
-
-def _bq_client(cfg: _BqConfig):
-    from google.cloud import bigquery
-    import json as _json
-
-    return bigquery.Client.from_service_account_info(
-        _json.loads(cfg.sa_json),
-        project=cfg.project,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +186,10 @@ def test_dest_plugin_write_out_replace_clears_existing(fresh_bigquery, work_dir)
     client = _bq_client(cfg)
     try:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), conn, dest, [replacement],
+            _dest_ctx(work_dir),
+            conn,
+            dest,
+            [replacement],
         )
         rows = list(client.query(f"SELECT id, name FROM `{full}` ORDER BY id"))
         assert [(r.id, r.name) for r in rows] == [(1, "fresh")]
@@ -312,7 +218,10 @@ def test_dest_plugin_write_out_multiple_tables(fresh_bigquery, work_dir):
     client = _bq_client(cfg)
     try:
         plugin._BigQueryDestPlugin().write_out(
-            _dest_ctx(work_dir), conn, dest, [src1, src2],
+            _dest_ctx(work_dir),
+            conn,
+            dest,
+            [src1, src2],
         )
         rows1 = list(client.query(f"SELECT x FROM `{full1}`"))
         rows2 = list(client.query(f"SELECT y FROM `{full2}`"))

@@ -342,3 +342,5 @@ class ApiErrorCode(ErrorCode):
     # StageManifestEntry
     API_22 = ErrorDef(ApiInitException, "Cannot create TableFileInput")
     # TableFileInput
+    API_23 = ErrorDef(ApiInitException, "Cannot create Entity")
+    # Entity

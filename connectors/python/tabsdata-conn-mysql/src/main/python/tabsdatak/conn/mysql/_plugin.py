@@ -15,6 +15,7 @@ from tabsdatak.conn.mysql import (
     SrcCfgSpec,
 )
 from tabsdatak.conn.mysql.error import MysqlErrorCode
+from tabsdatak.conn.mysql._explorer import MySQLConnectionExplorer
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -244,26 +245,6 @@ class MySQLDestPlugin(DestPlugin[MySQLDestConn, MySQLDest]):
             )
 
 
-class MySQLSrcExplorer(Explorer[MySQLSrcConn]):
-    def metadata(self, conn: MySQLSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: MySQLSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
-class MySQLDestExplorer(Explorer[MySQLDestConn]):
-    def metadata(self, conn: MySQLDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: MySQLDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 MYSQL_SRC = SrcDef(
     conn=MySQLSrcConn,
     type_="mysql-sql-in",
@@ -273,7 +254,7 @@ MYSQL_SRC = SrcDef(
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=MySQLSrcPlugin,
-    explorer=MySQLSrcExplorer,
+    explorer=MySQLConnectionExplorer,
     icon="conn/mysql/resources/mysql.svg",
 )
 
@@ -285,6 +266,6 @@ MYSQL_DEST = DestDef(
     dest=MySQLDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=MySQLDestPlugin,
-    explorer=MySQLDestExplorer,
+    explorer=MySQLConnectionExplorer,
     icon="conn/mysql/resources/mysql.svg",
 )

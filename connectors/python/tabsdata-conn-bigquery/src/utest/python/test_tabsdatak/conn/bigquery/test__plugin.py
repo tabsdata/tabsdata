@@ -19,9 +19,9 @@ from tabsdatak.conn.bigquery.error import (
     BigQueryRuntimeException,
     BigqueryErrorCode,
 )
+from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
 from tabsdatak.conn.bigquery import GCSLocation
 from tabsdatak.conn.common.types import GCPJson
-
 
 pytestmark = pytest.mark.bigquery
 
@@ -206,7 +206,8 @@ def test_dest_plugin_raises_bigquery_4_when_tables_none(work_dir):
 
 
 def test_dest_plugin_wraps_client_init_failure_as_bigquery_5(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     def _boom(*args, **kwargs):
         raise RuntimeError("client boom")
@@ -229,11 +230,14 @@ def test_dest_plugin_wraps_client_init_failure_as_bigquery_5(
 
 
 def test_dest_plugin_wraps_gcs_upload_failure_as_bigquery_6(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     bq_client = MagicMock(name="bq")
     monkeypatch.setattr(
-        impl, "build_bigquery_client", lambda *a, **kw: bq_client,
+        impl,
+        "build_bigquery_client",
+        lambda *a, **kw: bq_client,
     )
 
     gcs_client = MagicMock(name="gcs")
@@ -259,7 +263,8 @@ def test_dest_plugin_wraps_gcs_upload_failure_as_bigquery_6(
 
 
 def test_dest_plugin_wraps_load_job_failure_as_bigquery_7(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     load_job = MagicMock(name="load_job")
     load_job.result.side_effect = RuntimeError("load_job boom")
@@ -267,7 +272,9 @@ def test_dest_plugin_wraps_load_job_failure_as_bigquery_7(
     bq_client = MagicMock(name="bq")
     bq_client.load_table_from_uri.return_value = load_job
     monkeypatch.setattr(
-        impl, "build_bigquery_client", lambda *a, **kw: bq_client,
+        impl,
+        "build_bigquery_client",
+        lambda *a, **kw: bq_client,
     )
 
     gcs_client = MagicMock(name="gcs")
@@ -296,7 +303,8 @@ def test_dest_plugin_wraps_load_job_failure_as_bigquery_7(
 
 
 def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     load_job = MagicMock(name="load_job")
     load_job.result.return_value = None
@@ -305,7 +313,9 @@ def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
     bq_client = MagicMock(name="bq")
     bq_client.load_table_from_uri.return_value = load_job
     monkeypatch.setattr(
-        impl, "build_bigquery_client", lambda *a, **kw: bq_client,
+        impl,
+        "build_bigquery_client",
+        lambda *a, **kw: bq_client,
     )
 
     gcs_client = MagicMock(name="gcs")
@@ -324,7 +334,10 @@ def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
     src1 = _make_parquet(work_dir / "in1.parquet", [{"id": 1}])
     src2 = _make_parquet(work_dir / "in2.parquet", [{"id": 2}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src1, src2],
+        _dest_ctx(work_dir),
+        _bare_conn(),
+        dest,
+        [src1, src2],
     )
 
     # Two parquet -> GCS uploads.
@@ -349,16 +362,26 @@ def test_dest_plugin_forwards_project_to_bigquery_client(monkeypatch, work_dir):
     def _build_bq(credentials, project, connect_args):
         captured["project"] = project
         captured["connect_args"] = connect_args
-        return MagicMock(load_table_from_uri=MagicMock(return_value=MagicMock(
-            result=MagicMock(return_value=None),
-        )))
+        return MagicMock(
+            load_table_from_uri=MagicMock(
+                return_value=MagicMock(
+                    result=MagicMock(return_value=None),
+                )
+            )
+        )
 
     monkeypatch.setattr(impl, "build_bigquery_client", _build_bq)
-    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock(
-        bucket=MagicMock(return_value=MagicMock(
-            blob=MagicMock(return_value=MagicMock()),
-        )),
-    ))
+    monkeypatch.setattr(
+        impl,
+        "build_gcs_client",
+        lambda *a, **kw: MagicMock(
+            bucket=MagicMock(
+                return_value=MagicMock(
+                    blob=MagicMock(return_value=MagicMock()),
+                )
+            ),
+        ),
+    )
 
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
@@ -372,17 +395,6 @@ def test_dest_plugin_forwards_project_to_bigquery_client(monkeypatch, work_dir):
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    exp = plugin._BigQueryExplorer()
-    assert exp.metadata(_bare_conn()) is None
-    assert exp.data(_bare_conn(), "SELECT 1") is None
-
-
-# ---------------------------------------------------------------------------
 # DestDef wiring
 # ---------------------------------------------------------------------------
 
@@ -391,7 +403,7 @@ def test_bigquery_dest_def_wires_plugin_and_explorer():
     assert plugin.BIGQUERY_DEST.conn is BigQueryDestConn
     assert plugin.BIGQUERY_DEST.dest is BigQueryDest
     assert plugin.BIGQUERY_DEST.plugin is plugin._BigQueryDestPlugin
-    assert plugin.BIGQUERY_DEST.explorer is plugin._BigQueryExplorer
+    assert plugin.BIGQUERY_DEST.explorer is BigQueryConnectionExplorer
     assert plugin.BIGQUERY_DEST.type_ == "bigquery-bulk-out"
     assert plugin.BIGQUERY_DEST.dest_version == "v1"
 
@@ -418,6 +430,7 @@ def test_bigquery_dest_cardinality_zero_for_none_tables():
 
 def test_resolve_dest_cfg_returns_defaults_when_empty():
     import logging as _logging
+
     cfg = plugin._resolve_dest_cfg(None)
     assert cfg.logging_level == _logging.ERROR
 

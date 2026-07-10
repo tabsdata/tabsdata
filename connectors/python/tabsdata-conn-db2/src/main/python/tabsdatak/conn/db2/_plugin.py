@@ -14,6 +14,7 @@ from tabsdatak.conn.db2 import (
     SrcCfgKey,
     SrcCfgSpec,
 )
+from tabsdatak.conn.db2._explorer import Db2ConnectionExplorer
 from tabsdatak.conn.db2.error import Db2ErrorCode
 from tabsdatak.spi import (
     DestContext,
@@ -229,26 +230,6 @@ class Db2DestPlugin(DestPlugin[Db2DestConn, Db2Dest]):
             )
 
 
-class Db2SrcExplorer(Explorer[Db2SrcConn]):
-    def metadata(self, conn: Db2SrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: Db2SrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
-class Db2DestExplorer(Explorer[Db2DestConn]):
-    def metadata(self, conn: Db2DestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: Db2DestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 DB2_SRC = SrcDef(
     conn=Db2SrcConn,
     type_="db2-sql-in",
@@ -258,7 +239,7 @@ DB2_SRC = SrcDef(
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=Db2SrcPlugin,
-    explorer=Db2SrcExplorer,
+    explorer=Db2ConnectionExplorer,
     icon="conn/db2/resources/db2.svg",
 )
 
@@ -270,6 +251,6 @@ DB2_DEST = DestDef(
     dest=Db2Dest,
     cardinality=lambda dest: len(dest.tables),
     plugin=Db2DestPlugin,
-    explorer=Db2DestExplorer,
+    explorer=Db2ConnectionExplorer,
     icon="conn/db2/resources/db2.svg",
 )

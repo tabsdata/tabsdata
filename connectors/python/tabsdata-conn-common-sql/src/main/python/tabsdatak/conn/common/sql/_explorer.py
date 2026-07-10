@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 
 import tabsdatak._api as _api
-from tabsdatak.conn.common.explorer import BaseConnMetaModel, Column
+from tabsdatak.conn.common._explorer import BaseConnMetaModel, Column
 from tabsdatak.error import ApiErrorCode
 from tabsdatak.conn.common.sql.error import SqlCommonErrorCode
 from tabsdatak.spi import (

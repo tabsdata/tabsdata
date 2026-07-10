@@ -25,10 +25,10 @@ from tabsdatak.conn.oracle.error import (
     OracleRuntimeException,
     OracleErrorCode,
 )
+from tabsdatak.conn.oracle._explorer import OracleConnectionExplorer
 
 # noinspection PyProtectedMember
 from test_tabsdatak.conn.common.sql._testing import CtxStub
-
 
 pytestmark = pytest.mark.oracle
 
@@ -176,20 +176,6 @@ def test_dest_plugin_wraps_other_sqlalchemy_error_as_oracle_9(
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    src_exp = plugin.OracleSrcExplorer()
-    assert src_exp.metadata(_bare_src_conn()) is None
-    assert src_exp.data(_bare_src_conn(), "SELECT 1 FROM DUAL") is None
-    dest_exp = plugin.OracleDestExplorer()
-    assert dest_exp.metadata(_bare_dest_conn()) is None
-    assert dest_exp.data(_bare_dest_conn(), "SELECT 1 FROM DUAL") is None
-
-
-# ---------------------------------------------------------------------------
 # SrcDef / DestDef wiring
 # ---------------------------------------------------------------------------
 
@@ -198,7 +184,7 @@ def test_oracle_src_def_wires_plugin_and_explorer():
     assert plugin.ORACLE_SRC.conn is OracleSrcConn
     assert plugin.ORACLE_SRC.src is OracleSrc
     assert plugin.ORACLE_SRC.plugin is plugin.OracleSrcPlugin
-    assert plugin.ORACLE_SRC.explorer is plugin.OracleSrcExplorer
+    assert plugin.ORACLE_SRC.explorer is OracleConnectionExplorer
     assert plugin.ORACLE_SRC.type_ == "oracle-sql-in"
 
 
@@ -206,7 +192,7 @@ def test_oracle_dest_def_wires_plugin_and_explorer():
     assert plugin.ORACLE_DEST.conn is OracleDestConn
     assert plugin.ORACLE_DEST.dest is OracleDest
     assert plugin.ORACLE_DEST.plugin is plugin.OracleDestPlugin
-    assert plugin.ORACLE_DEST.explorer is plugin.OracleDestExplorer
+    assert plugin.ORACLE_DEST.explorer is OracleConnectionExplorer
     assert plugin.ORACLE_DEST.type_ == "oracle-sql-out"
 
 
@@ -237,11 +223,13 @@ def test_resolve_src_cfg_returns_defaults_when_empty():
 
 
 def test_resolve_src_cfg_applies_overrides():
-    cfg = plugin._resolve_src_cfg({
-        "oracle.logging_level": 20,
-        "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
-        "tabsdata.sql.chunkSize": 500,
-    })
+    cfg = plugin._resolve_src_cfg(
+        {
+            "oracle.logging_level": 20,
+            "tabsdata.sql.sql.readEngine": "polarsSqlAlchemyRead",
+            "tabsdata.sql.chunkSize": 500,
+        }
+    )
     assert cfg.logging_level == 20
     assert cfg.read_engine == "polarsSqlAlchemyRead"
     assert cfg.chunk_size == 500
@@ -254,11 +242,13 @@ def test_resolve_src_cfg_warns_on_unknown_key_via_raw_dict(caplog):
 
 
 def test_resolve_dest_cfg_applies_overrides():
-    cfg = plugin._resolve_dest_cfg({
-        "oracle.logging_level": 20,
-        "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
-        "tabsdata.sql.chunkSize": 500,
-    })
+    cfg = plugin._resolve_dest_cfg(
+        {
+            "oracle.logging_level": 20,
+            "tabsdata.sql.sql.writeEngine": "polarsSqlAlchemyWrite",
+            "tabsdata.sql.chunkSize": 500,
+        }
+    )
     assert cfg.logging_level == 20
     assert cfg.write_engine == "polarsSqlAlchemyWrite"
     assert cfg.chunk_size == 500

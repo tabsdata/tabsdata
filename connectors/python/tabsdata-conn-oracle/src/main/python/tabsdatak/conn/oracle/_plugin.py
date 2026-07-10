@@ -15,6 +15,7 @@ from tabsdatak.conn.oracle import (
     SrcCfgSpec,
 )
 from tabsdatak.conn.oracle.error import OracleErrorCode
+from tabsdatak.conn.oracle._explorer import OracleConnectionExplorer
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -217,26 +218,6 @@ class OracleDestPlugin(DestPlugin[OracleDestConn, OracleDest]):
             )
 
 
-class OracleSrcExplorer(Explorer[OracleSrcConn]):
-    def metadata(self, conn: OracleSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: OracleSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
-class OracleDestExplorer(Explorer[OracleDestConn]):
-    def metadata(self, conn: OracleDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: OracleDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 ORACLE_SRC = SrcDef(
     conn=OracleSrcConn,
     type_="oracle-sql-in",
@@ -246,7 +227,7 @@ ORACLE_SRC = SrcDef(
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=OracleSrcPlugin,
-    explorer=OracleSrcExplorer,
+    explorer=OracleConnectionExplorer,
     icon="conn/oracle/resources/oracle.svg",
 )
 
@@ -258,6 +239,6 @@ ORACLE_DEST = DestDef(
     dest=OracleDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=OracleDestPlugin,
-    explorer=OracleDestExplorer,
+    explorer=OracleConnectionExplorer,
     icon="conn/oracle/resources/oracle.svg",
 )

@@ -13,6 +13,7 @@ from tabsdatak.conn.bigquery import (
     DestCfgSpec,
 )
 from tabsdatak.conn.bigquery.error import BigqueryErrorCode
+from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -223,16 +224,6 @@ def _load_table_from_uri(
     load_job.result()
 
 
-class _BigQueryExplorer(Explorer[BigQueryDestConn]):
-    def metadata(self, conn: BigQueryDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: BigQueryDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 BIGQUERY_DEST = DestDef(
     conn=BigQueryDestConn,
     type_="bigquery-bulk-out",
@@ -241,6 +232,6 @@ BIGQUERY_DEST = DestDef(
     dest=BigQueryDest,
     cardinality=lambda dest: len(dest.tables) if dest.tables is not None else 0,
     plugin=_BigQueryDestPlugin,
-    explorer=_BigQueryExplorer,
+    explorer=BigQueryConnectionExplorer,
     icon="conn/bigquery/resources/bigquery.svg",
 )
