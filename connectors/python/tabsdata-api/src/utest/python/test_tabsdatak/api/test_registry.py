@@ -24,6 +24,7 @@ from tabsdatak._connectors import (
     avail_srcs,
     avail_stream_srcs,
     def_for,
+    def_for_conn,
     explorer_for,
     explorer_for_conn,
     get_dest,
@@ -160,6 +161,22 @@ def test_explorer_for_conn_unregistered_returns_none():
         pass
 
     assert explorer_for_conn(NotRegistered) is None
+
+
+def test_def_for_conn_resolves_by_conn_class():
+    from tabsdatak.conn.localfile import LocalFileSrcConn
+
+    defx = def_for_conn(LocalFileSrcConn)
+    assert defx is not None
+    assert defx.conn is LocalFileSrcConn
+    assert defx.type_ == "local-file-in"
+
+
+def test_def_for_conn_unregistered_returns_none():
+    class NotRegistered(Conn):
+        pass
+
+    assert def_for_conn(NotRegistered) is None
 
 
 # ---------------------------------------------------------------------------

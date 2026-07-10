@@ -136,21 +136,29 @@ def explorer_for(type_: str) -> type[Explorer] | None:
     return defx.explorer if defx is not None else None
 
 
-def explorer_for_conn(conn: Conn | type[Conn]) -> type[Explorer] | None:
-    """Return the :class:`~tabsdatak.spi.Explorer` class bound to ``conn``'s
-    connector, or ``None`` if none is registered.
+def def_for_conn(conn: Conn | type[Conn]) -> _Def | None:
+    """Return the registry def bound to ``conn``'s concrete
+    :class:`~tabsdatak.spi.Conn` class, or ``None`` if unregistered.
 
-    Resolves by the connection's concrete :class:`~tabsdatak.spi.Conn` class
-    rather than the wire ``type_``: a caller that deserialized a stored
-    ``connectionDef`` document has the ``Conn`` in hand but not the ``type_``.
-    A ``Conn`` subclass may back several registry entries (e.g. Salesforce's
-    SOSQL and report sources) -- they share one explorer, so the first
-    registered def whose ``conn`` matches and wires an explorer wins."""
+    Resolves by the connection class rather than the wire ``type_``: a caller
+    that deserialized a stored ``connectionDef`` document holds the ``Conn`` but
+    not the ``type_``. A ``Conn`` subclass may back several registry entries
+    (e.g. Salesforce's SOSQL and report sources); the first registered match
+    wins -- they share connector kind, direction and explorer, differing only
+    in the wire ``type_``."""
     cls = conn if isinstance(conn, type) else type(conn)
     for defx in _registry().values():
-        if defx.conn is cls and defx.explorer is not None:
-            return defx.explorer
+        if defx.conn is cls:
+            return defx
     return None
+
+
+def explorer_for_conn(conn: Conn | type[Conn]) -> type[Explorer] | None:
+    """Return the :class:`~tabsdatak.spi.Explorer` class bound to ``conn``'s
+    connector, or ``None`` if the connector is unregistered or wires no
+    explorer. Convenience over :func:`def_for_conn`."""
+    defx = def_for_conn(conn)
+    return defx.explorer if defx is not None else None
 
 
 # ---------------------------------------------------------------------------
