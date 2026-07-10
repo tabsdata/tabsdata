@@ -11,8 +11,13 @@ from tabsdatak.conn.salesforce import (
     SrcCfgKey,
     SrcCfgSpec,
 )
+from tabsdatak.conn.salesforce._explorer._report_explorer import (
+    SalesforceReportsConnectionExplorer,
+)
+from tabsdatak.conn.salesforce._explorer._soql_explorer import (
+    SalesforceSOQLConnectionExplorer,
+)
 from tabsdatak.spi import (
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
@@ -109,16 +114,6 @@ class _SalesforceReportSrcPlugin(SrcPlugin[SalesforceSrcConn, SalesforceReportSr
             logger.info("salesforce: read_in finished (%d report(s))", len(src.reports))
 
 
-class _SalesforceExplorer(Explorer[SalesforceSrcConn]):
-    def metadata(self, conn: SalesforceSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: SalesforceSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 SALESFORCE_SRC = SrcDef(
     conn=SalesforceSrcConn,
     type_="salesforce-sosql-in",
@@ -128,7 +123,7 @@ SALESFORCE_SRC = SrcDef(
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=_SalesforceSrcPlugin,
-    explorer=_SalesforceExplorer,
+    explorer=SalesforceSOQLConnectionExplorer,
     icon="conn/salesforce/resources/salesforce.svg",
 )
 
@@ -142,6 +137,6 @@ SALESFORCE_REPORT_SRC = SrcDef(
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.reports),
     plugin=_SalesforceReportSrcPlugin,
-    explorer=_SalesforceExplorer,
+    explorer=SalesforceReportsConnectionExplorer,
     icon="conn/salesforce/resources/salesforce.svg",
 )

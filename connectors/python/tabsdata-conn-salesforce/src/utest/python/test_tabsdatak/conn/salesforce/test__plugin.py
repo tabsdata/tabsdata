@@ -18,6 +18,12 @@ from tabsdatak.conn.salesforce import (
 )
 # noinspection PyProtectedMember
 from tabsdatak.conn.salesforce import _plugin as plugin
+from tabsdatak.conn.salesforce._explorer._report_explorer import (
+    SalesforceReportsConnectionExplorer,
+)
+from tabsdatak.conn.salesforce._explorer._soql_explorer import (
+    SalesforceSOQLConnectionExplorer,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.salesforce import _reader as reader
@@ -313,17 +319,6 @@ def test_report_plugin_raises_salesforce_16_on_unsupported_format(
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs -- the methods are TODO placeholders
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    exp = plugin._SalesforceExplorer()
-    assert exp.metadata(_conn()) is None
-    assert exp.data(_conn(), "SELECT Id FROM Account") is None
-
-
-# ---------------------------------------------------------------------------
 # SrcDef wiring
 # ---------------------------------------------------------------------------
 
@@ -332,7 +327,7 @@ def test_salesforce_src_def_wires_plugin_and_explorer():
     assert plugin.SALESFORCE_SRC.conn is SalesforceSrcConn
     assert plugin.SALESFORCE_SRC.src is SalesforceSrc
     assert plugin.SALESFORCE_SRC.plugin is plugin._SalesforceSrcPlugin
-    assert plugin.SALESFORCE_SRC.explorer is plugin._SalesforceExplorer
+    assert plugin.SALESFORCE_SRC.explorer is SalesforceSOQLConnectionExplorer
     assert plugin.SALESFORCE_SRC.type_ == "salesforce-sosql-in"
 
 
@@ -340,7 +335,7 @@ def test_salesforce_report_src_def_wires_plugin_and_explorer():
     assert plugin.SALESFORCE_REPORT_SRC.conn is SalesforceSrcConn
     assert plugin.SALESFORCE_REPORT_SRC.src is SalesforceReportSrc
     assert plugin.SALESFORCE_REPORT_SRC.plugin is plugin._SalesforceReportSrcPlugin
-    assert plugin.SALESFORCE_REPORT_SRC.explorer is plugin._SalesforceExplorer
+    assert plugin.SALESFORCE_REPORT_SRC.explorer is SalesforceReportsConnectionExplorer
     assert plugin.SALESFORCE_REPORT_SRC.type_ == "salesforce-report-in"
 
 

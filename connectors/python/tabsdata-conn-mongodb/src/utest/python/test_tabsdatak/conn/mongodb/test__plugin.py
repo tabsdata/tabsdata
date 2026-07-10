@@ -14,6 +14,7 @@ import tabsdatak.conn.mongodb._plugin as plugin
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
+from tabsdatak.conn.mongodb._explorer._explorer import MongoDBConnectionExplorer
 from tabsdatak.conn.mongodb.error import (
     MongodbErrorCode,
     MongoDBRuntimeException,
@@ -559,7 +560,7 @@ def test_mongodb_dest_def_wires_plugin_and_explorer():
     assert plugin.MONGODB_DEST.conn is MongoDBDestConn
     assert plugin.MONGODB_DEST.dest is MongoDBDest
     assert plugin.MONGODB_DEST.plugin is plugin._MongoDBDestPlugin
-    assert plugin.MONGODB_DEST.explorer is plugin._MongoDBExplorer
+    assert plugin.MONGODB_DEST.explorer is MongoDBConnectionExplorer
     assert plugin.MONGODB_DEST.type_ == "mongodb-out"
 
 
@@ -568,12 +569,6 @@ def test_mongodb_dest_cardinality_uses_collections_length():
         collections_with_ids=[("a.b", None), ("c.d", None)],
     )
     assert plugin.MONGODB_DEST.cardinality(dest) == 2
-
-
-def test_explorer_stubs_return_none():
-    exp = plugin._MongoDBExplorer()
-    assert exp.metadata(_bare_conn()) is None
-    assert exp.data(_bare_conn(), "find") is None
 
 
 # ---------------------------------------------------------------------------

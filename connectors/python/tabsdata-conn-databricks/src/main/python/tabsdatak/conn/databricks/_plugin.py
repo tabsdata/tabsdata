@@ -17,6 +17,7 @@ from tabsdatak.conn.databricks import (
     SrcCfgKey,
     SrcCfgSpec,
 )
+from tabsdatak.conn.databricks._explorer import DatabricksConnectionExplorer
 from tabsdatak.conn.databricks.error import (
     DatabricksErrorCode,
     DatabricksValidateException,
@@ -25,7 +26,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
@@ -252,26 +252,6 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDestConn, DatabricksDest]):
             )
 
 
-class _DatabricksSrcExplorer(Explorer[DatabricksSrcConn]):
-    def metadata(self, conn: DatabricksSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: DatabricksSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
-class _DatabricksDestExplorer(Explorer[DatabricksDestConn]):
-    def metadata(self, conn: DatabricksDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: DatabricksDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 DATABRICKS_SRC = SrcDef(
     conn=DatabricksSrcConn,
     type_="databricks-bulk-in",
@@ -281,7 +261,7 @@ DATABRICKS_SRC = SrcDef(
     table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
     plugin=_DatabricksSrcPlugin,
-    explorer=_DatabricksSrcExplorer,
+    explorer=DatabricksConnectionExplorer,
     icon="conn/databricks/resources/databricks.svg",
 )
 
@@ -293,6 +273,6 @@ DATABRICKS_DEST = DestDef(
     dest=DatabricksDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=_DatabricksDestPlugin,
-    explorer=_DatabricksDestExplorer,
+    explorer=DatabricksConnectionExplorer,
     icon="conn/databricks/resources/databricks.svg",
 )

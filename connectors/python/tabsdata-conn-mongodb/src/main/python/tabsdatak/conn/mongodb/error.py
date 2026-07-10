@@ -110,3 +110,7 @@ class MongodbErrorCode(ErrorCode):
         "MongoDBDest collection name {value!r} must be a fully-qualified"
         " <database>.<collection> when used as a write target",
     )  # _MongoDBDestPlugin.write_out: collection name not FQN-shaped
+    MONGODB_23 = ErrorDef(MongoDBRuntimeException, "Cannot Create MongoIndex")
+    MONGODB_24 = ErrorDef(MongoDBRuntimeException, "Cannot Create MongoValidator")
+    MONGODB_25 = ErrorDef(MongoDBRuntimeException, "Cannot Create MongoDBEntity")
+    MONGODB_26 = ErrorDef(MongoDBRuntimeException, "Cannot Create MongoDBConnMetaModel")

@@ -99,3 +99,6 @@ class SalesforceErrorCode(ErrorCode):
         "SalesforceReportSrc: last_modified_column requires"
         " initial_last_modified (and vice versa)",
     )  # SalesforceReportSrc.validate()
+    SALESFORCE_18 = ErrorDef(
+        SalesforceValidateException, "Cannot create SalesforceReportingEntity"
+    )

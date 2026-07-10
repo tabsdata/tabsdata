@@ -30,6 +30,7 @@ from tabsdatak.conn.databricks import _impl as impl
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import _plugin as plugin
+from tabsdatak.conn.databricks._explorer import DatabricksConnectionExplorer
 from tabsdatak.spi import TableFileInput
 from tabsdatak.conn.databricks.error import (
     DatabricksErrorCode,
@@ -362,20 +363,6 @@ def test_dest_plugin_dispatches_to_adapter(monkeypatch, work_dir):
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    src_exp = plugin._DatabricksSrcExplorer()
-    assert src_exp.metadata(_src_conn()) is None
-    assert src_exp.data(_src_conn(), "SELECT 1") is None
-    dest_exp = plugin._DatabricksDestExplorer()
-    assert dest_exp.metadata(_dest_conn()) is None
-    assert dest_exp.data(_dest_conn(), "SELECT 1") is None
-
-
-# ---------------------------------------------------------------------------
 # SrcDef / DestDef wiring
 # ---------------------------------------------------------------------------
 
@@ -384,7 +371,7 @@ def test_databricks_src_def_wires_plugin_and_explorer():
     assert plugin.DATABRICKS_SRC.conn is DatabricksSrcConn
     assert plugin.DATABRICKS_SRC.src is DatabricksSrc
     assert plugin.DATABRICKS_SRC.plugin is plugin._DatabricksSrcPlugin
-    assert plugin.DATABRICKS_SRC.explorer is plugin._DatabricksSrcExplorer
+    assert plugin.DATABRICKS_SRC.explorer is DatabricksConnectionExplorer
     assert plugin.DATABRICKS_SRC.type_ == "databricks-bulk-in"
 
 
@@ -392,7 +379,7 @@ def test_databricks_dest_def_wires_plugin_and_explorer():
     assert plugin.DATABRICKS_DEST.conn is DatabricksDestConn
     assert plugin.DATABRICKS_DEST.dest is DatabricksDest
     assert plugin.DATABRICKS_DEST.plugin is plugin._DatabricksDestPlugin
-    assert plugin.DATABRICKS_DEST.explorer is plugin._DatabricksDestExplorer
+    assert plugin.DATABRICKS_DEST.explorer is DatabricksConnectionExplorer
     assert plugin.DATABRICKS_DEST.type_ == "databricks-bulk-out"
 
 

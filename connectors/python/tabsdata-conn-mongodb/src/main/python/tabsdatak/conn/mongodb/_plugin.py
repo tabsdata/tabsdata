@@ -13,12 +13,12 @@ from tabsdatak.conn.mongodb import (
     MongoDBDest,
     MongoDBDestConn,
 )
+from tabsdatak.conn.mongodb._explorer._explorer import MongoDBConnectionExplorer
 from tabsdatak.conn.mongodb.error import MongodbErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     TableFileSpec,
 )
 
@@ -391,19 +391,6 @@ def _all_dup_key_errors(e: Any) -> bool:
     return all(err.get("code") == _DUP_KEY_CODE for err in errors)
 
 
-# --- Explorer ---------------------------------------------------------
-
-
-class _MongoDBExplorer(Explorer[MongoDBDestConn]):
-    def metadata(self, conn: MongoDBDestConn) -> Any:
-        # TODO
-        return None
-
-    def data(self, conn: MongoDBDestConn, query: str) -> Any:
-        # TODO
-        return None
-
-
 # --- Binding ----------------------------------------------------------
 
 
@@ -415,6 +402,6 @@ MONGODB_DEST = DestDef(
     dest=MongoDBDest,
     cardinality=lambda dest: len(dest.collections_with_ids),
     plugin=_MongoDBDestPlugin,
-    explorer=_MongoDBExplorer,
+    explorer=MongoDBConnectionExplorer,
     icon="conn/mongodb/resources/mongodb.svg",
 )

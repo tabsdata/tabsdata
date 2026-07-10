@@ -52,3 +52,14 @@ class ConnErrorCode(ErrorCode):
 
     # --- Explorer / metadata (tabsdatak.conn.common._explorer) -----------
     CONN_11 = ErrorDef(ConnInitException, "Cannot create Column")
+
+    # --- Entity (tabsdatak.conn.common._explorer) -----------
+    CONN_12 = ErrorDef(ConnInitException, "Cannot create ReportingEntity")
+    CONN_13 = ErrorDef(ConnInitException, "Cannot create ObjectsEntity")
+
+    # --- ReportingConnection Meta Model (tabsdatak.conn.common._explorer) -----------
+    CONN_14 = ErrorDef(ConnInitException, "Cannot create ReportingConnMetaModel")
+    CONN_15 = ErrorDef(ConnInitException, "Cannot create ObjectsConnMetaModel")
+
+    # --- Property (tabsdatak.conn.common._explorer) -----------
+    CONN_16 = ErrorDef(ConnInitException, "Cannot create Property")
