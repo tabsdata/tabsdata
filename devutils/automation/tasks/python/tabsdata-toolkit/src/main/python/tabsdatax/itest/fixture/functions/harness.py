@@ -125,11 +125,13 @@ def collection_factory(server: TabsdataServer) -> Iterator[CollectionFactory]:
             server.connection.project = project
             state["project"] = project
         name = f"e2e_{group}_{uuid.uuid4().hex[:8]}"
+        document, secrets = _connection_document(conn)
         collection = Collection(
             connection=server.connection,
             name=name,
             group=group,
-            connection_document=_template_to_yaml(conn),
+            connection_document=document,
+            secrets=secrets,
         )
         collection.create()
         created.append(name)
@@ -143,8 +145,30 @@ def collection_factory(server: TabsdataServer) -> Iterator[CollectionFactory]:
         server.delete_project(state["project"], raise_for_status=False)
 
 
-def _template_to_yaml(conn: Conn) -> str:
-    # Local import: the server expects the connection document as a YAML string.
-    from tabsdatak import _template
+def _connection_document(conn: Conn) -> tuple[str, list[dict]]:
+    """Serialize ``conn`` to a dehydrated connection document (YAML) plus the
+    ``[{key, value}]`` secret payload the apiserver injects into the function pod
+    as ``SECRET_CONN__*`` env vars.
 
-    return _template.to_yaml(conn.to_dict())
+    ``Secret.to_dict()`` always strips the value, so each secret value is revealed
+    from the hydrated ``Secret`` on ``conn`` -- located by the same leaf paths
+    ``dehydrate`` harvests -- and re-injected before dehydrating (mirroring how the
+    CLI harvests values from a raw connection YAML). Connections without secrets
+    (e.g. LocalFile) yield an empty list, so this is a no-op for them."""
+    from copy import deepcopy
+
+    from tabsdatak import _template
+    from tabsdatak.common._json_serde import _secret_refs, dehydrate, replace_at
+
+    reference = conn.to_dict()
+    data = deepcopy(reference)
+    for path, _ in _secret_refs(reference):
+        secret = conn
+        for attr in path.split("."):
+            if attr not in ("$", "spec"):
+                secret = getattr(secret, attr)
+        replace_at(data, path, f"secret:{secret.value()}")
+    dehydrated, secrets = dehydrate(data, reference)
+    return _template.to_yaml(dehydrated), [
+        {"key": kv.key, "value": kv.value} for kv in secrets
+    ]
