@@ -1,0 +1,79 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+FROM ubuntu:24.04
+
+SHELL ["/bin/bash", "-c"]
+
+ARG TARGETARCH
+ENV TARGETARCH=${TARGETARCH}
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HOME=/root
+
+ENV PATH="/root/.td/bin:${PATH}"
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
+        > /etc/apt/apt.conf.d/keep-cache
+
+COPY --link scripts/system.sh /root/.td/sbin/system.sh
+RUN --mount=type=cache,id=tabsdata-apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=tabsdata-apt-lib,target=/var/lib/apt,sharing=locked \
+    /root/.td/sbin/system.sh
+
+ENV RUSTUP_HOME="/root/.rustup"
+ENV CARGO_HOME="/root/.cargo"
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+
+COPY --link scripts/rust.sh /root/.td/sbin/rust.sh
+RUN --mount=type=cache,id=tabsdata-cargo-registry,target=/root/.cargo/registry \
+    --mount=type=cache,id=tabsdata-cargo-git,target=/root/.cargo/git \
+    /root/.td/sbin/rust.sh
+
+ENV RUSTC_WRAPPER="/root/.cargo/bin/sccache"
+ENV SCCACHE_CACHE_SIZE="32G"
+ENV SCCACHE_DIR="/root/.cache/sccache"
+
+ENV GOPATH="/root/go"
+ENV PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}"
+
+COPY --link scripts/go.sh /root/.td/sbin/go.sh
+RUN /root/.td/sbin/go.sh
+
+COPY --link scripts/node.sh /root/.td/sbin/node.sh
+RUN --mount=type=cache,id=tabsdata-npm,target=/root/.npm \
+    /root/.td/sbin/node.sh
+
+ENV PATH="/root/.local/bin:${PATH}"
+
+COPY --link scripts/python.sh /root/.td/sbin/python.sh
+RUN --mount=type=cache,id=tabsdata-uv,target=/root/.cache/uv \
+    /root/.td/sbin/python.sh
+
+ENV VIRTUAL_ENV="/root/.uv/envs/tabsdata"
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+
+ENV VIRTUALENV_DISABLE_PROMPT=1
+ENV VIRTUAL_ENV_DISABLE_PROMPT=1
+
+COPY --link scripts/devpi.sh /root/.td/sbin/devpi.sh
+COPY --link scripts/logger.json /root/.devpi/logger.json
+RUN /root/.td/sbin/devpi.sh
+
+COPY --link scripts/devpi-start.sh /root/.td/bin/devpi-start.sh
+COPY --link scripts/entrypoint.sh /root/.td/bin/entrypoint.sh
+COPY --link scripts/package.sh /root/.td/sbin/package.sh
+
+COPY --link scripts/shell.sh /root/.td/sbin/shell.sh
+RUN /root/.td/sbin/shell.sh
+
+ENV TABSDATA_REPOSITORIES_HOME="/workspace"
+
+WORKDIR /workspace
+
+EXPOSE 2457
+EXPOSE 3141
+
+ENTRYPOINT ["/root/.td/bin/entrypoint.sh"]

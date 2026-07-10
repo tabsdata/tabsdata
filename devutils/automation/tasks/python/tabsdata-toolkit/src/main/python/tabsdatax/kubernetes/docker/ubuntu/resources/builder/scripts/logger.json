@@ -1,0 +1,21 @@
+{
+    "version": 1,
+    "disable_existing_loggers": true,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s %(levelname)-5s %(name)s %(message)s"
+        }
+    },
+    "handlers": {
+        "file": {
+            "class": "logging.FileHandler",
+            "level": "DEBUG",
+            "filename": "/root/.devpi/server.log",
+            "formatter": "standard"
+        }
+    },
+    "root": {
+        "level": "DEBUG",
+        "handlers": ["file"]
+    }
+}

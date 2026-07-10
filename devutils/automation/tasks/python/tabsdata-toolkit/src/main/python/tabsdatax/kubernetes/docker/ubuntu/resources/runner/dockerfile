@@ -1,0 +1,53 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+FROM ubuntu:24.04
+
+SHELL ["/bin/bash", "-c"]
+
+ARG TARGETARCH
+ENV TARGETARCH=${TARGETARCH}
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HOME=/root
+
+ENV PATH="/root/.td/bin:${PATH}"
+
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' \
+        > /etc/apt/apt.conf.d/keep-cache
+
+COPY --link scripts/system.sh /root/.td/sbin/system.sh
+RUN --mount=type=cache,id=tabsdata-apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=tabsdata-apt-lib,target=/var/lib/apt,sharing=locked \
+    /root/.td/sbin/system.sh
+
+COPY --link scripts/oracle.sh /root/.td/sbin/oracle.sh
+RUN /root/.td/sbin/oracle.sh
+
+ENV ORACLE_INSTANT_CLIENT_HOME="/opt/oracle/instantclient"
+ENV ORACLE_HOME="/opt/oracle/instantclient"
+ENV ORACLE_BASE="/opt/oracle/instantclient"
+ENV TNS_ADMIN="/opt/oracle/instantclient"
+ENV LD_LIBRARY_PATH="/opt/oracle/instantclient"
+ENV PATH="${PATH}:/opt/oracle/instantclient"
+
+ENV PATH="/root/.local/bin:${PATH}"
+
+COPY --link scripts/python.sh /root/.td/sbin/python.sh
+RUN --mount=type=cache,id=tabsdata-uv,target=/root/.cache/uv \
+    /root/.td/sbin/python.sh
+
+COPY --link scripts/entrypoint.sh /root/.td/bin/entrypoint.sh
+COPY --link bin/ /root/.td/bin/
+COPY --link functions/ /root/.td/functions/
+
+COPY --link scripts/shell.sh /root/.td/sbin/shell.sh
+RUN /root/.td/sbin/shell.sh
+
+WORKDIR /root
+
+EXPOSE 2457
+
+ENTRYPOINT ["/root/.td/bin/entrypoint.sh"]

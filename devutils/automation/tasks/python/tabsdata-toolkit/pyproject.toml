@@ -98,6 +98,7 @@ tdf-functions = "tabsdatax.itest.fixture.functions.harness"
 
 [project.scripts]
 tdkdocker = "tabsdatax.docker.cli:main"
+tdkubuntu = "tabsdatax.kubernetes.docker.ubuntu.cli:main"
 tdx-gconnector = "tabsdatax.generator.connector.cli:main"
 tdx-gtableframe = "tabsdatax.generator.tableframe.cli:main"
 tdx-itest = "tabsdatax.itest.tdkinstance.cli:main"
@@ -115,9 +116,10 @@ Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
 [tool.pytest.ini_options]
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib -p pytester"
 consider_namespace_packages = true
 testpaths = ["src/utest/python"]
+pytester_example_dir = "src/main/resources"
 markers = [
     "agent: mark tests that require the tabsdata-agent package.",
     "ai_provider: mark tests that require an ai provider (accepted values: openai).",
@@ -198,6 +200,16 @@ namespaces = true
 [tool.setuptools.package-data]
 "*" = ["!.gitkeep", "!*.pyc", "!__pycache__/*"]
 "tabsdatax.generator.tableframe.engine.generate" = ["templates/*.tmpl", "ruff.toml"]
+"tabsdatax.kubernetes.docker.ubuntu" = [
+    "resources/builder/dockerfile",
+    "resources/builder/scripts/*.sh",
+    "resources/builder/scripts/*.json",
+    "resources/runner/dockerfile",
+    "resources/runner/scripts/*.sh",
+    "resources/runner/bin/*",
+    "resources/runner/functions/**/*.py",
+    "resources/runner/functions/**/*.csv",
+]
 "tabsdatax.itest.tdksystems" = [
     "models/*/generator.py",
     "models/*/sizing.json",

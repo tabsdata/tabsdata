@@ -1,0 +1,42 @@
+#!/bin/bash
+
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+set -euo pipefail
+
+FUNCTIONS="/root/.td/functions/basic"
+
+TD_SERVER="${TD_SERVER:-localhost:2457}"
+TD_USER="${TD_USER:-admin}"
+TD_PASSWORD="${TD_PASSWORD:-tabsdata}"
+COLLECTION="basic"
+
+echo "Logging in to tabsdata..."
+tdk login --server "${TD_SERVER}" --user "${TD_USER}" --password "${TD_PASSWORD}"
+tdk status
+
+echo "Creating collection '${COLLECTION}'..."
+tdk collection create --name "${COLLECTION}" 2>/dev/null \
+    || echo "Collection '${COLLECTION}' already exists."
+
+echo "Registering functions..."
+tdk fn register --coll "${COLLECTION}" \
+    --path "${FUNCTIONS}/publisher.py::persons_publisher" --update
+tdk fn register --coll "${COLLECTION}" \
+    --path "${FUNCTIONS}/transformer.py::persons_transformer" --update
+tdk fn register --coll "${COLLECTION}" \
+    --path "${FUNCTIONS}/subscriber.py::persons_subscriber" --update
+
+echo "Triggering publisher..."
+tdk fn trigger --coll "${COLLECTION}" --name persons_publisher
+
+echo "Waiting for execution to complete..."
+sleep 5
+tdk exe list-trx --coll "${COLLECTION}"
+
+echo ""
+echo "Done. Output files in ${FUNCTIONS}/output/"
+echo "  - spanish.jsonl"
+echo "  - french.jsonl"
