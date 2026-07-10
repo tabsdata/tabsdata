@@ -8,8 +8,8 @@ from tabsdatax.itest.fixture.instances.tabsdata import (
     consumer_of,
     make_instance,
     registered_consumers,
-    verify_serving,
     tabsdata_instance,
+    verify_serving,
 )
 
 

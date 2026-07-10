@@ -274,9 +274,18 @@ def loaded_instance(consumer: str, check: bool = True) -> Instance:
     return instance
 
 
-def declared_consumers(request) -> dict[str, bool]:
+SHORTHAND_CONSUMERS: dict[str, Consumer] = {
+    "td_tabsdata_instance": CONSUMER_TDTEST,
+    "ai_tabsdata_instance": CONSUMER_AITEST,
+    "ui_tabsdata_instance": CONSUMER_UITEST,
+}
+INSTANCE_FIXTURE_PREFIX = "instance_"
+INSTANCE_META_FIXTURE = "instance"
+
+
+def marker_consumers(node) -> dict[str, bool]:
     declared: dict[str, bool] = {}
-    for marker in request.node.iter_markers(MARKER):
+    for marker in node.iter_markers(MARKER):
         if marker.args:
             consumer = marker.args[0]
         else:
@@ -285,44 +294,72 @@ def declared_consumers(request) -> dict[str, bool]:
     return declared
 
 
-def shorthand_instance(request, consumer: str) -> Instance:
+def declared_consumers(request) -> dict[str, bool]:
+    return marker_consumers(request.node)
+
+
+def requested_consumers(fixturenames) -> set[str]:
+    consumers: set[str] = set()
+    for name in fixturenames:
+        if name in SHORTHAND_CONSUMERS:
+            consumers.add(SHORTHAND_CONSUMERS[name])
+        elif name.startswith(INSTANCE_FIXTURE_PREFIX):
+            consumers.add(name[len(INSTANCE_FIXTURE_PREFIX) :])
+    return consumers
+
+
+def enforced_instance(request, consumer: str) -> Instance:
     declared = declared_consumers(request)
-    return loaded_instance(consumer, declared.get(consumer, True))
+    if consumer not in declared:
+        pytest.fail(
+            f"Instance consumer {consumer!r} not declared: add "
+            f"@tabsdata_instance(consumer={consumer!r}) to the test",
+            pytrace=False,
+        )
+    return loaded_instance(consumer, declared[consumer])
 
 
 @pytest.fixture
 def td_tabsdata_instance(request) -> Instance:
-    return shorthand_instance(request, CONSUMER_TDTEST)
+    return enforced_instance(request, CONSUMER_TDTEST)
 
 
 @pytest.fixture
 def ai_tabsdata_instance(request) -> Instance:
-    return shorthand_instance(request, CONSUMER_AITEST)
+    return enforced_instance(request, CONSUMER_AITEST)
 
 
 @pytest.fixture
 def ui_tabsdata_instance(request) -> Instance:
-    return shorthand_instance(request, CONSUMER_UITEST)
+    return enforced_instance(request, CONSUMER_UITEST)
+
+
+@pytest.fixture(name=INSTANCE_META_FIXTURE)
+def meta_instance(request) -> Instance:
+    declared = declared_consumers(request)
+    if len(declared) != 1:
+        pytest.fail(
+            f"`{INSTANCE_META_FIXTURE}` requires exactly one declared consumer, "
+            f"found {sorted(declared) or 'none'}; declare one via "
+            f"@tabsdata_instance(consumer=...), and request it by name through the "
+            f"`{INSTANCE_FIXTURE_PREFIX}<consumer>` fixture",
+            pytrace=False,
+        )
+    (consumer, check), = declared.items()
+    return loaded_instance(consumer, check)
 
 
 def consumer_instance_fixture(consumer: str):
-    @pytest.fixture(name=f"instance_{consumer}")
+    @pytest.fixture(name=f"{INSTANCE_FIXTURE_PREFIX}{consumer}")
     def fixture(request) -> Instance:
-        declared = declared_consumers(request)
-        if consumer not in declared:
-            pytest.fail(
-                f"Instance consumer {consumer!r} not declared: add "
-                f"@tabsdata_instance(consumer={consumer!r}) to the test",
-                pytrace=False,
-            )
-        return loaded_instance(consumer, declared[consumer])
+        return enforced_instance(request, consumer)
 
     return fixture
 
 
 for registered_consumer in registered_consumers():
-    globals()[f"instance_{registered_consumer}"] = consumer_instance_fixture(
-        registered_consumer
+    globals()[f"{INSTANCE_FIXTURE_PREFIX}{registered_consumer}"] = (
+        consumer_instance_fixture(registered_consumer)
     )
 
 
@@ -331,6 +368,52 @@ def pytest_configure(config):
         "markers",
         f"{MARKER}(consumer, check=True): the test uses the registered tabsdata"
         " instance of `consumer`; read it through the `instance_<consumer>`"
-        " fixtures (one per declared consumer). The `td_instance` /"
-        " `ai_instance` / `ui_instance` shorthands need no declaration.",
+        " fixtures or the `td_`/`ai_`/`ui_tabsdata_instance` shorthands. Every"
+        " declared consumer must appear in the test's own signature (even if only"
+        " forwarded), and every instance reached anywhere in the fixture graph must"
+        " be declared. Other fixtures may relay the sole declared instance through"
+        " the `instance` meta-fixture; tests must not request `instance` directly.",
     )
+
+
+def direct_argnames(item) -> tuple[str, ...]:
+    info = getattr(item, "_fixtureinfo", None)
+    return tuple(getattr(info, "argnames", ()))
+
+
+def pytest_collection_modifyitems(config, items):
+    violations: list[str] = []
+    for item in items:
+        if not hasattr(item, "iter_markers"):
+            continue
+        problems: list[str] = []
+        if INSTANCE_META_FIXTURE in direct_argnames(item):
+            problems.append(
+                f"requests `{INSTANCE_META_FIXTURE}` directly; it is a relay for "
+                f"other fixtures — a test must request an instance by name through "
+                f"the `{INSTANCE_FIXTURE_PREFIX}<consumer>` fixture"
+            )
+        declared = set(marker_consumers(item))
+        reached = requested_consumers(getattr(item, "fixturenames", ()))
+        signature = requested_consumers(direct_argnames(item))
+        undeclared = reached - declared
+        unlisted = declared - signature
+        if undeclared:
+            problems.append(
+                f"requests instance(s) {sorted(undeclared)} without declaring "
+                f"them via @tabsdata_instance(consumer=...)"
+            )
+        if unlisted:
+            problems.append(
+                f"declares consumer(s) {sorted(unlisted)} that the test signature "
+                f"does not request; add the `{INSTANCE_FIXTURE_PREFIX}<consumer>` "
+                f"fixture argument to the test even if only to forward it"
+            )
+        if problems:
+            violations.append(f"{item.nodeid}: {'; '.join(problems)}")
+    if violations:
+        listing = "\n  ".join(violations)
+        raise pytest.UsageError(
+            "tabsdata_instance contract violated (declared consumers must match "
+            f"requested instance fixtures exactly):\n  {listing}"
+        )
