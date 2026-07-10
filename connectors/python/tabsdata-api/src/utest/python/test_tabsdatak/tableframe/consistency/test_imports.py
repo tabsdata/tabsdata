@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import ast
-import importlib
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -40,7 +40,9 @@ def _module_file(name: str) -> Path | None:
 
 def _imported_targets(name: str, source: str) -> set[str]:
     tree = ast.parse(source, filename=name)
-    package_of = name if _module_file(name).name == "__init__.py" else name.rsplit(".", 1)[0]
+    module_file = _module_file(name)
+    is_package = module_file is not None and module_file.name == "__init__.py"
+    package_of = name if is_package else name.rsplit(".", 1)[0]
     targets: set[str] = set()
     for node in tree.body:
         if isinstance(node, ast.Import):
@@ -84,26 +86,26 @@ def _cycles(graph: dict[str, set[str]]) -> list[list[str]]:
     counter = [0]
     found: list[list[str]] = []
 
-    def strong_connect(node: str) -> None:
-        index[node] = low[node] = counter[0]
+    def strong_connect(vertex: str) -> None:
+        index[vertex] = low[vertex] = counter[0]
         counter[0] += 1
-        stack.append(node)
-        on_stack.add(node)
-        for neighbor in graph.get(node, ()):
+        stack.append(vertex)
+        on_stack.add(vertex)
+        for neighbor in graph.get(vertex, ()):
             if neighbor not in index:
                 strong_connect(neighbor)
-                low[node] = min(low[node], low[neighbor])
+                low[vertex] = min(low[vertex], low[neighbor])
             elif neighbor in on_stack:
-                low[node] = min(low[node], index[neighbor])
-        if low[node] == index[node]:
+                low[vertex] = min(low[vertex], index[neighbor])
+        if low[vertex] == index[vertex]:
             component = []
             while True:
                 member = stack.pop()
                 on_stack.discard(member)
                 component.append(member)
-                if member == node:
+                if member == vertex:
                     break
-            if len(component) > 1 or node in graph.get(node, ()):
+            if len(component) > 1 or vertex in graph.get(vertex, ()):
                 found.append(sorted(component))
 
     for node in list(graph):
