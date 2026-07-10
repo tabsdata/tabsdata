@@ -39,6 +39,7 @@
 -r connectors/python/tabsdata-conn-stream-stage/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-databricks/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-kafka/requirements/requirements-dev-third-party.txt
+-r connectors/python/tabsdata-medallion/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-mongodb/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-mssql/requirements/requirements-dev-third-party.txt
 -r connectors/python/tabsdata-salesforce/requirements/requirements-dev-third-party.txt
@@ -83,6 +84,7 @@
 -r connectors/python/tabsdata-conn-stream-stage/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-databricks/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-kafka/requirements/requirements-third-party.txt
+-r connectors/python/tabsdata-medallion/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-mongodb/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-mssql/requirements/requirements-third-party.txt
 -r connectors/python/tabsdata-salesforce/requirements/requirements-third-party.txt

@@ -43,6 +43,7 @@ TABSDATA_CONNECTORS_NAMES = [
     "conn-stream-stage",
     "databricks",
     "kafka",
+    "medallion",
     "mongodb",
     "mssql",
     "salesforce",

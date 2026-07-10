@@ -37,6 +37,7 @@
 -r connectors/python/tabsdata-conn-stream-stage/requirements.txt
 -r connectors/python/tabsdata-databricks/requirements.txt
 -r connectors/python/tabsdata-kafka/requirements.txt
+-r connectors/python/tabsdata-medallion/requirements.txt
 -r connectors/python/tabsdata-mongodb/requirements.txt
 -r connectors/python/tabsdata-mssql/requirements.txt
 -r connectors/python/tabsdata-salesforce/requirements.txt

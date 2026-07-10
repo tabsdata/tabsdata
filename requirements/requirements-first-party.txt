@@ -34,6 +34,7 @@ tabsdata-conn-starrocks==2.0.0
 tabsdata-conn-stream-stage==2.0.0
 tabsdata-databricks==2.0.0
 tabsdata-kafka==2.0.0
+tabsdata-medallion==2.0.0
 tabsdata-mongodb==2.0.0
 tabsdata-mssql==2.0.0
 tabsdata-salesforce==2.0.0

@@ -80,6 +80,7 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-conn-stream-stage",
     "tabsdata-databricks",
     "tabsdata-kafka",
+    "tabsdata-medallion",
     "tabsdata-mongodb",
     "tabsdata-mssql",
     "tabsdata-salesforce",
