@@ -49,3 +49,6 @@ class ConnErrorCode(ErrorCode):
 
     # --- Credentials (later additions) ------------------------------
     CONN_10 = ErrorDef(ConnInitException, "Cannot create GCPHmac")  # GCPHmac
+
+    # --- Explorer / metadata (tabsdatak.conn.common._explorer) -----------
+    CONN_11 = ErrorDef(ConnInitException, "Cannot create Column")

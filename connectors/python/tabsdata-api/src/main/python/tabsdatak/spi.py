@@ -33,8 +33,8 @@ from enum import Enum
 from pathlib import Path
 from typing import (
     Annotated,
-    Any,
     Callable,
+    ClassVar,
     Type,
     TypeAlias,
     Union,
@@ -447,23 +447,95 @@ class FunctionCtx(TrxCtx, FlowCtx, ABC):
     """
 
 
+class Entity(ABC):
+    """Abstract base for an entity within a connection.
+
+    Every concrete entity carries a back-reference to the
+    :class:`ConnMetaModel` that produced it so that :meth:`fqn` can
+    format the entity's fully qualified name using the hierarchy
+    declared by the meta-model.
+    """
+
+    connection_type: "ConnMetaModel"
+
+    @abstractmethod
+    def fqn(self) -> str:
+        """Return the fully qualified name of this entity.
+
+        The format is dictated by the meta-model's
+        ``entity_fully_qualified_name`` hierarchy (e.g. SQL uses
+        ``"database.schema.table"``, storage uses ``"prefix/path"``).
+        """
+
+    @abstractmethod
+    def field_names(self) -> list[str]:
+        """Return the names of all fields/columns/properties in this entity."""
+
+    @abstractmethod
+    def to_dict(self) -> dict:
+        """Serialize the entity to a dict, omitting falsy values."""
+
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, data: dict, connection_type: "ConnMetaModel") -> "Entity":
+        """Rebuild an entity from :meth:`to_dict` output.
+
+        The caller supplies *connection_type* explicitly because it's
+        not serialized inside the dict — the meta-model instance is a
+        runtime reference, not a persisted payload.
+        """
+
+
+class ConnMetaModel(ABC):
+    """Abstract base for a connection *kind* (SQL, objects, storage, …)."""
+
+
 class Explorer[C: Conn](ABC):
     """Optional connector capability for ad-hoc inspection of a
     live :class:`tabsdatak.spi.Conn`: catalog metadata and arbitrary
     query execution. Used by tooling (UIs, schema diff), not by the
     flow runtime."""
 
-    # TODO nail down this API.
+    meta_model: ClassVar[ConnMetaModel]
+    entity_type: ClassVar[type[Entity]]
+
     @abstractmethod
-    def metadata(self, conn: C) -> Any:
+    def check_connect(self, conn: C) -> None:
+        """Verify that a connection can be established to ``conn``
+
+        Should perform the smallest possible round-trip (open a session,
+        issue a single-row query, list one resource, …) and raise if the
+        attempt fails. Returns ``None`` on success.
+
+        Args:
+            conn: The connection to check.
+        """
+
+    @abstractmethod
+    def metadata(self, conn: C) -> list[Entity] | None:
         """Return the connection's catalog metadata (schemas,
         tables, columns)."""
 
-    # TODO nail down this API.
     @abstractmethod
-    def data(self, conn: C, query: str) -> Any:
-        """Run ``query`` against ``conn`` and return the result
-        rows. Connector-specific row shape."""
+    def data(self, conn: C, entity: Entity, limit: int = 100) -> list[dict] | None:
+        """
+        Return up to *limit* sample rows from *entity*.
+
+        The base implementation returns ``None`` to signal that this
+        connector does not support a row-level data preview (file /
+        object storage inherits this). SQL-like extractors override
+        to issue a ``SELECT`` and return a list (possibly empty when
+        the entity has no rows — still distinct from ``None``).
+
+        Args:
+            conn: The connection to query.
+            entity: The entity to sample rows from.
+            limit: Maximum number of rows to return.
+
+        Returns:
+            A list of dicts (one per row) or ``None`` when the connector
+            does not support row-level preview.
+        """
 
 
 def check_plugin_param_type(

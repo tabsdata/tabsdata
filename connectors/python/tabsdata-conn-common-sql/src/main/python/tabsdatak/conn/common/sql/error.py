@@ -21,3 +21,5 @@ class SqlCommonErrorCode(ErrorCode):
         "Unknown SQL engine {engine!r}; the connector's defaults list "
         "it but the factory has no implementation for it",
     )
+    SQL_COMMON_2 = ErrorDef(SqlCommonRuntimeException, "Cannot create SQLEntity")
+    SQL_COMMON_3 = ErrorDef(SqlCommonRuntimeException, "Cannot create SQLConnMetaModel")

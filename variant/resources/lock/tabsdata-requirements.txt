@@ -135,6 +135,7 @@ six==1.17.0
 snowflake-connector-python==4.4.0
 sortedcontainers==2.4.0
 sqlalchemy==2.0.48
+sqlalchemy-bigquery==1.17.0
 sqlglot==30.0.3
 starlette==1.0.0
 strictyaml==1.7.3
