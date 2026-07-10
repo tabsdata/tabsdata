@@ -23,7 +23,7 @@ import warnings
 from typing import Type, Union
 
 from tabsdatak.api import Dest, Src, StreamSrc
-from tabsdatak.spi import DestDef, SrcDef, StreamSrcDef
+from tabsdatak.spi import Conn, DestDef, Explorer, SrcDef, StreamSrcDef
 
 _ENTRY_POINT_GROUP = "tabsdatak.connectors"
 
@@ -121,6 +121,36 @@ def avail_stream_srcs() -> dict[str, StreamSrcDef]:
 def avail_dests() -> dict[str, DestDef]:
     """Snapshot of registered destinations, keyed by ``type_``."""
     return {k: v for k, v in _registry().items() if isinstance(v, DestDef)}
+
+
+def def_for(type_: str) -> _Def | None:
+    """Return the connector def registered under ``type_`` (across
+    sources, stream sources and destinations), or ``None`` if unknown."""
+    return _registry().get(type_)
+
+
+def explorer_for(type_: str) -> type[Explorer] | None:
+    """Return the :class:`~tabsdatak.spi.Explorer` class for ``type_``,
+    or ``None`` if the type is unregistered or wires no explorer."""
+    defx = _registry().get(type_)
+    return defx.explorer if defx is not None else None
+
+
+def explorer_for_conn(conn: Conn | type[Conn]) -> type[Explorer] | None:
+    """Return the :class:`~tabsdatak.spi.Explorer` class bound to ``conn``'s
+    connector, or ``None`` if none is registered.
+
+    Resolves by the connection's concrete :class:`~tabsdatak.spi.Conn` class
+    rather than the wire ``type_``: a caller that deserialized a stored
+    ``connectionDef`` document has the ``Conn`` in hand but not the ``type_``.
+    A ``Conn`` subclass may back several registry entries (e.g. Salesforce's
+    SOSQL and report sources) -- they share one explorer, so the first
+    registered def whose ``conn`` matches and wires an explorer wins."""
+    cls = conn if isinstance(conn, type) else type(conn)
+    for defx in _registry().values():
+        if defx.conn is cls and defx.explorer is not None:
+            return defx.explorer
+    return None
 
 
 # ---------------------------------------------------------------------------

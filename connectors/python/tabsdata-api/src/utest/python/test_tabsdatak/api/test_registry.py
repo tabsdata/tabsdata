@@ -19,16 +19,20 @@ from __future__ import annotations
 
 import pytest
 
-from tabsdatak.api import Dest, Src
 from tabsdatak._connectors import (
     avail_dests,
     avail_srcs,
     avail_stream_srcs,
+    def_for,
+    explorer_for,
+    explorer_for_conn,
     get_dest,
     get_src,
     reload_connectors,
 )
+from tabsdatak.api import Dest, Src
 from tabsdatak.spi import (
+    Conn,
     DestDef,
     DestPlugin,
     Explorer,
@@ -84,6 +88,7 @@ def test_get_src_resolves_class_to_defx():
     # is always registered, so class->def resolution is exercised in
     # every environment.
     from tabsdatak.conn.localfile import LocalFileSrc
+
     defx = get_src(LocalFileSrc)
     assert defx.src is LocalFileSrc
     assert defx.type_ == "local-file-in"
@@ -91,6 +96,7 @@ def test_get_src_resolves_class_to_defx():
 
 def test_get_dest_resolves_class_to_defx():
     from tabsdatak.conn.localfile import LocalFileDest
+
     defx = get_dest(LocalFileDest)
     assert defx.dest is LocalFileDest
     assert defx.type_ == "local-file-out"
@@ -102,6 +108,58 @@ def test_get_src_unregistered_class_raises_keyerror():
 
     with pytest.raises(KeyError):
         get_src(NotRegistered)
+
+
+# ---------------------------------------------------------------------------
+# explorer_for / def_for / explorer_for_conn resolvers
+# ---------------------------------------------------------------------------
+
+
+def test_explorer_for_known_type_returns_explorer():
+    from tabsdatak.conn.localfile._plugin import LocalFileSrcExplorer
+
+    assert explorer_for("local-file-in") is LocalFileSrcExplorer
+
+
+def test_explorer_for_unknown_type_returns_none():
+    assert explorer_for("no-such-type") is None
+
+
+def test_def_for_known_type_returns_def():
+    defx = def_for("local-file-in")
+    assert defx is not None
+    assert defx.type_ == "local-file-in"
+
+
+def test_def_for_unknown_type_returns_none():
+    assert def_for("no-such-type") is None
+
+
+def test_explorer_for_conn_resolves_by_conn_class():
+    from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileSrcConn
+    from tabsdatak.conn.localfile._plugin import (
+        LocalFileDestExplorer,
+        LocalFileSrcExplorer,
+    )
+
+    assert explorer_for_conn(LocalFileSrcConn) is LocalFileSrcExplorer
+    assert explorer_for_conn(LocalFileDestConn) is LocalFileDestExplorer
+
+
+def test_explorer_for_conn_accepts_an_instance():
+    # Resolution keys on the class, so even an uninitialized instance resolves.
+    from tabsdatak.conn.localfile import LocalFileSrcConn
+    from tabsdatak.conn.localfile._plugin import LocalFileSrcExplorer
+
+    inst = LocalFileSrcConn.__new__(LocalFileSrcConn)
+    assert explorer_for_conn(inst) is LocalFileSrcExplorer
+
+
+def test_explorer_for_conn_unregistered_returns_none():
+    class NotRegistered(Conn):
+        pass
+
+    assert explorer_for_conn(NotRegistered) is None
 
 
 # ---------------------------------------------------------------------------
