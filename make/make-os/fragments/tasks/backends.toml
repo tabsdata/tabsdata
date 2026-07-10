@@ -208,13 +208,44 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--help"
+            echo ""
+            echo "Usage: cargo make systems_create [--systems-manifest <FILE>]"
+            echo ""
+            echo "Create the backend systems from a manifest file."
+            echo ""
+            echo "Options:"
+            echo "  --systems-manifest <FILE>  Path to the systems manifest YAML."
+            echo "                             Default: ${BACKENDS_SYSTEMS_MANIFEST}"
+            echo ""
+            exit 0
+        end
+    end
+
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
     cm_run_task __os__set_secrets
 
+    manifest = set ""
+    take_next = set false
+    for argument in ${arguments}
+        if ${take_next}
+            manifest = set ${argument}
+            take_next = set false
+        elseif eq ${argument} "--systems-manifest"
+            take_next = set true
+        end
+    end
+    manifest = trim ${manifest}
+    if is_empty ${manifest}
+        manifest = set ${BACKENDS_SYSTEMS_MANIFEST}
+    end
+
     info "🛠️ Creating backend systems..."
-    debug "🚀 tdx-system create --auto ALL -f"
-    exec --fail-on-error tdx-system create --auto ALL -f
+    debug "🚀 tdx-system create --sys-manifest ${manifest} -f"
+    exec --fail-on-error tdx-system create --sys-manifest ${manifest} -f
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -229,13 +260,48 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--help"
+            echo ""
+            echo "Usage: cargo make systems_destroy [--systems-manifest <FILE>] [--domains-manifest <FILE>]"
+            echo ""
+            echo "Destroy the backend systems. The backend domains are destroyed first."
+            echo ""
+            echo "Options:"
+            echo "  --systems-manifest <FILE>  Path to the systems manifest YAML."
+            echo "                             Default: ${BACKENDS_SYSTEMS_MANIFEST}"
+            echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
+            echo "                             Default: ${BACKENDS_DOMAINS_MANIFEST}"
+            echo ""
+            exit 0
+        end
+    end
+
+    cm_run_task __os__destroy_domains
+
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
     cm_run_task __os__set_secrets
 
+    manifest = set ""
+    take_next = set false
+    for argument in ${arguments}
+        if ${take_next}
+            manifest = set ${argument}
+            take_next = set false
+        elseif eq ${argument} "--systems-manifest"
+            take_next = set true
+        end
+    end
+    manifest = trim ${manifest}
+    if is_empty ${manifest}
+        manifest = set ${BACKENDS_SYSTEMS_MANIFEST}
+    end
+
     info "💥 Destroying backend systems..."
-    debug "🚀 tdx-system destroy --sys ALL"
-    exec --fail-on-error tdx-system destroy --sys ALL
+    debug "🚀 tdx-system destroy --sys-manifest ${manifest}"
+    exec --fail-on-error tdx-system destroy --sys-manifest ${manifest}
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -357,13 +423,44 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--help"
+            echo ""
+            echo "Usage: cargo make domains_create [--domains-manifest <FILE>]"
+            echo ""
+            echo "Create the backend domains from a manifest file."
+            echo ""
+            echo "Options:"
+            echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
+            echo "                             Default: ${BACKENDS_DOMAINS_MANIFEST}"
+            echo ""
+            exit 0
+        end
+    end
+
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
     cm_run_task __os__set_secrets
 
+    manifest = set ""
+    take_next = set false
+    for argument in ${arguments}
+        if ${take_next}
+            manifest = set ${argument}
+            take_next = set false
+        elseif eq ${argument} "--domains-manifest"
+            take_next = set true
+        end
+    end
+    manifest = trim ${manifest}
+    if is_empty ${manifest}
+        manifest = set ${BACKENDS_DOMAINS_MANIFEST}
+    end
+
     info "🛠️ Creating backend domains..."
-    debug "🚀 tdx-domain create --auto ALL -f"
-    exec --fail-on-error tdx-domain create --auto ALL -f
+    debug "🚀 tdx-domain create --domain-manifest ${manifest} -f"
+    exec --fail-on-error tdx-domain create --domain-manifest ${manifest} -f
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -391,13 +488,44 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        if eq ${argument} "--help"
+            echo ""
+            echo "Usage: cargo make domains_destroy [--domains-manifest <FILE>]"
+            echo ""
+            echo "Destroy the backend domains."
+            echo ""
+            echo "Options:"
+            echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
+            echo "                             Default: ${BACKENDS_DOMAINS_MANIFEST}"
+            echo ""
+            exit 0
+        end
+    end
+
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
     cm_run_task __os__set_secrets
 
+    manifest = set ""
+    take_next = set false
+    for argument in ${arguments}
+        if ${take_next}
+            manifest = set ${argument}
+            take_next = set false
+        elseif eq ${argument} "--domains-manifest"
+            take_next = set true
+        end
+    end
+    manifest = trim ${manifest}
+    if is_empty ${manifest}
+        manifest = set ${BACKENDS_DOMAINS_MANIFEST}
+    end
+
     info "💥 Destroying backend domains..."
-    debug "🚀 tdx-domain destroy --auto ALL"
-    exec --fail-on-error tdx-domain destroy --auto ALL
+    debug "🚀 tdx-domain destroy --domain-manifest ${manifest}"
+    exec --fail-on-error tdx-domain destroy --domain-manifest ${manifest}
 
     cm_run_task __os__reset_venv_env
     ''']
