@@ -13,12 +13,11 @@ development and diagnosis only; production pods should not include it.
 from __future__ import annotations
 
 import argparse
-import logging
-import os
 
 from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function.commands.inspect_function.runner import run
 
-logger = logging.getLogger(__name__)
+__all__ = ["run", "main"]
 
 VERSION = "2.0.0"
 INFO = "inspect-function — dump function-run execution information for troubleshooting"
@@ -48,19 +47,8 @@ def _build_parser():
 
 
 @command(name="td_inspect_function", parser=_build_parser)
-def main(_args: argparse.Namespace) -> int:
-    worker = os.environ.get("TD_WORKER", "<unset>")
-    decorator = os.environ.get("TD_DECORATOR", "<unset>")
-    runid = os.environ.get("TD_RUNID", "<unset>")
-    print(
-        f"--- inspect-function: worker={worker} runid={runid} "
-        f"decorator={decorator} ---",
-        flush=True,
-    )
-    for key in sorted(os.environ):
-        print(f"  {key}={os.environ[key]}", flush=True)
-    print("--- inspect-function: done ---", flush=True)
-    return 0
+def main(args: argparse.Namespace) -> int:
+    return run(args)
 
 
 if __name__ == "__main__":  # pragma: no cover

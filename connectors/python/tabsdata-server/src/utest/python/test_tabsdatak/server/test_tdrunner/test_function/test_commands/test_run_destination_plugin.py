@@ -55,7 +55,7 @@ from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payl
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-_MOD = "tabsdatak.server._tdrunner.function.commands.run_destination_plugin"
+_MOD = "tabsdatak.server._tdrunner.function.commands.run_destination_plugin.runner"
 
 
 # --- shared fixtures ----------------------------------------------------

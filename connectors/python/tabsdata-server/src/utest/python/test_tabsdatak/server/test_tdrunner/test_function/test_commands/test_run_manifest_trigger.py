@@ -393,7 +393,7 @@ def test_trigger_one_malformed_filename_skipped_no_invoke(monkeypatch, tmp_path)
         raise AssertionError("invoke must not run for malformed filenames")
 
     monkeypatch.setattr(
-        "tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.invoke",
+        "tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.runner.invoke",
         _no_call,
     )
     req = HttpRequest(url="http://x/", headers={})

@@ -15,12 +15,12 @@ from tabsdatak.server._tdrunner.function._lib.http_request import (
     HttpRequestError,
     HttpResponse,
 )
-from tabsdatak.server._tdrunner.function.commands import run_cron_trigger
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger import (
     _build_parser,
     _execution_request_body,
     _fire,
     main,
+    runner,
 )
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.error import (
     CronTriggerConnectionError,
@@ -109,7 +109,7 @@ def _capture_invoke(*, response: HttpResponse | None = None, raise_exc=None):
 
 def test_fire_posts_cron_body_and_returns_on_2xx(monkeypatch):
     fake, captured = _capture_invoke(response=HttpResponse(status_code=200, body=b"{}"))
-    monkeypatch.setattr(run_cron_trigger, "invoke", fake)
+    monkeypatch.setattr(runner, "invoke", fake)
 
     # 2xx -> returns cleanly (no raise); the @command wrapper turns this into
     # exit 0.
@@ -126,7 +126,7 @@ def test_fire_posts_cron_body_and_returns_on_2xx(monkeypatch):
 
 def test_fire_raises_ct2_on_non_2xx(monkeypatch):
     fake, _ = _capture_invoke(response=HttpResponse(status_code=403, body=b"forbidden"))
-    monkeypatch.setattr(run_cron_trigger, "invoke", fake)
+    monkeypatch.setattr(runner, "invoke", fake)
 
     with pytest.raises(CronTriggerRejectedError) as excinfo:
         _fire("http://api/execute", "POST", "Bearer tok")
@@ -136,7 +136,7 @@ def test_fire_raises_ct2_on_non_2xx(monkeypatch):
 
 def test_fire_raises_ct1_on_connection_error(monkeypatch):
     fake, _ = _capture_invoke(raise_exc=HttpRequestError("connection refused"))
-    monkeypatch.setattr(run_cron_trigger, "invoke", fake)
+    monkeypatch.setattr(runner, "invoke", fake)
 
     with pytest.raises(CronTriggerConnectionError) as excinfo:
         _fire("http://api/execute", "POST", "Bearer tok")

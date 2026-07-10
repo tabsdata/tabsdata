@@ -119,7 +119,7 @@ def test_resolve_plugin_unknown_stream_src_raises_no_plugin(monkeypatch):
         raise KeyError("no stream source registered")
 
     monkeypatch.setattr(
-        "tabsdatak.server._tdrunner.function.commands.run_streamer.get_stream_src",
+        "tabsdatak.server._tdrunner.function.commands.run_streamer.runner.get_stream_src",
         _raise,
     )
     with pytest.raises(NoPluginError):
@@ -134,13 +134,13 @@ def test_tabsdata_version_is_imported_in_command_module():
     from ``tabsdatak.extensions.variant.version.version``. Guard the
     import name stays stable so reviewers don't silently lose the
     plumbing on a refactor."""
-    from tabsdatak.server._tdrunner.function.commands import run_streamer
+    from tabsdatak.server._tdrunner.function.commands.run_streamer import runner
 
-    assert callable(run_streamer._tabsdata_version)
+    assert callable(runner._tabsdata_version)
     # Returns a non-empty string in test envs where the package is
     # installed; in containers without the version metadata the
     # function returns NO_VERSION (also a string).
-    v = run_streamer._tabsdata_version()
+    v = runner._tabsdata_version()
     assert isinstance(v, str)
     assert v != ""
 

@@ -27,7 +27,7 @@ from test_tabsdatak.server.test_tdrunner.test_function.conftest import info_payl
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-_MOD = "tabsdatak.server._tdrunner.function.commands.localize_fn_bundle"
+_MOD = "tabsdatak.server._tdrunner.function.commands.localize_fn_bundle.runner"
 
 
 def _set_argv(

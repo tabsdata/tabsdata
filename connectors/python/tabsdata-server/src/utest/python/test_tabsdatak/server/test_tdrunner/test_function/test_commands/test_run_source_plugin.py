@@ -80,7 +80,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 HANDLER = TransporterHandler1()
 
 
-_MOD = "tabsdatak.server._tdrunner.function.commands.run_source_plugin"
+_MOD = "tabsdatak.server._tdrunner.function.commands.run_source_plugin.runner"
 
 
 # --- module-level stream-publisher fixture --------------------------------

@@ -19,7 +19,7 @@ from tabsdatak.server._tdrunner.function.commands.run_transporter.error import (
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
-_MOD = "tabsdatak.server._tdrunner.function.commands.run_transporter"
+_MOD = "tabsdatak.server._tdrunner.function.commands.run_transporter.runner"
 
 
 def _set_argv(

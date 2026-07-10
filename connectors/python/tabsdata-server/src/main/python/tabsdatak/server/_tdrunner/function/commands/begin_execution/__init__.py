@@ -20,26 +20,20 @@ Runs exactly once per pod, before ``fetch-request``. The shared volume
 is overlaid on the image-template-provided ``shared/journal/``
 dir, so the parent always exists; only the file itself needs to be
 written.
+
+The logic lives in :mod:`.runner`; this module is the thin ``@command``
+entrypoint the console script resolves to. The compound imports
+:func:`.runner.run` directly instead of going through ``main``.
 """
 
 from __future__ import annotations
 
 import argparse
-import logging
-from datetime import datetime, timezone
-from pathlib import Path
 
-from tabsdatak.server._tdrunner.function._lib.command import (
-    build_parser,
-    command,
-    notify_running,
-)
-from tabsdatak.server._tdrunner.function._lib.journal import Journal
-from tabsdatak.server._tdrunner.function.commands.begin_execution.error import (
-    BeginExecutionErrorCode,
-)
+from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function.commands.begin_execution.runner import run
 
-logger = logging.getLogger(__name__)
+__all__ = ["run", "main"]
 
 VERSION = "2.0.0"
 INFO = "begin-execution — initialize the journal with the run's startup-phase data"
@@ -71,22 +65,7 @@ def _build_parser():
 
 @command(name="td_begin_execution", parser=_build_parser)
 def main(args: argparse.Namespace) -> int:
-    logger.info("Initializing Journal for the function run")
-    start = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
-    journal_path = Path(args.journal_file)
-    journal = Journal(start=start)
-    logger.debug("Journal start=%s; writing to %s", start, journal_path)
-    try:
-        journal.save(journal_path)
-    except OSError as exc:
-        raise BeginExecutionErrorCode.BE_1.exception(
-            cause=exc,
-            path=journal_path,
-            detail=str(exc),
-        )
-    logger.info("begin-execution: recorded start=%s", start)
-    notify_running(args)
-    return 0
+    return run(args)
 
 
 if __name__ == "__main__":  # pragma: no cover

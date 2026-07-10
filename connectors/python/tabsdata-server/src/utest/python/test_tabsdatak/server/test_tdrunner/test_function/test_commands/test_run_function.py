@@ -71,7 +71,7 @@ from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
-_MOD = "tabsdatak.server._tdrunner.function.commands.run_function"
+_MOD = "tabsdatak.server._tdrunner.function.commands.run_function.runner"
 
 
 # --- shared fixtures ----------------------------------------------------
