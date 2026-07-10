@@ -13,13 +13,14 @@ Object storage has no row-level sampling notion, so ``data`` is a no-op;
 import os
 from typing import ClassVar, TypeAlias
 
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.common.file._explorer import (
     FilePattern,
     FileStorageConnMetaModel,
     FileStorageEntity,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.s3 import S3DestConn, S3SrcConn
 from tabsdatak.spi import ConnMetaModel, Entity, Explorer
 

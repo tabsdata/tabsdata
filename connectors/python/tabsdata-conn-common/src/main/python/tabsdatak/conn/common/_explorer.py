@@ -2,9 +2,8 @@ from abc import abstractmethod
 from dataclasses import field
 
 import tabsdatak._api as _api
-from tabsdatak.error import ApiErrorCode
-from tabsdatak.spi import ConnMetaModel, Entity
 from tabsdatak.conn.common.error import ConnErrorCode
+from tabsdatak.spi import ConnMetaModel, Entity
 
 
 class BaseConnMetaModel(ConnMetaModel):
@@ -104,13 +103,11 @@ class ReportingEntity(Entity):
     columns: list[Column] = field(default_factory=list)
 
     def fqn(self) -> str:
-        return self.connection_type.entity_fqn(
-            {
-                "workspace": self.workspace,
-                "folder": self.workspace,
-                "report": self.report,
-            }
-        )
+        return self.connection_type.entity_fqn({
+            "workspace": self.workspace,
+            "folder": self.workspace,
+            "report": self.report,
+        })
 
     def field_names(self) -> list[str]:
         return [c.name for c in self.columns]
@@ -145,12 +142,10 @@ class ObjectsEntity(Entity):
     properties: list[Property] = field(default_factory=list)
 
     def fqn(self) -> str:
-        return self.connection_type.entity_fqn(
-            {
-                "namespace": self.namespace,
-                "object": self.object,
-            }
-        )
+        return self.connection_type.entity_fqn({
+            "namespace": self.namespace,
+            "object": self.object,
+        })
 
     def field_names(self) -> list[str]:
         return [p.name for p in self.properties]

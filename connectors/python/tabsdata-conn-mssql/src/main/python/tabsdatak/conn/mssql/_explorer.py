@@ -35,22 +35,20 @@ class MSSQLServerConnectionExplorer(SqlAlchemyConnectionExplorer):
     """
 
     def system_schemas(self) -> frozenset[str]:
-        return frozenset(
-            {
-                "sys",
-                "INFORMATION_SCHEMA",
-                "db_owner",
-                "db_accessadmin",
-                "db_securityadmin",
-                "db_ddladmin",
-                "db_backupoperator",
-                "db_datareader",
-                "db_datawriter",
-                "db_denydatareader",
-                "db_denydatawriter",
-                "guest",
-            }
-        )
+        return frozenset({
+            "sys",
+            "INFORMATION_SCHEMA",
+            "db_owner",
+            "db_accessadmin",
+            "db_securityadmin",
+            "db_ddladmin",
+            "db_backupoperator",
+            "db_datareader",
+            "db_datawriter",
+            "db_denydatareader",
+            "db_denydatawriter",
+            "guest",
+        })
 
     def make_url(self, conn: MSSQLConn) -> engine.URL:
         # `uri` is a str or a `Secret`; `_convert` yields the plain str

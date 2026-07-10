@@ -173,9 +173,7 @@ def _extract_columns(describe: dict) -> list[Column]:
             _column(key, detail_col_info.get(key, {})) for key in detail_columns
         )
     else:
-        columns.extend(
-            _column(key, info) for key, info in detail_col_info.items()
-        )
+        columns.extend(_column(key, info) for key, info in detail_col_info.items())
 
     columns.extend(
         _column(key, info, "grouping") for key, info in group_col_info.items()

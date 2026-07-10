@@ -1538,7 +1538,8 @@ def _domain_create_auto(args) -> int:
                     argv += ["--data", args.data]
             _domain_create(argv)
             detail = (
-                "" if seed or not args.model
+                ""
+                if seed or not args.model
                 else f"empty (model {args.model!r} not seeded)"
             )
             results.append((sname, sname, True, detail))
@@ -1561,8 +1562,14 @@ def _domain_create_from_manifest(args) -> int:
         try:
             if not name:
                 raise DatagenError("manifest entry has no `name` (domain name)")
-            argv = [*common, "--sys", sys_name, "--domain", name,
-                    *manifest.entry_to_argv(e)]
+            argv = [
+                *common,
+                "--sys",
+                sys_name,
+                "--domain",
+                name,
+                *manifest.entry_to_argv(e),
+            ]
             _domain_create(argv)
             results.append((name, sys_name, True, ""))
         except Exception as exc:  # noqa: BLE001 - one bad entry must not stop the rest

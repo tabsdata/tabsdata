@@ -18,7 +18,6 @@ from sqlalchemy import (
 
 import tabsdatak._api as _api
 from tabsdatak.conn.common._explorer import BaseConnMetaModel, Column
-from tabsdatak.error import ApiErrorCode
 from tabsdatak.conn.common.sql.error import SqlCommonErrorCode
 from tabsdatak.spi import (
     Conn,
@@ -37,15 +36,13 @@ class SQLEntity(Entity):
     columns: list[Column] = field(default_factory=list)
 
     def fqn(self) -> str:
-        return self.connection_type.entity_fqn(
-            {
-                "database": self.database,
-                "schema": self.schema,
-                "owner": self.schema,
-                "catalog": self.database,
-                "table": self.table,
-            }
-        )
+        return self.connection_type.entity_fqn({
+            "database": self.database,
+            "schema": self.schema,
+            "owner": self.schema,
+            "catalog": self.database,
+            "table": self.table,
+        })
 
     def field_names(self) -> list[str]:
         return [c.name for c in self.columns]

@@ -11,13 +11,12 @@ from tabsdatak.conn.snowflake import (
     SnowflakeDest,
     SnowflakeDestConn,
 )
-from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
 from tabsdatak.conn.snowflake._explorer import SnowflakeConnectionExplorer
+from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     TableFileSpec,
 )
 

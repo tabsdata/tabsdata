@@ -20,7 +20,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,

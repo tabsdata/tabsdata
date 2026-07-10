@@ -8,8 +8,8 @@ from tabsdatak.conn.common.file import _plugin
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import GCPJson, _convert
 from tabsdatak.conn.gcs import GCSDest, GCSDestConn, GCSSrc, GCSSrcConn
-from tabsdatak.conn.gcs.error import GcsErrorCode
 from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
+from tabsdatak.conn.gcs.error import GcsErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,

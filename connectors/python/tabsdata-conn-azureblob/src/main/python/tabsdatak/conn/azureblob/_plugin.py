@@ -9,9 +9,9 @@ from tabsdatak.conn.azureblob import (
     AzureBlobSrc,
     AzureBlobSrcConn,
 )
-from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
-from tabsdatak.conn.common.file import _plugin, _transporter
 from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
+from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
+from tabsdatak.conn.common.file import _plugin
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import AzureAccountKey, _convert

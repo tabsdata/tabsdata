@@ -14,13 +14,12 @@ from tabsdatak.conn.oracle import (
     SrcCfgKey,
     SrcCfgSpec,
 )
-from tabsdatak.conn.oracle.error import OracleErrorCode
 from tabsdatak.conn.oracle._explorer import OracleConnectionExplorer
+from tabsdatak.conn.oracle.error import OracleErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,

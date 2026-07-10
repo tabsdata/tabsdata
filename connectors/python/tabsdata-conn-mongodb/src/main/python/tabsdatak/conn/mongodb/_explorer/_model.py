@@ -7,7 +7,6 @@ from typing import Optional, Union
 
 import tabsdatak._api as _api
 from tabsdatak.conn.common._explorer import BaseConnMetaModel, Entity
-
 from tabsdatak.conn.mongodb.error import MongodbErrorCode
 
 
@@ -82,12 +81,10 @@ class MongoDBEntity(Entity):
     validator: Optional[MongoValidator] = None
 
     def fqn(self) -> str:
-        return self.connection_type.entity_fqn(
-            {
-                "database": self.database,
-                "collection": self.collection,
-            }
-        )
+        return self.connection_type.entity_fqn({
+            "database": self.database,
+            "collection": self.collection,
+        })
 
     def field_names(self) -> list[str]:
         """Return the collection's indexed field names, sorted and deduped.

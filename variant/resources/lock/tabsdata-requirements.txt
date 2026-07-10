@@ -93,7 +93,7 @@ platformdirs==4.9.4
 polars==1.39.3
 polars-runtime-32==1.39.3
 prompt-toolkit==3.0.52
-proto-plus==1.28.0
+proto-plus==1.28.1
 protobuf==6.33.6
 psycopg2-binary==2.9.11
 py-cpuinfo==9.0.0

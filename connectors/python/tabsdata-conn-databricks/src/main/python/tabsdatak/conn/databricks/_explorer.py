@@ -60,9 +60,7 @@ class DatabricksConnectionExplorer(Explorer):
         from tabsdatak.conn.databricks import _impl
 
         catalog = _convert(conn.catalog, str) if conn.catalog is not None else ""
-        schema_filter = (
-            _convert(conn.schema, str) if conn.schema is not None else None
-        )
+        schema_filter = _convert(conn.schema, str) if conn.schema is not None else None
 
         client = _impl._build_workspace_client(conn)
 
@@ -85,9 +83,7 @@ class DatabricksConnectionExplorer(Explorer):
         for schema_name in schemas:
             try:
                 tables = list(
-                    client.tables.list(
-                        catalog_name=catalog, schema_name=schema_name
-                    )
+                    client.tables.list(catalog_name=catalog, schema_name=schema_name)
                 )
             except Exception:
                 logger.warning(

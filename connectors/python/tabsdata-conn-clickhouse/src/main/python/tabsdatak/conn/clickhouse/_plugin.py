@@ -10,8 +10,8 @@ from tabsdatak.conn.clickhouse import (
     DestCfgKey,
     DestCfgSpec,
 )
-from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
 from tabsdatak.conn.clickhouse._explorer import ClickHouseConnectionExplorer
+from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -19,7 +19,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     TableFileSpec,
 )
 

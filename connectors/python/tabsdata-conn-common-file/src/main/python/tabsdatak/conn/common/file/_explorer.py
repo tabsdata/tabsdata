@@ -5,12 +5,10 @@
 from dataclasses import field
 
 import tabsdatak._api as _api
-from tabsdatak.conn.common._explorer import BaseConnMetaModel, Column
+from tabsdatak.conn.common._explorer import BaseConnMetaModel
 from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.spi import (
-    Conn,
     Entity,
-    Explorer,
 )
 
 
@@ -69,14 +67,12 @@ class FileStorageEntity(Entity):
     file: FilePattern | None = None
 
     def fqn(self) -> str:
-        return self.connection_type.entity_fqn(
-            {
-                "scheme": self.scheme,
-                "bucket": self.bucket,
-                "prefix": self.prefix,
-                "file": self.file.pattern if self.file is not None else "",
-            }
-        )
+        return self.connection_type.entity_fqn({
+            "scheme": self.scheme,
+            "bucket": self.bucket,
+            "prefix": self.prefix,
+            "file": self.file.pattern if self.file is not None else "",
+        })
 
     def field_names(self) -> list[str]:
         return [self.file.pattern] if self.file is not None else []

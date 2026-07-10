@@ -26,15 +26,13 @@ class PostgresConnectionExplorer(SqlAlchemyConnectionExplorer):
     """
 
     def system_schemas(self) -> frozenset[str]:
-        return frozenset(
-            {
-                "information_schema",
-                "pg_catalog",
-                "pg_toast",
-                "pg_temp_1",
-                "pg_toast_temp_1",
-            }
-        )
+        return frozenset({
+            "information_schema",
+            "pg_catalog",
+            "pg_toast",
+            "pg_temp_1",
+            "pg_toast_temp_1",
+        })
 
     def map_entity_fields(self, conn: PostgresConn, schema: str | None) -> dict:
         parsed = urlparse(_convert(conn.uri, str))

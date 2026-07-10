@@ -13,13 +13,12 @@ from tabsdatak.conn.starrocks import (
     StarRocksDest,
     StarRocksDestConn,
 )
-from tabsdatak.conn.starrocks.error import StarRocksErrorCode
 from tabsdatak.conn.starrocks._explorer import StarRocksConnectionExplorer
+from tabsdatak.conn.starrocks.error import StarRocksErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     TableFileSpec,
 )
 

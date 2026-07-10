@@ -14,13 +14,12 @@ from tabsdatak.conn.mysql import (
     SrcCfgKey,
     SrcCfgSpec,
 )
-from tabsdatak.conn.mysql.error import MysqlErrorCode
 from tabsdatak.conn.mysql._explorer import MySQLConnectionExplorer
+from tabsdatak.conn.mysql.error import MysqlErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,

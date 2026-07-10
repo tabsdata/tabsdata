@@ -7,3 +7,7 @@ repositories:
     alternate_name: tabsdata
     description: Tabsdata Open Source
     prefix: TABSDATA_OS
+  - name: tabsdata-km
+    alternate_name: null
+    description: Tabsdata Kminus
+    prefix: TABSDATA_KM

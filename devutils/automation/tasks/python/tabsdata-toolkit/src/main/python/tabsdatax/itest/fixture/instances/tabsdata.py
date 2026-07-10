@@ -345,7 +345,7 @@ def meta_instance(request) -> Instance:
             f"`{INSTANCE_FIXTURE_PREFIX}<consumer>` fixture",
             pytrace=False,
         )
-    (consumer, check), = declared.items()
+    ((consumer, check),) = declared.items()
     return loaded_instance(consumer, check)
 
 

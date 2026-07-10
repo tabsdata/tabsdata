@@ -77,7 +77,6 @@ chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["derive"] }
 clap_derive = { workspace = true }
 colored = { workspace = true }
-comfy-table = { workspace = true }
 const_format = { workspace = true }
 cron-descriptor = { workspace = true }
 dirs = { workspace = true }

@@ -27,14 +27,12 @@ class MySQLConnectionExplorer(SqlAlchemyConnectionExplorer):
         return {"database": schema or "", "schema": ""}
 
     def system_schemas(self) -> frozenset[str]:
-        return frozenset(
-            {
-                "information_schema",
-                "mysql",
-                "performance_schema",
-                "sys",
-            }
-        )
+        return frozenset({
+            "information_schema",
+            "mysql",
+            "performance_schema",
+            "sys",
+        })
 
     def engine_kwargs(self, conn: MySQLConn) -> dict:
         return conn.conn_cfg or {}

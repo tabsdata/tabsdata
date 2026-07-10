@@ -8,8 +8,8 @@ from tabsdatak.conn.common.file import _plugin
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
-from tabsdatak.conn.s3.error import S3ErrorCode
 from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
+from tabsdatak.conn.s3.error import S3ErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,

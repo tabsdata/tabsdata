@@ -12,8 +12,8 @@ from tabsdatak.conn.bigquery import (
     DestCfgKey,
     DestCfgSpec,
 )
-from tabsdatak.conn.bigquery.error import BigqueryErrorCode
 from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
+from tabsdatak.conn.bigquery.error import BigqueryErrorCode
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -21,7 +21,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     TableFileSpec,
 )
 

@@ -14,13 +14,12 @@ from tabsdatak.conn.postgres import (
     SrcCfgKey,
     SrcCfgSpec,
 )
-from tabsdatak.conn.postgres.error import PostgresErrorCode
 from tabsdatak.conn.postgres._explorer import PostgresConnectionExplorer
+from tabsdatak.conn.postgres.error import PostgresErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,

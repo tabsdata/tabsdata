@@ -28,14 +28,12 @@ class StarRocksConnectionExplorer(SqlAlchemyConnectionExplorer):
         return {"database": schema or conn.database or "", "schema": ""}
 
     def system_schemas(self) -> frozenset[str]:
-        return frozenset(
-            {
-                "information_schema",
-                "_statistics_",
-                "sys",
-                "mysql",
-            }
-        )
+        return frozenset({
+            "information_schema",
+            "_statistics_",
+            "sys",
+            "mysql",
+        })
 
     def engine_kwargs(self, conn: StarRocksDestConn) -> dict:
         return conn.conn_cfg or {}

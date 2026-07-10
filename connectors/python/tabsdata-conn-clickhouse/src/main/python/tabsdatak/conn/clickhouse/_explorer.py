@@ -6,7 +6,7 @@
 
 from tabsdatak.conn.clickhouse import ClickHouseDestConn
 from tabsdatak.conn.common._explorer import Column
-from tabsdatak.conn.common.sql._explorer import SQLEntity, SqlAlchemyConnectionExplorer
+from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer, SQLEntity
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert

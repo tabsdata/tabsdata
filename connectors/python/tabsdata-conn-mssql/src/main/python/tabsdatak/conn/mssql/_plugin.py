@@ -14,13 +14,12 @@ from tabsdatak.conn.mssql import (
     SrcCfgKey,
     SrcCfgSpec,
 )
-from tabsdatak.conn.mssql.error import MssqlErrorCode
 from tabsdatak.conn.mssql._explorer import MSSQLServerConnectionExplorer
+from tabsdatak.conn.mssql.error import MssqlErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,

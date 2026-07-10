@@ -13,7 +13,7 @@
 #             inheritance across process chains.
 #
 # arguments.: Arguments to pass to the process. The values are automatically
-#             generated using an internal algorithm based on reserved keywords.Scale
+#             generated using an internal algorithm based on reserved keywords.
 #
 # markers...: Arguments to pass to the process. For ephemeral workers, the
 #             process is wrapped in a system shell script. As a result, all the
