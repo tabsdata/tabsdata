@@ -45,9 +45,10 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference}
 use kube::core::{Expression, Selector};
 
 use crate::base::constants::{
-    KUBE_METADATA_FIELD_NAME, KUBE_METADATA_FIELD_UID, PART_OF_LABEL, PART_OF_TABSDATA,
+    KUBE_METADATA_FIELD_NAME, KUBE_METADATA_FIELD_UID, PART_OF_LABEL, PART_OF_TABSDATA, TIER_LABEL,
 };
 use crate::base::error::naming::NamingError;
+use crate::runtime::instance::tier::Tier;
 
 pub use client::{build_incluster_kube_client, build_kube_client};
 pub use cluster::ensure_cluster_reachable;
@@ -93,6 +94,15 @@ pub fn tabsdata_selector(label: Option<LabelFilter<'_>>) -> Selector {
     if let Some(LabelFilter { key, value }) = label {
         selector.extend([Expression::Equal(key.to_owned(), value.to_owned())]);
     }
+    selector
+}
+
+pub fn tabsdata_non_ephemeral_selector() -> Selector {
+    let mut selector = tabsdata_selector(None);
+    selector.extend([Expression::NotIn(
+        TIER_LABEL.to_owned(),
+        [Tier::Ephemeral.as_str().to_owned()].into_iter().collect(),
+    )]);
     selector
 }
 
@@ -172,3 +182,6 @@ pub fn owner_ref_for_cronjob(cronjob: &CronJob) -> Result<OwnerReference, Naming
         block_owner_deletion: Some(false),
     })
 }
+
+#[cfg(test)]
+mod tests;

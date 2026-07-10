@@ -10,8 +10,11 @@ use kube::runtime::wait::{Condition, await_condition};
 
 use crate::base::error::kubernetes::{KubeCronJobError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
-use crate::kube::api::{label_tabsdata, owner_ref_for_cronjob, tabsdata_selector};
+use crate::kube::api::{
+    label_tabsdata, owner_ref_for_cronjob, tabsdata_non_ephemeral_selector, tabsdata_selector,
+};
 use crate::kube::context::KubeContext;
+use kube::core::Selector;
 
 pub async fn create_cronjob(
     context: &KubeContext,
@@ -60,8 +63,18 @@ pub async fn delete_cronjob(context: &KubeContext, name: &str) -> Result<(), Kub
 }
 
 pub async fn delete_cronjobs(context: &KubeContext) -> Result<(), KubernetesError> {
+    delete_cronjobs_matching(context, tabsdata_selector(None)).await
+}
+
+pub async fn delete_cronjobs_non_ephemeral(context: &KubeContext) -> Result<(), KubernetesError> {
+    delete_cronjobs_matching(context, tabsdata_non_ephemeral_selector()).await
+}
+
+async fn delete_cronjobs_matching(
+    context: &KubeContext,
+    selector: Selector,
+) -> Result<(), KubernetesError> {
     let api: Api<CronJob> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = tabsdata_selector(None);
     let list_params = ListParams::default().labels_from(&selector);
     let delete_params = DeleteParams {
         propagation_policy: Some(PropagationPolicy::Background),
@@ -81,8 +94,20 @@ pub async fn delete_cronjobs(context: &KubeContext) -> Result<(), KubernetesErro
 }
 
 pub async fn list_cronjobs(context: &KubeContext) -> Result<Vec<CronJob>, KubernetesError> {
+    list_cronjobs_matching(context, tabsdata_selector(None)).await
+}
+
+pub async fn list_cronjobs_non_ephemeral(
+    context: &KubeContext,
+) -> Result<Vec<CronJob>, KubernetesError> {
+    list_cronjobs_matching(context, tabsdata_non_ephemeral_selector()).await
+}
+
+async fn list_cronjobs_matching(
+    context: &KubeContext,
+    selector: Selector,
+) -> Result<Vec<CronJob>, KubernetesError> {
     let api: Api<CronJob> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = tabsdata_selector(None);
     let list_params = ListParams::default().labels_from(&selector);
     api.list(&list_params)
         .await

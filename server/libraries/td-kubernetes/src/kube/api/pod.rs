@@ -13,8 +13,12 @@ use kube::runtime::wait::{Condition, await_condition};
 use crate::base::constants::{DELETE_POD_POLL_INTERVAL, DELETE_POD_WAIT_TIMEOUT};
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
-use crate::kube::api::{LabelFilter, label_tabsdata, owner_ref_for_pod, tabsdata_selector};
+use crate::kube::api::{
+    LabelFilter, label_tabsdata, owner_ref_for_pod, tabsdata_non_ephemeral_selector,
+    tabsdata_selector,
+};
 use crate::kube::context::KubeContext;
+use kube::core::Selector;
 
 pub async fn create_pod(
     context: &KubeContext,
@@ -63,8 +67,18 @@ pub async fn delete_pod(context: &KubeContext, name: &str) -> Result<(), Kuberne
 }
 
 pub async fn delete_pods(context: &KubeContext) -> Result<(), KubernetesError> {
+    delete_pods_matching(context, tabsdata_selector(None)).await
+}
+
+pub async fn delete_pods_non_ephemeral(context: &KubeContext) -> Result<(), KubernetesError> {
+    delete_pods_matching(context, tabsdata_non_ephemeral_selector()).await
+}
+
+async fn delete_pods_matching(
+    context: &KubeContext,
+    selector: Selector,
+) -> Result<(), KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = tabsdata_selector(None);
     let list_params = ListParams::default().labels_from(&selector);
     let delete_params = DeleteParams {
         propagation_policy: Some(PropagationPolicy::Background),
@@ -108,8 +122,18 @@ pub async fn delete_pods(context: &KubeContext) -> Result<(), KubernetesError> {
 }
 
 pub async fn list_pods(context: &KubeContext) -> Result<Vec<Pod>, KubernetesError> {
+    list_pods_matching(context, tabsdata_selector(None)).await
+}
+
+pub async fn list_pods_non_ephemeral(context: &KubeContext) -> Result<Vec<Pod>, KubernetesError> {
+    list_pods_matching(context, tabsdata_non_ephemeral_selector()).await
+}
+
+async fn list_pods_matching(
+    context: &KubeContext,
+    selector: Selector,
+) -> Result<Vec<Pod>, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = tabsdata_selector(None);
     let list_params = ListParams::default().labels_from(&selector);
     api.list(&list_params)
         .await

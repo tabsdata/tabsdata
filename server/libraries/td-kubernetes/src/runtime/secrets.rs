@@ -4,8 +4,9 @@
 
 //! Secret generation and synchronization for the kubernetes runtime.
 //!
-//! Components::
+//! Components:
 //!
+//! ```text
 //!     ┌─────────────────────── runtime/secrets ────────────────────────┐
 //!     │                                                                │
 //!     │   ┌────────────────┐         ┌─────────────────────────────┐   │
@@ -74,9 +75,11 @@
 //!                                       → cluster.namespace.Secret
 //!                                         name: "td-sys-tabsdata-secret-kubeconfig"
 //!                                         data: { kubeconfig: <encoded> }
+//! ```
 //!
-//! Startup sequence (kminus)::
+//! Startup sequence (kminus):
 //!
+//! ```text
 //!     tdkserver server start --provider kminus
 //!             ↓
 //!     Provider::start_server
@@ -104,6 +107,7 @@
 //!                                     Secret.data.kubeconfig
 //!                                   (codec is internal to td-kubernetes;
 //!                                    callers never see encode/decode)
+//! ```
 
 pub mod discovery;
 pub mod generator;

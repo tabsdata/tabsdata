@@ -21,7 +21,7 @@ use td_common::status::ExitStatus;
 use td_common::{about, logging};
 use td_database::config::{ComponentConfig, DatabaseComponents};
 use td_database::error::DbError;
-use td_database::server::{bootable_server, start_server, stop_server};
+use td_database::server::{bootable_server, serve_server, start_server, stop_server};
 use td_process::launcher::cli::Cli;
 use td_process::launcher::hooks;
 use te_database as dbm;
@@ -99,11 +99,14 @@ struct DbManagerParams {
 /// local server entry is a misconfiguration, not a no-op.
 async fn serve(server: Option<&ComponentConfig>) -> Result<(), DbError> {
     bootable_server(server)?;
-    start_server(server).await?;
+    let handle = serve_server(server).await?;
     info!("Database server running; waiting for shutdown signal");
     wait_for_shutdown().await;
     info!("Shutdown signal received; stopping database server");
-    stop_server(server).await
+    match handle {
+        Some(handle) => handle.stop().await,
+        None => stop_server(server).await,
+    }
 }
 
 /// Provision every component's schema and owner role, then upgrade each.

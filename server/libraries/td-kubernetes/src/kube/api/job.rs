@@ -10,8 +10,11 @@ use kube::runtime::wait::{Condition, await_condition};
 
 use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
-use crate::kube::api::{label_tabsdata, owner_ref_for_job, tabsdata_selector};
+use crate::kube::api::{
+    label_tabsdata, owner_ref_for_job, tabsdata_non_ephemeral_selector, tabsdata_selector,
+};
 use crate::kube::context::KubeContext;
+use kube::core::Selector;
 
 pub async fn create_job(
     context: &KubeContext,
@@ -60,8 +63,18 @@ pub async fn delete_job(context: &KubeContext, name: &str) -> Result<(), Kuberne
 }
 
 pub async fn delete_jobs(context: &KubeContext) -> Result<(), KubernetesError> {
+    delete_jobs_matching(context, tabsdata_selector(None)).await
+}
+
+pub async fn delete_jobs_non_ephemeral(context: &KubeContext) -> Result<(), KubernetesError> {
+    delete_jobs_matching(context, tabsdata_non_ephemeral_selector()).await
+}
+
+async fn delete_jobs_matching(
+    context: &KubeContext,
+    selector: Selector,
+) -> Result<(), KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = tabsdata_selector(None);
     let list_params = ListParams::default().labels_from(&selector);
     let delete_params = DeleteParams {
         propagation_policy: Some(PropagationPolicy::Background),
@@ -81,8 +94,18 @@ pub async fn delete_jobs(context: &KubeContext) -> Result<(), KubernetesError> {
 }
 
 pub async fn list_jobs(context: &KubeContext) -> Result<Vec<Job>, KubernetesError> {
+    list_jobs_matching(context, tabsdata_selector(None)).await
+}
+
+pub async fn list_jobs_non_ephemeral(context: &KubeContext) -> Result<Vec<Job>, KubernetesError> {
+    list_jobs_matching(context, tabsdata_non_ephemeral_selector()).await
+}
+
+async fn list_jobs_matching(
+    context: &KubeContext,
+    selector: Selector,
+) -> Result<Vec<Job>, KubernetesError> {
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
-    let selector = tabsdata_selector(None);
     let list_params = ListParams::default().labels_from(&selector);
     api.list(&list_params)
         .await

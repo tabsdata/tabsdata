@@ -24,12 +24,26 @@ pub(crate) use credentials::{EmbeddedPassword, resolve_password};
 pub use knobs::{BootConfig, boot_config, database_dir};
 
 #[cfg(feature = "embedded-postgres")]
+pub use boot::ServerHandle;
+#[cfg(feature = "embedded-postgres")]
 pub(crate) use boot::boot_detached;
 #[cfg(feature = "embedded-postgres")]
 pub(crate) use secrets::{load_or_create_owner_password, load_owner_password, load_password};
 
 use crate::config::ComponentConfig;
 use crate::error::DbError;
+
+/// No-op owning handle when embedded postgres is not built in: there is no
+/// in-process server to own, so `stop` does nothing.
+#[cfg(not(feature = "embedded-postgres"))]
+pub struct ServerHandle;
+
+#[cfg(not(feature = "embedded-postgres"))]
+impl ServerHandle {
+    pub async fn stop(self) -> Result<(), DbError> {
+        Ok(())
+    }
+}
 
 /// Start the local database server detached, on the entry's URL port, so it
 /// outlives this call. Idempotent; a no-op without a local entry.
@@ -46,6 +60,29 @@ pub async fn start_server(server: Option<&ComponentConfig>) -> Result<(), DbErro
         let _ = server;
         tracing::info!("embedded postgres not built in; nothing to start");
         Ok(())
+    }
+}
+
+/// Boot the local database server and return an owning handle, so the calling
+/// process owns the postmaster for its lifetime and stops it on shutdown. For
+/// the foreground `td_dbmanager serve` runtime, whose process IS the database
+/// service: the server must die with it, not outlive it as a reusable daemon.
+/// Returns `None` (logged) when there is no local server to run.
+pub async fn serve_server(
+    server: Option<&ComponentConfig>,
+) -> Result<Option<ServerHandle>, DbError> {
+    let Some(server) = local_server(server, "serve")? else {
+        return Ok(None);
+    };
+    #[cfg(feature = "embedded-postgres")]
+    {
+        Ok(Some(boot::boot_owned(&boot_config(server)?).await?))
+    }
+    #[cfg(not(feature = "embedded-postgres"))]
+    {
+        let _ = server;
+        tracing::info!("embedded postgres not built in; nothing to serve");
+        Ok(Some(ServerHandle))
     }
 }
 

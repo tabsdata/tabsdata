@@ -27,6 +27,27 @@ const POSTMASTER_PID_FILE: &str = "postmaster.pid";
 /// accepts connections; `initdb`'s bootstrap backend writes none at all.
 const POSTMASTER_STATUS_READY: &str = "ready";
 
+/// Owning handle to a postmaster this process booted (via [`boot_owned`]).
+/// Holding it keeps the server owned by this process; dropping it stops the
+/// server (the library's `Drop` runs `pg_ctl stop`). Prefer [`Self::stop`] for
+/// a graceful, awaited `pg_ctl stop --wait` on shutdown.
+pub struct ServerHandle {
+    server: PostgreSQL,
+}
+
+impl ServerHandle {
+    /// Stop the owned server with an awaited `pg_ctl stop --wait`. Consumes the
+    /// handle so the subsequent drop is a no-op.
+    pub async fn stop(self) -> Result<(), DbError> {
+        self.server
+            .stop()
+            .await
+            .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
+        info!("embedded postgres stopped (owned)");
+        Ok(())
+    }
+}
+
 /// Settings locating the server on `cfg`'s `data_dir`/`port` — enough to stop
 /// it, which needs no credentials. [`boot_settings`] layers the superuser
 /// password on for the boot path.
@@ -99,6 +120,38 @@ pub(crate) async fn boot_detached(cfg: &BootConfig) -> Result<(), DbError> {
         redacted_url(&url)
     );
     Ok(())
+}
+
+/// Boot the server and return its owning handle instead of forgetting it, so
+/// the caller's process owns the postmaster for its lifetime and stops it on
+/// drop (see [`ServerHandle`]). Unlike [`start_detached`], this never adopts a
+/// pre-existing postmaster: the owning process must boot the server it owns.
+/// For the foreground `serve` runtime, not the detached `start`/tests path.
+pub(super) async fn boot_owned(cfg: &BootConfig) -> Result<ServerHandle, DbError> {
+    // A postmaster left running on this data directory (for example, an orphan
+    // from a previous run that exited without stopping it) would make
+    // `pg_ctl start` fail. Stop it first so this process starts and owns a
+    // fresh server.
+    if read_postmaster(&cfg.data_dir_or_default()).is_some() {
+        warn!("embedded postgres already running on the data dir; stopping it to take ownership");
+        stop_detached(cfg).await?;
+    }
+    let mut server = PostgreSQL::new(boot_settings(cfg)?);
+    server
+        .setup()
+        .await
+        .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
+    server
+        .start()
+        .await
+        .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
+    let url = Url::parse(&server.settings().url("postgres"))
+        .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
+    info!(
+        "embedded postgres started (owned), listening at {}",
+        redacted_url(&url)
+    );
+    Ok(ServerHandle { server })
 }
 
 /// Start the server detached and idempotent: reuse one already accepting
