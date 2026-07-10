@@ -1,0 +1,150 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+"""Connector-agnostic end-to-end test harness: register real functions on a
+running tabsdata instance, trigger them, and read results back.
+
+Loaded as a pytest plugin (entry point ``tdf-functions``), so the ``server`` and
+``collection_factory`` fixtures are available to any connector's itest without a
+per-package conftest. The plain helpers (``run_function``, ``wait_for_completion``,
+``assert_frames_match``, ``write_module``) are importable from here.
+
+A test declares ``@tabsdata_instance(consumer=...)`` (for ``server``) and, via
+``collection_factory``, creates source/destination collections carrying any
+connector's ``Conn``; file-specific helpers live in :mod:`.files`.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+import uuid
+from collections.abc import Callable, Iterator
+from pathlib import Path
+from time import sleep
+from types import ModuleType
+
+import polars as pl
+import pytest
+from tabsdatak.sdk.status_utils.execution import (
+    EXECUTION_FINAL_STATUSES,
+    EXECUTION_SUCCESSFUL_FINAL_STATUSES,
+)
+from tabsdatak.sdk.tabsdata_server import Collection, FunctionInfo, TabsdataServer
+from tabsdatak.spi import Conn
+
+from tabsdatax.itest.fixture.instances.tabsdata import Instance
+
+POLL_INTERVAL_SECONDS = 2
+POLL_TIMEOUT_SECONDS = 300
+
+# Creates a collection in a given group ("sources" / "destinations") with the
+# given connection, and returns the created ``Collection``.
+CollectionFactory = Callable[[str, Conn], Collection]
+
+
+def write_module(project_root: Path, module_name: str, body: str) -> ModuleType:
+    """Write ``body`` to ``project_root/<module_name>.py`` and import it. Function
+    definitions must live in real modules under a ``project_root`` (they are
+    bundled and re-imported by the runner), and the source/destination paths are
+    fixed at decoration time -- so test modules are generated per test."""
+    (project_root / f"{module_name}.py").write_text(body)
+    spec = importlib.util.spec_from_file_location(
+        module_name, project_root / f"{module_name}.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def wait_for_completion(execution) -> str:
+    """Poll ``execution`` until it reaches a terminal state; return that status."""
+    waited = 0
+    while execution.status not in EXECUTION_FINAL_STATUSES:
+        if waited >= POLL_TIMEOUT_SECONDS:
+            pytest.fail(
+                f"execution did not finish within {POLL_TIMEOUT_SECONDS}s "
+                f"(last status {execution.status!r})",
+                pytrace=False,
+            )
+        sleep(POLL_INTERVAL_SECONDS)
+        waited += POLL_INTERVAL_SECONDS
+        execution.refresh()
+    return execution.status
+
+
+def run_function(
+    collection: Collection, function_info: FunctionInfo, project_root: Path
+) -> None:
+    """Register ``function_info`` in ``collection``, trigger it, assert success."""
+    function = collection.register_function(
+        info=function_info, project_root=str(project_root)
+    )
+    status = wait_for_completion(function.trigger())
+    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES, (
+        f"execution finished with non-success status {status!r}"
+    )
+
+
+def assert_frames_match(got: pl.DataFrame, expected: pl.DataFrame) -> None:
+    """Order- and dtype-agnostic content equality on ``expected``'s columns
+    (transporter format inference may differ from polars' own read)."""
+    columns = expected.columns
+    assert (
+        got.select(columns).cast(pl.String).sort(by=columns).to_dicts()
+        == expected.cast(pl.String).sort(by=columns).to_dicts()
+    )
+
+
+@pytest.fixture
+def server(instance_tdtest: Instance) -> TabsdataServer:
+    """A ``TabsdataServer`` client against the registered ``tdtest`` instance.
+
+    Requires ``@tabsdata_instance(consumer="tdtest")`` on the test.
+    """
+    api = instance_tdtest.apiserver
+    return TabsdataServer(
+        f"{api.host}:{api.port}", api.superuser.user, api.superuser.password
+    )
+
+
+@pytest.fixture
+def collection_factory(server: TabsdataServer) -> Iterator[CollectionFactory]:
+    """Create collections under a per-test project, cleaning up every collection
+    and the project on teardown. The project is created lazily on first use so a
+    skipped test provisions nothing."""
+    state: dict[str, str | None] = {"project": None}
+    created: list[str] = []
+
+    def make(group: str, conn: Conn) -> Collection:
+        if state["project"] is None:
+            project = f"e2e_{uuid.uuid4().hex[:8]}_proj"
+            server.create_project(project, description="e2e test project")
+            server.connection.project = project
+            state["project"] = project
+        name = f"e2e_{group}_{uuid.uuid4().hex[:8]}"
+        collection = Collection(
+            connection=server.connection,
+            name=name,
+            group=group,
+            connection_document=_template_to_yaml(conn),
+        )
+        collection.create()
+        created.append(name)
+        return collection
+
+    yield make
+
+    for name in reversed(created):
+        server.delete_collection(name, raise_for_status=False)
+    if state["project"]:
+        server.delete_project(state["project"], raise_for_status=False)
+
+
+def _template_to_yaml(conn: Conn) -> str:
+    # Local import: the server expects the connection document as a YAML string.
+    from tabsdatak import _template
+
+    return _template.to_yaml(conn.to_dict())

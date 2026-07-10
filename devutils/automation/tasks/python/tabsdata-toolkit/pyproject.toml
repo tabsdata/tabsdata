@@ -94,6 +94,7 @@ salesforce = [
 tdx-harvester = "tabsdatax.pytesting.plugins.harvester.plugin"
 tdf-instances = "tabsdatax.itest.fixture.instances.tabsdata"
 tdf-backends = "tabsdatax.itest.fixture.backend"
+tdf-functions = "tabsdatax.itest.fixture.functions.harness"
 
 [project.scripts]
 tdkdocker = "tabsdatax.docker.cli:main"
