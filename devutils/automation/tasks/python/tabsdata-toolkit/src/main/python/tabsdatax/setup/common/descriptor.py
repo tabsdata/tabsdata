@@ -26,23 +26,36 @@ class PackageDescriptor:
     def module(self) -> tuple[str, ...]:
         return tuple(self.package.split("-"))
 
-    def namespace(self, root: str) -> str:
+    def module_variants(self) -> tuple[tuple[str, ...], ...]:
+        if not self.module:
+            return ((),)
+        *head, leaf = self.module
+        return (
+            (*head, leaf),
+            (*head, f"_{leaf}"),
+        )
+
+    def namespace_parts(self, root: str) -> tuple[str, ...]:
         if self.module == ("api",):
-            return root
+            return (root,)
         infix = ("connector",) if root == "tabsdata" else ()
-        return ".".join((root, *infix, *self.module))
+        for variant in self.module_variants():
+            parts = (root, *infix, *variant)
+            source_root = os.path.join("src", "main", "python", *parts)
+            if os.path.isdir(source_root):
+                return parts
+        return (root, *infix, *self.module)
+
+    def namespace(self, root: str) -> str:
+        return ".".join(self.namespace_parts(root))
 
     def manifest_path(self, root: str) -> str:
-        if self.module == ("api",):
-            parts = (root,)
-        else:
-            infix = ("connector",) if root == "tabsdata" else ()
-            parts = (root, *infix, *self.module)
+        parts = self.namespace_parts(root)
         return os.path.join("src", "main", "python", *parts, "assets", "manifest")
 
     @property
     def primary_manifest_path(self) -> str:
-        for root in ("tabsdata", "tabsdatak"):
+        for root in ("tabsdatak", "tabsdata"):
             candidate_path = self.manifest_path(root)
             if os.path.isdir(candidate_path):
                 return candidate_path
