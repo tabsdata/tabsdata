@@ -521,7 +521,6 @@ class Explorer[C: Conn](ABC):
         """Return the connection's catalog metadata (schemas,
         tables, columns)."""
 
-    @abstractmethod
     def data(self, conn: C, entity: Entity, limit: int = 100) -> list[dict] | None:
         """
         Return up to *limit* sample rows from *entity*.
@@ -541,6 +540,7 @@ class Explorer[C: Conn](ABC):
             A list of dicts (one per row) or ``None`` when the connector
             does not support row-level preview.
         """
+        return None
 
 
 def check_plugin_param_type(

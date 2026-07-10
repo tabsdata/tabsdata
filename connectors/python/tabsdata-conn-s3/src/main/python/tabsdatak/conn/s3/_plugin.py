@@ -9,11 +9,11 @@ from tabsdatak.conn.common.file import _plugin
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
 from tabsdatak.conn.s3.error import S3ErrorCode
+from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
@@ -109,29 +109,6 @@ class S3DestPlugin(DestPlugin[S3DestConn, S3Dest]):
         )
 
 
-# --- Explorer placeholder ----------------------------------------
-
-
-class S3SrcExplorer(Explorer[S3SrcConn]):
-    def metadata(self, conn: S3SrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: S3SrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
-class S3DestExplorer(Explorer[S3DestConn]):
-    def metadata(self, conn: S3DestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: S3DestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 # --- Bindings ----------------------------------------------------
 
 
@@ -144,7 +121,7 @@ S3_SRC = SrcDef(
     table_mode=TableMode.ARRAY,
     cardinality=lambda src: len(src.paths),
     plugin=S3SrcPlugin,
-    explorer=S3SrcExplorer,
+    explorer=S3ConnectionExplorer,
     icon="conn/s3/resources/s3.svg",
 )
 
@@ -157,6 +134,6 @@ S3_DEST = DestDef(
     dest=S3Dest,
     cardinality=lambda dest: len(dest.paths),
     plugin=S3DestPlugin,
-    explorer=S3DestExplorer,
+    explorer=S3ConnectionExplorer,
     icon="conn/s3/resources/s3.svg",
 )

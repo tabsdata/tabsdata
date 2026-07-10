@@ -6,18 +6,25 @@ from unittest.mock import MagicMock
 import pytest
 
 from tabsdatak.api import Secret
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin
+
 # noinspection PyProtectedMember
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.common.types import AzureAccountKey
-from tabsdatak.conn.azureblob import AzureBlobDest, AzureBlobDestConn, AzureBlobSrc, AzureBlobSrcConn
+from tabsdatak.conn.azureblob import (
+    AzureBlobDest,
+    AzureBlobDestConn,
+    AzureBlobSrc,
+    AzureBlobSrcConn,
+)
+from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
 from tabsdatak.spi import TableFileInput
+
 # noinspection PyProtectedMember
 import tabsdatak.conn.azureblob._plugin as plugin
-
-
 
 pytestmark = pytest.mark.azureblob
 
@@ -130,8 +137,11 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
 
     def fake(*, ctx, cfg, build_location, run_env, errors):
         captured.update(
-            ctx=ctx, cfg=cfg, build_location=build_location,
-            run_env=run_env, errors=errors,
+            ctx=ctx,
+            cfg=cfg,
+            build_location=build_location,
+            run_env=run_env,
+            errors=errors,
         )
         return [[Path(tmp_path / "ok.parquet")]]
 
@@ -153,8 +163,12 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
     def fake(*, ctx, cfg, tables, build_location, run_env, errors):
         captured.update(
-            ctx=ctx, cfg=cfg, tables=tables, build_location=build_location,
-            run_env=run_env, errors=errors,
+            ctx=ctx,
+            cfg=cfg,
+            tables=tables,
+            build_location=build_location,
+            run_env=run_env,
+            errors=errors,
         )
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
@@ -172,20 +186,6 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    src_exp = plugin.AzureBlobSrcExplorer()
-    assert src_exp.metadata(_src_conn()) is None
-    assert src_exp.data(_src_conn(), "SELECT 1") is None
-    dest_exp = plugin.AzureBlobDestExplorer()
-    assert dest_exp.metadata(_dest_conn()) is None
-    assert dest_exp.data(_dest_conn(), "SELECT 1") is None
-
-
-# ---------------------------------------------------------------------------
 # SrcDef / DestDef wiring
 # ---------------------------------------------------------------------------
 
@@ -194,7 +194,7 @@ def test_azureblob_src_def_wires_plugin_and_explorer():
     assert plugin.AZURE_BLOB_SRC.conn is AzureBlobSrcConn
     assert plugin.AZURE_BLOB_SRC.src is AzureBlobSrc
     assert plugin.AZURE_BLOB_SRC.plugin is plugin.AzureBlobSrcPlugin
-    assert plugin.AZURE_BLOB_SRC.explorer is plugin.AzureBlobSrcExplorer
+    assert plugin.AZURE_BLOB_SRC.explorer is AzureBlobConnectionExplorer
     assert plugin.AZURE_BLOB_SRC.type_ == "az-file-in"
 
 
@@ -202,7 +202,7 @@ def test_azureblob_dest_def_wires_plugin_and_explorer():
     assert plugin.AZURE_BLOB_DEST.conn is AzureBlobDestConn
     assert plugin.AZURE_BLOB_DEST.dest is AzureBlobDest
     assert plugin.AZURE_BLOB_DEST.plugin is plugin.AzureBlobDestPlugin
-    assert plugin.AZURE_BLOB_DEST.explorer is plugin.AzureBlobDestExplorer
+    assert plugin.AZURE_BLOB_DEST.explorer is AzureBlobConnectionExplorer
     assert plugin.AZURE_BLOB_DEST.type_ == "az-file-out"
 
 

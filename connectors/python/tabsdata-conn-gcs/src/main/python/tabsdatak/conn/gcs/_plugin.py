@@ -9,11 +9,11 @@ from tabsdatak.conn.common.file import _plugin
 from tabsdatak.conn.common.types import GCPJson, _convert
 from tabsdatak.conn.gcs import GCSDest, GCSDestConn, GCSSrc, GCSSrcConn
 from tabsdatak.conn.gcs.error import GcsErrorCode
+from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
@@ -116,29 +116,6 @@ class GCSDestPlugin(DestPlugin[GCSDestConn, GCSDest]):
         )
 
 
-# --- Explorer placeholder ----------------------------------------
-
-
-class GCSSrcExplorer(Explorer[GCSSrcConn]):
-    def metadata(self, conn: GCSSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: GCSSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
-class GCSDestExplorer(Explorer[GCSDestConn]):
-    def metadata(self, conn: GCSDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: GCSDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 # --- Bindings ----------------------------------------------------
 
 
@@ -151,7 +128,7 @@ GCS_SRC = SrcDef(
     table_mode=TableMode.ARRAY,
     cardinality=lambda src: len(src.paths),
     plugin=GCSSrcPlugin,
-    explorer=GCSSrcExplorer,
+    explorer=GCSConnectionExplorer,
     icon="conn/gcs/resources/gcs.svg",
 )
 
@@ -164,6 +141,6 @@ GCS_DEST = DestDef(
     dest=GCSDest,
     cardinality=lambda dest: len(dest.paths),
     plugin=GCSDestPlugin,
-    explorer=GCSDestExplorer,
+    explorer=GCSConnectionExplorer,
     icon="conn/gcs/resources/gcs.svg",
 )

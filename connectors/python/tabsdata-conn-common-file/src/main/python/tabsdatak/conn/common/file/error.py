@@ -77,3 +77,24 @@ class FileCommonErrorCode(ErrorCode):
         FileRuntimeException,
         "Slot/path count mismatch: {tables} parquet files vs {paths} target paths",
     )  # run_write_out -- pre-flight check
+    FILE_COMMON_17 = ErrorDef(
+        ConnInitException,
+        "Source format=AUTO could not be inferred from paths {paths}: {reason}. "
+        "Set ``format=SrcFileFormat.<...>`` explicitly.",
+    )  # resolve_auto_src_format -- AUTO inference failure
+    FILE_COMMON_18 = ErrorDef(
+        ConnInitException,
+        "Destination format=AUTO could not be inferred from paths {paths}: {reason}. "
+        "Set ``format=DestFileFormat.<...>`` explicitly.",
+    )  # resolve_auto_dest_format -- AUTO inference failure
+    FILE_COMMON_19 = ErrorDef(
+        ConnInitException, "Cannot create FileStorageConnMetaModel"
+    )
+    FILE_COMMON_20 = ErrorDef(
+        ConnInitException,
+        "Cannot create FileStorageEntity",
+    )
+    FILE_COMMON_21 = ErrorDef(
+        ConnInitException,
+        "Cannot create FilePattern",
+    )

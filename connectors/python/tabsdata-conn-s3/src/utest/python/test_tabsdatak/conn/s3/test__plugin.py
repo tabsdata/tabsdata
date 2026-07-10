@@ -6,18 +6,20 @@ from unittest.mock import MagicMock
 import pytest
 
 from tabsdatak.api import Secret
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin
+
 # noinspection PyProtectedMember
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.common._transporter.invoker import transporter1
 from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
+from tabsdatak.conn.s3._explorer import S3ConnectionExplorer
 from tabsdatak.spi import TableFileInput
+
 # noinspection PyProtectedMember
 import tabsdatak.conn.s3._plugin as plugin
-
-
 
 pytestmark = pytest.mark.s3
 
@@ -117,8 +119,11 @@ def test_src_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_pa
 
     def fake(*, ctx, cfg, build_location, run_env, errors):
         captured.update(
-            ctx=ctx, cfg=cfg, build_location=build_location,
-            run_env=run_env, errors=errors,
+            ctx=ctx,
+            cfg=cfg,
+            build_location=build_location,
+            run_env=run_env,
+            errors=errors,
         )
         return [[Path(tmp_path / "ok.parquet")]]
 
@@ -141,8 +146,12 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
     def fake(*, ctx, cfg, tables, build_location, run_env, errors):
         captured.update(
-            ctx=ctx, cfg=cfg, tables=tables, build_location=build_location,
-            run_env=run_env, errors=errors,
+            ctx=ctx,
+            cfg=cfg,
+            tables=tables,
+            build_location=build_location,
+            run_env=run_env,
+            errors=errors,
         )
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
@@ -160,20 +169,6 @@ def test_dest_plugin_passes_build_location_run_env_and_errors(monkeypatch, tmp_p
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    src_exp = plugin.S3SrcExplorer()
-    assert src_exp.metadata(_src_conn()) is None
-    assert src_exp.data(_src_conn(), "SELECT 1") is None
-    dest_exp = plugin.S3DestExplorer()
-    assert dest_exp.metadata(_dest_conn()) is None
-    assert dest_exp.data(_dest_conn(), "SELECT 1") is None
-
-
-# ---------------------------------------------------------------------------
 # SrcDef / DestDef wiring
 # ---------------------------------------------------------------------------
 
@@ -182,7 +177,7 @@ def test_s3_src_def_wires_plugin_and_explorer():
     assert plugin.S3_SRC.conn is S3SrcConn
     assert plugin.S3_SRC.src is S3Src
     assert plugin.S3_SRC.plugin is plugin.S3SrcPlugin
-    assert plugin.S3_SRC.explorer is plugin.S3SrcExplorer
+    assert plugin.S3_SRC.explorer is S3ConnectionExplorer
     assert plugin.S3_SRC.type_ == "s3-file-in"
 
 
@@ -190,7 +185,7 @@ def test_s3_dest_def_wires_plugin_and_explorer():
     assert plugin.S3_DEST.conn is S3DestConn
     assert plugin.S3_DEST.dest is S3Dest
     assert plugin.S3_DEST.plugin is plugin.S3DestPlugin
-    assert plugin.S3_DEST.explorer is plugin.S3DestExplorer
+    assert plugin.S3_DEST.explorer is S3ConnectionExplorer
     assert plugin.S3_DEST.type_ == "s3-file-out"
 
 

@@ -10,7 +10,8 @@ from tabsdatak.conn.azureblob import (
     AzureBlobSrcConn,
 )
 from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
-from tabsdatak.conn.common.file import _plugin
+from tabsdatak.conn.common.file import _plugin, _transporter
+from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import AzureAccountKey, _convert
@@ -18,7 +19,6 @@ from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
@@ -124,29 +124,6 @@ class AzureBlobDestPlugin(DestPlugin[AzureBlobDestConn, AzureBlobDest]):
         )
 
 
-# --- Explorer placeholder ----------------------------------------
-
-
-class AzureBlobSrcExplorer(Explorer[AzureBlobSrcConn]):
-    def metadata(self, conn: AzureBlobSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: AzureBlobSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
-class AzureBlobDestExplorer(Explorer[AzureBlobDestConn]):
-    def metadata(self, conn: AzureBlobDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: AzureBlobDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 # --- Bindings ----------------------------------------------------
 
 
@@ -159,7 +136,7 @@ AZURE_BLOB_SRC = SrcDef(
     table_mode=TableMode.ARRAY,
     cardinality=lambda src: len(src.paths),
     plugin=AzureBlobSrcPlugin,
-    explorer=AzureBlobSrcExplorer,
+    explorer=AzureBlobConnectionExplorer,
     icon="conn/azureblob/resources/azure.svg",
 )
 
@@ -171,6 +148,6 @@ AZURE_BLOB_DEST = DestDef(
     dest=AzureBlobDest,
     cardinality=lambda dest: len(dest.paths),
     plugin=AzureBlobDestPlugin,
-    explorer=AzureBlobDestExplorer,
+    explorer=AzureBlobConnectionExplorer,
     icon="conn/azureblob/resources/azure.svg",
 )
