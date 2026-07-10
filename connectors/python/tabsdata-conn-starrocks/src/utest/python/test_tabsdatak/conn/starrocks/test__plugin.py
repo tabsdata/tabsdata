@@ -14,15 +14,17 @@ from tabsdatak.conn.common.types import (
     UserPassword,
 )
 from tabsdatak.conn.starrocks import S3Location, StarRocksDestConn, StarRocksDest
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.starrocks import _impl as impl
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.starrocks import _plugin as plugin
 from tabsdatak.conn.starrocks.error import (
     StarRocksErrorCode,
     StarRocksRuntimeException,
 )
-
+from tabsdatak.conn.starrocks._explorer import StarRocksConnectionExplorer
 
 pytestmark = pytest.mark.starrocks
 
@@ -125,7 +127,8 @@ def test_dest_plugin_wraps_operational_error_as_starrocks_4(monkeypatch, work_di
 
 
 def test_dest_plugin_wraps_other_sqlalchemy_error_as_starrocks_5(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     monkeypatch.setattr(impl, "upload_parquet", lambda *a, **kw: "s3://x/y")
 
@@ -224,17 +227,6 @@ def test_dest_plugin_replace_truncates_then_inserts(monkeypatch, work_dir):
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    exp = plugin.StarRocksExplorer()
-    assert exp.metadata(_bare_conn()) is None
-    assert exp.data(_bare_conn(), "SELECT 1") is None
-
-
-# ---------------------------------------------------------------------------
 # DestDef wiring
 # ---------------------------------------------------------------------------
 
@@ -243,7 +235,7 @@ def test_starrocks_dest_def_wires_plugin_and_explorer():
     assert plugin.STARROCKS_DEST.conn is StarRocksDestConn
     assert plugin.STARROCKS_DEST.dest is StarRocksDest
     assert plugin.STARROCKS_DEST.plugin is plugin.StarRocksDestPlugin
-    assert plugin.STARROCKS_DEST.explorer is plugin.StarRocksExplorer
+    assert plugin.STARROCKS_DEST.explorer is StarRocksConnectionExplorer
     assert plugin.STARROCKS_DEST.type_ == "starrocks-bulk-out"
 
 
@@ -261,6 +253,7 @@ def test_starrocks_dest_cardinality_uses_tables_length():
 
 def test_resolve_dest_cfg_returns_defaults_when_empty():
     import logging as _logging
+
     cfg = plugin._resolve_dest_cfg(None)
     assert cfg.logging_level == _logging.ERROR
 

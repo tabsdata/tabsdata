@@ -22,8 +22,10 @@ from tabsdatak.conn.clickhouse import (
     GCSLocation,
     S3Location,
 )
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse import _impl as impl
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.clickhouse import _plugin as plugin
 from tabsdatak.conn.clickhouse.error import (
@@ -31,7 +33,7 @@ from tabsdatak.conn.clickhouse.error import (
     ClickHouseRuntimeException,
     ClickHouseValidateException,
 )
-
+from tabsdatak.conn.clickhouse._explorer import ClickHouseConnectionExplorer
 
 pytestmark = pytest.mark.clickhouse
 
@@ -143,7 +145,10 @@ def test_dest_plugin_raises_clickhouse_4_on_tables_slots_mismatch(work_dir):
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(ClickHouseRuntimeException) as ei:
         plugin._ClickHouseDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src],
+            _dest_ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [src],
         )
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_4
 
@@ -164,23 +169,29 @@ _StubDatabaseError.__name__ = "DatabaseError"
 
 
 def test_dest_plugin_wraps_connection_failure_as_clickhouse_5(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     def boom(*_a, **_kw):
         raise _StubDatabaseError("connect fail")
+
     monkeypatch.setattr(impl, "write_via_bulk_loader", boom)
 
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     dest = ClickHouseDest(tables=["users"])
     with pytest.raises(ClickHouseRuntimeException) as ei:
         plugin._ClickHouseDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src],
+            _dest_ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [src],
         )
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_5
 
 
 def test_dest_plugin_wraps_other_failure_as_clickhouse_6(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     monkeypatch.setattr(
         impl,
@@ -191,13 +202,17 @@ def test_dest_plugin_wraps_other_failure_as_clickhouse_6(
     dest = ClickHouseDest(tables=["users"])
     with pytest.raises(ClickHouseRuntimeException) as ei:
         plugin._ClickHouseDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src],
+            _dest_ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [src],
         )
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_6
 
 
 def test_dest_plugin_wraps_unsupported_staging_as_clickhouse_7(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     monkeypatch.setattr(
         impl,
@@ -210,7 +225,10 @@ def test_dest_plugin_wraps_unsupported_staging_as_clickhouse_7(
     dest = ClickHouseDest(tables=["users"])
     with pytest.raises(ClickHouseRuntimeException) as ei:
         plugin._ClickHouseDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src],
+            _dest_ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [src],
         )
     assert ei.value.api_error is ClickHouseErrorCode.CLICKHOUSE_7
 
@@ -227,6 +245,7 @@ def test_dest_plugin_dispatches_to_bulk_loader(monkeypatch, work_dir):
     def stub(cfg, tables):
         captured["cfg"] = cfg
         captured["tables"] = tables
+
     monkeypatch.setattr(impl, "write_via_bulk_loader", stub)
 
     src1 = _make_parquet(work_dir / "u.parquet", [{"id": 1}])
@@ -237,23 +256,15 @@ def test_dest_plugin_dispatches_to_bulk_loader(monkeypatch, work_dir):
         schema_evolution="iceberg",
     )
     plugin._ClickHouseDestPlugin().write_out(
-        _dest_ctx(work_dir), _bare_conn(), dest, [src1, src2],
+        _dest_ctx(work_dir),
+        _bare_conn(),
+        dest,
+        [src1, src2],
     )
     assert captured["tables"] == [src1, src2]
     assert captured["cfg"].target_tables == ["users", "orders"]
     assert captured["cfg"].if_table_exists == "replace"
     assert captured["cfg"].schema_evolution == "iceberg"
-
-
-# ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    exp = plugin._ClickHouseExplorer()
-    assert exp.metadata(_bare_conn()) is None
-    assert exp.data(_bare_conn(), "SELECT 1") is None
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +276,7 @@ def test_clickhouse_dest_def_wires_plugin_and_explorer():
     assert plugin.CLICKHOUSE_DEST.conn is ClickHouseDestConn
     assert plugin.CLICKHOUSE_DEST.dest is ClickHouseDest
     assert plugin.CLICKHOUSE_DEST.plugin is plugin._ClickHouseDestPlugin
-    assert plugin.CLICKHOUSE_DEST.explorer is plugin._ClickHouseExplorer
+    assert plugin.CLICKHOUSE_DEST.explorer is ClickHouseConnectionExplorer
     assert plugin.CLICKHOUSE_DEST.type_ == "clickhouse-bulk-out"
 
 

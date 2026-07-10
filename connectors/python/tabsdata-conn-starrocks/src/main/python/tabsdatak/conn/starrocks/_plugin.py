@@ -14,6 +14,7 @@ from tabsdatak.conn.starrocks import (
     StarRocksDestConn,
 )
 from tabsdatak.conn.starrocks.error import StarRocksErrorCode
+from tabsdatak.conn.starrocks._explorer import StarRocksConnectionExplorer
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -126,16 +127,6 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDestConn, StarRocksDest]):
             )
 
 
-class StarRocksExplorer(Explorer[StarRocksDestConn]):
-    def metadata(self, conn: StarRocksDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: StarRocksDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 STARROCKS_DEST = DestDef(
     conn=StarRocksDestConn,
     type_="starrocks-bulk-out",
@@ -144,6 +135,6 @@ STARROCKS_DEST = DestDef(
     dest=StarRocksDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=StarRocksDestPlugin,
-    explorer=StarRocksExplorer,
+    explorer=StarRocksConnectionExplorer,
     icon="conn/starrocks/resources/starrocks.svg",
 )

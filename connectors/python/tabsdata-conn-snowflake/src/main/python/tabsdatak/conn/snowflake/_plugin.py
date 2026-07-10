@@ -12,6 +12,7 @@ from tabsdatak.conn.snowflake import (
     SnowflakeDestConn,
 )
 from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
+from tabsdatak.conn.snowflake._explorer import SnowflakeConnectionExplorer
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -129,16 +130,6 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDestConn, SnowflakeDest]):
         logger.info("snowflake: write_out finished (%d table(s))", len(dest.tables))
 
 
-class SnowflakeExplorer(Explorer[SnowflakeDestConn]):
-    def metadata(self, conn: SnowflakeDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: SnowflakeDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 SNOWFLAKE_DEST = DestDef(
     conn=SnowflakeDestConn,
     type_="snowflake-bulk-out",
@@ -147,6 +138,6 @@ SNOWFLAKE_DEST = DestDef(
     dest=SnowflakeDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=SnowflakeDestPlugin,
-    explorer=SnowflakeExplorer,
+    explorer=SnowflakeConnectionExplorer,
     icon="conn/snowflake/resources/snowflake.svg",
 )

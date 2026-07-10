@@ -19,7 +19,7 @@ from tabsdatak.conn.snowflake.error import (
     SnowflakeErrorCode,
     SnowflakeRuntimeException,
 )
-
+from tabsdatak.conn.snowflake._explorer import SnowflakeConnectionExplorer
 
 pytestmark = pytest.mark.snowflake
 
@@ -143,7 +143,10 @@ def test_dest_plugin_raises_snowflake_4_on_tables_slots_mismatch(work_dir):
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(SnowflakeRuntimeException) as ei:
         plugin.SnowflakeDestPlugin().write_out(
-            _dest_ctx(work_dir), _bare_conn(), dest, [src],
+            _dest_ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [src],
         )
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_4
 
@@ -164,7 +167,9 @@ def test_dest_plugin_wraps_database_error_as_snowflake_5(monkeypatch, work_dir):
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     dest = SnowflakeDest(tables=["USERS"])
     with pytest.raises(SnowflakeRuntimeException) as ei:
-        plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, [src])
+        plugin.SnowflakeDestPlugin().write_out(
+            _dest_ctx(work_dir), _conn(), dest, [src]
+        )
     assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_5
 
 
@@ -184,6 +189,7 @@ def test_dest_plugin_wraps_programming_error_as_snowflake_6(monkeypatch, work_di
 
 def test_dest_plugin_wraps_error_mentions_account(monkeypatch, work_dir):
     """The SNOWFLAKE_5 message embeds the account."""
+
     def boom(cfg, tables):
         raise DatabaseError("x")
 
@@ -191,12 +197,15 @@ def test_dest_plugin_wraps_error_mentions_account(monkeypatch, work_dir):
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     dest = SnowflakeDest(tables=["USERS"])
     with pytest.raises(SnowflakeRuntimeException) as ei:
-        plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, [src])
+        plugin.SnowflakeDestPlugin().write_out(
+            _dest_ctx(work_dir), _conn(), dest, [src]
+        )
     assert "ACME-MAIN" in str(ei.value)
 
 
 def test_dest_plugin_wraps_error_mentions_tables(monkeypatch, work_dir):
     """The SNOWFLAKE_6 message embeds the destination tables."""
+
     def boom(cfg, tables):
         raise ProgrammingError("x")
 
@@ -211,17 +220,6 @@ def test_dest_plugin_wraps_error_mentions_tables(monkeypatch, work_dir):
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    exp = plugin.SnowflakeExplorer()
-    assert exp.metadata(_bare_conn()) is None
-    assert exp.data(_bare_conn(), "SELECT 1") is None
-
-
-# ---------------------------------------------------------------------------
 # DestDef wiring
 # ---------------------------------------------------------------------------
 
@@ -230,7 +228,7 @@ def test_snowflake_dest_def_wires_plugin_and_explorer():
     assert plugin.SNOWFLAKE_DEST.conn is SnowflakeDestConn
     assert plugin.SNOWFLAKE_DEST.dest is SnowflakeDest
     assert plugin.SNOWFLAKE_DEST.plugin is plugin.SnowflakeDestPlugin
-    assert plugin.SNOWFLAKE_DEST.explorer is plugin.SnowflakeExplorer
+    assert plugin.SNOWFLAKE_DEST.explorer is SnowflakeConnectionExplorer
     assert plugin.SNOWFLAKE_DEST.type_ == "snowflake-bulk-out"
     assert plugin.SNOWFLAKE_DEST.dest_version == "v1"
 
@@ -249,6 +247,7 @@ def test_snowflake_dest_cardinality_uses_tables_length():
 
 def test_resolve_dest_cfg_returns_defaults_when_empty():
     import logging as _logging
+
     cfg = plugin._resolve_dest_cfg(None)
     assert cfg.logging_level == _logging.ERROR
 

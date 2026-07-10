@@ -11,6 +11,7 @@ from tabsdatak.conn.clickhouse import (
     DestCfgSpec,
 )
 from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
+from tabsdatak.conn.clickhouse._explorer import ClickHouseConnectionExplorer
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -151,16 +152,6 @@ def _is_connection_error(exc: BaseException) -> bool:
     }
 
 
-class _ClickHouseExplorer(Explorer[ClickHouseDestConn]):
-    def metadata(self, conn: ClickHouseDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: ClickHouseDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 CLICKHOUSE_DEST = DestDef(
     conn=ClickHouseDestConn,
     type_="clickhouse-bulk-out",
@@ -169,6 +160,6 @@ CLICKHOUSE_DEST = DestDef(
     dest=ClickHouseDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=_ClickHouseDestPlugin,
-    explorer=_ClickHouseExplorer,
+    explorer=ClickHouseConnectionExplorer,
     icon="conn/clickhouse/resources/clickhouse.svg",
 )
