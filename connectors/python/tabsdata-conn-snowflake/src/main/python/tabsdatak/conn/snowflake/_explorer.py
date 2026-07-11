@@ -5,6 +5,7 @@
 """Snowflake metadata explorer."""
 
 from sqlalchemy import engine
+from sqlalchemy.sql.elements import quoted_name
 
 from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer
 
@@ -24,13 +25,30 @@ class SnowflakeConnectionExplorer(SqlAlchemyConnectionExplorer):
     def schema_filter(self, conn: SnowflakeDestConn) -> str | None:
         if conn.schema is None:
             return None
-        return _convert(conn.schema, str) or None
+        name = _convert(conn.schema, str) or None
+        # Snowflake schema names are case-sensitive as stored; tdx provisions them
+        # lowercase (quoted), so force-quote to reference them verbatim rather than
+        # letting the dialect upper-fold an unquoted name.
+        return quoted_name(name, quote=True) if name else None
 
     def system_schemas(self) -> frozenset[str]:
         return frozenset({"INFORMATION_SCHEMA"})
 
     def engine_kwargs(self, conn: SnowflakeDestConn) -> dict:
         return conn.conn_cfg or {}
+
+    def map_entity_fields(self, conn: SnowflakeDestConn, schema: str | None) -> dict:
+        """Map the iterated schema name to entity database/schema fields."""
+        return {
+            "database": conn.database or "",
+            "schema": schema or "",
+        }
+
+    def _data_schema(self, entity):
+        # `SQLEntity` coerces the quoted_name back to a plain str, so re-quote
+        # here (as in `schema_filter`) so `data()` references the case-sensitive
+        # schema verbatim rather than letting the dialect upper-fold it.
+        return quoted_name(entity.schema, quote=True) if entity.schema else None
 
     def make_url(self, conn: SnowflakeDestConn) -> engine.URL:
         query: dict[str, str] = {}

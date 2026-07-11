@@ -31,23 +31,27 @@ class Db2ConnectionExplorer(SqlAlchemyConnectionExplorer):
         return "SELECT 1 FROM SYSIBM.SYSDUMMY1"
 
     def schema_filter(self, conn: Db2Conn) -> str | None:
+        src = sa_make_url(_convert(conn.uri, str))
+        cur = src.query.get("currentSchema") or src.query.get("CurrentSchema")
+        if cur:
+            return (cur[0] if isinstance(cur, (list, tuple)) else cur).upper()
         if conn.credentials is None:
             return None
-        # Db2 stores unquoted identifiers (incl. the schema/owner)
-        # upper-cased, so match the username's canonical form.
         return conn.credentials.user.value().upper()
 
     def system_schemas(self) -> frozenset[str]:
-        return frozenset({
-            "SYSCAT",
-            "SYSIBM",
-            "SYSIBMADM",
-            "SYSPROC",
-            "SYSSTAT",
-            "SYSTOOLS",
-            "NULLID",
-            "SQLJ",
-        })
+        return frozenset(
+            {
+                "SYSCAT",
+                "SYSIBM",
+                "SYSIBMADM",
+                "SYSPROC",
+                "SYSSTAT",
+                "SYSTOOLS",
+                "NULLID",
+                "SQLJ",
+            }
+        )
 
     def make_url(self, conn: Db2Conn) -> engine.URL:
         src = sa_make_url(_convert(conn.uri, str))
@@ -62,4 +66,5 @@ class Db2ConnectionExplorer(SqlAlchemyConnectionExplorer):
             host=src.host or "localhost",
             port=src.port or 50000,
             database=src.database or "",
+            query=src.query,
         )

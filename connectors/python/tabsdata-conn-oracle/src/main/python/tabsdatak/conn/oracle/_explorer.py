@@ -28,46 +28,52 @@ class OracleConnectionExplorer(SqlAlchemyConnectionExplorer):
     """
 
     def system_schemas(self) -> frozenset[str]:
-        return frozenset({
-            "SYS",
-            "SYSTEM",
-            "SYSAUX",
-            "OUTLN",
-            "DBSNMP",
-            "APPQOSSYS",
-            "DBSFWUSER",
-            "GSMADMIN_INTERNAL",
-            "CTXSYS",
-            "MDSYS",
-            "ORDSYS",
-            "ORDDATA",
-            "ORDPLUGINS",
-            "XDB",
-            "WMSYS",
-            "EXFSYS",
-            "OLAPSYS",
-            "LBACSYS",
-            "DVSYS",
-            "OJVMSYS",
-            "AUDSYS",
-            "GGSYS",
-            "GGSHAREDCAP",
-            "ANONYMOUS",
-            "APEX_PUBLIC_USER",
-            "FLOWS_FILES",
-            "APEX_040000",
-            "APEX_030200",
-            "ORACLE_OCM",
-            "SI_INFORMTN_SCHEMA",
-            "OWBSYS",
-            "REMOTE_SCHEDULER_AGENT",
-        })
+        return frozenset(
+            {
+                "SYS",
+                "SYSTEM",
+                "SYSAUX",
+                "OUTLN",
+                "DBSNMP",
+                "APPQOSSYS",
+                "DBSFWUSER",
+                "GSMADMIN_INTERNAL",
+                "CTXSYS",
+                "MDSYS",
+                "ORDSYS",
+                "ORDDATA",
+                "ORDPLUGINS",
+                "XDB",
+                "WMSYS",
+                "EXFSYS",
+                "OLAPSYS",
+                "LBACSYS",
+                "DVSYS",
+                "OJVMSYS",
+                "AUDSYS",
+                "GGSYS",
+                "GGSHAREDCAP",
+                "ANONYMOUS",
+                "APEX_PUBLIC_USER",
+                "FLOWS_FILES",
+                "APEX_040000",
+                "APEX_030200",
+                "ORACLE_OCM",
+                "SI_INFORMTN_SCHEMA",
+                "OWBSYS",
+                "REMOTE_SCHEDULER_AGENT",
+            }
+        )
 
     def map_entity_fields(self, conn: OracleConn, schema: str | None) -> dict:
         return {"database": "", "schema": schema or ""}
 
     def engine_kwargs(self, conn: OracleConn) -> dict:
-        return conn.conn_cfg or {}
+        # SQLAlchemy's Oracle dialect hides tables in the SYSTEM / SYSAUX
+        # tablespaces from reflection by default; clear that so a user schema
+        # whose tables happen to live there is still introspected. System
+        # *schemas* are excluded separately via `system_schemas`.
+        return {"exclude_tablespaces": ()} | (conn.conn_cfg or {})
 
     def make_url(self, conn: OracleConn) -> engine.URL:
         # `uri` is a str or a `Secret`; `_convert` yields the plain str

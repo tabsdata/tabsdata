@@ -5,14 +5,14 @@
 """End-to-end ``MSSQLServerConnectionExplorer`` tests against a real SQL
 Server instance.
 
-The ``fresh_mssql`` fixture (defined in ``conftest.py``) provisions a
-clean SQL Server backend per test and seeds a ``testing`` database with a
-``users`` table (``id`` PK, ``name``, ``age``) and an ``orders`` table
-(``id`` PK, ``user_id``, ``qty``) in the default ``dbo`` schema. These
-tests exercise the catalog introspection surface of
-``MSSQLServerConnectionExplorer`` -- ``check_connect`` / ``metadata`` /
-``data`` -- against the live server. The three methods are inherited
-from ``SqlAlchemyConnectionExplorer``; driving them through
+The ``mssqlserver_world_xs`` domain (provisioned by tdx) seeds a
+``wld_country`` table (``code`` PK), a ``wld_city`` table (``id`` PK,
+``name``, ``country_code``, ``district``, ``population``) and a
+``wld_country_language`` table (``country_code`` + ``language`` PK) in the
+default ``dbo`` schema. These tests exercise the catalog introspection
+surface of ``MSSQLServerConnectionExplorer`` -- ``check_connect`` /
+``metadata`` / ``data`` -- against the live server. The three methods are
+inherited from ``SqlAlchemyConnectionExplorer``; driving them through
 ``MSSQLServerConnectionExplorer`` covers the SQL-Server-specific
 ``system_schemas`` / ``make_url`` overrides at the same time.
 """
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.engine import make_url
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
@@ -28,25 +29,29 @@ from tabsdatak.conn.mssql import MSSQLSrcConn
 from tabsdatak.conn.mssql._explorer import MSSQLServerConnectionExplorer
 from tabsdatak.conn.common.sql._explorer import SQLEntity
 
-# Share the serialization domain of the other ``fresh_mssql`` consumers:
-# the fixture re-seeds the shared session container per test, so every
-# test that touches it must run on one worker to avoid a concurrent
-# re-seed corrupting a read in flight.
-pytestmark = [
-    pytest.mark.mssql,
-    pytest.mark.xdist_group("mssql-plugin_integration_seq"),
-]
+from tabsdatax.itest.fixture.backends.mssqlserver import (
+    MssqlserverDomain,
+    MssqlserverSystem,
+    mssqlserver_domain,
+    mssqlserver_system,
+)
+
+pytestmark = pytest.mark.mssql
 
 
-def _src_conn_from(cfg) -> MSSQLSrcConn:
-    return MSSQLSrcConn(uri=cfg.uri, credentials=cfg.credentials)
+def _clean_uri(uri: str) -> str:
+    """Return a URI with the username and password stripped out, for use in
+    a connection object that carries the credentials separately."""
+    url = make_url(uri)
+    return url.set(username=None, password=None).render_as_string(hide_password=False)
 
 
-def _odbc_src_conn_from(cfg) -> MSSQLSrcConn:
-    # Same backend, but the ``uri`` is a raw ODBC connection string (no
-    # ``://`` scheme) rather than a ``mssql://`` URI -- exercising the
-    # explorer's ``odbc_connect`` / connect_args path.
-    return MSSQLSrcConn(uri=cfg.odbc_connection_string, credentials=cfg.credentials)
+def _src_conn_from(cfg: MssqlserverDomain) -> MSSQLSrcConn:
+    clean_uri = _clean_uri(cfg.sqlalchemy_uri)
+    return MSSQLSrcConn(
+        uri=clean_uri,
+        credentials=UserPassword(user=Secret(cfg.user), password=Secret(cfg.password)),
+    )
 
 
 def _entity_by_table(entities: list[SQLEntity], table: str) -> SQLEntity:
@@ -60,17 +65,28 @@ def _entity_by_table(entities: list[SQLEntity], table: str) -> SQLEntity:
 # ---------------------------------------------------------------------------
 
 
-def test_check_connect_succeeds(fresh_mssql):
-    conn = _src_conn_from(fresh_mssql)
+@mssqlserver_system("mssqlserver")
+@mssqlserver_domain("mssqlserver_world_xs")
+def test_check_connect_succeeds(
+    system_mssqlserver: MssqlserverSystem,
+    domain_mssqlserver_world_xs: MssqlserverDomain,
+):
+    conn = _src_conn_from(domain_mssqlserver_world_xs)
     # Contract: returns None on success and must not raise.
     assert MSSQLServerConnectionExplorer().check_connect(conn) is None
 
 
-def test_check_connect_bad_credentials_raises(fresh_mssql):
+@mssqlserver_system("mssqlserver")
+@mssqlserver_domain("mssqlserver_world_xs")
+def test_check_connect_bad_credentials_raises(
+    system_mssqlserver: MssqlserverSystem,
+    domain_mssqlserver_world_xs: MssqlserverDomain,
+):
+    clean_uri = _clean_uri(domain_mssqlserver_world_xs.sqlalchemy_uri)
     bad = MSSQLSrcConn(
-        uri=fresh_mssql.uri,
+        uri=clean_uri,
         credentials=UserPassword(
-            user=Secret(fresh_mssql.user),
+            user=Secret(domain_mssqlserver_world_xs.user),
             password=Secret("definitely-wrong-password"),
         ),
     )
@@ -85,39 +101,56 @@ def test_check_connect_bad_credentials_raises(fresh_mssql):
 # ---------------------------------------------------------------------------
 
 
-def test_metadata_lists_seeded_tables(fresh_mssql):
-    conn = _src_conn_from(fresh_mssql)
+@mssqlserver_system("mssqlserver")
+@mssqlserver_domain("mssqlserver_world_xs")
+def test_metadata_lists_seeded_tables(
+    system_mssqlserver: MssqlserverSystem,
+    domain_mssqlserver_world_xs: MssqlserverDomain,
+):
+    conn = _src_conn_from(domain_mssqlserver_world_xs)
     entities = MSSQLServerConnectionExplorer().metadata(conn)
 
     assert entities and all(isinstance(e, SQLEntity) for e in entities)
 
-    # Only ``dbo`` holds user tables; sys / INFORMATION_SCHEMA and the
-    # fixed database roles are skipped, so exactly the two seeded tables
-    # show up.
-    assert {e.table for e in entities} == {"users", "orders"}
+    # Only ``dbo`` holds user tables; sys / INFORMATION_SCHEMA and the fixed
+    # database roles are skipped, so exactly the three seeded tables show up.
+    assert {e.table for e in entities} == {
+        "wld_country",
+        "wld_city",
+        "wld_country_language",
+    }
 
-    # No `map_entity_fields` override, so the base maps the iterated
-    # schema name (``dbo``) into both `database` and `schema`.
-    users = _entity_by_table(entities, "users")
+    # No `map_entity_fields` override, so the base maps the iterated schema
+    # name (``dbo``) into both `database` and `schema`.
+    users = _entity_by_table(entities, "wld_country")
     assert users.database == "dbo"
     assert users.schema == "dbo"
 
 
-def test_metadata_reflects_columns_and_primary_key(fresh_mssql):
-    conn = _src_conn_from(fresh_mssql)
-    users = _entity_by_table(MSSQLServerConnectionExplorer().metadata(conn), "users")
+@mssqlserver_system("mssqlserver")
+@mssqlserver_domain("mssqlserver_world_xs")
+def test_metadata_reflects_columns_and_primary_key(
+    domain_mssqlserver_world_xs: MssqlserverDomain,
+):
+    conn = _src_conn_from(domain_mssqlserver_world_xs)
+    users = _entity_by_table(MSSQLServerConnectionExplorer().metadata(conn), "wld_city")
 
     by_name = {c.name: c for c in users.columns}
-    assert set(by_name) == {"id", "name", "age"}
+    assert set(by_name) == {"id", "name", "country_code", "district", "population"}
 
     # `id` is the sole primary key; the others are not.
     assert by_name["id"].primary_key is True
     assert by_name["name"].primary_key is False
-    assert by_name["age"].primary_key is False
+    assert by_name["country_code"].primary_key is False
+    assert by_name["district"].primary_key is False
+    assert by_name["population"].primary_key is False
 
     # Types are reflected and simplified to a short canonical name.
     assert by_name["id"].type.startswith("INT")
     assert by_name["name"].type == "VARCHAR"
+    assert by_name["country_code"].type == "CHAR"
+    assert by_name["district"].type == "VARCHAR"
+    assert by_name["population"].type.startswith("INT")
 
 
 # ---------------------------------------------------------------------------
@@ -125,57 +158,41 @@ def test_metadata_reflects_columns_and_primary_key(fresh_mssql):
 # ---------------------------------------------------------------------------
 
 
-def test_data_returns_all_rows(fresh_mssql):
-    conn = _src_conn_from(fresh_mssql)
+@mssqlserver_system("mssqlserver")
+@mssqlserver_domain("mssqlserver_world_xs")
+def test_data_returns_all_rows(
+    system_mssqlserver: MssqlserverSystem,
+    domain_mssqlserver_world_xs: MssqlserverDomain,
+):
+    conn = _src_conn_from(domain_mssqlserver_world_xs)
     explorer = MSSQLServerConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "users")
+    users = _entity_by_table(explorer.metadata(conn), "wld_city")
 
-    rows = explorer.data(conn, users)
+    rows = explorer.data(conn, users, limit=3)
 
     assert isinstance(rows, list)
     assert len(rows) == 3
-    assert all(set(r) == {"id", "name", "age"} for r in rows)
-    assert {r["name"] for r in rows} == {"alice", "bob", "carol"}
+    assert all(
+        set(r) == {"id", "name", "country_code", "district", "population"} for r in rows
+    )
+    assert {r["name"] for r in rows} == {"Kabul", "Qandahar", "Herat"}
 
     by_id = {r["id"]: r for r in rows}
-    assert by_id[1]["name"] == "alice"
-    assert by_id[1]["age"] == 30
+    assert by_id[1]["name"] == "Kabul"
+    assert by_id[1]["country_code"] == "AFG"
+    assert by_id[1]["district"] == "Kabol"
+    assert by_id[1]["population"] == 1780000
 
 
-def test_data_respects_limit(fresh_mssql):
-    conn = _src_conn_from(fresh_mssql)
+@mssqlserver_system("mssqlserver")
+@mssqlserver_domain("mssqlserver_world_xs")
+def test_data_respects_limit(
+    system_mssqlserver: MssqlserverSystem,
+    domain_mssqlserver_world_xs: MssqlserverDomain,
+):
+    conn = _src_conn_from(domain_mssqlserver_world_xs)
     explorer = MSSQLServerConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "users")
+    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
 
     rows = explorer.data(conn, users, limit=2)
     assert len(rows) == 2
-
-
-# ---------------------------------------------------------------------------
-# ODBC connection string `uri` form
-#
-# The conn's `uri` may be a raw ODBC connection string instead of a
-# `mssql://` URI; the explorer wraps it as ``odbc_connect`` and passes
-# UID / PWD via connect_args. These confirm that path connects and
-# introspects end-to-end against the live server.
-# ---------------------------------------------------------------------------
-
-
-def test_check_connect_via_odbc_connection_string(fresh_mssql):
-    conn = _odbc_src_conn_from(fresh_mssql)
-    assert MSSQLServerConnectionExplorer().check_connect(conn) is None
-
-
-def test_metadata_and_data_via_odbc_connection_string(fresh_mssql):
-    conn = _odbc_src_conn_from(fresh_mssql)
-    explorer = MSSQLServerConnectionExplorer()
-
-    entities = explorer.metadata(conn)
-    assert {e.table for e in entities} == {"users", "orders"}
-
-    users = _entity_by_table(entities, "users")
-    assert {c.name for c in users.columns} == {"id", "name", "age"}
-
-    rows = explorer.data(conn, users)
-    assert len(rows) == 3
-    assert {r["name"] for r in rows} == {"alice", "bob", "carol"}

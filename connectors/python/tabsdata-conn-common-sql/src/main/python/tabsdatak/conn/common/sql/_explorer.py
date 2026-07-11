@@ -36,13 +36,15 @@ class SQLEntity(Entity):
     columns: list[Column] = field(default_factory=list)
 
     def fqn(self) -> str:
-        return self.connection_type.entity_fqn({
-            "database": self.database,
-            "schema": self.schema,
-            "owner": self.schema,
-            "catalog": self.database,
-            "table": self.table,
-        })
+        return self.connection_type.entity_fqn(
+            {
+                "database": self.database,
+                "schema": self.schema,
+                "owner": self.schema,
+                "catalog": self.database,
+                "table": self.table,
+            }
+        )
 
     def field_names(self) -> list[str]:
         return [c.name for c in self.columns]
@@ -174,7 +176,6 @@ class SqlAlchemyConnectionExplorer(Explorer):
         for schema in schemas:
             if schema is not None and schema.upper() in skip:
                 continue
-
             table_names = insp.get_table_names(schema=schema)
             view_names = insp.get_view_names(schema=schema)
             fields = self.map_entity_fields(conn, schema)
@@ -196,11 +197,16 @@ class SqlAlchemyConnectionExplorer(Explorer):
         eng.dispose()
         return entities
 
+    def _data_schema(self, entity: SQLEntity):
+        """Schema identifier used to qualify the table in :meth:`data`. Override
+        to control quoting where the stored schema name is case-sensitive."""
+        return entity.schema or None
+
     def data(self, conn: Conn, entity: Entity, limit: int = 100) -> list[dict]:
         url = self.make_url(conn)
         eng = create_engine(url, **self.engine_kwargs(conn))
         sql_entity = entity  # type: SQLEntity
-        schema = sql_entity.schema or None
+        schema = self._data_schema(sql_entity)
         t = sa_table(
             sql_entity.table,
             *[sa_column(c.name) for c in sql_entity.columns],

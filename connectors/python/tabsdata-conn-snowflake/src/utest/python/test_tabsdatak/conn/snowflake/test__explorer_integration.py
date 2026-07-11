@@ -5,21 +5,23 @@
 """End-to-end ``SnowflakeConnectionExplorer`` tests against a real
 Snowflake account.
 
-Snowflake has no local sandbox: these are live tests driven by the same
-``SNW__*`` environment variables as the plugin integration suite (account,
-user, PAT, database, schema, warehouse, optional role). They skip unless
-all required variables are set. There is no fixed ``users`` / ``orders``
-seed, so the catalog surface of ``SnowflakeConnectionExplorer`` --
-``check_connect`` / ``metadata`` / ``data`` -- is exercised structurally:
-the probe succeeds, ``metadata`` returns ``SQLEntity`` objects for the
-configured schema, and ``data`` samples whatever entity is present.
+The ``snowflake_world_xs`` domain (provisioned by tdx) seeds the configured
+schema with a ``wld_country`` table (``code``), a ``wld_city`` table (``id``,
+``name``, ``country_code``, ``district``, ``population``) and a
+``wld_country_language`` table (``country_code`` + ``language``). Snowflake
+treats PK/FK as informational and the seed DDL declares none, so unlike the
+container backends there are no reflected primary keys. These tests exercise
+the catalog introspection surface of ``SnowflakeConnectionExplorer`` --
+``check_connect`` / ``metadata`` / ``data`` -- against the live account; the
+three methods are inherited from ``SqlAlchemyConnectionExplorer`` and driven
+through the Snowflake-specific ``schema_filter`` / ``system_schemas`` /
+``make_url`` overrides.
 """
 
 from __future__ import annotations
 
-import os
-
 import pytest
+from sqlalchemy.exc import DatabaseError
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.sql._explorer import SQLEntity
@@ -27,60 +29,148 @@ from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.snowflake import SnowflakeDestConn
 from tabsdatak.conn.snowflake._explorer import SnowflakeConnectionExplorer
 
+from tabsdatax.itest.fixture.backends.snowflake import (
+    SnowflakeDomain,
+    SnowflakeSystem,
+    snowflake_domain,
+    snowflake_system,
+)
+
 pytestmark = [
     pytest.mark.snowflake,
     pytest.mark.snowflake_live,
-    pytest.mark.xdist_group("snowflake-plugin_integration_seq"),
 ]
 
-_ACCOUNT = os.environ.get("SNW__ACCOUNT")
-_USER = os.environ.get("SNW__USER")
-_PASSWORD = os.environ.get("SNW__PAT")
-_DATABASE = os.environ.get("SNW__DATABASE")
-_SCHEMA = os.environ.get("SNW__SCHEMA")
-_WAREHOUSE = os.environ.get("SNW__WAREHOUSE")
-_ROLE = os.environ.get("SNW__ROLE")
 
-_REQUIRED = (_ACCOUNT, _USER, _PASSWORD, _DATABASE, _SCHEMA, _WAREHOUSE)
-
-
-def _conn() -> SnowflakeDestConn:
-    if not all(_REQUIRED):
-        pytest.skip(
-            "Snowflake live tests require SNW__ACCOUNT + SNW__USER + "
-            "SNW__PAT + SNW__DATABASE + SNW__SCHEMA + SNW__WAREHOUSE"
-        )
-    kwargs = dict(
-        account=_ACCOUNT,
-        credentials=UserPassword(user=Secret(_USER), password=Secret(_PASSWORD)),
-        database=_DATABASE,
-        schema=_SCHEMA,
-        warehouse=_WAREHOUSE,
+def _conn_from(cfg: SnowflakeDomain) -> SnowflakeDestConn:
+    return SnowflakeDestConn(
+        account=cfg.account,
+        credentials=UserPassword(user=Secret(cfg.username), password=Secret(cfg.pat)),
+        database=cfg.database,
+        schema=cfg.schema,
+        warehouse=cfg.warehouse,
     )
-    if _ROLE:
-        kwargs["role"] = _ROLE
-    return SnowflakeDestConn(**kwargs)
 
 
-def test_check_connect_succeeds():
-    assert SnowflakeConnectionExplorer().check_connect(_conn()) is None
+def _entity_by_table(entities: list[SQLEntity], table: str) -> SQLEntity:
+    matches = [e for e in entities if e.table == table]
+    assert matches, f"no entity for {table!r} in {[e.table for e in entities]}"
+    return matches[0]
 
 
-def test_metadata_returns_sql_entities():
-    entities = SnowflakeConnectionExplorer().metadata(_conn())
-    assert isinstance(entities, list)
-    assert all(isinstance(e, SQLEntity) for e in entities)
+# ---------------------------------------------------------------------------
+# check_connect
+# ---------------------------------------------------------------------------
 
 
-def test_data_reads_sample_rows():
-    conn = _conn()
+@snowflake_system("snowflake")
+@snowflake_domain("snowflake_world_xs")
+def test_check_connect_succeeds(
+    system_snowflake: SnowflakeSystem, domain_snowflake_world_xs: SnowflakeDomain
+):
+    conn = _conn_from(domain_snowflake_world_xs)
+    assert SnowflakeConnectionExplorer().check_connect(conn) is None
+
+
+@snowflake_system("snowflake")
+@snowflake_domain("snowflake_world_xs")
+def test_check_connect_bad_credentials_raises(
+    system_snowflake: SnowflakeSystem, domain_snowflake_world_xs: SnowflakeDomain
+):
+    cfg = domain_snowflake_world_xs
+    bad = SnowflakeDestConn(
+        account=cfg.account,
+        credentials=UserPassword(
+            user=Secret(cfg.username),
+            password=Secret("definitely-wrong-password"),
+        ),
+        database=cfg.database,
+        schema=cfg.schema,
+        warehouse=cfg.warehouse,
+    )
+    with pytest.raises(DatabaseError):
+        SnowflakeConnectionExplorer().check_connect(bad)
+
+
+# ---------------------------------------------------------------------------
+# metadata
+# ---------------------------------------------------------------------------
+
+
+@snowflake_system("snowflake")
+@snowflake_domain("snowflake_world_xs")
+def test_metadata_lists_seeded_tables(
+    system_snowflake: SnowflakeSystem, domain_snowflake_world_xs: SnowflakeDomain
+):
+    conn = _conn_from(domain_snowflake_world_xs)
+    entities = SnowflakeConnectionExplorer().metadata(conn)
+
+    assert entities and all(isinstance(e, SQLEntity) for e in entities)
+
+    # The scan is restricted to the configured schema, so only the three
+    # seeded tables show up.
+    assert {e.table for e in entities} == {
+        "wld_country",
+        "wld_city",
+        "wld_country_language",
+    }
+
+    # No `map_entity_fields` override, so the base maps the iterated schema
+    # name into both `database` and `schema`.
+    users = _entity_by_table(entities, "wld_country")
+    assert users.schema == conn.schema
+
+
+@snowflake_system("snowflake")
+@snowflake_domain("snowflake_world_xs")
+def test_metadata_reflects_columns(domain_snowflake_world_xs: SnowflakeDomain):
+    conn = _conn_from(domain_snowflake_world_xs)
+    users = _entity_by_table(SnowflakeConnectionExplorer().metadata(conn), "wld_city")
+
+    by_name = {c.name: c for c in users.columns}
+    assert set(by_name) == {"id", "name", "country_code", "district", "population"}
+
+    # Snowflake PK/FK are informational and the seed DDL declares none, so no
+    # column reflects as a primary key.
+    assert all(c.primary_key is False for c in users.columns)
+
+    # STRING columns reflect as VARCHAR.
+    assert by_name["name"].type == "VARCHAR"
+    assert by_name["country_code"].type == "VARCHAR"
+    assert by_name["district"].type == "VARCHAR"
+
+
+# ---------------------------------------------------------------------------
+# data
+# ---------------------------------------------------------------------------
+
+
+@snowflake_system("snowflake")
+@snowflake_domain("snowflake_world_xs")
+def test_data_returns_rows(
+    system_snowflake: SnowflakeSystem, domain_snowflake_world_xs: SnowflakeDomain
+):
+    conn = _conn_from(domain_snowflake_world_xs)
     explorer = SnowflakeConnectionExplorer()
-    entities = explorer.metadata(conn)
-    if not entities:
-        pytest.skip("no tables present in the configured Snowflake schema")
+    users = _entity_by_table(explorer.metadata(conn), "wld_city")
 
-    rows = explorer.data(conn, entities[0], limit=5)
+    rows = explorer.data(conn, users, limit=3)
+
     assert isinstance(rows, list)
-    assert len(rows) <= 5
-    expected = {c.name for c in entities[0].columns}
-    assert all(set(r) == expected for r in rows)
+    assert len(rows) == 3
+    assert all(
+        set(r) == {"id", "name", "country_code", "district", "population"} for r in rows
+    )
+
+
+@snowflake_system("snowflake")
+@snowflake_domain("snowflake_world_xs")
+def test_data_respects_limit(
+    system_snowflake: SnowflakeSystem, domain_snowflake_world_xs: SnowflakeDomain
+):
+    conn = _conn_from(domain_snowflake_world_xs)
+    explorer = SnowflakeConnectionExplorer()
+    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
+
+    rows = explorer.data(conn, users, limit=2)
+    assert len(rows) == 2
