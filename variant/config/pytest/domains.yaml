@@ -12,6 +12,10 @@
   sys: bigquery
 - name: clickhouse
   sys: clickhouse
+- name: clickhouse_world_xs
+  sys: clickhouse
+  model: world
+  data: xs
 - name: databricks
   sys: databricks
 - name: databricks_world_xs
@@ -84,3 +88,7 @@
   data: xs
 - name: starrocks
   sys: starrocks
+- name: starrocks_world_xs
+  sys: starrocks
+  model: world
+  data: xs

@@ -5,20 +5,21 @@
 """End-to-end ``StarRocksConnectionExplorer`` tests against a real
 StarRocks instance.
 
-The ``fresh_starrocks`` fixture (defined in ``conftest.py``) provisions a
-clean StarRocks backend per test and seeds the ``testing`` database with a
-``users`` table (``id``, ``name``, ``age``) and an ``orders`` table
-(``id``, ``user_id``, ``qty``). Constructing a ``StarRocksDestConn`` also
-needs a cloud staging area, so the tests pull in the shared ``s3_staging``
-fixture (they skip when S3 staging isn't configured). These tests exercise
-the catalog introspection surface of ``StarRocksConnectionExplorer`` --
-``check_connect`` / ``metadata`` / ``data`` -- against the live server.
+The ``starrocks_world_xs`` domain (provisioned by tdx) seeds the database
+with a ``wld_country`` table (``code``), a ``wld_city`` table (``id``,
+``name``, ``country_code``, ``district``, ``population``) and a
+``wld_country_language`` table (``country_code`` + ``language``). These
+tests exercise the catalog introspection surface of
+``StarRocksConnectionExplorer`` -- ``check_connect`` / ``metadata`` /
+``data`` -- against the live server.
 
 StarRocks speaks the MySQL wire protocol and has a single namespace level
 (a *database*), so identifiers come back lower-case and the explorer maps
-the database into ``database`` with an empty ``schema`` (like MySQL).
-StarRocks' ``DUPLICATE KEY`` is a storage sort key, not a SQL primary key,
-so the primary-key flag is intentionally not asserted here.
+the database into ``database`` with an empty ``schema`` (like MySQL). The
+primary-key flag is not asserted: how StarRocks surfaces its key model
+through MySQL reflection isn't relied on here. Constructing a
+``StarRocksDestConn`` requires a cloud staging area, but the explorer never
+touches it, so a placeholder ``S3Location`` is used.
 """
 
 from __future__ import annotations
@@ -28,24 +29,37 @@ from sqlalchemy.exc import DBAPIError
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.sql._explorer import SQLEntity
-from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.starrocks import StarRocksDestConn
+from tabsdatak.conn.common.types import AwsAccessSecretKey, UserPassword
+from tabsdatak.conn.starrocks import S3Location, StarRocksDestConn
 from tabsdatak.conn.starrocks._explorer import StarRocksConnectionExplorer
 
-# Share the serialization domain of the other ``fresh_starrocks`` consumers.
-pytestmark = [
-    pytest.mark.starrocks,
-    pytest.mark.xdist_group("starrocks_seq"),
-]
+from tabsdatax.itest.fixture.backends.starrocks import (
+    StarrocksDomain,
+    StarrocksSystem,
+    starrocks_domain,
+    starrocks_system,
+)
+
+pytestmark = pytest.mark.starrocks
+
+# The explorer only issues catalog SQL over the MySQL protocol; the staging
+# area is never used, so a placeholder is enough to construct the conn.
+_STAGING = S3Location(
+    bucket="unused",
+    region="us-east-1",
+    credentials=AwsAccessSecretKey(
+        access_key_id=Secret("unused"), secret_access_key=Secret("unused")
+    ),
+)
 
 
-def _conn_from(cfg, staging) -> StarRocksDestConn:
+def _conn_from(cfg: StarrocksDomain) -> StarRocksDestConn:
     return StarRocksDestConn(
         host=cfg.host,
         port=cfg.port,
         database=cfg.database,
-        staging=staging,
-        credentials=cfg.credentials,
+        staging=_STAGING,
+        credentials=UserPassword(user=Secret(cfg.user), password=Secret(cfg.password)),
     )
 
 
@@ -60,19 +74,28 @@ def _entity_by_table(entities: list[SQLEntity], table: str) -> SQLEntity:
 # ---------------------------------------------------------------------------
 
 
-def test_check_connect_succeeds(fresh_starrocks, s3_staging):
-    conn = _conn_from(fresh_starrocks, s3_staging)
+@starrocks_system("starrocks")
+@starrocks_domain("starrocks_world_xs")
+def test_check_connect_succeeds(
+    system_starrocks: StarrocksSystem, domain_starrocks_world_xs: StarrocksDomain
+):
+    conn = _conn_from(domain_starrocks_world_xs)
     assert StarRocksConnectionExplorer().check_connect(conn) is None
 
 
-def test_check_connect_bad_credentials_raises(fresh_starrocks, s3_staging):
+@starrocks_system("starrocks")
+@starrocks_domain("starrocks_world_xs")
+def test_check_connect_bad_credentials_raises(
+    system_starrocks: StarrocksSystem, domain_starrocks_world_xs: StarrocksDomain
+):
+    cfg = domain_starrocks_world_xs
     bad = StarRocksDestConn(
-        host=fresh_starrocks.host,
-        port=fresh_starrocks.port,
-        database=fresh_starrocks.database,
-        staging=s3_staging,
+        host=cfg.host,
+        port=cfg.port,
+        database=cfg.database,
+        staging=_STAGING,
         credentials=UserPassword(
-            user=Secret(fresh_starrocks.user),
+            user=Secret(cfg.user),
             password=Secret("definitely-wrong-password"),
         ),
     )
@@ -85,30 +108,46 @@ def test_check_connect_bad_credentials_raises(fresh_starrocks, s3_staging):
 # ---------------------------------------------------------------------------
 
 
-def test_metadata_lists_seeded_tables(fresh_starrocks, s3_staging):
-    conn = _conn_from(fresh_starrocks, s3_staging)
+@starrocks_system("starrocks")
+@starrocks_domain("starrocks_world_xs")
+def test_metadata_lists_seeded_tables(
+    system_starrocks: StarrocksSystem, domain_starrocks_world_xs: StarrocksDomain
+):
+    conn = _conn_from(domain_starrocks_world_xs)
     entities = StarRocksConnectionExplorer().metadata(conn)
 
     assert entities and all(isinstance(e, SQLEntity) for e in entities)
 
-    # The scan is pinned to the configured database, so only the two
-    # seeded tables show up (identifiers are lower-case).
-    assert {e.table for e in entities} == {"users", "orders"}
+    # The scan is pinned to the configured database, so only the three seeded
+    # tables show up (identifiers are lower-case).
+    assert {e.table for e in entities} == {
+        "wld_country",
+        "wld_city",
+        "wld_country_language",
+    }
 
-    # StarRocks has no schema level: the database fills `database` and
-    # `schema` is left blank.
-    users = _entity_by_table(entities, "users")
-    assert users.database == fresh_starrocks.database
+    # StarRocks has no schema level: the database fills `database` and `schema`
+    # is left blank.
+    users = _entity_by_table(entities, "wld_country")
+    assert users.database == domain_starrocks_world_xs.database
     assert users.schema == ""
 
 
-def test_metadata_reflects_columns(fresh_starrocks, s3_staging):
-    conn = _conn_from(fresh_starrocks, s3_staging)
-    users = _entity_by_table(StarRocksConnectionExplorer().metadata(conn), "users")
+@starrocks_system("starrocks")
+@starrocks_domain("starrocks_world_xs")
+def test_metadata_reflects_columns(domain_starrocks_world_xs: StarrocksDomain):
+    conn = _conn_from(domain_starrocks_world_xs)
+    users = _entity_by_table(StarRocksConnectionExplorer().metadata(conn), "wld_city")
 
     by_name = {c.name: c for c in users.columns}
-    assert set(by_name) == {"id", "name", "age"}
-    assert by_name["id"].type.startswith("INT")
+    assert set(by_name) == {"id", "name", "country_code", "district", "population"}
+
+    # Types are reflected and simplified to a short canonical name.
+    assert by_name["id"].type == "BIGINT"
+    assert by_name["name"].type == "VARCHAR"
+    assert by_name["country_code"].type == "CHAR"
+    assert by_name["district"].type == "VARCHAR"
+    assert by_name["population"].type.startswith("INT")
 
 
 # ---------------------------------------------------------------------------
@@ -116,23 +155,32 @@ def test_metadata_reflects_columns(fresh_starrocks, s3_staging):
 # ---------------------------------------------------------------------------
 
 
-def test_data_returns_all_rows(fresh_starrocks, s3_staging):
-    conn = _conn_from(fresh_starrocks, s3_staging)
+@starrocks_system("starrocks")
+@starrocks_domain("starrocks_world_xs")
+def test_data_returns_rows(
+    system_starrocks: StarrocksSystem, domain_starrocks_world_xs: StarrocksDomain
+):
+    conn = _conn_from(domain_starrocks_world_xs)
     explorer = StarRocksConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "users")
+    users = _entity_by_table(explorer.metadata(conn), "wld_city")
 
-    rows = explorer.data(conn, users)
+    rows = explorer.data(conn, users, limit=3)
 
     assert isinstance(rows, list)
     assert len(rows) == 3
-    assert all(set(r) == {"id", "name", "age"} for r in rows)
-    assert {r["name"] for r in rows} == {"alice", "bob", "carol"}
+    assert all(
+        set(r) == {"id", "name", "country_code", "district", "population"} for r in rows
+    )
 
 
-def test_data_respects_limit(fresh_starrocks, s3_staging):
-    conn = _conn_from(fresh_starrocks, s3_staging)
+@starrocks_system("starrocks")
+@starrocks_domain("starrocks_world_xs")
+def test_data_respects_limit(
+    system_starrocks: StarrocksSystem, domain_starrocks_world_xs: StarrocksDomain
+):
+    conn = _conn_from(domain_starrocks_world_xs)
     explorer = StarRocksConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "users")
+    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
 
     rows = explorer.data(conn, users, limit=2)
     assert len(rows) == 2

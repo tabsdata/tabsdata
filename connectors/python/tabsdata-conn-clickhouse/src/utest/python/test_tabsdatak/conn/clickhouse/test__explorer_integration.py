@@ -5,40 +5,54 @@
 """End-to-end ``ClickHouseConnectionExplorer`` tests against a real
 ClickHouse instance.
 
-ClickHouse has no fixed ``users`` / ``orders`` seed, so the
-``metadata`` / ``data`` tests use a module-local ``seeded_clickhouse``
-fixture that creates a small scratch table (and drops it afterwards).
-That fixture is intentionally NOT baked into the shared
-``fresh_clickhouse`` fixture -- it's scoped to this module so the other
-``fresh_clickhouse`` consumers (e.g. the plugin integration tests) see an
-unchanged, empty database. The conn (and its required cloud staging) is
-built by the shared ``_conn_from`` helper; the suite skips when
-ClickHouse / staging aren't configured.
+The ``clickhouse_world_xs`` domain (provisioned by tdx) seeds the database
+with a ``wld_country`` table, a ``wld_city`` table (``id``, ``name``,
+``country_code``, ``district``, ``population``) and a
+``wld_country_language`` table. These tests exercise the catalog
+introspection surface of ``ClickHouseConnectionExplorer`` --
+``check_connect`` / ``metadata`` / ``data`` -- against the live server.
+
 """
 
 from __future__ import annotations
 
 import pytest
 
+from tabsdatak.api import Secret
+from tabsdatak.conn.clickhouse import ClickHouseDestConn, S3Location
 from tabsdatak.conn.clickhouse._explorer import ClickHouseConnectionExplorer
 from tabsdatak.conn.common.sql._explorer import SQLEntity
+from tabsdatak.conn.common.types import AwsAccessSecretKey, UserPassword
 
-# noinspection PyProtectedMember
-from test_tabsdatak.conn.clickhouse._integration_helpers import (
-    _ch_client,
-    _conn_from,
-    _db_name,
-    _drop_table,
+from tabsdatax.itest.fixture.backends.clickhouse import (
+    ClickhouseDomain,
+    ClickhouseSystem,
+    clickhouse_domain,
+    clickhouse_system,
 )
 
-# Share the serialization domain of the other ``fresh_clickhouse`` consumers.
-pytestmark = [
-    pytest.mark.clickhouse,
-    pytest.mark.xdist_group("clickhouse-plugin_integration_seq"),
-]
+pytestmark = pytest.mark.clickhouse
 
-# Scratch table seeded for the metadata/data tests (dropped afterwards).
-_PROBE_TABLE = "itest_explorer_probe"
+# The explorer only reads the catalog over clickhouse-connect; the staging
+# area is never used, so a placeholder is enough to construct the conn.
+_STAGING = S3Location(
+    bucket="unused",
+    region="us-east-1",
+    credentials=AwsAccessSecretKey(
+        access_key_id=Secret("unused"), secret_access_key=Secret("unused")
+    ),
+)
+
+
+def _conn_from(cfg: ClickhouseDomain) -> ClickHouseDestConn:
+    return ClickHouseDestConn(
+        host=cfg.host,
+        port=cfg.port,
+        database=cfg.database,
+        staging=_STAGING,
+        secure=False,
+        credentials=UserPassword(user=Secret(cfg.user), password=Secret(cfg.password)),
+    )
 
 
 def _entity_by_table(entities: list[SQLEntity], table: str) -> SQLEntity:
@@ -47,65 +61,99 @@ def _entity_by_table(entities: list[SQLEntity], table: str) -> SQLEntity:
     return matches[0]
 
 
-@pytest.fixture
-def seeded_clickhouse(fresh_clickhouse):
-    """Create a small seeded table in the configured ClickHouse database
-    so the explorer's ``metadata`` / ``data`` have something to read, and
-    drop it once the test finishes.
-
-    Kept local to this module (rather than modifying the shared
-    ``fresh_clickhouse`` fixture) so other consumers of that fixture are
-    unaffected. Yields ``(fresh_clickhouse, table_name)``.
-    """
-    db = _db_name(fresh_clickhouse)
-    client = _ch_client(fresh_clickhouse)
-    try:
-        # Drop any leftover from a previously crashed run, then seed.
-        _drop_table(client, db, _PROBE_TABLE)
-        client.command(
-            f"CREATE TABLE `{db}`.`{_PROBE_TABLE}` "
-            "(id Int32, name String, age Int32) ENGINE = MergeTree ORDER BY id"
-        )
-        client.command(
-            f"INSERT INTO `{db}`.`{_PROBE_TABLE}` (id, name, age) VALUES "
-            "(1, 'alice', 30), (2, 'bob', 25), (3, 'carol', 40)"
-        )
-        yield fresh_clickhouse, _PROBE_TABLE
-    finally:
-        _drop_table(client, db, _PROBE_TABLE)
-        client.close()
+# ---------------------------------------------------------------------------
+# check_connect
+# ---------------------------------------------------------------------------
 
 
-def test_check_connect_succeeds(fresh_clickhouse):
-    conn = _conn_from(fresh_clickhouse)
+@clickhouse_system("clickhouse")
+@clickhouse_domain("clickhouse_world_xs")
+def test_check_connect_succeeds(
+    system_clickhouse: ClickhouseSystem, domain_clickhouse_world_xs: ClickhouseDomain
+):
+    conn = _conn_from(domain_clickhouse_world_xs)
     assert ClickHouseConnectionExplorer().check_connect(conn) is None
 
 
-def test_metadata_lists_seeded_table(seeded_clickhouse):
-    cfg, table = seeded_clickhouse
-    conn = _conn_from(cfg)
+# ---------------------------------------------------------------------------
+# metadata
+# ---------------------------------------------------------------------------
+
+
+@clickhouse_system("clickhouse")
+@clickhouse_domain("clickhouse_world_xs")
+def test_metadata_lists_seeded_tables(
+    system_clickhouse: ClickhouseSystem, domain_clickhouse_world_xs: ClickhouseDomain
+):
+    conn = _conn_from(domain_clickhouse_world_xs)
     entities = ClickHouseConnectionExplorer().metadata(conn)
 
-    assert all(isinstance(e, SQLEntity) for e in entities)
-    # The scan is pinned to the configured database; ClickHouse has no
-    # schema level, so each entity reports the database in `database`
-    # with a blank `schema`.
-    assert all(e.schema == "" for e in entities)
+    assert entities and all(isinstance(e, SQLEntity) for e in entities)
 
-    # The seeded table shows up with its reflected columns.
-    probe = _entity_by_table(entities, table)
-    assert {c.name for c in probe.columns} == {"id", "name", "age"}
+    # The scan is pinned to the configured database, so only the three seeded
+    # tables show up.
+    assert {e.table for e in entities} == {
+        "wld_country",
+        "wld_city",
+        "wld_country_language",
+    }
+
+    # ClickHouse has no schema level: the database fills `database` and
+    # `schema` is left blank.
+    users = _entity_by_table(entities, "wld_country")
+    assert users.database == domain_clickhouse_world_xs.database
+    assert users.schema == ""
 
 
-def test_data_reads_seeded_rows(seeded_clickhouse):
-    cfg, table = seeded_clickhouse
-    conn = _conn_from(cfg)
+@clickhouse_system("clickhouse")
+@clickhouse_domain("clickhouse_world_xs")
+def test_metadata_reflects_columns(domain_clickhouse_world_xs: ClickhouseDomain):
+    conn = _conn_from(domain_clickhouse_world_xs)
+    users = _entity_by_table(ClickHouseConnectionExplorer().metadata(conn), "wld_city")
+
+    by_name = {c.name: c for c in users.columns}
+    assert set(by_name) == {"id", "name", "country_code", "district", "population"}
+
+    # Types keep ClickHouse's native spelling (Nullable(...) unwrapped and any
+    # parameters dropped by the explorer).
+    assert by_name["id"].type == "Int32"
+    assert by_name["name"].type == "String"
+    assert by_name["country_code"].type == "String"
+    assert by_name["district"].type == "String"
+    assert by_name["population"].type == "Int32"
+
+
+# ---------------------------------------------------------------------------
+# data
+# ---------------------------------------------------------------------------
+
+
+@clickhouse_system("clickhouse")
+@clickhouse_domain("clickhouse_world_xs")
+def test_data_returns_rows(
+    system_clickhouse: ClickhouseSystem, domain_clickhouse_world_xs: ClickhouseDomain
+):
+    conn = _conn_from(domain_clickhouse_world_xs)
     explorer = ClickHouseConnectionExplorer()
-    probe = _entity_by_table(explorer.metadata(conn), table)
+    users = _entity_by_table(explorer.metadata(conn), "wld_city")
 
-    rows = explorer.data(conn, probe, limit=5)
+    rows = explorer.data(conn, users, limit=3)
 
     assert isinstance(rows, list)
     assert len(rows) == 3
-    assert all(set(r) == {"id", "name", "age"} for r in rows)
-    assert {r["name"] for r in rows} == {"alice", "bob", "carol"}
+    assert all(
+        set(r) == {"id", "name", "country_code", "district", "population"} for r in rows
+    )
+
+
+@clickhouse_system("clickhouse")
+@clickhouse_domain("clickhouse_world_xs")
+def test_data_respects_limit(
+    system_clickhouse: ClickhouseSystem, domain_clickhouse_world_xs: ClickhouseDomain
+):
+    conn = _conn_from(domain_clickhouse_world_xs)
+    explorer = ClickHouseConnectionExplorer()
+    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
+
+    rows = explorer.data(conn, users, limit=2)
+    assert len(rows) == 2

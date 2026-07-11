@@ -139,7 +139,13 @@ class StarrocksSystem(ContainerBase):
             [
                 f"CREATE DATABASE `{name}`",
                 f"CREATE USER '{name}'@'%' IDENTIFIED BY '{pw}'",
-                f"GRANT ALL ON `{name}`.* TO '{name}'@'%'",
+                # StarRocks RBAC splits these: CREATE TABLE is a DATABASE-level
+                # privilege, while DML (SELECT/INSERT/...) is a TABLE-level one.
+                # `ON ALL TABLES IN DATABASE` is a standing grant covering current
+                # and future tables, so the user can load data into the tables it
+                # creates.
+                f"GRANT ALL ON DATABASE `{name}` TO '{name}'@'%'",
+                f"GRANT ALL ON ALL TABLES IN DATABASE `{name}` TO '{name}'@'%'",
             ],
         )
         uri = f"mysql+mysqlconnector://{name}:{pw}@{admin.host}:{admin.port}/{name}"
