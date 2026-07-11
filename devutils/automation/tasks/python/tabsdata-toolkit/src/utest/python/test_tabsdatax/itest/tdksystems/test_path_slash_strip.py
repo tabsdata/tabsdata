@@ -67,17 +67,19 @@ def test_cloud_system_strips_leading_slash(tmp_path, capsys):
     assert "WARNING" in capsys.readouterr().err
 
 
-def test_cloud_domain_env_reference_stripped_at_runtime(tmp_path, capsys, monkeypatch):
-    # A forwarded env reference: the leading slash lives in the env value and is
-    # stripped when resolved, not at write time.
+def test_cloud_domain_env_backed_value_is_stripped(tmp_path, capsys):
+    # An env-backed SYS_PATH bakes its value at create, so its leading slash is
+    # stripped at resolve just like a literal's; the env marker survives on the
+    # raw descriptor for a manifest dump.
     out = tmp_path / "s3_OUT.json"
     descriptor.write_cloud_domain(
         out=str(out), storage_type="s3", system_kind="file",
-        sys_path=None, sys_path_env="S3__SYS_PATH", base_path="xp-s3/s3_OUT",
+        sys_path="/xp-s3", sys_path_env="S3__SYS_PATH", base_path="/xp-s3/s3_OUT",
         forwarded=[])
-    monkeypatch.setenv("S3__SYS_PATH", "/xp-s3")
     assert _resolved(out)["SYS_PATH"] == "xp-s3"
     assert "WARNING" in capsys.readouterr().err
+    raw = {e["name"]: e.get("env") for e in descriptor.load(out)["meta"]}
+    assert raw["SYS_PATH"] == "S3__SYS_PATH"
 
 
 # ---- fs is exempt (absolute roots are valid) ------------------------------

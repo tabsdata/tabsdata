@@ -37,18 +37,19 @@ def test_system_descriptor_bakes_and_exports_sys_path_literal(tmp_path):
     assert _info_json(out, "clickhouse")["SYS_PATH"] == "xp-staging"
 
 
-def test_system_descriptor_sys_path_env_reference(tmp_path, monkeypatch):
+def test_system_descriptor_sys_path_env_marker(tmp_path):
     out = tmp_path / "clickhouse.json"
     descriptor.write_container_system(
         out=str(out), system_type="clickhouse", system_kind="sql",
         label="ClickHouse", container="clickhouse", host="localhost",
         port="8123", user="default", password="pw", domain_desc="db",
-        sys_path=None, sys_path_env="STAGE_ROOT",
+        sys_path="stage", sys_path_env="STAGE_ROOT",
     )
-    monkeypatch.setenv("STAGE_ROOT", "stage")
-    meta = _meta(out)
-    assert meta["SYS_PATH"] == "stage"
-    assert meta["FORWARDED_SYS_PATH_ENV"] == "STAGE_ROOT"
+    # SYS_PATH resolves from the baked value — no env needed at use time ...
+    assert _meta(out)["SYS_PATH"] == "stage"
+    # ... and the raw descriptor keeps the source env var, for a manifest dump.
+    raw = {e["name"]: e for e in descriptor.load(out)["meta"]}
+    assert raw["SYS_PATH"]["env"] == "STAGE_ROOT"
 
 
 def test_system_descriptor_without_staging_has_no_sys_path(tmp_path):

@@ -88,9 +88,9 @@ class Option:
 
 @dataclass
 class Setting:
-    """A resolved option: either a literal `value`, or a reference to `env_var`
-    (baked into the descriptor as a forwarded `${ENV}` so it re-resolves at use
-    time). Exactly one of value / env_var is the source of truth."""
+    """A create-time option: either a literal `value`, or a reference to
+    `env_var` whose value is read from the environment and baked into the
+    descriptor at create. Exactly one of value / env_var is the source of truth."""
 
     name: str
     value: str | None = None
@@ -418,15 +418,13 @@ class System(ABC):
 
     def settings_from_meta(self, meta: dict[str, str]) -> dict[str, Setting]:
         """Rebuild settings from an existing descriptor's resolved `meta` (for
-        destroy / status / domain create) — the inverse of resolution. Carries
-        both the concrete `value` (for connecting now) AND any forwarded
-        `FORWARDED_<name>_ENV` reference (so re-baking into a domain descriptor
-        keeps the secret a reference, not a literal)."""
+        destroy / status / domain create) — the inverse of resolution. Values are
+        baked into the descriptor, so each Setting carries the concrete `value`;
+        there is no env var to re-resolve."""
         return {
             opt.name: Setting(
                 name=opt.name,
                 value=meta.get(opt.name) or None,
-                env_var=meta.get(f"FORWARDED_{opt.name}_ENV") or None,
                 is_path=opt.is_path,
             )
             for opt in self._all_options()
@@ -434,10 +432,10 @@ class System(ABC):
 
     def resolve_values(self, settings: dict[str, Setting]) -> dict[str, str]:
         """Turn Settings into concrete values for the backend to connect NOW:
-        the literal `value` if present, else the current value of the forwarded
-        env var (erroring if unset). Paths are normalised + validated. This
-        feeds the live API call only — descriptors keep the Setting (reference),
-        so this never causes a secret to be written to disk."""
+        the literal `value` if present, else the current value of the referenced
+        env var (erroring if unset). Paths are normalised + validated. Used at
+        create time, both to reach the system and (via `descriptor.write`) to
+        bake the resolved values into the descriptor."""
         out: dict[str, str] = {}
         for s in settings.values():
             val = s.value

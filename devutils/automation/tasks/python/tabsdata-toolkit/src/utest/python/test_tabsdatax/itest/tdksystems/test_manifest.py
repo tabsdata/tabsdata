@@ -83,10 +83,10 @@ def test_system_entry_from_descriptor_fs():
 def test_system_entry_from_descriptor_s3_literal_and_env():
     doc = {"system": "s3", "name": "landing", "meta": [
         {"name": "BUCKET", "value": "b"},
-        {"name": "REGION", "env": "AWS_REGION"},       # ref preserved, not resolved
+        # env-backed: value is baked, but the env marker re-emits the reference
+        {"name": "REGION", "value": "us-east-1", "env": "AWS_REGION"},
         {"name": "ACCESS_KEY", "value": ""},           # empty -> omitted
         {"name": "SYS_PATH", "value": "root"},
-        {"name": "FORWARDED_REGION_ENV", "value": "AWS_REGION"},  # not an option
     ]}
     entry = manifest.system_entry_from_descriptor(doc)
     assert entry["type"] == "s3" and entry["name"] == "landing"

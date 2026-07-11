@@ -31,8 +31,10 @@ The decrypted JSON is::
       "entities": {"<table>": <rows>},    # domains only, per-entity record counts
                                           # (once data has been loaded)
       "meta": [                           # baked settings, in order
-         {"name": "HOST", "value": "localhost"},  # a literal, OR
-         {"name": "SYS_PATH", "env": "MY_ROOT"}   # read from $MY_ROOT at run time
+         {"name": "HOST", "value": "localhost"},        # a literal, OR
+         {"name": "SYS_PATH", "value": "/data",         # a value captured from an
+          "env": "MY_ROOT"}                             #   env var at create; `env`
+                                                        #   records the source
       ],
       "exported": ["HOST", ...],          # connection keys surfaced by `info`
       "strip_slash": [["SYS_PATH", true]] # relative-prefix leading-slash strips
@@ -41,9 +43,12 @@ The decrypted JSON is::
 `category` + `system` are enough for `tdx-system`/`tdx-domain` to pick the right
 per-system helper module. `name`/`started`/`model`/`data` are attached by
 :func:`stamp` right after the backend writes the connection settings. Env-backed
-values (`{"env": VAR}`) are resolved at *use* time — a missing/empty one is a
-hard error. Storage prefixes listed in `strip_slash` get a leading slash
-stripped at resolve time (with a warning when the flag is true).
+settings are captured from their env var at *create* time and baked as the
+`value` — the descriptor is encrypted at rest, so it holds the resolved secret
+and nothing is read from the environment at use time. The `env` name is kept
+only so a manifest dump can re-emit the `{env: VAR}` reference (keeping that
+plaintext YAML secret-free). Storage prefixes listed in `strip_slash` get a
+leading slash stripped at resolve time (with a warning when the flag is true).
 """
 
 from __future__ import annotations
@@ -85,13 +90,16 @@ def now_stamp() -> str:
 def _meta_entries(
     meta: list[tuple[str, str | None, str | None]],
 ) -> list[dict[str, str]]:
-    """Turn (name, literal, env_var) triples into JSON meta entries."""
+    """Turn (name, value, env_var) triples into JSON meta entries. `value` is
+    always baked (env-backed settings are resolved before they reach here); a
+    non-empty `env_var` is recorded alongside as the value's source, so a
+    manifest dump can re-emit the `{env: VAR}` reference."""
     out: list[dict[str, str]] = []
     for name, lit, env in meta:
-        if env is not None:
-            out.append({"name": name, "env": env})
-        else:
-            out.append({"name": name, "value": lit if lit is not None else ""})
+        entry = {"name": name, "value": lit if lit is not None else ""}
+        if env:
+            entry["env"] = env
+        out.append(entry)
     return out
 
 
@@ -131,19 +139,6 @@ def _write_doc(path: str | Path, doc: dict) -> None:
         crypto.encrypt(json.dumps(doc, indent=2).encode("utf-8")),
         encoding="utf-8",
     )
-
-
-def _forwarded(
-    forwarded: list[tuple[str, str | None, str | None]],
-) -> list[tuple[str, str | None, str | None]]:
-    """Expand each forwarded (name, literal, env_var) into its value entry plus
-    a FORWARDED_<name>_ENV literal recording the --env: reference (so downstream
-    scripts can preserve it)."""
-    out: list[tuple[str, str | None, str | None]] = []
-    for name, lit, env in forwarded:
-        out.append((name, lit, env))
-        out.append((f"FORWARDED_{name}_ENV", env or "", None))
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +193,6 @@ def write_container_system(
         meta.insert(4, ("IMAGE", image, None))  # after CONTAINER
     if staging:
         meta.append(("SYS_PATH", sys_path, sys_path_env))
-        meta.append(("FORWARDED_SYS_PATH_ENV", sys_path_env or "", None))
     for k, v in extra.items():
         meta.append((k, v, None))
     exported = [
@@ -273,7 +267,6 @@ def write_container_domain(
         meta.insert(2, ("IMAGE", image, None))  # after SYSTEM_KIND
     if staging:
         meta.append(("SYS_PATH", sys_path, sys_path_env))
-        meta.append(("FORWARDED_SYS_PATH_ENV", sys_path_env or "", None))
         meta.append(("BASE_PATH", base_path, None))
     for k, v in extra.items():
         meta.append((k, v, None))
@@ -327,9 +320,8 @@ def write_cloud_system(
         ("STORAGE_TYPE", storage_type, None),
         ("SYSTEM_KIND", system_kind, None),
         ("SYS_PATH", sys_path, sys_path_env),
-        ("FORWARDED_SYS_PATH_ENV", sys_path_env or "", None),
     ]
-    meta += _forwarded(forwarded)
+    meta += forwarded
     forwarded_names = [t[0] for t in forwarded]
     exported = ["STORAGE_TYPE", "SYSTEM_KIND", "SYS_PATH"] + forwarded_names
     strip = [("SYS_PATH", True)] if strip_sys_path_slash else []
@@ -364,10 +356,9 @@ def write_cloud_domain(
         ("STORAGE_TYPE", storage_type, None),
         ("SYSTEM_KIND", system_kind, None),
         ("SYS_PATH", sys_path, sys_path_env),
-        ("FORWARDED_SYS_PATH_ENV", sys_path_env or "", None),
         ("BASE_PATH", base_path, None),
     ]
-    meta += _forwarded(forwarded)
+    meta += forwarded
     forwarded_names = [t[0] for t in forwarded]
     exported = [
         "STORAGE_TYPE",
@@ -405,7 +396,7 @@ def write_saas_system(
         ("SAAS_TYPE", saas_type, None),
         ("SYSTEM_KIND", system_kind, None),
     ]
-    meta += _forwarded(forwarded)
+    meta += forwarded
     forwarded_names = [t[0] for t in forwarded]
     exported = ["SAAS_TYPE", "SYSTEM_KIND"] + forwarded_names
     _write(
@@ -436,7 +427,7 @@ def write_saas_domain(
     ]
     if schema is not None:
         meta.append(("SCHEMA", schema, None))
-    meta += _forwarded(forwarded)
+    meta += forwarded
     forwarded_names = [t[0] for t in forwarded]
     exported = ["SAAS_TYPE", "SYSTEM_KIND"]
     if schema is not None:
@@ -461,14 +452,34 @@ def write_saas_domain(
 
 
 def _settings_literals(settings: dict) -> dict[str, str]:
-    return {name: (s.value or "") for name, s in settings.items()}
+    return {name: _resolve_env(s) for name, s in settings.items()}
+
+
+def _resolve_env(setting) -> str:
+    """The concrete value of a Setting to bake into the descriptor: its literal
+    ``value`` if present, else the current value of its ``env_var`` — read now,
+    at create time, with a missing/empty one a hard error. The descriptor is
+    encrypted at rest, so the resolved value is stored and the env var is never
+    read again at use time (the name is kept separately, as a source marker)."""
+    if setting.value:
+        return setting.value
+    if setting.env_var:
+        val = os.environ.get(setting.env_var, "")
+        if not val:
+            raise DatagenError(
+                f"env var '{setting.env_var}' is unset / empty "
+                f"(needed by {setting.name})"
+            )
+        return val
+    return ""
 
 
 def _settings_triples(settings: dict, *, exclude: tuple[str, ...] = ()):
-    """(name, literal|None, env_var|None) for the writers' `forwarded` param —
-    env wins, so a forwarded reference is stored as a ref (secret never baked)."""
+    """(name, value, env_var) for the writers' `forwarded` param — the env-backed
+    value is resolved and baked now, with its env var name riding along so a
+    manifest dump can re-emit the ``{env: VAR}`` reference."""
     return [
-        (s.name, None if s.env_var else s.value, s.env_var)
+        (s.name, _resolve_env(s), s.env_var)
         for s in settings.values()
         if s.name not in exclude
     ]
@@ -478,8 +489,8 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
     """Persist a `System` backend's returned ``{name: Setting}`` as a
     descriptor, dispatching to the matching category writer. `role` is
     ``"sys"`` (system) or ``"env"`` (domain). Settings are duck-typed
-    (``.name`` / ``.value`` / ``.env_var``); a Setting with ``env_var`` is
-    stored as a forwarded reference, never baked."""
+    (``.name`` / ``.value`` / ``.env_var``); a Setting with ``env_var`` has its
+    value resolved and baked now, keeping the env var name as a source marker."""
     cat = sys_obj.category
     if role == "sys":
         if cat == "container":
@@ -497,7 +508,7 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
                 password=v["PASSWORD"],
                 domain_desc=getattr(sys_obj, "domain_desc", ""),
                 image=v.get("IMAGE") or None,
-                sys_path=(sp.value if sp and sp.env_var is None else None),
+                sys_path=(_resolve_env(sp) if sp else None),
                 sys_path_env=(sp.env_var if sp else None),
             )
         elif cat in ("cloud", "native"):  # object stores + local fs
@@ -507,7 +518,7 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
                 storage_type=sys_obj.slug,
                 system_kind=sys_obj.kind,
                 label=sys_obj.label,
-                sys_path=(sp.value if sp.env_var is None else None),
+                sys_path=_resolve_env(sp),
                 sys_path_env=sp.env_var,
                 forwarded=_settings_triples(settings, exclude=("SYS_PATH",)),
                 strip_sys_path_slash=getattr(sys_obj, "relative_sys_path", True),
@@ -548,7 +559,7 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
             out=out,
             storage_type=sys_obj.slug,
             system_kind=sys_obj.kind,
-            sys_path=(sp.value if sp.env_var is None else None),
+            sys_path=_resolve_env(sp),
             sys_path_env=sp.env_var,
             base_path=bp.value or "",
             forwarded=_settings_triples(settings, exclude=("SYS_PATH", "BASE_PATH")),
@@ -637,21 +648,14 @@ def loads(text: str) -> dict:
 
 
 def resolve(doc: dict, *, warn: bool = False) -> dict[str, str]:
-    """Resolve a descriptor's `meta` to {name: value}. Env-backed values are
-    read now (a missing/empty one is a hard error). Relative storage prefixes
-    have a leading slash stripped; when `warn`, a flagged strip prints a notice
-    to stderr."""
+    """Resolve a descriptor's `meta` to {name: value}. Values are baked into the
+    descriptor at create time (env-backed settings were captured then), so this
+    reads no environment variables — a system/domain works from its descriptor
+    alone. Relative storage prefixes have a leading slash stripped; when `warn`,
+    a flagged strip prints a notice to stderr."""
     meta: dict[str, str] = {}
     for entry in doc.get("meta", []):
-        name = entry["name"]
-        if "env" in entry:
-            var = entry["env"]
-            val = os.environ.get(var)
-            if not val:
-                raise DatagenError(f"{var} env var must be set (needed by {name})")
-            meta[name] = val
-        else:
-            meta[name] = entry.get("value") or ""
+        meta[entry["name"]] = entry.get("value") or ""
     for name, flag in doc.get("strip_slash", []):
         v = meta.get(name, "")
         if v.startswith("/"):

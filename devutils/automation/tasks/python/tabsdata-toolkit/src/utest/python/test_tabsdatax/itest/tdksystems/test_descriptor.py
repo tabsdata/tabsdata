@@ -7,8 +7,9 @@ import json
 
 import pytest
 
-from tabsdatax.itest.tdksystems import descriptor
+from tabsdatax.itest.tdksystems import descriptor, systems
 from tabsdatax.itest.tdksystems.errors import DatagenError
+from tabsdatax.itest.tdksystems.systems.base import Setting
 
 
 # ---- name validation -------------------------------------------------------
@@ -135,23 +136,68 @@ def test_cloud_and_saas_categories(tmp_path):
     assert _load(sf)["category"] == "saas" and _load(sf)["system"] == "snowflake"
 
 
-# ---- resolve: env-backed values + slash strip ------------------------------
+# ---- resolve: baked values + env marker + slash strip ----------------------
 
-def test_resolve_reads_env_backed_value(tmp_path, monkeypatch):
+def test_resolve_uses_baked_value_not_env(tmp_path, monkeypatch):
     out = tmp_path / "s3.json"
     descriptor.write_cloud_system(
         out=str(out), storage_type="s3", system_kind="file", label="s3",
-        sys_path=None, sys_path_env="MY_ROOT",
-        forwarded=[("REGION", None, "AWS_REGION")])
+        sys_path="data", sys_path_env="MY_ROOT",
+        forwarded=[("REGION", "us-east-1", "AWS_REGION")])
     doc = descriptor.load(out)
+    # Values are baked at create, so resolve reads nothing from the environment.
     monkeypatch.delenv("MY_ROOT", raising=False)
-    with pytest.raises(DatagenError, match="MY_ROOT env var must be set"):
-        descriptor.resolve(doc)
-    monkeypatch.setenv("MY_ROOT", "data")
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.delenv("AWS_REGION", raising=False)
     meta = descriptor.resolve(doc)
     assert meta["SYS_PATH"] == "data"
     assert meta["REGION"] == "us-east-1"
+    # The source env var names survive in the raw descriptor for a manifest dump.
+    raw = {e["name"]: e.get("env") for e in doc["meta"]}
+    assert raw["SYS_PATH"] == "MY_ROOT"
+    assert raw["REGION"] == "AWS_REGION"
+
+
+def test_write_bakes_env_backed_settings(tmp_path, monkeypatch):
+    # write() resolves an env-backed setting at create time and bakes the value,
+    # so status/destroy/info later work without the env set (the descriptor is
+    # encrypted at rest). azureblob is the motivating case: the account key is
+    # only in $AZ__ACCOUNT_KEY at create.
+    az = systems.get("azureblob")
+    settings = {
+        "CONTAINER": Setting("CONTAINER", env_var="AZ__CONTAINER"),
+        "ACCOUNT_NAME": Setting("ACCOUNT_NAME", env_var="AZ__ACCOUNT_NAME"),
+        "ACCOUNT_KEY": Setting("ACCOUNT_KEY", env_var="AZ__ACCOUNT_KEY"),
+        "SYS_PATH": Setting("SYS_PATH", env_var="AZ__SYS_PATH", is_path=True),
+    }
+    monkeypatch.setenv("AZ__CONTAINER", "c")
+    monkeypatch.setenv("AZ__ACCOUNT_NAME", "acct")
+    monkeypatch.setenv("AZ__ACCOUNT_KEY", "supersecret")
+    monkeypatch.setenv("AZ__SYS_PATH", "root")
+    out = tmp_path / "az.json"
+    descriptor.write(az, "sys", str(out), settings)
+
+    for var in ("AZ__CONTAINER", "AZ__ACCOUNT_NAME", "AZ__ACCOUNT_KEY", "AZ__SYS_PATH"):
+        monkeypatch.delenv(var, raising=False)
+    meta = descriptor.resolve(_load(str(out)))
+    assert meta["ACCOUNT_KEY"] == "supersecret"
+    assert meta["CONTAINER"] == "c"
+    assert meta["SYS_PATH"] == "root"
+    # The source env var names survive on the raw entries for a manifest dump.
+    raw = {e["name"]: e.get("env") for e in _load(str(out))["meta"]}
+    assert raw["ACCOUNT_KEY"] == "AZ__ACCOUNT_KEY"
+
+
+def test_write_errors_when_env_backed_setting_is_unset(tmp_path, monkeypatch):
+    az = systems.get("azureblob")
+    settings = {
+        "CONTAINER": Setting("CONTAINER", value="c"),
+        "ACCOUNT_NAME": Setting("ACCOUNT_NAME", value="acct"),
+        "ACCOUNT_KEY": Setting("ACCOUNT_KEY", env_var="AZ__ACCOUNT_KEY"),
+        "SYS_PATH": Setting("SYS_PATH", value="root", is_path=True),
+    }
+    monkeypatch.delenv("AZ__ACCOUNT_KEY", raising=False)
+    with pytest.raises(DatagenError, match="AZ__ACCOUNT_KEY.*unset"):
+        descriptor.write(az, "sys", str(tmp_path / "az.json"), settings)
 
 
 def test_resolve_strips_leading_slash(tmp_path, capsys):
