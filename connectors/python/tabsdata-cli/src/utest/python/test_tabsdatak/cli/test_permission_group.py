@@ -107,7 +107,9 @@ def other_user(admin_client):
 
 
 @pytest.mark.integration
-def test_grant_list_revoke_system_permission(admin_client, other_user):
+def test_grant_list_revoke_system_permission(
+    instance_tdtest, admin_client, other_user
+):
     # `manage_system` is a system permission the `default` role does NOT hold,
     # so it is a clean grant/revoke target (unlike `create_projects`, which
     # every user already has via `default`).
@@ -130,7 +132,9 @@ def test_grant_list_revoke_system_permission(admin_client, other_user):
 
 
 @pytest.mark.integration
-def test_system_permission_with_project_rejected(admin_client, other_user):
+def test_system_permission_with_project_rejected(
+    instance_tdtest, admin_client, other_user
+):
     with pytest.raises(APIServerError):
         admin_client.grant_permission(
             other_user, "manage_system", project="sandbox"
@@ -139,7 +143,7 @@ def test_system_permission_with_project_rejected(admin_client, other_user):
 
 @pytest.mark.integration
 def test_project_permission_without_project_rejected(
-    admin_client, other_user
+    instance_tdtest, admin_client, other_user
 ):
     with pytest.raises(APIServerError):
         admin_client.grant_permission(other_user, "develop_project")
@@ -151,7 +155,9 @@ def test_project_permission_without_project_rejected(
 
 
 @pytest.mark.integration
-def test_grant_forbidden_for_non_privileged_user(regular_user, other_user):
+def test_grant_forbidden_for_non_privileged_user(
+    instance_tdtest, regular_user, other_user
+):
     _, client = regular_user
     # only `default` (no manage_system / manage_project) -> Forbidden
     with pytest.raises(APIServerError):
@@ -160,7 +166,7 @@ def test_grant_forbidden_for_non_privileged_user(regular_user, other_user):
 
 @pytest.mark.integration
 def test_revoke_forbidden_for_non_privileged_user(
-    admin_client, regular_user, other_user
+    instance_tdtest, admin_client, regular_user, other_user
 ):
     _, client = regular_user
     # admin first grants something so a revoke target exists
@@ -175,7 +181,9 @@ def test_revoke_forbidden_for_non_privileged_user(
 
 
 @pytest.mark.integration
-def test_list_by_project_forbidden_for_non_privileged_user(regular_user):
+def test_list_by_project_forbidden_for_non_privileged_user(
+    instance_tdtest, regular_user
+):
     _, client = regular_user
     # listing who-can-access a project requires manage on that project
     with pytest.raises(APIServerError):
@@ -240,7 +248,7 @@ def created_project(admin_client):
 
 @pytest.mark.integration
 def test_grant_project_permission_lists_under_project(
-    admin_client, created_project, other_user
+    instance_tdtest, admin_client, created_project, other_user
 ):
     admin_client.grant_permission(
         other_user, "develop_project", project=created_project
