@@ -166,7 +166,7 @@ py-cpuinfo==9.0.0
 py-serializable==2.1.0
 py-spy==0.4.1
 pyarrow==23.0.1
-pyasn1==0.6.3
+pyasn1==0.6.4
 pyasn1-modules==0.4.2
 pycparser==3.0 ; implementation_name != 'PyPy'
 pydantic==2.12.5
@@ -241,7 +241,7 @@ twine==6.2.0
 types-pyyaml==6.0.3
 typing-extensions==4.15.0
 typing-inspection==0.4.2
-tzdata==2026.2
+tzdata==2026.3
 tzlocal==5.3.1
 uc-micro-py==2.0.0
 url-normalize==3.0.0

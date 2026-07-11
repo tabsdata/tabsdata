@@ -76,7 +76,7 @@ def _build_parser():
     parser.add_argument(
         "--request-file",
         required=True,
-        help="Path to write the fetched request run.",
+        help="Path to write the fetched request body.",
     )
     return parser
 

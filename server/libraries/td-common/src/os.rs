@@ -19,7 +19,9 @@ use std::env::consts::OS;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{Duration, Instant};
-use sysinfo::{Pid, Process, ProcessStatus, ProcessesToUpdate, Signal, System};
+#[cfg(not(target_os = "windows"))]
+use sysinfo::ProcessesToUpdate;
+use sysinfo::{Pid, Process, ProcessStatus, Signal, System};
 use tracing::{info, warn};
 
 pub const TD_DETACHED_SUBPROCESSES: &str = "TD_DETACHED_SUBPROCESSES";

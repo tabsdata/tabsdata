@@ -14,7 +14,7 @@ function's execute endpoint with a ``CronTrigger``
 Unlike the long-running supervisor cron worker (``td-crontrigger``) and the
 manifest-trigger sidecar, there is no loop, no ``request.yaml``, and no
 stage: the trigger URL injected via the worker's ``TD_TRIGGER_*`` secret
-already encodes the project + function version, so the request run is all
+already encodes the project + function version, so the request body is all
 that is needed. Kubernetes re-spawns the pod on the next schedule tick.
 
 apiserver response handling:

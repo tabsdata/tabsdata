@@ -54,6 +54,7 @@ passthrough = [
     # >>> passthrough:MOUNTS:END >>>
     "CC_x86_64_unknown_linux_gnu=clang",
     "CXX_x86_64_unknown_linux_gnu=clang++",
+    "HOME=/home/runner",
     "TD_CROSS_BUILD=true",
     # >>> passthrough:MAKE:BEGIN >>>
     "TD_ON_GA",

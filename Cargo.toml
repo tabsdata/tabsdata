@@ -566,7 +566,7 @@ features = ["cloud"]
 version = "0.1.0"
 
 [workspace.dependencies.postgresql_embedded]
-version = "0.20.2"
+version = "0.20.4"
 features = ["bundled", "tokio"]
 
 [workspace.dependencies.rand]
@@ -794,3 +794,7 @@ te-system = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { workspace = true, features = ["vendored"] }
+
+[patch.crates-io]
+postgresql_archive = { git = "https://github.com/tabsdata/postgresql-embedded.git", branch = "main" }
+postgresql_embedded = { git = "https://github.com/tabsdata/postgresql-embedded.git", branch = "main" }

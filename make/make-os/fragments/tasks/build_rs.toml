@@ -51,8 +51,38 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    theseus_cache_folder = get_env THESEUS_CACHE_HOME
+    theseus_cache_empty = is_empty ${theseus_cache_folder}
+    if ${theseus_cache_empty}
+        home_folder = get_env HOME
+        theseus_cache_folder = concat ${home_folder} "/.theseus"
+    end
+    postgresql_cache_folder = concat ${theseus_cache_folder} "/postgresql"
+
+    info "♻️ PostgreSQL cache contents before build: ${postgresql_cache_folder}"
+    postgresql_cache_exists = is_path_exists ${postgresql_cache_folder}
+    if ${postgresql_cache_exists}
+        postgresql_cache_entries = glob_array ${postgresql_cache_folder}/*
+        for postgresql_cache_entry in ${postgresql_cache_entries}
+            info "   ${postgresql_cache_entry}"
+        end
+    else
+        info "   <cache folder does not exist>"
+    end
+
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples
+
+    info "♻️ PostgreSQL cache contents after build: ${postgresql_cache_folder}"
+    postgresql_cache_exists = is_path_exists ${postgresql_cache_folder}
+    if ${postgresql_cache_exists}
+        postgresql_cache_entries = glob_array ${postgresql_cache_folder}/*
+        for postgresql_cache_entry in ${postgresql_cache_entries}
+            info "   ${postgresql_cache_entry}"
+        end
+    else
+        info "   <cache folder does not exist>"
+    end
 
     td_check_build_folder = set ${td-profile}
     is_dev = eq ${td_check_build_folder} "dev"
@@ -131,8 +161,38 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    theseus_cache_folder = get_env THESEUS_CACHE_HOME
+    theseus_cache_empty = is_empty ${theseus_cache_folder}
+    if ${theseus_cache_empty}
+        home_folder = get_env HOME
+        theseus_cache_folder = concat ${home_folder} "/.theseus"
+    end
+    postgresql_cache_folder = concat ${theseus_cache_folder} "/postgresql"
+
+    info "♻️ PostgreSQL cache contents before build: ${postgresql_cache_folder}"
+    postgresql_cache_exists = is_path_exists ${postgresql_cache_folder}
+    if ${postgresql_cache_exists}
+        postgresql_cache_entries = glob_array ${postgresql_cache_folder}/*
+        for postgresql_cache_entry in ${postgresql_cache_entries}
+            info "   ${postgresql_cache_entry}"
+        end
+    else
+        info "   <cache folder does not exist>"
+    end
+
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins
+
+    info "♻️ PostgreSQL cache contents after build: ${postgresql_cache_folder}"
+    postgresql_cache_exists = is_path_exists ${postgresql_cache_folder}
+    if ${postgresql_cache_exists}
+        postgresql_cache_entries = glob_array ${postgresql_cache_folder}/*
+        for postgresql_cache_entry in ${postgresql_cache_entries}
+            info "   ${postgresql_cache_entry}"
+        end
+    else
+        info "   <cache folder does not exist>"
+    end
 
     td_check_build_folder = set ${td-profile}
     is_dev = eq ${td_check_build_folder} "dev"

@@ -72,10 +72,7 @@ pub fn instance_markers(summary: &Summary, instance_pinned: bool) -> PinnedMarke
 }
 
 pub fn instance_label(summary: &Summary) -> &str {
-    summary
-        .instance_name
-        .as_deref()
-        .unwrap_or(DEFAULT_INSTANCE)
+    summary.instance_name.as_deref().unwrap_or(DEFAULT_INSTANCE)
 }
 
 pub fn resolved_cluster(

@@ -415,14 +415,17 @@ def cache_directory() -> Path:
     return Path.home() / ".theseus" / "postgresql"
 
 
-def run(report: Report) -> None:
-    target = resolve_target_triple(report)
-    version = resolve_version(report)
+def musl_companion_target(target: str) -> str | None:
+    parts = target.split("-")
+    if "linux" not in parts:
+        return None
+    companion = f"{'-'.join(parts[:-1])}-musl"
+    return companion if companion != target else None
 
-    cache_directory_path = cache_directory()
-    report.cache_directory = cache_directory_path
-    cache_directory_path.mkdir(parents=True, exist_ok=True)
 
+def cache_archive(
+    cache_directory_path: Path, version: str, target: str, report: Report
+) -> None:
     archive_name = f"postgresql-{version}-{target}.tar.gz"
     archive_path = cache_directory_path / archive_name
     report.archive_filename = archive_name
@@ -436,6 +439,21 @@ def run(report: Report) -> None:
         url = RELEASE_DOWNLOAD.format(version=version, target=target)
         report.download_url = url
         download(url, archive_path, report)
+
+
+def run(report: Report) -> None:
+    target = resolve_target_triple(report)
+    version = resolve_version(report)
+
+    cache_directory_path = cache_directory()
+    report.cache_directory = cache_directory_path
+    cache_directory_path.mkdir(parents=True, exist_ok=True)
+
+    cache_archive(cache_directory_path, version, target, report)
+
+    companion_target = musl_companion_target(target)
+    if companion_target:
+        cache_archive(cache_directory_path, version, companion_target, report)
 
     version_marker = sys.argv[1] if len(sys.argv) > 1 else None
     if version_marker:
