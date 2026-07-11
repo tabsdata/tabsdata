@@ -9,6 +9,7 @@ Unlike the cloud variants, no credentials are required.
 from __future__ import annotations
 
 import os
+import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -39,6 +40,7 @@ def _test_root(domain_fs: FsDomain, request: pytest.FixtureRequest) -> Path:
     session-shared ``fs`` domain base path (``request.node.name`` carries the
     param id, so parametrized cases stay isolated too)."""
     root = domain_fs.base_path / request.node.name
+    shutil.rmtree(root, ignore_errors=True)
     root.mkdir(parents=True, exist_ok=True)
     return root
 
