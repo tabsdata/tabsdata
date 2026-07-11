@@ -132,11 +132,14 @@ async fn create(
 }
 
 /// Runs as each schema's owner (DDL on its own schema) — no privileged pool.
+/// Seeds are idempotent full syncs, so re-running them here delivers the new
+/// release's baseline content to an existing database.
 async fn upgrade(components: &DatabaseComponents) -> Result<(), DbError> {
     info!("Upgrading database");
-    dbm::upgrade_all(components)
-        .await
-        .inspect(|()| info!("Database upgraded"))
+    dbm::upgrade_all(components).await?;
+    dbm::seed_all(components).await?;
+    info!("Database upgraded");
+    Ok(())
 }
 
 /// The same correctness check the apiserver runs on its serving pools.

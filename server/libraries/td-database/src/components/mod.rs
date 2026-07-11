@@ -158,8 +158,9 @@ pub async fn check_all(components: &DatabaseComponents) -> Result<(), DbError> {
 }
 
 /// Seed every registered component's release baseline on fresh serving pools
-/// opened from the config. Run after `upgrade_all`; each `seed` is an idempotent
-/// full sync, and components that ship structure only inherit the trait no-op.
+/// opened from the config. Run after `upgrade_all` on both create and upgrade;
+/// each `seed` is an idempotent full sync, and components that ship structure
+/// only inherit the trait no-op.
 pub async fn seed_all(components: &DatabaseComponents) -> Result<(), DbError> {
     for component in registered() {
         let serving = connect_serving(components, component.key()).await?;
