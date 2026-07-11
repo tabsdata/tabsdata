@@ -40,7 +40,7 @@ from tabsdatak.cli.td import (  # noqa: F401
     auth_group,
     collection_group,
     connection_group,
-    examples_guide,
+    examples_group,
     exe_group,
     fn_group,
     group_group,
@@ -142,50 +142,6 @@ def hints(ctx: click.Context, mode: str):
         set_current_cli_option(ctx, "hints", "disabled")
         store_cli_options(ctx)
         click.echo("Hints disabled. You will no longer see hints in the CLI.")
-
-
-@cli.command()
-@click.option(
-    "--dir",
-    "-d",
-    help=(
-        "Directory to generate the examples in. The directory must not exist "
-        "beforehand, as it will be created by the CLI."
-    ),
-)
-@click.option(
-    "--guide",
-    "-g",
-    is_flag=True,
-    help="Open the examples guide in the browser.",
-)
-@click.pass_context
-def examples(ctx: click.Context, dir: str, guide: bool):
-    """Generate a folder with example use cases and/or open these example's
-    guide."""
-    if not dir and not guide:
-        click.echo(ctx.get_help())
-        ctx.exit()
-
-    if dir:
-        if os.path.exists(dir):
-            raise click.ClickException(
-                f"Failed to generate examples: {dir} already exists."
-            )
-
-        # TODO(tabsdatak-migration): the `tabsdata.extensions._examples.cases`
-        # package has not yet been ported to the v2 `tabsdatak` namespace.
-        # Once migrated, replace this stub with the equivalent
-        # `tabsdatak.extensions._examples.cases` import + copytree logic
-        # below.
-        raise click.ClickException(
-            "Failed to generate examples: the examples content package has not "
-            "yet been migrated to the tabsdatak namespace. This command will be "
-            "re-enabled once the migration is complete."
-        )
-
-    if guide:
-        examples_guide.run()
 
 
 @cli.command()

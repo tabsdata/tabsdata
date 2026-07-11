@@ -1,0 +1,9 @@
+#
+# Copyright 2026 Tabs Data Inc.
+#
+
+title: Quickstart
+description: >-
+  A filesystem publisher, transformer, and subscriber over a CSV of people:
+  publish persons.csv, add a full_name column while dropping age,
+  then write the result as JSON Lines.
