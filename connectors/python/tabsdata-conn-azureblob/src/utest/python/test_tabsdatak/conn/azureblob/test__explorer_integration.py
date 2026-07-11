@@ -1,101 +1,104 @@
 """End-to-end ``AzureBlobConnectionExplorer`` tests against a real Azure
 Blob Storage container.
 
-The explorer talks to Azure directly via ``azure-storage-blob`` (no
-transporter binary), so these are gated only on container + credentials.
-Skipped unless ALL of these are set:
-
-  - ``AZ0__AZ_URI``          -- ``az://container[/path/prefix]``
-  - ``AZ0__AZ_ACCOUNT_NAME`` -- storage account name
-  - ``AZ0__AZ_ACCOUNT_KEY``  -- storage account key
-
-Each run seeds a handful of blobs under a unique
-``<uri_path>/td-explorer-integ/<uuid>`` prefix (used as the conn's
-``base_path``), so ``metadata`` sees exactly those blobs and nothing
-else already living in the container. The seeded blobs are removed on
-teardown.
+The ``azureblob_world_xs`` domain (provisioned by tdx) holds the world dataset
+laid out as ``<base_path>/<format>/<table>.<format>`` -- three tables
+(``wld_country`` / ``wld_city`` / ``wld_country_language``) in three formats
+(``csv`` / ``ndjson`` / ``parquet``). The explorer talks to Azure directly via
+``azure-storage-blob``: ``check_connect`` proves auth + container existence,
+``metadata`` lists the blobs under ``base_path`` (with size + last-modified),
+and ``data`` previews the first rows of a blob (csv via streamed lines, ndjson
+via newline-delimited JSON, parquet via pyarrow range requests).
 """
 
 from __future__ import annotations
 
-import os
 import uuid
-from pathlib import PurePosixPath
-from urllib.parse import urlparse
 
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.conn.common.types import AzureAccountKey
 from tabsdatak.conn.azureblob import AzureBlobSrcConn
-
-# noinspection PyProtectedMember
-import tabsdatak.conn.azureblob._explorer as az_explorer
+from tabsdatak.conn.common.file._explorer import FileStorageEntity
+from tabsdatak.conn.common.types import AzureAccountKey
 from tabsdatak.conn.azureblob._explorer import AzureBlobConnectionExplorer
+
+from tabsdatax.itest.fixture.backends.azureblob import (
+    AzureblobDomain,
+    AzureblobSystem,
+    azureblob_domain,
+    azureblob_system,
+)
 
 pytestmark = pytest.mark.azureblob
 
+_TABLES = ("wld_country", "wld_city", "wld_country_language")
+_FORMATS = ("csv", "ndjson", "parquet")
 
-_URI = os.environ.get("AZ0__AZ_URI")
-_ACCT_NAME = os.environ.get("AZ0__AZ_ACCOUNT_NAME")
-_ACCT_KEY = os.environ.get("AZ0__AZ_ACCOUNT_KEY")
-
-_skip_reason = (
-    "Azure Blob explorer integration tests require AZ0__AZ_URI + "
-    "AZ0__AZ_ACCOUNT_NAME + AZ0__AZ_ACCOUNT_KEY"
-)
-
-pytestmark = [
-    pytestmark,
-    pytest.mark.skipif(not all([_URI, _ACCT_NAME, _ACCT_KEY]), reason=_skip_reason),
+# The first five wld_city rows (in id order, as stored). ndjson / parquet
+# preserve native types; csv comes back with every value as a string.
+_WLD_CITY_HEAD = [
+    {
+        "id": 1,
+        "name": "Kabul",
+        "country_code": "AFG",
+        "district": "Kabol",
+        "population": 1780000,
+    },
+    {
+        "id": 2,
+        "name": "Qandahar",
+        "country_code": "AFG",
+        "district": "Qandahar",
+        "population": 237500,
+    },
+    {
+        "id": 3,
+        "name": "Herat",
+        "country_code": "AFG",
+        "district": "Herat",
+        "population": 186800,
+    },
+    {
+        "id": 4,
+        "name": "Mazar-e-Sharif",
+        "country_code": "AFG",
+        "district": "Balkh",
+        "population": 127800,
+    },
+    {
+        "id": 5,
+        "name": "Amsterdam",
+        "country_code": "NLD",
+        "district": "Noord-Holland",
+        "population": 731200,
+    },
 ]
 
 
-# Relative key (under base_path) -> expected FilePattern.format. Mixed
-# depths exercise the prefix split; mixed extensions the format sniff.
-_SEED_FILES = {
-    "users.csv": "csv",
-    "sub/orders.parquet": "parquet",
-    "report.json": "json",
-}
-
-
-def _join(*parts: str) -> str:
-    return "/".join(p.strip("/") for p in parts if p and p.strip("/"))
-
-
-def _creds() -> AzureAccountKey:
+def _creds(cfg: AzureblobDomain) -> AzureAccountKey:
     return AzureAccountKey(
-        account_name=Secret(_ACCT_NAME),
-        account_key=Secret(_ACCT_KEY),
+        account_name=Secret(cfg.account_name),
+        account_key=Secret(cfg.account_key),
     )
 
 
-def _conn(base_path: str) -> AzureBlobSrcConn:
-    container = urlparse(_URI).netloc
+def _conn_from(cfg: AzureblobDomain) -> AzureBlobSrcConn:
     return AzureBlobSrcConn(
-        container=container,
-        credentials=_creds(),
-        base_path=base_path,
+        container=cfg.container,
+        credentials=_creds(cfg),
+        base_path=str(cfg.base_path),
     )
 
 
-@pytest.fixture
-def seeded_conn():
-    """Provision a unique prefix seeded with ``_SEED_FILES`` and tear it
-    down afterwards. Yields the ``AzureBlobSrcConn`` at that prefix."""
-    uri_path = urlparse(_URI).path.lstrip("/")
-    base_path = _join(uri_path, "td-explorer-integ", uuid.uuid4().hex)
-    conn = _conn(base_path)
-
-    client = az_explorer._container_client(conn)
-    for rel in _SEED_FILES:
-        client.upload_blob(name=f"{base_path}/{rel}", data=b"col\n1\n", overwrite=True)
-    try:
-        yield conn
-    finally:
-        for blob in client.list_blobs(name_starts_with=base_path + "/"):
-            client.delete_blob(blob.name)
+def _entity_by_file(
+    entities: list[FileStorageEntity], filename: str
+) -> FileStorageEntity:
+    matches = [e for e in entities if e.file is not None and e.file.pattern == filename]
+    assert matches, (
+        f"no entity for {filename!r} in {[e.file.pattern for e in entities if e.file]}"
+    )
+    return matches[0]
 
 
 # ---------------------------------------------------------------------------
@@ -103,15 +106,24 @@ def seeded_conn():
 # ---------------------------------------------------------------------------
 
 
-def test_check_connect_succeeds():
+@azureblob_system("azureblob")
+@azureblob_domain("azureblob_world_xs")
+def test_check_connect_succeeds(
+    system_azureblob: AzureblobSystem, domain_azureblob_world_xs: AzureblobDomain
+):
     # Contract: returns None on success and must not raise.
-    assert AzureBlobConnectionExplorer().check_connect(_conn("")) is None
+    explorer = AzureBlobConnectionExplorer()
+    assert explorer.check_connect(_conn_from(domain_azureblob_world_xs)) is None
 
 
-def test_check_connect_nonexistent_container_raises():
+@azureblob_system("azureblob")
+@azureblob_domain("azureblob_world_xs")
+def test_check_connect_nonexistent_container_raises(
+    system_azureblob: AzureblobSystem, domain_azureblob_world_xs: AzureblobDomain
+):
     bad = AzureBlobSrcConn(
         container=f"td-does-not-exist-{uuid.uuid4().hex}",
-        credentials=_creds(),
+        credentials=_creds(domain_azureblob_world_xs),
     )
     with pytest.raises(Exception):
         AzureBlobConnectionExplorer().check_connect(bad)
@@ -122,39 +134,65 @@ def test_check_connect_nonexistent_container_raises():
 # ---------------------------------------------------------------------------
 
 
-def test_metadata_lists_only_seeded_blobs(seeded_conn):
-    entities = AzureBlobConnectionExplorer().metadata(seeded_conn)
+@azureblob_system("azureblob")
+@azureblob_domain("azureblob_world_xs")
+def test_metadata_lists_domain_objects(
+    system_azureblob: AzureblobSystem, domain_azureblob_world_xs: AzureblobDomain
+):
+    entities = AzureBlobConnectionExplorer().metadata(
+        _conn_from(domain_azureblob_world_xs)
+    )
 
-    # Isolation: base_path is unique, so exactly the seeded files show up.
-    assert {e.file.pattern for e in entities} == {
-        PurePosixPath(rel).name for rel in _SEED_FILES
-    }
+    assert entities and all(isinstance(e, FileStorageEntity) for e in entities)
     assert all(e.scheme == "az" for e in entities)
-    assert all(e.bucket == seeded_conn.container for e in entities)
+    assert all(e.bucket == domain_azureblob_world_xs.container for e in entities)
+
+    # Every object reports its size (bytes) and last-modified timestamp.
+    assert all(isinstance(e.size, int) and e.size > 0 for e in entities)
+    assert all(e.last_modified for e in entities)
+
+    # Exactly the world dataset: three tables in three formats.
+    assert {e.file.pattern for e in entities} == {
+        f"{table}.{fmt}" for table in _TABLES for fmt in _FORMATS
+    }
 
 
-def test_metadata_sniffs_format_and_builds_fqn(seeded_conn):
-    entities = AzureBlobConnectionExplorer().metadata(seeded_conn)
+@azureblob_system("azureblob")
+@azureblob_domain("azureblob_world_xs")
+def test_metadata_sniffs_format(
+    system_azureblob: AzureblobSystem, domain_azureblob_world_xs: AzureblobDomain
+):
+    entities = AzureBlobConnectionExplorer().metadata(
+        _conn_from(domain_azureblob_world_xs)
+    )
     by_name = {e.file.pattern: e for e in entities}
-
-    for rel, fmt in _SEED_FILES.items():
-        name = PurePosixPath(rel).name
-        entity = by_name[name]
-        assert entity.file.format == fmt
-        # prefix carries the blob's full key directory (base_path
-        # included), so the fqn is the fully-qualified az path.
-        assert (
-            entity.fqn()
-            == f"az://{seeded_conn.container}/{seeded_conn.base_path}/{rel}"
-        )
+    for fmt in _FORMATS:
+        assert by_name[f"wld_city.{fmt}"].file.format == fmt
 
 
 # ---------------------------------------------------------------------------
-# data -- object storage has no row-level preview
+# data -- first-rows preview per format
 # ---------------------------------------------------------------------------
 
 
-def test_data_returns_none(seeded_conn):
+@pytest.mark.parametrize("fmt", _FORMATS)
+@azureblob_system("azureblob")
+@azureblob_domain("azureblob_world_xs")
+def test_data_returns_first_rows(
+    system_azureblob: AzureblobSystem,
+    domain_azureblob_world_xs: AzureblobDomain,
+    fmt: str,
+):
+    conn = _conn_from(domain_azureblob_world_xs)
     explorer = AzureBlobConnectionExplorer()
-    entity = explorer.metadata(seeded_conn)[0]
-    assert explorer.data(seeded_conn, entity) is None
+    entity = _entity_by_file(explorer.metadata(conn), f"wld_city.{fmt}")
+
+    rows = explorer.data(conn, entity, limit=5)
+
+    assert isinstance(rows, list)
+    # csv comes back as strings; ndjson / parquet keep native types.
+    if fmt == "csv":
+        expected = [{k: str(v) for k, v in r.items()} for r in _WLD_CITY_HEAD]
+    else:
+        expected = _WLD_CITY_HEAD
+    assert rows == expected

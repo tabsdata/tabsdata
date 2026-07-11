@@ -65,6 +65,8 @@ class FileStorageEntity(Entity):
     bucket: str = ""
     prefix: str = ""
     file: FilePattern | None = None
+    size: int | None = None  # object size in bytes
+    last_modified: str | None = None  # ISO-8601 last-modified timestamp
 
     def fqn(self) -> str:
         return self.connection_type.entity_fqn({
@@ -88,6 +90,10 @@ class FileStorageEntity(Entity):
         d["fqn"] = self.fqn()
         if self.file is not None:
             d["file"] = self.file.to_dict()
+        if self.size is not None:
+            d["size"] = self.size
+        if self.last_modified is not None:
+            d["last_modified"] = self.last_modified
         return d
 
     @classmethod
@@ -101,4 +107,6 @@ class FileStorageEntity(Entity):
             prefix=data.get("prefix", ""),
             scheme=data.get("scheme", ""),
             file=FilePattern.from_dict(file) if file else None,
+            size=data.get("size"),
+            last_modified=data.get("last_modified"),
         )
