@@ -25,6 +25,9 @@ import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.s3 import S3Domain, s3_domain
 from tabsdatax.itest.fixture.functions.files import (
+    ObjectStore,
+    download_or_skip,
+    entity_stem,
     write_publisher_module,
     write_subscriber_module,
 )
@@ -56,45 +59,18 @@ def _credentials(domain: S3Domain) -> AwsAccessSecretKey:
     )
 
 
-def _entity(domain: S3Domain) -> str:
-    """A deterministic provisioned entity name. The descriptor lists entities as
-    full object paths (``<prefix>/<fmt>/<entity>.<ext>``), one per staged format,
-    so the bare name is the file stem."""
-    if not domain.entities:
-        pytest.skip(
-            f"s3 domain {domain.name!r} has no entities (model={domain.model!r}); "
-            "seed the domain before running this test",
-        )
-    return sorted({Path(key).stem for key in domain.entities})[0]
+@pytest.fixture
+def store(domain_s3: S3Domain, object_store) -> ObjectStore:
+    return object_store(domain_s3)
 
 
 @pytest.fixture
-def s3_client(domain_s3: S3Domain):
-    import boto3
-
-    return boto3.client(
-        "s3",
-        region_name=domain_s3.region or None,
-        aws_access_key_id=domain_s3.access_key or None,
-        aws_secret_access_key=domain_s3.secret_key or None,
-    )
-
-
-def _download(s3_client, bucket: str, key: str, dest: Path) -> Path:
-    s3_client.download_file(bucket, key, str(dest))
-    return dest
-
-
-@pytest.fixture
-def expected(domain_s3: S3Domain, s3_client, tmp_path: Path) -> pl.DataFrame:
+def expected(domain_s3: S3Domain, store: ObjectStore, tmp_path: Path) -> pl.DataFrame:
     """Canonical reference data: the provisioned csv copy of the chosen entity,
     downloaded from the bucket. The model is identical across formats, so it is
     ground truth for every source/destination format."""
-    entity = _entity(domain_s3)
-    key = f"{domain_s3.base_path}/csv/{entity}.csv"
-    return pl.read_csv(
-        _download(s3_client, domain_s3.bucket, key, tmp_path / "ref.csv")
-    )
+    key = f"{domain_s3.base_path}/csv/{entity_stem(domain_s3)}.csv"
+    return pl.read_csv(download_or_skip(store, key, tmp_path / "ref.csv"))
 
 
 def _publish(
@@ -135,7 +111,7 @@ def test_publisher_reads_format_from_s3_domain(
     collection_factory: CollectionFactory,
     tmp_path: Path,
 ) -> None:
-    entity = _entity(domain_s3)
+    entity = entity_stem(domain_s3)
     project_root = tmp_path / "pub"
     project_root.mkdir()
     collection = _publish(
@@ -167,13 +143,13 @@ def test_subscriber_writes_format_to_s3_domain(
     domain_s3: S3Domain,
     expected: pl.DataFrame,
     collection_factory: CollectionFactory,
-    s3_client,
+    store: ObjectStore,
     tmp_path: Path,
 ) -> None:
     # Round-trip: publish the provisioned csv into a table, then subscribe it
     # back out to an object in `dest_format` and assert the object matches.
     # OS/kminus does not auto-trigger subscribers, so trigger it directly.
-    entity = _entity(domain_s3)
+    entity = entity_stem(domain_s3)
     publisher_root = tmp_path / "pub"
     publisher_root.mkdir()
     source_collection = _publish(
@@ -201,10 +177,5 @@ def test_subscriber_writes_format_to_s3_domain(
     )
     run_function(destination_collection, subscriber_info, subscriber_root)
 
-    fetched = _download(
-        s3_client,
-        domain_s3.bucket,
-        f"{out_prefix}/{out_name}",
-        tmp_path / out_name,
-    )
+    fetched = download_or_skip(store, f"{out_prefix}/{out_name}", tmp_path / out_name)
     assert_frames_match(reader(fetched), expected)

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from tabsdatax.itest.fixture.functions.files import PluginDestCtx, PluginSrcCtx
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.localfile._plugin as plugin
@@ -26,108 +27,10 @@ from tabsdatak.conn.localfile import (
     LocalFileSrc,
     LocalFileSrcConn,
 )
-from tabsdatak.spi import DestContext, SrcPluginCtx
 
 pytestmark = pytest.mark.localfile
 
 TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
-
-
-# ---------------------------------------------------------------------------
-# Test contexts
-# ---------------------------------------------------------------------------
-
-
-class _SrcCtx(SrcPluginCtx):
-    def __init__(self, work_dir: Path) -> None:
-        self._work_dir = work_dir
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def exec_plan_id(self) -> str:
-        return "lf-integ-exec-plan"
-
-    @property
-    def trx_id(self) -> str:
-        return "lf-integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
-
-    @property
-    def collection_id(self) -> str:
-        return "test-collection-id"
-
-    @property
-    def collection_name(self) -> str:
-        return "test-collection"
-
-    @property
-    def function_id(self) -> str:
-        return "test-function-id"
-
-    @property
-    def function_name(self) -> str:
-        return "test-function"
-
-    def get_attr(self, attr):
-        return None
-
-    def set_attr(self, attr, val):
-        pass
-
-    def add_metadata(self, attr, val):
-        pass
-
-
-class _DestCtx(DestContext):
-    def __init__(self, work_dir: Path) -> None:
-        self._work_dir = work_dir
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def exec_plan_id(self) -> str:
-        return "lf-integ-exec-plan"
-
-    @property
-    def trx_id(self) -> str:
-        return "lf-integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
-
-    @property
-    def collection_id(self) -> str:
-        return "test-collection-id"
-
-    @property
-    def collection_name(self) -> str:
-        return "test-collection"
-
-    @property
-    def function_id(self) -> str:
-        return "test-function-id"
-
-    @property
-    def function_name(self) -> str:
-        return "test-function"
-
-    def get_attr(self, attr):
-        return None
-
-    def set_attr(self, attr, val):
-        pass
-
-    def add_metadata(self, attr, val):
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +59,7 @@ def test_dest_then_src_round_trip(tmp_path: Path):
     # 1. Write
     dest = LocalFileDest(paths=["users.parquet"])
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work_dest),
+        PluginDestCtx(work_dest),
         conn,
         dest,
         [Path(in_parquet)],
@@ -165,7 +68,7 @@ def test_dest_then_src_round_trip(tmp_path: Path):
 
     # 2. Read back
     src = LocalFileSrc(paths=["users.parquet"])
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work_src), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work_src), conn, src)
 
     assert len(out) == 1
     assert len(out[0]) >= 1
@@ -188,7 +91,7 @@ def test_src_treats_absolute_path_as_relative_to_base_path(tmp_path: Path):
 
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     assert len(out[0]) >= 1
     assert pl.read_parquet(out[0][0].file).select("x").to_dicts() == [{"x": 1}]
 
@@ -217,7 +120,7 @@ def test_src_wildcard_in_basename_matches_multiple_files(tmp_path: Path):
 
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
 
     assert len(out) == 1
     # Three parquet inputs -> at least three target files in the report
@@ -239,7 +142,7 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(tmp_path: Path):
 
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
 
     # One slot, zero files
     assert len(out) == 1
@@ -282,7 +185,7 @@ def test_src_initial_last_modified_filters_out_older_files(tmp_path: Path):
 
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
 
     names = sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0])
     assert names == ["new"]
@@ -308,7 +211,7 @@ def test_src_initial_last_modified_at_or_before_oldest_returns_all(
 
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
 
     names = sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0])
     assert names == ["a", "b"]
@@ -338,7 +241,7 @@ def test_src_format_csv_reads_with_default_options(tmp_path: Path):
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
@@ -361,7 +264,7 @@ def test_src_format_csv_honours_separator_option(tmp_path: Path):
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
@@ -385,7 +288,7 @@ def test_src_format_json_reads_records(tmp_path: Path):
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
@@ -407,7 +310,7 @@ def test_src_format_avro_reads_records(tmp_path: Path):
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
         {"id": 1, "name": "alice"},
@@ -431,7 +334,7 @@ def test_src_format_auto_infers_parquet_from_extension(tmp_path: Path):
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name")
     assert df.to_dicts() == [{"id": 1, "name": "alice"}]
 
@@ -475,7 +378,7 @@ def test_dest_format_csv_writes_csv_file(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work),
+        PluginDestCtx(work),
         conn,
         dest,
         [Path(src_parquet)],
@@ -507,7 +410,7 @@ def test_dest_format_csv_honours_separator_option(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work),
+        PluginDestCtx(work),
         conn,
         dest,
         [Path(src_parquet)],
@@ -535,7 +438,7 @@ def test_dest_format_json_writes_json_file(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work),
+        PluginDestCtx(work),
         conn,
         dest,
         [Path(src_parquet)],
@@ -568,7 +471,7 @@ def test_dest_format_avro_writes_avro_file(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work),
+        PluginDestCtx(work),
         conn,
         dest,
         [Path(src_parquet)],
@@ -599,7 +502,7 @@ def test_dest_format_auto_defaults_to_parquet(tmp_path: Path):
     work = tmp_path / "work"
     work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
-        _DestCtx(work),
+        PluginDestCtx(work),
         conn,
         dest,
         [Path(src_parquet)],
@@ -637,7 +540,7 @@ def _read_csv_with_cfg(
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     # Drop the binary's ``$td.opt.*`` provenance columns.
     df = pl.read_parquet(out[0][0].file)
     user_cols = [c for c in df.columns if not c.startswith("$td.")]
@@ -863,7 +766,7 @@ def test_csv_src_encoding_utf8(tmp_path: Path):
     )
     work = tmp_path / "work"
     work.mkdir()
-    out = plugin.LocalFileSrcPlugin().read_in(_SrcCtx(work), conn, src)
+    out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name")
     assert df.sort("id").to_dicts() == [
         {"id": 1, "name": "café"},

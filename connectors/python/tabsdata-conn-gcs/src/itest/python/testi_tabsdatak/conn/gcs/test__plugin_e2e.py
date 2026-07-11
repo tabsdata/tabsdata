@@ -17,7 +17,6 @@ provisioned with data (``tdx-domain seed``); the seed stages each format under
 
 from __future__ import annotations
 
-import json
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -26,6 +25,9 @@ import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.gcs import GcsDomain, gcs_domain
 from tabsdatax.itest.fixture.functions.files import (
+    ObjectStore,
+    download_or_skip,
+    entity_stem,
     write_publisher_module,
     write_subscriber_module,
 )
@@ -54,42 +56,18 @@ def _credentials(domain: GcsDomain) -> GCPJson:
     return GCPJson(json=Secret(domain.service_account_key))
 
 
-def _entity(domain: GcsDomain) -> str:
-    """A deterministic provisioned entity name. The descriptor lists entities as
-    full object paths (``<prefix>/<fmt>/<entity>.<ext>``), one per staged format,
-    so the bare name is the file stem."""
-    if not domain.entities:
-        pytest.skip(
-            f"gcs domain {domain.name!r} has no entities (model={domain.model!r}); "
-            "seed the domain before running this test",
-        )
-    return sorted({Path(key).stem for key in domain.entities})[0]
+@pytest.fixture
+def store(domain_gcs: GcsDomain, object_store) -> ObjectStore:
+    return object_store(domain_gcs)
 
 
 @pytest.fixture
-def gcs_client(domain_gcs: GcsDomain):
-    from google.cloud import storage
-
-    return storage.Client.from_service_account_info(
-        json.loads(domain_gcs.service_account_key)
-    )
-
-
-def _download(gcs_client, bucket: str, key: str, dest: Path) -> Path:
-    gcs_client.bucket(bucket).blob(key).download_to_filename(str(dest))
-    return dest
-
-
-@pytest.fixture
-def expected(domain_gcs: GcsDomain, gcs_client, tmp_path: Path) -> pl.DataFrame:
+def expected(domain_gcs: GcsDomain, store: ObjectStore, tmp_path: Path) -> pl.DataFrame:
     """Canonical reference data: the provisioned csv copy of the chosen entity,
     downloaded from the bucket. The model is identical across formats, so it is
     ground truth for every source/destination format."""
-    entity = _entity(domain_gcs)
-    key = f"{domain_gcs.base_path}/csv/{entity}.csv"
-    return pl.read_csv(
-        _download(gcs_client, domain_gcs.bucket, key, tmp_path / "ref.csv")
-    )
+    key = f"{domain_gcs.base_path}/csv/{entity_stem(domain_gcs)}.csv"
+    return pl.read_csv(download_or_skip(store, key, tmp_path / "ref.csv"))
 
 
 def _publish(
@@ -129,7 +107,7 @@ def test_publisher_reads_format_from_gcs_domain(
     collection_factory: CollectionFactory,
     tmp_path: Path,
 ) -> None:
-    entity = _entity(domain_gcs)
+    entity = entity_stem(domain_gcs)
     project_root = tmp_path / "pub"
     project_root.mkdir()
     collection = _publish(
@@ -161,13 +139,13 @@ def test_subscriber_writes_format_to_gcs_domain(
     domain_gcs: GcsDomain,
     expected: pl.DataFrame,
     collection_factory: CollectionFactory,
-    gcs_client,
+    store: ObjectStore,
     tmp_path: Path,
 ) -> None:
     # Round-trip: publish the provisioned csv into a table, then subscribe it
     # back out to an object in `dest_format` and assert the object matches.
     # OS/kminus does not auto-trigger subscribers, so trigger it directly.
-    entity = _entity(domain_gcs)
+    entity = entity_stem(domain_gcs)
     publisher_root = tmp_path / "pub"
     publisher_root.mkdir()
     source_collection = _publish(
@@ -194,10 +172,5 @@ def test_subscriber_writes_format_to_gcs_domain(
     )
     run_function(destination_collection, subscriber_info, subscriber_root)
 
-    fetched = _download(
-        gcs_client,
-        domain_gcs.bucket,
-        f"{out_prefix}/{out_name}",
-        tmp_path / out_name,
-    )
+    fetched = download_or_skip(store, f"{out_prefix}/{out_name}", tmp_path / out_name)
     assert_frames_match(reader(fetched), expected)

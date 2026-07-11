@@ -25,6 +25,12 @@ from pathlib import Path
 import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.azureblob import AzureblobSystem, azureblob_system
+from tabsdatax.itest.fixture.functions.files import (
+    ObjectStore,
+    PluginDestCtx,
+    PluginSrcCtx,
+    download_or_skip,
+)
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.azureblob._plugin as plugin
@@ -39,108 +45,10 @@ from tabsdatak.conn.azureblob import (
 )
 from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
 from tabsdatak.conn.common.types import AzureAccountKey
-from tabsdatak.spi import DestContext, SrcPluginCtx
 
 pytestmark = pytest.mark.azureblob
 
 TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
-
-
-# ---------------------------------------------------------------------------
-# Test contexts
-# ---------------------------------------------------------------------------
-
-
-class _SrcCtx(SrcPluginCtx):
-    def __init__(self, work_dir: Path) -> None:
-        self._work_dir = work_dir
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def exec_plan_id(self) -> str:
-        return "az-integ-exec-plan"
-
-    @property
-    def trx_id(self) -> str:
-        return "az-integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
-
-    @property
-    def collection_id(self) -> str:
-        return "test-collection-id"
-
-    @property
-    def collection_name(self) -> str:
-        return "test-collection"
-
-    @property
-    def function_id(self) -> str:
-        return "test-function-id"
-
-    @property
-    def function_name(self) -> str:
-        return "test-function"
-
-    def get_attr(self, attr):
-        return None
-
-    def set_attr(self, attr, val):
-        pass
-
-    def add_metadata(self, attr, val):
-        pass
-
-
-class _DestCtx(DestContext):
-    def __init__(self, work_dir: Path) -> None:
-        self._work_dir = work_dir
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def exec_plan_id(self) -> str:
-        return "az-integ-exec-plan"
-
-    @property
-    def trx_id(self) -> str:
-        return "az-integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
-
-    @property
-    def collection_id(self) -> str:
-        return "test-collection-id"
-
-    @property
-    def collection_name(self) -> str:
-        return "test-collection"
-
-    @property
-    def function_id(self) -> str:
-        return "test-function-id"
-
-    @property
-    def function_name(self) -> str:
-        return "test-function"
-
-    def get_attr(self, attr):
-        return None
-
-    def set_attr(self, attr, val):
-        pass
-
-    def add_metadata(self, attr, val):
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -165,16 +73,8 @@ def run_base(system_azureblob: AzureblobSystem) -> str:
 
 
 @pytest.fixture
-def blob_client(system_azureblob: AzureblobSystem):
-    """A raw azure-storage-blob client, for downloading emitted blobs to verify
-    the bytes the transporter actually wrote (the src plugin would re-transcode
-    to parquet, hiding the on-object format) and for staging source blobs."""
-    from azure.storage.blob import BlobServiceClient
-
-    return BlobServiceClient(
-        account_url=f"https://{system_azureblob.account_name}.blob.core.windows.net",
-        credential=system_azureblob.account_key,
-    )
+def store(system_azureblob: AzureblobSystem, object_store) -> ObjectStore:
+    return object_store(system_azureblob)
 
 
 @pytest.fixture
@@ -209,21 +109,14 @@ def _upload_parquet(
     work.mkdir()
     dest = AzureBlobDest(paths=[name])
     plugin.AzureBlobDestPlugin().write_out(
-        _DestCtx(work), dest_conn, dest, [Path(local)]
+        PluginDestCtx(work), dest_conn, dest, [Path(local)]
     )
 
 
 def _read_back(src_conn: AzureBlobSrcConn, src: AzureBlobSrc, tmp_path: Path):
     work = tmp_path / f"work-src-{uuid.uuid4().hex}"
     work.mkdir()
-    return plugin.AzureBlobSrcPlugin().read_in(_SrcCtx(work), src_conn, src)
-
-
-def _download(blob_client, container: str, key: str, dest: Path) -> Path:
-    stream = blob_client.get_blob_client(container=container, blob=key).download_blob()
-    with open(dest, "wb") as fh:
-        fh.write(stream.readall())
-    return dest
+    return plugin.AzureBlobSrcPlugin().read_in(PluginSrcCtx(work), src_conn, src)
 
 
 # ---------------------------------------------------------------------------
@@ -322,17 +215,14 @@ _ROWS = [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}]
 
 
 def _stage_object(
-    blob_client, container: str, run_base: str, name: str, writer, tmp_path: Path
+    store: ObjectStore, run_base: str, name: str, writer, tmp_path: Path
 ) -> None:
     """Write ``_ROWS`` locally in the target format and upload the raw bytes to
     ``<run_base>/<name>`` (a raw put, so the object genuinely carries that format
     -- the dest plugin would expect parquet input and transcode)."""
     local = tmp_path / f"stage-{uuid.uuid4().hex}-{name}"
     writer(pl.DataFrame(_ROWS), local)
-    with open(local, "rb") as fh:
-        blob_client.get_blob_client(
-            container=container, blob=f"{run_base}/{name}"
-        ).upload_blob(fh, overwrite=True)
+    store.upload(local, f"{run_base}/{name}")
 
 
 @pytest.mark.azureblob
@@ -352,17 +242,14 @@ def _stage_object(
 )
 def test_src_reads_each_format(
     src_conn: AzureBlobSrcConn,
-    blob_client,
-    system_azureblob: AzureblobSystem,
+    store: ObjectStore,
     run_base: str,
     tmp_path: Path,
     name: str,
     writer,
     fmt: SrcFileFormat,
 ):
-    _stage_object(
-        blob_client, system_azureblob.container, run_base, name, writer, tmp_path
-    )
+    _stage_object(store, run_base, name, writer, tmp_path)
     out = _read_back(src_conn, AzureBlobSrc(paths=[name], format=fmt), tmp_path)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == _ROWS
@@ -370,7 +257,7 @@ def test_src_reads_each_format(
 
 # ---------------------------------------------------------------------------
 # Destination-side formats: start from a parquet (the in-flight table format),
-# write with the requested DestFileFormat, download the emitted object back with
+# write with the requested DestFileFormat, read the emitted object back with
 # the matching reader.
 # ---------------------------------------------------------------------------
 
@@ -388,8 +275,7 @@ def test_src_reads_each_format(
 )
 def test_dest_writes_each_format(
     dest_conn: AzureBlobDestConn,
-    system_azureblob: AzureblobSystem,
-    blob_client,
+    store: ObjectStore,
     run_base: str,
     tmp_path: Path,
     name: str,
@@ -401,7 +287,7 @@ def test_dest_writes_each_format(
     work = tmp_path / f"work-dest-{uuid.uuid4().hex}"
     work.mkdir()
     plugin.AzureBlobDestPlugin().write_out(
-        _DestCtx(work),
+        PluginDestCtx(work),
         dest_conn,
         AzureBlobDest(paths=[name], format=fmt),
         [Path(in_parquet)],
@@ -409,7 +295,8 @@ def test_dest_writes_each_format(
 
     # Download the raw object to verify the transporter wrote the requested
     # format (reading via the src plugin would re-transcode to parquet).
-    fetched = tmp_path / f"fetched-{name}"
-    _download(blob_client, system_azureblob.container, f"{run_base}/{name}", fetched)
+    fetched = download_or_skip(
+        store, f"{run_base}/{name}", tmp_path / f"fetched-{name}"
+    )
     df = reader(fetched).select("id", "name").sort("id")
     assert df.to_dicts() == _ROWS

@@ -25,6 +25,9 @@ import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.azureblob import AzureblobDomain, azureblob_domain
 from tabsdatax.itest.fixture.functions.files import (
+    ObjectStore,
+    download_or_skip,
+    entity_stem,
     write_publisher_module,
     write_subscriber_module,
 )
@@ -56,47 +59,20 @@ def _credentials(domain: AzureblobDomain) -> AzureAccountKey:
     )
 
 
-def _entity(domain: AzureblobDomain) -> str:
-    """A deterministic provisioned entity name. The descriptor lists entities as
-    full object paths (``<prefix>/<fmt>/<entity>.<ext>``), one per staged format,
-    so the bare name is the file stem."""
-    if not domain.entities:
-        pytest.skip(
-            f"azureblob domain {domain.name!r} has no entities "
-            f"(model={domain.model!r}); seed the domain before running this test",
-        )
-    return sorted({Path(key).stem for key in domain.entities})[0]
-
-
 @pytest.fixture
-def blob_client(domain_azureblob: AzureblobDomain):
-    from azure.storage.blob import BlobServiceClient
-
-    return BlobServiceClient(
-        account_url=f"https://{domain_azureblob.account_name}.blob.core.windows.net",
-        credential=domain_azureblob.account_key,
-    )
-
-
-def _download(blob_client, container: str, key: str, dest: Path) -> Path:
-    stream = blob_client.get_blob_client(container=container, blob=key).download_blob()
-    with open(dest, "wb") as fh:
-        fh.write(stream.readall())
-    return dest
+def store(domain_azureblob: AzureblobDomain, object_store) -> ObjectStore:
+    return object_store(domain_azureblob)
 
 
 @pytest.fixture
 def expected(
-    domain_azureblob: AzureblobDomain, blob_client, tmp_path: Path
+    domain_azureblob: AzureblobDomain, store: ObjectStore, tmp_path: Path
 ) -> pl.DataFrame:
     """Canonical reference data: the provisioned csv copy of the chosen entity,
     downloaded from the container. The model is identical across formats, so it
     is ground truth for every source/destination format."""
-    entity = _entity(domain_azureblob)
-    key = f"{domain_azureblob.base_path}/csv/{entity}.csv"
-    return pl.read_csv(
-        _download(blob_client, domain_azureblob.container, key, tmp_path / "ref.csv")
-    )
+    key = f"{domain_azureblob.base_path}/csv/{entity_stem(domain_azureblob)}.csv"
+    return pl.read_csv(download_or_skip(store, key, tmp_path / "ref.csv"))
 
 
 def _publish(
@@ -136,7 +112,7 @@ def test_publisher_reads_format_from_azureblob_domain(
     collection_factory: CollectionFactory,
     tmp_path: Path,
 ) -> None:
-    entity = _entity(domain_azureblob)
+    entity = entity_stem(domain_azureblob)
     project_root = tmp_path / "pub"
     project_root.mkdir()
     collection = _publish(
@@ -168,13 +144,13 @@ def test_subscriber_writes_format_to_azureblob_domain(
     domain_azureblob: AzureblobDomain,
     expected: pl.DataFrame,
     collection_factory: CollectionFactory,
-    blob_client,
+    store: ObjectStore,
     tmp_path: Path,
 ) -> None:
     # Round-trip: publish the provisioned csv into a table, then subscribe it
     # back out to an object in `dest_format` and assert the object matches.
     # OS/kminus does not auto-trigger subscribers, so trigger it directly.
-    entity = _entity(domain_azureblob)
+    entity = entity_stem(domain_azureblob)
     publisher_root = tmp_path / "pub"
     publisher_root.mkdir()
     source_collection = _publish(
@@ -201,10 +177,5 @@ def test_subscriber_writes_format_to_azureblob_domain(
     )
     run_function(destination_collection, subscriber_info, subscriber_root)
 
-    fetched = _download(
-        blob_client,
-        domain_azureblob.container,
-        f"{out_prefix}/{out_name}",
-        tmp_path / out_name,
-    )
+    fetched = download_or_skip(store, f"{out_prefix}/{out_name}", tmp_path / out_name)
     assert_frames_match(reader(fetched), expected)

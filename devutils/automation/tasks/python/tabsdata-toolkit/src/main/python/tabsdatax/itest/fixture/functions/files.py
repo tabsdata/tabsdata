@@ -3,22 +3,124 @@
 #
 
 """End-to-end helpers shared by the file-based connectors (localfile, s3, gcs,
-azureblob): discover a provisioned file in a domain, and generate publisher /
-subscriber modules parameterized by the connector's ``Src`` / ``Dest``.
+azureblob): discover a provisioned file/object, fabricate plugin contexts,
+resolve the provisioned entity, and generate publisher / subscriber modules
+parameterized by the connector's ``Src`` / ``Dest``.
 
 Connector-agnostic: the caller passes the import line and the constructor
-expression for its own source/destination, so nothing here depends on a
-specific connector. Generic (non-file) harness lives in :mod:`.harness`.
+expression for its own source/destination, and (for object stores) an
+:class:`ObjectStore` adapter over its own cloud client -- so nothing here
+depends on a specific connector. Generic (non-file) harness lives in
+:mod:`.harness`.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 from tabsdatak.sdk.tabsdata_server import FunctionInfo
+from tabsdatak.spi import DestContext, SrcPluginCtx
 
 from tabsdatax.itest.fixture.functions.harness import write_module
+
+
+class _PluginCtx:
+    """The fixed attributes every fabricated plugin context carries -- shared by
+    the ``Src`` and ``Dest`` context stubs the integration tests drive the plugin
+    with. The values are inert; the plugins only read ``work_dir`` in practice."""
+
+    def __init__(self, work_dir: Path) -> None:
+        self._work_dir = work_dir
+
+    @property
+    def work_dir(self) -> Path:
+        return self._work_dir
+
+    @property
+    def exec_plan_id(self) -> str:
+        return "e2e-integ-exec-plan"
+
+    @property
+    def trx_id(self) -> str:
+        return "e2e-integ-trx"
+
+    @property
+    def exec_plan_ts(self) -> str:
+        return "2026-01-01T00:00:00.000000+00:00"
+
+    @property
+    def collection_id(self) -> str:
+        return "test-collection-id"
+
+    @property
+    def collection_name(self) -> str:
+        return "test-collection"
+
+    @property
+    def function_id(self) -> str:
+        return "test-function-id"
+
+    @property
+    def function_name(self) -> str:
+        return "test-function"
+
+    def get_attr(self, attr):
+        return None
+
+    def set_attr(self, attr, val):
+        pass
+
+    def add_metadata(self, attr, val):
+        pass
+
+
+class PluginSrcCtx(_PluginCtx, SrcPluginCtx):
+    """Fabricated ``SrcPluginCtx`` for driving a connector's ``SrcPlugin`` directly
+    in an integration test."""
+
+
+class PluginDestCtx(_PluginCtx, DestContext):
+    """Fabricated ``DestContext`` for driving a connector's ``DestPlugin`` directly
+    in an integration test."""
+
+
+class ObjectStore(Protocol):
+    """A connector-provided adapter over its cloud client (boto3 /
+    google-cloud-storage / azure-storage-blob), so the shared object-store helpers
+    stay client-agnostic. Keys are container/bucket-relative object paths."""
+
+    def exists(self, key: str) -> bool: ...
+
+    def download(self, key: str, dest: Path) -> None: ...
+
+    def upload(self, local: Path, key: str) -> None: ...
+
+
+def download_or_skip(store: ObjectStore, key: str, dest: Path) -> Path:
+    """Download ``key`` to ``dest``, or skip if the object is absent -- the
+    object-store analogue of :func:`first_provisioned_file`, so an unseeded or
+    stale-descriptor domain yields a clean skip instead of a raw 404."""
+    if not store.exists(key):
+        pytest.skip(
+            f"object {key!r} not provisioned; (re)seed the domain before running "
+            f"this test",
+        )
+    store.download(key, dest)
+    return dest
+
+
+def entity_stem(domain) -> str:
+    """A deterministic provisioned entity name from a cloud ``domain``. The
+    descriptor lists entities as full object paths (``<prefix>/<fmt>/<entity>.<ext>``),
+    one per staged format, so the bare name is the file stem; skip if none."""
+    if not domain.entities:
+        pytest.skip(
+            f"domain {domain.name!r} has no entities (model={domain.model!r}); "
+            f"seed the domain before running this test",
+        )
+    return sorted({Path(key).stem for key in domain.entities})[0]
 
 
 def first_provisioned_file(base_dir: Path, pattern: str = "*.csv") -> Path:

@@ -17,7 +17,6 @@ matching, ``initial_last_modified`` filtering, and per-format round-trips.
 
 from __future__ import annotations
 
-import json
 import time
 import uuid
 from datetime import datetime, timezone
@@ -26,6 +25,12 @@ from pathlib import Path
 import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.gcs import GcsSystem, gcs_system
+from tabsdatax.itest.fixture.functions.files import (
+    ObjectStore,
+    PluginDestCtx,
+    PluginSrcCtx,
+    download_or_skip,
+)
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.gcs._plugin as plugin
@@ -35,108 +40,10 @@ from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NA
 from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
 from tabsdatak.conn.common.types import GCPJson
 from tabsdatak.conn.gcs import GCSDest, GCSDestConn, GCSSrc, GCSSrcConn
-from tabsdatak.spi import DestContext, SrcPluginCtx
 
 pytestmark = pytest.mark.gcs
 
 TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
-
-
-# ---------------------------------------------------------------------------
-# Test contexts
-# ---------------------------------------------------------------------------
-
-
-class _SrcCtx(SrcPluginCtx):
-    def __init__(self, work_dir: Path) -> None:
-        self._work_dir = work_dir
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def exec_plan_id(self) -> str:
-        return "gcs-integ-exec-plan"
-
-    @property
-    def trx_id(self) -> str:
-        return "gcs-integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
-
-    @property
-    def collection_id(self) -> str:
-        return "test-collection-id"
-
-    @property
-    def collection_name(self) -> str:
-        return "test-collection"
-
-    @property
-    def function_id(self) -> str:
-        return "test-function-id"
-
-    @property
-    def function_name(self) -> str:
-        return "test-function"
-
-    def get_attr(self, attr):
-        return None
-
-    def set_attr(self, attr, val):
-        pass
-
-    def add_metadata(self, attr, val):
-        pass
-
-
-class _DestCtx(DestContext):
-    def __init__(self, work_dir: Path) -> None:
-        self._work_dir = work_dir
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def exec_plan_id(self) -> str:
-        return "gcs-integ-exec-plan"
-
-    @property
-    def trx_id(self) -> str:
-        return "gcs-integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
-
-    @property
-    def collection_id(self) -> str:
-        return "test-collection-id"
-
-    @property
-    def collection_name(self) -> str:
-        return "test-collection"
-
-    @property
-    def function_id(self) -> str:
-        return "test-function-id"
-
-    @property
-    def function_name(self) -> str:
-        return "test-function"
-
-    def get_attr(self, attr):
-        return None
-
-    def set_attr(self, attr, val):
-        pass
-
-    def add_metadata(self, attr, val):
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -158,15 +65,8 @@ def run_base(system_gcs: GcsSystem) -> str:
 
 
 @pytest.fixture
-def gcs_client(system_gcs: GcsSystem):
-    """A raw google-cloud-storage client, for downloading emitted objects to
-    verify the bytes the transporter actually wrote (the src plugin would
-    re-transcode to parquet, hiding the on-object format)."""
-    from google.cloud import storage
-
-    return storage.Client.from_service_account_info(
-        json.loads(system_gcs.service_account_key)
-    )
+def store(system_gcs: GcsSystem, object_store) -> ObjectStore:
+    return object_store(system_gcs)
 
 
 @pytest.fixture
@@ -200,18 +100,15 @@ def _upload_parquet(
     work = tmp_path / f"work-dest-{uuid.uuid4().hex}"
     work.mkdir()
     dest = GCSDest(paths=[name])
-    plugin.GCSDestPlugin().write_out(_DestCtx(work), dest_conn, dest, [Path(local)])
+    plugin.GCSDestPlugin().write_out(
+        PluginDestCtx(work), dest_conn, dest, [Path(local)]
+    )
 
 
 def _read_back(src_conn: GCSSrcConn, src: GCSSrc, tmp_path: Path):
     work = tmp_path / f"work-src-{uuid.uuid4().hex}"
     work.mkdir()
-    return plugin.GCSSrcPlugin().read_in(_SrcCtx(work), src_conn, src)
-
-
-def _download(gcs_client, bucket: str, key: str, dest: Path) -> Path:
-    gcs_client.bucket(bucket).blob(key).download_to_filename(str(dest))
-    return dest
+    return plugin.GCSSrcPlugin().read_in(PluginSrcCtx(work), src_conn, src)
 
 
 # ---------------------------------------------------------------------------
@@ -310,16 +207,14 @@ _ROWS = [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}]
 
 
 def _stage_object(
-    gcs_client, bucket: str, run_base: str, name: str, writer, tmp_path: Path
+    store: ObjectStore, run_base: str, name: str, writer, tmp_path: Path
 ) -> None:
     """Write ``_ROWS`` locally in the target format and upload the raw bytes to
     ``<run_base>/<name>`` (a raw put, so the object genuinely carries that format
     -- the dest plugin would expect parquet input and transcode)."""
     local = tmp_path / f"stage-{uuid.uuid4().hex}-{name}"
     writer(pl.DataFrame(_ROWS), local)
-    gcs_client.bucket(bucket).blob(f"{run_base}/{name}").upload_from_filename(
-        str(local)
-    )
+    store.upload(local, f"{run_base}/{name}")
 
 
 @pytest.mark.gcs
@@ -339,15 +234,14 @@ def _stage_object(
 )
 def test_src_reads_each_format(
     src_conn: GCSSrcConn,
-    gcs_client,
-    system_gcs: GcsSystem,
+    store: ObjectStore,
     run_base: str,
     tmp_path: Path,
     name: str,
     writer,
     fmt: SrcFileFormat,
 ):
-    _stage_object(gcs_client, system_gcs.bucket, run_base, name, writer, tmp_path)
+    _stage_object(store, run_base, name, writer, tmp_path)
     out = _read_back(src_conn, GCSSrc(paths=[name], format=fmt), tmp_path)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == _ROWS
@@ -355,7 +249,7 @@ def test_src_reads_each_format(
 
 # ---------------------------------------------------------------------------
 # Destination-side formats: start from a parquet (the in-flight table format),
-# write with the requested DestFileFormat, download the emitted object back with
+# write with the requested DestFileFormat, read the emitted object back with
 # the matching reader.
 # ---------------------------------------------------------------------------
 
@@ -373,8 +267,7 @@ def test_src_reads_each_format(
 )
 def test_dest_writes_each_format(
     dest_conn: GCSDestConn,
-    system_gcs: GcsSystem,
-    gcs_client,
+    store: ObjectStore,
     run_base: str,
     tmp_path: Path,
     name: str,
@@ -386,7 +279,7 @@ def test_dest_writes_each_format(
     work = tmp_path / f"work-dest-{uuid.uuid4().hex}"
     work.mkdir()
     plugin.GCSDestPlugin().write_out(
-        _DestCtx(work),
+        PluginDestCtx(work),
         dest_conn,
         GCSDest(paths=[name], format=fmt),
         [Path(in_parquet)],
@@ -394,7 +287,8 @@ def test_dest_writes_each_format(
 
     # Download the raw object to verify the transporter wrote the requested
     # format (reading via the src plugin would re-transcode to parquet).
-    fetched = tmp_path / f"fetched-{name}"
-    _download(gcs_client, system_gcs.bucket, f"{run_base}/{name}", fetched)
+    fetched = download_or_skip(
+        store, f"{run_base}/{name}", tmp_path / f"fetched-{name}"
+    )
     df = reader(fetched).select("id", "name").sort("id")
     assert df.to_dicts() == _ROWS

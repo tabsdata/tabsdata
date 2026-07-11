@@ -25,6 +25,12 @@ from pathlib import Path
 import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.s3 import S3System, s3_system
+from tabsdatax.itest.fixture.functions.files import (
+    ObjectStore,
+    PluginDestCtx,
+    PluginSrcCtx,
+    download_or_skip,
+)
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.s3._plugin as plugin
@@ -34,108 +40,10 @@ from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NA
 from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
 from tabsdatak.conn.common.types import AwsAccessSecretKey
 from tabsdatak.conn.s3 import S3Dest, S3DestConn, S3Src, S3SrcConn
-from tabsdatak.spi import DestContext, SrcPluginCtx
 
 pytestmark = pytest.mark.s3
 
 TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
-
-
-# ---------------------------------------------------------------------------
-# Test contexts
-# ---------------------------------------------------------------------------
-
-
-class _SrcCtx(SrcPluginCtx):
-    def __init__(self, work_dir: Path) -> None:
-        self._work_dir = work_dir
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def exec_plan_id(self) -> str:
-        return "s3-integ-exec-plan"
-
-    @property
-    def trx_id(self) -> str:
-        return "s3-integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
-
-    @property
-    def collection_id(self) -> str:
-        return "test-collection-id"
-
-    @property
-    def collection_name(self) -> str:
-        return "test-collection"
-
-    @property
-    def function_id(self) -> str:
-        return "test-function-id"
-
-    @property
-    def function_name(self) -> str:
-        return "test-function"
-
-    def get_attr(self, attr):
-        return None
-
-    def set_attr(self, attr, val):
-        pass
-
-    def add_metadata(self, attr, val):
-        pass
-
-
-class _DestCtx(DestContext):
-    def __init__(self, work_dir: Path) -> None:
-        self._work_dir = work_dir
-
-    @property
-    def work_dir(self) -> Path:
-        return self._work_dir
-
-    @property
-    def exec_plan_id(self) -> str:
-        return "s3-integ-exec-plan"
-
-    @property
-    def trx_id(self) -> str:
-        return "s3-integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
-
-    @property
-    def collection_id(self) -> str:
-        return "test-collection-id"
-
-    @property
-    def collection_name(self) -> str:
-        return "test-collection"
-
-    @property
-    def function_id(self) -> str:
-        return "test-function-id"
-
-    @property
-    def function_name(self) -> str:
-        return "test-function"
-
-    def get_attr(self, attr):
-        return None
-
-    def set_attr(self, attr, val):
-        pass
-
-    def add_metadata(self, attr, val):
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -160,18 +68,8 @@ def run_base(system_s3: S3System) -> str:
 
 
 @pytest.fixture
-def s3_client(system_s3: S3System):
-    """A raw boto3 client, for downloading emitted objects to verify the bytes
-    the transporter actually wrote (the src plugin would re-transcode to
-    parquet, hiding the on-object format)."""
-    import boto3
-
-    return boto3.client(
-        "s3",
-        region_name=system_s3.region or None,
-        aws_access_key_id=system_s3.access_key or None,
-        aws_secret_access_key=system_s3.secret_key or None,
-    )
+def store(system_s3: S3System, object_store) -> ObjectStore:
+    return object_store(system_s3)
 
 
 @pytest.fixture
@@ -207,13 +105,13 @@ def _upload_parquet(
     work = tmp_path / f"work-dest-{uuid.uuid4().hex}"
     work.mkdir()
     dest = S3Dest(paths=[name])
-    plugin.S3DestPlugin().write_out(_DestCtx(work), dest_conn, dest, [Path(local)])
+    plugin.S3DestPlugin().write_out(PluginDestCtx(work), dest_conn, dest, [Path(local)])
 
 
 def _read_back(src_conn: S3SrcConn, src: S3Src, tmp_path: Path):
     work = tmp_path / f"work-src-{uuid.uuid4().hex}"
     work.mkdir()
-    return plugin.S3SrcPlugin().read_in(_SrcCtx(work), src_conn, src)
+    return plugin.S3SrcPlugin().read_in(PluginSrcCtx(work), src_conn, src)
 
 
 # ---------------------------------------------------------------------------
@@ -312,14 +210,14 @@ _ROWS = [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}]
 
 
 def _stage_object(
-    s3_client, bucket: str, run_base: str, name: str, writer, tmp_path: Path
+    store: ObjectStore, run_base: str, name: str, writer, tmp_path: Path
 ) -> None:
     """Write ``_ROWS`` locally in the target format and upload the raw bytes to
     ``<run_base>/<name>`` (a raw put, so the object genuinely carries that format
     -- the dest plugin would expect parquet input and transcode)."""
     local = tmp_path / f"stage-{uuid.uuid4().hex}-{name}"
     writer(pl.DataFrame(_ROWS), local)
-    s3_client.upload_file(str(local), bucket, f"{run_base}/{name}")
+    store.upload(local, f"{run_base}/{name}")
 
 
 @pytest.mark.s3_specific
@@ -339,15 +237,14 @@ def _stage_object(
 )
 def test_src_reads_each_format(
     src_conn: S3SrcConn,
-    s3_client,
-    system_s3: S3System,
+    store: ObjectStore,
     run_base: str,
     tmp_path: Path,
     name: str,
     writer,
     fmt: SrcFileFormat,
 ):
-    _stage_object(s3_client, system_s3.bucket, run_base, name, writer, tmp_path)
+    _stage_object(store, run_base, name, writer, tmp_path)
     out = _read_back(src_conn, S3Src(paths=[name], format=fmt), tmp_path)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == _ROWS
@@ -373,8 +270,7 @@ def test_src_reads_each_format(
 )
 def test_dest_writes_each_format(
     dest_conn: S3DestConn,
-    system_s3: S3System,
-    s3_client,
+    store: ObjectStore,
     run_base: str,
     tmp_path: Path,
     name: str,
@@ -386,7 +282,7 @@ def test_dest_writes_each_format(
     work = tmp_path / f"work-dest-{uuid.uuid4().hex}"
     work.mkdir()
     plugin.S3DestPlugin().write_out(
-        _DestCtx(work),
+        PluginDestCtx(work),
         dest_conn,
         S3Dest(paths=[name], format=fmt),
         [Path(in_parquet)],
@@ -394,7 +290,8 @@ def test_dest_writes_each_format(
 
     # Download the raw object to verify the transporter wrote the requested
     # format (reading via the src plugin would re-transcode to parquet).
-    fetched = tmp_path / f"fetched-{name}"
-    s3_client.download_file(system_s3.bucket, f"{run_base}/{name}", str(fetched))
+    fetched = download_or_skip(
+        store, f"{run_base}/{name}", tmp_path / f"fetched-{name}"
+    )
     df = reader(fetched).select("id", "name").sort("id")
     assert df.to_dicts() == _ROWS
