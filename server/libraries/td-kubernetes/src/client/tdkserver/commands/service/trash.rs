@@ -163,7 +163,7 @@ async fn stop_if_possible(name: &str, verbose: bool) {
     };
 
     if provider.service_dead().await {
-        cwarn!("Skipping stop; instance is already stopped.");
+        cwarn!("Instance '{name}' is already stopped; skipping stop.");
         return;
     }
 

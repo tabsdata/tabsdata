@@ -10,7 +10,7 @@ use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
-    instance_markers, resolved_details, resolved_instance, resolved_yes,
+    instance_label, instance_markers, resolved_details, resolved_instance, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::{preview, report};
@@ -117,12 +117,18 @@ pub async fn restart_service(
         if matches!(outcome.cluster, ClusterStopOutcome::AlreadyStopped)
             && matches!(outcome.instance, InstanceStopOutcome::AlreadyStopped)
         {
-            cwarn!("Instance was already stopped.");
+            cwarn!(
+                "Instance '{}' was already stopped.",
+                instance_label(&provider.summary())
+            );
         } else {
             report::component::service::stopped_service(&provider.summary());
         }
     } else {
-        cwarn!("Instance was already stopped; starting it.");
+        cwarn!(
+            "Instance '{}' was already stopped; starting it.",
+            instance_label(&provider.summary())
+        );
     }
 
     provider.start_service(reporter).await?;

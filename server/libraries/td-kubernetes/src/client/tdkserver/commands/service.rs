@@ -19,6 +19,7 @@ pub mod unregister;
 pub mod view;
 
 use clap_derive::Args;
+use td_common::settings::DEFAULT_INSTANCE;
 
 use crate::client::session::pin::{Pins, Resolved, resolve, resolve_flag};
 use crate::client::tdkserver::arguments::ClusterArguments;
@@ -68,6 +69,13 @@ pub fn instance_markers(summary: &Summary, instance_pinned: bool) -> PinnedMarke
         instance_name: instance_pinned && summary.instance_name.is_some(),
         ..PinnedMarkers::default()
     }
+}
+
+pub fn instance_label(summary: &Summary) -> &str {
+    summary
+        .instance_name
+        .as_deref()
+        .unwrap_or(DEFAULT_INSTANCE)
 }
 
 pub fn resolved_cluster(

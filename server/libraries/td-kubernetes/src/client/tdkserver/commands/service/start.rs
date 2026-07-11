@@ -10,7 +10,7 @@ use crate::base::reporter::InteractiveReporter;
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
-    instance_markers, resolved_details, resolved_instance, resolved_yes,
+    instance_label, instance_markers, resolved_details, resolved_instance, resolved_yes,
 };
 use crate::client::tdkserver::common::prompt_yes_no;
 use crate::client::tdkserver::render::{preview, report};
@@ -86,7 +86,10 @@ pub async fn command_start(arguments: StartArguments, globals: &GlobalArguments)
     provider.ensure_startable_service().await?;
 
     if provider.service_alive().await {
-        cwarn!("Instance is already started.");
+        cwarn!(
+            "Instance '{}' is already started.",
+            instance_label(&provider.summary())
+        );
         return Ok(());
     }
 
