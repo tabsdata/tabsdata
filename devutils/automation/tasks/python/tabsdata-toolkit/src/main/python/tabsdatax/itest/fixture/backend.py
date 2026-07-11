@@ -16,12 +16,22 @@ A test declares the backends it needs by name with the per-type decorators
 Each decorator emits a ``tabsdata_backend(name, dataclass)`` marker; the
 ``system_<name>`` / ``domain_<name>`` fixtures are generated at plugin import
 from the store (``$TD_BACKENDS_DIR/{systems,domains}/<name>``, populated by
-``tdx-system`` / ``tdx-domain`` before pytest starts) and enforce that the test
-declared the backend. Resolution decrypts the descriptor with
-``$TD_BACKENDS_CRYPTO_KEY``, checks its role + ``system_type`` match the
-dataclass, and builds it — each
-field pulled from the descriptor key of the same (upper-cased) name, pydantic
-coercing the type. Loads are lazy and cached for the session.
+``tdx-system`` / ``tdx-domain`` before pytest starts). Resolution decrypts the
+descriptor with ``$TD_BACKENDS_CRYPTO_KEY``, checks its role + ``system_type``
+match the dataclass, and builds it — each field pulled from the descriptor key
+of the same (upper-cased) name, pydantic coercing the type. Loads are lazy and
+cached for the session.
+
+The declaration and the fixtures a test uses are held in exact agreement at
+collection time, keyed by ``(family, name)`` where family is ``system`` or
+``domain`` (so ``system_orders`` and ``domain_orders`` are distinct). The check
+runs in both directions and aborts the session before any test body when they
+disagree:
+
+* every backend a test **declares** (via a decorator) must appear as its
+  ``system_<name>`` / ``domain_<name>`` fixture in the test's **own signature**,
+  even when only a helper fixture reads it; and
+* every backend **reached** anywhere in the fixture graph must be declared.
 
 Env: ``TD_TEST_ON_MISSING_BACKEND`` = ``skip`` | ``fail`` (default) when a
 descriptor is absent; ``TD_TEST_SKIP_BACKENDS`` = comma-separated vendor
@@ -47,6 +57,9 @@ DOMAIN = "domain"
 _DESCRIPTOR_ROLE = {SYSTEM: "sys", DOMAIN: "env"}
 
 MARKER = "tabsdata_backend"
+
+SYSTEM_FIXTURE_PREFIX = "system_"
+DOMAIN_FIXTURE_PREFIX = "domain_"
 
 
 class System:
@@ -161,6 +174,34 @@ def declared_backends(request) -> dict[str, type]:
     return declared
 
 
+def _kind_of(cls: type) -> str:
+    if issubclass(cls, System):
+        return SYSTEM
+    if issubclass(cls, Domain):
+        return DOMAIN
+    pytest.fail(f"{cls.__name__} must subclass System or Domain")
+
+
+def marker_backends(node) -> set[tuple[str, str]]:
+    """The ``(kind, name)`` pairs a test declares via the backend markers."""
+    declared: set[tuple[str, str]] = set()
+    for marker in node.iter_markers(MARKER):
+        name, cls = marker.args
+        declared.add((_kind_of(cls), name))
+    return declared
+
+
+def requested_backends(fixturenames) -> set[tuple[str, str]]:
+    """The ``(kind, name)`` pairs reachable through the given fixture names."""
+    requested: set[tuple[str, str]] = set()
+    for name in fixturenames:
+        if name.startswith(SYSTEM_FIXTURE_PREFIX):
+            requested.add((SYSTEM, name[len(SYSTEM_FIXTURE_PREFIX) :]))
+        elif name.startswith(DOMAIN_FIXTURE_PREFIX):
+            requested.add((DOMAIN, name[len(DOMAIN_FIXTURE_PREFIX) :]))
+    return requested
+
+
 def resolve_declared(request, name: str, expected: type | None = None):
     declared = declared_backends(request)
     if name not in declared:
@@ -212,5 +253,54 @@ def pytest_configure(config):
         "markers",
         f"{MARKER}(name, cls): the test uses the tdx-provisioned backend `name`"
         " loaded as `cls`; read it through the `system_<name>` /"
-        " `domain_<name>` fixtures.",
+        " `domain_<name>` fixtures. Every declared backend must appear in the"
+        " test's own signature (even if only forwarded to a helper), and every"
+        " backend reached anywhere in the fixture graph must be declared.",
     )
+
+
+def _kind_prefix(kind: str) -> str:
+    return SYSTEM_FIXTURE_PREFIX if kind == SYSTEM else DOMAIN_FIXTURE_PREFIX
+
+
+def direct_argnames(item) -> tuple[str, ...]:
+    info = getattr(item, "_fixtureinfo", None)
+    return tuple(getattr(info, "argnames", ()))
+
+
+def pytest_collection_modifyitems(config, items):
+    violations: list[str] = []
+    for item in items:
+        if not hasattr(item, "iter_markers"):
+            continue
+        declared = marker_backends(item)
+        reached = requested_backends(getattr(item, "fixturenames", ()))
+        signature = requested_backends(direct_argnames(item))
+        undeclared = reached - declared
+        unlisted = declared - signature
+        problems: list[str] = []
+        if undeclared:
+            requested = sorted(
+                f"{_kind_prefix(kind)}{name}" for kind, name in undeclared
+            )
+            problems.append(
+                f"requests backend fixture(s) {requested} without declaring them "
+                f"via @<type>_system / @<type>_domain"
+            )
+        if unlisted:
+            missing = sorted(
+                f"{_kind_prefix(kind)}{name}" for kind, name in unlisted
+            )
+            problems.append(
+                f"declares backend(s) that the test signature does not request; "
+                f"add the {missing} fixture argument(s) to the test even if only "
+                f"to forward them"
+            )
+        if problems:
+            violations.append(f"{item.nodeid}: {'; '.join(problems)}")
+    if violations:
+        listing = "\n  ".join(violations)
+        raise pytest.UsageError(
+            "tabsdata_backend contract violated (declared backends must match "
+            f"requested backend fixtures exactly):\n  {listing}"
+        )

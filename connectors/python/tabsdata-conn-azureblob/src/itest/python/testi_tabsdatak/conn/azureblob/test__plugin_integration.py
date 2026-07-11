@@ -127,7 +127,10 @@ def _read_back(src_conn: AzureBlobSrcConn, src: AzureBlobSrc, tmp_path: Path):
 @pytest.mark.azureblob
 @azureblob_system("azureblob")
 def test_dest_then_src_round_trip(
-    src_conn: AzureBlobSrcConn, dest_conn: AzureBlobDestConn, tmp_path: Path
+    system_azureblob: AzureblobSystem,
+    src_conn: AzureBlobSrcConn,
+    dest_conn: AzureBlobDestConn,
+    tmp_path: Path,
 ):
     _upload_parquet(
         dest_conn,
@@ -154,7 +157,10 @@ def test_dest_then_src_round_trip(
 @pytest.mark.azureblob
 @azureblob_system("azureblob")
 def test_src_wildcard_in_basename_matches_multiple_objects(
-    src_conn: AzureBlobSrcConn, dest_conn: AzureBlobDestConn, tmp_path: Path
+    system_azureblob: AzureblobSystem,
+    src_conn: AzureBlobSrcConn,
+    dest_conn: AzureBlobDestConn,
+    tmp_path: Path,
 ):
     for name in ("a.parquet", "b.parquet", "c.parquet"):
         _upload_parquet(dest_conn, name, [{"name": name}], tmp_path)
@@ -171,7 +177,10 @@ def test_src_wildcard_in_basename_matches_multiple_objects(
 @pytest.mark.azureblob
 @azureblob_system("azureblob")
 def test_src_wildcard_with_no_matches_returns_empty_slot(
-    src_conn: AzureBlobSrcConn, dest_conn: AzureBlobDestConn, tmp_path: Path
+    system_azureblob: AzureblobSystem,
+    src_conn: AzureBlobSrcConn,
+    dest_conn: AzureBlobDestConn,
+    tmp_path: Path,
 ):
     _upload_parquet(dest_conn, "only.csv", [{"name": "x"}], tmp_path)
 
@@ -189,7 +198,10 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(
 @pytest.mark.azureblob
 @azureblob_system("azureblob")
 def test_src_initial_last_modified_filters_out_older_objects(
-    src_conn: AzureBlobSrcConn, dest_conn: AzureBlobDestConn, tmp_path: Path
+    system_azureblob: AzureblobSystem,
+    src_conn: AzureBlobSrcConn,
+    dest_conn: AzureBlobDestConn,
+    tmp_path: Path,
 ):
     _upload_parquet(dest_conn, "old.parquet", [{"name": "old"}], tmp_path)
     time.sleep(2)
@@ -241,6 +253,7 @@ def _stage_object(
     ],
 )
 def test_src_reads_each_format(
+    system_azureblob: AzureblobSystem,
     src_conn: AzureBlobSrcConn,
     store: ObjectStore,
     run_base: str,
@@ -274,6 +287,7 @@ def test_src_reads_each_format(
     ],
 )
 def test_dest_writes_each_format(
+    system_azureblob: AzureblobSystem,
     dest_conn: AzureBlobDestConn,
     store: ObjectStore,
     run_base: str,
