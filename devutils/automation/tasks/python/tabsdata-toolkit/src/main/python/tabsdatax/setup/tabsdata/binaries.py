@@ -64,6 +64,10 @@ def collect_group_datafiles(
         if km_subpath is not None:
             km_root = resolve_km_project_relative()
             if km_root is None:
+                if require_server_binaries:
+                    raise FileNotFoundError(
+                        f"Binary group '{group_name}' km project not found."
+                    )
                 logger.debug(
                     f"Binary group '{group_name}' km project not found; skipping."
                 )
@@ -75,6 +79,11 @@ def collect_group_datafiles(
             folder = default_target_folder
 
         if (km_subpath is not None or source is not None) and not os.path.isdir(folder):
+            if require_server_binaries:
+                raise FileNotFoundError(
+                    f"Binary group '{group_name}' source folder '{folder}' does"
+                    " not exist."
+                )
             logger.debug(
                 f"Binary group '{group_name}' source folder '{folder}' does"
                 " not exist; skipping."

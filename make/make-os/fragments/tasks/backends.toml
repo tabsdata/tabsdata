@@ -37,6 +37,16 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    skip_secrets_load = get_env TD_SKIP_SECRETS_LOAD
+    skip_secrets_load_true = eq ${skip_secrets_load} "true"
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    skip_load = set ${skip_secrets_load_true} or ${on_ga_true}
+    if ${skip_load}
+        info "🔑 Skipping the 1Password load; assuming TD_BACKENDS_CRYPTO_KEY is already provided"
+        exit 0
+    end
+
     crypto_key = get_env TD_BACKENDS_CRYPTO_KEY
     crypto_key = trim ${crypto_key}
     if is_empty ${crypto_key}
@@ -159,6 +169,16 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+
+    skip_secrets_load = get_env TD_SKIP_SECRETS_LOAD
+    skip_secrets_load_true = eq ${skip_secrets_load} "true"
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    skip_load = set ${skip_secrets_load_true} or ${on_ga_true}
+    if ${skip_load}
+        info "🔐 Skipping the 1Password load; assuming backend systems secrets are already provided"
+        exit 0
+    end
 
     systems_marker = get_env TD_BACKENDS_SYSTEMS
     systems_marker = trim ${systems_marker}
