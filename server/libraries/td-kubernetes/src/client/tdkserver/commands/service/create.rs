@@ -146,6 +146,7 @@ pub async fn create_instance(
         InstanceArguments::new(Some(settings.name.clone())),
         verbose,
         kminus_api_port(&assigned),
+        settings.loglevel,
     )
     .await?;
 

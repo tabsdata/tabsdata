@@ -10,6 +10,7 @@ use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::Cancelled;
 use tracing::warn;
 
+use crate::base::constants::LogLevel;
 #[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::client::registry::instance_folder;
@@ -40,6 +41,19 @@ pub struct QuickstartArguments {
         long_help = "Name of the instance to initialize, create and start. Defaults to 'tabsdata'."
     )]
     pub instance: Option<String>,
+
+    #[arg(
+        long,
+        name = "loglevel",
+        value_enum,
+        required = false,
+        display_order = 75,
+        long_help = "Log level for the kminus orchestrator and pod runner. \
+                     Defaults to 'debug'. Only valid with the 'kminus' provider.\n\n\
+                     Example:\n  \
+                     tdk quickstart --provider kminus --loglevel info"
+    )]
+    pub loglevel: Option<LogLevel>,
 
     #[command(flatten)]
     pub cluster: ClusterArguments,
@@ -127,6 +141,7 @@ pub async fn command_quickstart(
         save,
         details,
         yes,
+        loglevel,
     } = arguments;
 
     #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
@@ -154,7 +169,7 @@ pub async fn command_quickstart(
     let preexisting = folder.exists();
 
     let outcome = run_quickstart(
-        instance, cluster, port, save, details, yes, &overrides, globals,
+        instance, cluster, port, save, details, yes, loglevel, &overrides, globals,
     )
     .await;
 
@@ -191,6 +206,7 @@ async fn run_quickstart(
     save: Option<bool>,
     details: Option<bool>,
     yes: Option<bool>,
+    loglevel: Option<LogLevel>,
     overrides: &HashMap<String, String>,
     globals: &GlobalArguments,
 ) -> CommandResult {
@@ -201,6 +217,7 @@ async fn run_quickstart(
             details,
             save,
             yes,
+            loglevel,
         },
         globals,
     )
@@ -226,6 +243,7 @@ async fn run_quickstart(
     command_start(
         StartArguments {
             instance,
+            loglevel: None,
             details,
             yes,
         },

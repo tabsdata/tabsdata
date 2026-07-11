@@ -67,7 +67,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     let yes = resolved_yes(yes, &pins);
     let verbose = globals.verbose;
 
-    let provider = provider_for_instance(instance.value, verbose).await?;
+    let provider = provider_for_instance(instance.value, verbose, None).await?;
     provider.ensure_stoppable_service().await?;
 
     if provider.service_dead().await {

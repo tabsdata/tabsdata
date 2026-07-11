@@ -11,7 +11,7 @@ use kube::Client;
 use kube::config::{Config, KubeConfigOptions, Kubeconfig};
 use td_python::python::resolve_python_binary;
 
-use crate::base::constants::{FOLDER_PROFILE, FOLDER_STAGING};
+use crate::base::constants::{DEFAULT_LOG_LEVEL, FOLDER_PROFILE, FOLDER_STAGING, LogLevel};
 use crate::base::error::provider::ProviderError;
 use crate::core::system::exit::CommandResult;
 use crate::core::system::stream::Silencer;
@@ -27,6 +27,7 @@ const KM_START_SUBCOMMAND: &str = "start";
 const KM_WORKDIR_ARGUMENT: &str = "--workdir";
 const KM_IMAGESDIR_ARGUMENT: &str = "--imagesdir";
 const KM_PORTSTART_ARGUMENT: &str = "--portstart";
+const KM_LOGLEVEL_ARGUMENT: &str = "--loglevel";
 
 const KM_CONFIG_FOLDER: &str = "config";
 const KM_DATA_FOLDER: &str = "data";
@@ -44,6 +45,7 @@ pub struct KminusCluster {
     images_path: PathBuf,
     verbose: bool,
     portstart: Option<u16>,
+    loglevel: Option<LogLevel>,
 }
 
 impl KminusCluster {
@@ -52,12 +54,14 @@ impl KminusCluster {
         images_path: impl Into<PathBuf>,
         verbose: bool,
         portstart: Option<u16>,
+        loglevel: Option<LogLevel>,
     ) -> Self {
         Self {
             path: path.into(),
             images_path: images_path.into(),
             verbose,
             portstart,
+            loglevel,
         }
     }
 
@@ -67,6 +71,10 @@ impl KminusCluster {
 
     pub fn images_path(&self) -> &Path {
         &self.images_path
+    }
+
+    pub fn loglevel(&self) -> LogLevel {
+        self.loglevel.unwrap_or(DEFAULT_LOG_LEVEL)
     }
 
     pub fn sysconfig_path(&self) -> PathBuf {
@@ -108,6 +116,9 @@ impl KminusCluster {
             .arg(KM_IMAGESDIR_ARGUMENT)
             .arg(self.images_path())
             .stdin(Stdio::null());
+        if let Some(loglevel) = self.loglevel {
+            command.arg(KM_LOGLEVEL_ARGUMENT).arg(loglevel.as_str());
+        }
         if self.verbose {
             command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
         } else {

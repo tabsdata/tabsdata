@@ -184,6 +184,7 @@ impl Provider for DockerProvider {
             cluster_url: Some(self.config.cluster_url.to_string()),
             cluster_name: Some(self.cluster_name.clone()),
             namespace: Some(self.config.default_namespace.clone()),
+            loglevel: None,
         }
     }
 

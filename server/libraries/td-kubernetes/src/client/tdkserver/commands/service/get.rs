@@ -65,7 +65,7 @@ pub async fn command_get(arguments: GetArguments, globals: &GlobalArguments) -> 
     let instance = resolved_instance(instance, &pins);
     let verbose = globals.verbose;
 
-    let provider = provider_for_instance(instance.value, verbose).await?;
+    let provider = provider_for_instance(instance.value, verbose, None).await?;
     let name = provider.summary().instance_name.unwrap_or_default();
 
     let profile = load_profile(provider.cluster_provider(), verbose)?;

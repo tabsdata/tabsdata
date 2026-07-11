@@ -10,7 +10,7 @@ use td_common::status::ExitStatus::{Cancelled, GeneralError, NoAction};
 use td_error::TdError;
 use tracing::info;
 
-use crate::base::constants::KUBECONFIG_FILE;
+use crate::base::constants::{DEFAULT_LOG_LEVEL, KUBECONFIG_FILE, LogLevel};
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::{InteractiveReporter, Reporter};
@@ -47,6 +47,19 @@ pub struct InitArguments {
 
     #[command(flatten)]
     pub cluster: ClusterArguments,
+
+    #[arg(
+        long,
+        name = "loglevel",
+        value_enum,
+        required = false,
+        display_order = 20,
+        long_help = "Log level for the kminus orchestrator and pod runner. \
+                     Defaults to 'debug'. Only valid with the 'kminus' provider.\n\n\
+                     Example:\n  \
+                     tdk init --provider kminus --loglevel info"
+    )]
+    pub loglevel: Option<LogLevel>,
 
     #[arg(
         long,
@@ -92,6 +105,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         save,
         details,
         yes,
+        loglevel,
     } = arguments;
 
     let pins = PinContext::pins();
@@ -111,6 +125,19 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
     let provider = cluster.provider.unwrap_or(DEFAULT_PROVIDER);
     cluster.provider = Some(provider);
 
+    if provider != ClusterProvider::Kminus && loglevel.is_some() {
+        return abort_with(
+            NoAction,
+            ProviderError::ArgumentNotValidForProvider {
+                argument: "loglevel".to_owned(),
+                provider: provider.as_str().to_owned(),
+            },
+        );
+    }
+    let loglevel_defaulted = loglevel.is_none();
+    let loglevel =
+        (provider == ClusterProvider::Kminus).then(|| loglevel.unwrap_or(DEFAULT_LOG_LEVEL));
+
     if details.value {
         preview::init_service(
             &instance,
@@ -119,6 +146,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
             provider.as_str(),
             cluster_pinned.provider,
             provider_defaulted,
+            loglevel.map(|level| (level.as_str(), loglevel_defaulted)),
         );
     }
     if !yes.value && !prompt_yes_no("Proceed with the initialization?") {
@@ -145,6 +173,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
         cluster,
         InstanceArguments::new(Some(instance.clone())),
         verbose,
+        None,
         None,
     )
     .await?;
@@ -192,6 +221,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
             resolved,
         },
         ports: Vec::new(),
+        loglevel,
     };
     if let Err(error) = settings.save() {
         step.fail();

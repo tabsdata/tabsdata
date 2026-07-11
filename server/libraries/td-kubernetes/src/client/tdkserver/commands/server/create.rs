@@ -54,7 +54,7 @@ pub async fn command_create(
         yes,
     } = arguments;
 
-    let provider = provider_for(cluster, instance, globals.verbose, None).await?;
+    let provider = provider_for(cluster, instance, globals.verbose, None, None).await?;
     provider.ensure_creatable_server().await?;
 
     if details {

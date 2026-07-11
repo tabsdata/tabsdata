@@ -16,8 +16,8 @@ use td_python::python::get_python_scripts_folder;
 use crate::base::constants::FOLDER_PYENV_AG;
 use crate::base::constants::{
     CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, EDIT_FOLDER, FOLDER_PYENV_TD, FOLDER_PYTHON,
-    FOLDER_RUNTIMES, INIT_FOLDER, INPUT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE, SETTINGS_FILE,
-    STAGE_FOLDER, TRASH_FOLDER, VENV_ACTIVATE_FILE,
+    FOLDER_RUNTIMES, INIT_FOLDER, INPUT_FOLDER, KUBE_FOLDER, KUBECONFIG_FILE, LogLevel,
+    SETTINGS_FILE, STAGE_FOLDER, TRASH_FOLDER, VENV_ACTIVATE_FILE,
 };
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
@@ -141,6 +141,8 @@ pub struct InstanceSettings {
     pub cluster: ClusterViews,
     #[serde(default)]
     pub ports: Vec<AssignedPort>,
+    #[serde(default)]
+    pub loglevel: Option<LogLevel>,
 }
 
 impl InstanceSettings {

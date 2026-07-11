@@ -4,7 +4,9 @@
 
 use std::time::Duration;
 
+use clap_derive::ValueEnum;
 use const_format::concatcp;
+use serde::{Deserialize, Serialize};
 
 pub const ENV_KUBECONFIG: &str = "KUBECONFIG";
 
@@ -146,3 +148,28 @@ pub const POD_PHASE_FAILED: &str = "Failed";
 pub const LOG_POD_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 pub const KMINUS_MIN_NOFILE: u64 = 65536;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[value(rename_all = "lower")]
+pub enum LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl LogLevel {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Trace => "trace",
+            Self::Debug => "debug",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
+        }
+    }
+}
+
+pub const DEFAULT_LOG_LEVEL: LogLevel = LogLevel::Debug;

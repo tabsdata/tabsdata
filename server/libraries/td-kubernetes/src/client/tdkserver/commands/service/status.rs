@@ -19,7 +19,7 @@ pub async fn command_status(
     let pins = PinContext::pins();
     let instance = resolved_instance(arguments.instance, &pins);
     let verbose = globals.verbose;
-    let provider = provider_for_instance(instance.value, verbose).await?;
+    let provider = provider_for_instance(instance.value, verbose, None).await?;
     let context = provider.kube_context().await?;
     let pods = list_pods(&context).await?;
     let jobs = list_jobs(&context).await?;

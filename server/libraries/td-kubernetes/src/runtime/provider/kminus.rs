@@ -22,7 +22,7 @@ use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, DATABASE_HOST_LOOPBACK, DEFAULT_NAMESPACE, FOLDER_CLUSTER,
     FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
     FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA,
+    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -127,6 +127,7 @@ impl KminusProvider {
         instance: InstanceArguments,
         verbose: bool,
         portstart: Option<u16>,
+        loglevel: Option<LogLevel>,
     ) -> CommandResult<Self> {
         if cluster.context.is_some()
             || cluster.kubeconfig.is_some()
@@ -162,6 +163,7 @@ impl KminusProvider {
             folder.join(FOLDER_IMAGES),
             verbose,
             portstart,
+            loglevel,
         );
         let kminus_instance = KminusInstance::new(
             kminus_cluster.kubefile(),
@@ -302,6 +304,7 @@ impl Provider for KminusProvider {
             cluster_url: Some(kube.cluster_url),
             cluster_name: Some(kube.cluster),
             namespace: Some(kube.namespace),
+            loglevel: Some(self.cluster.loglevel()),
         }
     }
 

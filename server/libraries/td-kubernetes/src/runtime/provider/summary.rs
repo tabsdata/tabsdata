@@ -4,6 +4,7 @@
 
 use std::path::PathBuf;
 
+use crate::base::constants::LogLevel;
 use crate::runtime::provider::ClusterProvider;
 
 #[derive(Debug, Clone)]
@@ -16,4 +17,5 @@ pub struct Summary {
     pub cluster_url: Option<String>,
     pub cluster_name: Option<String>,
     pub namespace: Option<String>,
+    pub loglevel: Option<LogLevel>,
 }

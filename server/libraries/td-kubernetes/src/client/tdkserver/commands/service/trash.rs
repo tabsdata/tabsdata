@@ -151,7 +151,7 @@ async fn stop_if_possible(name: &str, verbose: bool) {
         return;
     }
 
-    let provider = match provider_for_instance(Some(name.to_owned()), verbose).await {
+    let provider = match provider_for_instance(Some(name.to_owned()), verbose, None).await {
         Ok(provider) => provider,
         Err(error) => {
             cwarn!(

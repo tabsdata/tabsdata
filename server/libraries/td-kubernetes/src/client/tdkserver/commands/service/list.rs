@@ -21,7 +21,7 @@ pub async fn command_list(globals: &GlobalArguments) -> CommandResult {
     let mut rows = Vec::with_capacity(listings.len());
     for listing in &listings {
         let (alive, url) =
-            match provider_for_instance(Some(listing.name.clone()), globals.verbose).await {
+            match provider_for_instance(Some(listing.name.clone()), globals.verbose, None).await {
                 Ok(provider) => {
                     if provider.service_alive().await {
                         let url = match provider.kube_context().await {

@@ -27,7 +27,7 @@ pub async fn command_info(
     let settings = InstanceSettings::load(&name)?;
     let folder = instance_folder(&name)?;
 
-    let alive = match provider_for_instance(Some(name.clone()), verbose).await {
+    let alive = match provider_for_instance(Some(name.clone()), verbose, None).await {
         Ok(provider) => Some(provider.service_alive().await),
         Err(_) => None,
     };

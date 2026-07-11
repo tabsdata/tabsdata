@@ -8,6 +8,7 @@ use std::path::Path;
 
 use tracing::{info, warn};
 
+use crate::base::constants::DEFAULT_LOG_LEVEL;
 #[cfg(feature = "enterprise")]
 use crate::client::registry::ag_venv_activate_file;
 use crate::client::registry::{InstanceSettings, td_venv_activate_file};
@@ -21,6 +22,7 @@ use crate::client::tdkserver::render::report::helper::table::{
 };
 use crate::core::system::exit::CommandResult;
 use crate::runtime::instance::ports::{AssignedPort, apiserver_public_port, database_port};
+use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::summary::Summary;
 
 fn list_columns() -> [ReportColumn<'static>; 8] {
@@ -140,6 +142,8 @@ pub fn instance_info(settings: &InstanceSettings, folder: &Path, alive: Option<b
         cluster_url: resolved.url.clone(),
         cluster_name: resolved.cluster.clone(),
         namespace: resolved.namespace.clone(),
+        loglevel: (settings.provider == ClusterProvider::Kminus)
+            .then(|| settings.loglevel.unwrap_or(DEFAULT_LOG_LEVEL)),
     };
 
     let status = match alive {
@@ -228,6 +232,15 @@ pub fn restarted_service(summary: &Summary) {
 pub fn initialized_service(settings: &InstanceSettings) {
     info!("Initialized tabsdata instance '{}'.", settings.name);
     info!("  - state........: {}", settings.state.as_str());
+    if settings.provider == ClusterProvider::Kminus {
+        match settings.loglevel {
+            Some(loglevel) => info!("  - log level....: {}", loglevel.as_str()),
+            None => info!(
+                "  - log level....: {} (default)",
+                DEFAULT_LOG_LEVEL.as_str()
+            ),
+        }
+    }
     let resolved = &settings.cluster.resolved;
     let summary = Summary {
         provider: settings.provider,
@@ -238,6 +251,7 @@ pub fn initialized_service(settings: &InstanceSettings) {
         cluster_url: resolved.url.clone(),
         cluster_name: resolved.cluster.clone(),
         namespace: resolved.namespace.clone(),
+        loglevel: None,
     };
     render_summary_lines(&summary);
     warn!(

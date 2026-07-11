@@ -5,6 +5,7 @@
 use clap_derive::Args;
 use tracing::info;
 
+use crate::base::constants::LogLevel;
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
@@ -28,6 +29,20 @@ pub struct RestartArguments {
         long_help = "Name of the instance to restart. Defaults to 'tabsdata'."
     )]
     pub instance: Option<String>,
+
+    #[arg(
+        long,
+        name = "loglevel",
+        value_enum,
+        required = false,
+        display_order = 20,
+        long_help = "Log level for the kminus orchestrator and pod runner. When given, \
+                     it is applied and saved as the instance's new log level; otherwise \
+                     the saved value is used. Only valid with the 'kminus' provider.\n\n\
+                     Example:\n  \
+                     tdk restart --loglevel info"
+    )]
+    pub loglevel: Option<LogLevel>,
 
     #[arg(
         long,
@@ -60,6 +75,7 @@ pub async fn command_restart(
 ) -> CommandResult {
     let RestartArguments {
         instance,
+        loglevel,
         details,
         yes,
     } = arguments;
@@ -70,7 +86,7 @@ pub async fn command_restart(
     let yes = resolved_yes(yes, &pins);
     let verbose = globals.verbose;
 
-    let provider = provider_for_instance(instance.value, verbose).await?;
+    let provider = provider_for_instance(instance.value, verbose, loglevel).await?;
     provider.ensure_startable_service().await?;
 
     let not_dead = !provider.service_dead().await;

@@ -21,7 +21,7 @@ use kube::Config;
 use serde::{Deserialize, Serialize};
 use td_common::settings::DEFAULT_INSTANCE;
 
-use crate::base::constants::KMINUS_MIN_NOFILE;
+use crate::base::constants::{KMINUS_MIN_NOFILE, LogLevel};
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
 use crate::client::registry::{ClusterViews, InstanceSettings, InstanceState};
@@ -457,6 +457,7 @@ pub async fn provider_for(
     instance: InstanceArguments,
     verbose: bool,
     portstart: Option<u16>,
+    loglevel: Option<LogLevel>,
 ) -> CommandResult<Box<dyn Provider>> {
     let provider = cluster
         .provider
@@ -464,7 +465,7 @@ pub async fn provider_for(
     match provider {
         ClusterProvider::Kminus => {
             check_kminus_ulimit()?;
-            let provider = KminusProvider::build(cluster, instance, verbose, portstart)?;
+            let provider = KminusProvider::build(cluster, instance, verbose, portstart, loglevel)?;
             Ok(Box::new(provider))
         }
         ClusterProvider::Docker => {
@@ -510,7 +511,7 @@ pub async fn provider_for_or_tdkcontext(
     verbose: bool,
 ) -> CommandResult<Box<dyn Provider>> {
     if cluster.provider.is_some() {
-        return provider_for(cluster, instance, verbose, None).await;
+        return provider_for(cluster, instance, verbose, None, None).await;
     }
     Err(ProviderError::NoClusterSpecification.into())
 }
@@ -518,9 +519,21 @@ pub async fn provider_for_or_tdkcontext(
 pub async fn provider_for_instance(
     instance: Option<String>,
     verbose: bool,
+    loglevel: Option<LogLevel>,
 ) -> CommandResult<Box<dyn Provider>> {
     let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
-    let settings = InstanceSettings::load_required(&instance, &[InstanceState::Created])?;
+    let mut settings = InstanceSettings::load_required(&instance, &[InstanceState::Created])?;
+    if let Some(loglevel) = loglevel {
+        if settings.provider != ClusterProvider::Kminus {
+            return Err(ProviderError::ArgumentNotValidForProvider {
+                argument: "loglevel".to_owned(),
+                provider: settings.provider.as_str().to_owned(),
+            }
+            .into());
+        }
+        settings.loglevel = Some(loglevel);
+        settings.save()?;
+    }
     let cluster = ClusterArguments {
         provider: Some(settings.provider),
         context: None,
@@ -533,6 +546,7 @@ pub async fn provider_for_instance(
         InstanceArguments::new(Some(settings.name.clone())),
         verbose,
         kminus_api_port(&settings.ports),
+        settings.loglevel,
     )
     .await
 }

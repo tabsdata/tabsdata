@@ -77,6 +77,7 @@ pub fn init_service(
     provider: &str,
     provider_pinned: bool,
     provider_defaulted: bool,
+    loglevel: Option<(&str, bool)>,
 ) {
     info!("About to initialize tabsdata instance:");
     info!(
@@ -87,6 +88,12 @@ pub fn init_service(
         "  - provider.....: {provider}{}",
         origin_marker(provider_pinned, provider_defaulted)
     );
+    if let Some((loglevel, loglevel_defaulted)) = loglevel {
+        info!(
+            "  - log level....: {loglevel}{}",
+            origin_marker(false, loglevel_defaulted)
+        );
+    }
 }
 
 fn origin_marker(pinned: bool, defaulted: bool) -> &'static str {
@@ -154,6 +161,9 @@ pub(crate) fn render_summary_lines(summary: &Summary) {
     if let Some(namespace) = &summary.namespace {
         info!("  - namespace....: {namespace}");
     }
+    if let Some(loglevel) = summary.loglevel {
+        info!("  - log level....: {}", loglevel.as_str());
+    }
 }
 
 fn pinned_suffix(pinned: bool) -> &'static str {
@@ -199,5 +209,8 @@ pub(crate) fn render_marked_summary_lines(summary: &Summary, markers: &PinnedMar
             "  - namespace....: {namespace}{}",
             pinned_suffix(markers.namespace)
         );
+    }
+    if let Some(loglevel) = summary.loglevel {
+        info!("  - log level....: {}", loglevel.as_str());
     }
 }
