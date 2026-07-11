@@ -96,7 +96,9 @@ def _emit(document, file):
 def template_(ctx, type_, file):
     """Print a fill-in connection template for a connector type"""
     info = _resolve(ctx, type_)
-    _emit(template.build_template(info.conn_cls), file)
+    # Show every config: required fields as fill-ins, optional ones with their
+    # default (default-None fields commented out so the document stays valid).
+    _emit(template.build_template(info.conn_cls, all_fields=True), file)
 
 
 @connection.command()

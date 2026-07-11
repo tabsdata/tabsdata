@@ -362,25 +362,55 @@ def _placeholder_value(members: list[Any], default: Any, path: str) -> Any:
     return _scalar_placeholder([members[0]], default, path)
 
 
+def _expected_note(members: list[Any]) -> Optional[str]:
+    """A very short 'what's expected' note for a union / dict / list / choice
+    field — shown on optional fields and commented-out ones. ``None`` for a
+    plain single-form scalar."""
+    accepts = _type_comment(members)
+    if accepts is not None:
+        return accepts
+    choices: list[str] = []
+    for m in members:
+        if typing.get_origin(m) is typing.Literal:
+            choices.extend(str(a) for a in typing.get_args(m))
+    if choices:
+        return "one of: " + " | ".join(choices)
+    for m in members:
+        origin = typing.get_origin(m)
+        if origin is dict or m is dict:
+            return "a dict (str-keyed)"
+        if origin in (list, tuple, set, frozenset) or m in (list, tuple, set):
+            return "a list"
+    return None
+
+
 def _field_comment_lines(
-    name: str, members: list[Any], value: Any
+    name: str, members: list[Any], value: Any, required: bool, default: Any
 ) -> Optional[list[str]]:
-    """The content lines of the comment block shown above a fill-in field
-    (borders are added by :func:`_set_block_comment`)::
+    """The content lines of the comment block shown above a real (uncommented)
+    field (borders are added by :func:`_set_block_comment`). A required fill-in
+    placeholder gets::
 
         # accepts: <value> | secret:<value>   (only when >1 accepted form)
         # replace <value> with the actual <name>
 
-    Returns ``None`` for a field rendering a concrete sample (a default, enum,
-    int, ...) -- only the ``<value>`` placeholders are annotated."""
-    if not isinstance(value, SingleQuotedScalarString):
-        return None
-    lines = []
-    accepts = _type_comment(members)
-    if accepts is not None:
-        lines.append(accepts)
-    lines.append(f"replace <value> with the actual {name}")
-    return lines
+    an optional field shown with its default gets an ``optional (default: …)``
+    note plus a short type note. ``None`` for a required field rendering a bare
+    concrete sample."""
+    if isinstance(value, SingleQuotedScalarString):
+        lines = []
+        accepts = _type_comment(members)
+        if accepts is not None:
+            lines.append(accepts)
+        lines.append(f"replace <value> with the actual {name}")
+        return lines
+    if not required:
+        lines = [f"optional (default: {default!r})"]
+        note = _expected_note(members)
+        if note is not None:
+            lines.append(note)
+        return lines
+    return None
 
 
 def _set_block_comment(
@@ -397,16 +427,78 @@ def _set_block_comment(
     cm.ca.items[key] = [None, tokens, None, None]
 
 
+def _strip_comments(node: Any) -> Any:
+    """Recursively drop attached comments, so a commented-out nested field's
+    sample renders as plain structure (not comments-within-comments)."""
+    if isinstance(node, CommentedMap):
+        node.ca.items.clear()
+        for v in node.values():
+            _strip_comments(v)
+    return node
+
+
+def _commented_lines(
+    name: str, first: Any, members: list[Any], indent: int
+) -> list[str]:
+    """Content lines (no leading ``#``) for an optional field whose default is
+    None, rendered commented-out: a short note, then the field as it would be
+    written (a scalar sample, or the full nested envelope)."""
+    note = _expected_note(members)
+    head = f"{name}  (optional, default: none)" + (f" -- {note}" if note else "")
+    body_map = CommentedMap()
+    if isinstance(first, type) and issubclass(first, DescriptorBase):
+        obj = _first_concrete(first)
+        body_map[name] = _strip_comments(
+            _envelope(obj, _build_spec(obj, "", True, _SPEC_INDENT))
+        )
+    else:
+        body_map[name] = _placeholder_value(members, None, name)
+    return [head, *to_yaml(body_map).rstrip("\n").split("\n")]
+
+
+def _deepest_last(cm: CommentedMap) -> tuple[CommentedMap, str]:
+    """The owner map + key of the spec's last-rendered scalar leaf (drilling
+    into the last nested map), where a trailing map comment must be attached."""
+    key = next(reversed(cm))
+    val = cm[key]
+    if isinstance(val, CommentedMap) and len(val):
+        return _deepest_last(val)
+    return cm, key
+
+
+def _attach_commented(out: CommentedMap, lines: list[str], indent: int) -> None:
+    """Attach commented-out optional-field `lines` at the end of spec `out`
+    (after its last real field), indented at the spec's own level. An
+    all-optional spec (no real fields) gets them as a leading comment."""
+    if not out:
+        out.yaml_set_start_comment("\n".join(lines), indent=indent)
+        return
+    pad = " " * indent
+    text = "\n" + "".join(f"{pad}# {ln}\n" if ln else f"{pad}#\n" for ln in lines)
+    owner, key = _deepest_last(out)
+    # Preserve any before-comment already on this leaf; only set its EOL slot.
+    entry = owner.ca.items.get(key) or [None, None, None, None]
+    entry[2] = CommentToken(text, CommentMark(indent))
+    owner.ca.items[key] = entry
+
+
 def _build_spec(cls: type, prefix: str, all_fields: bool, indent: int) -> CommentedMap:
     out = CommentedMap()
+    commented: list[str] = []
     for name, fi in cls.__pydantic_fields__.items():
-        if not fi.is_required() and not all_fields:
+        required = fi.is_required()
+        if not required and not all_fields:
             continue
         path = f"{prefix}{name}"
         members = _members(fi.annotation)
         # The sample is generated from the FIRST member of the field's union.
         first = members[0]
         default = None if fi.default is _UNSET else fi.default
+        if not required and fi.default is None:
+            # Optional, defaults to None -> shown commented-out (keeps the
+            # rendered document valid) with a short 'what's expected' note.
+            commented.extend(_commented_lines(name, first, members, indent))
+            continue
         if isinstance(first, type) and issubclass(first, DescriptorBase):
             # Nested object -> its own envelope; no fill-in comment of its own.
             obj = _first_concrete(first)
@@ -416,9 +508,11 @@ def _build_spec(cls: type, prefix: str, all_fields: bool, indent: int) -> Commen
             continue
         value = _placeholder_value(members, default, path)
         out[name] = value
-        lines = _field_comment_lines(name, members, value)
+        lines = _field_comment_lines(name, members, value, required, default)
         if lines is not None:
             _set_block_comment(out, name, lines, indent)
+    if commented:
+        _attach_commented(out, commented, indent)
     return out
 
 
