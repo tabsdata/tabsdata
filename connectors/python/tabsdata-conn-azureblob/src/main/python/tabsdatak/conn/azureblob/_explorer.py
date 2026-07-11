@@ -13,7 +13,7 @@ import os
 from typing import ClassVar, TypeAlias
 
 from tabsdatak.conn.azureblob import AzureBlobDestConn, AzureBlobSrcConn
-from tabsdatak.conn.common.file.explorer import (
+from tabsdatak.conn.common.file._explorer import (
     FilePattern,
     FileStorageConnMetaModel,
     FileStorageEntity,

@@ -32,6 +32,7 @@ def test_introduce_named(instance_tdtest: Instance) -> None:
     assert instance_tdtest.name in instance_tdtest.introduce()
 
 
+@tabsdata_instance(consumer="tdtest")
 def test_introduce_via_fixture(td_tabsdata_instance: Instance) -> None:
     assert td_tabsdata_instance.name in td_tabsdata_instance.introduce()
 
