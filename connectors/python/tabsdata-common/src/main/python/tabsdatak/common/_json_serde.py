@@ -11,10 +11,17 @@ leaves and yields a jsonpath for each; `replace_at` writes a new value at
 such a path.
 
 Secrets are NOT envelopes. A `tabsdatak.api.Secret` string leaf is one
-of two forms: the dehydrated marker ``":secret:"`` (no value), or the
-hydrated ``"secret:<value>"``. The secret helpers walk the tree for those
-leaves and key each one on the env-var-style form of its jsonpath:
+of two wire forms: the dehydrated marker ``":secret:"`` (no value), or the
+hydrated ``"secret:<value>"``. A third, create-time *input* form
+``"$secret:<VAR>"`` sources the value from an environment variable; it is
+rewritten to a wire form before storage and never persists. The secret
+helpers walk the tree for those leaves and key each one on the
+env-var-style form of its jsonpath:
 
+* `resolve_env_secret_refs` runs first, at connection create/upsert time:
+  it rewrites each ``"$secret:<VAR>"`` input leaf to ``"secret:<value>"``
+  read from ``os.environ``, before the document is validated and
+  dehydrated. ``"$secret:"`` never reaches the stored or hydrated form.
 * `dehydrate` strips every secret value out of the tree (replacing
   ``"secret:hunter2"`` with ``":secret:"``) and returns it alongside a
   `KeyValue` list, matching the ``Vec<KeyValue>`` the apiserver's
@@ -129,6 +136,12 @@ def _value_at(json_serde_data: JsonSerdeData, path: JsonPath) -> Any:
 #   * ``"secret:<value>"`` -- a hydrated secret carrying ``<value>``.
 _SECRET_DEHYDRATED = ":secret:"
 _SECRET_PREFIX = "secret:"
+
+# Create-time input form: ``"$secret:<VAR>"`` names an environment variable
+# to read the secret value from. `resolve_env_secret_refs` rewrites it to
+# ``"secret:<value>"`` before validation / `dehydrate`; it never survives
+# into a stored or hydrated document.
+_SECRET_ENV_REF_PREFIX = "$secret:"
 
 # Key prefix for the harvested `KeyValue` keys (and the env-var names
 # `env_hydrate` reads). Secrets get ``SECRET_CONN__``.
@@ -300,6 +313,63 @@ def env_hydrate(data: JsonSerdeData) -> JsonSerdeData:
     for path, new_value in plan:
         replace_at(out, path, new_value)
     return out
+
+
+def _env_secret_refs(data: JsonSerdeData) -> list[tuple[JsonPath, str]]:
+    """Return ``(json_path, var_name)`` for every ``"$secret:<VAR>"`` string
+    leaf under ``data`` -- the create-time env-reference form. Paths use the
+    same ``$.key[i]`` jsonpath syntax `replace_at` accepts.
+    """
+    found: list[tuple[JsonPath, str]] = []
+
+    def walk(n: Any, path: JsonPath) -> None:
+        if isinstance(n, dict):
+            for k, v in n.items():
+                walk(v, f"{path}.{k}")
+        elif isinstance(n, list):
+            for i, v in enumerate(n):
+                walk(v, f"{path}[{i}]")
+        elif isinstance(n, str) and n.startswith(_SECRET_ENV_REF_PREFIX):
+            found.append((path, n[len(_SECRET_ENV_REF_PREFIX) :]))
+
+    walk(data, "$")
+    return found
+
+
+def resolve_env_secret_refs(data: JsonSerdeData) -> JsonSerdeData:
+    """Resolve ``"$secret:<VAR>"`` leaves from the process environment.
+
+    Returns a deep copy of ``data`` with every ``"$secret:<VAR>"`` string
+    leaf replaced by ``"secret:<value>"``, where ``<value>`` is
+    ``os.environ["<VAR>"]`` (a var set to the empty string is a valid empty
+    secret). This runs on connection create/upsert, before the document is
+    validated and `dehydrate`d: it lets a secret value be supplied from an
+    environment variable instead of being inlined. After it runs no
+    ``"$secret:"`` leaf remains -- the value flows through the normal secret
+    pipeline (validated at its field, harvested by `dehydrate`, stored as
+    ``":secret:"``), so it is irrelevant to `hydrate` / `env_hydrate` /
+    `list_refs`.
+
+    Raises:
+        CommonRuntimeException: if any referenced env var is unset
+            (COMMON_12).
+    """
+    out = deepcopy(data)
+    refs = _env_secret_refs(out)
+    missing = sorted({var for _, var in refs if os.environ.get(var) is None})
+    if missing:
+        raise CommonErrorCode.COMMON_12.exception(vars=missing)
+    for path, var in refs:
+        replace_at(out, path, _SECRET_PREFIX + os.environ[var])
+    return out
+
+
+def env_secret_ref_vars(data: JsonSerdeData) -> list[str]:
+    """Return the sorted, de-duplicated environment variable names referenced
+    by ``"$secret:<VAR>"`` leaves in ``data`` (before resolution). Backs the
+    "these env vars were read" notice the create/upsert CLI prints.
+    """
+    return sorted({var for _, var in _env_secret_refs(data)})
 
 
 def list_refs(data: JsonSerdeData) -> list[str]:

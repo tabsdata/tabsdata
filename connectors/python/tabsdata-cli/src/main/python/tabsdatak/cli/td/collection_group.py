@@ -24,7 +24,14 @@ from tabsdatak.cli.cli_utils import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.common._json_serde import dehydrate
+from tabsdatak.common._error import CommonException
+
+# noinspection PyProtectedMember
+from tabsdatak.common._json_serde import (
+    dehydrate,
+    env_secret_ref_vars,
+    resolve_env_secret_refs,
+)
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
@@ -140,6 +147,9 @@ def _load_connection_document(conn_file, group):
     re-serialized as YAML (secret leaves reduced to ``secret:``), the group its
     kind implies, and the harvested secret values. No secret value is sent
     inside the connection document — they ride in the secret payload.
+
+    ``$secret:<ENV_VAR>`` values are resolved from the environment here (on the
+    client, at create/update time); the env vars read are echoed to the user.
     """
     try:
         raw = (
@@ -153,6 +163,16 @@ def _load_connection_document(conn_file, group):
         document = template.from_yaml(raw)
     except Exception as e:  # noqa: BLE001 -- any YAML parse failure
         raise click.ClickException(f"invalid connection YAML: {e}")
+    env_vars = env_secret_ref_vars(document)
+    try:
+        document = resolve_env_secret_refs(document)
+    except CommonException as e:
+        raise click.ClickException(str(e))
+    if env_vars:
+        click.echo(
+            "Connection secrets resolved from environment variable(s): "
+            + ", ".join(env_vars)
+        )
     try:
         template.validate(document)
     except template.TemplateError as e:

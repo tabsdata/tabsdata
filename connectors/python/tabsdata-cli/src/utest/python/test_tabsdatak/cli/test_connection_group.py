@@ -117,3 +117,36 @@ def test_validate_rejects_malformed_yaml(tmp_path):
     result = CliRunner().invoke(cli, ["connection", "validate", "-f", str(path)])
     assert result.exit_code != 0
     assert "not valid YAML" in result.output
+
+
+_ENV_REF_DOC = (
+    "kind: connectionDef\n"
+    "apiVersion: '1.0'\n"
+    "type: tabsdatak.conn.localfile:LocalFileSrcConn\n"
+    "spec:\n"
+    "  base_path: '$secret:MY_BP'\n"
+)
+
+
+def test_validate_resolves_env_secret_refs(tmp_path, monkeypatch):
+    # validate resolves `$secret:<ENV_VAR>` from the environment first, exactly
+    # as create does -- so a document sourcing a secret from the environment
+    # validates instead of being rejected as a bad secret value.
+    path = tmp_path / "conn.yaml"
+    path.write_text(_ENV_REF_DOC)
+    monkeypatch.setenv("MY_BP", "/data/in")
+    result = CliRunner().invoke(cli, ["connection", "validate", "-f", str(path)])
+    assert result.exit_code == 0, result.output
+    assert "Connection document is valid" in result.output
+    assert "MY_BP" in result.output  # echoes the env var it read
+
+
+def test_validate_reports_unset_env_secret_ref(tmp_path, monkeypatch):
+    # An unset referenced var is reported by name, not silently rejected as a
+    # malformed secret value.
+    path = tmp_path / "conn.yaml"
+    path.write_text(_ENV_REF_DOC)
+    monkeypatch.delenv("MY_BP", raising=False)
+    result = CliRunner().invoke(cli, ["connection", "validate", "-f", str(path)])
+    assert result.exit_code != 0
+    assert "MY_BP" in result.output

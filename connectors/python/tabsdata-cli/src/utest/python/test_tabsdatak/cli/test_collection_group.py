@@ -109,6 +109,62 @@ def test_load_connection_document_dehydrates_unprefixed_secret_values(tmp_path):
     assert sent["spec"]["uri"] == "mysql://h:3306/db"
 
 
+# Secret values supplied as `$secret:<ENV_VAR>` are read from the environment
+# at create time, then harvested like any other secret -- no `$secret:` leaf
+# reaches the stored document.
+_MYSQL_SRC_YAML_ENVREF = """\
+kind: connectionDef
+apiVersion: '1.0'
+type: tabsdatak.conn.mysql:MySQLSrcConn
+spec:
+  uri: mysql://h:3306/db
+  credentials:
+    kind: userPasswordCredentials
+    apiVersion: '1.0'
+    type: tabsdatak.conn.common.types:UserPassword
+    spec:
+      user: $secret:DB_USER
+      password: $secret:DB_PASS
+"""
+
+
+@pytest.mark.skipif(
+    not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
+)
+def test_load_connection_document_resolves_env_secret_refs(
+    tmp_path, monkeypatch, capsys
+):
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+
+    monkeypatch.setenv("DB_USER", "etl")
+    monkeypatch.setenv("DB_PASS", "hunter2")
+    connection, group, secrets = collection_group._load_connection_document(
+        _write(tmp_path, _MYSQL_SRC_YAML_ENVREF), None
+    )
+    # The env-var values are harvested into the payload.
+    assert {kv["value"] for kv in secrets} == {"etl", "hunter2"}
+    sent = template.from_yaml(connection)
+    creds = sent["spec"]["credentials"]["spec"]
+    assert creds["user"] == ":secret:"
+    assert creds["password"] == ":secret:"
+    # The env vars read are echoed to the user at create time.
+    out = capsys.readouterr().out
+    assert "DB_USER" in out and "DB_PASS" in out
+
+
+@pytest.mark.skipif(
+    not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
+)
+def test_load_connection_document_env_secret_ref_missing_var(tmp_path, monkeypatch):
+    monkeypatch.delenv("DB_USER", raising=False)
+    monkeypatch.delenv("DB_PASS", raising=False)
+    with pytest.raises(click.ClickException, match=r"\$secret:"):
+        collection_group._load_connection_document(
+            _write(tmp_path, _MYSQL_SRC_YAML_ENVREF), None
+        )
+
+
 @pytest.mark.skipif(
     not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
 )

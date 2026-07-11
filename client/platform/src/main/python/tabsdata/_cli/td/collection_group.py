@@ -22,7 +22,14 @@ from tabsdata.api.tabsdata_server import TabsdataServer
 from tabsdatak import _template as template
 
 # noinspection PyProtectedMember
-from tabsdatak.common._json_serde import dehydrate
+from tabsdatak.common._error import CommonException
+
+# noinspection PyProtectedMember
+from tabsdatak.common._json_serde import (
+    dehydrate,
+    env_secret_ref_vars,
+    resolve_env_secret_refs,
+)
 
 
 @click.group()
@@ -141,6 +148,16 @@ def _load_connection_document(conn_file: str, group: str | None):
         document = template.from_yaml(raw)
     except Exception as e:  # noqa: BLE001 -- any YAML parse failure
         raise click.ClickException(f"invalid connection YAML: {e}")
+    env_vars = env_secret_ref_vars(document)
+    try:
+        document = resolve_env_secret_refs(document)
+    except CommonException as e:
+        raise click.ClickException(str(e))
+    if env_vars:
+        click.echo(
+            "Connection secrets resolved from environment variable(s): "
+            + ", ".join(env_vars)
+        )
     try:
         kind = template.validate(document)
     except template.TemplateError as e:

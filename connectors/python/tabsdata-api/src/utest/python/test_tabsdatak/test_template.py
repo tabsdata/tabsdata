@@ -223,8 +223,12 @@ def test_yaml_template_has_header():
     lines = text.splitlines()
     # Names the connector/direction the template targets.
     assert lines[0] == "# Connection template for: local-file-in (src)"
-    # Reminds that secret values carry the 'secret:' prefix.
+    # Reminds that secret values carry the 'secret:' prefix, or a
+    # '$secret:<ENV_VAR>' environment reference.
     assert "secret:" in lines[1]
+    assert "$secret:" in lines[1]
+    # Notes that a '$secret:' value is resolved client-side at create/update.
+    assert "client" in lines[2]
     # The header is a comment, so the document still parses + validates.
     assert template.validate(template.from_yaml(text)) == "connectionDef"
 

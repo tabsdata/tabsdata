@@ -8,9 +8,11 @@ from tabsdatak.common._json_serde import (
     KeyValue,
     dehydrate,
     env_hydrate,
+    env_secret_ref_vars,
     hydrate,
     list_refs,
     replace_at,
+    resolve_env_secret_refs,
 )
 
 
@@ -280,3 +282,72 @@ def test_env_hydrate_does_not_mutate_input(monkeypatch):
     data = _wrap({"password": _secret(None)})
     env_hydrate(data)
     assert data["spec"]["password"] == _secret(None)
+
+
+# ---------------------------------------------------------------------------
+# resolve_env_secret_refs
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_env_secret_refs_reads_named_env_vars(monkeypatch):
+    monkeypatch.setenv("DB_PASSWORD", "hunter2")
+    monkeypatch.setenv("API_TOKEN", "etl")
+    data = _wrap({"password": "$secret:DB_PASSWORD", "token": "$secret:API_TOKEN"})
+    out = resolve_env_secret_refs(data)
+    assert out["spec"] == {"password": "secret:hunter2", "token": "secret:etl"}
+
+
+def test_resolve_env_secret_refs_empty_env_var_is_valid_empty_secret(monkeypatch):
+    monkeypatch.setenv("DB_PASSWORD", "")
+    data = _wrap({"password": "$secret:DB_PASSWORD"})
+    out = resolve_env_secret_refs(data)
+    assert out["spec"]["password"] == "secret:"
+
+
+def test_resolve_env_secret_refs_raises_on_missing_env(monkeypatch):
+    monkeypatch.delenv("DB_PASSWORD", raising=False)
+    data = _wrap({"password": "$secret:DB_PASSWORD"})
+    with pytest.raises(CommonRuntimeException) as exc_info:
+        resolve_env_secret_refs(data)
+    assert exc_info.value.api_error is CommonErrorCode.COMMON_12
+
+
+def test_resolve_env_secret_refs_leaves_other_forms_untouched(monkeypatch):
+    monkeypatch.delenv("DB_PASSWORD", raising=False)
+    data = _wrap({
+        "dehydrated": _secret(None),
+        "inline": _secret("keepme"),
+        "plain": "just-a-value",
+    })
+    out = resolve_env_secret_refs(data)
+    assert out["spec"] == data["spec"]
+
+
+def test_resolve_env_secret_refs_handles_list_and_nested_paths(monkeypatch):
+    monkeypatch.setenv("A", "aa")
+    monkeypatch.setenv("B", "bb")
+    data = _wrap({"creds": ["$secret:A", {"inner": "$secret:B"}]})
+    out = resolve_env_secret_refs(data)
+    assert out["spec"]["creds"] == ["secret:aa", {"inner": "secret:bb"}]
+
+
+def test_resolve_env_secret_refs_does_not_mutate_input(monkeypatch):
+    monkeypatch.setenv("DB_PASSWORD", "hunter2")
+    data = _wrap({"password": "$secret:DB_PASSWORD"})
+    resolve_env_secret_refs(data)
+    assert data["spec"]["password"] == "$secret:DB_PASSWORD"
+
+
+# ---------------------------------------------------------------------------
+# env_secret_ref_vars
+# ---------------------------------------------------------------------------
+
+
+def test_env_secret_ref_vars_lists_sorted_unique_vars():
+    data = _wrap({"pw": "$secret:B", "tok": "$secret:A", "dup": "$secret:A"})
+    assert env_secret_ref_vars(data) == ["A", "B"]
+
+
+def test_env_secret_ref_vars_empty_when_no_refs():
+    data = _wrap({"pw": _secret("x"), "plain": "value"})
+    assert env_secret_ref_vars(data) == []

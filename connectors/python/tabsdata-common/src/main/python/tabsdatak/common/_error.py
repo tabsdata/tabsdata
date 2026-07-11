@@ -77,3 +77,9 @@ class CommonErrorCode(ErrorCode):
         CommonRuntimeException,
         "python {version} not in allowed set: {allowed}",
     )  # validate_python_version: producer's interpreter not whitelisted
+
+    # --- $secret: env resolution (tabsdatak.common._json_serde) -----
+    COMMON_12 = ErrorDef(
+        CommonRuntimeException,
+        "environment variable(s) referenced by '$secret:' not set: {vars!r}",
+    )  # resolve_env_secret_refs: a $secret:<VAR> input names an unset env var

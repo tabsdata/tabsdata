@@ -22,6 +22,12 @@ from tabsdatak import _template as template
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import logical_prompt, output_option, render
 
+# noinspection PyProtectedMember
+from tabsdatak.common._error import CommonException
+
+# noinspection PyProtectedMember
+from tabsdatak.common._json_serde import env_secret_ref_vars, resolve_env_secret_refs
+
 
 @cli_command
 @click.group()
@@ -120,6 +126,21 @@ def validate(file):
         document = template.from_yaml(raw)
     except Exception as e:  # noqa: BLE001 -- any YAML parse failure
         raise click.ClickException(f"not valid YAML: {e}")
+    # Resolve any `$secret:<ENV_VAR>` references from the environment first,
+    # exactly as connection create/upsert does, so a document that sources
+    # secret values from the environment validates the same way it is created
+    # (an unset referenced var is reported, not silently rejected as a bad
+    # secret value).
+    env_vars = env_secret_ref_vars(document)
+    try:
+        document = resolve_env_secret_refs(document)
+    except CommonException as e:
+        raise click.ClickException(str(e))
+    if env_vars:
+        click.echo(
+            "Connection secrets resolved from environment variable(s): "
+            + ", ".join(env_vars)
+        )
     try:
         template.validate(document)
     except template.TemplateError as e:

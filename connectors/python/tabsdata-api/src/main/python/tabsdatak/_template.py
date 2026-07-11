@@ -316,7 +316,9 @@ _NEST_INDENT = 4
 
 def _set_template_header(env: CommentedMap, conn_cls: type) -> None:
     """Prepend a header naming the connector / direction the template targets and
-    reminding that secret values carry the ``secret:`` prefix."""
+    reminding that secret values carry the ``secret:`` prefix (or a
+    ``$secret:<ENV_VAR>`` environment reference resolved client-side at
+    create/update time)."""
     label = conn_cls.__kind__
     for r in list_connectors():
         if r.conn_cls is conn_cls:
@@ -324,7 +326,10 @@ def _set_template_header(env: CommentedMap, conn_cls: type) -> None:
             break
     env.yaml_set_start_comment(
         f"Connection template for: {label}\n"
-        "Secret values must be prefixed with 'secret:'."
+        "Secret values use the 'secret:' prefix, or '$secret:<ENV_VAR>' to "
+        "read the value from an environment variable.\n"
+        "A '$secret:' value is resolved on the client when the "
+        "source/destination is created or updated with this connection."
     )
 
 
