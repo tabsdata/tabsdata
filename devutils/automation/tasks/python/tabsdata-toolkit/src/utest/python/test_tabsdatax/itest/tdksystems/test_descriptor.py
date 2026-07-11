@@ -71,6 +71,42 @@ def test_stamp_records_model_and_data_and_extra_meta(tmp_path):
     assert "SYS_ADMIN_PASSWORD" not in doc["exported"]
 
 
+def test_uri_without_credentials():
+    f = descriptor._uri_without_credentials
+    assert (
+        f("mysql+mysqlconnector://u:p@h:3306/db")
+        == "mysql+mysqlconnector://h:3306/db"
+    )
+    # SQLAlchemy driver schemes with '_' (db2) are handled; the query is kept.
+    assert (
+        f("db2+ibm_db://db2inst1:pw@h:50000/DB?currentSchema=s")
+        == "db2+ibm_db://h:50000/DB?currentSchema=s"
+    )
+    # No userinfo, or no scheme -> returned unchanged.
+    assert f("clickhouse+http://h:8123") == "clickhouse+http://h:8123"
+    assert f("kafka://h:9092/topic") == "kafka://h:9092/topic"
+    assert f("not-a-uri") == "not-a-uri"
+
+
+def test_container_domain_exports_credentials_free_uri(tmp_path):
+    out = tmp_path / "mydb.json"
+    descriptor.write_container_domain(
+        out=str(out), system_kind="sql", system_type="mysql",
+        host="h", port="3306", user="finance", password="s3cr3t", db="finance_db",
+        sqlalchemy_uri="mysql+mysqlconnector://finance:s3cr3t@h:3306/finance_db",
+        domain_desc="d", supports_sql=True,
+    )
+    attrs = descriptor.attributes(_load(out))
+    # A credentials-free URI is surfaced alongside the credential-bearing one.
+    assert attrs["URI"] == "mysql+mysqlconnector://h:3306/finance_db"
+    assert (
+        attrs["SQLALCHEMY_URI"]
+        == "mysql+mysqlconnector://finance:s3cr3t@h:3306/finance_db"
+    )
+    assert "s3cr3t" not in attrs["URI"]
+    assert "URI" in _load(out)["exported"]
+
+
 def test_stamp_adds_redundant_entity_term_key(tmp_path):
     # fs: the entity container is a "folder" — stamp adds a redundant FOLDER key
     # (== the external entity name) to meta + exported.

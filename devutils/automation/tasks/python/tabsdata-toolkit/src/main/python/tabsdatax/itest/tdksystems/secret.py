@@ -2,11 +2,11 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Secret providers for `tdx-system secrets --get <PROVIDER>:<REF>`.
+"""Secret providers for `tdx-system secrets --set <PROVIDER>:<REF>`.
 
 A provider fetches a set of named secrets from an external store and returns
 them as an ordered ``{<NAME>: <value>}`` dict, where each ``NAME`` follows the
-``<ITEM>__<FIELD>`` convention `tdx-system create --env-prefix` reads. `--get`
+``<ITEM>__<FIELD>`` convention `tdx-system create --env-prefix` reads. `--set`
 selects a provider by scheme:
 
     1p:<VAULT>      1Password, via the `op` CLI  (see :mod:`.secret_1p`)
@@ -62,13 +62,13 @@ def with_systems_var(secrets: dict[str, str]) -> dict[str, str]:
     return {**secrets, SYSTEMS_ENV: " ".join(prefixes)}
 
 
-def parse_ref(get: str) -> tuple[str, str]:
-    """Split a `--get` value `<scheme>:<ref>` into (scheme, ref)."""
-    scheme, sep, ref = get.partition(":")
+def parse_ref(ref_arg: str) -> tuple[str, str]:
+    """Split a `--set` value `<scheme>:<ref>` into (scheme, ref)."""
+    scheme, sep, ref = ref_arg.partition(":")
     scheme, ref = scheme.strip(), ref.strip()
     if not sep or not scheme or not ref:
         raise DatagenError(
-            f"--get expects <PROVIDER>:<REF> (e.g. 1p:dev_xp), got {get!r}"
+            f"--set expects <PROVIDER>:<REF> (e.g. 1p:dev_xp), got {ref_arg!r}"
         )
     return scheme, ref
 
@@ -77,18 +77,18 @@ def _load_provider(scheme: str):
     modname = _PROVIDERS.get(scheme)
     if modname is None:
         raise DatagenError(
-            f"unknown secret provider {scheme!r} in --get "
+            f"unknown secret provider {scheme!r} in --set "
             f"(supported: {', '.join(sorted(_PROVIDERS))})"
         )
     return importlib.import_module(f".{modname}", __package__)
 
 
-def fetch(get: str) -> dict[str, str]:
-    """Resolve `--get <PROVIDER>:<REF>` to an ordered dict of secret env vars.
+def fetch(ref_arg: str) -> dict[str, str]:
+    """Resolve `--set <PROVIDER>:<REF>` to an ordered dict of secret env vars.
 
     Dispatches to the provider module registered for `<PROVIDER>`; the ref is
     provider-specific (a vault name for `1p`, etc.)."""
-    scheme, ref = parse_ref(get)
+    scheme, ref = parse_ref(ref_arg)
     return _load_provider(scheme).fetch(ref)
 
 

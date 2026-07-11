@@ -29,7 +29,7 @@ automatically; the `main` venv is untouched.
 
 ```bash
 # 1. Credentials + salesforce system (--env-prefix defaults to SALESFORCE).
-eval "$(tdx-system secrets --get 1p:dev_xp --out export)"
+eval "$(tdx-system secrets --set 1p:dev_xp --out export)"
 tdx-system create --type salesforce --sys ./sys.salesforce.json --name sf
 
 # 2. Create the domain (creds clone — no schema) and wipe + upload the data

@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""1Password secret provider for `tdx-system secrets --get 1p:<VAULT>`.
+"""1Password secret provider for `tdx-system secrets --set 1p:<VAULT>`.
 
 `fetch(vault)` reads every item in VAULT via the `op` CLI and returns an
 ordered ``{<ITEM_TITLE>__<FIELD_ID>: <value>}`` dict for every non-null,

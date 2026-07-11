@@ -119,6 +119,24 @@ def test_install_model_and_data_loads_without_rerunning_ddl(monkeypatch):
     assert seen == {"create_force": True, "load_force": False}
 
 
+def test_install_model_and_data_uses_ephemeral_schemas_dir(monkeypatch):
+    # Kafka schema sidecars go to a temp dir that's removed after the load — not
+    # left as `<domain>-schemas` next to the descriptor in the store.
+    seen = {}
+
+    def fake_load(ns):
+        seen["schemas"] = ns.schemas
+        seen["live"] = Path(ns.schemas).is_dir()
+
+    monkeypatch.setattr(tdx.cli, "_run_data_create", lambda ns: None)
+    monkeypatch.setattr(tdx.cli, "_run_data_load", fake_load)
+    monkeypatch.setattr(tdx.data_gen, "is_sizeable", lambda m: True)
+    tdx._install_model_and_data("/tmp/x/domains/dom", "world", "xs", force=False)
+    assert seen["live"] is True                        # available during the load
+    assert seen["schemas"] != "/tmp/x/domains/dom-schemas"
+    assert not Path(seen["schemas"]).exists()          # cleaned up afterwards
+
+
 def test_domain_create_force_destroys_existing_via_system(stores, fs_root, monkeypatch):
     # create -f on an existing domain destroys it FIRST (over the system's
     # connection, via _domain_destroy_one), then creates fresh.
@@ -331,6 +349,21 @@ def test_info_bad_format_rejected(stores, fs_root):
     # argparse rejects an out-of-choice --format with SystemExit.
     with pytest.raises(SystemExit):
         tdx._sys_info(["--sys", "my_fs", "--format", "yaml"])
+
+
+def test_info_defaults_to_json(stores, fs_root, capsys):
+    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
+                     "--sys-path", str(fs_root), "-f"])
+    capsys.readouterr()   # drop the create output
+    # No --format -> json by default (stdout parses as a JSON object).
+    assert tdx._sys_info(["--sys", "my_fs"]) == 0
+    obj = json.loads(capsys.readouterr().out)
+    assert obj["NAME"] == "my_fs" and obj["TYPE"] == "fs"
+    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox",
+                        "--domain-prefix", "", "-f"])
+    capsys.readouterr()
+    assert tdx._domain_info(["--domain", "inbox"]) == 0
+    assert json.loads(capsys.readouterr().out)["NAME"] == "inbox"
 
 
 def test_pause_resume_registered_and_container_only(stores, fs_root):
@@ -562,6 +595,17 @@ def test_secrets_emits_systems_var():
     assert f"export {secret.SYSTEMS_ENV}='MYSQL S3'" in secret.render(out, "export")
     assert f'"{secret.SYSTEMS_ENV}": "MYSQL S3"' in secret.render(out, "json")
     assert f"unset {secret.SYSTEMS_ENV}" in secret.render(out, "unset")
+
+
+def test_secrets_cli_set_flag(monkeypatch, capsys):
+    from tabsdatax.itest.tdksystems import secret
+    # echo the ref back so we can see the --set value reached fetch().
+    monkeypatch.setattr(secret, "fetch", lambda ref: {"MYSQL__USER": ref})
+    assert tdx._sys_secrets(["--set", "1p:dev_xp", "--out", "export"]) == 0
+    assert "export MYSQL__USER=1p:dev_xp" in capsys.readouterr().out
+    # the old --get spelling is gone.
+    with pytest.raises(SystemExit):
+        tdx._sys_secrets(["--get", "1p:dev_xp"])
 
 
 # ---- tdx-domain recreate: reset to a clean initial state ------------------
@@ -914,6 +958,116 @@ def test_domain_destroy_from_manifest_destroys_and_skips_missing(
     assert "skipping domain 'ghost'" in err
 
 
+# ---- create --sync: reconcile the store to a manifest (systems + domains) ---
+
+def test_sys_sync_reconciles_store_to_manifest(stores, fs_root, tmp_path, capsys):
+    # store has {keep, gone}; the manifest lists {keep, new}. --sync creates `new`,
+    # destroys `gone`, and leaves `keep` untouched.
+    tdx._sys_create(["--type", "fs", "--sys", "keep",
+                     "--sys-path", str(fs_root / "keep"), "-f"])
+    tdx._sys_create(["--type", "fs", "--sys", "gone",
+                     "--sys-path", str(fs_root / "gone"), "-f"])
+    m = tmp_path / "sys.yaml"
+    m.write_text(
+        f"- type: fs\n  name: keep\n  sys-path: {fs_root}/keep\n"
+        f"- type: fs\n  name: new\n  sys-path: {fs_root}/new\n"
+    )
+    capsys.readouterr()
+    rc = tdx._sys_create(["--sys-manifest", str(m), "--sync"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert {n for n, _ in tdx._store_entries(store.system_dir(), "sys")} == {
+        "keep", "new"
+    }
+    assert "created 1/1" in out
+    assert "destroyed 1/1" in out
+    assert "1 left unchanged (not updated)" in out
+
+
+def test_sys_sync_never_updates_existing(stores, fs_root, tmp_path):
+    # An existing system whose manifest entry differs is left exactly as it was.
+    tdx._sys_create(["--type", "fs", "--sys", "keep",
+                     "--sys-path", str(fs_root / "orig"), "-f"])
+    m = tmp_path / "sys.yaml"
+    m.write_text(f"- type: fs\n  name: keep\n  sys-path: {fs_root}/changed\n")
+    assert tdx._sys_create(["--sys-manifest", str(m), "--sync"]) == 0
+    meta = descriptor.resolve(descriptor.load(store.system_path("keep")))
+    assert meta["SYS_PATH"] == str(fs_root / "orig")
+
+
+def test_sys_sync_refuses_to_destroy_system_in_use(stores, fs_root, tmp_path, capsys):
+    # A store system omitted from the manifest but still referenced by a domain is
+    # not destroyed (reported FAIL); the rest of the sync still runs.
+    tdx._sys_create(["--type", "fs", "--sys", "busy",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "busy", "--domain", "d",
+                        "--domain-prefix", "", "-f"])
+    m = tmp_path / "sys.yaml"
+    m.write_text(f"- type: fs\n  name: other\n  sys-path: {fs_root}/other\n")
+    capsys.readouterr()
+    rc = tdx._sys_create(["--sys-manifest", str(m), "--sync"])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "in use by domain(s): d" in out
+    assert store.system_path("busy").exists()
+    assert store.system_path("other").exists()
+
+
+def test_sys_sync_reports_create_failure_and_continues(
+    stores, fs_root, tmp_path, capsys
+):
+    # A bad new entry (unknown type) fails but the destroy of an omitted system
+    # still runs.
+    tdx._sys_create(["--type", "fs", "--sys", "gone",
+                     "--sys-path", str(fs_root / "gone"), "-f"])
+    m = tmp_path / "sys.yaml"
+    m.write_text("- type: nope\n  name: bad\n")
+    capsys.readouterr()
+    rc = tdx._sys_create(["--sys-manifest", str(m), "--sync"])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "FAIL" in out and "bad" in out
+    assert not store.system_path("gone").exists()
+    assert "created 0/1" in out and "destroyed 1/1" in out
+
+
+def test_sys_sync_requires_manifest(stores):
+    with pytest.raises(DatagenError, match="only valid with --sys-manifest"):
+        tdx._sys_create(["--type", "fs", "--sys", "x", "--sync"])
+
+
+def test_domain_sync_reconciles_store_to_manifest(
+    stores, fs_root, tmp_path, capsys
+):
+    tdx._sys_create(["--type", "fs", "--sys", "mysys",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "keep",
+                        "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "gone",
+                        "--domain-prefix", "", "-f"])
+    m = tmp_path / "domains.yaml"
+    m.write_text("- name: keep\n  sys: mysys\n- name: new\n  sys: mysys\n")
+    capsys.readouterr()
+    rc = tdx._domain_create(
+        ["--domain-manifest", str(m), "--sync", "--domain-prefix", "", "-f"]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert {n for n, _ in tdx._store_entries(store.domain_dir(), "env")} == {
+        "keep", "new"
+    }
+    assert not (fs_root / "gone").exists()
+    assert (fs_root / "new").is_dir()
+    assert "created 1/1" in out
+    assert "destroyed 1/1" in out
+    assert "1 left unchanged (not updated)" in out
+
+
+def test_domain_sync_requires_manifest(stores):
+    with pytest.raises(DatagenError, match="only valid with --domain-manifest"):
+        tdx._domain_create(["--sys", "x", "--sync"])
+
+
 # ---- destroy uses the system connection (via the domain's sys_name) ---------
 
 def test_domain_meta_via_system_refreshes_cloud_connection(stores, fs_root):
@@ -963,6 +1117,51 @@ def test_domain_destroy_uses_system_and_removes_folder(stores, fs_root):
     tdx._domain_destroy(["--domain", "d"])
     assert not store.domain_path("d").exists()
     assert not (fs_root / "d").exists()
+
+
+def test_domain_destroy_force_removes_descriptor_on_teardown_failure(
+    stores, fs_root, monkeypatch, capsys
+):
+    tdx._sys_create(["--type", "fs", "--sys", "mysys",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "d", "--domain-prefix", "", "-f"])
+    assert store.domain_path("d").exists()
+
+    class _Boom:
+        def destroy_domain(self, ctx):
+            raise RuntimeError("backend unreachable")
+
+    monkeypatch.setattr(tdx.systems, "get", lambda slug: _Boom())
+    # without -f the teardown failure propagates and the descriptor stays.
+    with pytest.raises(RuntimeError, match="backend unreachable"):
+        tdx._domain_destroy(["--domain", "d"])
+    assert store.domain_path("d").exists()
+    # with -f the descriptor is removed anyway and a warning is printed.
+    assert tdx._domain_destroy(["--domain", "d", "-f"]) == 0
+    assert not store.domain_path("d").exists()
+    err = capsys.readouterr().err
+    assert "WARNING" in err and "backend unreachable" in err
+
+
+def test_sys_destroy_force_removes_descriptor_on_teardown_failure(
+    stores, fs_root, monkeypatch, capsys
+):
+    tdx._sys_create(["--type", "fs", "--sys", "mysys",
+                     "--sys-path", str(fs_root), "-f"])
+    assert store.system_path("mysys").exists()
+
+    class _Boom:
+        def destroy_system(self, ctx):
+            raise RuntimeError("teardown boom")
+
+    monkeypatch.setattr(tdx.systems, "get", lambda slug: _Boom())
+    with pytest.raises(RuntimeError, match="teardown boom"):
+        tdx._sys_destroy(["--sys", "mysys"])
+    assert store.system_path("mysys").exists()
+    assert tdx._sys_destroy(["--sys", "mysys", "-f"]) == 0
+    assert not store.system_path("mysys").exists()
+    err = capsys.readouterr().err
+    assert "WARNING" in err and "teardown boom" in err
 
 
 def test_domain_create_single_defaults_name_to_system(stores, fs_root):

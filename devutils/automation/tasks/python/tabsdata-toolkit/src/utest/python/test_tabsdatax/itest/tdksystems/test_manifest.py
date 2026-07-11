@@ -123,6 +123,13 @@ def test_write_to_file_round_trips(tmp_path):
     assert manifest.read(str(out)) == entries
 
 
+def test_write_creates_missing_parent_dirs(tmp_path):
+    entries = [{"type": "fs", "sys": "a"}]
+    out = tmp_path / "config" / "nested" / "systems.yaml"
+    manifest.write(str(out), entries)
+    assert manifest.read(str(out)) == entries
+
+
 def test_write_dash_goes_to_stdout(capsys):
     manifest.write("-", [{"type": "fs", "sys": "a"}])
     out = capsys.readouterr().out

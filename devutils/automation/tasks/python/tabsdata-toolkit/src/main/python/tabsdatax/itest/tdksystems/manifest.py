@@ -17,7 +17,10 @@ Each CLI names its manifest with one flag — `tdx-system` via ``--sys-manifest
 FILE|-`` and `tdx-domain` via ``--domain-manifest FILE|-`` (``-`` is stdin, or
 stdout when writing) — used by three verbs: ``dump`` writes a manifest of every
 system / domain in the store, and ``create`` / ``destroy`` replay it
-(continue-on-error, one per-entry report). A SYSTEM entry is
+(continue-on-error, one per-entry report). ``create --sync`` instead reconciles
+the store to the manifest — creating the entries the store lacks and destroying
+the systems / domains the manifest omits, never updating the ones in both. A
+SYSTEM entry is
 ``{name, type, <settings>}``; a DOMAIN entry is ``{name, sys, model?, data?}``
 (its keys mirror `tdx-domain create` flags). The domain entity prefix is
 deliberately NOT recorded, so a domain manifest replays under each user's own
@@ -90,7 +93,9 @@ def write(dest: str, entries: list[dict]) -> None:
     if dest == "-":
         sys.stdout.write(text)
         return
-    Path(dest).write_text(text, encoding="utf-8")
+    p = Path(dest)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
     n = len(entries)
     print(
         f">>> wrote manifest ({n} entr{'y' if n == 1 else 'ies'}) to {dest}",

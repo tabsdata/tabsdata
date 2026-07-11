@@ -1,7 +1,7 @@
 """Integration tests: every cloud-storage system end-to-end.
 
 Cloud creds come from a 1Password vault — by default `dev_xp`. Tests
-do `eval $(tdx-system secrets --get 1p:dev_xp --out export)` (in-process
+do `eval $(tdx-system secrets --set 1p:dev_xp --out export)` (in-process
 via the helper in conftest) and rely on each system's default
 `--env-prefix <SYS>` to derive its options from the resulting
 `<SYS>__<FIELD>` env vars (the naming that provider produces).

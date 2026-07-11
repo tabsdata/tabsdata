@@ -222,6 +222,24 @@ def write_container_system(
     )
 
 
+def _uri_without_credentials(uri: str) -> str:
+    """A connection URI with any ``user:password@`` userinfo stripped, so `info`
+    can surface it without leaking credentials. Parsed by hand rather than with
+    ``urlsplit`` because SQLAlchemy driver schemes carry characters it rejects as
+    a scheme (e.g. the ``_`` in ``db2+ibm_db``), which would drop the authority.
+    A URI with no ``scheme://`` prefix, or no ``@`` in its authority, is returned
+    unchanged."""
+    m = re.match(r"^([a-zA-Z][\w+.\-]*://)(.*)$", uri)
+    if not m:
+        return uri
+    prefix, rest = m.group(1), m.group(2)
+    end = min((i for i, ch in enumerate(rest) if ch in "/?#"), default=len(rest))
+    authority, tail = rest[:end], rest[end:]
+    if "@" in authority:
+        authority = authority[authority.rfind("@") + 1 :]
+    return prefix + authority + tail
+
+
 def write_container_domain(
     *,
     out: str,
@@ -260,6 +278,7 @@ def write_container_domain(
         ("PASSWORD", password, None),
         ("DB", db, None),
         ("SQLALCHEMY_URI", sqlalchemy_uri, None),
+        ("URI", _uri_without_credentials(sqlalchemy_uri), None),
         ("DOMAIN_DESC", domain_desc, None),
         ("SUPPORTS_SQL", "1" if supports_sql else "0", None),
     ]
@@ -279,6 +298,7 @@ def write_container_domain(
         "PASSWORD",
         "DB",
         "SQLALCHEMY_URI",
+        "URI",
     ]
     if image:
         exported.insert(2, "IMAGE")  # after SYSTEM_KIND
@@ -536,7 +556,16 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
     # role == "env" (domain)
     if cat == "container":
         v = _settings_literals(settings)
-        known = {"HOST", "PORT", "USER", "PASSWORD", "DB", "SQLALCHEMY_URI", "IMAGE"}
+        known = {
+            "HOST",
+            "PORT",
+            "USER",
+            "PASSWORD",
+            "DB",
+            "SQLALCHEMY_URI",
+            "URI",
+            "IMAGE",
+        }
         extra = {k: val for k, val in v.items() if k not in known}  # SYS_* back-refs
         write_container_domain(
             out=out,

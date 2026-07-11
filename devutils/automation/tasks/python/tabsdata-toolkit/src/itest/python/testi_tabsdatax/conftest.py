@@ -103,14 +103,14 @@ def assert_ok(cp: subprocess.CompletedProcess, label: str) -> None:
 
 
 def source_1p_env(vault: str) -> dict:
-    """Run `tdx-system secrets --get 1p:<vault> --out export` and return the
+    """Run `tdx-system secrets --set 1p:<vault> --out export` and return the
     resulting env dict (current env + the exports). For test convenience:
     tests that interact with cloud systems pass this as `env=` to subprocess
     calls."""
-    cp = run_cmd("tdx-system", "secrets", "--get", f"1p:{vault}", "--out", "export")
+    cp = run_cmd("tdx-system", "secrets", "--set", f"1p:{vault}", "--out", "export")
     if cp.returncode != 0:
         raise RuntimeError(
-            f"tdx-system secrets --get 1p:{vault} --out export failed: {cp.stderr}"
+            f"tdx-system secrets --set 1p:{vault} --out export failed: {cp.stderr}"
         )
     extra = {}
     for line in cp.stdout.splitlines():

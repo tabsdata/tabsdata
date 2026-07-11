@@ -1,5 +1,5 @@
 """Unit tests for the pluggable secret registry (`tabsdatax.itest.tdksystems.secret`):
-`--get <PROVIDER>:<REF>` parsing, provider dispatch, and `--out` rendering."""
+`--set <PROVIDER>:<REF>` parsing, provider dispatch, and `--out` rendering."""
 from __future__ import annotations
 
 import json

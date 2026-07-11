@@ -10,14 +10,20 @@
     tdx-system create  --auto ALL|T1,T2,... [--sys-dir DIR]   # one system per
                                                     # type, each named after its
                                                     # type; config $<PREFIX>__<OPT>
-    tdx-system create  --sys-manifest FILE|- [--sys-dir DIR] [-f]  # every system in
-                                                    # a YAML manifest (keys mirror
-                                                    # the create flags; - = stdin)
+    tdx-system create  --sys-manifest FILE|- [--sync] [--sys-dir DIR] [-f]  # every
+                                                    # system in a YAML manifest (keys
+                                                    # mirror the create flags; - =
+                                                    # stdin). --sync reconciles the
+                                                    # store to the manifest (create /
+                                                    # destroy to match; existing ones
+                                                    # are never updated)
     tdx-system dump    --sys-manifest FILE|- [--sys-dir DIR]  # write a manifest of
                                                     # every system in the store
     tdx-system list    [--sys-dir DIR]              # names + types in the store
-    tdx-system destroy --sys NAME | --auto ALL|N1,N2,... [--sys-dir DIR]  # + rm desc
-    tdx-system destroy --sys-manifest FILE|- [--sys-dir DIR] [--domain-dir DIR]
+    tdx-system destroy --sys NAME | --auto ALL|N1,N2,... [--sys-dir DIR] [-f]
+                                                    # tear down + rm desc; -f removes
+                                                    # the desc even if teardown fails
+    tdx-system destroy --sys-manifest FILE|- [--sys-dir DIR] [--domain-dir DIR] [-f]
                                                     # destroy every system in a
                                                     # manifest; one still used by a
                                                     # domain fails, a missing one
@@ -27,9 +33,9 @@
                                                     # system in a manifest (a
                                                     # missing one warns and is
                                                     # skipped)
-    tdx-system info    --sys NAME [--sys-dir DIR] --format json|export|unset
+    tdx-system info    --sys NAME [--sys-dir DIR] [--format json|export|unset]
     tdx-system pause | resume --sys NAME [--sys-dir DIR]  # stop / start container
-    tdx-system secrets --get 1p:VAULT --out json|export|unset   # pull creds; also
+    tdx-system secrets --set 1p:VAULT --out json|export|unset   # pull creds; also
                                                     # emits $TD_BACKENDS_SYSTEMS
     tdx-system connect --remote-sys [user@]HOST:REMOTE_SYS --sys NAME [--sys-dir DIR]
                        --remote-secret-env VAR      # ssh-tunnel; container system;
@@ -47,10 +53,14 @@
                                                     # one domain per system, each
                                                     # named after its system, seeded
                                                     # where the system supports it
-    tdx-domain create  --domain-manifest FILE|- [--domain-dir DIR] [-f]  # every
-                                                    # domain in a tdx-domain manifest
-                                                    # (keys mirror the create flags;
-                                                    # - = stdin)
+    tdx-domain create  --domain-manifest FILE|- [--sync] [--domain-dir DIR] [-f]
+                                                    # every domain in a tdx-domain
+                                                    # manifest (keys mirror the create
+                                                    # flags; - = stdin). --sync
+                                                    # reconciles the store to the
+                                                    # manifest (create / destroy to
+                                                    # match; existing ones are never
+                                                    # updated)
     tdx-domain dump    --domain-manifest FILE|- [--domain-dir DIR]  # write a
                                                     # manifest of every domain in
                                                     # the store
@@ -61,14 +71,16 @@
                                                     # (replays recorded ddl/data)
     tdx-domain list    [--domain-dir DIR]           # names + types + model/data
     tdx-domain destroy --domain NAME | --auto ALL|N1,N2,... [--domain-dir DIR]
-                       [--sys-dir DIR]              # drops via the system's conn
-                                                    # (found by the domain's sys_name)
-    tdx-domain destroy --domain-manifest FILE|- [--domain-dir DIR] [--sys-dir DIR]
+                       [--sys-dir DIR] [-f]         # drops via the system's conn
+                                                    # (found by the domain's sys_name);
+                                                    # -f removes the desc even if the
+                                                    # teardown fails
+    tdx-domain destroy --domain-manifest FILE|- [--domain-dir DIR] [--sys-dir DIR] [-f]
                                                     # destroy every domain in a
                                                     # manifest; a missing one warns
                                                     # and is skipped
     tdx-domain status  --domain NAME | --auto ALL|N1,N2,... [--domain-dir DIR]
-    tdx-domain info    --domain NAME [--domain-dir DIR] --format json|export|unset
+    tdx-domain info    --domain NAME [--domain-dir DIR] [--format json|export|unset]
 
 Systems and domains are addressed by *name* (a plain identifier), not by path:
 each name is a file in a *store directory* (see the `store` module):
@@ -92,6 +104,7 @@ import getpass
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 from . import (
@@ -374,6 +387,49 @@ def _multi_apply(names: list[str], kind: str, per_name, *, past: str) -> int:
     return rc
 
 
+def _report_synced(
+    kind: str,
+    created: list[tuple[str, str, bool, str]],
+    destroyed: list[tuple[str, bool, str]],
+    unchanged: list[str],
+) -> int:
+    """Per-section + summary report for a manifest `--sync`: `created` (in the
+    manifest, absent from the store), `destroyed` (in the store, absent from the
+    manifest), and `unchanged` (in both — `--sync` never updates an existing
+    <kind>). `created` items are (name, type, ok, detail); `destroyed` items are
+    (name, ok, detail). Returns 0 iff no create/destroy failed."""
+    created_ok = sum(1 for _, _, ok, _ in created if ok)
+    destroyed_ok = sum(1 for _, ok, _ in destroyed if ok)
+    print()
+    if created:
+        print("created (in the manifest, not the store):")
+        for name, typ, ok, detail in created:
+            line = f"  {'ok  ' if ok else 'FAIL'}  {name} ({typ})"
+            if detail:
+                line += f": {detail}"
+            print(line)
+    if destroyed:
+        print("destroyed (in the store, not the manifest):")
+        for name, ok, detail in destroyed:
+            line = f"  {'ok  ' if ok else 'FAIL'}  {name}"
+            if detail:
+                line += f": {detail}"
+            print(line)
+    if unchanged:
+        print("unchanged (in both — not updated):")
+        for name in unchanged:
+            print(f"  --    {name}")
+    print()
+    print(
+        f">>> synced {kind}s: created {created_ok}/{len(created)}, "
+        f"destroyed {destroyed_ok}/{len(destroyed)}, "
+        f"{len(unchanged)} left unchanged (not updated)"
+    )
+    print()
+    failed = (len(created) - created_ok) + (len(destroyed) - destroyed_ok)
+    return 0 if failed == 0 else 1
+
+
 # --- per-item status / destroy (shared by the single + multi paths) --------
 
 
@@ -387,16 +443,46 @@ def _sys_status_one(name: str, sys_dir: str | None) -> tuple[bool, str]:
     return h.ok, h.detail
 
 
-def _sys_destroy_one(name: str, sys_dir: str | None) -> str:
+def _teardown_and_remove(
+    kind: str, name: str, path: Path, slug: str, teardown, *, force: bool
+) -> str:
+    """Run a system/domain `teardown`, then remove its descriptor. Normally a
+    failed teardown raises and the descriptor is kept. With `force`, a failed
+    teardown still removes the descriptor — so the store doesn't keep a stale
+    entry for a backend that's already gone / unreachable — and warns on stderr
+    instead of raising."""
+    try:
+        teardown()
+    except Exception as exc:  # noqa: BLE001 - force turns any teardown failure into a warning
+        if not force:
+            raise
+        os.remove(path)
+        print(
+            f">>> WARNING: could not destroy {kind} '{name}' ({exc}); "
+            f"removed its descriptor {path} anyway (-f/--force)",
+            file=sys.stderr,
+        )
+        return f"({slug}); teardown FAILED ({exc}); removed {path} anyway (-f)"
+    os.remove(path)
+    return f"({slug}); removed {path}"
+
+
+def _sys_destroy_one(name: str, sys_dir: str | None, *, force: bool = False) -> str:
     path = store.system_path(name, sys_dir)
     doc = descriptor.load(path)
     _require_role(doc, "sys", "tdx-system", "tdx-domain")
     meta = descriptor.resolve(doc)
     _setenv(meta)
     slug = doc["system"]
-    systems.get(slug).destroy_system(SystemContext(slug, doc["name"], meta))
-    os.remove(path)
-    return f"({slug}); removed {path}"
+    ctx = SystemContext(slug, doc["name"], meta)
+    return _teardown_and_remove(
+        "system",
+        name,
+        path,
+        slug,
+        lambda: systems.get(slug).destroy_system(ctx),
+        force=force,
+    )
 
 
 def _domain_status_one(name: str, domain_dir: str | None) -> tuple[bool, str]:
@@ -441,16 +527,24 @@ def _domain_meta_via_system(doc: dict, sys_dir: str | None) -> dict:
     return merged
 
 
-def _domain_destroy_one(name: str, domain_dir: str | None, sys_dir: str | None) -> str:
+def _domain_destroy_one(
+    name: str, domain_dir: str | None, sys_dir: str | None, *, force: bool = False
+) -> str:
     path = store.domain_path(name, domain_dir)
     doc = descriptor.load(path)
     _require_role(doc, "env", "tdx-domain", "tdx-system")
     meta = _domain_meta_via_system(doc, sys_dir)
     _setenv(meta)
     slug = doc["system"]
-    systems.get(slug).destroy_domain(DomainContext(slug, doc["name"], meta))
-    os.remove(path)
-    return f"({slug}); removed {path}"
+    ctx = DomainContext(slug, doc["name"], meta)
+    return _teardown_and_remove(
+        "domain",
+        name,
+        path,
+        slug,
+        lambda: systems.get(slug).destroy_domain(ctx),
+        force=force,
+    )
 
 
 def _recreate_one(name: str, domain_dir: str | None) -> str:
@@ -765,9 +859,17 @@ def _sys_create(rest: list[str]) -> int:
         help="single: system name (a file in the system store dir)",
     )
     _add_sys_dir(p)
+    _add_domain_dir(p)
     _add_secret_env(p)
     p.add_argument(
         "-f", "--force", action="store_true", help="recreate if it already exists"
+    )
+    p.add_argument(
+        "--sync",
+        action="store_true",
+        help="with --sys-manifest: reconcile the store to the manifest — create "
+        "systems it lists but the store lacks, destroy systems the store has but "
+        "it omits, and leave systems in both untouched (never updated)",
     )
     # Single mode lets the chosen type contribute its own options, so
     # `tdx-system create --type s3 -h` also lists --bucket / --region / …. Peek
@@ -778,11 +880,15 @@ def _sys_create(rest: list[str]) -> int:
         systems.get(the_type).add_create_options(p)
     args = p.parse_args(rest)
     _apply_secret(args)
+    if args.sync and not args.sys_manifest:
+        raise DatagenError("--sync is only valid with --sys-manifest")
     if args.sys_manifest:
         if args.sys:
             raise DatagenError(
                 "--sys is not used with --sys-manifest (names come from it)"
             )
+        if args.sync:
+            return _sys_sync_from_manifest(args)
         return _sys_create_from_manifest(args)
     if args.auto is not None:
         if args.sys:
@@ -801,11 +907,9 @@ def _sys_create(rest: list[str]) -> int:
     return _sys_create_single(args, the_type)
 
 
-def _sys_create_from_manifest(args) -> int:
-    """`--sys-manifest FILE|-`: create every system entry in the manifest, reusing
-    the single-create path per entry (full validation). One failed entry is
-    reported and the rest still run."""
-    entries = manifest.read(args.sys_manifest)
+def _sys_common_argv(args) -> list[str]:
+    """The store/secret/force flags to forward from a batch system-create to each
+    per-entry single create."""
     common: list[str] = []
     if args.sys_dir:
         common += ["--sys-dir", args.sys_dir]
@@ -813,20 +917,75 @@ def _sys_create_from_manifest(args) -> int:
         common += ["--secret-env", args.secret_env]
     if args.force:
         common.append("-f")
-    results: list[tuple[str, str, bool, str]] = []
-    for entry in entries:
-        e = dict(entry)
-        typ = str(e.pop("type", "?"))
-        # identity is `name` (the system file name); accept legacy `sys` too. It
-        # maps to the `--sys` create flag; the rest of the keys are settings.
-        name = str(e.pop("name", None) or e.pop("sys", None) or "?")
-        try:
-            argv = [*common, "--type", typ, "--sys", name, *manifest.entry_to_argv(e)]
-            _sys_create(argv)
-            results.append((name, typ, True, ""))
-        except Exception as exc:  # noqa: BLE001 - one bad entry must not stop the rest
-            results.append((name, typ, False, str(exc)))
+    return common
+
+
+def _entry_sys_name(entry: dict) -> str:
+    """A system manifest entry's identity: its `name` (the system file name),
+    accepting the legacy `sys` key too; empty when neither is set."""
+    return str(entry.get("name") or entry.get("sys") or "")
+
+
+def _sys_create_entry(entry: dict, common: list[str]) -> tuple[str, str, bool, str]:
+    """Create one system from a manifest entry via the single-create path (full
+    validation), returning a (name, type, ok, detail) result — a failure is
+    captured, not raised, so a batch keeps going."""
+    e = dict(entry)
+    typ = str(e.pop("type", "?"))
+    # identity is `name` (the system file name); accept legacy `sys` too. It
+    # maps to the `--sys` create flag; the rest of the keys are settings.
+    name = str(e.pop("name", None) or e.pop("sys", None) or "?")
+    try:
+        argv = [*common, "--type", typ, "--sys", name, *manifest.entry_to_argv(e)]
+        _sys_create(argv)
+        return (name, typ, True, "")
+    except Exception as exc:  # noqa: BLE001 - one bad entry must not stop the rest
+        return (name, typ, False, str(exc))
+
+
+def _sys_create_from_manifest(args) -> int:
+    """`--sys-manifest FILE|-`: create every system entry in the manifest, reusing
+    the single-create path per entry (full validation). One failed entry is
+    reported and the rest still run."""
+    common = _sys_common_argv(args)
+    results = [_sys_create_entry(e, common) for e in manifest.read(args.sys_manifest)]
     return _report_created_batch("system", results)
+
+
+def _sys_sync_from_manifest(args) -> int:
+    """`--sys-manifest FILE|- --sync`: reconcile the store to the manifest — create
+    every system the manifest lists but the store lacks, destroy every system the
+    store has but the manifest omits, and leave systems present in both untouched
+    (`--sync` never updates an existing system). A system still referenced by a
+    domain is not destroyed. Continue-on-error: each failed create/destroy is
+    reported and the rest still run."""
+    common = _sys_common_argv(args)
+    store_names = {
+        name for name, _ in _store_entries(store.system_dir(args.sys_dir), "sys")
+    }
+    manifest_names: set[str] = set()
+    created: list[tuple[str, str, bool, str]] = []
+    unchanged: list[str] = []
+    for entry in manifest.read(args.sys_manifest):
+        name = _entry_sys_name(entry)
+        if not name:
+            print(">>> skipping manifest entry with no `name`", file=sys.stderr)
+            continue
+        manifest_names.add(name)
+        if name in store_names:
+            unchanged.append(name)
+        else:
+            created.append(_sys_create_entry(entry, common))
+    destroyed: list[tuple[str, bool, str]] = []
+    for name in sorted(store_names - manifest_names):
+        try:
+            users = _domains_using_system(name, args.domain_dir)
+            if users:
+                raise DatagenError(f"in use by domain(s): {', '.join(users)}")
+            destroyed.append((name, True, _sys_destroy_one(name, args.sys_dir)))
+        except Exception as exc:  # noqa: BLE001 - one bad target must not stop the rest
+            destroyed.append((name, False, str(exc)))
+    return _report_synced("system", created, destroyed, unchanged)
 
 
 def _sys_dump(rest: list[str]) -> int:
@@ -1027,12 +1186,14 @@ def _sys_names_from_manifest(manifest_path: str, sys_dir: str | None) -> list[st
     return names
 
 
-def _sys_batch_ns(prog: str, rest: list[str]) -> argparse.Namespace:
+def _sys_batch_ns(
+    prog: str, rest: list[str], *, with_force: bool = False
+) -> argparse.Namespace:
     """Parse a batch-capable system verb (destroy / status): a single `--sys NAME`,
     `--auto ALL|N1,N2,...` for a batch (every system in the store, or a comma list
     of names), or `--sys-manifest FILE|-` for every system in a `tdx-system`
-    manifest — mirroring the domain side. Exactly one is required. Applies the
-    secret before returning."""
+    manifest — mirroring the domain side. Exactly one is required. `with_force`
+    adds `-f/--force` (destroy only). Applies the secret before returning."""
     p = _ArgumentParser(
         prog=prog, add_help=True, description=f"Reads {_ENCRYPTED_DESC}."
     )
@@ -1054,6 +1215,14 @@ def _sys_batch_ns(prog: str, rest: list[str]) -> argparse.Namespace:
         help="batch: every system in a `tdx-system` manifest (- reads stdin); a "
         "system missing from the store is warned and skipped",
     )
+    if with_force:
+        p.add_argument(
+            "-f",
+            "--force",
+            action="store_true",
+            help="remove the descriptor even if the backend teardown fails "
+            "(warns instead of failing)",
+        )
     _add_sys_dir(p)
     _add_domain_dir(p)
     _add_secret_env(p)
@@ -1072,7 +1241,7 @@ def _sys_destroy_from_manifest(args) -> int:
         users = _domains_using_system(name, args.domain_dir)
         if users:
             raise DatagenError(f"in use by domain(s): {', '.join(users)}")
-        return _sys_destroy_one(name, args.sys_dir)
+        return _sys_destroy_one(name, args.sys_dir, force=args.force)
 
     return _multi_apply(names, "system", destroy, past="destroyed")
 
@@ -1091,7 +1260,7 @@ def _sys_destroy(rest: list[str]) -> int:
     """`tdx-system destroy`: drop a single system (`--sys NAME`), a batch
     (`--auto ALL|N1,N2,...`), or every system in a `tdx-system` manifest
     (`--sys-manifest`, where one still used by a domain fails)."""
-    args = _sys_batch_ns("tdx-system destroy", rest)
+    args = _sys_batch_ns("tdx-system destroy", rest, with_force=True)
     if args.sys_manifest:
         return _sys_destroy_from_manifest(args)
     if args.auto is not None:
@@ -1101,11 +1270,11 @@ def _sys_destroy(rest: list[str]) -> int:
         return _multi_apply(
             names,
             "system",
-            lambda n: _sys_destroy_one(n, args.sys_dir),
+            lambda n: _sys_destroy_one(n, args.sys_dir, force=args.force),
             past="destroyed",
         )
     _require_single_system(args.sys)
-    detail = _sys_destroy_one(args.sys, args.sys_dir)
+    detail = _sys_destroy_one(args.sys, args.sys_dir, force=args.force)
     print()
     print(f">>> destroyed system '{args.sys}' {detail}")
     print()
@@ -1184,8 +1353,8 @@ def _sys_secrets(rest: list[str]) -> int:
         description="Fetch secrets from a pluggable provider and print them to "
         "stdout as a JSON dict, `export` lines, or `unset` lines.\n"
         "Apply them to the current shell with `source`/`eval`:\n"
-        "  source <(tdx-system secrets --get 1p:dev_xp --out export)\n"
-        "  source <(tdx-system secrets --get 1p:dev_xp --out unset)\n"
+        "  source <(tdx-system secrets --set 1p:dev_xp --out export)\n"
+        "  source <(tdx-system secrets --set 1p:dev_xp --out unset)\n"
         "The names follow <ITEM>__<FIELD>, matching the "
         "$<PREFIX>__<OPT> env vars `tdx-system create` reads.\n"
         f"Also sets ${secret.SYSTEMS_ENV} to the distinct <ITEM> prefixes "
@@ -1193,11 +1362,12 @@ def _sys_secrets(rest: list[str]) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument(
-        "--get",
+        "--set",
+        dest="ref",
         required=True,
         metavar="PROVIDER:REF",
         help="secret source as <PROVIDER>:<REF>. Supported providers: "
-        "1p (1Password) — e.g. --get 1p:dev_xp reads vault 'dev_xp'",
+        "1p (1Password) — e.g. --set 1p:dev_xp reads vault 'dev_xp'",
     )
     p.add_argument(
         "--out",
@@ -1207,7 +1377,7 @@ def _sys_secrets(rest: list[str]) -> int:
         "path for Windows / tooling",
     )
     args = p.parse_args(rest)
-    secrets = secret.with_systems_var(secret.fetch(args.get))
+    secrets = secret.with_systems_var(secret.fetch(args.ref))
     text = secret.render(secrets, args.out)
     if text:
         print(text)
@@ -1421,6 +1591,13 @@ def _domain_create(rest: list[str]) -> int:
     p.add_argument(
         "-f", "--force", action="store_true", help="recreate if it already exists"
     )
+    p.add_argument(
+        "--sync",
+        action="store_true",
+        help="with --domain-manifest: reconcile the store to the manifest — create "
+        "domains it lists but the store lacks, destroy domains the store has but "
+        "it omits, and leave domains in both untouched (never updated)",
+    )
     # Single mode: peek --sys so the target system can contribute its own
     # create-domain options before we parse (mirrors --type peeking in
     # _sys_create). The peek decrypts the system descriptor, so point crypto at
@@ -1440,12 +1617,16 @@ def _domain_create(rest: list[str]) -> int:
             peeked_sys.add_domain_options(p)
     args = p.parse_args(rest)
     _apply_secret(args)
+    if args.sync and not args.domain_manifest:
+        raise DatagenError("--sync is only valid with --domain-manifest")
     if args.domain_manifest:
         if args.sys or args.domain:
             raise DatagenError(
                 "--sys / --domain are not used with --domain-manifest "
                 "(names come from it)"
             )
+        if args.sync:
+            return _domain_sync_from_manifest(args)
         return _domain_create_from_manifest(args)
     if args.auto is not None:
         if args.sys or args.domain:
@@ -1548,33 +1729,73 @@ def _domain_create_auto(args) -> int:
     return _report_created_batch("domain", results)
 
 
+def _domain_create_entry(entry: dict, common: list[str]) -> tuple[str, str, bool, str]:
+    """Create one domain from a manifest entry via the single-create path, returning
+    a (name, sys, ok, detail) result — a failure is captured, not raised, so a batch
+    keeps going. Each entry's `name` maps to `--domain` and `sys` to `--sys` (the
+    rest mirror the create flags)."""
+    e = dict(entry)
+    name = str(e.pop("name", None) or "")
+    sys_name = str(e.pop("sys", None) or "")
+    try:
+        if not name:
+            raise DatagenError("manifest entry has no `name` (domain name)")
+        argv = [
+            *common,
+            "--sys",
+            sys_name,
+            "--domain",
+            name,
+            *manifest.entry_to_argv(e),
+        ]
+        _domain_create(argv)
+        return (name, sys_name, True, "")
+    except Exception as exc:  # noqa: BLE001 - one bad entry must not stop the rest
+        return (name or "?", sys_name or "?", False, str(exc))
+
+
 def _domain_create_from_manifest(args) -> int:
     """`--domain-manifest FILE|-`: create every domain entry in a `tdx-domain`
-    manifest, reusing the single-create path per entry. Each entry's `name` maps to
-    `--domain` and `sys` to `--sys` (the rest mirror the create flags). One failed
-    entry is reported and the rest still run."""
+    manifest, reusing the single-create path per entry. One failed entry is
+    reported and the rest still run."""
     common = _domain_common_argv(args)
-    results: list[tuple[str, str, bool, str]] = []
-    for entry in manifest.read(args.domain_manifest):
-        e = dict(entry)
-        name = str(e.pop("name", None) or "")
-        sys_name = str(e.pop("sys", None) or "")
-        try:
-            if not name:
-                raise DatagenError("manifest entry has no `name` (domain name)")
-            argv = [
-                *common,
-                "--sys",
-                sys_name,
-                "--domain",
-                name,
-                *manifest.entry_to_argv(e),
-            ]
-            _domain_create(argv)
-            results.append((name, sys_name, True, ""))
-        except Exception as exc:  # noqa: BLE001 - one bad entry must not stop the rest
-            results.append((name or "?", sys_name or "?", False, str(exc)))
+    results = [
+        _domain_create_entry(e, common) for e in manifest.read(args.domain_manifest)
+    ]
     return _report_created_batch("domain", results)
+
+
+def _domain_sync_from_manifest(args) -> int:
+    """`--domain-manifest FILE|- --sync`: reconcile the store to the manifest —
+    create every domain the manifest lists but the store lacks, destroy every domain
+    the store has but the manifest omits, and leave domains present in both untouched
+    (`--sync` never updates an existing domain). Continue-on-error: each failed
+    create/destroy is reported and the rest still run."""
+    common = _domain_common_argv(args)
+    store_names = {
+        name for name, _ in _store_entries(store.domain_dir(args.domain_dir), "env")
+    }
+    manifest_names: set[str] = set()
+    created: list[tuple[str, str, bool, str]] = []
+    unchanged: list[str] = []
+    for entry in manifest.read(args.domain_manifest):
+        name = str(entry.get("name") or "")
+        if not name:
+            print(">>> skipping manifest entry with no `name`", file=sys.stderr)
+            continue
+        manifest_names.add(name)
+        if name in store_names:
+            unchanged.append(name)
+        else:
+            created.append(_domain_create_entry(entry, common))
+    destroyed: list[tuple[str, bool, str]] = []
+    for name in sorted(store_names - manifest_names):
+        try:
+            detail = _domain_destroy_one(name, args.domain_dir, args.sys_dir)
+            destroyed.append((name, True, detail))
+        except Exception as exc:  # noqa: BLE001 - one bad target must not stop the rest
+            destroyed.append((name, False, str(exc)))
+    return _report_synced("domain", created, destroyed, unchanged)
 
 
 def _domain_dump(rest: list[str]) -> int:
@@ -1628,20 +1849,24 @@ def _install_model_and_data(
         # Fixed-data models have no size (they'd reject one); sizeable models
         # take the requested bucket.
         size = data if data_gen.is_sizeable(model) else None
-        schemas_dir = Path(domain_path).with_suffix("").as_posix() + "-schemas"
-        cli._run_data_load(
-            argparse.Namespace(
-                model=model,
-                domain=domain_path,
-                size=size,
-                force=False,
-                format=None,
-                chunks=None,
-                ser="json",
-                schemas=schemas_dir,
-                use_schema_registry=False,
+        # Kafka data-load writes per-entity schema sidecars to --schemas; they're
+        # only needed to serialize the produce, so hold them in a temp dir that's
+        # discarded here rather than littering the domain store next to the
+        # descriptor. (Non-kafka loads ignore --schemas and never touch it.)
+        with tempfile.TemporaryDirectory(prefix="tdx-schemas-") as schemas_dir:
+            cli._run_data_load(
+                argparse.Namespace(
+                    model=model,
+                    domain=domain_path,
+                    size=size,
+                    force=False,
+                    format=None,
+                    chunks=None,
+                    ser="json",
+                    schemas=schemas_dir,
+                    use_schema_registry=False,
+                )
             )
-        )
 
 
 def _domain_create_single(args, peeked_sys) -> int:
@@ -1816,13 +2041,15 @@ def _domain_names_from_manifest(
 
 
 def _domain_destroy(rest: list[str]) -> int:
-    args = _domain_batch_ns("tdx-domain destroy", rest)
+    args = _domain_batch_ns("tdx-domain destroy", rest, with_force=True)
     if args.domain_manifest:
         names = _domain_names_from_manifest(args.domain_manifest, args.domain_dir)
         return _multi_apply(
             names,
             "domain",
-            lambda n: _domain_destroy_one(n, args.domain_dir, args.sys_dir),
+            lambda n: _domain_destroy_one(
+                n, args.domain_dir, args.sys_dir, force=args.force
+            ),
             past="destroyed",
         )
     if args.auto is not None:
@@ -1832,11 +2059,15 @@ def _domain_destroy(rest: list[str]) -> int:
         return _multi_apply(
             names,
             "domain",
-            lambda n: _domain_destroy_one(n, args.domain_dir, args.sys_dir),
+            lambda n: _domain_destroy_one(
+                n, args.domain_dir, args.sys_dir, force=args.force
+            ),
             past="destroyed",
         )
     _require_single_domain(args.domain)
-    detail = _domain_destroy_one(args.domain, args.domain_dir, args.sys_dir)
+    detail = _domain_destroy_one(
+        args.domain, args.domain_dir, args.sys_dir, force=args.force
+    )
     print()
     print(f">>> destroyed domain '{args.domain}' {detail}")
     print()
@@ -1906,12 +2137,15 @@ def _require_single_domain(name: str) -> None:
     descriptor.validate_name(name)
 
 
-def _domain_batch_ns(prog: str, rest: list[str]) -> argparse.Namespace:
+def _domain_batch_ns(
+    prog: str, rest: list[str], *, with_force: bool = False
+) -> argparse.Namespace:
     """Parse a batch-capable domain verb (destroy / status): a single `--domain
     NAME`, `--auto ALL|N1,N2,...` for a batch (every domain in the store, or a
     comma list of names), or `--domain-manifest FILE|-` for every domain in a
     `tdx-domain` manifest — mirroring `create`'s modes. Exactly one is required.
-    Applies the secret before returning."""
+    `with_force` adds `-f/--force` (destroy only). Applies the secret before
+    returning."""
     p = _ArgumentParser(
         prog=prog, add_help=True, description=f"Reads {_ENCRYPTED_DESC}."
     )
@@ -1933,6 +2167,14 @@ def _domain_batch_ns(prog: str, rest: list[str]) -> argparse.Namespace:
         help="batch: every domain in a `tdx-domain` manifest (- reads stdin); a "
         "domain missing from the store is warned and skipped",
     )
+    if with_force:
+        p.add_argument(
+            "-f",
+            "--force",
+            action="store_true",
+            help="remove the descriptor even if the backend teardown fails "
+            "(warns instead of failing)",
+        )
     _add_domain_dir(p)
     _add_sys_dir(p)
     _add_secret_env(p)
@@ -1957,9 +2199,9 @@ def _locator_ns(
     if want_format:
         p.add_argument(
             "--format",
-            required=True,
+            default="json",
             choices=list(descriptor.VALID_INFO_FORMATS),
-            help="json | export | unset",
+            help="json (default) | export | unset",
         )
     _add_secret_env(p)
     args = p.parse_args(rest)
