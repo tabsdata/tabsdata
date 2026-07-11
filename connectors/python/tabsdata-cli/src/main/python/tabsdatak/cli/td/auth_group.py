@@ -4,6 +4,8 @@
 
 import os
 import shutil
+import sys
+from pathlib import Path
 
 import rich_click as click
 from rich.console import Console
@@ -34,7 +36,10 @@ def auth():
 
 @auth.command()
 @click.option("--server", "-s", help="Tabsdata Server URL")
-@click.option("--pem", help="Path to the certificate PEM file")
+@click.option(
+    "--pem",
+    help="Path to the certificate PEM file, or '-' to read it from stdin.",
+)
 @click.pass_context
 def add_cert(ctx: click.Context, server: str, pem: str):
     """
@@ -52,7 +57,10 @@ def add_cert(ctx: click.Context, server: str, pem: str):
             server = HTTPS_PROTOCOL + server
         certificate_path = _obtain_certificate_file_path(server)
         os.makedirs(DEFAULT_TABSDATA_CERTIFICATE_FOLDER, exist_ok=True)
-        shutil.copy(pem, certificate_path)
+        if pem == "-":
+            Path(certificate_path).write_text(sys.stdin.read())
+        else:
+            shutil.copy(pem, certificate_path)
         click.echo(f"Certificate added successfully for server '{server}'")
         click.echo(f"Certificate stored at '{certificate_path}'")
     except Exception as e:

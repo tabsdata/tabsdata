@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from click.testing import CliRunner
 
@@ -59,6 +61,22 @@ def test_template_file_writes_document_to_path(tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert out2.read_text() == out.read_text()
+
+
+def test_template_file_dash_writes_to_stdout():
+    # ``--file -`` means stdout, not a file literally named "-". The output is
+    # identical to omitting ``--file``, with no "Wrote ..." status line.
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            cli, ["connection", "template", "-t", "local-file-in", "--file", "-"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "kind: connectionDef" in result.output
+        assert "Wrote connection document" not in result.output
+        assert not Path("-").exists()
+    plain = CliRunner().invoke(cli, ["connection", "template", "-t", "local-file-in"])
+    assert result.output == plain.output
 
 
 def test_template_rejects_dash_o_output_flag():

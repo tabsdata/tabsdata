@@ -911,8 +911,8 @@ def info(ctx: click.Context, plan: str):
 @click.option(
     "--file",
     help=(
-        "Path of the file where the logs will be saved. Any folders provided before "
-        "the file must already exist."
+        "Path of the file where the logs will be saved, or '-' to write them to "
+        "stdout. Any folders provided before the file must already exist."
     ),
 )
 @click.option(
@@ -1027,6 +1027,10 @@ def logs(
             )
             generated_logs += server.get_worker_log(w)
             generated_logs += os.linesep + "*" * 20 + os.linesep
+        if file == "-":
+            # The file is stdout: emit the raw log text, nothing else.
+            click.echo(generated_logs, nl=False)
+            return
         if output_format(ctx) != "table":
             if file:
                 with open(file, "w") as f:

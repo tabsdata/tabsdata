@@ -718,6 +718,22 @@ def test_exe_logs_carries_worker_log_in_every_format(tmp_path):
     assert "line-1" in result.output and "line-2" in result.output
 
 
+def test_exe_logs_file_dash_writes_raw_logs_to_stdout(tmp_path):
+    # ``--file -`` means stdout: the raw log text is emitted, with no "Saving
+    # logs to file" chatter and no file literally named "-".
+    client = _client()
+    _set_worker_log(client)
+    result = _invoke(
+        ["exe", "logs", "--worker", "W1", "--file", "-"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    assert "W1" in result.output
+    assert "line-1" in result.output and "line-2" in result.output
+    assert "Saving logs to file" not in result.output
+
+
 # ---------------------------------------------------------------------------
 # ``pin show`` -- kept out of the matrix.
 #

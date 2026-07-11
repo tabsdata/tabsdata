@@ -76,7 +76,7 @@ def _resolve(ctx, type_):
 
 def _emit(document, file):
     text = template.to_yaml(document)
-    if file:
+    if file and file != "-":
         Path(file).write_text(text)
         click.echo(f"Wrote connection document to {file}")
     else:
@@ -91,7 +91,11 @@ def _emit(document, file):
 # the point, and JSON can't carry them), so there is no output *format* to pick
 # here -- ``-o/--output`` is reserved CLI-wide for that. Use ``--file``/``-f``
 # for the output path, matching validate/table/exe.
-@click.option("--file", "-f", help="Write the template to this file instead of stdout.")
+@click.option(
+    "--file",
+    "-f",
+    help="Write the template to this file. '-' (or omitting it) writes to stdout.",
+)
 @click.pass_context
 def template_(ctx, type_, file):
     """Print a fill-in connection template for a connector type"""
