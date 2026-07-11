@@ -33,7 +33,15 @@ impl std::fmt::Debug for KeyValue {
 /// the triple is validated CLI-side.
 #[ta_objects::Dto]
 pub struct ConnectionUpsert {
-    #[schema(value_type = Object)]
+    /// On the wire it is a YAML string (the dehydrated connection document),
+    /// matching the create endpoint; it is parsed into the connection object
+    /// here so the rest of the pipeline keeps working on a value.
+    #[schema(value_type = String)]
+    #[serde(
+        default,
+        deserialize_with = "crate::dxo::collection::deserialize_yaml_connection"
+    )]
+    #[builder(default)]
     pub connection: Option<serde_json::Value>,
     pub secrets: Option<Vec<KeyValue>>,
     pub vars: Option<Vec<KeyValue>>,

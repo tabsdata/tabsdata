@@ -266,6 +266,52 @@ def info(ctx: click.Context, name: str):
 @collection.command()
 @proj_option
 @output_option
+@click.option(
+    "--name",
+    "-n",
+    help="Name of the source/destination collection whose connection to display.",
+)
+@click.pass_context
+def connection(ctx: click.Context, name: str):
+    """Display the connection of a source/destination collection.
+
+    Shows the dehydrated connection document plus the names (never the values)
+    of its secrets and variables.
+    """
+    verify_login_or_prompt(ctx)
+    name = (
+        name
+        or get_currently_pinned_object(ctx, "collection")
+        or logical_prompt(ctx, "Name of the collection whose connection to display")
+    )
+    try:
+        server: TabsdataServer = ctx.obj["tabsdataserver"]
+        conn_read = server.get_collection_connection(name)
+
+        def _table():
+            doc = conn_read.get("connection") or {}
+            table = Table(title=f"Connection for collection '{name}'")
+            table.add_column("Type", style="cyan", no_wrap=True)
+            table.add_column("Secrets")
+            table.add_column("Vars")
+            table.add_row(
+                str(doc.get("type", "")),
+                ", ".join(conn_read.get("secret_names") or []),
+                ", ".join(conn_read.get("var_names") or []),
+            )
+            click.echo()
+            Console().print(table)
+            click.echo()
+
+        render(ctx, data=conn_read, table=_table)
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(f"Failed to display connection: {e}")
+
+
+@collection.command()
+@proj_option
+@output_option
 @click.pass_context
 def list(ctx: click.Context):
     """List all collections"""
@@ -314,6 +360,14 @@ def list(ctx: click.Context):
         "versions keep their stamped path; only new artifacts use the new prefix."
     ),
 )
+@click.option(
+    "--conn-file",
+    help=(
+        "Connection YAML document ('-' to read from stdin) to create or replace "
+        "the source/destination collection's connection. Validated and dehydrated "
+        "client-side; secret values are stripped into the secret payload."
+    ),
+)
 @click.pass_context
 def update(
     ctx: click.Context,
@@ -321,6 +375,7 @@ def update(
     new_name: str,
     description: str,
     base_path: str,
+    conn_file: str,
 ):
     """Update a collection by name"""
     verify_login_or_prompt(ctx)
@@ -331,14 +386,28 @@ def update(
     )
     click.echo(f"Updating collection: {name}")
     click.echo("-" * 10)
+    connection = None
+    secrets = None
+    if conn_file:
+        connection, _group, secrets = _load_connection_document(conn_file, None)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.update_collection(
-            name,
-            new_name=new_name,
-            new_description=description,
-            new_base_path=base_path,
-        )
+        # Scalar fields go through the collection-update endpoint; the connection
+        # (if any) through its dedicated upsert endpoint. When only --conn-file is
+        # given, skip the no-op scalar update.
+        scalar_change = new_name or description is not None or base_path is not None
+        if scalar_change or not conn_file:
+            server.update_collection(
+                name,
+                new_name=new_name,
+                new_description=description,
+                new_base_path=base_path,
+            )
+        if connection is not None:
+            # A rename lands first, so the connection upsert targets the new name.
+            server.update_collection_connection(
+                new_name or name, connection=connection, secrets=secrets
+            )
         click.echo("Collection updated successfully")
     except Exception as e:
         hint_common_solutions(ctx, e)

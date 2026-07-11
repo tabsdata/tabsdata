@@ -204,10 +204,16 @@ mod definitions {
     }
 }
 
-/// Parse the `connection` field, which arrives on the wire as a YAML string
-/// (the dehydrated connection document the client built with `Conn` + dehydrate)
-/// into the `serde_json::Value` the rest of the create pipeline consumes. YAML
-/// is a superset of JSON, so a JSON string parses too. `null`/absent -> `None`.
+/// Parse the `connection` field into the `serde_json::Value` the rest of the
+/// pipeline consumes. It accepts either form:
+///
+/// - a YAML string — the dehydrated connection document the client sends on the
+///   wire (YAML is a superset of JSON, so a JSON string parses too); or
+/// - an already-parsed object — the form `ConnectionUpsert` round-trips through
+///   the connection store's own serialize/deserialize (the stored record holds
+///   the connection as a map, not a string).
+///
+/// `null`/absent -> `None`.
 pub(crate) fn deserialize_yaml_connection<'de, D>(
     deserializer: D,
 ) -> Result<Option<serde_json::Value>, D::Error>
@@ -215,12 +221,12 @@ where
     D: serde::Deserializer<'de>,
 {
     use serde::Deserialize;
-    let raw: Option<String> = Option::deserialize(deserializer)?;
-    match raw {
-        None => Ok(None),
-        Some(text) => serde_yaml::from_str(&text)
+    match Option::<serde_json::Value>::deserialize(deserializer)? {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::String(text)) => serde_yaml::from_str(&text)
             .map(Some)
             .map_err(serde::de::Error::custom),
+        Some(other) => Ok(Some(other)),
     }
 }
 

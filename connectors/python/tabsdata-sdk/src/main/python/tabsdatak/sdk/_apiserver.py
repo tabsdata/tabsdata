@@ -522,7 +522,7 @@ class APIServer:
     def collection_connection_upsert(
         self,
         collection_name: str,
-        connection: dict,
+        connection: str,
         secrets: list | None = None,
         variables: list | None = None,
         raise_for_status: bool = True,

@@ -644,6 +644,28 @@ class Collection:
         self._data = response.json().get("data")
         return self
 
+    def upsert_connection(
+        self,
+        connection: str,
+        secrets: list | None = None,
+        variables: list | None = None,
+        raise_for_status: bool = True,
+    ) -> Collection:
+        self.connection.collection_connection_upsert(
+            self.name,
+            connection,
+            secrets=secrets,
+            variables=variables,
+            raise_for_status=raise_for_status,
+        )
+        return self
+
+    def get_connection(self, raise_for_status: bool = True) -> dict:
+        response = self.connection.collection_connection_get(
+            self.name, raise_for_status=raise_for_status
+        )
+        return response.json().get("data")
+
     def update_function(
         self,
         function_name: str,
@@ -3809,6 +3831,65 @@ class TabsdataServer:
             base_path=new_base_path,
             raise_for_status=raise_for_status,
         )
+
+    def update_collection_connection(
+        self,
+        name: str,
+        connection: str,
+        secrets: list | None = None,
+        variables: list | None = None,
+        raise_for_status: bool = True,
+    ) -> Collection:
+        """
+        Create or update the connection of a source/destination collection.
+
+        The server exposes this as a dedicated endpoint (a collection's
+        connection is not part of the collection-update payload), so it is a
+        separate call from :meth:`update_collection`.
+
+        Args:
+            name (str): The name of the collection.
+            connection (str): Dehydrated connection document as a YAML string
+                (same wire form as create).
+            secrets (list, optional): ``{key, value}`` covering every ``secret:``
+                reference in the connection document.
+            variables (list, optional): ``{key, value}`` non-secret values.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Raises:
+            APIServerError: If the connection could not be updated.
+        """
+        collection = Collection(self.connection, name)
+        return collection.upsert_connection(
+            connection,
+            secrets=secrets,
+            variables=variables,
+            raise_for_status=raise_for_status,
+        )
+
+    def get_collection_connection(
+        self, name: str, raise_for_status: bool = True
+    ) -> dict:
+        """
+        Read the connection of a source/destination collection.
+
+        Returns the dehydrated connection document plus the NAMES (never the
+        values) of its secrets and vars.
+
+        Args:
+            name (str): The name of the collection.
+            raise_for_status (bool, optional): Whether to raise an exception if the
+                request was not successful. Defaults to True.
+
+        Returns:
+            dict: ``{id, connection, secret_names, var_names}``.
+
+        Raises:
+            APIServerError: If the connection could not be read.
+        """
+        collection = Collection(self.connection, name)
+        return collection.get_connection(raise_for_status=raise_for_status)
 
     def list_dataversions(
         self,

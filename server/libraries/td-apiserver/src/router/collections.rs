@@ -452,12 +452,11 @@ mod tests {
         // Source collection (group `source` → CollectionType::Source).
         create_collection_in(&router, db.clone(), "src_coll", Some(SOURCE_GROUP)).await;
 
+        // The upsert endpoint takes the connection as a dehydrated YAML string
+        // (same wire form as create).
         let conn_body = json!({
-            "connection": {
-                "type": "mysqlSrcConn",
-                "name": "src_coll",
-                "conn_configs": {"env:password": "CREDENTIALS_PASSWORD"},
-            },
+            "connection": "type: mysqlSrcConn\nname: src_coll\n\
+                conn_configs:\n  \"env:password\": CREDENTIALS_PASSWORD\n",
             "secrets": [{"key": "CREDENTIALS_PASSWORD", "value": "hunter2"}],
             "vars": []
         });
