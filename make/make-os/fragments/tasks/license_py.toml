@@ -52,8 +52,8 @@ script = [
         end
     end
 
-    debug "🚀 licensecheck --license \"PROPRIETARY\" --requirements-paths requirements.txt ${authorized_licenses} ${authorized_packages} ${ignored_licenses} --show-only-failing --zero"
-    exec --fail-on-error licensecheck --license "PROPRIETARY" --requirements-paths requirements.txt %{authorized_licenses} %{authorized_packages} %{ignored_licenses} --show-only-failing --zero
+    debug "🚀 uvx licensecheck@2026.0.8 --license \"PROPRIETARY\" --requirements-paths requirements.txt ${authorized_licenses} ${authorized_packages} ${ignored_licenses} --show-only-failing --zero"
+    exec --fail-on-error uvx licensecheck@2026.0.8 --license "PROPRIETARY" --requirements-paths requirements.txt %{authorized_licenses} %{authorized_packages} %{ignored_licenses} --show-only-failing --zero
 
     cd ..
     ''']

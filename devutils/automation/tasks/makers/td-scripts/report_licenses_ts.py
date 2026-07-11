@@ -161,6 +161,10 @@ def get_custom_license(_m_name, m_license):
     key = m_license.strip()
     if key in normalized_licenses:
         return normalized_licenses[key]
+    key_lower = key.lower()
+    for normalized_key, normalized_value in normalized_licenses.items():
+        if normalized_key.lower() == key_lower:
+            return normalized_value
     logger.error(f"No label for module license '{m_license}'")
     exit(1)
 
