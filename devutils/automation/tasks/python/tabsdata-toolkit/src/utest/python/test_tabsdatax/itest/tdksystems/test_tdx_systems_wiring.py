@@ -112,6 +112,20 @@ def test_s3_descriptor_matches_old_writer(tmp_path, stores, fake_s3):
         assert a[key] == b[key], key
 
 
+def test_cloud_create_does_not_probe_or_clear_root(stores, monkeypatch):
+    # Object-store create verifies reachability only: it must not check the root
+    # prefix for existing objects nor clear it (the root is externally owned).
+    class _StrictS3:
+        def status(self): pass
+        def exists(self, p): raise AssertionError("must not probe root existence")
+        def clear(self, p): raise AssertionError("must not clear root prefix")
+        def upload(self, p, paths): return 0
+
+    monkeypatch.setattr(S3System, "_backend", lambda self, values: _StrictS3())
+    assert tdx._sys_create(["--type", "s3", "--sys", "store", *_S3_CREATE]) == 0
+    assert tdx._sys_destroy(["--sys", "store"]) == 0
+
+
 # ---- mysql (container) — domain via tdx; system descriptor built directly -
 
 def test_mysql_domain_through_tdx(stores, monkeypatch):

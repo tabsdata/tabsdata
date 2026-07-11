@@ -5,9 +5,10 @@
 """Local-filesystem system — domains are directories under a root path.
 
 Diverges from the object stores: the root and each domain are real dirs
-(mkdir / rmtree), with stricter root validation so a system-level destroy can
-never rmtree a sensitive path. Absolute roots are valid, so `relative_sys_path`
-is False (no leading-slash strip).
+(mkdir), with stricter root validation so a force-recreate rmtree can never
+wipe a sensitive path. The root itself is left in place on system destroy, and
+is not checked for pre-existing content on create. Absolute roots are valid, so
+`relative_sys_path` is False (no leading-slash strip).
 """
 
 from __future__ import annotations
@@ -29,8 +30,8 @@ from .backend import FsBackend
 
 
 def _validate_fs_root(root: str) -> None:
-    """Allow only safe locations so a system-level destroy can rmtree without
-    wiping a real system directory."""
+    """Allow only safe locations so a force-recreate rmtree of a domain
+    directory under this root can never wipe a real system directory."""
     if not root:
         raise DatagenError("root path is empty")
     parts = [p for p in root.split("/") if p]
@@ -84,28 +85,16 @@ class FsSystem(CloudBase):
             )
         }
 
-    # fs creates its root dir rather than checking a remote bucket.
+    # fs ensures its root dir exists rather than checking a remote bucket; it
+    # neither errors on a pre-existing root nor deletes it (destroy is a no-op,
+    # inherited from CloudBase).
     def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
         root = _normalize_path(
             spec.settings["SYS_PATH"].value or f"target/backends/{spec.name}"
         )
         _validate_fs_root(root)
-        root_p = Path(root)
-        if root_p.exists():
-            if spec.force:
-                shutil.rmtree(root_p)
-                print(f">>> --force: removed existing root path '{root}'")
-            else:
-                raise DatagenError(
-                    f"root path already exists: '{root}' (use --force to clear)"
-                )
-        root_p.mkdir(parents=True)
+        Path(root).mkdir(parents=True, exist_ok=True)
         return {"SYS_PATH": Setting("SYS_PATH", value=root, is_path=True)}
-
-    def destroy_system(self, ctx: SystemContext) -> None:
-        p = Path(ctx.meta.get("SYS_PATH", ""))
-        if p.exists():
-            shutil.rmtree(p)
 
     # fs materialises the domain as a real directory (mkdir).
     def create_domain(

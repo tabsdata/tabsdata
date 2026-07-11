@@ -191,7 +191,19 @@ def test_full_fs_lifecycle(stores, fs_root):
 
     tdx._sys_destroy(["--sys", "my_fs"])
     assert not store.system_path("my_fs").exists()
-    assert not fs_root.exists()
+    assert fs_root.exists()  # system destroy leaves the root path in place
+
+
+def test_fs_create_ignores_pre_existing_root(stores, fs_root):
+    # A pre-existing (even non-empty) root is fine: create neither errors nor
+    # clears it — no --force needed — and system destroy leaves it untouched.
+    fs_root.mkdir(parents=True)
+    (fs_root / "keep.txt").write_text("x")
+    assert tdx._sys_create(["--type", "fs", "--sys", "my_fs",
+                            "--sys-path", str(fs_root)]) == 0
+    assert (fs_root / "keep.txt").read_text() == "x"
+    tdx._sys_destroy(["--sys", "my_fs"])
+    assert (fs_root / "keep.txt").exists()
 
 
 # ---- list: names + types in the store dir ----------------------------------

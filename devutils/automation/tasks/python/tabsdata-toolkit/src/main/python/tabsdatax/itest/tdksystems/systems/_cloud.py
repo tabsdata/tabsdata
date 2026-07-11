@@ -6,8 +6,8 @@
 
 A cloud system's pluggable logic is one hook: `_backend(values)` returning an
 object with `status` / `exists` / `clear` / `upload`. The local-filesystem
-backend (`fs`) overrides the create/destroy methods (mkdir / rmtree instead of
-prefix checks) and sets `relative_sys_path = False`.
+backend (`fs`) overrides `create_system` (mkdir instead of a reachability check)
+and sets `relative_sys_path = False`.
 """
 
 from __future__ import annotations
@@ -46,20 +46,10 @@ class CloudBase(System):
             backend.status()
         except Exception as exc:  # noqa: BLE001
             raise DatagenError(f"could not reach {self.slug}: {exc}")
-        root = values.get("SYS_PATH", "")
-        if backend.exists(root):
-            if spec.force:
-                backend.clear(root)
-                print(f">>> --force: cleared existing root prefix {self.slug}://{root}")
-            else:
-                raise DatagenError(
-                    f"root prefix has objects: {self.slug}://{root} "
-                    f"(use --force to clear)"
-                )
         return dict(spec.settings)
 
     def destroy_system(self, ctx: SystemContext) -> None:
-        return None  # externally owned
+        return None  # the root prefix is externally owned — never touch it
 
     def system_status(self, ctx: SystemContext) -> Health:
         return self._reachable(
