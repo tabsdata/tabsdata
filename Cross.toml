@@ -6,6 +6,7 @@
 
 [target.x86_64-unknown-linux-musl]
 pre-build = [
+    "apt-get update && apt-get install --assume-yes clang",
     "ln -snf /home/runner/.theseus /root/.theseus",
 ]
 
@@ -16,6 +17,8 @@ passthrough = [
     "TABSDATA_SOLUTION_HOME",
     "THESEUS_CACHE_HOME",
     # >>> passthrough:MOUNTS:END >>>
+    "CC_x86_64_unknown_linux_gnu=clang",
+    "CXX_x86_64_unknown_linux_gnu=clang++",
     "TD_CROSS_BUILD=true",
     "GITHUB_TOKEN",
     # >>> passthrough:MAKE:BEGIN >>>
