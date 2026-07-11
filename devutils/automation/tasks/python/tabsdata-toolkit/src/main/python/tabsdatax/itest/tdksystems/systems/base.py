@@ -39,6 +39,7 @@ What the framework (not the System) owns
 from __future__ import annotations
 
 import argparse
+import getpass
 import os
 import re
 from abc import ABC, abstractmethod
@@ -65,6 +66,37 @@ def _validate_path(p: str, label: str) -> None:
         raise DatagenError(f"{label} must not contain '..' (got: {p})")
     if "\n" in p:
         raise DatagenError(f"{label} contains newlines")
+
+
+_NON_IDENT = re.compile(r"[^A-Za-z0-9_]+")
+
+
+def _ident_token(value: str) -> str:
+    """Squeeze an arbitrary string (a username / build number) into an
+    identifier-safe token — non-`[A-Za-z0-9_]` runs collapse to a single `_`,
+    trimmed at the ends — so it can head a system/schema/database name."""
+    tok = _NON_IDENT.sub("_", value).strip("_")
+    return tok or "x"
+
+
+def _os_username() -> str:
+    """The OS login name, with env fallbacks for environments where
+    `getpass.getuser()` can't read one."""
+    try:
+        return getpass.getuser()
+    except Exception:  # noqa: BLE001 - no controlling user (odd CI); fall back
+        return os.environ.get("USER") or os.environ.get("USERNAME") or "user"
+
+
+def _build_identity() -> str:
+    """The CI/dev build identity `<user>_<build>` used to namespace shared
+    resources across concurrent runs: `$TD_BUILD_USER` (else the OS login) and
+    `$TD_BUILD_NUMBER` (else `0`), each squeezed to an identifier-safe token.
+    Heads the domain `DOMAIN_PREFIX` and, for kafka systems, the consumer
+    `GROUP_ID`."""
+    user = os.environ.get("TD_BUILD_USER") or _os_username()
+    build = os.environ.get("TD_BUILD_NUMBER") or "0"
+    return f"{_ident_token(user)}_{_ident_token(build)}"
 
 
 # ======================================================================

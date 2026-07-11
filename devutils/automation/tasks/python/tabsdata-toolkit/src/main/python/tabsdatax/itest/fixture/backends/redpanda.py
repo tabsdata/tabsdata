@@ -39,6 +39,7 @@ class RedpandaDomain(Domain):
     db: str
     sqlalchemy_uri: str
     topic: str  # redpanda calls the entity container a topic (== db here)
+    group_id: str  # consumer group id — the build identity (see GROUP_ID)
     model: str | None = None
     data: str | None = None
     entities: dict[str, int] | None = None  # {table: record count}, once loaded

@@ -100,9 +100,7 @@ system is just a new module.
 from __future__ import annotations
 
 import argparse
-import getpass
 import os
-import re
 import sys
 import tempfile
 from pathlib import Path
@@ -132,6 +130,7 @@ from .systems.base import (
     DomainContext,
     SystemContext,
     Unsupported,
+    _build_identity,
 )
 
 
@@ -258,36 +257,14 @@ def _expand_names(value: str, directory: Path, role: str, opt: str) -> list[str]
 # `$TD_BUILD_USER`_`$TD_BUILD_NUMBER`_ (the CI identity), else the OS login name
 # and build 0.
 
-_NON_IDENT = re.compile(r"[^A-Za-z0-9_]+")
-
-
-def _ident_token(value: str) -> str:
-    """Squeeze an arbitrary string (a username / build number) into an
-    identifier-safe token — non-`[A-Za-z0-9_]` runs collapse to a single `_`,
-    trimmed at the ends — so it can head a system/schema/database name."""
-    tok = _NON_IDENT.sub("_", value).strip("_")
-    return tok or "x"
-
-
-def _os_username() -> str:
-    """The OS login name, with env fallbacks for environments where
-    `getpass.getuser()` can't read one."""
-    try:
-        return getpass.getuser()
-    except Exception:  # noqa: BLE001 - no controlling user (odd CI); fall back
-        return os.environ.get("USER") or os.environ.get("USERNAME") or "user"
-
 
 def _resolve_domain_prefix(explicit: str | None) -> str:
     """The DOMAIN_PREFIX prepended to a domain's external entity name.
-    `--domain-prefix` wins verbatim; otherwise it is
-    `<TD_BUILD_USER or os-user>_<TD_BUILD_NUMBER or 0>_` (each auto-resolved
-    token sanitised to identifier-safe)."""
+    `--domain-prefix` wins verbatim; otherwise it is the build identity
+    (`<user>_<build>`, see `_build_identity`) with a trailing `_`."""
     if explicit is not None:
         return explicit
-    user = os.environ.get("TD_BUILD_USER") or _os_username()
-    build = os.environ.get("TD_BUILD_NUMBER") or "0"
-    return f"{_ident_token(user)}_{_ident_token(build)}_"
+    return _build_identity() + "_"
 
 
 def _external_name(domain: str, explicit_prefix: str | None) -> str:
@@ -720,7 +697,7 @@ def _print_created(kind: str, path: str, hint: str) -> None:
     print(f"    descriptor: {path}")
     print()
     verb = "tdx-domain" if kind == "domain" else "tdx-system"
-    print(f"    info:  {verb} info {hint} --format json")
+    print(f"    info:  {verb} info {hint}")
     print()
 
 

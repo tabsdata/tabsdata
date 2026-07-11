@@ -22,6 +22,7 @@ import pytest
 
 from tabsdatax.itest.tdksystems import descriptor, store, tdx
 from tabsdatax.itest.tdksystems.errors import DatagenError
+from tabsdatax.itest.tdksystems.systems import base
 
 
 @pytest.fixture
@@ -163,10 +164,14 @@ def test_created_info_hint_uses_verb_first_syntax(stores, fs_root, capsys):
     tdx._sys_create(["--type", "fs", "--sys", "my_fs",
                      "--sys-path", str(fs_root), "-f"])
     # The post-create hint must be a runnable command: verb before flags,
-    # addressing the system by name.
-    assert "tdx-system info --sys my_fs --format json" in capsys.readouterr().out
+    # addressing the system by name. No --format (json is the default).
+    out = capsys.readouterr().out
+    assert "tdx-system info --sys my_fs" in out
+    assert "--format" not in out
     tdx._domain_create(["--sys", "my_fs", "--domain", "inbox", "-f"])
-    assert "tdx-domain info --domain inbox --format json" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "tdx-domain info --domain inbox" in out
+    assert "--format" not in out
 
 
 def test_sys_info_formats_are_unprefixed(stores, fs_root):
@@ -1241,15 +1246,38 @@ def test_resolve_domain_prefix_precedence(monkeypatch):
     # ... else the OS user + build 0.
     monkeypatch.delenv("TD_BUILD_USER", raising=False)
     monkeypatch.delenv("TD_BUILD_NUMBER", raising=False)
-    monkeypatch.setattr(tdx, "_os_username", lambda: "devx")
+    monkeypatch.setattr(base, "_os_username", lambda: "devx")
     assert tdx._resolve_domain_prefix(None) == "devx_0_"
 
 
 def test_ident_token_sanitizes():
-    assert tdx._ident_token("tucu") == "tucu"
-    assert tdx._ident_token("a.b/c") == "a_b_c"
-    assert tdx._ident_token("--x--") == "x"
-    assert tdx._ident_token("") == "x"          # never empty (would break names)
+    assert base._ident_token("tucu") == "tucu"
+    assert base._ident_token("a.b/c") == "a_b_c"
+    assert base._ident_token("--x--") == "x"
+    assert base._ident_token("") == "x"          # never empty (would break names)
+
+
+def test_build_identity(monkeypatch):
+    monkeypatch.setenv("TD_BUILD_USER", "ci")
+    monkeypatch.setenv("TD_BUILD_NUMBER", "7")
+    assert base._build_identity() == "ci_7"      # DOMAIN_PREFIX minus trailing _
+    monkeypatch.delenv("TD_BUILD_USER", raising=False)
+    monkeypatch.delenv("TD_BUILD_NUMBER", raising=False)
+    monkeypatch.setattr(base, "_os_username", lambda: "devx")
+    assert base._build_identity() == "devx_0"
+
+
+def test_redpanda_domain_group_id_is_build_identity(monkeypatch):
+    # A redpanda domain's GROUP_ID is the build identity (matching the topic's
+    # DOMAIN_PREFIX) and is exported so a source connection can consume under a
+    # per-build consumer group.
+    from tabsdatax.itest.tdksystems import systems
+
+    monkeypatch.setenv("TD_BUILD_USER", "ci")
+    monkeypatch.setenv("TD_BUILD_NUMBER", "7")
+    rp = systems.get("redpanda")
+    assert rp._domain_extra_vars()["GROUP_ID"] == "ci_7"
+    assert "GROUP_ID" in rp.exported_domain_vars
 
 
 def test_domain_prefix_defaults_to_build_identity(stores, fs_root, monkeypatch):
@@ -1273,7 +1301,7 @@ def test_domain_prefix_defaults_to_build_identity(stores, fs_root, monkeypatch):
 def test_domain_prefix_falls_back_to_os_user(stores, fs_root, monkeypatch):
     monkeypatch.delenv("TD_BUILD_USER", raising=False)
     monkeypatch.delenv("TD_BUILD_NUMBER", raising=False)
-    monkeypatch.setattr(tdx, "_os_username", lambda: "devx")
+    monkeypatch.setattr(base, "_os_username", lambda: "devx")
     tdx._sys_create(["--type", "fs", "--sys", "my_fs",
                      "--sys-path", str(fs_root), "-f"])
     tdx._domain_create(["--sys", "my_fs", "--domain", "inbox", "-f"])

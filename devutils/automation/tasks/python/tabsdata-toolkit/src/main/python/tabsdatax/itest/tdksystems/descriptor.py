@@ -258,6 +258,7 @@ def write_container_domain(
     sys_path_env: str | None = None,
     base_path: str | None = None,
     extra_vars: dict[str, str] | None = None,
+    exported_extra: tuple[str, ...] = (),
 ) -> None:
     """Descriptor for a container domain (SQL or not).
 
@@ -266,7 +267,9 @@ def write_container_domain(
     `base_path` (+ `sys_path` / `sys_path_env`) — for file-staging systems, the
     domain's full staging prefix, exported as `BASE_PATH` alongside the root
     `SYS_PATH`. `extra_vars` — extra metadata surfaced in `meta` (e.g.
-    redpanda's KAFKA_BROKERS / SCHEMA_REGISTRY_URL)."""
+    redpanda's KAFKA_BROKERS / SCHEMA_REGISTRY_URL). `exported_extra` — the
+    subset of `extra_vars` keys to also export (surface in `info` / fixtures)
+    rather than keep meta-only (e.g. redpanda's GROUP_ID)."""
     extra = extra_vars or {}
     staging = base_path is not None
     meta: list[tuple[str, str | None, str | None]] = [
@@ -304,6 +307,7 @@ def write_container_domain(
         exported.insert(2, "IMAGE")  # after SYSTEM_KIND
     if staging:
         exported += ["SYS_PATH", "BASE_PATH"]
+    exported += [k for k in exported_extra if k in extra]
     strip = [("SYS_PATH", True), ("BASE_PATH", False)] if staging else []
     _write(
         out,
@@ -581,6 +585,7 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
             supports_sql=sys_obj.supports_sql,
             image=v.get("IMAGE") or None,
             extra_vars=extra,
+            exported_extra=getattr(sys_obj, "exported_domain_vars", ()),
         )
     elif cat in ("cloud", "native"):  # object stores + local fs
         sp, bp = settings["SYS_PATH"], settings["BASE_PATH"]

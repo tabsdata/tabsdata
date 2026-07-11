@@ -17,6 +17,9 @@ class GcsSystem(CloudBase):
     options = (
         Option("BUCKET", "bucket"),
         Option("SERVICE_ACCOUNT_KEY", "service-account-key", secret=True),
+        # S3-interop (HMAC) credentials for an S3-compatible connection.
+        Option("HMAC_ACCESS_KEY", "hmac-access-key"),
+        Option("HMAC_SECRET_KEY", "hmac-secret-key", secret=True),
     )
 
     def _backend(self, values: dict[str, str]) -> GcsBackend:

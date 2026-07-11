@@ -522,6 +522,11 @@ class ContainerBase(System):
     def generate_password(self) -> str:
         return gen_password()
 
+    # Extra-var keys from `_domain_extra_vars` that are also EXPORTED (surfaced
+    # in `info` and the test fixtures), not just kept in `meta`. Empty by
+    # default — the back-refs and internal connection vars stay meta-only.
+    exported_domain_vars: tuple[str, ...] = ()
+
     def _system_extra_vars(self) -> dict[str, str]:
         return {}
 

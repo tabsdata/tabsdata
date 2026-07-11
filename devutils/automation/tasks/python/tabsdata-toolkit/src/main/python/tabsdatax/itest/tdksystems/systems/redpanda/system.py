@@ -13,7 +13,7 @@ import subprocess
 from ...errors import DatagenError
 from ...shell import docker_run, find_free_port
 from .._container import AdminConn, ContainerBase, DomainResult
-from ..base import DomainContext, LoadRequest
+from ..base import DomainContext, LoadRequest, _build_identity
 
 
 class RedpandaSystem(ContainerBase):
@@ -39,6 +39,9 @@ class RedpandaSystem(ContainerBase):
     password_env_name = ""
     extra_env: list[tuple[str, str]] = []
     extra_flags: list[str] = []
+    # The consumer GROUP_ID is surfaced (exported) so a source connection built
+    # from a domain descriptor can consume under a per-build group.
+    exported_domain_vars = ("GROUP_ID",)
 
     _registry_port: int | None = None
 
@@ -127,10 +130,12 @@ class RedpandaSystem(ContainerBase):
     def _domain_extra_vars(self) -> dict[str, str]:
         # Surfaced in the domain's `meta` for the kafka loader: the bootstrap
         # broker(s) and the schema-registry endpoint (forwarded from the
-        # system script's exported env).
+        # system script's exported env). GROUP_ID is the per-build consumer
+        # group id (the build identity, matching the DOMAIN_PREFIX).
         return {
             "KAFKA_BROKERS": f"localhost:{os.environ.get('PORT', '9092')}",
             "SCHEMA_REGISTRY_URL": os.environ.get("SCHEMA_REGISTRY_URL", ""),
+            "GROUP_ID": _build_identity(),
         }
 
     def check_ready(self, container: str, password: str) -> bool:

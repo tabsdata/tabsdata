@@ -3,19 +3,25 @@
 the real tdx verb functions with the docker / boto3 / connector layers faked."""
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from tabsdatax.itest.tdksystems import data_gen, descriptor, store, systems, tdx
 from tabsdatax.itest.tdksystems.errors import DatagenError
 from tabsdatax.itest.tdksystems.shell import ArgumentParser
 from tabsdatax.itest.tdksystems.systems.base import System
+from tabsdatax.itest.tdksystems.systems.gcs.system import GcsSystem
 from tabsdatax.itest.tdksystems.systems.mysql.system import MysqlSystem
 from tabsdatax.itest.tdksystems.systems.s3.system import S3System
 from tabsdatax.itest.tdksystems.systems.snowflake.system import SnowflakeSystem
 
-
 _S3_CREATE = ["--bucket", "b", "--region", "r", "--access-key", "AK",
               "--secret-key", "SK", "--sys-path", "data", "-f"]
+
+_GCS_CREATE = ["--bucket", "b", "--service-account-key", "SAK",
+               "--hmac-access-key", "HAK", "--hmac-secret-key", "HSK",
+               "--sys-path", "data", "-f"]
 
 
 class _FakeS3:
@@ -35,6 +41,11 @@ class _FakeCur:
 @pytest.fixture
 def fake_s3(monkeypatch):
     monkeypatch.setattr(S3System, "_backend", lambda self, values: _FakeS3())
+
+
+@pytest.fixture
+def fake_gcs(monkeypatch):
+    monkeypatch.setattr(GcsSystem, "_backend", lambda self, values: _FakeS3())
 
 
 @pytest.fixture
@@ -124,6 +135,20 @@ def test_cloud_create_does_not_probe_or_clear_root(stores, monkeypatch):
     monkeypatch.setattr(S3System, "_backend", lambda self, values: _StrictS3())
     assert tdx._sys_create(["--type", "s3", "--sys", "store", *_S3_CREATE]) == 0
     assert tdx._sys_destroy(["--sys", "store"]) == 0
+
+
+# ---- gcs (cloud) — S3-interop HMAC credentials -----------------------------
+
+def test_gcs_exports_hmac_keys(stores, fake_gcs):
+    # The HMAC access/secret keys are settable directly (or via $GCS__*) and are
+    # surfaced in the descriptor's exported set and `info`.
+    assert tdx._sys_create(["--type", "gcs", "--sys", "store", *_GCS_CREATE]) == 0
+    doc = descriptor.load(store.system_path("store"))
+    assert "HMAC_ACCESS_KEY" in doc["exported"]
+    assert "HMAC_SECRET_KEY" in doc["exported"]
+    info = json.loads(descriptor.info(doc, "json"))
+    assert info["HMAC_ACCESS_KEY"] == "HAK"
+    assert info["HMAC_SECRET_KEY"] == "HSK"
 
 
 # ---- mysql (container) — domain via tdx; system descriptor built directly -

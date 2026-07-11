@@ -15,14 +15,14 @@
       "value": "?"
     },
     {
-      "id": "access_key",
-      "label": "access_key",
+      "id": "hmac_access_key",
+      "label": "hmac_access_key",
       "type": "CONCEALED",
       "value": "?"
     },
     {
-      "id": "secret_key",
-      "label": "secret_key",
+      "id": "hmac_secret_key",
+      "label": "hmac_secret_key",
       "type": "CONCEALED",
       "value": "?"
     },
