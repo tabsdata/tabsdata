@@ -1190,14 +1190,17 @@ def test_manifest_batch_reports_per_entry_failure(stores, fs_root, tmp_path, cap
 
 # ---- fs: --sys-path is a local option (no env), default target/<name> ------
 
-def test_fs_default_sys_path_is_target_backends_name(stores, tmp_path, monkeypatch):
-    # No --sys-path -> root defaults to target/backends/<system name> under cwd;
-    # no $FS__SYS_PATH involved.
+def test_fs_default_sys_path_is_absolute_target_backends_name(
+    stores, tmp_path, monkeypatch
+):
+    # No --sys-path -> root defaults to <cwd>/target/backends/<system name>,
+    # stored as an absolute path; no $FS__SYS_PATH involved.
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("FS__SYS_PATH", "/tmp/should-be-ignored")
     assert tdx._sys_create(["--type", "fs", "--sys", "myfs", "-f"]) == 0
     doc = _read(store.system_path("myfs"))
-    assert descriptor.attributes(doc)["SYS_PATH"] == "target/backends/myfs"
+    sys_path = descriptor.attributes(doc)["SYS_PATH"]
+    assert sys_path.startswith("/") and sys_path.endswith("/target/backends/myfs")
     assert (tmp_path / "target" / "backends" / "myfs").is_dir()
 
 

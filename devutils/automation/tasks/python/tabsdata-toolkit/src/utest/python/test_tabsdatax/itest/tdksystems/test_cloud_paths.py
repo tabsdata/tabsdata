@@ -5,11 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from tabsdatax.itest.tdksystems.errors import DatagenError
 from tabsdatax.itest.tdksystems.systems._backend import normalise_prefix, walk_paths
 from tabsdatax.itest.tdksystems.systems.base import _normalize_path, _validate_path
 from tabsdatax.itest.tdksystems.systems.fs.system import _validate_fs_root
-from tabsdatax.itest.tdksystems.errors import DatagenError
-
 
 # ---- normalise_prefix (object-store key prefixes) -------------------------
 
@@ -60,7 +59,7 @@ def test_validate_path_rejects_newlines():
 # ---- _validate_fs_root ----------------------------------------------------
 
 @pytest.mark.parametrize("ok", [
-    "/tmp/tdx", "/home/user/data", "/Users/me/data", "rel/path",
+    "/tmp/tdx", "/home/user/data", "/Users/me/data",
 ])
 def test_validate_fs_root_accepts(ok):
     _validate_fs_root(ok)
@@ -70,9 +69,11 @@ def test_validate_fs_root_accepts(ok):
     "/etc/passwd",        # absolute, not in safe roots
     "/var/log",
     "/usr/local",
+    "rel/path",           # relative — fs roots must be absolute
     "usr/local/foo",      # relative starting with usr
     "opt/something",      # relative starting with opt
-    "single",             # only 1 element
+    "single",             # relative, single element
+    "/tmp",               # absolute but only 1 element
 ])
 def test_validate_fs_root_rejects(bad):
     with pytest.raises(DatagenError):
@@ -82,6 +83,42 @@ def test_validate_fs_root_rejects(bad):
 def test_validate_fs_root_rejects_empty():
     with pytest.raises(DatagenError):
         _validate_fs_root("")
+
+
+# ---- FsSystem.create_system stores an absolute SYS_PATH -------------------
+
+def test_create_system_resolves_relative_default_to_absolute(tmp_path, monkeypatch):
+    import tabsdatax.itest.tdksystems.systems.fs.system as fs_system
+    from tabsdatax.itest.tdksystems.systems.base import CreateSystemSpec, Setting
+
+    monkeypatch.setattr(fs_system, "_validate_fs_root", lambda root: None)
+    monkeypatch.chdir(tmp_path)
+    spec = CreateSystemSpec(
+        name="fs",
+        out=str(tmp_path / "desc"),
+        settings={"SYS_PATH": Setting("SYS_PATH", value=None, is_path=True)},
+    )
+    sys_path = fs_system.FsSystem().create_system(spec)["SYS_PATH"].value
+    assert sys_path.startswith("/")
+    assert sys_path.endswith("/target/backends/fs")
+    assert Path(sys_path).is_absolute()
+    assert Path(sys_path).is_dir()
+
+
+def test_create_system_preserves_absolute_sys_path(tmp_path, monkeypatch):
+    import tabsdatax.itest.tdksystems.systems.fs.system as fs_system
+    from tabsdatax.itest.tdksystems.systems.base import CreateSystemSpec, Setting
+
+    monkeypatch.setattr(fs_system, "_validate_fs_root", lambda root: None)
+    root = tmp_path / "sys"
+    spec = CreateSystemSpec(
+        name="fs",
+        out=str(tmp_path / "desc"),
+        settings={"SYS_PATH": Setting("SYS_PATH", value=str(root), is_path=True)},
+    )
+    sys_path = fs_system.FsSystem().create_system(spec)["SYS_PATH"].value
+    assert sys_path == str(root)
+    assert Path(sys_path).is_dir()
 
 
 # ---- walk_paths -----------------------------------------------------------

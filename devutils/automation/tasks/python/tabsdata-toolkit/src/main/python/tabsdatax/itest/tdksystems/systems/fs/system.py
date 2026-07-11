@@ -7,8 +7,10 @@
 Diverges from the object stores: the root and each domain are real dirs
 (mkdir), with stricter root validation so a force-recreate rmtree can never
 wipe a sensitive path. The root itself is left in place on system destroy, and
-is not checked for pre-existing content on create. Absolute roots are valid, so
-`relative_sys_path` is False (no leading-slash strip).
+is not checked for pre-existing content on create. The root is stored as an
+absolute path (a full path from the filesystem root), so `relative_sys_path`
+is False (the descriptor keeps the leading slash) — the mirror image of the
+object stores, whose bucket-relative prefixes must not start with a slash.
 """
 
 from __future__ import annotations
@@ -28,26 +30,39 @@ from ..base import (
 )
 from .backend import FsBackend
 
+# First path element of a root we refuse to sit under, so a force-recreate
+# rmtree of a domain directory can never wipe a real system location.
+_UNSAFE_ROOT_HEADS = frozenset({
+    "usr",
+    "opt",
+    "etc",
+    "var",
+    "bin",
+    "sbin",
+    "lib",
+    "boot",
+    "dev",
+    "proc",
+    "sys",
+    "root",
+})
+
 
 def _validate_fs_root(root: str) -> None:
-    """Allow only safe locations so a force-recreate rmtree of a domain
-    directory under this root can never wipe a real system directory."""
+    """fs roots are absolute (a full path from the filesystem root); a root
+    directly under a system directory is refused so a force-recreate rmtree of a
+    domain directory under this root can never wipe a real system location."""
     if not root:
         raise DatagenError("root path is empty")
+    if not root.startswith("/"):
+        raise DatagenError(
+            f"fs root path must be absolute (start with '/') (got: '{root}')"
+        )
     parts = [p for p in root.split("/") if p]
-    if root.startswith("/"):
-        first = parts[0] if parts else ""
-        if first not in ("tmp", "home", "Users"):
-            raise DatagenError(
-                f"absolute root path must start with /tmp/, /home/, or "
-                f"/Users/ (got: '{root}')"
-            )
-    else:
-        if parts and parts[0] in ("usr", "opt"):
-            raise DatagenError(
-                f"relative root path's first element cannot be 'usr' or "
-                f"'opt' (got: '{root}')"
-            )
+    if parts and parts[0] in _UNSAFE_ROOT_HEADS:
+        raise DatagenError(
+            f"fs root path must not sit under a system directory (got: '{root}')"
+        )
     if len(parts) < 2:
         raise DatagenError(f"root path must have at least 2 elements (got: '{root}')")
 
@@ -57,7 +72,7 @@ class FsSystem(CloudBase):
     label = "fs"
     category = "native"  # local filesystem, not a cloud object store; still
     # persisted via write_cloud_* (descriptor kind stays "cloud-*")
-    relative_sys_path = False  # absolute roots are valid — don't strip slash
+    relative_sys_path = False  # roots are absolute — keep the leading slash
     domain_flag = "folder"  # a domain is a directory on disk
     options = ()  # only --sys-path (the root)
 
@@ -67,15 +82,16 @@ class FsSystem(CloudBase):
 
     # fs is local, so — unlike the object stores — its root is a plain
     # `--sys-path` option (no `$FS__SYS_PATH` env fallback), defaulting to
-    # `target/backends/<system name>` relative to the current directory.
+    # `target/backends/<system name>`; whatever is given is resolved to an
+    # absolute path against the current directory.
     def add_create_options(self, parser) -> None:
         parser.add_argument(
             "--sys-path",
             dest="lit_SYS_PATH",
             default=None,
             metavar="DIR",
-            help="root dir (default: target/backends/<system name>, relative to "
-            "the current directory)",
+            help="root dir (default: target/backends/<system name>); stored as "
+            "an absolute path resolved against the current directory",
         )
 
     def resolve_create_settings(self, ns) -> dict[str, Setting]:
@@ -87,10 +103,15 @@ class FsSystem(CloudBase):
 
     # fs ensures its root dir exists rather than checking a remote bucket; it
     # neither errors on a pre-existing root nor deletes it (destroy is a no-op,
-    # inherited from CloudBase).
+    # inherited from CloudBase). The root is made absolute so the localfile
+    # connection's base_path is a full path from the filesystem root.
     def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
         root = _normalize_path(
-            spec.settings["SYS_PATH"].value or f"target/backends/{spec.name}"
+            str(
+                Path(
+                    spec.settings["SYS_PATH"].value or f"target/backends/{spec.name}"
+                ).absolute()
+            )
         )
         _validate_fs_root(root)
         Path(root).mkdir(parents=True, exist_ok=True)
