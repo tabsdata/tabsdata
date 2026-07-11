@@ -46,14 +46,12 @@ def _pin_version_sk(
     ])
     pinned = events.join(slim, on=key_cols, how="inner").filter(
         (col("$m.valid_from") <= col("$m.source_ts"))
-        & (
-            col("$m.valid_to").is_null()
-            | (col("$m.source_ts") < col("$m.valid_to"))
-        )
+        & (col("$m.valid_to").is_null() | (col("$m.source_ts") < col("$m.valid_to")))
     )
-    return pinned.rename({"$m.version_sk": sk_alias}).drop(
-        ["$m.valid_from", "$m.valid_to"]
-    )
+    return pinned.rename({"$m.version_sk": sk_alias}).drop([
+        "$m.valid_from",
+        "$m.valid_to",
+    ])
 
 
 def build_fact(
@@ -113,9 +111,11 @@ def build_fact(
     # attributes. Cast the components to Int32 first: dt.month() / dt.day() are
     # Int8, so `month * 100` would overflow (200 wraps to -56).
     fct = fct.with_columns(
-        (col("$m.source_ts").dt.year().cast(td_dtypes.Int32) * 10000
-         + col("$m.source_ts").dt.month().cast(td_dtypes.Int32) * 100
-         + col("$m.source_ts").dt.day().cast(td_dtypes.Int32)).alias("$m.date_sk")
+        (
+            col("$m.source_ts").dt.year().cast(td_dtypes.Int32) * 10000
+            + col("$m.source_ts").dt.month().cast(td_dtypes.Int32) * 100
+            + col("$m.source_ts").dt.day().cast(td_dtypes.Int32)
+        ).alias("$m.date_sk")
     )
 
     return fct.drop(["$m.pk"])

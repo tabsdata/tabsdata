@@ -96,24 +96,20 @@ def build_upd_cdc_bronze(
         full = _to_utc_datetime(full_commits[-1], updated_ts_col)
         survivors = full.filter(~col(is_delete_col).cast(td_dtypes.Boolean))
 
-        erase = TableFrame.from_dict(
-            {
-                **{c: [None] for c in pk_cols},
-                "$m.op": [OP_TOMBSTONE],
-                "$m.source_ts": [run_ts],
-                "$m.bronze_ts": [run_ts],
-                "$m.pk": [pk_cols],
-            }
-        ).with_columns([col(name).cast(dtype) for name, dtype in pk_schema.items()])
+        erase = TableFrame.from_dict({
+            **{c: [None] for c in pk_cols},
+            "$m.op": [OP_TOMBSTONE],
+            "$m.source_ts": [run_ts],
+            "$m.bronze_ts": [run_ts],
+            "$m.pk": [pk_cols],
+        }).with_columns([col(name).cast(dtype) for name, dtype in pk_schema.items()])
 
-        seed = survivors.with_columns(
-            [
-                lit(OP_INSERT).alias("$m.op"),
-                lit(run_ts).alias("$m.source_ts"),
-                lit(run_ts).alias("$m.bronze_ts"),
-                lit(pk_cols).alias("$m.pk"),
-            ]
-        )
+        seed = survivors.with_columns([
+            lit(OP_INSERT).alias("$m.op"),
+            lit(run_ts).alias("$m.source_ts"),
+            lit(run_ts).alias("$m.bronze_ts"),
+            lit(pk_cols).alias("$m.pk"),
+        ])
 
         if not upd_commits:
             return concat([erase, seed], how="diagonal_relaxed")
@@ -131,26 +127,27 @@ def build_upd_cdc_bronze(
         upd_after = upd.filter(col(updated_ts_col) > seed_max_ts)
 
         seen = (
-            survivors.select(pk_cols)
+            survivors
+            .select(pk_cols)
             .unique(subset=pk_cols)
             .with_columns(lit(True).alias("_seen"))
         )
 
         classified_upd = (
-            upd_after.join(seen, on=pk_cols, how="left")
-            .with_columns(
-                [
-                    pl.when(pl.col(is_delete_col).cast(pl.Boolean))
-                    .then(pl.lit(OP_DELETE))
-                    .when(pl.col("_seen").is_null())
-                    .then(pl.lit(OP_INSERT))
-                    .otherwise(pl.lit(OP_UPDATE))
-                    .alias("$m.op"),
-                    col(updated_ts_col).alias("$m.source_ts"),
-                    lit(run_ts).alias("$m.bronze_ts"),
-                    lit(pk_cols).alias("$m.pk"),
-                ]
-            )
+            upd_after
+            .join(seen, on=pk_cols, how="left")
+            .with_columns([
+                pl
+                .when(pl.col(is_delete_col).cast(pl.Boolean))
+                .then(pl.lit(OP_DELETE))
+                .when(pl.col("_seen").is_null())
+                .then(pl.lit(OP_INSERT))
+                .otherwise(pl.lit(OP_UPDATE))
+                .alias("$m.op"),
+                col(updated_ts_col).alias("$m.source_ts"),
+                lit(run_ts).alias("$m.bronze_ts"),
+                lit(pk_cols).alias("$m.pk"),
+            ])
             .drop("_seen")
         )
 
@@ -171,14 +168,12 @@ def build_upd_cdc_bronze(
         # First-ever incremental fire — no bootstrap landed yet. Drop
         # soft-deleted rows outright (bronze has no prior state for them
         # to delete) and emit the survivors as I events stamped at run_ts.
-        return upd.filter(~col(is_delete_col).cast(td_dtypes.Boolean)).with_columns(
-            [
-                lit(OP_INSERT).alias("$m.op"),
-                lit(run_ts).alias("$m.source_ts"),
-                lit(run_ts).alias("$m.bronze_ts"),
-                lit(pk_cols).alias("$m.pk"),
-            ]
-        )
+        return upd.filter(~col(is_delete_col).cast(td_dtypes.Boolean)).with_columns([
+            lit(OP_INSERT).alias("$m.op"),
+            lit(run_ts).alias("$m.source_ts"),
+            lit(run_ts).alias("$m.bronze_ts"),
+            lit(pk_cols).alias("$m.pk"),
+        ])
 
     # Classify each upd row in priority order: is_delete_col=True → D
     # (regardless of whether the PK was previously seen); unseen PK → I;
@@ -188,30 +183,31 @@ def build_upd_cdc_bronze(
     # row distinct and the dedup is a no-op, which row-multiplies the
     # left-join below.
     seen = (
-        prior_bronze.filter(col("$m.op") != OP_TOMBSTONE)
+        prior_bronze
+        .filter(col("$m.op") != OP_TOMBSTONE)
         .select(pk_cols)
         .unique(subset=pk_cols)
         .with_columns(lit(True).alias("_seen"))
     )
 
     return (
-        upd.join(seen, on=pk_cols, how="left")
-        .with_columns(
-            [
-                # pl.when/then chains need polars-native expressions —
-                # passing tabsdata's td_expr.Expr wrapper trips polars'
-                # internal literal coercion. Use pl.col / pl.lit only
-                # inside the when chain.
-                pl.when(pl.col(is_delete_col).cast(pl.Boolean))
-                .then(pl.lit(OP_DELETE))
-                .when(pl.col("_seen").is_null())
-                .then(pl.lit(OP_INSERT))
-                .otherwise(pl.lit(OP_UPDATE))
-                .alias("$m.op"),
-                col(updated_ts_col).alias("$m.source_ts"),
-                lit(run_ts).alias("$m.bronze_ts"),
-                lit(pk_cols).alias("$m.pk"),
-            ]
-        )
+        upd
+        .join(seen, on=pk_cols, how="left")
+        .with_columns([
+            # pl.when/then chains need polars-native expressions —
+            # passing tabsdata's td_expr.Expr wrapper trips polars'
+            # internal literal coercion. Use pl.col / pl.lit only
+            # inside the when chain.
+            pl
+            .when(pl.col(is_delete_col).cast(pl.Boolean))
+            .then(pl.lit(OP_DELETE))
+            .when(pl.col("_seen").is_null())
+            .then(pl.lit(OP_INSERT))
+            .otherwise(pl.lit(OP_UPDATE))
+            .alias("$m.op"),
+            col(updated_ts_col).alias("$m.source_ts"),
+            lit(run_ts).alias("$m.bronze_ts"),
+            lit(pk_cols).alias("$m.pk"),
+        ])
         .drop("_seen")
     )
