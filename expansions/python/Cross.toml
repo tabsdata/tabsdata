@@ -6,9 +6,6 @@
 
 [target.x86_64-unknown-linux-musl]
 pre-build = [
-    "mkdir -p \"$THESEUS_CACHE_HOME\"",
-    "rm -rf \"$HOME/.theseus\"",
-    "ln -s \"$THESEUS_CACHE_HOME\" \"$HOME/.theseus\"",
     "echo ...",
     "echo Configuring regional settings...",
     "export DEBIAN_FRONTEND=noninteractive",
@@ -47,7 +44,7 @@ pre-build = [
 ]
 
 [target.x86_64-unknown-linux-musl.env]
-volumes = ["TABSDATA_SOLUTION_HOME", "THESEUS_CACHE_HOME"]
+volumes = ["TABSDATA_SOLUTION_HOME", "THESEUS_CACHE_HOME=/root/.theseus"]
 passthrough = [
     # >>> passthrough:MOUNTS:BEGIN >>>
     "TABSDATA_SOLUTION_HOME",

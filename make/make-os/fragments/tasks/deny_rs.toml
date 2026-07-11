@@ -12,8 +12,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --config ${DENY_TOML} check bans advisories sources"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --config ${DENY_TOML} check bans advisories sources
     ''']
 
 [tasks.__os__deny_rs_modules]
@@ -26,8 +26,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --config ${DENY_TOML} check bans advisories sources"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --config ${DENY_TOML} check bans advisories sources
     ''']
 
 [tasks.__os__deny_rs_expansions]
@@ -51,8 +51,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --config ${DENY_TOML} check bans advisories sources"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TO_EXPANSIONS_PYTHON_CARGO_TOML} --config ${DENY_TOML} check bans advisories sources
     ''']
 
 [tasks.__os__deny_rs_expansions_polars]
@@ -65,6 +65,6 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} check --config ${DENY_TOML} bans advisories sources
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --config ${DENY_TOML} check bans advisories sources"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} deny --locked %{td-target-token} %{td-target} --log-level error --workspace --all-features --manifest-path ${PROJECT_RS_TY_EXPANSIONS_POLARS_CARGO_TOML} --config ${DENY_TOML} check bans advisories sources
     ''']
