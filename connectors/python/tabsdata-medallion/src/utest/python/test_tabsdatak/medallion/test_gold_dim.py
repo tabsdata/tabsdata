@@ -14,6 +14,7 @@ from tabsdatak._medallion._gold._dim import (
     build_type1_dim,
     build_type2_dim,
 )
+from tabsdatak._medallion._gold._fact import build_fact
 
 pytestmark = pytest.mark.medallion
 
@@ -343,3 +344,131 @@ def test_type2_multiple_expired_commits_concatenated():
     # two closed versions + one open version.
     assert len(rows) == 3
     assert {r["city"] for r in rows} == {"NYC", "BOSTON", "SF"}
+
+
+# ── build_fact ───────────────────────────────────────────────────────────────
+
+DATE_SK = "$m.date_sk"
+
+# Timestamps spread across the year so version intervals are unambiguous.
+JAN = datetime(2024, 1, 1, tzinfo=timezone.utc)
+JUN = datetime(2024, 6, 1, tzinfo=timezone.utc)
+FEB_15 = datetime(2024, 2, 15, tzinfo=timezone.utc)
+AUG_20 = datetime(2024, 8, 20, tzinfo=timezone.utc)
+
+
+def make_event_silver(rows: list[tuple]) -> TableFrame:
+    """Append-only event silver. rows: (order_id, customer_id, amount, source_ts)."""
+    n = len(rows)
+    return TableFrame.from_dict(
+        {
+            "order_id": [r[0] for r in rows],
+            "customer_id": [r[1] for r in rows],
+            "amount": [r[2] for r in rows],
+            M_SOURCE_TS: [r[3] for r in rows],
+            M_PK: [["order_id"]] * n,
+        }
+    ).cast(
+        {
+            "order_id": td_dtypes.Int64,
+            "customer_id": td_dtypes.String,
+            "amount": td_dtypes.Float64,
+        }
+    )
+
+
+def make_dim_version_history(rows: list[tuple], key: str = "customer_id") -> TableFrame:
+    """SCD2 history dim for fact pinning.
+    rows: (key_value, valid_from, valid_to, version_sk)."""
+    n = len(rows)
+    return TableFrame.from_dict(
+        {
+            key: [r[0] for r in rows],
+            VALID_FROM: [r[1] for r in rows],
+            VALID_TO: [r[2] for r in rows],
+            VERSION_SK: [r[3] for r in rows],
+        }
+    ).cast(
+        {
+            key: td_dtypes.String,
+            VALID_TO: td_dtypes.Datetime(time_unit="us", time_zone="UTC"),
+            VERSION_SK: td_dtypes.UInt64,
+        }
+    )
+
+
+def test_fact_pins_version_by_event_ts():
+    """Each event links to the dim version active at its $m.source_ts. Exercises
+    both range-filter branches: the closed version (valid_to set) and the open
+    version (valid_to null)."""
+    events = make_event_silver([
+        (1, "c1", 10.0, FEB_15),   # Feb → version active Jan–Jun
+        (2, "c1", 20.0, AUG_20),   # Aug → version active Jun–open
+    ])
+    hist = make_dim_version_history([
+        ("c1", JAN, JUN, 111),     # closed version
+        ("c1", JUN, None, 222),    # open version
+    ])
+    out = build_fact([events], [(hist, ["customer_id"], "customer_version_sk")])
+
+    cols = user_cols(out)
+    assert "customer_version_sk" in cols
+    assert DATE_SK in cols
+    assert M_PK not in cols              # $m.pk dropped
+    assert "amount" in cols             # measure rides through
+    assert M_SOURCE_TS in cols          # event time kept
+
+    by_order = {r["order_id"]: r for r in to_rows(out)}
+    assert by_order[1]["customer_version_sk"] == 111
+    assert by_order[2]["customer_version_sk"] == 222
+    # date_sk = YYYYMMDD from $m.source_ts.
+    assert by_order[1][DATE_SK] == 20240215
+    assert by_order[2][DATE_SK] == 20240820
+
+
+def test_fact_multiple_dims_pinned():
+    """Two referenced dims each contribute their own version_sk column."""
+    events = make_event_silver([(1, "c1", 10.0, FEB_15)])
+    # reuse the customer history; add a product history keyed on product_id.
+    events = events.with_columns(col("customer_id").alias("product_id"))
+    cust = make_dim_version_history([("c1", JAN, None, 111)])
+    prod = make_dim_version_history([("c1", JAN, None, 999)], key="product_id")
+    out = build_fact(
+        [events],
+        [
+            (cust, ["customer_id"], "customer_version_sk"),
+            (prod, ["product_id"], "product_version_sk"),
+        ],
+    )
+    row = to_rows(out)[0]
+    assert row["customer_version_sk"] == 111
+    assert row["product_version_sk"] == 999
+
+
+def test_fact_orphan_fk_is_dropped():
+    """An event whose FK has no matching dim version is dropped (inner join)."""
+    events = make_event_silver([
+        (1, "c1", 10.0, FEB_15),   # matches
+        (2, "ZZ", 99.0, FEB_15),   # unknown customer → dropped
+    ])
+    hist = make_dim_version_history([("c1", JAN, None, 111)])
+    out = build_fact([events], [(hist, ["customer_id"], "customer_version_sk")])
+    rows = to_rows(out)
+    assert len(rows) == 1
+    assert rows[0]["order_id"] == 1
+
+
+def test_fact_event_before_first_version_is_dropped():
+    """An event predating the entity's first version is dropped by the range
+    filter (no covering interval)."""
+    events = make_event_silver([(1, "c1", 10.0, JAN)])
+    # version only starts in June — the January event has no covering version.
+    hist = make_dim_version_history([("c1", JUN, None, 222)])
+    out = build_fact([events], [(hist, ["customer_id"], "customer_version_sk")])
+    assert to_rows(out) == []
+
+
+def test_fact_empty_events_returns_none():
+    """No new events → concat returns None → build_fact returns None."""
+    hist = make_dim_version_history([("c1", JAN, None, 111)])
+    assert build_fact([], [(hist, ["customer_id"], "customer_version_sk")]) is None
