@@ -29,7 +29,11 @@ from the **first** member of its type union:
 - a :class:`~tabsdatak.api.Secret` first member renders as ``'secret:<value>'``
   (or ``'<value> or secret:<value>'`` when the union also accepts a plain
   literal); the runtime store resolves the value the user fills in;
-- a nested-object first member recurses into its own envelope;
+- a nested-object first member recurses into its own envelope; when that object
+  is an abstract base with more than one concrete subclass (a polymorphic field
+  like ``staging: CloudLocation`` -> S3 / AzBlob / GCS) there is no single
+  default, so every subclass is rendered commented-out, grouped together in
+  place under the field name, for the user to uncomment exactly one;
 - any other first member renders ``'<value>'`` or a concrete typed sample
   (enum / int / bool / a field carrying a default).
 
@@ -461,6 +465,46 @@ def _commented_lines(
     return [head, *to_yaml(body_map).rstrip("\n").split("\n")]
 
 
+def _polymorphic_option_lines(
+    name: str, subs: list[type], required: bool, all_fields: bool
+) -> list[str]:
+    """Commented-out blocks for EVERY concrete subclass of a polymorphic nested
+    field, grouped together so the user uncomments exactly one. A field typed as
+    an abstract base with several concrete subclasses (e.g.
+    ``staging: CloudLocation`` -> S3 / AzBlob / GCS in the clickhouse / druid /
+    starrocks destinations) has no single default, so all its options are
+    rendered commented-out in place under the field name."""
+    head = f"{name}: uncomment exactly ONE of the following blocks"
+    if required:
+        head += " (required)"
+    lines = [head]
+    for sub in subs:
+        body_map = CommentedMap()
+        body_map[name] = _strip_comments(
+            _envelope(sub, _build_spec(sub, "", all_fields, _SPEC_INDENT))
+        )
+        lines.append("")
+        lines.extend(to_yaml(body_map).rstrip("\n").split("\n"))
+    return lines
+
+
+def _attach_after_last(out: CommentedMap, lines: list[str], indent: int) -> None:
+    """Attach commented `lines` immediately after the spec's current last field,
+    so a fully-commented field (a polymorphic field with no active default)
+    renders in field-order position rather than drifting to the spec's end. An
+    empty spec (the field is first) gets them as a leading comment."""
+    if not len(out):
+        out.yaml_set_start_comment("\n".join(lines), indent=indent)
+        return
+    pad = " " * indent
+    body = "".join(f"{pad}# {ln}\n" if ln else f"{pad}#\n" for ln in lines)
+    owner, key = _deepest_last(out)
+    entry = owner.ca.items.get(key) or [None, None, None, None]
+    prev = entry[2].value.rstrip("\n") + "\n" if entry[2] is not None else ""
+    entry[2] = CommentToken(prev + "\n" + body, CommentMark(indent))
+    owner.ca.items[key] = entry
+
+
 def _deepest_last(cm: CommentedMap) -> tuple[CommentedMap, str]:
     """The owner map + key of the spec's last-rendered scalar leaf (drilling
     into the last nested map), where a trailing map comment must be attached."""
@@ -505,8 +549,22 @@ def _build_spec(cls: type, prefix: str, all_fields: bool, indent: int) -> Commen
             commented.extend(_commented_lines(name, first, members, indent))
             continue
         if isinstance(first, type) and issubclass(first, DescriptorBase):
-            # Nested object -> its own envelope; no fill-in comment of its own.
-            obj = _first_concrete(first)
+            subs = _concrete_subs(first)
+            if not subs:
+                raise TemplateError(f"no concrete subclass for type {first.__name__}")
+            if len(subs) > 1:
+                # Polymorphic field (an abstract base with several concrete
+                # subclasses, e.g. `staging: CloudLocation` -> S3 / AzBlob / GCS):
+                # no single default, so render every option commented-out together
+                # in place, for the user to uncomment exactly one.
+                _attach_after_last(
+                    out,
+                    _polymorphic_option_lines(name, subs, required, all_fields),
+                    indent,
+                )
+                continue
+            # Single concrete subclass -> its own envelope; no fill-in comment.
+            obj = subs[0]
             out[name] = _envelope(
                 obj, _build_spec(obj, f"{path}.", all_fields, indent + _NEST_INDENT)
             )

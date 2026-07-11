@@ -98,6 +98,70 @@ def test_all_fields_comments_out_none_defaults():
     assert "# conn_cfg: {}" in text
 
 
+# --- polymorphic nested fields (cloud staging) ------------------------------
+
+
+def test_non_polymorphic_connector_has_no_alternative_blocks():
+    # localfile has no abstract-base nested field, so no "alternative" block.
+    info = template.resolve_conn("local-file-in", "src")
+    text = template.to_yaml(template.build_template(info.conn_cls, all_fields=True))
+    assert "alternative" not in text
+
+
+@pytest.mark.skipif(
+    not _installed("clickhouse-bulk-out", "dest"),
+    reason="clickhouse connector not installed",
+)
+def test_polymorphic_staging_lists_all_subclasses_commented():
+    info = template.resolve_conn("clickhouse-bulk-out", "dest")
+    doc = template.build_template(info.conn_cls, all_fields=True)
+    # A polymorphic field has no single default: it is NOT rendered as an active
+    # key -- every option is commented out for the user to uncomment one.
+    assert "staging" not in doc["spec"]
+    text = template.to_yaml(doc)
+    # All three cloud options appear together, commented, under one header.
+    assert "# staging: uncomment exactly ONE of the following blocks (required)" in text
+    for kind in (
+        "clickHouseS3Location",
+        "clickHouseAzBlobLocation",
+        "clickHouseGcsLocation",
+    ):
+        assert f"#   kind: {kind}" in text
+    # The blocks render in place (right after the preceding `credentials` field,
+    # before the following `database` field), not drifting to the spec's end.
+    assert text.index("# staging:") < text.index("database:")
+    # They are comments only: the parsed document carries no staging at all.
+    parsed = template.from_yaml(text)
+    assert "staging" not in parsed["spec"]
+    assert "Location" not in str(parsed)
+
+
+@pytest.mark.skipif(
+    not _installed("clickhouse-bulk-out", "dest"),
+    reason="clickhouse connector not installed",
+)
+def test_polymorphic_staging_option_uncomments_to_valid_block():
+    # Uncommenting one option's block yields a well-formed `staging` mapping of
+    # that concrete subclass.
+    info = template.resolve_conn("clickhouse-bulk-out", "dest")
+    text = template.to_yaml(template.build_template(info.conn_cls, all_fields=True))
+    lines = text.splitlines()
+    start = next(
+        i
+        for i, ln in enumerate(lines)
+        if ln.strip() == "# staging:" and "AzBlob" in lines[i + 1]
+    )
+    block = []
+    for ln in lines[start:]:
+        s = ln.strip()
+        if s == "#":  # bare '#' separates option blocks
+            break
+        block.append(ln.replace("  # ", "", 1))
+    parsed = template.from_yaml("\n".join(block))
+    assert parsed["staging"]["kind"] == "clickHouseAzBlobLocation"
+    assert set(parsed["staging"]["spec"]) == {"container", "credentials", "base_path"}
+
+
 def test_expected_note():
     assert template._expected_note([dict]) == "a dict (str-keyed)"
     assert template._expected_note([list]) == "a list"
