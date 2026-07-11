@@ -102,8 +102,7 @@ pub fn terminate_process_tree(pid: i32, signal: Signal) -> Result<(), OsProcessE
         return Err(OsProcessError::ProcessNotFound(pid));
     };
     info!("Process with pid '{}' found: '{:?}'", pid, process.name());
-    kill_children_with(process, signal);
-    kill_parent_with(process, signal);
+    kill_with(process, signal);
 
     let deadline = Instant::now() + TERMINATE_TREE_GRACE;
     while Instant::now() < deadline {
