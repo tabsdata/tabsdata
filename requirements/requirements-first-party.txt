@@ -18,6 +18,7 @@ tabsdata-conn-common-file==2.0.0
 tabsdata-conn-common-sql==2.0.0
 tabsdata-conn-databricks==2.0.0
 tabsdata-conn-db2==2.0.0
+tabsdata-conn-dev==2.0.0
 tabsdata-conn-druid==2.0.0
 tabsdata-conn-gcs==2.0.0
 tabsdata-conn-kafka==2.0.0

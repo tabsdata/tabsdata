@@ -56,6 +56,7 @@ markers = [
     "clickhouse: mark tests that require a ClickHouse docker container.",
     "common: mark tests that require the tabsdata-common package.",
     "config_resolver: tests for the config_resolver tool in tabsserver.",
+    "conn_dev: mark tests that require the tabsdata-conn-dev package.",
     "conn_kafka: mark tests that require the tabsdata-conn-kafka package.",
     "conn_stream_stage: mark tests that require the tabsdata-conn-stream-stage package.",
     "crontrigger: mark tests for the CronTrigger class.",

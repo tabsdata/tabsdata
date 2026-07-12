@@ -10,7 +10,7 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-from test_tabsdata.bootest import enrich_sys_path
+from test_tabsdatak.bootest import enrich_sys_path
 from test_tabsdatak.conn.mongodb.bootest import TESTING_RESOURCES_PATH
 
 
@@ -26,7 +26,7 @@ import pytest
 from filelock import FileLock
 from xdist.workermanage import WorkerController
 
-from tabsdata._utils.tdlogging import setup_tests_logging
+from test_tabsdatak._testing import setup_tests_logging
 from test_tabsdata.common.constants import (
     CONTAINER_PORT_BINDING_WAIT_POLL_INTERVAL_SECONDS,
     CONTAINER_PORT_BINDING_WAIT_TIMEOUT_SECONDS,

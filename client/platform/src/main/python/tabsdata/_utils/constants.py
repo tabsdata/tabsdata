@@ -27,6 +27,7 @@ TABSDATA_CONNECTORS_NAMES = [
     "conn-common-sql",
     "conn-databricks",
     "conn-db2",
+    "conn-dev",
     "conn-druid",
     "conn-gcs",
     "conn-kafka",

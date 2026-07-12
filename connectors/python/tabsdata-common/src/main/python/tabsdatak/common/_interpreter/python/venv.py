@@ -64,6 +64,7 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-conn-common-sql",
     "tabsdata-conn-databricks",
     "tabsdata-conn-db2",
+    "tabsdata-conn-dev",
     "tabsdata-conn-druid",
     "tabsdata-conn-gcs",
     "tabsdata-conn-kafka",

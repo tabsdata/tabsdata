@@ -26,10 +26,17 @@ PLACEHOLDER_MODULE = "{c.module}"
 PLACEHOLDER_ALIAS = "{c.alias}"
 PLACEHOLDER_VERSION = "{c.version}"
 PLACEHOLDER_YEAR = "{c.year}"
+PLACEHOLDER_FIRST_PARTY = "{c.first_party}"
 PLACEHOLDER_BOOTEST_PARENTS = "{c.bootest_parents}"
 PLACEHOLDER_BOOTEST_RESOURCES = "{c.bootest_resources}"
 
-PLACEHOLDERS_HIDDEN = {PLACEHOLDER_BOOTEST_PARENTS, PLACEHOLDER_BOOTEST_RESOURCES}
+PLACEHOLDERS_HIDDEN = {
+    PLACEHOLDER_FIRST_PARTY,
+    PLACEHOLDER_BOOTEST_PARENTS,
+    PLACEHOLDER_BOOTEST_RESOURCES,
+}
+
+CONNECTOR_PACKAGE_PREFIX = "conn-"
 
 VALID_PROJECT_NAMES = {"tabsdata", "tabsdata-os"}
 
@@ -75,6 +82,16 @@ def bootest_resources(module: str) -> str:
     return "\n".join(f'    / "{segment}"' for segment in segments)
 
 
+def first_party(package: str, version: str) -> str:
+    dependencies = [
+        f"tabsdata-api=={version}",
+        f"tabsdata-common=={version}",
+    ]
+    if package.startswith(CONNECTOR_PACKAGE_PREFIX):
+        dependencies.append(f"tabsdata-conn-common=={version}")
+    return "\n".join(dependencies)
+
+
 def build_placeholders(package: str, backend: str, root: Path) -> Placeholders:
     version_file = root / "assets" / "manifest" / "VERSION"
     version = version_file.read_text(encoding="utf-8").strip()
@@ -113,6 +130,13 @@ def build_placeholders(package: str, backend: str, root: Path) -> Placeholders:
             key=PLACEHOLDER_YEAR,
             caption="Year",
             value=year,
+        ),
+        Placeholder(
+            key=PLACEHOLDER_FIRST_PARTY,
+            caption="First party",
+            compute=lambda ps: first_party(
+                ps[PLACEHOLDER_PACKAGE].value, ps[PLACEHOLDER_VERSION].value
+            ),
         ),
         Placeholder(
             key=PLACEHOLDER_BOOTEST_PARENTS,

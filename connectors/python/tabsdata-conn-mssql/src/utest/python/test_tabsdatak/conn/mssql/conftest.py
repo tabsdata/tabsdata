@@ -17,7 +17,7 @@ from filelock import FileLock
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-from test_tabsdata.bootest import enrich_sys_path
+from test_tabsdatak.bootest import enrich_sys_path
 from test_tabsdatak.conn.mssql.bootest import TESTING_RESOURCES_PATH
 
 
@@ -32,7 +32,7 @@ _enrich_sys_path()
 import pytest
 from xdist.workermanage import WorkerController
 
-from tabsdata._utils.tdlogging import setup_tests_logging
+from test_tabsdatak._testing import setup_tests_logging
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
 from test_tabsdata.common.constants import (

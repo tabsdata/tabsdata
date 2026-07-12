@@ -21,6 +21,7 @@
 -r connectors/python/tabsdata-conn-common-sql/requirements.txt
 -r connectors/python/tabsdata-conn-databricks/requirements.txt
 -r connectors/python/tabsdata-conn-db2/requirements.txt
+-r connectors/python/tabsdata-conn-dev/requirements.txt
 -r connectors/python/tabsdata-conn-druid/requirements.txt
 -r connectors/python/tabsdata-conn-gcs/requirements.txt
 -r connectors/python/tabsdata-conn-kafka/requirements.txt

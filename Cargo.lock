@@ -7101,7 +7101,7 @@ dependencies = [
 [[package]]
 name = "postgresql_archive"
 version = "0.20.4"
-source = "git+https://github.com/tabsdata/postgresql-embedded.git?branch=main#70851b4ab1501f2e892165a7fd7f0469f87ed678"
+source = "git+https://github.com/tabsdata/postgresql-embedded.git?branch=main#ddf973fe3b2ade6e95d3bb853c02cbc17c4d02a2"
 dependencies = [
  "async-trait",
  "flate2",
@@ -7126,7 +7126,7 @@ dependencies = [
 [[package]]
 name = "postgresql_commands"
 version = "0.20.4"
-source = "git+https://github.com/tabsdata/postgresql-embedded.git?branch=main#70851b4ab1501f2e892165a7fd7f0469f87ed678"
+source = "git+https://github.com/tabsdata/postgresql-embedded.git?branch=main#ddf973fe3b2ade6e95d3bb853c02cbc17c4d02a2"
 dependencies = [
  "tokio",
  "tracing",
@@ -7135,7 +7135,7 @@ dependencies = [
 [[package]]
 name = "postgresql_embedded"
 version = "0.20.4"
-source = "git+https://github.com/tabsdata/postgresql-embedded.git?branch=main#70851b4ab1501f2e892165a7fd7f0469f87ed678"
+source = "git+https://github.com/tabsdata/postgresql-embedded.git?branch=main#ddf973fe3b2ade6e95d3bb853c02cbc17c4d02a2"
 dependencies = [
  "anyhow",
  "postgresql_archive",

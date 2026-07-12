@@ -20,7 +20,7 @@ logger.setLevel(logging.INFO)
 
 from tabsdata._credentials import UserPasswordCredentials
 from tabsdata._utils.constants import TRUE_VALUES
-from test_tabsdata.bootest import enrich_sys_path
+from test_tabsdatak.bootest import enrich_sys_path
 from test_tabsdata_mssql.bootest import TESTING_RESOURCES_PATH
 
 
@@ -38,7 +38,7 @@ import pytest
 from filelock import FileLock
 from xdist.workermanage import WorkerController
 
-from tabsdata._utils.tdlogging import setup_tests_logging
+from test_tabsdatak._testing import setup_tests_logging
 from test_tabsdata.common.constants import (
     DB_HOST,
     DB_NAME,
