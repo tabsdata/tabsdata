@@ -118,6 +118,17 @@ def run(args: argparse.Namespace) -> int:
     entries = load_outputs_manifest_or_raise(
         outputs_manifest_path, RunDestinationPluginErrorCode.RDP_7
     )
+    # Contract: a subscriber that returns None for every output slot produced no
+    # new data this run, so the destination plugin must NOT be invoked (skip the
+    # external write) rather than erroring on the null slots.
+    if entries and all(e.get(MANIFEST_FILE_KEY) is None for e in entries):
+        logger.info(
+            "Subscriber produced no data (all %d output slot(s) null); "
+            "skipping %s.write_out",
+            len(entries),
+            type(plugin).__name__,
+        )
+        return 0
     tables = _tables_from_manifest(entries)
     logger.debug(
         "Outputs manifest has %d entries: %s; "

@@ -2,9 +2,11 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 import os
 from time import sleep
-from typing import List
+from typing import TYPE_CHECKING, List
 
 import rich_click as click
 from rich.console import Console
@@ -26,7 +28,6 @@ from tabsdatak.cli.cli_utils import (
     show_hint,
     verify_login_or_prompt,
 )
-from tabsdatak.cli.td.fn_group import _monitor_execution_or_transaction
 from tabsdatak.sdk.status_utils.execution import (
     EXECUTION_FINAL_STATUSES,
     EXECUTION_SUCCESSFUL_FINAL_STATUSES,
@@ -47,10 +48,9 @@ from tabsdatak.sdk.status_utils.worker import (
     WORKER_VALID_USER_PROVIDED_STATUSES,
     user_worker_status_to_api,
 )
-from tabsdatak.sdk.tabsdata_server import (
-    TabsdataServer,
-    _top_and_convert_to_timestamp,
-)
+
+if TYPE_CHECKING:
+    from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
 @cli_command
@@ -444,6 +444,9 @@ def obtain_list_exec_filters(
     """
     Helper function to obtain the filters for listing plans.
     """
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk.tabsdata_server import _top_and_convert_to_timestamp
+
     request_filter = []
     if status:
         request_filter.extend(
@@ -648,6 +651,9 @@ def obtain_list_trx_filters(
     """
     Helper function to obtain the filters for listing transactions.
     """
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk.tabsdata_server import _top_and_convert_to_timestamp
+
     request_filter = []
     if status:
         request_filter.extend(
@@ -1156,6 +1162,8 @@ def monitor(ctx: click.Context, plan: str, trx: str):
             execution = server.get_execution(plan)
         elif trx:
             transaction = server.get_transaction(trx)
+        from tabsdatak.cli.td.fn_group import _monitor_execution_or_transaction
+
         _monitor_execution_or_transaction(
             ctx, execution=execution, transaction=transaction
         )

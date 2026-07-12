@@ -2,6 +2,9 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import rich_click as click
 from rich.console import Console
@@ -16,14 +19,18 @@ from tabsdatak.cli.cli_utils import (
     render,
     verify_login_or_prompt,
 )
-from tabsdatak.sdk.tabsdata_server import (
+
+# noinspection PyProtectedMember
+from tabsdatak.sdk._permission_types import (
     RBAC_ONLY_WILDCARD_MESSAGE,
     SIMPLE_PROJECT_PERMISSION_TYPES,
     SIMPLE_RBAC_ONLY_WILDCARD_TYPES,
     SIMPLE_SYSTEM_PERMISSION_TYPES,
     VALID_SIMPLE_PERMISSION_TYPES,
-    TabsdataServer,
 )
+
+if TYPE_CHECKING:
+    from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
 def _validate_permission(perm: str, project: str) -> None:

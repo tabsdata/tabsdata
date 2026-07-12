@@ -20,13 +20,9 @@ from pathlib import Path
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
-from ruamel.yaml import YAML
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import output_option, render, show_hint
-
-# noinspection PyProtectedMember
-from tabsdatak.common._resources.reader import td_resource
 
 EXAMPLES_RESOURCE = "tdresources/examples"
 META_FILE = "_meta.yaml"
@@ -42,6 +38,9 @@ def examples():
 
 
 def _examples_root() -> Path:
+    # noinspection PyProtectedMember
+    from tabsdatak.common._resources.reader import td_resource
+
     try:
         return td_resource(EXAMPLES_RESOURCE)
     except FileNotFoundError as error:
@@ -64,6 +63,8 @@ def _read_meta(example_dir: Path) -> dict:
     meta_path = example_dir / META_FILE
     if not meta_path.exists():
         return {}
+    from ruamel.yaml import YAML
+
     try:
         data = YAML(typ="safe").load(meta_path.read_text())
     except Exception:

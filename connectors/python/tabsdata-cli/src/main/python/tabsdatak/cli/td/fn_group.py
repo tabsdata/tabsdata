@@ -2,8 +2,10 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
 from time import sleep
-from typing import Tuple
+from typing import TYPE_CHECKING, Tuple
 
 import rich_click as click
 from rich.console import Console
@@ -24,18 +26,14 @@ from tabsdatak.cli.cli_utils import (
     show_hint,
     verify_login_or_prompt,
 )
-from tabsdatak.sdk._apiserver import APIServerError
 from tabsdatak.sdk.status_utils.execution import EXECUTION_FINAL_STATUSES
 from tabsdatak.sdk.status_utils.function_run import (
     FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES,
 )
 from tabsdatak.sdk.status_utils.transaction import TRANSACTION_FINAL_STATUSES
-from tabsdatak.sdk.tabsdata_server import (
-    Execution,
-    TabsdataServer,
-    Transaction,
-    _function_type_to_mapping,
-)
+
+if TYPE_CHECKING:
+    from tabsdatak.sdk.tabsdata_server import Execution, TabsdataServer, Transaction
 
 
 @cli_command
@@ -204,6 +202,9 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
 @click.pass_context
 def list_functions(ctx: click.Context, coll: str):
     """List all functions in a collection"""
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk.tabsdata_server import _function_type_to_mapping
+
     verify_login_or_prompt(ctx)
     coll = (
         coll
@@ -350,6 +351,9 @@ def register(
     With ``--update``, behaves idempotently: if the function already
     exists in the collection it is updated; otherwise it is registered.
     """
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk._apiserver import APIServerError
+
     verify_login_or_prompt(ctx)
     description = description or ""
     local_pkg_list = list(local_pkg) if local_pkg else None

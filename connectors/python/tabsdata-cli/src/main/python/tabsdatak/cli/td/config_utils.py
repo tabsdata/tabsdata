@@ -9,7 +9,7 @@ import os
 
 from ruamel.yaml import YAML
 
-from tabsdatak.cli.cli_utils import td_resource
+from tabsdatak.common._resources.reader import td_resource
 
 logger = logging.getLogger(__name__)
 

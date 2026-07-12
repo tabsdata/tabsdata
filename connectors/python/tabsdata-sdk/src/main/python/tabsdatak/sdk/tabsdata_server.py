@@ -2367,40 +2367,9 @@ PERMISSION_TYPES_WITH_ENTITY = [
 
 
 # --- Simple Security Mode permission facade ---------------------
-# Flat per-user permissions, the surface exposed by `td permission`. The server
-# translates these into RBAC role-membership operations; there is no
-# `simple_permission` table. See `server/.../dxo/simple_permission.rs` and
-# `server/.../types/basic/typed_enum.rs::SimplePermissionType`.
-
-# Project-scoped permissions: require `--proj`.
-SIMPLE_PROJECT_PERMISSION_TYPES = [
-    "view_project",
-    "develop_project",
-    "manage_project",
-]
-
-# System-scoped permissions: must not carry `--proj`. `manage_system` is full
-# system admin (sys_admin): user/role administration plus authority over all
-# projects.
-SIMPLE_SYSTEM_PERMISSION_TYPES = [
-    "create_projects",
-    "manage_system",
-]
-
-VALID_SIMPLE_PERMISSION_TYPES = (
-    SIMPLE_PROJECT_PERMISSION_TYPES + SIMPLE_SYSTEM_PERMISSION_TYPES
-)
-
-# Org-wide read/develop wildcards have no Simple-surface name; rejected
-# client-side (and by the server) with a "use RBAC Mode View" message.
-SIMPLE_RBAC_ONLY_WILDCARD_TYPES = [
-    "view_all_projects",
-    "develop_all_projects",
-]
-
-RBAC_ONLY_WILDCARD_MESSAGE = (
-    "org-wide view/develop is RBAC Mode View only; grant per project or use RBAC Mode."
-)
+# The permission-type constants (SIMPLE_*_PERMISSION_TYPES, VALID_*, ...) live in
+# the lightweight `tabsdatak.sdk._permission_types` module so `tdk permission` can
+# reference them in its option help without importing this (heavy) module.
 
 
 class SimplePermission:

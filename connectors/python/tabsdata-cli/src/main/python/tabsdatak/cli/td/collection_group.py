@@ -2,16 +2,16 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
+from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-# noinspection PyProtectedMember
-from tabsdatak import _template as template
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     get_currently_pinned_object,
@@ -23,16 +23,8 @@ from tabsdatak.cli.cli_utils import (
     verify_login_or_prompt,
 )
 
-# noinspection PyProtectedMember
-from tabsdatak.common._error import CommonException
-
-# noinspection PyProtectedMember
-from tabsdatak.common._json_serde import (
-    dehydrate,
-    env_secret_ref_vars,
-    resolve_env_secret_refs,
-)
-from tabsdatak.sdk.tabsdata_server import TabsdataServer
+if TYPE_CHECKING:
+    from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
 @cli_command
@@ -126,6 +118,9 @@ def _group_for_conn(conn_cls) -> str:
     Every connection now shares the uniform ``connectionDef`` kind, so the
     direction is taken from the registered binding rather than parsed out of
     the kind string."""
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+
     for r in template.list_connectors():
         if r.conn_cls is conn_cls:
             return _DIRECTION_TO_GROUP[r.direction]
@@ -151,6 +146,15 @@ def _load_connection_document(conn_file, group):
     ``$secret:<ENV_VAR>`` values are resolved from the environment here (on the
     client, at create/update time); the env vars read are echoed to the user.
     """
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+    from tabsdatak.common._error import CommonException
+    from tabsdatak.common._json_serde import (
+        dehydrate,
+        env_secret_ref_vars,
+        resolve_env_secret_refs,
+    )
+
     try:
         raw = (
             sys.stdin.read()

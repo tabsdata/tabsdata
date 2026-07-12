@@ -9,11 +9,6 @@ legacy ``tabsdatak.common._information.about.dabout`` surface so the
 ``td`` migration can land without dragging in the explicitly-excluded
 ``_utils/internal/`` subtree. Placeholder pending a proper v2 port
 (see TODO block below).
-
-:func:`td_resource` is the proper v2 resolver re-exported from
-``tabsdatak.common._resources.reader`` — it honours the
-editable-install overlay that lets resources live under the repo's
-``variant/`` tree.
 """
 
 from __future__ import annotations
@@ -28,26 +23,23 @@ import platform
 import re
 import sys
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import requests
 import rich_click as click
 from rich_click import Option, UsageError
-from ruamel.yaml import YAML
 
-from tabsdatak.common._resources.reader import td_resource  # noqa: F401
-
-# noinspection PyProtectedMember
-from tabsdatak.sdk._apiserver import (
-    BASE_API_URL,
-    DEFAULT_TABSDATA_DIRECTORY,
-    APIServer,
-    APIServerError,
-    obtain_connection,
-)
-from tabsdatak.sdk.tabsdata_server import Function, TabsdataServer
+# Heavy imports (the server SDK, requests, ruamel) are deferred into the
+# functions that use them so importing this shared helper -- which every command
+# module does -- stays cheap. Type-only names live under TYPE_CHECKING.
+if TYPE_CHECKING:
+    from tabsdatak.sdk.tabsdata_server import Function
 
 CONNECTION_FILE = "connection.json"
+
+# Mirrors tabsdatak.sdk._apiserver.DEFAULT_TABSDATA_DIRECTORY. Defined locally so
+# the common CLI path (which needs only this constant) never imports the
+# requests-heavy _apiserver module.
+DEFAULT_TABSDATA_DIRECTORY = os.path.join(os.path.expanduser("~"), ".tabsdata")
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +159,11 @@ def logical_prompt(
 
 
 def utils_login(ctx: click.Context, server_url: str, username: str, password: str):
+    import requests
+
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk._apiserver import APIServerError, obtain_connection
+
     try:
         obtain_connection(
             server_url,
@@ -203,24 +200,57 @@ def request_login_information(ctx: click.Context):
     return server_url, username, password
 
 
+class _LazyTabsdataServer:
+    """Stand-in for the connected ``TabsdataServer`` that builds the real,
+    SDK-backed object (and pays its heavy imports) only on first attribute
+    access. Commands that never touch the server -- ``examples``,
+    ``connection``, ``--help`` -- never trigger it. It is truthy so the usual
+    ``if not ctx.obj["tabsdataserver"]`` login checks keep working."""
+
+    def __init__(self, ctx: click.Context, credentials: dict):
+        self._ctx = ctx
+        self._credentials = credentials
+        self._server = None
+
+    def _build(self):
+        if self._server is None:
+            # noinspection PyProtectedMember
+            from tabsdatak.sdk._apiserver import APIServer
+            from tabsdatak.sdk.tabsdata_server import TabsdataServer
+
+            credentials = self._credentials
+            connection = APIServer(
+                credentials.get("url"),
+                credentials_file=get_credentials_file_path(self._ctx),
+            )
+            connection.refresh_token = credentials.get("refresh_token")
+            connection.bearer_token = credentials.get("bearer_token")
+            connection.token_type = credentials.get("token_type")
+            connection.expires_in = credentials.get("expires_in")
+            connection.expiration_time = credentials.get("expiration_time")
+            # The active project rides on the connection: it defaults to the
+            # pinned project, and a per-command `--proj` overrides it.
+            connection.project = self._ctx.obj.get("pinned_objects", {}).get("project")
+            server = TabsdataServer.__new__(TabsdataServer)
+            server.connection = connection
+            self._server = server
+        return self._server
+
+    def __getattr__(self, name: str):
+        return getattr(self._build(), name)
+
+    def __bool__(self) -> bool:
+        return True
+
+
 def initialise_tabsdata_server_connection(ctx: click.Context):
     try:
         with open(os.path.join(DEFAULT_TABSDATA_DIRECTORY, CONNECTION_FILE)) as f:
             credentials = json.load(f)
-        connection = APIServer(
-            credentials.get("url"),
-            credentials_file=get_credentials_file_path(ctx),
-        )
-        connection.refresh_token = credentials.get("refresh_token")
-        connection.bearer_token = credentials.get("bearer_token")
-        connection.token_type = credentials.get("token_type")
-        connection.expires_in = credentials.get("expires_in")
-        connection.expiration_time = credentials.get("expiration_time")
-        tabsdata_server = TabsdataServer.__new__(TabsdataServer)
-        tabsdata_server.connection = connection
     except FileNotFoundError:
-        tabsdata_server = None
-    ctx.obj["tabsdataserver"] = tabsdata_server
+        ctx.obj["tabsdataserver"] = None
+        return
+    ctx.obj["tabsdataserver"] = _LazyTabsdataServer(ctx, credentials)
 
 
 def get_pinned_objects_file_path(ctx: click.Context) -> str:
@@ -319,6 +349,8 @@ def render(ctx: click.Context, *, data, table) -> None:
     if fmt == "json":
         click.echo(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
     else:  # yaml
+        from ruamel.yaml import YAML
+
         # Normalize through JSON (default=str) so any value is YAML-safe, then
         # dump with ruamel (a guaranteed dependency via tabsdata-api; PyYAML is
         # not a declared tabsdata-cli dependency). Key order is preserved.
@@ -465,8 +497,13 @@ def hint_common_solutions(ctx: click.Context, e: Exception):
     """
     Show common solutions for CLI issues.
     """
+    import requests
+
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk._apiserver import BASE_API_URL
+
     if isinstance(e, requests.exceptions.ConnectionError):
-        server: TabsdataServer = ctx.obj.get("tabsdataserver")
+        server = ctx.obj.get("tabsdataserver")
         server_url = server.connection.url[: -len(BASE_API_URL)] if server else None
         if server_url:
             show_hint(

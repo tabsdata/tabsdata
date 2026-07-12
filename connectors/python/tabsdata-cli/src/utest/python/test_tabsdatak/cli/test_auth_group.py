@@ -17,13 +17,15 @@ _PEM = "-----BEGIN CERTIFICATE-----\nMIIBfakecert==\n-----END CERTIFICATE-----\n
 
 
 def _patched_store(tmp_path, cert):
+    # add_cert imports these from tabsdatak.sdk._apiserver lazily (inside the
+    # command body), so patch them at that source module.
     return (
         patch(
-            "tabsdatak.cli.td.auth_group._obtain_certificate_file_path",
+            "tabsdatak.sdk._apiserver._obtain_certificate_file_path",
             return_value=str(cert),
         ),
         patch(
-            "tabsdatak.cli.td.auth_group.DEFAULT_TABSDATA_CERTIFICATE_FOLDER",
+            "tabsdatak.sdk._apiserver.DEFAULT_TABSDATA_CERTIFICATE_FOLDER",
             str(tmp_path),
         ),
     )

@@ -17,16 +17,8 @@ import rich_click as click
 from rich.console import Console
 from rich.table import Table
 
-# noinspection PyProtectedMember
-from tabsdatak import _template as template
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import logical_prompt, output_option, render
-
-# noinspection PyProtectedMember
-from tabsdatak.common._error import CommonException
-
-# noinspection PyProtectedMember
-from tabsdatak.common._json_serde import env_secret_ref_vars, resolve_env_secret_refs
 
 
 @cli_command
@@ -40,6 +32,9 @@ def connection():
 @click.pass_context
 def types(ctx):
     """List the connection types available from installed connectors"""
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+
     rows = template.list_connectors()
 
     def _table():
@@ -72,6 +67,9 @@ def _type_option(fn):
 
 
 def _resolve(ctx, type_):
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+
     type_ = type_ or logical_prompt(ctx, "Connector type (see 'tdk connection types')")
     try:
         # Types are globally unique, so the direction is always inferred.
@@ -81,6 +79,9 @@ def _resolve(ctx, type_):
 
 
 def _emit(document, file):
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+
     text = template.to_yaml(document)
     if file and file != "-":
         Path(file).write_text(text)
@@ -105,6 +106,9 @@ def _emit(document, file):
 @click.pass_context
 def template_(ctx, type_, file):
     """Print a fill-in connection template for a connector type"""
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+
     info = _resolve(ctx, type_)
     # Show every config: required fields as fill-ins, optional ones with their
     # default (default-None fields commented out so the document stays valid).
@@ -121,6 +125,14 @@ def template_(ctx, type_, file):
 )
 def validate(file):
     """Validate a connection YAML document against its connector schema"""
+    # noinspection PyProtectedMember
+    from tabsdatak import _template as template
+    from tabsdatak.common._error import CommonException
+    from tabsdatak.common._json_serde import (
+        env_secret_ref_vars,
+        resolve_env_secret_refs,
+    )
+
     raw = sys.stdin.read() if file == "-" else Path(file).read_text()
     try:
         document = template.from_yaml(raw)

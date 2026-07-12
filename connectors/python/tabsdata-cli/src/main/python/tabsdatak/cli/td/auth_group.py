@@ -19,13 +19,6 @@ from tabsdatak.cli.cli_utils import (
     render,
     verify_login_or_prompt,
 )
-from tabsdatak.sdk._apiserver import (
-    DEFAULT_TABSDATA_CERTIFICATE_FOLDER,
-    HTTP_PROTOCOL,
-    HTTPS_PROTOCOL,
-    _obtain_certificate_file_path,
-)
-from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
 @cli_command
@@ -46,6 +39,14 @@ def add_cert(ctx: click.Context, server: str, pem: str):
     Add a certificate for a Tabsdata Server.
     Only needed for self-signed certificates.
     """
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk._apiserver import (
+        DEFAULT_TABSDATA_CERTIFICATE_FOLDER,
+        HTTP_PROTOCOL,
+        HTTPS_PROTOCOL,
+        _obtain_certificate_file_path,
+    )
+
     server = server or logical_prompt(ctx, "Tabsdata Server URL")
     pem = pem or logical_prompt(ctx, "Path to the certificate PEM file")
     click.echo("Adding certificate")
@@ -72,6 +73,13 @@ def add_cert(ctx: click.Context, server: str, pem: str):
 @click.pass_context
 def delete_cert(ctx: click.Context, server: str):
     """Delete a certificate for a Tabsdata Server"""
+    # noinspection PyProtectedMember
+    from tabsdatak.sdk._apiserver import (
+        HTTP_PROTOCOL,
+        HTTPS_PROTOCOL,
+        _obtain_certificate_file_path,
+    )
+
     server = server or logical_prompt(ctx, "Tabsdata Server URL")
     click.echo("Deleting certificate")
     click.echo("-" * 10)
@@ -175,6 +183,8 @@ def password_change(
                 "Two different new passwords were entered. "
                 "Please provide the same password twice."
             )
+    from tabsdatak.sdk.tabsdata_server import TabsdataServer
+
     try:
         # We create a new TabsdataServer instance to avoid using the current session
         # credentials, which might result in a total deadlock if the old password is

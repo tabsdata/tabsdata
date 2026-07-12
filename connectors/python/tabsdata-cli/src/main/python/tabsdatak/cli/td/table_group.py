@@ -2,6 +2,10 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
@@ -18,9 +22,9 @@ from tabsdatak.cli.cli_utils import (
     show_hint,
     verify_login_or_prompt,
 )
-from tabsdatak.sdk.tabsdata_server import (
-    TabsdataServer,
-)
+
+if TYPE_CHECKING:
+    from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
 @cli_command

@@ -83,8 +83,11 @@ def test_tdabout_unknown_package_prints_unknown_version(capsys):
 
 
 def test_td_resource_raises_filenotfound_for_missing_resource():
+    # cli_utils no longer re-exports td_resource; it is resolved from reader.
+    from tabsdatak.common._resources.reader import td_resource
+
     with pytest.raises(FileNotFoundError) as ei:
-        cli_utils.td_resource("does/not/exist.txt")
+        td_resource("does/not/exist.txt")
     assert "does/not/exist.txt" in str(ei.value)
 
 

@@ -17,6 +17,7 @@ except PackageNotFoundError:
 
 from tabsdatak.cli._registry import collect_cli_commands
 from tabsdatak.cli.cli_utils import (
+    DEFAULT_TABSDATA_DIRECTORY,
     get_credentials_file_path,
     hint_common_solutions,
     initialise_tabsdata_server_connection,
@@ -26,7 +27,6 @@ from tabsdatak.cli.cli_utils import (
     set_current_cli_option,
     store_cli_options,
     store_pinned_objects,
-    td_resource,
     tdabout,
     utils_login,
     verify_login_or_prompt,
@@ -34,6 +34,8 @@ from tabsdatak.cli.cli_utils import (
 
 # Built-in command groups, imported for their @cli_command side effects: each
 # module registers its top-level group, attached below via collect_cli_commands.
+# Only registration runs at import time -- every command's execution-time imports
+# (the server SDK, connection templates, ...) are deferred into the command body.
 # TODO: role, cron, and stage management are temporarily removed; reintroduce
 # their modules here (they self-register via @cli_command) in a later version.
 from tabsdatak.cli.td import (  # noqa: F401
@@ -51,12 +53,6 @@ from tabsdatak.cli.td import (  # noqa: F401
     table_group,
     user_group,
 )
-from tabsdatak.cli.td.config_utils import execute_actions_for_command
-from tabsdatak.common._compatibility import (
-    PackageVersionError,
-    check_sticky_version_packages,
-)
-from tabsdatak.sdk._apiserver import DEFAULT_TABSDATA_DIRECTORY
 
 CYAN = "[cyan]"
 NO_CYAN = "[/cyan]"
@@ -91,16 +87,12 @@ def cli(ctx: click.Context, no_prompt: bool):
             "tabsdata_directory": DEFAULT_TABSDATA_DIRECTORY,
             "no_prompt": no_prompt,
         }
+        # The server connection is set up lazily: the pinned project is applied
+        # when the connection is first built (on first use), so commands that
+        # never talk to the server don't construct it or import the server SDK.
         initialise_tabsdata_server_connection(ctx)
         load_pinned_objects(ctx)
         load_cli_options(ctx)
-        # The active project rides on the connection: it defaults to the pinned
-        # project, and a per-command `--proj` overrides it for that invocation.
-        # Project-scoped commands never thread it -- the connection injects it
-        # into every tenant path.
-        server = ctx.obj.get("tabsdataserver")
-        if server is not None:
-            server.connection.project = ctx.obj["pinned_objects"].get("project")
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to initialize CLI: {e}")
@@ -162,6 +154,8 @@ def info(third_party: bool, license: bool, release_notes: bool):
     """
     Provide information about license and third party libraries
     """
+    from tabsdatak.common._resources.reader import td_resource
+
     if license:
         license_path = td_resource("assets/manifest/LICENSE")
         with open(license_path, "r", encoding="utf-8") as f:
@@ -220,6 +214,8 @@ def login(ctx: click.Context, server: str, user: str, password: str):
         hide_input=True,
     )
     utils_login(ctx, server, user, password)
+    from tabsdatak.cli.td.config_utils import execute_actions_for_command
+
     execute_actions_for_command("login")
 
 
@@ -261,6 +257,11 @@ def status(ctx: click.Context):
 
 
 if __name__ == "__main__":
+    from tabsdatak.common._compatibility import (
+        PackageVersionError,
+        check_sticky_version_packages,
+    )
+
     try:
         check_sticky_version_packages()
     except PackageVersionError as error:
