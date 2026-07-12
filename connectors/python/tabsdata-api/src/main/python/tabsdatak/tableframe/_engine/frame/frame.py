@@ -165,17 +165,21 @@ class EngineFrame(BaseFrame):
     def _assemble(cls, lf, mode) -> Self:
         return cls._build(lf, mode)
 
-    def _strip(self, drop_system_columns):
-        # The conversion surface (to_polars_* / to_pandas / to_dict) drops only the
-        # standard `$td.` system columns, leaving connector `@td.` columns in place.
-        if not drop_system_columns:
-            return self._lf
+    def _strip(self, drop_system_columns, drop_internal_columns=False):
         from tabsdatak.tableframe._engine.constant.column.prefixes import (
+            TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
             TD_SYSTEM_COLUMN_PREFIX,
         )
 
+        if drop_internal_columns:
+            prefixes = (TD_SYSTEM_COLUMN_PREFIX, TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
+        elif drop_system_columns:
+            prefixes = (TD_SYSTEM_COLUMN_PREFIX,)
+        else:
+            return self._lf
+
         names = self._lf.collect_schema().names()
-        keep = [name for name in names if not name.startswith(TD_SYSTEM_COLUMN_PREFIX)]
+        keep = [name for name in names if not name.startswith(prefixes)]
         return self._lf.select(keep)
 
     def _persisted(self):
@@ -192,9 +196,19 @@ class EngineFrame(BaseFrame):
         return self._lf.select(keep)
 
     def _sink_native(self, path) -> None:
+        self._sink(self._persisted(), path)
+
+    def _sink_user(self, path) -> None:
+        self._sink(self._strip(drop_system_columns=True), path)
+
+    def _sink_public(self, path) -> None:
+        self._sink(
+            self._strip(drop_system_columns=True, drop_internal_columns=True), path
+        )
+
+    def _sink(self, lf, path) -> None:
         from tabsdatak.tableframe._core.hooks import get_sink_observer
 
-        lf = self._persisted()
         observer = get_sink_observer(type(self))
         if observer is not None:
             lf = observer(lf, "sink_parquet", path)

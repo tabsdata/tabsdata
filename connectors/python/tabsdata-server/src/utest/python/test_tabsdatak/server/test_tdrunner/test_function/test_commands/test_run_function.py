@@ -836,7 +836,7 @@ def test_invoke_user_function_wrong_element_type_raises_shape_mismatch():
 
 def test_sink_outputs_writes_each_table_frame(tmp_path):
     result = (_fake_table_frame(), _fake_table_frame())
-    entries = _sink_outputs(result, ["t1", "t2"], tmp_path)
+    entries = _sink_outputs(result, ["t1", "t2"], tmp_path, public=False)
     assert len(entries) == 2
     for i, entry in enumerate(entries):
         assert entry["name"] == f"t{i + 1}"
@@ -849,7 +849,7 @@ def test_sink_outputs_writes_each_table_frame(tmp_path):
 
 def test_sink_outputs_none_value_records_null_file(tmp_path):
     result = (None, _fake_table_frame())
-    entries = _sink_outputs(result, ["t1", "t2"], tmp_path)
+    entries = _sink_outputs(result, ["t1", "t2"], tmp_path, public=False)
     assert entries[0] == {"name": "t1", "file": None}
     assert entries[1]["file"] is not None
     # No slot0 dir should have been created (we skipped the sink).
@@ -863,7 +863,32 @@ def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkey
 
     monkeypatch.setattr(TableFrame, "_sink_native", broken_sink)
     with pytest.raises(OutputWriteFailedError):
-        _sink_outputs((_fake_table_frame(),), ["t1"], tmp_path)
+        _sink_outputs((_fake_table_frame(),), ["t1"], tmp_path, public=False)
+
+
+def test_sink_outputs_native_keeps_system_columns(tmp_path):
+    from tabsdatak.tableframe._engine.constant.column.prefixes import (
+        TD_SYSTEM_COLUMN_PREFIX,
+    )
+
+    entries = _sink_outputs((_fake_table_frame(),), ["t1"], tmp_path, public=False)
+    columns = pl.scan_parquet(entries[0]["file"]).collect_schema().names()
+    assert any(c.startswith(TD_SYSTEM_COLUMN_PREFIX) for c in columns)
+
+
+def test_sink_outputs_public_drops_internal_columns(tmp_path):
+    from tabsdatak.tableframe._engine.constant.column.prefixes import (
+        TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
+        TD_SYSTEM_COLUMN_PREFIX,
+    )
+
+    entries = _sink_outputs((_fake_table_frame(),), ["t1"], tmp_path, public=True)
+    columns = pl.scan_parquet(entries[0]["file"]).collect_schema().names()
+    assert not any(
+        c.startswith((TD_SYSTEM_COLUMN_PREFIX, TD_CONNECTOR_SYSTEM_COLUMN_PREFIX))
+        for c in columns
+    )
+    assert "x" in columns
 
 
 # --- main: error paths --------------------------------------------------

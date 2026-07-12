@@ -329,9 +329,18 @@ def _sink_outputs(
     result: tuple,
     output_tables: list[str],
     out_dir: Path,
+    *,
+    public: bool,
 ) -> list[dict]:
     """Sink each non-None output to `<out_dir>/slot<i>/<table>.parquet`
-    and build the outputs-manifest entries."""
+    and build the outputs-manifest entries.
+
+    Publisher / transformer outputs become stored tables, so they sink
+    natively with the framework's persisted system columns. Subscriber
+    outputs feed a destination plugin and leave the system, so they sink
+    publicly: stripped of every `$td.` system and `@td.` connector
+    column, leaving only the user's own columns for the plugin to write.
+    """
     entries: list[dict] = []
     for i, (table_name, value) in enumerate(zip(output_tables, result)):
         if value is None:
@@ -346,7 +355,10 @@ def _sink_outputs(
             slot_dir.mkdir(parents=True, exist_ok=True)
             # [TODO: tabsdatak.tableframe scan and sink migration] revisit when
             # tabsdatak.tableframe ships scan and sink methods.
-            value._sink_native(dest)
+            if public:
+                value._sink_public(dest)
+            else:
+                value._sink_native(dest)
         except Exception as exc:
             raise RunFunctionErrorCode.RF_16.exception(
                 cause=exc, table=table_name, path=dest, detail=str(exc)
@@ -458,7 +470,12 @@ def run(args: argparse.Namespace) -> int:
         )
         logger.debug("Drained ctx scratch to %s", state_dir)
 
-    entries_out = _sink_outputs(result, output_tables, out_dir)
+    entries_out = _sink_outputs(
+        result,
+        output_tables,
+        out_dir,
+        public=isinstance(info, SubscriberInfo),
+    )
     written = sum(
         1 for e in entries_out if e.get(outputs_manifest.MANIFEST_FILE_KEY) is not None
     )
