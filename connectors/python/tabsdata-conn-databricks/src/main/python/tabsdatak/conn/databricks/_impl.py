@@ -359,9 +359,17 @@ def execute_query(
     out_path = work_dir / f"intermediate_{index}_{uuid_string}.parquet"
 
     warehouse_id = _resolve_warehouse_id(ws_client, cfg.conn)
+    # Run the query in the connection's catalog/schema so unqualified table
+    # names (e.g. ``SELECT * FROM wld_country``) resolve against the right
+    # schema instead of the warehouse default.
+    conn = cfg.conn
+    catalog = _convert(conn.catalog, str) if conn.catalog is not None else None
+    schema = _convert(conn.schema, str) if conn.schema is not None else None
     response = ws_client.statement_execution.execute_statement(
         warehouse_id=warehouse_id,
         statement=statement,
+        catalog=catalog,
+        schema=schema,
         disposition=Disposition.EXTERNAL_LINKS,
         format=Format.ARROW_STREAM,
         wait_timeout=_ASYNC_EXECUTION_WAIT_TIMEOUT,
