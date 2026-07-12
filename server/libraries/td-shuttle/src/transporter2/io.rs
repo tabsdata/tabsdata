@@ -227,6 +227,7 @@ fn tweak_path(url: &Url, path: &OsPath) -> String {
 pub struct Store {
     store: Arc<dyn ObjectStore>,
     path: String,
+    object_path: OsPath,
     uri: String,
 }
 
@@ -241,9 +242,17 @@ pub fn resolve(loc: &Location) -> Result<Store> {
     validate_required(kind, &canonical)?;
     let (store, path) = parse_url_opts(&url, canonical)?;
     let path = tweak_path(&url, &path);
+    let object_path = OsPath::parse(&path)?;
+    tracing::debug!(
+        uri = %uri,
+        path = %path,
+        object_path = %object_path,
+        "shuttle.transporter2: resolved store path"
+    );
     Ok(Store {
         store: Arc::from(store),
         path,
+        object_path,
         uri,
     })
 }
@@ -259,13 +268,13 @@ impl Store {
 
     /// `(size, last_modified)` of the object.
     pub async fn head(&self) -> Result<(u64, DateTime<Utc>)> {
-        let meta = self.store.head(&OsPath::from(self.path.as_str())).await?;
+        let meta = self.store.head(&self.object_path).await?;
         Ok((meta.size, meta.last_modified))
     }
 
     /// Read the whole object into memory.
     pub async fn read_all(&self) -> Result<Bytes> {
-        let got = self.store.get(&OsPath::from(self.path.as_str())).await?;
+        let got = self.store.get(&self.object_path).await?;
         Ok(got.bytes().await?)
     }
 
@@ -274,7 +283,7 @@ impl Store {
         let len = data.len() as u64;
         self.store
             .put(
-                &OsPath::from(self.path.as_str()),
+                &self.object_path,
                 PutPayload::from_bytes(data),
             )
             .await?;
@@ -282,13 +291,13 @@ impl Store {
     }
 
     pub async fn delete(&self) -> Result<()> {
-        self.store.delete(&OsPath::from(self.path.as_str())).await?;
+        self.store.delete(&self.object_path).await?;
         Ok(())
     }
 
     /// A streaming reader over the object's bytes (no whole-object buffering).
     pub async fn open_read_stream(&self) -> Result<impl AsyncBufRead + Send + Unpin + 'static> {
-        let got = self.store.get(&OsPath::from(self.path.as_str())).await?;
+        let got = self.store.get(&self.object_path).await?;
         let stream = got.into_stream().map_err(std::io::Error::other);
         Ok(BufReader::new(StreamReader::new(stream)))
     }
@@ -297,13 +306,13 @@ impl Store {
     /// as they are written; the object becomes visible only on `shutdown`
     /// (atomic — a partial object is never exposed).
     pub fn open_write(&self) -> BufWriter {
-        BufWriter::new(self.store.clone(), OsPath::from(self.path.as_str()))
+        BufWriter::new(self.store.clone(), self.object_path.clone())
     }
 
     /// List objects one level under `dir` (the directory the wildcard finder
     /// scans). The whole listing is materialized.
     pub async fn list(&self, dir: &str) -> Result<Vec<FileMeta>> {
-        let prefix = OsPath::from(dir);
+        let prefix = OsPath::parse(dir)?;
         let mut stream = self.store.list(Some(&prefix));
         let mut out = Vec::new();
         while let Some(meta) = stream.next().await {

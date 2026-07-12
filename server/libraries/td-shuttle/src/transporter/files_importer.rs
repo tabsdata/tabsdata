@@ -370,9 +370,10 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(
-                path_r.clone().to_string_lossy().replace('\\', "/").as_ref(),
-            ),
+            location: ObjectStorePath::parse(
+                path_r.clone().to_string_lossy().replace('\\', "/"),
+            )
+            .unwrap(),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id.to_string()),
@@ -505,9 +506,10 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(
-                path_r.clone().to_string_lossy().replace('\\', "/").as_ref(),
-            ),
+            location: ObjectStorePath::parse(
+                path_r.clone().to_string_lossy().replace('\\', "/"),
+            )
+            .unwrap(),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id.to_string()),
@@ -643,9 +645,10 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(
-                path_r.clone().to_string_lossy().replace('\\', "/").as_ref(),
-            ),
+            location: ObjectStorePath::parse(
+                path_r.clone().to_string_lossy().replace('\\', "/"),
+            )
+            .unwrap(),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id.to_string()),
@@ -777,7 +780,7 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(path_r_normalized.as_str()),
+            location: ObjectStorePath::parse(path_r_normalized.as_str()).unwrap(),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id_r.to_string()),
@@ -956,7 +959,7 @@ mod tests {
             .unwrap()
             .to_string();
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(from_filename.as_str()),
+            location: ObjectStorePath::parse(from_filename.as_str()).unwrap(),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some("e_tag".to_string()),
@@ -1291,7 +1294,7 @@ mod tests {
             .unwrap()
             .to_string();
         let meta = ObjectMeta {
-            location: ObjectStorePath::from(from_filename.as_str()),
+            location: ObjectStorePath::parse(from_filename.as_str()).unwrap(),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some("e_tag".to_string()),

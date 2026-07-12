@@ -415,12 +415,11 @@ def cache_directory() -> Path:
     return Path.home() / ".theseus" / "postgresql"
 
 
-def musl_companion_target(target: str) -> str | None:
-    parts = target.split("-")
-    if "linux" not in parts:
+def host_companion_target(target: str, report: Report) -> str | None:
+    host = report.target_triple_rustc
+    if not host or host == target:
         return None
-    companion = f"{'-'.join(parts[:-1])}-musl"
-    return companion if companion != target else None
+    return host
 
 
 def cache_archive(
@@ -451,7 +450,7 @@ def run(report: Report) -> None:
 
     cache_archive(cache_directory_path, version, target, report)
 
-    companion_target = musl_companion_target(target)
+    companion_target = host_companion_target(target, report)
     if companion_target:
         cache_archive(cache_directory_path, version, companion_target, report)
 

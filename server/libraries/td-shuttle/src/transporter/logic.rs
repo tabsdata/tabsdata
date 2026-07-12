@@ -123,6 +123,11 @@ pub fn to_file_to_import_instructions(
     let importer_options = importer_options.clone();
     move |res| {
         let (idx, o) = res?;
+        tracing::debug!(
+            base_url = %base_url,
+            location = %o.location,
+            "shuttle.import: building file import instructions"
+        );
         Ok(FileImportInstructions {
             idx,
             from_url: base_url.join(o.location.as_ref()).unwrap(),

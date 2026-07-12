@@ -109,11 +109,10 @@ pub fn _tdtestdir(module_path: &str) -> PathBuf {
             .name()
             .unwrap_or("unknown")
             .to_string();
-        let dir = root
-            .join("target")
-            .join("testdir")
-            .join(crate_name)
-            .join(test_name.replace("::", "/"));
+        let dir = test_name.split("::").fold(
+            root.join("target").join("testdir").join(crate_name),
+            |dir, segment| dir.join(segment),
+        );
         if dir.exists() {
             std::fs::remove_dir_all(&dir).unwrap();
         }

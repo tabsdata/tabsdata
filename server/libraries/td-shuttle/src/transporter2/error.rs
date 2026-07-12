@@ -22,6 +22,9 @@ pub enum TransporterError {
     #[error("object_store error: {0}")]
     ObjectStore(#[from] object_store::Error),
 
+    #[error("invalid object store path: {0}")]
+    ObjectStorePath(#[from] object_store::path::Error),
+
     #[error("invalid uri '{0}': {1}")]
     InvalidUri(String, url::ParseError),
 

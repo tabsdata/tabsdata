@@ -193,7 +193,7 @@ if os.path.exists(TARGET_FILE_CSV):
 
 try:
     result = subprocess.run(
-        ["licensecheck", "-r", SOURCE_FILE, "--format", "json"],
+        ["uvx", "licensecheck@2026.0.8", "-r", SOURCE_FILE, "--format", "json"],
         capture_output=True,
         text=True,
         check=True,
