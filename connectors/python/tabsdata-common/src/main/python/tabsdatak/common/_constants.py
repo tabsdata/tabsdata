@@ -15,8 +15,13 @@ WHEEL_EXTENSION = ".whl"
 
 VARIANT = "variant"
 RESOURCES = "resources"
+TDRESOURCES = "tdresources"
 
 SRC_MAIN = ("src", "main")
+PLATFORM_SRC_MAIN = ("client", "platform", "src", "main")
+
+TABSDATA_TDRESOURCES_SOURCE_PARTS = PLATFORM_SRC_MAIN + (RESOURCES,)
+TABSDATA_AGENT_TDRESOURCES_SOURCE_PARTS = SRC_MAIN + (RESOURCES,)
 
 # --- Package / module names -----------------------------------------------
 

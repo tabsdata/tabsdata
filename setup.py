@@ -268,6 +268,15 @@ PACKAGE_RESOURCES = {
         Path(".") / "tabsdata" / "resources",
         Path(".") / "tabsdatak" / "resources",
     ],
+    Path(ROOT)
+    / "client"
+    / "platform"
+    / "src"
+    / "main"
+    / "resources"
+    / "tdresources": [
+        Path(".") / "tabsdatak" / "tdresources",
+    ],
 }
 
 with global_spinner("Building package 'tabsdata' (TabsData)..."):
@@ -673,6 +682,11 @@ with global_spinner("Building package 'tabsdata' (TabsData)..."):
                 ),
                 os.path.join(
                     "resources",
+                    "**",
+                    "*",
+                ),
+                os.path.join(
+                    "tdresources",
                     "**",
                     "*",
                 ),

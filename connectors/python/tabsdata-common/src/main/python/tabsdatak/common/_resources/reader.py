@@ -17,11 +17,14 @@ from tabsdatak.common._constants import (
     TABSDATA_AG_MODULE_NAME,
     TABSDATA_AGENT_PACKAGE_NAME,
     TABSDATA_AGENT_REGION,
+    TABSDATA_AGENT_TDRESOURCES_SOURCE_PARTS,
     TABSDATA_MODULE_NAME,
     TABSDATA_PACKAGE_NAME,
     TABSDATA_REGION,
+    TABSDATA_TDRESOURCES_SOURCE_PARTS,
     TABSDATAK_MODULE_NAME,
     TABSDATAK_REGION,
+    TDRESOURCES,
     VARIANT,
 )
 from tabsdatak.common._interpreter.python.error import UnsupportedInstallMethodError
@@ -31,13 +34,30 @@ from tabsdatak.common._interpreter.python.recipe import InstallRecipe
 logger = logging.getLogger(__name__)
 
 
-RESOURCES_LOCATION: dict[str, tuple[str, str, tuple[str, ...]]] = {
-    TABSDATAK_REGION: (TABSDATAK_MODULE_NAME, TABSDATA_PACKAGE_NAME, (VARIANT,)),
-    TABSDATA_REGION: (TABSDATA_MODULE_NAME, TABSDATA_PACKAGE_NAME, (VARIANT,)),
+RESOURCES_LOCATION: dict[str, tuple[str, str, dict[str, tuple[str, ...]]]] = {
+    TABSDATAK_REGION: (
+        TABSDATAK_MODULE_NAME,
+        TABSDATA_PACKAGE_NAME,
+        {
+            RESOURCES: (VARIANT,),
+            TDRESOURCES: TABSDATA_TDRESOURCES_SOURCE_PARTS,
+        },
+    ),
+    TABSDATA_REGION: (
+        TABSDATA_MODULE_NAME,
+        TABSDATA_PACKAGE_NAME,
+        {
+            RESOURCES: (VARIANT,),
+            TDRESOURCES: TABSDATA_TDRESOURCES_SOURCE_PARTS,
+        },
+    ),
     TABSDATA_AGENT_REGION: (
         TABSDATA_AG_MODULE_NAME,
         TABSDATA_AGENT_PACKAGE_NAME,
-        SRC_MAIN,
+        {
+            RESOURCES: SRC_MAIN,
+            TDRESOURCES: TABSDATA_AGENT_TDRESOURCES_SOURCE_PARTS,
+        },
     ),
 }
 
@@ -72,15 +92,16 @@ def lookup_resource(resource: str, *, region: str) -> Path | None:
     module, distribution, editable_root_parts = RESOURCES_LOCATION[region]
     normalized_resource = resource.replace(BACK_SLASH, SLASH)
     resource_parts = PurePosixPath(normalized_resource).parts
-    if resource_parts and resource_parts[0] == RESOURCES:
+    source_parts = (
+        editable_root_parts.get(resource_parts[0]) if resource_parts else None
+    )
+    if source_parts is not None:
         source_root = editable_source_root(distribution)
         if source_root is not None:
             try:
-                variant_path = source_root.joinpath(
-                    *editable_root_parts, *resource_parts
-                )
-                if variant_path.exists():
-                    return variant_path
+                source_path = source_root.joinpath(*source_parts, *resource_parts)
+                if source_path.exists():
+                    return source_path
             except OSError:
                 pass
     try:
