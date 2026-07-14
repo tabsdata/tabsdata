@@ -16,7 +16,7 @@ The decrypted JSON is::
     {
       "generator": "tdx",
       "kind":     "<category>-<role>",    # e.g. "container-system", "cloud-domain"
-      "category": "container|cloud|native|saas|service",  # helper module family
+      "category": "container|cloud|native|saas|service|dev",  # helper module family
       "system":   "<slug>",               # external system (mysql, s3, snowflake…)
       "role":     "sys|env",              # system descriptor vs domain descriptor
       "name":     "<logical-name>",       # the descriptor's file name (an identifier)
@@ -525,6 +525,61 @@ def write_service_domain(
     )
 
 
+def write_dev_system(
+    *,
+    out: str,
+    dev_type: str,
+    system_kind: str,
+    label: str,
+    forwarded: list[tuple[str, str | None, str | None]],
+) -> None:
+    """Descriptor for a dev (no-op) system. Backed by no external resource — it
+    carries only SYSTEM_KIND (plus any forwarded settings, normally none), for
+    consistency with the other families so CI/IntTest can manage it the same
+    way."""
+    meta: list[tuple[str, str | None, str | None]] = [
+        ("SYSTEM_KIND", system_kind, None)
+    ]
+    meta += forwarded
+    exported = ["SYSTEM_KIND"] + [t[0] for t in forwarded]
+    _write(
+        out,
+        category="dev",
+        system=dev_type,
+        role="sys",
+        kind="dev-system",
+        meta=meta,
+        exported=exported,
+        strip_slash=[],
+    )
+
+
+def write_dev_domain(
+    *,
+    out: str,
+    dev_type: str,
+    system_kind: str,
+    forwarded: list[tuple[str, str | None, str | None]],
+) -> None:
+    """Descriptor for a dev (no-op) domain — the mirror of `write_dev_system`;
+    the domain creates no external entity, so it carries only SYSTEM_KIND."""
+    meta: list[tuple[str, str | None, str | None]] = [
+        ("SYSTEM_KIND", system_kind, None)
+    ]
+    meta += forwarded
+    exported = ["SYSTEM_KIND"] + [t[0] for t in forwarded]
+    _write(
+        out,
+        category="dev",
+        system=dev_type,
+        role="env",
+        kind="dev-domain",
+        meta=meta,
+        exported=exported,
+        strip_slash=[],
+    )
+
+
 # ---------------------------------------------------------------------------
 # write: persist a System backend's returned settings (the one systems ->
 # descriptor serialization step; the write_* above are its primitives).
@@ -612,6 +667,14 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
                 label=sys_obj.label,
                 forwarded=_settings_triples(settings),
             )
+        elif cat == "dev":
+            write_dev_system(
+                out=out,
+                dev_type=sys_obj.slug,
+                system_kind=sys_obj.kind,
+                label=sys_obj.label,
+                forwarded=_settings_triples(settings),
+            )
         else:
             write_saas_system(
                 out=out,
@@ -668,6 +731,13 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
         write_service_domain(
             out=out,
             service_type=sys_obj.slug,
+            system_kind=sys_obj.kind,
+            forwarded=_settings_triples(settings),
+        )
+    elif cat == "dev":
+        write_dev_domain(
+            out=out,
+            dev_type=sys_obj.slug,
             system_kind=sys_obj.kind,
             forwarded=_settings_triples(settings),
         )

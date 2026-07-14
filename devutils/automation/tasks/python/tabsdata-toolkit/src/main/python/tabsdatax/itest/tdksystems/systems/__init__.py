@@ -37,6 +37,8 @@ _SLUGS = {
     # service (credential-only API accounts)
     "anthropic": ("anthropic.system", "AnthropicSystem"),
     "openai": ("openai.system", "OpenAISystem"),
+    # dev (no-op)
+    "dev": ("dev.system", "DevSystem"),
 }
 
 

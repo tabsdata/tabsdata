@@ -233,7 +233,7 @@ class System(ABC):
     # ---- identity / declaration (class attributes) ----
     slug: str = ""  # --type value, dir name under systems/
     label: str = ""  # human name, e.g. "MySQL"
-    category: str = ""  # "container" | "cloud" | "native" | "saas" | "service"
+    category: str = ""  # container|cloud|native|saas|service|dev
     # descriptor field + --type grouping ONLY
     kind: str = ""  # data-plane compat tag: sql|file|kafka|
     # mongodb|salesforce (model-vs-system check)

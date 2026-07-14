@@ -44,6 +44,10 @@ Homepage = "https://tabsdata.com"
 Documentation = "https://docs.tabsdata.com"
 Source = "https://github.com/tabsdata/tabsdata"
 
+[project.entry-points."tabsdatak.connectors"]
+src_dev_datagen = "tabsdatak.conn.dev._plugin:DATAGEN_SRC"
+dest_dev_trash = "tabsdatak.conn.dev._plugin:TRASH_DEST"
+
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"
 consider_namespace_packages = true
