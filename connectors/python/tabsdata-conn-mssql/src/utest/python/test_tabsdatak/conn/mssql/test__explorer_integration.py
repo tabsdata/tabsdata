@@ -130,6 +130,7 @@ def test_metadata_lists_seeded_tables(
 @mssqlserver_system("mssqlserver")
 @mssqlserver_domain("mssqlserver_world_xs")
 def test_metadata_reflects_columns_and_primary_key(
+    system_mssqlserver: MssqlserverSystem,
     domain_mssqlserver_world_xs: MssqlserverDomain,
 ):
     conn = _src_conn_from(domain_mssqlserver_world_xs)

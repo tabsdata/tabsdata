@@ -122,7 +122,9 @@ def test_metadata_lists_seeded_tables(
 
 @mysql_system("mysql")
 @mysql_domain("mysql_world_xs")
-def test_metadata_reflects_columns_and_primary_key(domain_mysql_world_xs: MysqlDomain):
+def test_metadata_reflects_columns_and_primary_key(
+    system_mysql: MysqlSystem, domain_mysql_world_xs: MysqlDomain
+):
     conn = _src_conn_from(domain_mysql_world_xs)
     users = _entity_by_table(MySQLConnectionExplorer().metadata(conn), "wld_city")
 

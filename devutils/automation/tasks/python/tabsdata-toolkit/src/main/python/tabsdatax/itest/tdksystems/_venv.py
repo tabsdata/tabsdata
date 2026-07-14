@@ -33,6 +33,7 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 
 from .errors import DatagenError
@@ -55,7 +56,11 @@ def _uv() -> str:
 
 
 def _venv_python(venv: Path) -> Path:
-    return venv / ("Scripts" if os.name == "nt" else "bin") / "python"
+    paths = sysconfig.get_paths(
+        scheme="venv",
+        vars={"base": str(venv), "platbase": str(venv)},
+    )
+    return Path(paths["scripts"]) / ("python" + sysconfig.get_config_var("EXE"))
 
 
 def _project_dir() -> Path:

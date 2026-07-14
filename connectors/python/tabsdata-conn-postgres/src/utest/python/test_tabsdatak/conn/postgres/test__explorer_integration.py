@@ -123,6 +123,7 @@ def test_metadata_lists_seeded_tables(
 @postgres_system("postgres")
 @postgres_domain("postgres_world_xs")
 def test_metadata_reflects_columns_and_primary_key(
+    system_postgres: PostgresSystem,
     domain_postgres_world_xs: PostgresDomain,
 ):
     conn = _src_conn_from(domain_postgres_world_xs)

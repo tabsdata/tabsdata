@@ -123,7 +123,9 @@ def test_metadata_lists_seeded_tables(
 
 @snowflake_system("snowflake")
 @snowflake_domain("snowflake_world_xs")
-def test_metadata_reflects_columns(domain_snowflake_world_xs: SnowflakeDomain):
+def test_metadata_reflects_columns(
+    system_snowflake: SnowflakeSystem, domain_snowflake_world_xs: SnowflakeDomain
+):
     conn = _conn_from(domain_snowflake_world_xs)
     users = _entity_by_table(SnowflakeConnectionExplorer().metadata(conn), "wld_city")
 

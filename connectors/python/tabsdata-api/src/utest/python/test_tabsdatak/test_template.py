@@ -76,24 +76,24 @@ def test_localfile_template_round_trips():
     doc = template.build_template(info.conn_cls)
     assert doc["spec"] == {}
     assert template.validate(doc) == "connectionDef"
-    # all_fields surfaces the optional fields: base_path (default '') as a real
+    # all_fields surfaces the optional fields: base_path (default '/') as a real
     # key, conn_cfg (default None) commented out so the document stays valid.
     full = template.build_template(info.conn_cls, all_fields=True)
     assert set(full["spec"]) == {"base_path"}
     text = template.to_yaml(full)
-    assert "base_path: ''" in text
+    assert "base_path: /" in text
     assert "# conn_cfg" in text
     # Still a valid connection (the commented conn_cfg is not parsed).
     assert template.validate(template.from_yaml(text)) == "connectionDef"
 
 
 def test_all_fields_comments_out_none_defaults():
-    # localfile: base_path (default '') is a real key with an 'optional' note;
+    # localfile: base_path (default '/') is a real key with an 'optional' note;
     # conn_cfg (default None) is commented out with a short 'what's expected'.
     info = template.resolve_conn("local-file-in", "src")
     text = template.to_yaml(template.build_template(info.conn_cls, all_fields=True))
-    assert "# optional (default: '')" in text
-    assert "base_path: ''" in text
+    assert "# optional (default: '/')" in text
+    assert "base_path: /" in text
     assert "# conn_cfg  (optional, default: none) -- a dict (str-keyed)" in text
     assert "# conn_cfg: {}" in text
 

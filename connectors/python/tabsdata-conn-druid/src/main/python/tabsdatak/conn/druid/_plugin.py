@@ -215,6 +215,10 @@ class DruidDestPlugin(DestPlugin[DruidDestConn, DruidDest]):
 
 
 class DruidExplorer(Explorer[DruidDestConn]):
+    def check_connect(self, conn: DruidDestConn) -> Any:
+        # TODO
+        pass
+
     def metadata(self, conn: DruidDestConn) -> Any:
         # TODO
         pass

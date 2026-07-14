@@ -128,6 +128,7 @@ def test_metadata_lists_seeded_tables(
 @oracle_system("oracle")
 @oracle_domain("oracle_world_xs")
 def test_metadata_reflects_columns_and_primary_key(
+    system_oracle: OracleSystem,
     domain_oracle_world_xs: OracleDomain,
 ):
     conn = _src_conn_from(domain_oracle_world_xs)

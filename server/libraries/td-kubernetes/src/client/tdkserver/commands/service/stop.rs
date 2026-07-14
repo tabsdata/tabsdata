@@ -3,9 +3,11 @@
 //
 
 use clap_derive::Args;
+use td_common::settings::DEFAULT_INSTANCE;
 use tracing::info;
 
 use crate::base::reporter::InteractiveReporter;
+use crate::client::registry::instance_folder;
 use crate::client::session::pin::PinContext;
 use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
@@ -66,6 +68,15 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
     let details = resolved_details(details, &pins);
     let yes = resolved_yes(yes, &pins);
     let verbose = globals.verbose;
+
+    let name = instance
+        .value
+        .clone()
+        .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
+    if !instance_folder(&name)?.exists() {
+        cwarn!("Instance '{name}' does not exist. Nothing to stop.");
+        return Ok(());
+    }
 
     let provider = provider_for_instance(instance.value, verbose, None).await?;
     provider.ensure_stoppable_service().await?;

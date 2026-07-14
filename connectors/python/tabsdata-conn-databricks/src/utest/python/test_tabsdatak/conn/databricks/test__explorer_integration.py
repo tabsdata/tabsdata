@@ -121,7 +121,9 @@ def test_metadata_lists_seeded_tables(
 
 @databricks_system("databricks")
 @databricks_domain("databricks_world_xs")
-def test_metadata_reflects_columns(domain_databricks_world_xs: DatabricksDomain):
+def test_metadata_reflects_columns(
+    system_databricks: DatabricksSystem, domain_databricks_world_xs: DatabricksDomain
+):
     conn = _conn_from(domain_databricks_world_xs)
     users = _entity_by_table(DatabricksConnectionExplorer().metadata(conn), "wld_city")
 

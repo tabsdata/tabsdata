@@ -107,7 +107,9 @@ def test_metadata_lists_seeded_tables(
 
 @clickhouse_system("clickhouse")
 @clickhouse_domain("clickhouse_world_xs")
-def test_metadata_reflects_columns(domain_clickhouse_world_xs: ClickhouseDomain):
+def test_metadata_reflects_columns(
+    system_clickhouse: ClickhouseSystem, domain_clickhouse_world_xs: ClickhouseDomain
+):
     conn = _conn_from(domain_clickhouse_world_xs)
     users = _entity_by_table(ClickHouseConnectionExplorer().metadata(conn), "wld_city")
 

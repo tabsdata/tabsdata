@@ -424,9 +424,11 @@ def test_main_missing_outputs_manifest_returns_bad_manifest(
     assert main() == BadManifestError.exit_code
 
 
-def test_main_null_file_in_manifest_returns_bad_manifest(
+def test_main_all_null_manifest_skips_write_out(
     tmp_path, built_bundle, monkeypatch, http_ok_url
 ):
+    # A subscriber that returns None for every output slot produced no new data
+    # this run, so the destination plugin is skipped and main() succeeds.
     req = _write_request(tmp_path / "request.yaml")
     conn_file = _write_connection_file(
         tmp_path / "connection.yaml", tmp_path / "dest_out"
@@ -445,7 +447,7 @@ def test_main_null_file_in_manifest_returns_bad_manifest(
         connection_file=conn_file,
         responder_url=http_ok_url,
     )
-    assert main() == BadManifestError.exit_code
+    assert main() == 0
 
 
 # --- main: end-to-end --------------------------------------------------

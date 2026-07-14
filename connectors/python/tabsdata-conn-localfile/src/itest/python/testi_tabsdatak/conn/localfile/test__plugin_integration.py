@@ -9,7 +9,6 @@ Unlike the cloud variants, no credentials are required.
 from __future__ import annotations
 
 import os
-import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -17,6 +16,7 @@ import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
 from tabsdatax.itest.fixture.functions.files import PluginDestCtx, PluginSrcCtx
+from tabsdatax.itest.fixture.monikers import moniker
 
 # noinspection PyProtectedMember
 import tabsdatak.conn.localfile._plugin as plugin
@@ -35,14 +35,15 @@ pytestmark = pytest.mark.localfile
 TRANSPORTER_BINARY = PythonEnvironment().binary(TRANSPORTER_BINARY_NAME)
 
 
-def _test_root(domain_fs: FsDomain, request: pytest.FixtureRequest) -> Path:
-    """A unique writable scratch dir for the current test under the
-    session-shared ``fs`` domain base path (``request.node.name`` carries the
-    param id, so parametrized cases stay isolated too)."""
-    root = domain_fs.base_path / request.node.name
-    shutil.rmtree(root, ignore_errors=True)
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+def fs_scratch(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+) -> tuple[Path, Path, Path]:
+    root = domain_fs.base_path / moniker(request)
+    base = root / "store"
+    work = root / "work"
+    base.mkdir(parents=True)
+    work.mkdir(parents=True)
+    return root, base, work
 
 
 # ---------------------------------------------------------------------------
@@ -52,11 +53,7 @@ def _test_root(domain_fs: FsDomain, request: pytest.FixtureRequest) -> Path:
 
 @fs_domain("fs")
 def test_dest_then_src_round_trip(domain_fs: FsDomain, request: pytest.FixtureRequest):
-    root = _test_root(domain_fs, request)
-    # Use ``base`` as the base_path; entries are rooted there.
-    # ``full_path`` strips leading/trailing slashes.
-    base = root / "store"
-    base.mkdir()
+    root, base, _ = fs_scratch(domain_fs, request)
     work_dest = root / "work_dest"
     work_dest.mkdir()
     work_src = root / "work_src"
@@ -97,9 +94,7 @@ def test_dest_then_src_round_trip(domain_fs: FsDomain, request: pytest.FixtureRe
 def test_src_treats_absolute_path_as_relative_to_base_path(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     in_parquet = base / "data.parquet"
     pl.DataFrame([{"x": 1}]).write_parquet(in_parquet, use_pyarrow=True)
 
@@ -107,8 +102,6 @@ def test_src_treats_absolute_path_as_relative_to_base_path(
     # Note the leading slash on the entry -- the plugin strips it.
     src = LocalFileSrc(paths=["/data.parquet"])
 
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     assert len(out[0]) >= 1
     assert pl.read_parquet(out[0][0].file).select("x").to_dicts() == [{"x": 1}]
@@ -123,9 +116,7 @@ def test_src_treats_absolute_path_as_relative_to_base_path(
 def test_src_wildcard_in_basename_matches_multiple_files(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     for name in ("a.parquet", "b.parquet", "c.parquet"):
         pl.DataFrame([{"name": name}]).write_parquet(
             base / name,
@@ -140,8 +131,6 @@ def test_src_wildcard_in_basename_matches_multiple_files(
     conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(paths=["*.parquet"])
 
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
 
     assert len(out) == 1
@@ -155,9 +144,7 @@ def test_src_wildcard_in_basename_matches_multiple_files(
 def test_src_wildcard_with_no_matches_returns_empty_slot(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     pl.DataFrame([{"name": "x"}]).write_parquet(
         base / "x.csv",
         use_pyarrow=True,
@@ -166,8 +153,6 @@ def test_src_wildcard_with_no_matches_returns_empty_slot(
     conn = LocalFileSrcConn(base_path=str(base))
     src = LocalFileSrc(paths=["*.parquet"])
 
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
 
     # One slot, zero files
@@ -190,9 +175,7 @@ def _set_mtime(path: Path, when: datetime) -> None:
 def test_src_initial_last_modified_filters_out_older_files(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
 
     # Two files, deliberately spaced in time
     old = base / "old.parquet"
@@ -213,8 +196,6 @@ def test_src_initial_last_modified_filters_out_older_files(
         initial_last_modified=cutoff,
     )
 
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
 
     names = sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0])
@@ -225,9 +206,7 @@ def test_src_initial_last_modified_filters_out_older_files(
 def test_src_initial_last_modified_at_or_before_oldest_returns_all(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     pl.DataFrame([{"name": "a"}]).write_parquet(base / "a.parquet", use_pyarrow=True)
     pl.DataFrame([{"name": "b"}]).write_parquet(base / "b.parquet", use_pyarrow=True)
 
@@ -241,8 +220,6 @@ def test_src_initial_last_modified_at_or_before_oldest_returns_all(
         initial_last_modified=floor,
     )
 
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
 
     names = sorted(pl.read_parquet(f.file).select("name").item(0, 0) for f in out[0])
@@ -263,9 +240,7 @@ def test_src_initial_last_modified_at_or_before_oldest_returns_all(
 def test_src_format_csv_reads_with_default_options(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     pl.DataFrame(
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     ).write_csv(base / "users.csv")
@@ -275,8 +250,6 @@ def test_src_format_csv_reads_with_default_options(
         paths=["users.csv"],
         format=SrcFileFormat.CSV,
     )
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
@@ -289,9 +262,7 @@ def test_src_format_csv_reads_with_default_options(
 def test_src_format_csv_honours_separator_option(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     pl.DataFrame(
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     ).write_csv(base / "users.csv", separator=";")
@@ -302,8 +273,6 @@ def test_src_format_csv_honours_separator_option(
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"separator": ";"}},
     )
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
@@ -318,9 +287,7 @@ def test_src_format_json_reads_records(
 ):
     # The transporter binary reads newline-delimited JSON (one record
     # per line) for ``SrcFileFormat.JSON``.
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     pl.DataFrame(
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     ).write_ndjson(base / "users.json")
@@ -330,8 +297,6 @@ def test_src_format_json_reads_records(
         paths=["users.json"],
         format=SrcFileFormat.JSON,
     )
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
@@ -344,9 +309,7 @@ def test_src_format_json_reads_records(
 def test_src_format_avro_reads_records(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     pl.DataFrame(
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
     ).write_avro(base / "users.avro")
@@ -356,8 +319,6 @@ def test_src_format_avro_reads_records(
         paths=["users.avro"],
         format=SrcFileFormat.AVRO,
     )
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name").sort("id")
     assert df.to_dicts() == [
@@ -370,9 +331,7 @@ def test_src_format_avro_reads_records(
 def test_src_format_auto_infers_parquet_from_extension(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     pl.DataFrame([{"id": 1, "name": "alice"}]).write_parquet(
         base / "users.parquet",
         use_pyarrow=True,
@@ -384,8 +343,6 @@ def test_src_format_auto_infers_parquet_from_extension(
         # AUTO is the default; spell it out for clarity.
         format=SrcFileFormat.AUTO,
     )
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name")
     assert df.to_dicts() == [{"id": 1, "name": "alice"}]
@@ -418,9 +375,7 @@ def _stage_input_parquet(root: Path, rows: list[dict]) -> Path:
 def test_dest_format_csv_writes_csv_file(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    root, base, work = fs_scratch(domain_fs, request)
     src_parquet = _stage_input_parquet(
         root,
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
@@ -431,8 +386,6 @@ def test_dest_format_csv_writes_csv_file(
         paths=["users.csv"],
         format=DestFileFormat.CSV,
     )
-    work = root / "work"
-    work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
         PluginDestCtx(work),
         conn,
@@ -453,9 +406,7 @@ def test_dest_format_csv_writes_csv_file(
 def test_dest_format_csv_honours_separator_option(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    root, base, work = fs_scratch(domain_fs, request)
     src_parquet = _stage_input_parquet(
         root,
         [{"id": 1, "name": "alice"}],
@@ -467,8 +418,6 @@ def test_dest_format_csv_honours_separator_option(
         format=DestFileFormat.CSV,
         format_cfg={DestFileFormat.CSV: {"separator": ";"}},
     )
-    work = root / "work"
-    work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
         PluginDestCtx(work),
         conn,
@@ -486,9 +435,7 @@ def test_dest_format_csv_honours_separator_option(
 def test_dest_format_json_writes_json_file(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    root, base, work = fs_scratch(domain_fs, request)
     src_parquet = _stage_input_parquet(
         root,
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
@@ -499,8 +446,6 @@ def test_dest_format_json_writes_json_file(
         paths=["users.json"],
         format=DestFileFormat.JSON,
     )
-    work = root / "work"
-    work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
         PluginDestCtx(work),
         conn,
@@ -523,9 +468,7 @@ def test_dest_format_json_writes_json_file(
 def test_dest_format_avro_writes_avro_file(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    root, base, work = fs_scratch(domain_fs, request)
     src_parquet = _stage_input_parquet(
         root,
         [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
@@ -536,8 +479,6 @@ def test_dest_format_avro_writes_avro_file(
         paths=["users.avro"],
         format=DestFileFormat.AVRO,
     )
-    work = root / "work"
-    work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
         PluginDestCtx(work),
         conn,
@@ -558,9 +499,7 @@ def test_dest_format_avro_writes_avro_file(
 def test_dest_format_auto_defaults_to_parquet(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    root, base, work = fs_scratch(domain_fs, request)
     src_parquet = _stage_input_parquet(
         root,
         [{"id": 1, "name": "alice"}],
@@ -571,8 +510,6 @@ def test_dest_format_auto_defaults_to_parquet(
         paths=["users.parquet"],
         format=DestFileFormat.AUTO,
     )
-    work = root / "work"
-    work.mkdir()
     plugin.LocalFileDestPlugin().write_out(
         PluginDestCtx(work),
         conn,
@@ -596,12 +533,12 @@ def test_dest_format_auto_defaults_to_parquet(
 
 
 def _read_csv_with_cfg(
-    root: Path,
+    domain_fs: FsDomain,
+    request: pytest.FixtureRequest,
     csv_text: str,
     cfg: dict,
 ) -> pl.DataFrame:
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     (base / "in.csv").write_text(csv_text)
 
     conn = LocalFileSrcConn(base_path=str(base))
@@ -610,8 +547,6 @@ def _read_csv_with_cfg(
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: cfg},
     )
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     # Drop the binary's ``$td.opt.*`` provenance columns.
     df = pl.read_parquet(out[0][0].file)
@@ -625,7 +560,8 @@ def _read_csv_with_cfg(
 @fs_domain("fs")
 def test_csv_src_separator(domain_fs: FsDomain, request: pytest.FixtureRequest):
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "id;name\n1;alice\n2;bob\n",
         {"separator": ";"},
     )
@@ -643,7 +579,8 @@ def test_csv_src_quote_char(domain_fs: FsDomain, request: pytest.FixtureRequest)
     # Apostrophe-quoted field with embedded comma -- only parses
     # correctly when ``quote_char`` is honored.
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "id,name\n1,'alice, the great'\n2,bob\n",
         {"quote_char": "'"},
     )
@@ -659,7 +596,8 @@ def test_csv_src_quote_char(domain_fs: FsDomain, request: pytest.FixtureRequest)
 @fs_domain("fs")
 def test_csv_src_has_header_false(domain_fs: FsDomain, request: pytest.FixtureRequest):
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "1,alice\n2,bob\n",
         {"has_header": False},
     )
@@ -676,7 +614,8 @@ def test_csv_src_has_header_false(domain_fs: FsDomain, request: pytest.FixtureRe
 @fs_domain("fs")
 def test_csv_src_skip_rows(domain_fs: FsDomain, request: pytest.FixtureRequest):
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "# noise 1\n# noise 2\nid,name\n1,alice\n2,bob\n",
         {"skip_rows": 2},
     )
@@ -694,7 +633,8 @@ def test_csv_src_skip_rows_after_header(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "id,name\nskip_1,skip_1\nskip_2,skip_2\n1,alice\n2,bob\n",
         {"skip_rows_after_header": 2},
     )
@@ -710,7 +650,8 @@ def test_csv_src_skip_rows_after_header(
 @fs_domain("fs")
 def test_csv_src_comment_prefix(domain_fs: FsDomain, request: pytest.FixtureRequest):
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "# header comment\nid,name\n# data comment\n1,alice\n2,bob\n",
         {"comment_prefix": "#"},
     )
@@ -726,7 +667,8 @@ def test_csv_src_comment_prefix(domain_fs: FsDomain, request: pytest.FixtureRequ
 @fs_domain("fs")
 def test_csv_src_null_values(domain_fs: FsDomain, request: pytest.FixtureRequest):
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "id,name\n1,NA\n2,bob\n",
         {"null_values": ["NA"]},
     )
@@ -748,7 +690,8 @@ def test_csv_src_missing_is_null_default_empty_cell_is_null(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "id,name\n1,\n2,bob\n",
         {"missing_is_null": True},
     )
@@ -763,7 +706,8 @@ def test_csv_src_missing_is_null_default_empty_cell_is_null(
 @fs_domain("fs")
 def test_csv_src_try_parse_dates(domain_fs: FsDomain, request: pytest.FixtureRequest):
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "id,when\n1,2026-01-01\n2,2026-02-02\n",
         {"try_parse_dates": True},
     )
@@ -779,7 +723,8 @@ def test_csv_src_decimal_comma(domain_fs: FsDomain, request: pytest.FixtureReque
     # Comma is the decimal point, so the field delimiter must be
     # something else (``;`` here).
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "id;value\n1;1,5\n2;2,75\n",
         {"separator": ";", "decimal_comma": True},
     )
@@ -796,7 +741,8 @@ def test_csv_src_truncate_ragged_lines(
     domain_fs: FsDomain, request: pytest.FixtureRequest
 ):
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         # Second row has an extra column.
         "id,name\n1,alice\n2,bob,extra\n",
         {"truncate_ragged_lines": True, "ignore_errors": True},
@@ -815,7 +761,8 @@ def test_csv_src_raise_if_empty_false(
     # Empty file -- with raise_if_empty=False the binary should NOT
     # error; output should be empty.
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "",
         {"raise_if_empty": False},
     )
@@ -832,7 +779,8 @@ def test_csv_src_ignore_errors(domain_fs: FsDomain, request: pytest.FixtureReque
     # the column as String so every row passes through. Probing
     # showed all 3 rows survive.
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "id,name\n1,alice\nnot_a_number,bob\n3,carol\n",
         {"ignore_errors": True},
     )
@@ -847,9 +795,7 @@ def test_csv_src_ignore_errors(domain_fs: FsDomain, request: pytest.FixtureReque
 @fs_domain("fs")
 def test_csv_src_encoding_utf8(domain_fs: FsDomain, request: pytest.FixtureRequest):
     # Default encoding is utf8 -- multibyte chars round-trip.
-    root = _test_root(domain_fs, request)
-    base = root / "store"
-    base.mkdir()
+    _, base, work = fs_scratch(domain_fs, request)
     (base / "in.csv").write_bytes(
         "id,name\n1,café\n2,piñata\n".encode("utf-8"),
     )
@@ -859,8 +805,6 @@ def test_csv_src_encoding_utf8(domain_fs: FsDomain, request: pytest.FixtureReque
         format=SrcFileFormat.CSV,
         format_cfg={SrcFileFormat.CSV: {"encoding": "utf8"}},
     )
-    work = root / "work"
-    work.mkdir()
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     df = pl.read_parquet(out[0][0].file).select("id", "name")
     assert df.sort("id").to_dicts() == [
@@ -878,7 +822,8 @@ def test_csv_src_eol_char_default_lf(
 ):
     # Default eol is LF; this validates the happy path.
     df = _read_csv_with_cfg(
-        _test_root(domain_fs, request),
+        domain_fs,
+        request,
         "id,name\n1,alice\n2,bob\n",
         {"eol_char": "\n"},
     )

@@ -135,7 +135,9 @@ def test_metadata_lists_seeded_tables(
 
 @starrocks_system("starrocks")
 @starrocks_domain("starrocks_world_xs")
-def test_metadata_reflects_columns(domain_starrocks_world_xs: StarrocksDomain):
+def test_metadata_reflects_columns(
+    system_starrocks: StarrocksSystem, domain_starrocks_world_xs: StarrocksDomain
+):
     conn = _conn_from(domain_starrocks_world_xs)
     users = _entity_by_table(StarRocksConnectionExplorer().metadata(conn), "wld_city")
 

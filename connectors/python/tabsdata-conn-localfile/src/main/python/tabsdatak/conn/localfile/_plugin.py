@@ -103,6 +103,10 @@ class LocalFileDestPlugin(DestPlugin[LocalFileDestConn, LocalFileDest]):
 
 
 class LocalFileSrcExplorer(Explorer[LocalFileSrcConn]):
+    def check_connect(self, conn: LocalFileSrcConn) -> Any:
+        # TODO
+        pass
+
     def metadata(self, conn: LocalFileSrcConn) -> Any:
         # TODO
         pass
@@ -113,6 +117,10 @@ class LocalFileSrcExplorer(Explorer[LocalFileSrcConn]):
 
 
 class LocalFileDestExplorer(Explorer[LocalFileDestConn]):
+    def check_connect(self, conn: LocalFileDestConn) -> Any:
+        # TODO
+        pass
+
     def metadata(self, conn: LocalFileDestConn) -> Any:
         # TODO
         pass

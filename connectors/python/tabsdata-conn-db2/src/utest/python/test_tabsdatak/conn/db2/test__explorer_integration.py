@@ -123,7 +123,9 @@ def test_metadata_lists_seeded_tables(
 
 @db2_system("db2")
 @db2_domain("db2_world_xs")
-def test_metadata_reflects_columns_and_primary_key(domain_db2_world_xs: Db2Domain):
+def test_metadata_reflects_columns_and_primary_key(
+    system_db2: Db2System, domain_db2_world_xs: Db2Domain
+):
     conn = _src_conn_from(domain_db2_world_xs)
     users = _entity_by_table(Db2ConnectionExplorer().metadata(conn), "wld_city")
 
