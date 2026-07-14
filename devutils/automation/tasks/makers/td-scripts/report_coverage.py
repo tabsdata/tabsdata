@@ -14,6 +14,8 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
+RENDER_WIDTH = 1024
+
 
 # noinspection DuplicatedCode
 def load(module_name) -> ModuleType:
@@ -192,7 +194,7 @@ def coverage_report(coverage_json: Path, project_root: Path):  # noqa: C901
 
     # noinspection PyBroadException
     try:
-        console = Console()
+        console = Console(width=RENDER_WIDTH)
         table = Table(title="Coverage Summary", box=box.ROUNDED, expand=False)
         table.add_column("Metric", style="cyan", no_wrap=True, justify="left")
         table.add_column("Value", style="white", justify="right")

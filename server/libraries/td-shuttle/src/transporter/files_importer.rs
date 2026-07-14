@@ -838,7 +838,7 @@ mod tests {
                 {
                     path_str_lf.remove(0);
                 }
-                path_str_lf.replace("/", "\\")
+                path_str_lf
             }
         } else {
             url_tf.to_string()

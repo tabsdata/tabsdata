@@ -13,6 +13,8 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
+RENDER_WIDTH = 1024
+
 COLOR_SCHEMES = {
     "status": {
         "Running": "green",
@@ -60,7 +62,7 @@ def main() -> int:
         payload = json.loads(os.environ[arguments.env])
     else:
         payload = json.load(sys.stdin)
-    console = Console()
+    console = Console(width=RENDER_WIDTH)
     documents = payload if isinstance(payload, list) else [payload]
     for document in documents:
         render(console, document)

@@ -8,6 +8,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 DEFAULT_COLOR = "dark_orange"
+RENDER_WIDTH = 1024
 
 
 @click.command(name="banner")
@@ -15,7 +16,7 @@ DEFAULT_COLOR = "dark_orange"
 @click.option("--color", default=DEFAULT_COLOR)
 def banner(message: str, color: str):
     """Print a highly visible boxed banner."""
-    console = Console()
+    console = Console(width=RENDER_WIDTH)
     text = Text(message, justify="left")
     width = min(console.width, text.cell_len + 4)
     console.print(

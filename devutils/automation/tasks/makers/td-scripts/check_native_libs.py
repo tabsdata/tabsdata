@@ -44,6 +44,8 @@ DIM = "\033[38;5;243m"
 ORANGE = "\033[1;38;5;208m"
 WHITE = "\033[1;37m"
 
+RENDER_WIDTH = 1024
+
 # macOS system library prefixes - any dylib under these paths is acceptable
 MACOS_SYSTEM_PREFIXES = (
     "/usr/lib/",
@@ -308,6 +310,7 @@ def print_report(results: list[tuple[str, list[LibInfo]]]) -> bool:
     all_ok = True
 
     console = Console(
+        width=RENDER_WIDTH,
         theme=Theme({
             "title": "bold bright_cyan",
             "binary": "bold bright_cyan",

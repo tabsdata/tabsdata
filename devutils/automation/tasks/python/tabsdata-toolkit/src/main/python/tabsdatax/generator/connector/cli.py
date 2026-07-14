@@ -46,8 +46,9 @@ CONNECTORS_FOLDER = "connectors/python"
 
 ROOT_PYPROJECT = "pyproject.toml"
 PLATFORM_PYTEST_INI = "client/platform/src/utest/python/test_tabsdata/pytest.ini"
+RENDER_WIDTH = 1024
 
-console = Console()
+console = Console(width=RENDER_WIDTH)
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 

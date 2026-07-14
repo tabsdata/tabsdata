@@ -17,6 +17,8 @@ from packaging.version import InvalidVersion, Version
 from rich.console import Console
 from rich.table import Table
 
+RENDER_WIDTH = 1024
+
 
 @dataclass
 class Requirement:
@@ -171,7 +173,7 @@ def check_outdated(
 
 
 def display_outdate(outdated: list[OutdatedPackage]) -> None:
-    console = Console()
+    console = Console(width=RENDER_WIDTH)
 
     if not outdated:
         console.print("[green]All packages are up to date![/green]")
@@ -220,7 +222,7 @@ def main():
         print(f"Error: File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    console = Console()
+    console = Console(width=RENDER_WIDTH)
     console.print(f"[dim]Checking {args.file}...[/dim]")
 
     outdated = check_outdated(args.file, args.workers)

@@ -21,8 +21,9 @@ if TYPE_CHECKING:
 
 THEME = "gruvbox-dark"
 DELIMITER_STYLE = "bold #2f7fd1"
+RENDER_WIDTH = 1024
 
-console = Console()
+console = Console(width=RENDER_WIDTH)
 
 
 def show_json(title: str, content: str) -> None:

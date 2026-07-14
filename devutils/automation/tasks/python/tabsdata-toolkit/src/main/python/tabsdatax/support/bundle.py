@@ -40,8 +40,9 @@ BUNDLE_PREFIX = "td-support"
 BUNDLE_TIMESTAMP = "%Y%m%d-%H%M%S"
 BUNDLE_EXTENSION = "zip"
 STAGING_PREFIX = "td-support-"
+RENDER_WIDTH = 1024
 
-console = Console()
+console = Console(width=RENDER_WIDTH)
 
 
 def workspace_folder() -> Path:

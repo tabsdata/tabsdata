@@ -343,7 +343,7 @@ fn polars_source_path(url: &Url) -> String {
         && let Ok(path) = url.to_file_path()
         && let Some(path) = path.to_str()
     {
-        return path.to_string();
+        return path.replace('\\', "/");
     }
     url.to_string()
 }
@@ -359,10 +359,18 @@ fn importer_lazy_frame(
         "[path] [importer_lazy_frame] Value of polars_source_path: {url_str:?}"
     );
     let pl_path = PlPath::new(url_str.as_str());
-    let cloud_config = CloudOptions::from_untyped_config(
-        pl_path.cloud_scheme().as_ref(),
-        importer_options.location_configs(),
-    )?;
+    let cloud_config = if url.scheme() == "file" {
+        None
+    } else {
+        Some(CloudOptions::from_untyped_config(
+            pl_path.cloud_scheme().as_ref(),
+            importer_options.location_configs(),
+        )?)
+    };
+    td_common::troubleshoot_rs!(
+        "[path] [importer_lazy_frame] Value of cloud_config presence: {}",
+        cloud_config.is_some()
+    );
     let format = importer_options.format();
 
     let lazy_frame = match format {
@@ -370,7 +378,7 @@ fn importer_lazy_frame(
         // the number of rows necessary to properly infer all columns data type.
         Format::Parquet(config) => {
             let mut parquet_config = config.scan_config();
-            parquet_config.cloud_options = Some(cloud_config);
+            parquet_config.cloud_options = cloud_config;
             LazyFrame::scan_parquet(PlPath::new(url_str.as_str()), parquet_config)?
         }
         // We force reading the whole file the avoid corner cases of columns data type inference.
@@ -378,14 +386,14 @@ fn importer_lazy_frame(
             let reader =
                 LazyCsvReader::new(PlPath::new(url_str.as_str())).with_infer_schema_length(None);
             let reader = options.apply_to(reader);
-            reader.with_cloud_options(Some(cloud_config)).finish()?
+            reader.with_cloud_options(cloud_config).finish()?
         }
         // We force reading the whole file the avoid corner cases of columns data type inference.
         Format::NdJson(options) => {
             let reader = LazyJsonLineReader::new(PlPath::new(url_str.as_str()))
                 .with_infer_schema_length(None);
             let reader = options.apply_to(reader);
-            reader.with_cloud_options(Some(cloud_config)).finish()?
+            reader.with_cloud_options(cloud_config).finish()?
         }
         // As log column is treated as a string, we do not need a full scan to infer data type.
         Format::Log(options) => {
@@ -396,13 +404,10 @@ fn importer_lazy_frame(
                 .unwrap_or_else(|| panic!("URL {url} does not refer to a file"));
             let reader = LazyCsvReader::new(PlPath::new(url_str.as_str())).with_cache(false);
             let reader = options.apply_to(reader);
-            reader
-                .with_cloud_options(Some(cloud_config))
-                .finish()?
-                .select([
-                    lit(file_name).alias("file"),
-                    nth(0).as_expr().alias("message"),
-                ])
+            reader.with_cloud_options(cloud_config).finish()?.select([
+                lit(file_name).alias("file"),
+                nth(0).as_expr().alias("message"),
+            ])
         }
         Format::Binary => unimplemented!("This choice should not be used for imports using polars"),
     };
@@ -624,7 +629,7 @@ mod tests {
         // The path handed to Polars must be the decoded filesystem path so the
         // object store does not look for a file literally named ...%20....
         let source_path = polars_source_path(&url);
-        assert_eq!(source_path, file.to_str().unwrap());
+        assert_eq!(source_path, file.to_str().unwrap().replace('\\', "/"));
         assert!(source_path.contains("badge_scans copy.csv"));
         assert!(!source_path.contains("%20"));
     }

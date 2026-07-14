@@ -6,9 +6,10 @@ import importlib
 import importlib.util
 import json
 import os
-import platform
+import shutil
 import subprocess
 import sys
+import tempfile
 from types import ModuleType
 
 from tabulate import tabulate
@@ -193,14 +194,48 @@ os.makedirs(TARGET_DIR, exist_ok=True)
 if os.path.exists(TARGET_FILE):
     os.remove(TARGET_FILE)
 
-npx = "npx.cmd" if platform.system() == "Windows" else "npx"
+node = shutil.which("node")
+if node is None:
+    logger.error("❌ node executable not found on PATH")
+    exit(1)
+node_directory = os.path.dirname(node)
+
+npm_cli = os.path.join(node_directory, "node_modules", "npm", "bin", "npm-cli.js")
+if not os.path.isfile(npm_cli):
+    npm_cli = os.path.join(
+        node_directory, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"
+    )
+
+checker_prefix = os.path.join(tempfile.gettempdir(), "td-license-checker-ts")
+os.makedirs(checker_prefix, exist_ok=True)
+license_checker = os.path.join(
+    checker_prefix,
+    "node_modules",
+    "license-checker-rseidelsohn",
+    "bin",
+    "license-checker-rseidelsohn.js",
+)
 
 try:
+    subprocess.run(
+        [
+            node,
+            npm_cli,
+            "install",
+            "--prefix",
+            checker_prefix,
+            "license-checker-rseidelsohn",
+        ],
+        check=True,
+        encoding="utf-8",
+        errors="strict",
+    )
     result = subprocess.run(
         [
-            npx,
-            "--yes",
-            "license-checker-rseidelsohn",
+            node,
+            license_checker,
+            "--start",
+            "../tabsdata-ui",
             "--json",
             "--relativeLicensePath",
         ],

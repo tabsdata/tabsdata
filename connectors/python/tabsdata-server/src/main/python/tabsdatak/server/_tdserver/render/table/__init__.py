@@ -11,6 +11,8 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
+RENDER_WIDTH = 1024
+
 COLOR_SCHEMES = {
     "status": {
         "Running": "green",
@@ -24,7 +26,7 @@ COLOR_SCHEMES = {
 
 
 def render(payload: dict) -> None:
-    console = Console()
+    console = Console(width=RENDER_WIDTH)
     table = Table(
         title=payload.get("title"),
         title_justify="left",

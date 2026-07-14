@@ -17,6 +17,7 @@ from rich.text import Text
 THEME = "gruvbox-dark"
 BORDER_STYLE = "bold #2f7fd1"
 MARGIN = 4
+RENDER_WIDTH = 1024
 
 
 def render(console: Console, document: dict) -> None:
@@ -54,7 +55,7 @@ def main() -> int:
         payload = json.loads(os.environ[arguments.env])
     else:
         payload = json.load(sys.stdin)
-    console = Console()
+    console = Console(width=RENDER_WIDTH)
     documents = payload if isinstance(payload, list) else [payload]
     for document in documents:
         render(console, document)
