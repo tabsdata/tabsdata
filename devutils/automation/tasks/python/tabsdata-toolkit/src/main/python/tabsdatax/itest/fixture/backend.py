@@ -288,9 +288,7 @@ def pytest_collection_modifyitems(config, items):
                 f"via @<type>_system / @<type>_domain"
             )
         if unlisted:
-            missing = sorted(
-                f"{_kind_prefix(kind)}{name}" for kind, name in unlisted
-            )
+            missing = sorted(f"{_kind_prefix(kind)}{name}" for kind, name in unlisted)
             problems.append(
                 f"declares backend(s) that the test signature does not request; "
                 f"add the {missing} fixture argument(s) to the test even if only "

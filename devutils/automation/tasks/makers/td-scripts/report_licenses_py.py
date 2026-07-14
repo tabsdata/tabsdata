@@ -128,6 +128,7 @@ normalized_licenses = {
     "MIT LICENSE;; APACHE SOFTWARE LICENSE": "MIT License or Apache Software License Version 2.0",                                                                                             # noqa: E231,E241,E501
     "MIT LICENSE;; MOZILLA PUBLIC LICENSE 2.0 _MPL 2.0_": "MIT License or Mozilla Public License Version 2.0",                                                                                 # noqa: E231,E241,E501
     "MIT LICENSE": "MIT License",                                                                                                                                                              # noqa: E231,E241,E501
+    "MIT_;; MPL-2.0;; _Apache-2.0": "MIT License or Mozilla Public License Version 2.0 or Apache License Version 2.0",                                                                         # noqa: E231,E241,E501
     "MIT NO ATTRIBUTION LICENSE _MIT-0_": "MIT No Attribution License",                                                                                                                        # noqa: E231,E241,E501
     "MIT OR Apache2": "MIT License or Apache License Version 2.0",                                                                                                                             # noqa: E231,E241,E501
     "MIT OR Unlicense": "MIT License or The Unlicense",                                                                                                                                        # noqa: E231,E241,E501

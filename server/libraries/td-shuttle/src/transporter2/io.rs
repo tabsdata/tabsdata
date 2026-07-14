@@ -282,10 +282,7 @@ impl Store {
     pub async fn write_all(&self, data: Bytes) -> Result<u64> {
         let len = data.len() as u64;
         self.store
-            .put(
-                &self.object_path,
-                PutPayload::from_bytes(data),
-            )
+            .put(&self.object_path, PutPayload::from_bytes(data))
             .await?;
         Ok(len)
     }

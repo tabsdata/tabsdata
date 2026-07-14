@@ -5,6 +5,7 @@
 # docker run -it --rm --platform linux/amd64 ghcr.io/cross-rs/x86_64-unknown-linux-musl:main bash
 
 [target.x86_64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl:main"
 pre-build = [
     "ln -snf /home/runner/.theseus /root/.theseus",
     "echo ...",
@@ -20,6 +21,9 @@ pre-build = [
     "echo Installing dependencies...",
     "apt-get install -y curl",
     "apt-get install -y clang",
+    "apt-get install -y libssl3t64",
+    "apt-get install -y libgssapi-krb5-2",
+    "getent passwd 1001 || echo 'runner:x:1001:1001::/home/runner:/bin/bash' >> /etc/passwd",
     "echo Installing python...",
     "apt-get install -y python3.12",
     "apt-get install -y python3.12-dev",
@@ -134,9 +138,9 @@ passthrough = [
     "GCP0__GCP_STORAGE_ACCESS_KEY",
     "GCP0__GCP_STORAGE_SECRET_KEY",
     "GCP0__GCP_STORAGE_URI",
-    "GCS__ACCESS_KEY",
     "GCS__BUCKET",
-    "GCS__SECRET_KEY",
+    "GCS__HMAC_ACCESS_KEY",
+    "GCS__HMAC_SECRET_KEY",
     "GCS__SERVICE_ACCOUNT_KEY",
     "GCS__SYS_PATH",
     "IMPORT_AWS_ACCESS_KEY",
@@ -147,7 +151,7 @@ passthrough = [
     "IMPORT_AZURE_ACCOUNT_NAME",
     "IMPORT_AZURE_BASE_URL",
     "OPENAI_API_KEY",
-    "OPENAPI__API_KEY",
+    "OPENAI__API_KEY",
     "OSS_INDEX_API_KEY",
     "OSS_INDEX_USERNAME",
     "S30__S3_ACCESS_KEY",

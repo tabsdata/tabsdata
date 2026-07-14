@@ -415,13 +415,6 @@ def cache_directory() -> Path:
     return Path.home() / ".theseus" / "postgresql"
 
 
-def host_companion_target(target: str, report: Report) -> str | None:
-    host = report.target_triple_rustc
-    if not host or host == target:
-        return None
-    return host
-
-
 def cache_archive(
     cache_directory_path: Path, version: str, target: str, report: Report
 ) -> None:
@@ -441,18 +434,18 @@ def cache_archive(
 
 
 def run(report: Report) -> None:
-    target = resolve_target_triple(report)
+    resolve_target_triple(report)
     version = resolve_version(report)
+
+    target = report.target_triple_rustc or report.target_triple
+    report.target_triple = target
+    report.target_triple_source = "rustc"
 
     cache_directory_path = cache_directory()
     report.cache_directory = cache_directory_path
     cache_directory_path.mkdir(parents=True, exist_ok=True)
 
     cache_archive(cache_directory_path, version, target, report)
-
-    companion_target = host_companion_target(target, report)
-    if companion_target:
-        cache_archive(cache_directory_path, version, companion_target, report)
 
     version_marker = sys.argv[1] if len(sys.argv) > 1 else None
     if version_marker:

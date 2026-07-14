@@ -234,9 +234,9 @@ jobs:
       GCP0__GCP_STORAGE_ACCESS_KEY: ${{ secrets.GCP0__GCP_STORAGE_ACCESS_KEY }}
       GCP0__GCP_STORAGE_SECRET_KEY: ${{ secrets.GCP0__GCP_STORAGE_SECRET_KEY }}
       GCP0__GCP_STORAGE_URI: ${{ secrets.GCP0__GCP_STORAGE_URI }}
-      GCS__ACCESS_KEY: ${{ secrets.GCS__ACCESS_KEY }}
       GCS__BUCKET: ${{ secrets.GCS__BUCKET }}
-      GCS__SECRET_KEY: ${{ secrets.GCS__SECRET_KEY }}
+      GCS__HMAC_ACCESS_KEY: ${{ secrets.GCS__HMAC_ACCESS_KEY }}
+      GCS__HMAC_SECRET_KEY: ${{ secrets.GCS__HMAC_SECRET_KEY }}
       GCS__SERVICE_ACCOUNT_KEY: ${{ secrets.GCS__SERVICE_ACCOUNT_KEY }}
       GCS__SYS_PATH: ${{ secrets.GCS__SYS_PATH }}
       IMPORT_AWS_ACCESS_KEY: ${{ secrets.IMPORT_AWS_ACCESS_KEY }}
@@ -247,7 +247,7 @@ jobs:
       IMPORT_AZURE_ACCOUNT_NAME: ${{ secrets.IMPORT_AZURE_ACCOUNT_NAME }}
       IMPORT_AZURE_BASE_URL: ${{ secrets.IMPORT_AZURE_BASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENAPI__API_KEY: ${{ secrets.OPENAPI__API_KEY }}
+      OPENAI__API_KEY: ${{ secrets.OPENAI__API_KEY }}
       OSS_INDEX_API_KEY: ${{ secrets.OSS_INDEX_API_KEY }}
       OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
       PAT_AOINOKIMI: ${{ secrets.PAT_AOINOKIMI }}

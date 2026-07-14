@@ -147,8 +147,9 @@ fn create_file_import_instructions(
             // cloud (/) schemes.
             let path = url.path();
             let relative = path.strip_prefix(base_path.as_str()).unwrap_or(path);
-            meta.location =
-                ObjectStorePath::parse(relative).unwrap_or(ObjectStorePath::from(relative));
+            let relative = relative.replace('\\', "/");
+            meta.location = ObjectStorePath::parse(&relative)
+                .unwrap_or_else(|_| ObjectStorePath::from(relative.as_str()));
             (idx, meta)
         })
         .map(crate::transporter::logic::take_files_limit())
@@ -370,10 +371,8 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::parse(
-                path_r.clone().to_string_lossy().replace('\\', "/"),
-            )
-            .unwrap(),
+            location: ObjectStorePath::parse(path_r.clone().to_string_lossy().replace('\\', "/"))
+                .unwrap(),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id.to_string()),
@@ -506,10 +505,8 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::parse(
-                path_r.clone().to_string_lossy().replace('\\', "/"),
-            )
-            .unwrap(),
+            location: ObjectStorePath::parse(path_r.clone().to_string_lossy().replace('\\', "/"))
+                .unwrap(),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id.to_string()),
@@ -645,10 +642,8 @@ mod tests {
             .unwrap();
 
         let meta = ObjectMeta {
-            location: ObjectStorePath::parse(
-                path_r.clone().to_string_lossy().replace('\\', "/"),
-            )
-            .unwrap(),
+            location: ObjectStorePath::parse(path_r.clone().to_string_lossy().replace('\\', "/"))
+                .unwrap(),
             last_modified: Utc::now(),
             size: 1024,
             e_tag: Some(id.to_string()),

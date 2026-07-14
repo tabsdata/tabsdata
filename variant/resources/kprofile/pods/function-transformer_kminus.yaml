@@ -22,7 +22,7 @@ metadata:
     tabsdata.com/worker: function
 spec:
   backoffLimit: 0
-  ttlSecondsAfterFinished: 604800
+  ttlSecondsAfterFinished: 300
   template:
     metadata:
       labels:

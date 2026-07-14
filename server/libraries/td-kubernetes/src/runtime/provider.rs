@@ -21,7 +21,9 @@ use kube::Config;
 use serde::{Deserialize, Serialize};
 use td_common::settings::DEFAULT_INSTANCE;
 
-use crate::base::constants::{KMINUS_MIN_NOFILE, LogLevel};
+#[cfg(unix)]
+use crate::base::constants::KMINUS_MIN_NOFILE;
+use crate::base::constants::LogLevel;
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
 use crate::client::registry::{ClusterViews, InstanceSettings, InstanceState};

@@ -36,15 +36,13 @@ class SQLEntity(Entity):
     columns: list[Column] = field(default_factory=list)
 
     def fqn(self) -> str:
-        return self.connection_type.entity_fqn(
-            {
-                "database": self.database,
-                "schema": self.schema,
-                "owner": self.schema,
-                "catalog": self.database,
-                "table": self.table,
-            }
-        )
+        return self.connection_type.entity_fqn({
+            "database": self.database,
+            "schema": self.schema,
+            "owner": self.schema,
+            "catalog": self.database,
+            "table": self.table,
+        })
 
     def field_names(self) -> list[str]:
         return [c.name for c in self.columns]

@@ -12,7 +12,6 @@ use td_error::TdError;
 use tracing::info;
 
 use crate::base::error::cli::CliError;
-use crate::base::error::provider::ProviderError;
 use crate::base::reporter::InteractiveReporter;
 use crate::client::registry::{InstanceSettings, instance_folder, trash_root};
 use crate::client::session::pin::PinContext;
@@ -84,7 +83,8 @@ pub async fn command_trash(arguments: TrashArguments, globals: &GlobalArguments)
 
     let folder = instance_folder(&name)?;
     if !folder.exists() {
-        return Err(ProviderError::InstanceFolderNotFound(folder.display().to_string()).into());
+        cwarn!("Instance '{name}' does not exist. Nothing to trash.");
+        return Ok(());
     }
 
     let trash_root = trash_root()?;

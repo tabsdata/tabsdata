@@ -40,18 +40,16 @@ class Db2ConnectionExplorer(SqlAlchemyConnectionExplorer):
         return conn.credentials.user.value().upper()
 
     def system_schemas(self) -> frozenset[str]:
-        return frozenset(
-            {
-                "SYSCAT",
-                "SYSIBM",
-                "SYSIBMADM",
-                "SYSPROC",
-                "SYSSTAT",
-                "SYSTOOLS",
-                "NULLID",
-                "SQLJ",
-            }
-        )
+        return frozenset({
+            "SYSCAT",
+            "SYSIBM",
+            "SYSIBMADM",
+            "SYSPROC",
+            "SYSSTAT",
+            "SYSTOOLS",
+            "NULLID",
+            "SQLJ",
+        })
 
     def make_url(self, conn: Db2Conn) -> engine.URL:
         src = sa_make_url(_convert(conn.uri, str))

@@ -268,13 +268,7 @@ PACKAGE_RESOURCES = {
         Path(".") / "tabsdata" / "resources",
         Path(".") / "tabsdatak" / "resources",
     ],
-    Path(ROOT)
-    / "client"
-    / "platform"
-    / "src"
-    / "main"
-    / "resources"
-    / "tdresources": [
+    Path(ROOT) / "client" / "platform" / "src" / "main" / "resources" / "tdresources": [
         Path(".") / "tabsdatak" / "tdresources",
     ],
 }

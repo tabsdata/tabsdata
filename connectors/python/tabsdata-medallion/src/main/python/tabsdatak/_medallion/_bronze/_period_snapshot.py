@@ -42,15 +42,13 @@ def build_period_snapshot_bronze(
         return None
 
     run_ts = datetime.now(tz=timezone.utc)
-    return raw.with_columns(
-        [
-            # The periodic publisher stamps "$m.period" on every row with the
-            # period the snapshot belongs to (see Pattern 5). Mirror that into
-            # "$m.source_ts" so downstream consumers can use the same column
-            # name conventions as the CDC / snapshot-diff / append-only bronze
-            # flavors. Original "$m.period" stays on the row.
-            col("$m.period").alias("$m.source_ts"),
-            lit(run_ts).alias("$m.bronze_ts"),
-            lit(pk_cols).alias("$m.pk"),
-        ]
-    )
+    return raw.with_columns([
+        # The periodic publisher stamps "$m.period" on every row with the
+        # period the snapshot belongs to (see Pattern 5). Mirror that into
+        # "$m.source_ts" so downstream consumers can use the same column
+        # name conventions as the CDC / snapshot-diff / append-only bronze
+        # flavors. Original "$m.period" stays on the row.
+        col("$m.period").alias("$m.source_ts"),
+        lit(run_ts).alias("$m.bronze_ts"),
+        lit(pk_cols).alias("$m.pk"),
+    ])

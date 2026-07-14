@@ -62,24 +62,20 @@ def build_snapshot_diff_cdc_bronze(
             "refresh"
         )
         # Initial onboarding (no prev) OR refresh trigger (no new arrivals).
-        erase = TableFrame.from_dict(
-            {
-                **{c: [None] for c in pk_cols + value_cols},
-                "$m.op": [OP_TOMBSTONE],
-                "$m.source_ts": [run_ts],
-                "$m.bronze_ts": [run_ts],
-                "$m.pk": [pk_cols],
-            }
-        ).with_columns([col(name).cast(dt) for name, dt in all_dtypes.items()])
+        erase = TableFrame.from_dict({
+            **{c: [None] for c in pk_cols + value_cols},
+            "$m.op": [OP_TOMBSTONE],
+            "$m.source_ts": [run_ts],
+            "$m.bronze_ts": [run_ts],
+            "$m.pk": [pk_cols],
+        }).with_columns([col(name).cast(dt) for name, dt in all_dtypes.items()])
 
-        seed = head.select(pk_cols + value_cols).with_columns(
-            [
-                lit(OP_INSERT).alias("$m.op"),
-                lit(run_ts).alias("$m.source_ts"),
-                lit(run_ts).alias("$m.bronze_ts"),
-                lit(pk_cols).alias("$m.pk"),
-            ]
-        )
+        seed = head.select(pk_cols + value_cols).with_columns([
+            lit(OP_INSERT).alias("$m.op"),
+            lit(run_ts).alias("$m.source_ts"),
+            lit(run_ts).alias("$m.bronze_ts"),
+            lit(pk_cols).alias("$m.pk"),
+        ])
         return concat([erase, seed], how="diagonal_relaxed")
 
     # Incremental: diff prev vs. head → synthetic I/U/D.
@@ -100,15 +96,14 @@ def build_snapshot_diff_cdc_bronze(
     # carry one column per value name, not two.
     prev_cols = [f"{c}_prev" for c in value_cols]
     updates = (
-        joined.filter(diff_expr)
+        joined
+        .filter(diff_expr)
         .drop(prev_cols)
         .with_columns(lit(OP_UPDATE).alias("$m.op"))
     )
 
-    return concat([inserts, updates, deletes], how="diagonal_relaxed").with_columns(
-        [
-            lit(run_ts).alias("$m.source_ts"),
-            lit(run_ts).alias("$m.bronze_ts"),
-            lit(pk_cols).alias("$m.pk"),
-        ]
-    )
+    return concat([inserts, updates, deletes], how="diagonal_relaxed").with_columns([
+        lit(run_ts).alias("$m.source_ts"),
+        lit(run_ts).alias("$m.bronze_ts"),
+        lit(pk_cols).alias("$m.pk"),
+    ])
