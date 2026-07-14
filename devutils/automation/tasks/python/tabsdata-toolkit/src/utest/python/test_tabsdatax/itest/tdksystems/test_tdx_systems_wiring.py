@@ -54,12 +54,13 @@ def fake_sf(monkeypatch):
 
 
 def test_registry_serves_every_system():
-    # All 17 systems are now on the unified registry.
+    # All 19 systems are now on the unified registry.
     assert set(tdx.systems.all_slugs()) == {
         "mysql", "postgres", "mssqlserver", "oracle", "db2", "clickhouse",
         "mongodb", "starrocks", "redpanda",
         "s3", "gcs", "azureblob", "fs",
         "databricks", "snowflake", "salesforce", "bigquery",
+        "anthropic", "openai",
     }
     assert tdx._unified("s3") and tdx._unified("postgres")
 

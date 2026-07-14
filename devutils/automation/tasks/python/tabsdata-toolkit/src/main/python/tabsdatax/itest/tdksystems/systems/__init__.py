@@ -34,6 +34,9 @@ _SLUGS = {
     "snowflake": ("snowflake.system", "SnowflakeSystem"),
     "salesforce": ("salesforce.system", "SalesforceSystem"),
     "bigquery": ("bigquery.system", "BigQuerySystem"),
+    # service (credential-only API accounts)
+    "anthropic": ("anthropic.system", "AnthropicSystem"),
+    "openai": ("openai.system", "OpenAISystem"),
 }
 
 

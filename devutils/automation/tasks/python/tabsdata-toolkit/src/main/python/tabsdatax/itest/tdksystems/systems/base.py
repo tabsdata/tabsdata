@@ -12,8 +12,9 @@ dispatch without any `if category == …` branch::
 
 Each system is a directory under `systems/` (`systems/mysql/`, `systems/s3/`,
 `systems/snowflake/`, …) whose class subclasses one of the shared bases
-(`_container.ContainerBase` / `_cloud.CloudBase` / `_saas.SaasBase`) and
-supplies only its per-system hooks. `category` survives as a *descriptor field
+(`_container.ContainerBase` / `_cloud.CloudBase` / `_saas.SaasBase` /
+`_service.ServiceBase`) and supplies only its per-system hooks. `category`
+survives as a *descriptor field
 / --type grouping*, not as control flow; the former per-category distinctions
 are capability flags (`supports_pause` / `staging_root` / `domain_is_named` /
 `supports_sql` / `kind`).
@@ -232,7 +233,7 @@ class System(ABC):
     # ---- identity / declaration (class attributes) ----
     slug: str = ""  # --type value, dir name under systems/
     label: str = ""  # human name, e.g. "MySQL"
-    category: str = ""  # "container" | "cloud" | "native" | "saas"
+    category: str = ""  # "container" | "cloud" | "native" | "saas" | "service"
     # descriptor field + --type grouping ONLY
     kind: str = ""  # data-plane compat tag: sql|file|kafka|
     # mongodb|salesforce (model-vs-system check)

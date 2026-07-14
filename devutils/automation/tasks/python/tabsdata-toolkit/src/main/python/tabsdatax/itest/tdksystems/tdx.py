@@ -96,8 +96,8 @@ file (AES-256-GCM in PEM armor, keyed by the personal secret; see the
 `descriptor` / `crypto` modules). Every descriptor verb reads that secret from
 the env var named by `--secret-env` (default $TD_BACKENDS_CRYPTO_KEY) and fails
 if it is unset. `--type` names the external system — every backend in the
-`container` / `cloud` / `saas` helper packages is a valid type, so adding a new
-system is just a new module.
+`container` / `cloud` / `saas` / `service` helper packages is a valid type, so
+adding a new system is just a new module.
 """
 
 from __future__ import annotations
