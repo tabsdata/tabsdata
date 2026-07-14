@@ -33,7 +33,8 @@
                                                     # system in a manifest (a
                                                     # missing one warns and is
                                                     # skipped)
-    tdx-system info    --sys NAME [--sys-dir DIR] [--format json|export|unset]
+    tdx-system info    --sys NAME [--sys-dir DIR] [--format json|export|unset] \\
+                       [--prefix PREFIX]            # PREFIX -> <PREFIX>__<KEY>
     tdx-system pause | resume --sys NAME [--sys-dir DIR]  # stop / start container
     tdx-system secrets --set 1p:VAULT --out json|export|unset   # pull creds; also
                                                     # emits $TD_BACKENDS_SYSTEMS
@@ -80,13 +81,15 @@
                                                     # manifest; a missing one warns
                                                     # and is skipped
     tdx-domain status  --domain NAME | --auto ALL|N1,N2,... [--domain-dir DIR]
-    tdx-domain info    --domain NAME [--domain-dir DIR] [--format json|export|unset]
+    tdx-domain info    --domain NAME [--domain-dir DIR] [--format json|export|unset] \\
+                       [--prefix PREFIX]            # PREFIX -> <PREFIX>__<KEY>
 
 Systems and domains are addressed by *name* (a plain identifier), not by path:
 each name is a file in a *store directory* (see the `store` module):
 `--sys-dir`/`--domain-dir`, else `${TD_BACKENDS_DIR}/{systems,domains}`, else
 `~/.tabsdatax/{systems,domains}`. The file name is also the descriptor's
-logical name, so the `info` keys are unprefixed.
+logical name, so the `info` keys are unprefixed by default; pass `info
+--prefix PREFIX` to emit every key as `<PREFIX>__<KEY>`.
 
 Each `create` writes a *descriptor* — a JSON document stored as an encrypted
 file (AES-256-GCM in PEM armor, keyed by the personal secret; see the
@@ -1284,7 +1287,7 @@ def _sys_info(rest: list[str]) -> int:
     args = _locator_ns("tdx-system info", "sys", rest, want_format=True)
     doc = descriptor.load(_sys_target(args))
     _require_role(doc, "sys", "tdx-system", "tdx-domain")
-    print(descriptor.info(doc, args.format))
+    print(descriptor.info(doc, args.format, prefix=args.prefix))
     return 0
 
 
@@ -2074,7 +2077,7 @@ def _domain_info(rest: list[str]) -> int:
     args = _locator_ns("tdx-domain info", "domain", rest, want_format=True)
     doc = descriptor.load(_domain_target(args))
     _require_role(doc, "env", "tdx-domain", "tdx-system")
-    print(descriptor.info(doc, args.format))
+    print(descriptor.info(doc, args.format, prefix=args.prefix))
     return 0
 
 
@@ -2179,6 +2182,13 @@ def _locator_ns(
             default="json",
             choices=list(descriptor.VALID_INFO_FORMATS),
             help="json (default) | export | unset",
+        )
+        p.add_argument(
+            "--prefix",
+            default=None,
+            metavar="PREFIX",
+            help="if given, every emitted key is <PREFIX>__<KEY> "
+            "(json object keys, export/unset variable names)",
         )
     _add_secret_env(p)
     args = p.parse_args(rest)

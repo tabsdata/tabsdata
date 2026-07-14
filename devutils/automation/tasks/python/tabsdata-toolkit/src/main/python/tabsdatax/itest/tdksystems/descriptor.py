@@ -819,18 +819,23 @@ def attributes(doc: dict) -> dict[str, object]:
 VALID_INFO_FORMATS = ("json", "export", "unset")
 
 
-def info(doc: dict, fmt: str) -> str:
+def info(doc: dict, fmt: str, prefix: str | None = None) -> str:
     """Render a descriptor's info in `fmt`:
 
     - ``json``   — a JSON object of `<KEY>: value` (identity + connection)
     - ``export`` — `export <KEY>=<value>` lines to source (unix)
     - ``unset``  — `unset <KEY>` lines to source (unix)
+
+    Keys are unprefixed by default; if `prefix` is given, every key is emitted
+    as ``<prefix>__<KEY>`` (json object keys, `export`/`unset` variable names).
     """
     if fmt not in VALID_INFO_FORMATS:
         raise DatagenError(
             f"--format must be one of {'|'.join(VALID_INFO_FORMATS)} (got: {fmt!r})"
         )
     pairs = _info_pairs(doc)
+    if prefix:
+        pairs = [(f"{prefix}__{k}", v) for k, v in pairs]
     if fmt == "json":
         return json.dumps(dict(pairs), indent=2)
     if fmt == "export":

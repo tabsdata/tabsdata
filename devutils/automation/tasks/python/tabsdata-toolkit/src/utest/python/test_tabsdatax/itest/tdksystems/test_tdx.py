@@ -371,6 +371,20 @@ def test_info_defaults_to_json(stores, fs_root, capsys):
     assert json.loads(capsys.readouterr().out)["NAME"] == "inbox"
 
 
+def test_info_prefix_option_prefixes_keys(stores, fs_root, capsys):
+    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
+                     "--sys-path", str(fs_root), "-f"])
+    capsys.readouterr()
+    assert tdx._sys_info(["--sys", "my_fs", "--prefix", "SRC"]) == 0
+    obj = json.loads(capsys.readouterr().out)
+    assert obj["SRC__NAME"] == "my_fs" and obj["SRC__TYPE"] == "fs"
+    assert all(k.startswith("SRC__") for k in obj)
+
+    assert tdx._sys_info(["--sys", "my_fs", "--format", "export",
+                          "--prefix", "SRC"]) == 0
+    assert "export SRC__NAME=my_fs" in capsys.readouterr().out
+
+
 def test_pause_resume_registered_and_container_only(stores, fs_root):
     # pause / resume are tdx-system verbs...
     assert {"pause", "resume"} <= set(tdx._SYS_VERBS)

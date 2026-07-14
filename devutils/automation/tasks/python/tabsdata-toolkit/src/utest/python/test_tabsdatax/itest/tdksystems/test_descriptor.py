@@ -289,6 +289,27 @@ def test_info_rejects_bad_format(tmp_path):
         descriptor.info(_stamped_domain(tmp_path), "yaml")
 
 
+def test_info_prefix_prefixes_every_key(tmp_path):
+    doc = _stamped_domain(tmp_path)
+    plain = json.loads(descriptor.info(doc, "json"))
+    prefixed = json.loads(descriptor.info(doc, "json", prefix="SRC"))
+    assert set(prefixed) == {f"SRC__{k}" for k in plain}
+    assert prefixed["SRC__NAME"] == plain["NAME"]
+
+    exp = descriptor.info(doc, "export", prefix="SRC")
+    assert "export SRC__NAME=inbox" in exp
+    unset = {ln.split()[1] for ln in
+             descriptor.info(doc, "unset", prefix="SRC").splitlines()}
+    assert unset == set(prefixed)
+
+
+def test_info_prefix_none_or_empty_is_unprefixed(tmp_path):
+    doc = _stamped_domain(tmp_path)
+    plain = descriptor.info(doc, "json")
+    assert descriptor.info(doc, "json", prefix=None) == plain
+    assert descriptor.info(doc, "json", prefix="") == plain
+
+
 # ---- load / is_descriptor --------------------------------------------------
 
 def test_is_descriptor(tmp_path):
