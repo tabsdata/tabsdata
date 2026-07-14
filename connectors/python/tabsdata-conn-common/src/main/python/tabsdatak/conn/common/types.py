@@ -120,23 +120,29 @@ class DataType(Enum):  # PLACEHOLDER
 # is left unchecked.
 
 
-# --- BasePath -------------------------------------------------------
+# --- FullPath -------------------------------------------------------
 
-# ``base_path`` is a directory path rooted at the connector's natural
-# root (``/`` for localfile, the bucket / container root for the cloud
-# connectors). The stored value is whatever the user provided -- the
-# location / Conn classes expose a ``full_path(path)`` method that
-# joins ``base_path`` with a relative path and strips leading /
-# trailing ``/`` from the result. The empty string represents the
-# root. Backslash and NUL are forbidden.
-_BASE_PATH_RE_STR = r"^(?:[^\\\x00]*)$"
-BasePathSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_BASE_PATH_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_BASE_PATH_RE_STR)],
+# ``base_path`` is always spelled as a full, absolute-looking path: it
+# starts with ``/`` and never ends with one (other than the bare root
+# ``/`` itself). This gives one consistent shape across every connector
+# -- local filesystem and cloud object store alike. For the local-file
+# connector the leading ``/`` is the real absolute path. For the cloud
+# connectors it is a UX convention: the value denotes a "folder"
+# (object-key prefix) from the container / bucket root, and the leading
+# ``/`` is trimmed when composing the actual object key (``full_path`` /
+# ``normalize_dir_path`` do the trimming). Backslash and NUL are
+# forbidden. pydantic_core's regex engine has no lookaround, so the rule
+# is spelled out per character: the first char must be ``/``, the last
+# char must not be ``/`` (interior ``/`` separate segments), and the bare
+# ``/`` root is allowed. Defaults to ``/``.
+_FULL_PATH_RE_STR = r"^(?:/|/[^\\\x00]*[^/\\\x00])$"
+FullPathSpec: TypeAlias = Union[
+    Annotated[str, StringConstraints(pattern=_FULL_PATH_RE_STR)],
+    Annotated[Secret, _api.SecretValueConstraints(pattern=_FULL_PATH_RE_STR)],
 ]
 
 
-def full_path(base_path: BasePathSpec, path: str) -> str:
+def full_path(base_path: FullPathSpec, path: str) -> str:
     """Join ``base_path`` with ``path``, stripping leading and
     trailing ``/`` from each side and from the result. ``base_path``
     may be a ``str`` or a ``Secret`` whose ``.value()``
@@ -144,6 +150,21 @@ def full_path(base_path: BasePathSpec, path: str) -> str:
     """
     resolved = _convert(base_path, str)
     return (resolved.strip("/") + "/" + path.strip("/")).strip("/")
+
+
+def normalize_dir_path(path: str, lead_separator: bool, back_separator: bool) -> str:
+    """Render ``path`` as a directory-style prefix with a leading and/or
+    trailing ``/`` forced on per the flags -- for an external driver that
+    expects a specific spelling of the prefix. ``path`` is first reduced
+    to its slash-stripped core; an empty core yields ``""`` regardless of
+    the flags (there is no directory to delimit).
+    """
+    core = path.strip("/")
+    if not core:
+        return ""
+    lead = "/" if lead_separator else ""
+    back = "/" if back_separator else ""
+    return f"{lead}{core}{back}"
 
 
 # --- S3 bucket ------------------------------------------------------

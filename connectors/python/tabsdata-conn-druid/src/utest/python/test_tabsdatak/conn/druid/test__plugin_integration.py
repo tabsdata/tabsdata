@@ -153,9 +153,11 @@ class _DestCtx(DestContext):
 
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
-    """Split ``s3://bucket[/path]`` into ``(bucket, path)``."""
+    """Split ``s3://bucket[/path]`` into ``(bucket, path)``. ``path`` is a
+    FullPathSpec (leading ``/``, no trailing ``/``); a bucket-only URI
+    yields the bare root ``/``."""
     parsed = urlparse(uri)
-    return parsed.netloc, parsed.path.lstrip("/")
+    return parsed.netloc, "/" + parsed.path.strip("/")
 
 
 @pytest.fixture

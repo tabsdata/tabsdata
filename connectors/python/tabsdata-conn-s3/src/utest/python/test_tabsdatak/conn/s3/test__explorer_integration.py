@@ -87,7 +87,7 @@ def _conn_from(cfg: S3Domain) -> S3SrcConn:
         bucket=cfg.bucket,
         region=cfg.region,
         credentials=_creds(cfg),
-        base_path=str(cfg.base_path),
+        base_path="/" + str(cfg.base_path).strip("/"),
     )
 
 

@@ -25,7 +25,7 @@ from tabsdatak.conn.common.file._explorer import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
+from tabsdatak.conn.common.types import _convert, normalize_dir_path
 from tabsdatak.conn.gcs import GCSDestConn, GCSSrcConn
 from tabsdatak.spi import ConnMetaModel, Entity, Explorer
 
@@ -50,12 +50,17 @@ class GCSConnectionExplorer(Explorer):
 
     def metadata(self, conn: GCSConn) -> list[FileStorageEntity]:
         bucket = _convert(conn.bucket, str)
-        base_path = _convert(conn.base_path, str).strip("/") if conn.base_path else ""
+        # base_path is a FullPathSpec (leading "/"); the GCS list prefix
+        # wants no leading "/" and a trailing "/", so normalize it
+        # (root "/" -> "" -> list the whole bucket).
+        prefix = normalize_dir_path(
+            _convert(conn.base_path, str), lead_separator=False, back_separator=True
+        )
         # ``bucket`` holds the raw bucket name and ``prefix`` the object's
         # full key directory (which already includes base_path), so the
         # fqn resolves to ``gs://<bucket>/<prefix>/<file>``.
         client = _storage_client(conn)
-        prefix_arg = base_path + "/" if base_path else None
+        prefix_arg = prefix or None
 
         entities: list[FileStorageEntity] = []
         for blob in client.list_blobs(bucket, prefix=prefix_arg):

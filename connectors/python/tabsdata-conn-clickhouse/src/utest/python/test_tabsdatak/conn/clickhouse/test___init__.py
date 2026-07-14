@@ -42,7 +42,7 @@ def _staging():
             access_key_id=Secret("AKIA..."),
             secret_access_key=Secret("secret"),
         ),
-        base_path="staging/",
+        base_path="/staging",
     )
 
 
@@ -188,7 +188,7 @@ def test_gcs_location_accepts_both_credential_types():
         bucket="my-bucket",
         credentials=_sa_creds(),
         hmac_credentials=_hmac_creds(),
-        base_path="staging",
+        base_path="/staging",
     )
     assert isinstance(loc.credentials, GCPJson)
     assert isinstance(loc.hmac_credentials, GCPHmac)
@@ -199,7 +199,7 @@ def test_gcs_location_round_trips_json():
         bucket="my-bucket",
         credentials=_sa_creds(),
         hmac_credentials=_hmac_creds(),
-        base_path="staging/clickhouse",
+        base_path="/staging/clickhouse",
     )
     loaded = GCSLocation.from_json(original.to_json())
     # Serializing always dehydrates, so secret values do not survive the
@@ -208,7 +208,7 @@ def test_gcs_location_round_trips_json():
         bucket="my-bucket",
         credentials=GCPJson(json=Secret()),
         hmac_credentials=GCPHmac(access_key=Secret(), secret_key=Secret()),
-        base_path="staging/clickhouse",
+        base_path="/staging/clickhouse",
     )
 
 

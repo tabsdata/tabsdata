@@ -28,7 +28,7 @@ HANDLER = TransporterHandler1()
 
 
 def test_build_location_joins_base_path_with_entry():
-    conn = LocalFileSrcConn(base_path="/data/")
+    conn = LocalFileSrcConn(base_path="/data")
     loc = plugin.build_location(conn, "users.csv", HANDLER)
     assert isinstance(loc, transporter1.TransporterLocalFile)
     assert loc.url.startswith("file:///")
@@ -38,14 +38,14 @@ def test_build_location_joins_base_path_with_entry():
 def test_build_location_treats_absolute_path_as_relative_to_base_path():
     # ``full_path`` strips the leading slash from the entry, so
     # ``"/sub/x"`` and ``"sub/x"`` produce the same location.
-    conn = LocalFileSrcConn(base_path="/data/")
+    conn = LocalFileSrcConn(base_path="/data")
     abs_loc = plugin.build_location(conn, "/sub/users.csv", HANDLER)
     rel_loc = plugin.build_location(conn, "sub/users.csv", HANDLER)
     assert abs_loc.url == rel_loc.url
 
 
-def test_build_location_empty_base_path_uses_root():
-    conn = LocalFileSrcConn(base_path="")
+def test_build_location_root_base_path_uses_root():
+    conn = LocalFileSrcConn(base_path="/")
     loc = plugin.build_location(conn, "users.csv", HANDLER)
     assert loc.url == "file:///users.csv"
 

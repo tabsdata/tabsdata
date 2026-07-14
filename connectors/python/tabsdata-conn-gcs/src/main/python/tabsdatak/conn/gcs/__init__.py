@@ -44,11 +44,10 @@ from tabsdatak.conn.common.file.typing_ import (
     SrcPathsSpec,
 )
 from tabsdatak.conn.common.types import (
-    BasePathSpec,
     CfgSpec,
+    FullPathSpec,
     GCPJson,
     GCSBucketSpec,
-    full_path,
 )
 from tabsdatak.conn.gcs.error import GcsErrorCode
 from tabsdatak.spi import Conn
@@ -97,18 +96,17 @@ class GCSSrcConn(Conn):
     :param bucket: GCS bucket name (e.g. ``"my-data-bucket"``).
     :param credentials: :class:`GCPJson` service-account credentials.
     :param project: Optional GCP project id.
-    :param base_path: Optional object-key prefix under the bucket.
+    :param base_path: Full path (object-key prefix) from the bucket
+        root: starts with ``/``, no trailing ``/``. The leading ``/`` is
+        trimmed when forming the object key. Defaults to ``/``.
     :param conn_cfg: Optional driver-side cfg dict.
     """
 
     bucket: GCSBucketSpec
     credentials: CredentialsSpec
     project: ProjectSpec | None = None
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 @_api.dataclass(GcsErrorCode.GCS_1, kw_only=True)
@@ -123,11 +121,8 @@ class GCSDestConn(Conn):
     bucket: GCSBucketSpec
     credentials: CredentialsSpec
     project: ProjectSpec | None = None
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 # --- Source ----------------------------------------------------------

@@ -53,7 +53,9 @@ _S3_SECRET_KEY = os.environ.get("S30__S3_SECRET_KEY")
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
     body = uri[len("s3://") :] if uri.startswith("s3://") else uri
     bucket, _, base_path = body.partition("/")
-    return bucket, base_path
+    # base_path is a FullPathSpec (leading "/", no trailing "/"); a
+    # bucket-only URI yields the bare root "/".
+    return bucket, "/" + base_path.strip("/")
 
 
 @pytest.fixture

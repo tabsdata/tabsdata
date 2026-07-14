@@ -74,7 +74,7 @@ def src_conn(system_gcs: GcsSystem, run_base: str) -> GCSSrcConn:
     return GCSSrcConn(
         bucket=system_gcs.bucket,
         credentials=_credentials(system_gcs),
-        base_path=run_base,
+        base_path="/" + run_base.strip("/"),
     )
 
 
@@ -83,7 +83,7 @@ def dest_conn(system_gcs: GcsSystem, run_base: str) -> GCSDestConn:
     return GCSDestConn(
         bucket=system_gcs.bucket,
         credentials=_credentials(system_gcs),
-        base_path=run_base,
+        base_path="/" + run_base.strip("/"),
     )
 
 

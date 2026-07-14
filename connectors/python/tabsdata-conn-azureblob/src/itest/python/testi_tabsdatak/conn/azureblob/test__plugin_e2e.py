@@ -94,7 +94,7 @@ def _publish(
         AzureBlobSrcConn(
             container=domain_azureblob.container,
             credentials=_credentials(domain_azureblob),
-            base_path=str(domain_azureblob.base_path),
+            base_path="/" + str(domain_azureblob.base_path).strip("/"),
         ),
     )
     run_function(collection, info, project_root)
@@ -172,7 +172,7 @@ def test_subscriber_writes_format_to_azureblob_domain(
         AzureBlobDestConn(
             container=domain_azureblob.container,
             credentials=_credentials(domain_azureblob),
-            base_path=out_prefix,
+            base_path="/" + out_prefix.strip("/"),
         ),
     )
     run_function(destination_collection, subscriber_info, subscriber_root)

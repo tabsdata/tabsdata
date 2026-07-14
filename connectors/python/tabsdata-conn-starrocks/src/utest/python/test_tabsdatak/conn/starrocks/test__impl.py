@@ -99,7 +99,7 @@ def _s3_staging() -> S3Location:
             access_key_id=Secret("AKIA..."),
             secret_access_key=Secret("secret"),
         ),
-        base_path="prefix/",
+        base_path="/prefix",
     )
 
 
@@ -139,7 +139,7 @@ def _az_staging() -> AzBlobLocation:
             account_name=Secret("acct"),
             account_key=Secret("azkey"),
         ),
-        base_path="prefix/",
+        base_path="/prefix",
     )
 
 
@@ -162,7 +162,7 @@ def _gcs_staging() -> GCSLocation:
     return GCSLocation(
         bucket="gbk",
         credentials=GCPJson(json=Secret("{}")),
-        base_path="prefix/",
+        base_path="/prefix",
     )
 
 

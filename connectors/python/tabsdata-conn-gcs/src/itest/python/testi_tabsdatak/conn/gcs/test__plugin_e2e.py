@@ -89,7 +89,7 @@ def _publish(
         GCSSrcConn(
             bucket=domain_gcs.bucket,
             credentials=_credentials(domain_gcs),
-            base_path=str(domain_gcs.base_path),
+            base_path="/" + str(domain_gcs.base_path).strip("/"),
         ),
     )
     run_function(collection, info, project_root)
@@ -167,7 +167,7 @@ def test_subscriber_writes_format_to_gcs_domain(
         GCSDestConn(
             bucket=domain_gcs.bucket,
             credentials=_credentials(domain_gcs),
-            base_path=out_prefix,
+            base_path="/" + out_prefix.strip("/"),
         ),
     )
     run_function(destination_collection, subscriber_info, subscriber_root)

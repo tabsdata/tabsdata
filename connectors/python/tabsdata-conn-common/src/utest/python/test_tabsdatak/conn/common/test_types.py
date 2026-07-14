@@ -6,14 +6,17 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.error import ConnErrorCode, ConnInitException
+from pydantic import TypeAdapter
+
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AzureAccountKey,
     Credentials,
+    FullPathSpec,
     GCPJson,
     UserPassword,
 )
-from tabsdatak.conn.common.types import full_path
+from tabsdatak.conn.common.types import full_path, normalize_dir_path
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -160,6 +163,57 @@ def testfull_path_result_never_starts_or_ends_with_slash():
             out = full_path(bp, p)
             assert not out.startswith("/"), (bp, p, out)
             assert not out.endswith("/"), (bp, p, out)
+
+
+# ---------------------------------------------------------------------------
+# FullPathSpec validation
+# ---------------------------------------------------------------------------
+
+_full_path = TypeAdapter(FullPathSpec)
+
+
+def _accepts(adapter, value) -> bool:
+    try:
+        adapter.validate_python(value)
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.parametrize("value", ["/", "/a", "/a/b", "/data/sub"])
+def test_full_path_accepts_absolute_paths(value):
+    assert _accepts(_full_path, value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["", "a", "a/b", "staging", "/a/", "//", "/a/b/", "/a\\b", "/a\x00"],
+)
+def test_full_path_rejects_relative_or_trailing_slash(value):
+    assert not _accepts(_full_path, value)
+
+
+# ---------------------------------------------------------------------------
+# normalize_dir_path helper
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("path", "lead", "back", "expected"),
+    [
+        ("staging", False, True, "staging/"),
+        ("/staging/", False, True, "staging/"),
+        ("staging", True, False, "/staging"),
+        ("staging", True, True, "/staging/"),
+        ("staging", False, False, "staging"),
+        ("a/b", False, True, "a/b/"),
+        ("", False, True, ""),
+        ("", True, True, ""),
+        ("/", True, True, ""),
+    ],
+)
+def test_normalize_dir_path(path, lead, back, expected):
+    assert normalize_dir_path(path, lead, back) == expected
 
 
 # ---------------------------------------------------------------------------

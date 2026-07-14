@@ -40,7 +40,7 @@ from tabsdatak.conn.common.file.typing_ import (
     SrcFormatCfgSpec,
     SrcPathsSpec,
 )
-from tabsdatak.conn.common.types import BasePathSpec, CfgSpec, full_path
+from tabsdatak.conn.common.types import CfgSpec, FullPathSpec
 from tabsdatak.conn.localfile.error import LocalFileErrorCode
 from tabsdatak.spi import Conn
 
@@ -65,13 +65,15 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(LocalFileErrorCode.LOCALFILE_1, kw_only=True)
 class LocalFileSrcConn(Conn):
-    """LocalFile connection used by :class:`LocalFileSrc`."""
+    """LocalFile connection used by :class:`LocalFileSrc`.
 
-    base_path: BasePathSpec = ""
+    ``base_path`` is an absolute local-filesystem path: it must start
+    with ``/`` and must not end with one (other than the bare root
+    ``/``). It defaults to the root ``/``.
+    """
+
+    base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 @_api.dataclass(LocalFileErrorCode.LOCALFILE_1, kw_only=True)
@@ -83,11 +85,8 @@ class LocalFileDestConn(Conn):
     be confused at the wire-format level.
     """
 
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 # --- Source ---------------------------------------------------------

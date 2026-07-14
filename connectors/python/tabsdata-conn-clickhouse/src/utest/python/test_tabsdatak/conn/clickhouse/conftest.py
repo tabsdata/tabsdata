@@ -415,10 +415,10 @@ def _parse_uri(uri: str) -> str:
     return urlparse(uri).netloc
 
 
-# Session-scoped staging prefix: ``YYYYMMDDTHHMMSS`` of the moment
-# conftest is loaded. Same value across every test in the session;
-# different value across runs.
-_SESSION_BASE_PATH = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+# Session-scoped staging prefix: ``/YYYYMMDDTHHMMSS`` of the moment
+# conftest is loaded (a FullPathSpec, so leading ``/``). Same value
+# across every test in the session; different value across runs.
+_SESSION_BASE_PATH = "/" + datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
 
 
 def _staging_config(prefix: str) -> CloudLocation | None:
@@ -611,8 +611,9 @@ def _extend_base_path(
     cloud locations are pydantic-flavored dataclasses (kw_only,
     frozen-ish) without a stable shallow-copy helper.
     """
+    # base_path is a FullPathSpec (leading "/"); keep the result absolute.
     base = (location.base_path or "").rstrip("/")
-    new_base_path = f"{base}/{extra}" if base else extra
+    new_base_path = f"{base}/{extra}"
 
     if isinstance(location, S3Location):
         return S3Location(

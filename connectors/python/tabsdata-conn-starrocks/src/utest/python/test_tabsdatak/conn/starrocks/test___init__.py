@@ -38,7 +38,7 @@ def _staging():
             access_key_id=Secret("AKIA..."),
             secret_access_key=Secret("secret"),
         ),
-        base_path="staging/",
+        base_path="/staging",
     )
 
 

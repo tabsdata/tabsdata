@@ -74,7 +74,7 @@ def _staging() -> S3Location:
             access_key_id=Secret("AKIA..."),
             secret_access_key=Secret("secret"),
         ),
-        base_path="stg/",
+        base_path="/stg",
     )
 
 

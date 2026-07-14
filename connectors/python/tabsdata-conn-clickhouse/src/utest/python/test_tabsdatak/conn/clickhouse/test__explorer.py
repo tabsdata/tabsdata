@@ -56,7 +56,7 @@ def _conn(database: str = "analytics") -> ClickHouseDestConn:
                 access_key_id=Secret("AKIA0000000000000000"),
                 secret_access_key=Secret("secret-value"),
             ),
-            base_path="staging/",
+            base_path="/staging",
         ),
         credentials=UserPassword(user=Secret("u"), password=Secret("p")),
     )

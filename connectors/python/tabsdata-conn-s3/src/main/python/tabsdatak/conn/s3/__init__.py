@@ -43,10 +43,9 @@ from tabsdatak.conn.common.file.typing_ import (
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
-    BasePathSpec,
     CfgSpec,
+    FullPathSpec,
     S3BucketSpec,
-    full_path,
 )
 from tabsdatak.conn.s3.error import S3ErrorCode
 from tabsdatak.spi import Conn
@@ -81,18 +80,17 @@ class S3SrcConn(Conn):
 
     Holds the bucket / region / credentials / base_path. The src
     class wraps this conn and adds the per-flow ``paths`` list.
+
+    ``base_path`` is a full path (object-key prefix) from the bucket
+    root: it starts with ``/`` and has no trailing ``/``. The leading
+    ``/`` is trimmed when forming the object key. Defaults to ``/``.
     """
 
     bucket: S3BucketSpec
     region: AwsRegionSpec
     credentials: CredentialsSpec
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        """Resolve ``path`` against ``base_path`` and return the
-        joined result."""
-        return full_path(self.base_path, path)
 
 
 @_api.dataclass(S3ErrorCode.S3_1, kw_only=True)
@@ -107,11 +105,8 @@ class S3DestConn(Conn):
     bucket: S3BucketSpec
     region: AwsRegionSpec
     credentials: CredentialsSpec
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 # --- Source ----------------------------------------------------------

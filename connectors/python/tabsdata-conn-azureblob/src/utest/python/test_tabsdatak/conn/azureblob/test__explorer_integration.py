@@ -87,7 +87,7 @@ def _conn_from(cfg: AzureblobDomain) -> AzureBlobSrcConn:
     return AzureBlobSrcConn(
         container=cfg.container,
         credentials=_creds(cfg),
-        base_path=str(cfg.base_path),
+        base_path="/" + str(cfg.base_path).strip("/"),
     )
 
 

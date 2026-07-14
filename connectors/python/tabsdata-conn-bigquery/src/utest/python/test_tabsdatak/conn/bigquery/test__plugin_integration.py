@@ -15,7 +15,7 @@ variables that, when set, point the plugin at a real workspace:
 - ``GCP0__GCP_STORAGE_URI`` -- the GCS staging location as a
   ``gs://<bucket>[/<base_path>]`` URI. The bucket portion is fed to
   :class:`GCSLocation.bucket`; the path portion (if any) becomes
-  ``base_path``, with ``"staging/"`` as the default when absent.
+  ``base_path``, with ``"staging"`` as the default when absent.
 
 The ``GCP0__GCP_STORAGE_ACCESS_KEY`` / ``GCP0__GCP_STORAGE_SECRET_KEY``
 HMAC pair is intentionally NOT consumed here -- BigQuery's staging

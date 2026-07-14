@@ -78,7 +78,7 @@ def src_conn(system_s3: S3System, run_base: str) -> S3SrcConn:
         bucket=system_s3.bucket,
         region=system_s3.region,
         credentials=_credentials(system_s3),
-        base_path=run_base,
+        base_path="/" + run_base.strip("/"),
     )
 
 
@@ -88,7 +88,7 @@ def dest_conn(system_s3: S3System, run_base: str) -> S3DestConn:
         bucket=system_s3.bucket,
         region=system_s3.region,
         credentials=_credentials(system_s3),
-        base_path=run_base,
+        base_path="/" + run_base.strip("/"),
     )
 
 

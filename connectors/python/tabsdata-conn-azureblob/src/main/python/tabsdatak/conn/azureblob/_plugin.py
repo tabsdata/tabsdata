@@ -14,7 +14,7 @@ from tabsdatak.conn.azureblob.error import AzureBlobErrorCode
 from tabsdatak.conn.common.file import _plugin
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import AzureAccountKey, _convert
+from tabsdatak.conn.common.types import AzureAccountKey, _convert, full_path
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -46,7 +46,7 @@ def build_location(
 ) -> Any:
     container = _convert(conn.container, str)
     if not (path_entry.startswith("az://") or path_entry.startswith("abfss://")):
-        path_entry = conn.full_path(path_entry)
+        path_entry = full_path(conn.base_path, path_entry)
     return handler.azure_location(
         uri=_az_uri(container, path_entry),
         account_name_env=handler.azure_account_name_env,

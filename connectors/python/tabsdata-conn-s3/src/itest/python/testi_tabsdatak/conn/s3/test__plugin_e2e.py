@@ -93,7 +93,7 @@ def _publish(
             bucket=domain_s3.bucket,
             region=domain_s3.region,
             credentials=_credentials(domain_s3),
-            base_path=str(domain_s3.base_path),
+            base_path="/" + str(domain_s3.base_path).strip("/"),
         ),
     )
     run_function(collection, info, project_root)
@@ -172,7 +172,7 @@ def test_subscriber_writes_format_to_s3_domain(
             bucket=domain_s3.bucket,
             region=domain_s3.region,
             credentials=_credentials(domain_s3),
-            base_path=out_prefix,
+            base_path="/" + out_prefix.strip("/"),
         ),
     )
     run_function(destination_collection, subscriber_info, subscriber_root)

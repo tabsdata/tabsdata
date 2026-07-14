@@ -82,7 +82,7 @@ def src_conn(system_azureblob: AzureblobSystem, run_base: str) -> AzureBlobSrcCo
     return AzureBlobSrcConn(
         container=system_azureblob.container,
         credentials=_credentials(system_azureblob),
-        base_path=run_base,
+        base_path="/" + run_base.strip("/"),
     )
 
 
@@ -91,7 +91,7 @@ def dest_conn(system_azureblob: AzureblobSystem, run_base: str) -> AzureBlobDest
     return AzureBlobDestConn(
         container=system_azureblob.container,
         credentials=_credentials(system_azureblob),
-        base_path=run_base,
+        base_path="/" + run_base.strip("/"),
     )
 
 

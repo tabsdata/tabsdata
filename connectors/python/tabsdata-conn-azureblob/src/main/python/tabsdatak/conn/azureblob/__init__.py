@@ -45,9 +45,8 @@ from tabsdatak.conn.common.file.typing_ import (
 from tabsdatak.conn.common.types import (
     AzContainerSpec,
     AzureAccountKey,
-    BasePathSpec,
     CfgSpec,
-    full_path,
+    FullPathSpec,
 )
 from tabsdatak.spi import Conn
 
@@ -85,17 +84,16 @@ class AzureBlobSrcConn(Conn):
 
     :param container: Azure Blob container name.
     :param credentials: Storage-account key credentials.
-    :param base_path: Optional path prefix under the container.
+    :param base_path: Full path (path prefix) from the container root:
+        starts with ``/``, no trailing ``/``. The leading ``/`` is
+        trimmed when forming the blob name. Defaults to ``/``.
     :param conn_cfg: Optional driver-side cfg dict.
     """
 
     container: AzContainerSpec
     credentials: CredentialsSpec
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 @_api.dataclass(AzureBlobErrorCode.AZURE_BLOB_1, kw_only=True)
@@ -109,11 +107,8 @@ class AzureBlobDestConn(Conn):
 
     container: AzContainerSpec
     credentials: CredentialsSpec
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 # --- Source ----------------------------------------------------------

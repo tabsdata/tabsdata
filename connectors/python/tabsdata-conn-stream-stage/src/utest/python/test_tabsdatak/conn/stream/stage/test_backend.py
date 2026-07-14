@@ -114,8 +114,7 @@ def test_local_backend_read_text_absent_then_present(tmp_path):
 
 
 class _FakeCloudConn:
-    def full_path(self, rel: str) -> str:
-        return f"bucket-prefix/{rel}"
+    base_path = "/bucket-prefix"
 
 
 class _FakePlugin:
@@ -135,7 +134,7 @@ def test_cloud_backend_applies_full_path_before_building_location():
     backend = _CloudStageBackend(_FakeCloudConn(), plugin)
     backend.build_location("files/x.parquet", HANDLER)
     # The cloud connectors' build_location does NOT apply base_path, so
-    # the backend must resolve through conn.full_path first.
+    # the backend must resolve it through full_path(conn.base_path, ...) first.
     assert plugin.seen_path == "bucket-prefix/files/x.parquet"
 
 

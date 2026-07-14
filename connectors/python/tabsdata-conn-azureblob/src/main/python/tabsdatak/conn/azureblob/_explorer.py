@@ -26,7 +26,7 @@ from tabsdatak.conn.common.file._explorer import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
+from tabsdatak.conn.common.types import _convert, normalize_dir_path
 from tabsdatak.spi import ConnMetaModel, Entity, Explorer
 
 # Either Azure Blob connection flavour -- source or destination.
@@ -49,12 +49,17 @@ class AzureBlobConnectionExplorer(Explorer):
 
     def metadata(self, conn: AzureBlobConn) -> list[FileStorageEntity]:
         container = _convert(conn.container, str)
-        base_path = _convert(conn.base_path, str).strip("/") if conn.base_path else ""
+        # base_path is a FullPathSpec (leading "/"); the blob
+        # name_starts_with wants no leading "/" and a trailing "/", so
+        # normalize it (root "/" -> "" -> list the whole container).
+        prefix = normalize_dir_path(
+            _convert(conn.base_path, str), lead_separator=False, back_separator=True
+        )
         # ``bucket`` holds the raw container name and ``prefix`` the blob's
         # full key directory (which already includes base_path), so the
         # fqn resolves to ``az://<container>/<prefix>/<file>``.
         client = _container_client(conn)
-        name_starts_with = base_path + "/" if base_path else None
+        name_starts_with = prefix or None
 
         entities: list[FileStorageEntity] = []
         for blob in client.list_blobs(name_starts_with=name_starts_with):

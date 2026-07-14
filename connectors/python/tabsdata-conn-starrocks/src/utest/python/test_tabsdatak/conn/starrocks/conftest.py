@@ -565,7 +565,7 @@ def _split_s3_uri(uri: str) -> tuple[str, str | None]:
     rest = uri[len(prefix):].strip("/")
     if "/" in rest:
         bucket, base_path = rest.split("/", 1)
-        return bucket, base_path.strip("/") + "/"
+        return bucket, "/" + base_path.strip("/")
     return rest, None
 
 
@@ -585,7 +585,7 @@ def s3_staging() -> S3Location:
     bucket, uri_base_path = _split_s3_uri(uri)
     base_path = os.environ.get(
         _S3_BASE_PATH_ENV,
-        uri_base_path if uri_base_path is not None else "tabsdata-starrocks-integ/",
+        uri_base_path if uri_base_path is not None else "/tabsdata-starrocks-integ",
     )
     return S3Location(
         bucket=bucket,

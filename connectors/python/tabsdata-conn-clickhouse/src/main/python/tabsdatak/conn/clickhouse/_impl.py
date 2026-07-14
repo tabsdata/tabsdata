@@ -62,7 +62,7 @@ def build_cloud_storage(staging: CloudLocation):
         cfg = S3Config(
             bucket=_convert(staging.bucket, str),
             region=_convert(staging.region, str),
-            base_path=staging.base_path or "",
+            base_path=_convert(staging.base_path, str),
             access_key_id=_convert(staging.credentials.access_key_id, str),
             secret_access_key=(_convert(staging.credentials.secret_access_key, str)),
         )
@@ -71,7 +71,7 @@ def build_cloud_storage(staging: CloudLocation):
     if isinstance(staging, AzBlobLocation):
         cfg = AzureConfig(
             container=_convert(staging.container, str),
-            base_path=staging.base_path or "",
+            base_path=_convert(staging.base_path, str),
             account_name=_convert(staging.credentials.account_name, str),
             account_key=_convert(staging.credentials.account_key, str),
         )
@@ -80,7 +80,7 @@ def build_cloud_storage(staging: CloudLocation):
     if isinstance(staging, GCSLocation):
         cfg = GCSConfig(
             bucket=_convert(staging.bucket, str),
-            base_path=staging.base_path or "",
+            base_path=_convert(staging.base_path, str),
             service_account_json=_convert(staging.credentials.json, str),
             hmac_access_key=_convert(staging.hmac_credentials.access_key, str),
             hmac_secret_key=_convert(staging.hmac_credentials.secret_key, str),

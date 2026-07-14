@@ -38,10 +38,9 @@ class _BqConfig:
 def _split_gs_uri(uri: str) -> tuple[str, str]:
     """Split ``gs://<bucket>[/<path>]`` into ``(bucket, base_path)``.
 
-    Path defaults to ``"staging/"`` when the URI carries only a bucket.
-    The returned ``base_path`` is normalized to always end with ``/``
-    so callers don't have to worry about ``GCSLocation.full_path``
-    join semantics.
+    Path defaults to ``"/staging"`` when the URI carries only a bucket.
+    The returned ``base_path`` is a ``FullPathSpec`` (leading ``/``, no
+    trailing ``/``); ``full_path`` trims the leading ``/`` for the key.
     """
     prefix = "gs://"
     if not uri.startswith(prefix):
@@ -49,9 +48,9 @@ def _split_gs_uri(uri: str) -> tuple[str, str]:
     rest = uri[len(prefix) :].strip("/")
     if "/" in rest:
         bucket, base_path = rest.split("/", 1)
-        base_path = base_path.strip("/") + "/"
+        base_path = "/" + base_path.strip("/")
     else:
-        bucket, base_path = rest, "staging/"
+        bucket, base_path = rest, "/staging"
     return bucket, base_path
 
 

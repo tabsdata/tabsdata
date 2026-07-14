@@ -33,6 +33,7 @@ from pathlib import Path
 
 from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.azureblob import AzureBlobSrcConn, _plugin as _azureblob_plugin
+from tabsdatak.conn.common.types import full_path
 from tabsdatak.conn.gcs import GCSSrcConn, _plugin as _gcs_plugin
 from tabsdatak.conn.localfile import LocalFileSrcConn, _plugin as _localfile_plugin
 from tabsdatak.conn.s3 import S3SrcConn, _plugin as _s3_plugin
@@ -149,8 +150,8 @@ class _LocalStageBackend(StageBackend):
 class _CloudStageBackend(StageBackend):
     """Cloud object-store stage (s3 / az / gcs). The cloud connectors'
     ``build_location`` does not apply ``base_path``, so paths are
-    resolved through ``conn.full_path`` first; ``run_env`` supplies the
-    transporter's credential env."""
+    resolved through ``full_path(conn.base_path, ...)`` first; ``run_env``
+    supplies the transporter's credential env."""
 
     def __init__(self, conn: S3SrcConn | AzureBlobSrcConn | GCSSrcConn, plugin) -> None:
         self._conn = conn
@@ -162,7 +163,7 @@ class _CloudStageBackend(StageBackend):
 
     def build_location(self, rel: str, handler: TransporterHandler):
         return self._plugin.build_location(
-            self._conn, self._conn.full_path(rel), handler
+            self._conn, full_path(self._conn.base_path, rel), handler
         )
 
     def credential_env(self, handler: TransporterHandler) -> dict[str, str] | None:

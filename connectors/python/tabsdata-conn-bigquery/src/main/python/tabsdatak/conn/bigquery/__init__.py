@@ -34,12 +34,11 @@ from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
-    BasePathSpec,
     CfgSpec,
     EntityWhitelistSpec,
+    FullPathSpec,
     GCPJson,
     GCSBucketSpec,
-    full_path,
 )
 from tabsdatak.spi import Conn
 
@@ -96,8 +95,10 @@ class GCSLocation(CloudLocation):
 
     :param bucket: GCS bucket name.
     :param credentials: GCP service-account JSON credentials.
-    :param base_path: Optional object-key prefix under the bucket
-        (e.g. ``"staging/bigquery/"``); defaults to bucket root.
+    :param base_path: Full path (object-key prefix) from the bucket
+        root (e.g. ``"/staging/bigquery"``): starts with ``/``, no
+        trailing ``/``. The leading ``/`` is trimmed when forming the
+        object key. Defaults to ``/``.
     :param cfg: Optional cfg dict passed to the underlying GCS
         client.
     """
@@ -105,11 +106,8 @@ class GCSLocation(CloudLocation):
     __kind__ = "bigQueryGcsLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 # --- Connection ------------------------------------------------------

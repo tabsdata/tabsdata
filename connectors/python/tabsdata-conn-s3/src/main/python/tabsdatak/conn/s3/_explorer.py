@@ -26,7 +26,7 @@ from tabsdatak.conn.common.file._explorer import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
+from tabsdatak.conn.common.types import _convert, normalize_dir_path
 from tabsdatak.conn.s3 import S3DestConn, S3SrcConn
 from tabsdatak.spi import ConnMetaModel, Entity, Explorer
 
@@ -48,14 +48,19 @@ class S3ConnectionExplorer(Explorer):
 
     def metadata(self, conn: S3Conn) -> list[FileStorageEntity]:
         bucket = _convert(conn.bucket, str)
-        base_path = _convert(conn.base_path, str).strip("/") if conn.base_path else ""
+        # base_path is a FullPathSpec (leading "/"); the S3 list_objects_v2
+        # Prefix wants no leading "/" and a trailing "/", so normalize it
+        # (root "/" -> "" -> list the whole bucket).
+        prefix = normalize_dir_path(
+            _convert(conn.base_path, str), lead_separator=False, back_separator=True
+        )
         # ``bucket`` holds the raw bucket name and ``prefix`` the object's
         # full key directory (which already includes base_path), so the
         # fqn resolves to ``s3://<bucket>/<prefix>/<file>``.
         client = _s3_client(conn)
         list_kwargs: dict = {"Bucket": bucket}
-        if base_path:
-            list_kwargs["Prefix"] = base_path + "/"
+        if prefix:
+            list_kwargs["Prefix"] = prefix
 
         entities: list[FileStorageEntity] = []
         for page in client.get_paginator("list_objects_v2").paginate(**list_kwargs):

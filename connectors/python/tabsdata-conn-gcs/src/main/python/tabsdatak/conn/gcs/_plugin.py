@@ -6,7 +6,7 @@ from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.common.file import _plugin
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import GCPJson, _convert
+from tabsdatak.conn.common.types import GCPJson, _convert, full_path
 from tabsdatak.conn.gcs import GCSDest, GCSDestConn, GCSSrc, GCSSrcConn
 from tabsdatak.conn.gcs._explorer import GCSConnectionExplorer
 from tabsdatak.conn.gcs.error import GcsErrorCode
@@ -41,7 +41,7 @@ def build_location(
 ) -> Any:
     bucket = _convert(conn.bucket, str)
     if not path_entry.startswith("gs://"):
-        path_entry = conn.full_path(path_entry)
+        path_entry = full_path(conn.base_path, path_entry)
     return handler.gcs_location(
         uri=_gcs_uri(bucket, path_entry),
         service_account_key_env=handler.gcp_service_account_json_env,

@@ -86,26 +86,29 @@ def test_localfile_validate_rejects_cross_side_format_cfg_keys():
 
 
 # ---------------------------------------------------------------------------
-# LocalFile{Src,Dest}Conn.full_path
+# LocalFile{Src,Dest}Conn.base_path
 # ---------------------------------------------------------------------------
 
 
-def test_localfile_conn_default_base_path_is_empty(conn_cls):
+def test_localfile_conn_default_base_path_is_root(conn_cls):
     c = conn_cls()
-    assert c.base_path == ""
-    assert c.full_path("foo.csv") == "foo.csv"
+    assert c.base_path == "/"
 
 
-def test_localfile_conn_full_path_treats_absolute_path_as_relative(conn_cls):
-    c = conn_cls(base_path="/data/")
-    assert c.full_path("/foo.csv") == "data/foo.csv"
-    assert c.full_path("foo.csv") == "data/foo.csv"
+def test_localfile_conn_accepts_absolute_base_path(conn_cls):
+    c = conn_cls(base_path="/data/sub")
+    assert c.base_path == "/data/sub"
 
 
-def test_localfile_conn_full_path_strips_trailing_slashes(conn_cls):
-    c = conn_cls(base_path="/data")
-    assert c.full_path("sub/foo.csv/") == "data/sub/foo.csv"
-    assert c.full_path("/") == "data"
+@pytest.mark.parametrize("bad", ["", "data", "data/sub", "/data/"])
+def test_localfile_conn_rejects_non_absolute_or_trailing_slash(conn_cls, bad):
+    # FullPathSpec requires a leading "/" and forbids a trailing one;
+    # a bare string that fails the pattern is coerced onto the Secret union
+    # member, whose value check raises API_6.
+    from tabsdatak.error import ApiRuntimeException
+
+    with pytest.raises(ApiRuntimeException):
+        conn_cls(base_path=bad)
 
 
 # ---------------------------------------------------------------------------

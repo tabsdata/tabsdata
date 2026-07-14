@@ -74,7 +74,7 @@ def _staging() -> GCSLocation:
     return GCSLocation(
         bucket="staging-bucket",
         credentials=GCPJson(json=Secret(_gcp_key())),
-        base_path="staging/",
+        base_path="/staging",
     )
 
 

@@ -10,16 +10,26 @@ from tabsdatak.conn.clickhouse._storage_config import (
     GCSConfig,
     S3Config,
 )
+from tabsdatak.conn.common.types import full_path, normalize_dir_path
 
 logger = logging.getLogger(__name__)
 
 
 def _make_key(base_path: str, upload_id: str, filename: str) -> str:
-    """Build a slash-joined object key with no leading slash and no
-    empty path components (so an empty ``base_path`` simply collapses
-    to ``"<upload_id>/<filename>"``)."""
-    parts = [p for p in (base_path.strip("/"), upload_id, filename) if p]
-    return "/".join(parts)
+    """Build the object key ``<base_path>/<upload_id>/<filename>`` with no
+    leading slash -- S3 / GCS / Azure object keys are never slash-rooted
+    (an empty ``base_path`` collapses to ``"<upload_id>/<filename>"``)."""
+    return full_path(base_path, f"{upload_id}/{filename}")
+
+
+# ClickHouse's list APIs (S3 ``list_objects_v2`` ``Prefix``, Azure
+# ``name_starts_with``, GCS ``list_blobs`` ``prefix``) expect the
+# ``base_path`` prefix spelled with a trailing "/" and no leading one, so
+# that only objects staged under it match (and it lines up with the keys
+# ``_make_key`` produces). An empty ``base_path`` yields "" (whole
+# container).
+def _list_prefix(base_path: str) -> str:
+    return normalize_dir_path(base_path, lead_separator=False, back_separator=True)
 
 
 # --- Generic CloudStorage --------------------------------------------
@@ -93,7 +103,7 @@ class S3Storage(CloudStorage):
 
     def delete(self, up_to_id: str) -> None:
         s3 = self._client()
-        prefix = self._config.base_path.rstrip("/") + "/"
+        prefix = _list_prefix(self._config.base_path)
         to_delete = []
         paginator = s3.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=self._config.bucket, Prefix=prefix):
@@ -175,8 +185,7 @@ class GCSStorage(CloudStorage):
         from older runs.
         """
         bucket = self._client().bucket(self._config.bucket)
-        prefix_root = self._config.base_path.strip("/")
-        prefix = f"{prefix_root}/" if prefix_root else ""
+        prefix = _list_prefix(self._config.base_path)
 
         file_blobs = []
         deleted_upload_ids: set[str] = set()
@@ -280,7 +289,7 @@ class AzureStorage(CloudStorage):
 
     def delete(self, up_to_id: str) -> None:
         container = self._service().get_container_client(self._config.container)
-        prefix = self._config.base_path.rstrip("/") + "/"
+        prefix = _list_prefix(self._config.base_path)
         to_delete = []
         for blob in container.list_blobs(name_starts_with=prefix):
             relative = blob.name[len(prefix) :]

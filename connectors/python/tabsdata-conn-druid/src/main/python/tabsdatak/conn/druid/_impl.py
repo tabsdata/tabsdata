@@ -14,7 +14,7 @@ from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.common.file._output import copy_one as _transporter_copy_one
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
+from tabsdatak.conn.common.types import _convert, full_path
 from tabsdatak.conn.druid import (
     AzBlobLocation,
     CloudLocation,
@@ -81,14 +81,6 @@ def _staging_subdir(ctx_trx_id: str) -> str:
     of the same trx don't clash with leftovers from a partial prior run.
     """
     return f"td-druid/{ctx_trx_id}/{uuid.uuid4().hex[:8]}"
-
-
-def _join_path(base: str, *parts: str) -> str:
-    """Join cloud-path segments with single ``/`` separators."""
-    pieces = [base.strip("/")] if base else []
-    for p in parts:
-        pieces.append(p.strip("/"))
-    return "/".join(s for s in pieces if s)
 
 
 def staged_uri(location: CloudLocation, key: str) -> str:
@@ -196,10 +188,9 @@ def upload_staged_files(
     pairs: list[tuple[Any, Any]] = []
     uris: list[str] = []
     keys: list[str] = []
-    base_path = getattr(staging, "base_path", "") or ""
     for idx, src_path in enumerate(parquet_files):
         name = f"part-{idx:05d}-{Path(src_path).name}"
-        key = _join_path(base_path, subdir, name)
+        key = full_path(staging.base_path, f"{subdir}/{name}")
         target = _transporter_target(staging, key, handler)
         source = handler.local_path_location(Path(src_path))
         pairs.append((source, target))

@@ -35,13 +35,12 @@ from tabsdatak.conn.common.types import (
     AwsRegionSpec,
     AzContainerSpec,
     AzureAccountKey,
-    BasePathSpec,
     CfgSpec,
+    FullPathSpec,
     GCPJson,
     GCSBucketSpec,
     S3BucketSpec,
     UserPassword,
-    full_path,
 )
 
 # noinspection PyProtectedMember
@@ -114,8 +113,10 @@ class S3Location(CloudLocation):
     :param bucket: S3 bucket name.
     :param region: AWS region (e.g. ``"us-east-1"``).
     :param credentials: AWS access-key / secret-key pair.
-    :param base_path: Optional key prefix under the bucket
-        (e.g. ``"staging/druid/"``).
+    :param base_path: Full path (key prefix) from the bucket root
+        (e.g. ``"/staging/druid"``): starts with ``/``, no trailing
+        ``/``. The leading ``/`` is trimmed when forming the object key.
+        Defaults to ``/``.
     :param cfg: Optional cfg dict passed to the underlying S3
         client.
     """
@@ -124,11 +125,8 @@ class S3Location(CloudLocation):
     bucket: S3BucketSpec
     region: AwsRegionSpec
     credentials: AwsAccessSecretKey
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 @_api.dataclass(DruidErrorCode.DRUID_13, kw_only=True)
@@ -139,18 +137,17 @@ class AzBlobLocation(CloudLocation):
 
     :param container: Azure Blob container name.
     :param credentials: Storage-account key credentials.
-    :param base_path: Optional path prefix under the container.
+    :param base_path: Full path (path prefix) from the container root:
+        starts with ``/``, no trailing ``/``. The leading ``/`` is
+        trimmed when forming the blob name. Defaults to ``/``.
     :param cfg: Optional cfg dict for the Azure Blob client.
     """
 
     __kind__ = "druidAzBlobLocation"
     container: AzContainerSpec
     credentials: AzureAccountKey
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 @_api.dataclass(DruidErrorCode.DRUID_14, kw_only=True)
@@ -161,18 +158,17 @@ class GCSLocation(CloudLocation):
 
     :param bucket: GCS bucket name.
     :param credentials: GCP service-account JSON credentials.
-    :param base_path: Optional object-key prefix under the bucket.
+    :param base_path: Full path (object-key prefix) from the bucket
+        root: starts with ``/``, no trailing ``/``. The leading ``/`` is
+        trimmed when forming the object key. Defaults to ``/``.
     :param cfg: Optional cfg dict for the GCS client.
     """
 
     __kind__ = "druidGcsLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson
-    base_path: BasePathSpec = ""
+    base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
-
-    def full_path(self, path: str) -> str:
-        return full_path(self.base_path, path)
 
 
 # --- Connection ------------------------------------------------------

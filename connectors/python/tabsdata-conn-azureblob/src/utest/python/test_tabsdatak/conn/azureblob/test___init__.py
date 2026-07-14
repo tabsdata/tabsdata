@@ -134,7 +134,7 @@ def test_azureblob_validate_rejects_cross_side_format_cfg_keys():
 
 
 # ---------------------------------------------------------------------------
-# AzureBlobConn.full_path
+# AzureBlobConn.base_path
 # ---------------------------------------------------------------------------
 
 
@@ -149,19 +149,27 @@ def _conn_with_base(cls, base_path):
     )
 
 
-def test_azureblob_conn_default_base_path_is_empty(conn_cls):
-    c = _conn_with_base(conn_cls, "")
-    assert c.base_path == ""
-    assert c.full_path("foo.csv") == "foo.csv"
+def test_azureblob_conn_default_base_path_is_root(conn_cls):
+    c = conn_cls(
+        container=Secret(),
+        credentials=AzureAccountKey(
+            account_name=Secret(),
+            account_key=Secret(),
+        ),
+    )
+    assert c.base_path == "/"
 
 
-def test_azureblob_conn_full_path_treats_absolute_path_as_relative(conn_cls):
-    c = _conn_with_base(conn_cls, "/data/")
-    assert c.full_path("/foo.csv") == "data/foo.csv"
-    assert c.full_path("foo.csv") == "data/foo.csv"
+def test_azureblob_conn_accepts_absolute_base_path(conn_cls):
+    c = _conn_with_base(conn_cls, "/data/sub")
+    assert c.base_path == "/data/sub"
 
 
-def test_azureblob_conn_full_path_strips_trailing_slashes(conn_cls):
-    c = _conn_with_base(conn_cls, "/data")
-    assert c.full_path("sub/foo.csv/") == "data/sub/foo.csv"
-    assert c.full_path("/") == "data"
+@pytest.mark.parametrize("bad", ["data", "data/sub", "/data/"])
+def test_azureblob_conn_rejects_non_absolute_or_trailing_slash_base_path(conn_cls, bad):
+    # A bare string that fails the FullPathSpec pattern is coerced onto the
+    # Secret union member, whose value check raises API_6.
+    from tabsdatak.error import ApiRuntimeException
+
+    with pytest.raises(ApiRuntimeException):
+        _conn_with_base(conn_cls, bad)
