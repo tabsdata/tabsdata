@@ -123,20 +123,34 @@ pub fn to_file_to_import_instructions(
     let importer_options = importer_options.clone();
     move |res| {
         let (idx, o) = res?;
-        tracing::debug!(
-            base_url = %base_url,
-            location = %o.location,
-            "shuttle.import: building file import instructions"
+        let from_url = base_url.join(o.location.as_ref()).unwrap();
+        let to_url = importer_options
+            .to()
+            .join(&(id::id().to_string() + ".parquet"))
+            .unwrap();
+        td_common::troubleshoot_rs!(
+            "[path] [to_file_to_import_instructions] Value of base_url: {base_url}"
+        );
+        td_common::troubleshoot_rs!(
+            "[path] [to_file_to_import_instructions] Value of location: {:?}",
+            o.location.as_ref()
+        );
+        td_common::troubleshoot_rs!(
+            "[path] [to_file_to_import_instructions] Value of from_url: {from_url}"
+        );
+        td_common::troubleshoot_rs!(
+            "[path] [to_file_to_import_instructions] Value of importer_options.to(): {}",
+            importer_options.to()
+        );
+        td_common::troubleshoot_rs!(
+            "[path] [to_file_to_import_instructions] Value of to_url: {to_url}"
         );
         Ok(FileImportInstructions {
             idx,
-            from_url: base_url.join(o.location.as_ref()).unwrap(),
+            from_url,
             timestamp: o.last_modified,
             size: o.size as usize,
-            to_url: importer_options
-                .to()
-                .join(&(id::id().to_string() + ".parquet"))
-                .unwrap(),
+            to_url,
             importer_options: importer_options.clone(),
         })
     }
@@ -340,6 +354,10 @@ fn importer_lazy_frame(
     importer_options: &ImporterOptions,
 ) -> Result<LazyFrame, PolarsError> {
     let url_str = polars_source_path(url);
+    td_common::troubleshoot_rs!("[path] [importer_lazy_frame] Value of url: {url}");
+    td_common::troubleshoot_rs!(
+        "[path] [importer_lazy_frame] Value of polars_source_path: {url_str:?}"
+    );
     let pl_path = PlPath::new(url_str.as_str());
     let cloud_config = CloudOptions::from_untyped_config(
         pl_path.cloud_scheme().as_ref(),
@@ -507,17 +525,35 @@ fn write_imported_lazy_frame(
     importer_options: &ImporterOptions,
     lazy_frame: LazyFrame,
 ) -> Result<(), PolarsError> {
+    td_common::troubleshoot_rs!("[path] [write_imported_lazy_frame] Value of url: {url}");
+    td_common::troubleshoot_rs!(
+        "[path] [write_imported_lazy_frame] Value of PlPath input: {:?}",
+        url.as_ref()
+    );
     let pl_path = PlPath::new(url.as_ref());
-    let cloud_options = CloudOptions::from_untyped_config(
-        pl_path.cloud_scheme().as_ref(),
-        importer_options.to_configs(),
-    )?;
+    td_common::troubleshoot_rs!("[path] [write_imported_lazy_frame] Value of pl_path: {pl_path:?}");
+    td_common::troubleshoot_rs!(
+        "[path] [write_imported_lazy_frame] Value of pl_path cloud scheme: {:?}",
+        pl_path.cloud_scheme()
+    );
+    let cloud_options = if url.scheme() == "file" {
+        None
+    } else {
+        Some(CloudOptions::from_untyped_config(
+            pl_path.cloud_scheme().as_ref(),
+            importer_options.to_configs(),
+        )?)
+    };
+    td_common::troubleshoot_rs!(
+        "[path] [write_imported_lazy_frame] Value of cloud_options presence: {}",
+        cloud_options.is_some()
+    );
     match importer_options.to_format() {
         ToFormat::Parquet(parquet_write_options) => {
             let sink = lazy_frame.sink_parquet(
                 create_sink_target(url, importer_options.to_configs())?,
                 parquet_write_options.clone(),
-                Some(cloud_options),
+                cloud_options,
                 SinkOptions {
                     sync_on_close: SyncOnCloseType::None,
                     maintain_order: true,

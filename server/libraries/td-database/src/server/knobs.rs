@@ -69,12 +69,14 @@ pub fn boot_config(server: &ComponentConfig) -> Result<BootConfig, DbError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
-    // nextest runs each test in its own process, so mutating the environment
-    // is safe in these tests.
+    // These tests mutate process-global environment variables, so they run
+    // serially to avoid racing each other under a shared test process.
 
     #[cfg(postgres)]
     #[test]
+    #[serial]
     fn boot_config_from_server_entry() {
         unsafe { std::env::set_var(DATABASE_DIR_ENV, "/tmp/td-boot-config-test") };
         let server: ComponentConfig = serde_yaml::from_str(
@@ -125,6 +127,7 @@ password: ${embedded}
     }
 
     #[test]
+    #[serial]
     fn database_dir_env_precedence() {
         unsafe {
             std::env::remove_var(DATABASE_DIR_ENV);

@@ -260,6 +260,7 @@ env_scripts = [
         else
             set_env RUSTC_WRAPPER ${sccache_path}
             set_env SCCACHE_CACHE_SIZE "32G"
+            set_env SCCACHE_IDLE_TIMEOUT "0"
             info "🧰 Enabled sccache wrapper '${sccache_path}' with 32G cache."
         end
     end
@@ -331,14 +332,45 @@ env_scripts = [
     else
         macros-test-features = set "td-test"
     end
+    skip_test_tower = set false
+    skip_test_logging = set false
+    if ${on_ga_true}
+        skip_test_tower = set true
+        skip_test_logging = set true
+    end
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
+    for argument in ${arguments}
+        argument = trim ${argument}
+        if eq ${argument} "--notest-tower"
+            skip_test_tower = set true
+        end
+        if eq ${argument} "--notest-logging"
+            skip_test_logging = set true
+        end
+    end
+    set_env TD_SKIP_TEST_TOWER ${skip_test_tower}
+    set_env TD_SKIP_TEST_LOGGING ${skip_test_logging}
+    if ${skip_test_tower}
+        debug "🚫 Skipping the tower metadata test task"
+    end
+    if ${skip_test_logging}
+        debug "🚫 Skipping the logging test task"
+    end
+
     if not is_empty ${modules-features}
         modules-test-features = concat "dummy" "," ${modules-features}
-        modules-test-features-test_logging = concat "dummy" "," ${modules-features} "," "test_logging"
-        modules-test-features-test_tower_metadata = concat "dummy" "," ${modules-features} "," "test_tower_metadata"
+        modules-test-features-test_logging = concat "dummy" "," ${modules-features}
+        modules-test-features-test_tower_metadata = concat "dummy" "," ${modules-features}
     else
         modules-test-features = set "td-test"
-        modules-test-features-test_logging = set "td-test,test_logging"
-        modules-test-features-test_tower_metadata = set "td-test,test_tower_metadata"
+        modules-test-features-test_logging = set "td-test"
+        modules-test-features-test_tower_metadata = set "td-test"
+    end
+    if not ${skip_test_logging}
+        modules-test-features-test_logging = concat ${modules-test-features-test_logging} "," "test_logging"
+    end
+    if not ${skip_test_tower}
+        modules-test-features-test_tower_metadata = concat ${modules-test-features-test_tower_metadata} "," "test_tower_metadata"
     end
     if not is_empty ${expansions-features}
         expansions-test-features = concat "dummy" "," ${expansions-features}

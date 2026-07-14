@@ -239,6 +239,10 @@ script = [
             echo "Options:"
             echo "  --systems-manifest <FILE>  Path to the systems manifest YAML."
             echo "                             Default: ${BACKENDS_SYSTEMS_MANIFEST}"
+            echo "                             When no argument is given, the"
+            echo "                             TD_OVERRIDE_SYSTEMS_MANIFEST environment"
+            echo "                             variable, if set, selects a file by name"
+            echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
             echo ""
             exit 0
         end
@@ -260,9 +264,28 @@ script = [
     end
     manifest = trim ${manifest}
     if is_empty ${manifest}
-        manifest = set ${BACKENDS_SYSTEMS_MANIFEST}
+        override = get_env TD_OVERRIDE_SYSTEMS_MANIFEST
+        override = trim ${override}
+        if is_empty ${override}
+            manifest = set ${BACKENDS_SYSTEMS_MANIFEST}
+        else
+            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${override}
+        end
+    else
+        absolute = starts_with ${manifest} "/"
+        if not ${absolute}
+            absolute = starts_with ${manifest} "\\"
+        end
+        if not ${absolute}
+            second = substring ${manifest} 1 2
+            absolute = eq ${second} ":"
+        end
+        if not ${absolute}
+            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${manifest}
+        end
     end
 
+    info "📄 Using systems manifest: ${manifest}"
     info "🛠️ Creating backend systems..."
     debug "🚀 tdx-system create --sys-manifest ${manifest} -f"
     exec --fail-on-error tdx-system create --sys-manifest ${manifest} -f
@@ -291,8 +314,16 @@ script = [
             echo "Options:"
             echo "  --systems-manifest <FILE>  Path to the systems manifest YAML."
             echo "                             Default: ${BACKENDS_SYSTEMS_MANIFEST}"
+            echo "                             When no argument is given, the"
+            echo "                             TD_OVERRIDE_SYSTEMS_MANIFEST environment"
+            echo "                             variable, if set, selects a file by name"
+            echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
             echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
             echo "                             Default: ${BACKENDS_DOMAINS_MANIFEST}"
+            echo "                             When no argument is given, the"
+            echo "                             TD_OVERRIDE_DOMAINS_MANIFEST environment"
+            echo "                             variable, if set, selects a file by name"
+            echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
             echo ""
             exit 0
         end
@@ -316,9 +347,28 @@ script = [
     end
     manifest = trim ${manifest}
     if is_empty ${manifest}
-        manifest = set ${BACKENDS_SYSTEMS_MANIFEST}
+        override = get_env TD_OVERRIDE_SYSTEMS_MANIFEST
+        override = trim ${override}
+        if is_empty ${override}
+            manifest = set ${BACKENDS_SYSTEMS_MANIFEST}
+        else
+            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${override}
+        end
+    else
+        absolute = starts_with ${manifest} "/"
+        if not ${absolute}
+            absolute = starts_with ${manifest} "\\"
+        end
+        if not ${absolute}
+            second = substring ${manifest} 1 2
+            absolute = eq ${second} ":"
+        end
+        if not ${absolute}
+            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${manifest}
+        end
     end
 
+    info "📄 Using systems manifest: ${manifest}"
     info "💥 Destroying backend systems..."
     debug "🚀 tdx-system destroy --sys-manifest ${manifest}"
     exec --fail-on-error tdx-system destroy --sys-manifest ${manifest}
@@ -454,6 +504,10 @@ script = [
             echo "Options:"
             echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
             echo "                             Default: ${BACKENDS_DOMAINS_MANIFEST}"
+            echo "                             When no argument is given, the"
+            echo "                             TD_OVERRIDE_DOMAINS_MANIFEST environment"
+            echo "                             variable, if set, selects a file by name"
+            echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
             echo ""
             exit 0
         end
@@ -475,9 +529,28 @@ script = [
     end
     manifest = trim ${manifest}
     if is_empty ${manifest}
-        manifest = set ${BACKENDS_DOMAINS_MANIFEST}
+        override = get_env TD_OVERRIDE_DOMAINS_MANIFEST
+        override = trim ${override}
+        if is_empty ${override}
+            manifest = set ${BACKENDS_DOMAINS_MANIFEST}
+        else
+            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${override}
+        end
+    else
+        absolute = starts_with ${manifest} "/"
+        if not ${absolute}
+            absolute = starts_with ${manifest} "\\"
+        end
+        if not ${absolute}
+            second = substring ${manifest} 1 2
+            absolute = eq ${second} ":"
+        end
+        if not ${absolute}
+            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${manifest}
+        end
     end
 
+    info "📄 Using domains manifest: ${manifest}"
     info "🛠️ Creating backend domains..."
     debug "🚀 tdx-domain create --domain-manifest ${manifest} -f"
     exec --fail-on-error tdx-domain create --domain-manifest ${manifest} -f
@@ -519,6 +592,10 @@ script = [
             echo "Options:"
             echo "  --domains-manifest <FILE>  Path to the domains manifest YAML."
             echo "                             Default: ${BACKENDS_DOMAINS_MANIFEST}"
+            echo "                             When no argument is given, the"
+            echo "                             TD_OVERRIDE_DOMAINS_MANIFEST environment"
+            echo "                             variable, if set, selects a file by name"
+            echo "                             from ${BACKENDS_MANIFEST_FOLDER}."
             echo ""
             exit 0
         end
@@ -540,9 +617,28 @@ script = [
     end
     manifest = trim ${manifest}
     if is_empty ${manifest}
-        manifest = set ${BACKENDS_DOMAINS_MANIFEST}
+        override = get_env TD_OVERRIDE_DOMAINS_MANIFEST
+        override = trim ${override}
+        if is_empty ${override}
+            manifest = set ${BACKENDS_DOMAINS_MANIFEST}
+        else
+            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${override}
+        end
+    else
+        absolute = starts_with ${manifest} "/"
+        if not ${absolute}
+            absolute = starts_with ${manifest} "\\"
+        end
+        if not ${absolute}
+            second = substring ${manifest} 1 2
+            absolute = eq ${second} ":"
+        end
+        if not ${absolute}
+            manifest = set ${BACKENDS_MANIFEST_FOLDER}/${manifest}
+        end
     end
 
+    info "📄 Using domains manifest: ${manifest}"
     info "💥 Destroying backend domains..."
     debug "🚀 tdx-domain destroy --domain-manifest ${manifest}"
     exec --fail-on-error tdx-domain destroy --domain-manifest ${manifest}

@@ -67,6 +67,11 @@ script = [
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets --tests"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets --tests
 
+    # TDTRACE: run a single td-shuttle test with output uncaptured so the
+    # 🔎TDTRACE🔎 lines surface early. Non-fatal; remove with the traces.
+    debug "🔎TDTRACE🔎 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} transporter::files_importer::tests::test_import_file_info_name_csv -- --nocapture"
+    exec ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} transporter::files_importer::tests::test_import_file_info_name_csv -- --nocapture
+
     if eq ${td-cargo} "cross"
         debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features}"
         exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features}
@@ -101,6 +106,12 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+
+    skip_test_logging = get_env TD_SKIP_TEST_LOGGING
+    if eq ${skip_test_logging} "true"
+        info "🚫 Skipping the logging test task"
+        code = exit 0
+    end
 
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets --tests"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets --tests
@@ -139,6 +150,12 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+
+    skip_test_tower = get_env TD_SKIP_TEST_TOWER
+    if eq ${skip_test_tower} "true"
+        info "🚫 Skipping the tower metadata test task"
+        code = exit 0
+    end
 
     debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets --tests"
     exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_tower_metadata} --all-targets --tests

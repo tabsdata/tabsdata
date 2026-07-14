@@ -44,6 +44,17 @@ fn terminate_process_kills_descendant_in_own_process_group() {
     use std::os::unix::process::CommandExt;
     use std::process::{Command as SystemCommand, Stdio};
 
+    if SystemCommand::new(PYTHON_BINARY)
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_err()
+    {
+        eprintln!("Skipping test; the '{PYTHON_BINARY}' interpreter is not available");
+        return;
+    }
+
     let marker = std::env::temp_dir().join(format!(
         "td_terminate_process_marker_{}",
         std::process::id()

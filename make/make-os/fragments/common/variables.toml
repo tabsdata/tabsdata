@@ -19,6 +19,25 @@ script = [
         info "🚆 _____ The Rust tests will run in parallel mode"
         set_env TD_TEST_RS_PARALLEL true
     end
+
+    aiagent_source_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-ag/src/main/python/tabsdata/ag/resources/registry/_generated"
+    aiagent_source_baseline = set "${aiagent_source_folder}/baseline.jsonl"
+    aiagent_source_embeddings = set "${aiagent_source_folder}/baseline_embeddings.jsonl"
+    aiagent_baseline_exists = is_file ${aiagent_source_baseline}
+    aiagent_embeddings_exists = is_file ${aiagent_source_embeddings}
+    if ${aiagent_baseline_exists} and ${aiagent_embeddings_exists}
+        aiagent_target_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/aiagent"
+        mkdir ${aiagent_target_folder}
+        aiagent_target_baseline = set "${aiagent_target_folder}/baseline.jsonl"
+        aiagent_target_embeddings = set "${aiagent_target_folder}/baseline_embeddings.jsonl"
+        cp ${aiagent_source_baseline} ${aiagent_target_baseline}
+        cp ${aiagent_source_embeddings} ${aiagent_target_embeddings}
+        set_env TD_AIAGENT_BASELINE_FILE ${aiagent_target_baseline}
+        set_env TD_AIAGENT_BASELINE_EMBEDDINGS_FILE ${aiagent_target_embeddings}
+        info "🤖 Staged the AI agent baseline artifacts into ${aiagent_target_folder}"
+    else
+        info "🤖 Skipping AI agent baseline staging; artifacts not found under ${aiagent_source_folder}"
+    end
     ''']
 
 [tasks.__os__set_mode_test_py]

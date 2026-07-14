@@ -108,6 +108,7 @@ url = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 serde_yaml = { workspace = true }
+serial_test = { workspace = true }
 td-database = { workspace = true, features = ["td-test"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

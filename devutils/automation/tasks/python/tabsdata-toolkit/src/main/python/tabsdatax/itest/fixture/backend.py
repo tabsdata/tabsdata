@@ -33,9 +33,11 @@ disagree:
   even when only a helper fixture reads it; and
 * every backend **reached** anywhere in the fixture graph must be declared.
 
-Env: ``TD_TEST_ON_MISSING_BACKEND`` = ``skip`` | ``fail`` (default) when a
-descriptor is absent; ``TD_TEST_SKIP_BACKENDS`` = comma-separated vendor
-``system_type``s to skip even when present.
+Env, split per family so systems and domains are governed independently:
+``TD_TEST_ON_MISSING_SYSTEM`` / ``TD_TEST_ON_MISSING_DOMAIN`` = ``skip`` |
+``fail`` (default) when a descriptor is absent; ``TD_TEST_SKIP_SYSTEMS`` /
+``TD_TEST_SKIP_DOMAINS`` = comma-separated backend ``name``s to skip even when
+present.
 """
 
 from __future__ import annotations
@@ -49,12 +51,20 @@ from pydantic import ValidationError
 
 from ..tdksystems import crypto, descriptor, store
 
-ON_MISSING_ENV = "TD_TEST_ON_MISSING_BACKEND"  # skip | fail (default: fail)
-SKIP_ENV = "TD_TEST_SKIP_BACKENDS"  # comma-separated types to skip
-
 SYSTEM = "system"
 DOMAIN = "domain"
 _DESCRIPTOR_ROLE = {SYSTEM: "sys", DOMAIN: "env"}
+
+# skip | fail (default: fail) when a descriptor is absent, per family.
+ON_MISSING_ENV = {
+    SYSTEM: "TD_TEST_ON_MISSING_SYSTEM",
+    DOMAIN: "TD_TEST_ON_MISSING_DOMAIN",
+}
+# comma-separated backend `name`s to skip even when present, per family.
+SKIP_ENV = {
+    SYSTEM: "TD_TEST_SKIP_SYSTEMS",
+    DOMAIN: "TD_TEST_SKIP_DOMAINS",
+}
 
 MARKER = "tabsdata_backend"
 
@@ -75,15 +85,17 @@ class Domain:
     system_type: ClassVar[str]
 
 
-def _on_missing() -> str:
-    mode = (os.environ.get(ON_MISSING_ENV) or "fail").strip().lower()
+def _on_missing(family: str) -> str:
+    env = ON_MISSING_ENV[family]
+    mode = (os.environ.get(env) or "fail").strip().lower()
     if mode not in ("skip", "fail"):
-        pytest.fail(f"${ON_MISSING_ENV} must be 'skip' or 'fail' (got {mode!r})")
+        pytest.fail(f"${env} must be 'skip' or 'fail' (got {mode!r})")
     return mode
 
 
-def _skip_types() -> set[str]:
-    return {t.strip() for t in os.environ.get(SKIP_ENV, "").split(",") if t.strip()}
+def _skip_names(family: str) -> set[str]:
+    env = SKIP_ENV[family]
+    return {t.strip() for t in os.environ.get(env, "").split(",") if t.strip()}
 
 
 _CACHE: dict[tuple[str, type], object] = {}  # (descriptor path, cls) -> built
@@ -104,18 +116,19 @@ def load(name: str, cls: type):
     # secret always from $TD_BACKENDS_CRYPTO_KEY; missing / skip re-checked per call.
     crypto.use_secret_env(None)
     if not path.exists():
-        if _on_missing() == "skip":
+        if _on_missing(backend_type) == "skip":
             pytest.skip(
-                f"{backend_type} {name!r} not found at {path} (${ON_MISSING_ENV}=skip)"
+                f"Provisioned {backend_type} {name!r} was not found at {path}, "
+                f"so this test is skipped (${ON_MISSING_ENV[backend_type]}=skip)."
             )
         pytest.fail(
-            f"{backend_type} {name!r} not found at {path} "
-            f"(set ${ON_MISSING_ENV}=skip to skip instead)"
+            f"Provisioned {backend_type} {name!r} was not found at {path}. "
+            f"Set ${ON_MISSING_ENV[backend_type]}=skip to skip instead of fail."
         )
-    if system_type in _skip_types():
+    if name in _skip_names(backend_type):
         pytest.skip(
-            f"{backend_type} {name!r} (system_type {system_type!r}) "
-            f"skipped via ${SKIP_ENV}"
+            f"Requested {backend_type} {name!r} is listed in "
+            f"${SKIP_ENV[backend_type]}, so this test is skipped."
         )
 
     key = (str(path), cls)

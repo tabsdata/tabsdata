@@ -135,6 +135,17 @@ fn create_file_import_instructions(
 ) -> Result<Vec<crate::transporter::logic::FileImportInstructions>, TransporterError> {
     let importer_options: Arc<ImporterOptions> = Arc::new(import_request.try_into()?);
     let base_path = base_url(import_request.source()).path().to_string();
+    td_common::troubleshoot_rs!(
+        "[path] [create_file_import_instructions] Value of base_url: {}",
+        base_url(import_request.source())
+    );
+    td_common::troubleshoot_rs!(
+        "[path] [create_file_import_instructions] Value of base_path: {base_path:?}"
+    );
+    td_common::troubleshoot_rs!(
+        "[path] [create_file_import_instructions] Value of importer_options.to(): {}",
+        importer_options.to()
+    );
 
     files_to_import
         .into_iter()
@@ -148,8 +159,21 @@ fn create_file_import_instructions(
             let path = url.path();
             let relative = path.strip_prefix(base_path.as_str()).unwrap_or(path);
             let relative = relative.replace('\\', "/");
+            td_common::troubleshoot_rs!(
+                "[path] [create_file_import_instructions] Value of file url: {url}"
+            );
+            td_common::troubleshoot_rs!(
+                "[path] [create_file_import_instructions] Value of url path: {path:?}"
+            );
+            td_common::troubleshoot_rs!(
+                "[path] [create_file_import_instructions] Value of relative path: {relative:?}"
+            );
             meta.location = ObjectStorePath::parse(&relative)
                 .unwrap_or_else(|_| ObjectStorePath::from(relative.as_str()));
+            td_common::troubleshoot_rs!(
+                "[path] [create_file_import_instructions] Value of meta location: {}",
+                meta.location
+            );
             (idx, meta)
         })
         .map(crate::transporter::logic::take_files_limit())
@@ -1186,6 +1210,12 @@ mod tests {
 
         let test_dir = td_common::tdtestdir!();
         let base_url = Url::from_directory_path(&test_dir).unwrap();
+        td_common::troubleshoot_rs!(
+            "[path] [test_import_with_file_info] Value of test_dir: {test_dir:?}"
+        );
+        td_common::troubleshoot_rs!(
+            "[path] [test_import_with_file_info] Value of base_url: {base_url}"
+        );
         let from_base = Location::LocalFile {
             url: base_url.clone(),
         };
@@ -1194,6 +1224,18 @@ mod tests {
         };
 
         let from_file = from_base.set_file(&id().to_string()).unwrap();
+        td_common::troubleshoot_rs!(
+            "[path] [test_import_with_file_info] Value of from_base url: {}",
+            from_base.url()
+        );
+        td_common::troubleshoot_rs!(
+            "[path] [test_import_with_file_info] Value of to_base url: {}",
+            to_base.url()
+        );
+        td_common::troubleshoot_rs!(
+            "[path] [test_import_with_file_info] Value of from_file url: {}",
+            from_file.url()
+        );
 
         let col_int = Int64Chunked::from_iter((0i64..10i64).map(Some))
             .into_series()
@@ -1288,6 +1330,9 @@ mod tests {
             .and_then(|mut s| s.next_back())
             .unwrap()
             .to_string();
+        td_common::troubleshoot_rs!(
+            "[path] [test_import_with_file_info] Value of from_filename: {from_filename:?}"
+        );
         let meta = ObjectMeta {
             location: ObjectStorePath::parse(from_filename.as_str()).unwrap(),
             last_modified: Utc::now(),
@@ -1295,6 +1340,14 @@ mod tests {
             e_tag: Some("e_tag".to_string()),
             version: Some("v1".to_string()),
         };
+        td_common::troubleshoot_rs!(
+            "[path] [test_import_with_file_info] Value of meta location: {}",
+            meta.location
+        );
+        td_common::troubleshoot_rs!(
+            "[path] [test_import_with_file_info] Value of files url: {}",
+            from_file.url()
+        );
         let files: Vec<(Url, ObjectMeta)> = vec![(from_file.url().clone(), meta)];
 
         let response = FilesImporter::import(&request, files).await.unwrap();

@@ -1,0 +1,81 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+- name: azureblob
+  type: azureblob
+  container:
+    env: AZ__CONTAINER
+  account-name:
+    env: AZ__ACCOUNT_NAME
+  account-key:
+    env: AZ__ACCOUNT_KEY
+  sys-path:
+    env: AZ__SYS_PATH
+- name: bigquery
+  type: bigquery
+  project:
+    env: BIGQUERY__PROJECT
+  service-account-key:
+    env: BIGQUERY__SERVICE_ACCOUNT_KEY
+  bucket:
+    env: BIGQUERY__BUCKET
+  sys-path:
+    env: BIGQUERY__SYS_PATH
+- name: databricks
+  type: databricks
+  host:
+    env: DATABRICKS__HOST
+  token:
+    env: DATABRICKS__TOKEN
+  warehouse-id:
+    env: DATABRICKS__WAREHOUSE_ID
+  catalog:
+    env: DATABRICKS__CATALOG
+  volume:
+    env: DATABRICKS__VOLUME
+- name: fs
+  type: fs
+  sys-path: target/backends/fs
+- name: gcs
+  type: gcs
+  bucket:
+    env: GCS__BUCKET
+  service-account-key:
+    env: GCS__SERVICE_ACCOUNT_KEY
+  sys-path:
+    env: GCS__SYS_PATH
+- name: s3
+  type: s3
+  bucket:
+    env: S3__BUCKET
+  region:
+    env: S3__REGION
+  access-key:
+    env: S3__ACCESS_KEY
+  secret-key:
+    env: S3__SECRET_KEY
+  sys-path:
+    env: S3__SYS_PATH
+- name: salesforce
+  type: salesforce
+  url:
+    env: SALESFORCE__URL
+  username:
+    env: SALESFORCE__USERNAME
+  password:
+    env: SALESFORCE__PASSWORD
+  token:
+    env: SALESFORCE__TOKEN
+- name: snowflake
+  type: snowflake
+  account:
+    env: SNOWFLAKE__ACCOUNT
+  username:
+    env: SNOWFLAKE__USERNAME
+  pat:
+    env: SNOWFLAKE__PAT
+  warehouse:
+    env: SNOWFLAKE__WAREHOUSE
+  database:
+    env: SNOWFLAKE__DATABASE

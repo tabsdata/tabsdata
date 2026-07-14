@@ -84,6 +84,9 @@ normalized_licenses = {
     "Apache-2.0 OR MIT OR Zlib": "Apache License Version 2.0 or MIT License or Zlib License",                                                                                                  # noqa: E231,E241,E501
     "Apache-2.0 OR MIT": "Apache License Version 2.0 or MIT License",                                                                                                                          # noqa: E231,E241,E501
     "Apache-2.0 WITH LLVM-exception": "Apache License Version 2.0 with LLVM Exception",                                                                                                        # noqa: E231,E241,E501
+    "Apache-2.0;; Apache-2.0 WITH LLVM-exception;; BSD-2-Clause;; BSD-3-Clause;; BSL-1.0;; MIT": "Apache License Version 2.0 or Apache License Version 2.0 with LLVM Exception or "            # noqa: E231,E241,E501
+        "BSD Simplified License (BSD-2-Clause) or BSD Revised License (BSD-3-Clause) or "                                                                                                      # noqa: E231,E241,E501
+        "Boost Software License Version 1.0 or MIT License",                                                                                                                                   # noqa: E231,E241,E501
     "APACHE-2.0;; BSD 3-CLAUSE": "Apache License Version 2.0 or BSD Revised License (BSD-3-Clause)",                                                                                           # noqa: E231,E241,E501
     "APACHE-2.0;; BSD-2-CLAUSE": "Apache License Version 2.0 or BSD Simplified License (BSD-2-Clause)",                                                                                        # noqa: E231,E241,E501
     "APACHE-2.0;; BSD-3-CLAUSE": "Apache License Version 2.0 or BSD Revised License (BSD-3-Clause)",                                                                                           # noqa: E231,E241,E501

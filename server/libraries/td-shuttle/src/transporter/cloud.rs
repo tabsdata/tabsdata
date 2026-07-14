@@ -8,7 +8,7 @@ use crate::transporter::retry::with_retry;
 use bytes::Bytes;
 use object_store::path::{Path, Path as ObjectPath};
 use object_store::{ObjectStore, ObjectStoreExt, PutPayload};
-use polars::prelude::{PlPath, PolarsError, PolarsResult, SinkTarget, SpecialEq};
+use polars::prelude::{PolarsError, PolarsResult, SinkTarget, SpecialEq};
 use polars_io::prelude::sync_on_close::SyncOnCloseType;
 use polars_io::utils::file::DynWriteable;
 use std::collections::HashMap;
@@ -110,37 +110,8 @@ pub fn create_sink_target(
     url: &Url,
     cloud_config: &HashMap<String, String>,
 ) -> PolarsResult<SinkTarget> {
-    match url.scheme() {
-        "file" => create_local_sink_target(url),
-        _ => create_cloud_sink_target(url, cloud_config),
-    }
-}
-
-fn create_local_sink_target(url: &Url) -> PolarsResult<SinkTarget> {
-    let target = if url.scheme() == "file" {
-        // Decode the percent-encoded URL back to the real filesystem path
-        // (e.g. a space encoded as %20) and resolve the Windows drive letter,
-        // so Polars does not write to a path whose name literally contains
-        // the encoded sequence.
-        let path = url.to_file_path().map_err(|()| {
-            PolarsError::ComputeError(format!("Invalid local file URL: {url}").into())
-        })?;
-        let path_str = path.to_str().ok_or_else(|| {
-            PolarsError::ComputeError(format!("Non-UTF-8 local file path: {url}").into())
-        })?;
-        SinkTarget::Path(PlPath::new(path_str))
-    } else {
-        SinkTarget::Path(PlPath::new(url.as_str()))
-    };
-    Ok(target)
-}
-
-fn create_cloud_sink_target(
-    url: &Url,
-    cloud_config: &HashMap<String, String>,
-) -> PolarsResult<SinkTarget> {
     let (store, path) = create_store(url, cloud_config)
-        .map_err(|e| PolarsError::ComputeError(format!("Failed to parse cloud URL: {e}").into()))?;
+        .map_err(|e| PolarsError::ComputeError(format!("Failed to parse URL: {e}").into()))?;
     let writer: Box<dyn DynWriteable> = Box::new(ObjectStoreWriter::new(Arc::from(store), path));
     let target = SinkTarget::Dyn(SpecialEq::new(Arc::new(Mutex::new(Some(writer)))));
     Ok(target)

@@ -12,6 +12,7 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    set_env TD_TROUBLESHOOT_RS true
     set_env TD_FAIL_FAST_RS false
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -19,6 +20,13 @@ script = [
             info "⌛️ Fail-Fast enabled. Groups of Rust tests will execute until some group has failures."
             set_env TD_FAIL_FAST_RS true
         end
+    end
+
+    shared_pg_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/td-test-pg"
+    shared_pg_exists = is_path_exists ${shared_pg_folder}
+    if ${shared_pg_exists}
+        info "🧹 Removing the stale shared test PostgreSQL folder: ${shared_pg_folder}"
+        rm -r ${shared_pg_folder}
     end
     test_rs_parallel = get_env TD_TEST_RS_PARALLEL
     if eq ${test_rs_parallel} "true"
@@ -37,6 +45,18 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+
+    unset_env TD_TROUBLESHOOT_RS
+
+    shared_pg_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/td-test-pg"
+    shared_pg_exists = is_path_exists ${shared_pg_folder}
+    if ${shared_pg_exists}
+        info "🧹 Removing the shared test PostgreSQL folder: ${shared_pg_folder}"
+        removed = rm -r ${shared_pg_folder}
+        if not ${removed}
+            info "🧹 Could not remove the shared test PostgreSQL folder now; it will be recreated on the next run"
+        end
+    end
 
     exit_code = get_env TD_TESTS_CODE_RS
     if not eq ${exit_code} "0"

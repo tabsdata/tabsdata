@@ -210,3 +210,14 @@ pub fn check_flag_env(env: &str) -> bool {
             .unwrap_or(false)
     })
 }
+
+pub const TROUBLESHOOT_RS_ENV: &str = "TD_TROUBLESHOOT_RS";
+
+#[macro_export]
+macro_rules! troubleshoot_rs {
+    ($($arg:tt)*) => {
+        if $crate::env::check_flag_env($crate::env::TROUBLESHOOT_RS_ENV) {
+            eprintln!($($arg)*);
+        }
+    };
+}

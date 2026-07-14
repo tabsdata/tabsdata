@@ -146,9 +146,20 @@ pub async fn ensure_started() {
                 // the connect-probe above, not by a possibly-stale `postmaster.pid`;
                 // its boot is Drop-safe, so even a lost race leaves a peer's server
                 // untouched.
-                crate::server::boot_detached(&embedded_config())
-                    .await
-                    .expect("boot shared test postgres");
+                if let Err(error) = crate::server::boot_detached(&embedded_config()).await {
+                    let start_log = data_dir().join("start.log");
+                    match std::fs::read_to_string(&start_log) {
+                        Ok(contents) => td_common::troubleshoot_rs!(
+                            "[postgres] [ensure_started] Boot failed; contents of {}:\n{contents}",
+                            start_log.display()
+                        ),
+                        Err(read_error) => td_common::troubleshoot_rs!(
+                            "[postgres] [ensure_started] Boot failed; unable to read {}: {read_error}",
+                            start_log.display()
+                        ),
+                    }
+                    panic!("boot shared test postgres: {error}");
+                }
                 // `pg_ctl start -w` already waits for readiness, but confirm via a
                 // real connection (and tolerate any final lag).
                 let mut accepting = false;
@@ -158,6 +169,29 @@ pub async fn ensure_started() {
                         break;
                     }
                     tokio::time::sleep(BOOT_RETRY).await;
+                }
+                if !accepting {
+                    let start_log = data_dir().join("start.log");
+                    match std::fs::read_to_string(&start_log) {
+                        Ok(contents) => td_common::troubleshoot_rs!(
+                            "[postgres] [ensure_started] Contents of {}:\n{contents}",
+                            start_log.display()
+                        ),
+                        Err(error) => td_common::troubleshoot_rs!(
+                            "[postgres] [ensure_started] Unable to read {}: {error}",
+                            start_log.display()
+                        ),
+                    }
+                    let pid_file = data_dir().join("postmaster.pid");
+                    match std::fs::read_to_string(&pid_file) {
+                        Ok(contents) => {
+                            td_common::troubleshoot_rs!("[postgres] [ensure_started] Contents of postmaster.pid:\n{contents}")
+                        }
+                        Err(error) => td_common::troubleshoot_rs!(
+                            "[postgres] [ensure_started] Unable to read {}: {error}",
+                            pid_file.display()
+                        ),
+                    }
                 }
                 assert!(
                     accepting,
