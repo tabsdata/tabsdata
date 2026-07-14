@@ -31,7 +31,7 @@ from tabsdatak.conn.clickhouse._statuses import BulkLoadStatus
 from tabsdatak.conn.clickhouse._validation import CLICKHOUSE_FQN_DEF
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import fqn, unfqn
+from tabsdatak.conn.common._validation import complete_levels, fqn, unfqn
 
 logger = logging.getLogger(__name__)
 
@@ -238,8 +238,8 @@ def clickhouse_fqn_parts(table_name: str, default_db: str) -> tuple[str, str]:
     queries against ``system.columns`` / ``system.tables``.
     """
     parts = unfqn(table_name, CLICKHOUSE_FQN_DEF, total_parts=2)
-    db = parts[0] if parts[0] is not None else default_db
-    return db, parts[1]
+    db, tbl = complete_levels(parts, [default_db, None])
+    return db, tbl
 
 
 def clickhouse_fqn(table_name: str, default_db: str) -> str:

@@ -153,6 +153,52 @@ def test_dest_plugin_write_out_creates_and_appends(fresh_bigquery, work_dir):
             client.close()
 
 
+def test_dest_plugin_bare_table_uses_conn_dataset(fresh_bigquery, work_dir):
+    """1-part bare table -- resolved to ``project.dataset.table`` from
+    the connection's ``project`` / ``dataset`` defaults."""
+    cfg = fresh_bigquery
+    table = f"td_bigquery_bare_{uuid.uuid4().hex[:16]}"
+    full = f"{cfg.project}.{cfg.dataset}.{table}"
+
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "name": "alice"}])
+    conn = _conn_from(cfg)
+    dest = BigQueryDest(tables=[f"`{table}`"])
+
+    client = _bq_client(cfg)
+    try:
+        plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
+        rows = list(client.query(f"SELECT id, name FROM `{full}` ORDER BY id"))
+        assert [(r.id, r.name) for r in rows] == [(1, "alice")]
+    finally:
+        try:
+            client.delete_table(full, not_found_ok=True)
+        finally:
+            client.close()
+
+
+def test_dest_plugin_two_part_table_uses_conn_project(fresh_bigquery, work_dir):
+    """2-part ``dataset.table`` -- the project is filled from the
+    connection while the user-supplied dataset is preserved."""
+    cfg = fresh_bigquery
+    table = f"td_bigquery_twopart_{uuid.uuid4().hex[:16]}"
+    full = f"{cfg.project}.{cfg.dataset}.{table}"
+
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 7, "name": "bob"}])
+    conn = _conn_from(cfg)
+    dest = BigQueryDest(tables=[f"`{cfg.dataset}.{table}`"])
+
+    client = _bq_client(cfg)
+    try:
+        plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), conn, dest, [src])
+        rows = list(client.query(f"SELECT id, name FROM `{full}` ORDER BY id"))
+        assert [(r.id, r.name) for r in rows] == [(7, "bob")]
+    finally:
+        try:
+            client.delete_table(full, not_found_ok=True)
+        finally:
+            client.close()
+
+
 def test_dest_plugin_write_out_replace_clears_existing(fresh_bigquery, work_dir):
     cfg = fresh_bigquery
     table = f"td_bigquery_replace_{uuid.uuid4().hex[:16]}"

@@ -186,82 +186,78 @@ def fqn(parts: list[str], spec: FqnDef) -> str:
     return sep.join(quoted)
 
 
-def fqn_complete(
+def complete_levels(
     parts: list[str | None],
-    total_parts: int,
-    *defaults: str,
-) -> list[str]:
-    """Fill in the leading ``None`` slots of ``parts`` with the
-    positional ``defaults`` values, returning a fully-populated list
-    of length ``total_parts`` suitable for feeding to :func:`fqn`.
+    defaults: list[str | None],
+) -> list[str | None]:
+    """Fill the missing upper levels of a parsed hierarchical name from
+    positional connection-level defaults.
 
-    ``parts`` is first normalized to length ``total_parts`` by
-    left-padding with ``None``; then the leading run of ``None``
-    entries is replaced with the ``defaults`` values in order. The
-    typical use case is completing a partially-qualified name from
-    :func:`unfqn` against connection defaults::
+    ``parts`` and ``defaults`` are positionally aligned to the same fixed
+    levels, most-significant first -- e.g. ``[catalog, schema, table]``
+    paired with ``[conn.catalog, conn.schema, None]``. ``parts`` is the
+    output of :func:`unfqn` with ``total_parts=len(defaults)`` (or an
+    equivalent split left-padded with ``None``): the specified levels are
+    a non-``None`` suffix and any missing upper levels are a leading run
+    of ``None``.
 
-        # User wrote ``schema.users``; conn supplies the catalog.
-        parts = unfqn("schema.users", spec, total_parts=3)
-        full = fqn_complete(parts, 3, "main")          # ["main", "schema", "users"]
-        fqn(full, spec)                                 # `main`.`schema`.`users`
+    The leading ``None`` levels are filled *contiguously* -- from the
+    innermost missing level (just above the first specified part) outward
+    toward the most-significant level -- stopping at the first level whose
+    default is ``None``. Filling contiguously, rather than each level
+    independently, guarantees a component is never shifted into the wrong
+    slot: a level is defaulted only once every level below it (down to the
+    specified part) is resolved. A level left unresolved stays ``None``;
+    this function never raises on a missing default. Callers that require
+    a fully-qualified result check the returned list for a leading
+    ``None`` and raise their own typed error.
+
+    Present (non-``None``) parts are never overwritten.
 
     Args:
-        parts: list whose leading entries may be ``None``. Length must
-            not exceed ``total_parts``; ``None`` entries are only
-            permitted in the leading run.
-        total_parts: target length of the returned list.
-        ``*defaults``: replacement values, in order, for the leading
-            ``None`` slots. The number of ``defaults`` must equal the
-            number of leading ``None`` entries after normalization.
+        parts: the parsed levels; missing upper levels are a leading run
+            of ``None``.
+        defaults: per-level default values positionally aligned to
+            ``parts``; ``None`` where no default applies.
+
+    Returns:
+        A new list the same length as ``parts`` with leading ``None``
+        levels filled from ``defaults`` as far as the contiguous run of
+        available defaults reaches.
 
     Raises:
-        ValueError: ``total_parts`` is non-positive; ``parts`` has
-            more entries than ``total_parts``; ``parts`` has a
-            ``None`` entry that is not in the leading run; the count
-            of ``defaults`` does not match the leading-``None`` count;
-            or any default is empty.
+        ValueError: ``parts`` and ``defaults`` differ in length, or a
+            ``None`` appears in ``parts`` after a non-``None`` level
+            (only leading levels may be missing).
     """
-    if total_parts < 1:
+    if len(parts) != len(defaults):
         raise ValueError(
-            f"fqn_complete: total_parts must be a positive integer: {total_parts!r}"
-        )
-    if len(parts) > total_parts:
-        raise ValueError(
-            f"fqn_complete: parts has {len(parts)} entries, exceeds "
-            f"total_parts={total_parts}"
+            f"complete_levels: parts has {len(parts)} entries, "
+            f"defaults has {len(defaults)}"
         )
 
-    padded: list[str | None] = [None] * (total_parts - len(parts)) + list(parts)
+    out = list(parts)
 
-    leading_none_count = 0
-    for v in padded:
-        if v is None:
-            leading_none_count += 1
+    leading = 0
+    for p in out:
+        if p is None:
+            leading += 1
         else:
             break
 
-    for i in range(leading_none_count, total_parts):
-        if padded[i] is None:
+    for i in range(leading, len(out)):
+        if out[i] is None:
             raise ValueError(
-                f"fqn_complete: parts has None at position {i} after the "
-                f"leading run; only leading Nones are allowed: {parts!r}"
+                f"complete_levels: None at position {i} after the leading "
+                f"run; only leading levels may be missing: {parts!r}"
             )
 
-    if len(defaults) != leading_none_count:
-        raise ValueError(
-            f"fqn_complete: expected {leading_none_count} default value(s) "
-            f"to fill the leading None slots, got {len(defaults)}"
-        )
+    for i in range(leading - 1, -1, -1):
+        if defaults[i] is None:
+            break
+        out[i] = defaults[i]
 
-    for i, d in enumerate(defaults):
-        if not d:
-            raise ValueError(f"fqn_complete: default at index {i} is empty")
-
-    # After validation: leading slots filled from defaults, tail copied
-    # from padded (all known to be non-None strings by the check above).
-    tail = [str(v) for v in padded[leading_none_count:]]
-    return list(defaults) + tail
+    return out
 
 
 def unfqn(

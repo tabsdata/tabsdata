@@ -153,6 +153,50 @@ def test_dest_inserts_documents_without_id_field(
     ]
 
 
+def test_dest_bare_collection_uses_uri_default_db(
+    mongodb_config, collection_name, work_dir, tmp_path,
+):
+    """A bare (unqualified) collection resolves against the database
+    named in the connection URI."""
+    # The database in the URI path is the "defaultauthdb" that
+    # ``get_default_database()`` returns; ``authSource=admin`` keeps
+    # authentication against the root user's database (matching the
+    # empty-path URI the other tests use).
+    uri = (
+        f"mongodb://{mongodb_config.host}:{mongodb_config.port}"
+        f"/{mongodb_config.database}"
+        "?authSource=admin&serverSelectionTimeoutMS=15000&connectTimeoutMS=15000"
+    )
+    db_conn = MongoDBDestConn(
+        uri=uri,
+        credentials=UserPassword(
+            user=Secret(mongodb_config.user),
+            password=Secret(mongodb_config.password),
+        ),
+    )
+    parquet = _make_parquet(
+        tmp_path / "bare.parquet",
+        [{"name": "alice", "age": 30}],
+    )
+    dest = MongoDBDest(
+        collections_with_ids=[(collection_name, None)],
+    )
+    try:
+        plugin._MongoDBDestPlugin().write_out(
+            _Ctx(work_dir), db_conn, dest, [Path(parquet)],
+        )
+        docs = _read_collection(db_conn, mongodb_config.database, collection_name)
+        assert docs == [{"name": "alice", "age": 30}]
+    finally:
+        import pymongo
+
+        client = pymongo.MongoClient(plugin._uri_with_credentials(db_conn))
+        try:
+            client[mongodb_config.database].drop_collection(collection_name)
+        finally:
+            client.close()
+
+
 def test_dest_upserts_documents_with_id_field(
     conn, fqn, database, collection_name, work_dir, tmp_path, cleanup,
 ):

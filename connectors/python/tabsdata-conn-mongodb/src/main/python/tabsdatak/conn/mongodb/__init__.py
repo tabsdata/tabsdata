@@ -4,8 +4,9 @@
   (URI without credentials + a :class:`UserPassword` that the
   plugin splices into the URI at write time).
 * :class:`MongoDBDest` -- destination: list of
-  ``(<db>.<collection>, <id_field>|None)`` tuples; one parquet
-  slot per collection. ``id_field=None`` does insert-only;
+  ``([<db>.]<collection>, <id_field>|None)`` tuples; one parquet
+  slot per collection. A bare ``<collection>`` targets the database
+  named in the connection URI. ``id_field=None`` does insert-only;
   ``id_field="user_id"`` does upsert-by-id.
 
 No ``MongoDBSrc`` today.
@@ -84,10 +85,12 @@ class MongoDBDest(Dest):
 
     :param collections_with_ids: List of
         ``(collection_name, id_field)`` tuples; one slot per
-        entry. ``collection_name`` is the destination collection
-        and ``id_field`` is the document field used as the unique
-        id (e.g. ``("users", "user_id")``). Pass ``id_field=None``
-        (e.g. ``("logs", None)``) to let MongoDB auto-generate
+        entry. ``collection_name`` is the destination collection,
+        optionally qualified as ``<database>.<collection>``; a bare
+        ``<collection>`` targets the database named in the connection
+        URI. ``id_field`` is the document field used as the unique
+        id (e.g. ``("mydb.users", "user_id")``). Pass ``id_field=None``
+        (e.g. ``("mydb.logs", None)``) to let MongoDB auto-generate
         ``_id``.
     :param if_collection_exists: ``"append"`` (default) leaves
         existing documents alone; ``"replace"`` drops the

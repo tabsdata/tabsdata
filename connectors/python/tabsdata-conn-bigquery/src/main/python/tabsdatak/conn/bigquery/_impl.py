@@ -92,6 +92,16 @@ def unquote_table_fqn(table: str) -> str:
     return ".".join(p for p in parts if p is not None)
 
 
+def qualify_table_fqn(table: str, project: str | None, dataset: str | None) -> str:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common._validation import complete_levels
+
+    raw = table.split(".")
+    parts: list[str | None] = [None] * (3 - len(raw)) + list(raw)
+    filled = complete_levels(parts, [project, dataset, None])
+    return ".".join(p for p in filled if p is not None)
+
+
 # --- Dest cfg --------------------------------------------------------
 
 
@@ -121,10 +131,14 @@ class BigQueryWriteCfg:
         # from the upstream input plugin's table list, which the new
         # SPI does not yet surface. The defensive check in
         # ``_plugin.write_out`` raises BIGQUERY_4 in that case.
+        project = _convert(conn.project, str) if conn.project is not None else None
+        dataset = _convert(conn.dataset, str) if conn.dataset is not None else None
         target_tables: list[str] = []
         if dest.tables is not None:
             for t in dest.tables:
-                target_tables.append(unquote_table_fqn(t))
+                target_tables.append(
+                    qualify_table_fqn(unquote_table_fqn(t), project, dataset)
+                )
         return cls(
             conn=conn,
             target_tables=target_tables,

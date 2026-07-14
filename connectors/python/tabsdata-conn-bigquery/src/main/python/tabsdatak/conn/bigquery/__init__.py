@@ -2,9 +2,10 @@
 
 * :class:`BigQueryDestConn` -- per-project BigQuery connection
   (project + GCS staging + GCP credentials).
-* :class:`BigQueryDest` -- destination: list of fully-qualified
-  table names (``project.dataset.table``); one parquet slot per
-  table. Writes go via a GCS staging bucket and a
+* :class:`BigQueryDest` -- destination: list of table names
+  (``[[project.]dataset.]table``, partial names completed from the
+  connection's ``project`` / ``dataset`` defaults); one parquet slot
+  per table. Writes go via a GCS staging bucket and a
   ``load_table_from_uri`` load job.
 
 No ``BigQuerySrc`` today. Credential fields accept ``Secret``
@@ -147,8 +148,10 @@ class BigQueryDestConn(Conn):
 class BigQueryDest(Dest):
     """BigQuery destination — one parquet slot per target table.
 
-    :param tables: Fully-qualified table names
-        (``[project.]dataset.table``). One slot per table.
+    :param tables: Table names (``[[project.]dataset.]table``). A
+        bare ``table`` or ``dataset.table`` is completed from the
+        connection's ``project`` / ``dataset`` defaults. One slot per
+        table.
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"`` (drop + recreate).
     :param schema_evolution: ``"update"`` (default; allow new

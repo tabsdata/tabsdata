@@ -263,12 +263,12 @@ def _quote_ident(name: str) -> str:
 def _qualify(database: str, table: str) -> str:
     r"""Return ``\`db\`.\`tbl\``` -- handling pre-qualified inputs
     (``a.b``) by splitting at the unquoted dot."""
-    from tabsdatak.conn.common._validation import split_fqn
+    from tabsdatak.conn.common._validation import complete_levels, split_fqn
 
-    parts = split_fqn(table, quote="`")
-    if len(parts) == 2:
-        return f"{_quote_ident(parts[0])}.{_quote_ident(parts[1])}"
-    return f"{_quote_ident(database)}.{_quote_ident(parts[0])}"
+    raw = split_fqn(table, quote="`")
+    parts: list[str | None] = [None] * (2 - len(raw)) + list(raw)
+    db, tbl = complete_levels(parts, [database, None])
+    return f"{_quote_ident(db)}.{_quote_ident(tbl)}"
 
 
 def upload_parquet(

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 import pymongo
@@ -139,7 +140,8 @@ class _FakeCollection:
 
 
 class _FakeDatabase:
-    def __init__(self) -> None:
+    def __init__(self, name: str = "") -> None:
+        self.name = name
         self.collections: dict[str, _FakeCollection] = {}
 
     def get_collection(self, name: str) -> _FakeCollection:
@@ -165,16 +167,26 @@ class _FakeClient:
     surface the plugin uses: ``admin.command``, ``client[db]``,
     ``start_session``, ``close``."""
 
-    def __init__(self, ping_raises: Exception | None = None) -> None:
+    def __init__(
+        self,
+        ping_raises: Exception | None = None,
+        default_db: str | None = None,
+    ) -> None:
         self.databases: dict[str, _FakeDatabase] = {}
         self.admin = _FakeAdmin(ping_raises=ping_raises)
         self.session = _FakeSession()
         self.closed = False
+        self._default_db = default_db
 
     def __getitem__(self, db: str) -> _FakeDatabase:
         if db not in self.databases:
-            self.databases[db] = _FakeDatabase()
+            self.databases[db] = _FakeDatabase(db)
         return self.databases[db]
+
+    def get_default_database(self, default: Any = None) -> Any:
+        if self._default_db is None:
+            return default
+        return self[self._default_db]
 
     def start_session(self) -> _FakeSession:
         return self.session
@@ -387,7 +399,8 @@ def test_write_out_raises_mongodb_22_on_bare_collection_name(
     parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
     dest = MongoDBDest(
         # "users" without a leading database -- legal as a collection
-        # name validator-wise, but not legal at runtime.
+        # name validator-wise, and not resolvable at runtime because
+        # this connection URI carries no default database.
         collections_with_ids=[("users", None)],
     )
     with pytest.raises(MongoDBRuntimeException) as ei:
@@ -395,6 +408,20 @@ def test_write_out_raises_mongodb_22_on_bare_collection_name(
             _Ctx(work_dir), _bare_conn(), dest, [parquet],
         )
     assert ei.value.api_error is MongodbErrorCode.MONGODB_22
+
+
+def test_write_out_bare_collection_uses_uri_default_db(monkeypatch, work_dir):
+    client = _install_client(monkeypatch, _FakeClient(default_db="app"))
+    parquet = _make_parquet(work_dir / "u.parquet", [{"name": "alice"}])
+    dest = MongoDBDest(
+        # Bare "users" -- resolved against the URI's default database.
+        collections_with_ids=[("users", None)],
+    )
+
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+
+    coll = client["app"].collections["users"]
+    assert len(coll.bulk_write_calls) == 1
 
 
 def test_write_out_raises_mongodb_21_when_id_field_missing(
@@ -536,19 +563,35 @@ def test_pymongo_kwargs_strips_prefix():
 
 
 def test_split_collection_ok():
-    assert plugin._split_collection("app.users") == ("app", "users")
+    assert plugin._split_collection("app.users", None) == ("app", "users")
 
 
-def test_split_collection_rejects_bare_name():
+def test_split_collection_bare_uses_default_db():
+    assert plugin._split_collection("users", "app") == ("app", "users")
+
+
+def test_split_collection_qualified_overrides_default_db():
+    assert plugin._split_collection("db2.users", "app") == ("db2", "users")
+
+
+def test_split_collection_rejects_bare_name_without_default_db():
     with pytest.raises(MongoDBRuntimeException) as ei:
-        plugin._split_collection("users")
+        plugin._split_collection("users", None)
     assert ei.value.api_error is MongodbErrorCode.MONGODB_22
 
 
 def test_split_collection_rejects_empty_db():
     with pytest.raises(MongoDBRuntimeException) as ei:
-        plugin._split_collection(".users")
+        plugin._split_collection(".users", "app")
     assert ei.value.api_error is MongodbErrorCode.MONGODB_22
+
+
+def test_default_database_name_from_uri():
+    assert plugin._default_database_name(_FakeClient(default_db="app")) == "app"
+
+
+def test_default_database_name_none_when_uri_has_no_db():
+    assert plugin._default_database_name(_FakeClient()) is None
 
 
 # ---------------------------------------------------------------------------

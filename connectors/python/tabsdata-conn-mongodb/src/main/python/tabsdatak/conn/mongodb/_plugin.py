@@ -130,19 +130,27 @@ def _build_client(conn: MongoDBDestConn) -> Any:
 # --- Collection helpers ----------------------------------------------
 
 
-def _split_collection(value: str) -> tuple[str, str]:
-    """Split ``"db.collection"`` into ``(db, collection)``.
+def _split_collection(value: str, default_db: str | None) -> tuple[str, str]:
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common._validation import complete_levels
 
-    A bare collection without a leading ``database.`` is rejected with
-    ``MONGODB_22`` -- a write target must be fully qualified so the
-    plugin knows which database to address.
-    """
-    if "." not in value:
-        raise MongodbErrorCode.MONGODB_22.exception(value=value)
-    db, _, coll = value.partition(".")
+    if "." in value:
+        head, _, tail = value.partition(".")
+        parts: list[str | None] = [head, tail]
+    else:
+        parts = [None, value]
+    db, coll = complete_levels(parts, [default_db, None])
     if not db or not coll:
         raise MongodbErrorCode.MONGODB_22.exception(value=value)
     return db, coll
+
+
+def _default_database_name(client: Any) -> str | None:
+    try:
+        db = client.get_default_database(default=None)
+    except Exception:
+        return None
+    return db.name if db is not None else None
 
 
 def _ensure_clean_collection(collection: "Collection") -> None:
@@ -206,6 +214,7 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
 
         logger.debug("mongodb: establishing pymongo client")
         client = _build_client(conn)
+        default_db = _default_database_name(client)
         total = len(dest.collections_with_ids)
         try:
             session_cm = client.start_session()
@@ -229,6 +238,7 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
                         session=session if dest.use_trxs else None,
                         dest=dest,
                         collection_fqn=collection_fqn,
+                        default_db=default_db,
                         id_field=id_field,
                         table=table,
                     )
@@ -254,11 +264,12 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
         session: "ClientSession | None",
         dest: MongoDBDest,
         collection_fqn: str,
+        default_db: str | None,
         id_field: str | None,
         table: TableFileSpec,
     ) -> None:
 
-        db_name, coll_name = _split_collection(collection_fqn)
+        db_name, coll_name = _split_collection(collection_fqn, default_db)
         database = client[db_name]
         collection = database.get_collection(coll_name)
 

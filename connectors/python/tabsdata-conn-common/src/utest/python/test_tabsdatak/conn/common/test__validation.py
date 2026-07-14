@@ -205,93 +205,86 @@ def test_fqn_rejects_empty_element():
 
 
 # ---------------------------------------------------------------------------
-# _validation.fqn_complete -- fill leading None slots with defaults
+# _validation.complete_levels -- contiguous fill of leading missing levels
 # ---------------------------------------------------------------------------
 
 
-def test_fqn_complete_fills_single_leading_none():
-    from tabsdatak.conn.common._validation import fqn_complete
-    assert fqn_complete([None, "schema", "users"], 3, "main") == [
+def test_complete_levels_fills_single_leading_none():
+    from tabsdatak.conn.common._validation import complete_levels
+    assert complete_levels([None, "schema", "users"], ["main", None, None]) == [
         "main", "schema", "users",
     ]
 
 
-def test_fqn_complete_fills_multiple_leading_nones():
-    from tabsdatak.conn.common._validation import fqn_complete
-    assert fqn_complete([None, None, "users"], 3, "main", "default") == [
-        "main", "default", "users",
+def test_complete_levels_fills_multiple_leading_nones():
+    from tabsdatak.conn.common._validation import complete_levels
+    assert complete_levels(
+        [None, None, "users"], ["main", "default", None]
+    ) == ["main", "default", "users"]
+
+
+def test_complete_levels_no_op_when_already_fully_qualified():
+    from tabsdatak.conn.common._validation import complete_levels
+    assert complete_levels(["a", "b", "c"], ["x", "y", None]) == ["a", "b", "c"]
+
+
+def test_complete_levels_leaves_partial_when_default_absent():
+    # No default for the missing level -> left None (not raised).
+    from tabsdatak.conn.common._validation import complete_levels
+    assert complete_levels([None, "schema", "users"], [None, None, None]) == [
+        None, "schema", "users",
     ]
 
 
-def test_fqn_complete_left_pads_short_parts_then_fills():
-    # ``parts`` of length 1 against total_parts=3 -> normalized to
-    # ``[None, None, "users"]``, then two defaults fill the leading
-    # Nones in order.
-    from tabsdatak.conn.common._validation import fqn_complete
-    assert fqn_complete(["users"], 3, "main", "default") == [
-        "main", "default", "users",
+def test_complete_levels_stops_at_first_absent_default_no_slot_shift():
+    # THE slot-shift guard: a bare table with an outer default present
+    # but the adjacent (inner) default absent must NOT pull the outer
+    # default down into the inner slot. Contiguous fill stops at the gap.
+    from tabsdatak.conn.common._validation import complete_levels
+    assert complete_levels(
+        [None, None, "users"], ["project", None, None]
+    ) == [None, None, "users"]
+
+
+def test_complete_levels_fills_inner_then_stops_at_outer_gap():
+    from tabsdatak.conn.common._validation import complete_levels
+    # Inner default present, outer absent -> fill inner only.
+    assert complete_levels(
+        [None, None, "users"], [None, "dataset", None]
+    ) == [None, "dataset", "users"]
+
+
+def test_complete_levels_does_not_overwrite_present_part():
+    from tabsdatak.conn.common._validation import complete_levels
+    assert complete_levels(["given", "b", "c"], ["dflt", None, None]) == [
+        "given", "b", "c",
     ]
 
 
-def test_fqn_complete_no_op_when_already_fully_qualified():
-    from tabsdatak.conn.common._validation import fqn_complete
-    assert fqn_complete(["a", "b", "c"], 3) == ["a", "b", "c"]
-
-
-def test_fqn_complete_round_trip_with_unfqn_and_fqn():
-    from tabsdatak.conn.common._validation import fqn_complete
+def test_complete_levels_round_trip_with_unfqn_and_fqn():
+    from tabsdatak.conn.common._validation import complete_levels
     spec = FqnDef(separator=".", quote="`")
     parsed = unfqn("schema.users", spec, total_parts=3)
-    full = fqn_complete(parsed, 3, "main")
-    assert fqn(full, spec) == "`main`.`schema`.`users`"
+    full = complete_levels(parsed, ["main", None, None])
+    assert fqn([p for p in full if p is not None], spec) == "`main`.`schema`.`users`"
 
 
-def test_fqn_complete_rejects_zero_total_parts():
-    from tabsdatak.conn.common._validation import fqn_complete
-    with pytest.raises(ValueError, match="total_parts must be a positive integer"):
-        fqn_complete(["a"], 0)
+def test_complete_levels_rejects_length_mismatch():
+    from tabsdatak.conn.common._validation import complete_levels
+    with pytest.raises(ValueError, match="parts has 2 entries, defaults has 3"):
+        complete_levels(["a", "b"], ["x", "y", "z"])
 
 
-def test_fqn_complete_rejects_negative_total_parts():
-    from tabsdatak.conn.common._validation import fqn_complete
-    with pytest.raises(ValueError, match="total_parts must be a positive integer"):
-        fqn_complete(["a"], -1)
-
-
-def test_fqn_complete_rejects_parts_longer_than_total_parts():
-    from tabsdatak.conn.common._validation import fqn_complete
-    with pytest.raises(ValueError, match="exceeds total_parts=2"):
-        fqn_complete(["a", "b", "c"], 2)
-
-
-def test_fqn_complete_rejects_none_after_leading_run():
-    from tabsdatak.conn.common._validation import fqn_complete
+def test_complete_levels_rejects_none_after_leading_run():
+    from tabsdatak.conn.common._validation import complete_levels
     with pytest.raises(ValueError, match="None at position 1 after the leading run"):
-        fqn_complete(["a", None, "c"], 3)
+        complete_levels(["a", None, "c"], ["x", "y", "z"])
 
 
-def test_fqn_complete_rejects_too_few_defaults():
-    from tabsdatak.conn.common._validation import fqn_complete
-    with pytest.raises(ValueError, match="expected 2 default value"):
-        fqn_complete([None, None, "users"], 3, "main")
-
-
-def test_fqn_complete_rejects_too_many_defaults():
-    from tabsdatak.conn.common._validation import fqn_complete
-    with pytest.raises(ValueError, match="expected 1 default value"):
-        fqn_complete([None, "schema", "users"], 3, "main", "extra")
-
-
-def test_fqn_complete_rejects_empty_default():
-    from tabsdatak.conn.common._validation import fqn_complete
-    with pytest.raises(ValueError, match="default at index 0 is empty"):
-        fqn_complete([None, "schema", "users"], 3, "")
-
-
-def test_fqn_complete_returns_new_list_not_aliased():
-    from tabsdatak.conn.common._validation import fqn_complete
+def test_complete_levels_returns_new_list_not_aliased():
+    from tabsdatak.conn.common._validation import complete_levels
     parts: list[str | None] = ["a", "b", "c"]
-    out = fqn_complete(parts, 3)
+    out = complete_levels(parts, [None, None, None])
     out.append("mutated")
     assert parts == ["a", "b", "c"]
 

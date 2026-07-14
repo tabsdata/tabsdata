@@ -179,6 +179,70 @@ def test_write_cfg_handles_tables_none():
 
 
 # ---------------------------------------------------------------------------
+# _impl.qualify_table_fqn
+# ---------------------------------------------------------------------------
+
+
+def test_qualify_table_fqn_prefixes_dataset_and_project():
+    assert (
+        impl.qualify_table_fqn("wld_country", "my-project", "analytics")
+        == "my-project.analytics.wld_country"
+    )
+
+
+def test_qualify_table_fqn_prefixes_project_for_dataset_table():
+    assert (
+        impl.qualify_table_fqn("analytics.users", "my-project", "analytics")
+        == "my-project.analytics.users"
+    )
+
+
+def test_qualify_table_fqn_leaves_full_name_unchanged():
+    assert (
+        impl.qualify_table_fqn("other-project.ds.t", "my-project", "analytics")
+        == "other-project.ds.t"
+    )
+
+
+def test_qualify_table_fqn_bare_without_dataset_unchanged():
+    # No dataset default -> nothing to complete; the bare name is left
+    # for the SDK to reject (rather than shifting it into a wrong slot).
+    assert impl.qualify_table_fqn("wld_country", "my-project", None) == "wld_country"
+
+
+def test_qualify_table_fqn_dataset_table_without_project_unchanged():
+    assert impl.qualify_table_fqn("analytics.users", None, None) == "analytics.users"
+
+
+# ---------------------------------------------------------------------------
+# _impl.BigQueryWriteCfg.from_dest -- FQN completion from the connection
+# ---------------------------------------------------------------------------
+
+
+def test_write_cfg_qualifies_bare_table_from_conn():
+    dest = BigQueryDest(tables=["`wld_country`"])
+    cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
+    assert cfg.target_tables == ["my-project.analytics.wld_country"]
+
+
+def test_write_cfg_qualifies_dataset_table_with_conn_project():
+    dest = BigQueryDest(tables=["`analytics.orders`"])
+    cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
+    assert cfg.target_tables == ["my-project.analytics.orders"]
+
+
+def test_write_cfg_bare_table_unqualified_without_conn_dataset():
+    conn = BigQueryDestConn(
+        staging=_staging(),
+        credentials=GCPJson(json=Secret(_gcp_key())),
+        project="my-project",
+    )
+    dest = BigQueryDest(tables=["`wld_country`"])
+    cfg = impl.BigQueryWriteCfg.from_dest(conn, dest)
+    assert cfg.target_tables == ["wld_country"]
+
+
+# ---------------------------------------------------------------------------
 # _BigQueryDestPlugin.write_out -- defensive / error wrapping
 # ---------------------------------------------------------------------------
 

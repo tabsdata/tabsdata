@@ -33,7 +33,7 @@ from tenacity import (
     wait_fixed,
 )
 
-from tabsdatak.conn.common._validation import fqn, unfqn
+from tabsdatak.conn.common._validation import complete_levels, fqn, unfqn
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn
 from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
@@ -439,10 +439,7 @@ def _fully_qualify_table(conn: _AnyDatabricksConn, table: str) -> str:
     catalog = _convert(conn.catalog, str) if conn.catalog is not None else None
     schema = _convert(conn.schema, str) if conn.schema is not None else None
     parts = unfqn(table, _DATABRICKS_FQN_DEF, total_parts=3)
-    if parts[0] is None and catalog:
-        parts[0] = catalog
-    if parts[1] is None and schema:
-        parts[1] = schema
+    parts = complete_levels(parts, [catalog or None, schema or None, None])
     if any(p is None for p in parts):
         from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
