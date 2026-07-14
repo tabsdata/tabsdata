@@ -67,6 +67,11 @@ class ClickhouseSystem(ContainerBase):
                 f'CREATE USER "{result.user}" IDENTIFIED WITH '
                 f"plaintext_password BY '{result.password}'",
                 f'GRANT ALL ON "{result.db}".* TO "{result.user}"',
+                # Cloud-staging ingest uses the s3() / azureBlobStorage() table
+                # functions, which need global source grants (not the db-scoped
+                # ALL above). S3 covers both S3 and GCS staging (GCS is read via
+                # the S3-compatible endpoint).
+                f'GRANT S3, CREATE TEMPORARY TABLE ON *.* TO "{result.user}"',
             ],
         )
 
