@@ -63,10 +63,17 @@ def _normalize_path(p: str) -> str:
 
 
 def _validate_path(p: str, label: str) -> None:
+    """Guard a path without ever rewriting it: reject multi-line values and
+    leading/trailing whitespace. Slashes (leading, trailing, or inner) are left
+    exactly as given — the value is used verbatim."""
+    if p != p.strip():
+        raise DatagenError(
+            f"{label} must not have leading/trailing whitespace (got: {p!r})"
+        )
+    if "\n" in p or "\r" in p:
+        raise DatagenError(f"{label} must be a single line (got: {p!r})")
     if ".." in p.split("/"):
         raise DatagenError(f"{label} must not contain '..' (got: {p})")
-    if "\n" in p:
-        raise DatagenError(f"{label} contains newlines")
 
 
 _NON_IDENT = re.compile(r"[^A-Za-z0-9_]+")
@@ -115,7 +122,7 @@ class Option:
 
     name: str  # env-var / setting name, e.g. "BUCKET"
     cli_flag: str  # flag stem, e.g. "bucket"
-    is_path: bool = False  # normalise + validate as a path (e.g. SYS_PATH)
+    is_path: bool = False  # validate as a path, used verbatim (e.g. SYS_PATH)
     secret: bool = False  # mask when echoing create details
 
 
@@ -438,13 +445,12 @@ class System(ABC):
 
     def resolve_domain_options(self, ns) -> dict[str, str]:
         """Collect the declared `domain_options` from a parsed Namespace into a
-        `{name: value}` dict (paths normalised + validated), for
+        `{name: value}` dict (paths validated, never rewritten), for
         CreateDomainSpec.options."""
         out: dict[str, str] = {}
         for opt in self.domain_options:
             val = getattr(ns, f"dom_{opt.name}", None) or ""
             if opt.is_path:
-                val = _normalize_path(val)
                 _validate_path(val, opt.name)
             out[opt.name] = val
         return out
@@ -466,7 +472,7 @@ class System(ABC):
     def resolve_values(self, settings: dict[str, Setting]) -> dict[str, str]:
         """Turn Settings into concrete values for the backend to connect NOW:
         the literal `value` if present, else the current value of the referenced
-        env var (erroring if unset). Paths are normalised + validated. Used at
+        env var (erroring if unset). Paths are validated, never rewritten. Used at
         create time, both to reach the system and (via `descriptor.write`) to
         bake the resolved values into the descriptor."""
         out: dict[str, str] = {}
@@ -478,7 +484,6 @@ class System(ABC):
                     raise DatagenError(f"env var '{s.env_var}' is unset / empty")
             val = val or ""
             if s.is_path:
-                val = _normalize_path(val)
                 _validate_path(val, s.name)
             out[s.name] = val
         return out

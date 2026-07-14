@@ -55,8 +55,7 @@ def test_wrong_role_fails(provision):
     descriptor.write_cloud_domain(
         out=str(store.system_path("looks_like_sys")),   # a domain in systems/
         storage_type="fs", system_kind="file", sys_path="/tmp/x",
-        sys_path_env=None, base_path="/tmp/x/d", forwarded=[],
-        strip_sys_path_slash=False)
+        sys_path_env=None, base_path="/tmp/x/d", forwarded=[])
     descriptor.stamp(store.system_path("looks_like_sys"), name="looks_like_sys",
                      started="t")
     with pytest.raises(pytest.fail.Exception, match="not a system"):
@@ -67,7 +66,7 @@ def test_system_type_mismatch_fails(provision):
     descriptor.write_cloud_system(
         out=str(store.system_path("weird")), storage_type="mysteryfs",
         system_kind="file", label="x", sys_path="/tmp/x", sys_path_env=None,
-        forwarded=[], strip_sys_path_slash=False)
+        forwarded=[])
     descriptor.stamp(store.system_path("weird"), name="weird", started="t")
     with pytest.raises(pytest.fail.Exception, match="mysteryfs.*FsSystem"):
         common.load("weird", FsSystem)

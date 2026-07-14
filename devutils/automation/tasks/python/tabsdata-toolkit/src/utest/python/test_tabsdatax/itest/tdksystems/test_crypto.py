@@ -104,8 +104,7 @@ def test_load_wrong_secret_reports_it(tmp_path, monkeypatch):
     monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "created-with-this")
     descriptor.write_cloud_system(
         out=str(out), storage_type="fs", system_kind="file", label="fs",
-        sys_path="/tmp/x", sys_path_env=None, forwarded=[],
-        strip_sys_path_slash=False)
+        sys_path="/tmp/x", sys_path_env=None, forwarded=[])
     monkeypatch.setenv("TD_BACKENDS_CRYPTO_KEY", "reading-with-that")
     with pytest.raises(DatagenError, match="could not decrypt"):
         descriptor.load(out)

@@ -114,7 +114,7 @@ def test_stamp_adds_redundant_entity_term_key(tmp_path):
     descriptor.write_cloud_domain(
         out=str(out), storage_type="fs", system_kind="file",
         sys_path="/tmp/x", sys_path_env=None, base_path="/tmp/x/pfx_inbox",
-        forwarded=[], strip_sys_path_slash=False)
+        forwarded=[])
     descriptor.stamp(out, name="inbox", started="t", external_name="pfx_inbox",
                      entity_term="folder")
     attrs = descriptor.attributes(_load(out))
@@ -236,16 +236,16 @@ def test_write_errors_when_env_backed_setting_is_unset(tmp_path, monkeypatch):
         descriptor.write(az, "sys", str(tmp_path / "az.json"), settings)
 
 
-def test_resolve_strips_leading_slash(tmp_path, capsys):
+def test_resolve_preserves_leading_slash(tmp_path, capsys):
     out = tmp_path / "s3_OUT.json"
     descriptor.write_cloud_domain(
         out=str(out), storage_type="s3", system_kind="file",
         sys_path="/xp-s3", sys_path_env=None, base_path="/xp-s3/s3_OUT",
         forwarded=[])
-    meta = descriptor.resolve(descriptor.load(out), warn=True)
-    assert meta["SYS_PATH"] == "xp-s3"
-    assert meta["BASE_PATH"] == "xp-s3/s3_OUT"
-    assert capsys.readouterr().err.count("WARNING") == 1
+    meta = descriptor.resolve(descriptor.load(out))
+    assert meta["SYS_PATH"] == "/xp-s3"
+    assert meta["BASE_PATH"] == "/xp-s3/s3_OUT"
+    assert capsys.readouterr().err == ""
 
 
 # ---- info: json / export / unset, all with unprefixed keys ----------------
@@ -317,7 +317,7 @@ def test_is_descriptor(tmp_path):
     descriptor.write_cloud_system(out=str(good), storage_type="fs",
                                   system_kind="file", label="fs",
                                   sys_path="/tmp/x", sys_path_env=None,
-                                  forwarded=[], strip_sys_path_slash=False)
+                                  forwarded=[])
     assert descriptor.is_descriptor(good)
     plain = tmp_path / "notes.txt"
     plain.write_text("not json")

@@ -118,10 +118,9 @@ def test_s3_descriptor_matches_old_writer(tmp_path, stores, fake_s3):
         out=ref, storage_type="s3", system_kind="file", label="S3",
         sys_path="data", sys_path_env=None,
         forwarded=[("BUCKET", "b", None), ("REGION", "r", None),
-                   ("ACCESS_KEY", "AK", None), ("SECRET_KEY", "SK", None)],
-        strip_sys_path_slash=True)
+                   ("ACCESS_KEY", "AK", None), ("SECRET_KEY", "SK", None)])
     a, b = descriptor.load(store.system_path("store")), descriptor.load(ref)
-    for key in ("kind", "category", "system", "role", "meta", "exported", "strip_slash"):
+    for key in ("kind", "category", "system", "role", "meta", "exported"):
         assert a[key] == b[key], key
 
 

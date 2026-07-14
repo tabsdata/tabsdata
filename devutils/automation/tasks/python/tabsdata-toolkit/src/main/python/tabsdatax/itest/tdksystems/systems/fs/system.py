@@ -8,9 +8,7 @@ Diverges from the object stores: the root and each domain are real dirs
 (mkdir), with stricter root validation so a force-recreate rmtree can never
 wipe a sensitive path. The root itself is left in place on system destroy, and
 is not checked for pre-existing content on create. The root is stored as an
-absolute path (a full path from the filesystem root), so `relative_sys_path`
-is False (the descriptor keeps the leading slash) — the mirror image of the
-object stores, whose bucket-relative prefixes must not start with a slash.
+absolute path (a full path from the filesystem root).
 """
 
 from __future__ import annotations
@@ -72,7 +70,6 @@ class FsSystem(CloudBase):
     label = "fs"
     category = "native"  # local filesystem, not a cloud object store; still
     # persisted via write_cloud_* (descriptor kind stays "cloud-*")
-    relative_sys_path = False  # roots are absolute — keep the leading slash
     domain_flag = "folder"  # a domain is a directory on disk
     options = ()  # only --sys-path (the root)
 

@@ -36,8 +36,7 @@ The decrypted JSON is::
           "env": "MY_ROOT"}                             #   env var at create; `env`
                                                         #   records the source
       ],
-      "exported": ["HOST", ...],          # connection keys surfaced by `info`
-      "strip_slash": [["SYS_PATH", true]] # relative-prefix leading-slash strips
+      "exported": ["HOST", ...]           # connection keys surfaced by `info`
     }
 
 `category` + `system` are enough for `tdx-system`/`tdx-domain` to pick the right
@@ -47,8 +46,8 @@ settings are captured from their env var at *create* time and baked as the
 `value` — the descriptor is encrypted at rest, so it holds the resolved secret
 and nothing is read from the environment at use time. The `env` name is kept
 only so a manifest dump can re-emit the `{env: VAR}` reference (keeping that
-plaintext YAML secret-free). Storage prefixes listed in `strip_slash` get a
-leading slash stripped at resolve time (with a warning when the flag is true).
+plaintext YAML secret-free). Path values (SYS_PATH / BASE_PATH) are stored and
+returned verbatim — `tdx-system`/`tdx-domain` never rewrite a given path.
 """
 
 from __future__ import annotations
@@ -57,7 +56,6 @@ import json
 import os
 import re
 import shlex
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -112,7 +110,6 @@ def _write(
     kind: str,
     meta: list[tuple[str, str | None, str | None]],
     exported: list[str],
-    strip_slash: list[tuple[str, bool]],
 ) -> None:
     # `name` / `started` are filled in by stamp() right after this, once the CLI
     # knows the descriptor's name; the backend only bakes the connection
@@ -125,7 +122,6 @@ def _write(
         "role": role,
         "meta": _meta_entries(meta),
         "exported": list(exported),
-        "strip_slash": [[n, bool(w)] for n, w in strip_slash],
     }
     _write_doc(out, doc)
 
@@ -209,7 +205,6 @@ def write_container_system(
         exported.insert(4, "IMAGE")  # after CONTAINER
     if staging:
         exported.append("SYS_PATH")
-    strip = [("SYS_PATH", True)] if staging else []
     _write(
         out,
         category="container",
@@ -218,7 +213,6 @@ def write_container_system(
         kind="container-system",
         meta=meta,
         exported=exported,
-        strip_slash=strip,
     )
 
 
@@ -308,7 +302,6 @@ def write_container_domain(
     if staging:
         exported += ["SYS_PATH", "BASE_PATH"]
     exported += [k for k in exported_extra if k in extra]
-    strip = [("SYS_PATH", True), ("BASE_PATH", False)] if staging else []
     _write(
         out,
         category="container",
@@ -317,7 +310,6 @@ def write_container_domain(
         kind="container-domain",
         meta=meta,
         exported=exported,
-        strip_slash=strip,
     )
 
 
@@ -330,13 +322,10 @@ def write_cloud_system(
     sys_path: str | None,
     sys_path_env: str | None,
     forwarded: list[tuple[str, str | None, str | None]],
-    strip_sys_path_slash: bool = True,
     category: str = "cloud",
 ) -> None:
     """Descriptor for a cloud-storage system (target/systems/s3.json, …).
 
-    `strip_sys_path_slash` — when True (object stores) a leading slash on
-    SYS_PATH is stripped at run time; fs passes False (absolute roots valid).
     `category` is the user-facing family (object stores are "cloud"; the local
     filesystem passes "native"); the descriptor `kind` stays "cloud-*" either
     way, so the data pipeline routes both the same."""
@@ -348,7 +337,6 @@ def write_cloud_system(
     meta += forwarded
     forwarded_names = [t[0] for t in forwarded]
     exported = ["STORAGE_TYPE", "SYSTEM_KIND", "SYS_PATH"] + forwarded_names
-    strip = [("SYS_PATH", True)] if strip_sys_path_slash else []
     _write(
         out,
         category=category,
@@ -357,7 +345,6 @@ def write_cloud_system(
         kind="cloud-system",
         meta=meta,
         exported=exported,
-        strip_slash=strip,
     )
 
 
@@ -370,11 +357,9 @@ def write_cloud_domain(
     sys_path_env: str | None,
     base_path: str,
     forwarded: list[tuple[str, str | None, str | None]],
-    strip_sys_path_slash: bool = True,
     category: str = "cloud",
 ) -> None:
-    """Descriptor for a cloud domain. `strip_sys_path_slash` — see
-    write_cloud_system; fs passes False. `category` — see write_cloud_system
+    """Descriptor for a cloud domain. `category` — see write_cloud_system
     (fs passes "native"); the descriptor `kind` stays "cloud-domain"."""
     meta: list[tuple[str, str | None, str | None]] = [
         ("STORAGE_TYPE", storage_type, None),
@@ -390,9 +375,6 @@ def write_cloud_domain(
         "SYS_PATH",
         "BASE_PATH",
     ] + forwarded_names
-    # BASE_PATH = SYS_PATH/<segment>, so it only leads with '/' when SYS_PATH
-    # does — warn once (on SYS_PATH) and strip BASE_PATH silently.
-    strip = [("SYS_PATH", True), ("BASE_PATH", False)] if strip_sys_path_slash else []
     _write(
         out,
         category=category,
@@ -401,7 +383,6 @@ def write_cloud_domain(
         kind="cloud-domain",
         meta=meta,
         exported=exported,
-        strip_slash=strip,
     )
 
 
@@ -431,7 +412,6 @@ def write_saas_system(
         kind="saas-system",
         meta=meta,
         exported=exported,
-        strip_slash=[],
     )
 
 
@@ -465,7 +445,6 @@ def write_saas_domain(
         kind="saas-domain",
         meta=meta,
         exported=exported,
-        strip_slash=[],
     )
 
 
@@ -494,7 +473,6 @@ def write_service_system(
         kind="service-system",
         meta=meta,
         exported=exported,
-        strip_slash=[],
     )
 
 
@@ -521,7 +499,6 @@ def write_service_domain(
         kind="service-domain",
         meta=meta,
         exported=exported,
-        strip_slash=[],
     )
 
 
@@ -550,7 +527,6 @@ def write_dev_system(
         kind="dev-system",
         meta=meta,
         exported=exported,
-        strip_slash=[],
     )
 
 
@@ -576,7 +552,6 @@ def write_dev_domain(
         kind="dev-domain",
         meta=meta,
         exported=exported,
-        strip_slash=[],
     )
 
 
@@ -656,7 +631,6 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
                 sys_path=_resolve_env(sp),
                 sys_path_env=sp.env_var,
                 forwarded=_settings_triples(settings, exclude=("SYS_PATH",)),
-                strip_sys_path_slash=getattr(sys_obj, "relative_sys_path", True),
                 category=cat,
             )
         elif cat == "service":
@@ -724,7 +698,6 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
             sys_path_env=sp.env_var,
             base_path=bp.value or "",
             forwarded=_settings_triples(settings, exclude=("SYS_PATH", "BASE_PATH")),
-            strip_sys_path_slash=getattr(sys_obj, "relative_sys_path", True),
             category=cat,
         )
     elif cat == "service":
@@ -822,26 +795,14 @@ def loads(text: str) -> dict:
     return doc
 
 
-def resolve(doc: dict, *, warn: bool = False) -> dict[str, str]:
+def resolve(doc: dict) -> dict[str, str]:
     """Resolve a descriptor's `meta` to {name: value}. Values are baked into the
     descriptor at create time (env-backed settings were captured then), so this
     reads no environment variables — a system/domain works from its descriptor
-    alone. Relative storage prefixes have a leading slash stripped; when `warn`,
-    a flagged strip prints a notice to stderr."""
+    alone. Values are returned exactly as stored — paths are never rewritten."""
     meta: dict[str, str] = {}
     for entry in doc.get("meta", []):
         meta[entry["name"]] = entry.get("value") or ""
-    for name, flag in doc.get("strip_slash", []):
-        v = meta.get(name, "")
-        if v.startswith("/"):
-            if warn and flag:
-                print(
-                    f"WARNING: {name} value {v!r} must not start with '/' "
-                    f"(storage prefixes are relative) - removing the leading "
-                    f"slash.",
-                    file=sys.stderr,
-                )
-            meta[name] = v.lstrip("/")
     return meta
 
 

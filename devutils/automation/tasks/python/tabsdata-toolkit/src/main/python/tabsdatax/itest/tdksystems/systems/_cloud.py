@@ -6,8 +6,8 @@
 
 A cloud system's pluggable logic is one hook: `_backend(values)` returning an
 object with `status` / `exists` / `clear` / `upload`. The local-filesystem
-backend (`fs`) overrides `create_system` (mkdir instead of a reachability check)
-and sets `relative_sys_path = False`.
+backend (`fs`) overrides `create_system` (mkdir instead of a reachability
+check).
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ class CloudBase(System):
     category = "cloud"
     kind = "file"
     staging_root = True  # -> base adds the SYS_PATH (--sys-path) option
-    relative_sys_path = True  # object-store prefix: strip a leading slash
     domain_flag = "prefix"  # object stores name the domain a prefix (fs: folder)
 
     def _backend(self, values: dict[str, str]):

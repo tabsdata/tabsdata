@@ -33,8 +33,8 @@ def test_system_descriptor_bakes_and_exports_sys_path_literal(tmp_path):
         port="8123", user="default", password="pw", domain_desc="db",
         sys_path="/xp-staging", sys_path_env=None,
     )
-    assert _meta(out)["SYS_PATH"] == "xp-staging"          # leading slash stripped
-    assert _info_json(out, "clickhouse")["SYS_PATH"] == "xp-staging"
+    assert _meta(out)["SYS_PATH"] == "/xp-staging"         # preserved verbatim
+    assert _info_json(out, "clickhouse")["SYS_PATH"] == "/xp-staging"
 
 
 def test_system_descriptor_sys_path_env_marker(tmp_path):
@@ -74,10 +74,10 @@ def test_domain_descriptor_bakes_full_base_path(tmp_path):
         sys_path="/xp-staging", sys_path_env=None,
         base_path="/xp-staging/clickhouse_OUT",
     )
-    assert _meta(out)["BASE_PATH"] == "xp-staging/clickhouse_OUT"
+    assert _meta(out)["BASE_PATH"] == "/xp-staging/clickhouse_OUT"
     info = _info_json(out, "clickhouse_out")
-    assert info["SYS_PATH"] == "xp-staging"
-    assert info["BASE_PATH"] == "xp-staging/clickhouse_OUT"
+    assert info["SYS_PATH"] == "/xp-staging"
+    assert info["BASE_PATH"] == "/xp-staging/clickhouse_OUT"
 
 
 def test_domain_descriptor_without_staging_has_no_base_path(tmp_path):
@@ -137,7 +137,7 @@ class _NS:
 def test_resolve_staging_root_literal():
     sysobj = systems.get("clickhouse")
     ns = _NS(lit_SYS_PATH="/xp-staging/", env_SYS_PATH=None, env_prefix=None)
-    assert cli._resolve_staging_root(sysobj, ns) == ("/xp-staging", None)
+    assert cli._resolve_staging_root(sysobj, ns) == ("/xp-staging/", None)
 
 
 def test_resolve_staging_root_env_prefix(monkeypatch):

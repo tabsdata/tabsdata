@@ -57,7 +57,7 @@ def _resolve_staging_root(sys_obj, args) -> tuple[str | None, str | None]:
                 f"(got: {prefix!r})"
             )
         envv = f"{prefix}__SYS_PATH"
-    from .systems.base import _normalize_path, _validate_path
+    from .systems.base import _validate_path
 
     if envv is not None:
         if not re.fullmatch(r"[A-Za-z0-9_]+", envv):
@@ -66,9 +66,8 @@ def _resolve_staging_root(sys_obj, args) -> tuple[str | None, str | None]:
             raise DatagenError(f"env var '{envv}' is unset / empty")
         return None, envv
     if lit:
-        value = _normalize_path(lit)
-        _validate_path(value, "sys-path")
-        return value, None
+        _validate_path(lit, "sys-path")
+        return lit, None
     return None, None
 
 

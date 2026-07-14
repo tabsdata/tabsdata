@@ -52,7 +52,7 @@ def test_validate_path_rejects_dotdot():
 
 
 def test_validate_path_rejects_newlines():
-    with pytest.raises(DatagenError, match="newlines"):
+    with pytest.raises(DatagenError, match="single line"):
         _validate_path("foo\nbar", "test")
 
 
