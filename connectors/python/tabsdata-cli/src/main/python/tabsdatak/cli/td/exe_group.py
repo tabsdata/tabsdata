@@ -416,7 +416,7 @@ def list_plan(
             show_hint(
                 ctx,
                 "If you want to explore why a plan failed, you can "
-                "use the 'td exe logs' command with the '--plan "
+                "use the 'tdk exe logs' command with the '--plan "
                 "<PLAN-ID>' option to see the logs.",
             )
     except Exception as e:
@@ -624,7 +624,7 @@ def list_trx(
             show_hint(
                 ctx,
                 "If you want to explore why a transaction failed, you can "
-                "use the 'td exe logs' command with the '--trx "
+                "use the 'tdk exe logs' command with the '--trx "
                 "<TRANSACTION-ID>' option to see the logs.",
             )
     except Exception as e:
@@ -819,7 +819,7 @@ def list_worker(
         show_hint(
             ctx,
             "If you want to explore why a worker failed, you can "
-            "use the 'td exe logs' command with the '--worker "
+            "use the 'tdk exe logs' command with the '--worker "
             "<WORKER-ID>' option to see the logs.",
         )
     except Exception as e:

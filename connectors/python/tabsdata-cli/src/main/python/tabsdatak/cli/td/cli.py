@@ -117,7 +117,7 @@ def shell(ctx: click.Context):
         cli,
         __version__,
         banner_title="Tabsdata Interactive Shell",
-        tool_name="td",
+        tool_name="tdk",
     )
 
 

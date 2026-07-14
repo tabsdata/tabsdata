@@ -39,9 +39,9 @@ def set(ctx: click.Context, project: str, collection: str):
     """Pin a project and/or a collection.
 
     Examples:
-        td pin set --proj sales
-        td pin set --coll orders            # requires a pinned project
-        td pin set --proj sales --coll orders
+        tdk pin set --proj sales
+        tdk pin set --coll orders            # requires a pinned project
+        tdk pin set --proj sales --coll orders
     """
     if not (project or collection):
         raise click.ClickException("Nothing to pin. Specify --proj and/or --coll.")
@@ -50,7 +50,7 @@ def set(ctx: click.Context, project: str, collection: str):
     # in this same command, or a pre-existing pin. Fail fast otherwise.
     if collection and not (project or pinned.get("project")):
         raise click.ClickException(
-            "No project pinned. Pin a project first with 'td pin set "
+            "No project pinned. Pin a project first with 'tdk pin set "
             "--proj <name>' before pinning a collection."
         )
     try:
@@ -107,9 +107,9 @@ def unset(ctx: click.Context, project: bool, collection: bool):
     collection.
 
     Examples:
-        td pin unset            # unpin both
-        td pin unset --proj     # unpin both (project + its collection)
-        td pin unset --coll     # unpin the collection only
+        tdk pin unset            # unpin both
+        tdk pin unset --proj     # unpin both (project + its collection)
+        tdk pin unset --coll     # unpin the collection only
     """
     try:
         pinned = ctx.obj["pinned_objects"]

@@ -2,11 +2,11 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-"""Shared helpers for the ``td`` CLI.
+"""Shared helpers for the ``tdk`` CLI.
 
 Also hosts a temporary stand-in for :func:`tdabout` that mirrors the
 legacy ``tabsdatak.common._information.about.dabout`` surface so the
-``td`` migration can land without dragging in the explicitly-excluded
+``tdk`` migration can land without dragging in the explicitly-excluded
 ``_utils/internal/`` subtree. Placeholder pending a proper v2 port
 (see TODO block below).
 """
@@ -45,7 +45,7 @@ DEFAULT_TABSDATA_DIRECTORY = os.path.join(os.path.expanduser("~"), ".tabsdata")
 # ---------------------------------------------------------------------------
 # Temporary stand-in for legacy ``_utils.internal._about.tdabout``.
 #
-# TODO(tabsdatak-migration): this is a placeholder so the ``td`` CLI
+# TODO(tabsdatak-migration): this is a placeholder so the ``tdk`` CLI
 # migration can land without porting the explicitly-excluded
 # ``tabsdata/_utils/internal/`` subtree. Replace with a proper v2
 # implementation in a follow-up ticket once the v2 packaging story
@@ -488,7 +488,7 @@ def show_hint(ctx: click.Context, hint: str, final_empty_line: bool = False):
     if get_current_cli_option(ctx, "hints", default="enabled") == "enabled":
         click.echo(click.style("Hint: ", fg="green", bold=True), nl=False)
         click.echo(hint)
-        click.echo("Use 'td hints off' to stop seeing these hints.")
+        click.echo("Use 'tdk hints off' to stop seeing these hints.")
         if final_empty_line:
             click.echo()
 
@@ -519,7 +519,7 @@ def hint_common_solutions(ctx: click.Context, e: Exception):
         show_hint(
             ctx,
             "It seems like you might have an expired session. You can "
-            "log in again with 'td login'.",
+            "log in again with 'tdk login'.",
         )
 
 
@@ -532,7 +532,7 @@ def verify_trigger_type(function: Function, type: str):
 # ---------------------------------------------------------------------------
 # Dynamic-import of a user function from a "path/to/file.py::name" string.
 #
-# Used by ``td fn register`` to materialise the user's decorated
+# Used by ``tdk fn register`` to materialise the user's decorated
 # function (a tabsdatak ``*Info`` descriptor) without touching
 # ``sys.path``. The legacy version lived in the SDK; v2 keeps it
 # CLI-side because the SDK takes a ready-made ``info`` object directly.

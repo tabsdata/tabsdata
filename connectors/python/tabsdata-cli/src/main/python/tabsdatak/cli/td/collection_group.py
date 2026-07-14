@@ -41,7 +41,7 @@ def collection():
     "--group",
     help=(
         "Name of the group to assign. Defaults to 'default' when omitted. "
-        "Use 'td group list' to see available groups."
+        "Use 'tdk group list' to see available groups."
     ),
 )
 @click.option(

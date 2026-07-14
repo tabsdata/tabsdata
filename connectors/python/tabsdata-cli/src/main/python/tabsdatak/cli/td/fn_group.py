@@ -82,7 +82,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
         show_hint(
             ctx,
             "You do not need to delete and re-register a function to change it. "
-            "Use 'td fn update' to modify the function instead.",
+            "Use 'tdk fn update' to modify the function instead.",
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -376,7 +376,7 @@ def register(
         if update:
             show_hint(
                 ctx,
-                "To update functions you can also use the dedicated command 'td fn "
+                "To update functions you can also use the dedicated command 'tdk fn "
                 "update'",
                 final_empty_line=True,
             )
@@ -560,9 +560,9 @@ def trigger(
         else:
             show_hint(
                 ctx,
-                "You can check the status of the plan with 'td exe info "
+                "You can check the status of the plan with 'tdk exe info "
                 f"--plan {execution.id}', or monitor the execution of the function "
-                f"with 'td exe monitor --plan {execution.id}'",
+                f"with 'tdk exe monitor --plan {execution.id}'",
             )
 
     except Exception as e:
@@ -652,13 +652,13 @@ def _monitor_execution_or_transaction(
         for fn_run in failed_runs:
             click.echo(f"- {fn_run.id}")
         complete_command = (
-            f"'td exe logs --plan {supervised_entity.id}'"
+            f"'tdk exe logs --plan {supervised_entity.id}'"
             if execution
-            else f"'td exe logs --trx {supervised_entity.id}'"
+            else f"'tdk exe logs --trx {supervised_entity.id}'"
         )
         show_hint(
             ctx,
-            "You can check their logs with 'td exe logs --fn-run <FN-RUN-ID>' or with "
+            "You can check their logs with 'tdk exe logs --fn-run <FN-RUN-ID>' or with "
             + complete_command,
         )
     else:
@@ -909,7 +909,7 @@ def disable(
 @click.option(
     "--patch-of",
     help=(
-        "Function-version id (fvid) this patch overrides. Use 'td fn info "
+        "Function-version id (fvid) this patch overrides. Use 'tdk fn info "
         "--show-history' to find available fvids."
     ),
 )
@@ -1002,7 +1002,7 @@ def patch(
         show_hint(
             ctx,
             "Replay a finished logical-function-run against the latest patch "
-            "with 'td exe replay --coll <coll> --lfr <lfr_id>'.",
+            "with 'tdk exe replay --coll <coll> --lfr <lfr_id>'.",
             final_empty_line=True,
         )
     except Exception as e:
