@@ -41,7 +41,13 @@ class RedpandaSystem(ContainerBase):
     extra_flags: list[str] = []
     # The consumer GROUP_ID is surfaced (exported) so a source connection built
     # from a domain descriptor can consume under a per-build group.
-    exported_domain_vars = ("GROUP_ID",)
+    # SCHEMA_REGISTRY_URL is surfaced too so tests / connections can reach the
+    # (always-on) Confluent-compatible registry the broker publishes on 8081.
+    exported_domain_vars = ("GROUP_ID", "SCHEMA_REGISTRY_URL")
+    # SCHEMA_REGISTRY_URL is stamped into the system descriptor at system-create;
+    # carry it into the env at domain-create so `_domain_extra_vars` resolves it
+    # even when the domain is created in a separate process from the system.
+    system_var_carryovers = ("SCHEMA_REGISTRY_URL",)
 
     _registry_port: int | None = None
 

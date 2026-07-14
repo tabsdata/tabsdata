@@ -286,8 +286,13 @@ class ContainerBase(System):
         admin = self._admin_conn(ctx)
         # Some hooks read PORT / CONTAINER from env (e.g. redpanda's broker /
         # schema-registry extra vars); export them for `_domain_extra_vars`.
+        # Re-surface system-level extra vars stamped at system-create time (e.g.
+        # redpanda's SCHEMA_REGISTRY_URL) so a standalone domain create — whose
+        # process never ran system create — can still read them from ctx.meta.
         os.environ["PORT"] = admin.port
         os.environ["CONTAINER"] = cname
+        for _k in self.system_var_carryovers:
+            os.environ[_k] = ctx.meta.get(_k, "")
         password = self.generate_password()
         result = self.domain_result(admin, entity, password)
         out: dict[str, Setting] = {
@@ -551,6 +556,12 @@ class ContainerBase(System):
     # in `info` and the test fixtures), not just kept in `meta`. Empty by
     # default — the back-refs and internal connection vars stay meta-only.
     exported_domain_vars: tuple[str, ...] = ()
+
+    # System-level extra vars (from `_system_extra_vars`, stamped into the system
+    # descriptor at system-create) that `plan_domain` must re-export into the env
+    # so `_domain_extra_vars` can read them during a standalone domain create
+    # (a separate process that never ran system create). Empty by default.
+    system_var_carryovers: tuple[str, ...] = ()
 
     def _system_extra_vars(self) -> dict[str, str]:
         return {}

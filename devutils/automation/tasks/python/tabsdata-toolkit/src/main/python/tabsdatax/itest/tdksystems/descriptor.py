@@ -606,6 +606,19 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
         if cat == "container":
             v = _settings_literals(settings)
             sp = settings.get("SYS_PATH")
+            # Settings beyond the fixed container fields are `_system_extra_vars`
+            # (e.g. redpanda's REGISTRY_PORT / SCHEMA_REGISTRY_URL); persist them
+            # via extra_vars so they survive into the system descriptor's meta.
+            _std = {
+                "CONTAINER",
+                "HOST",
+                "PORT",
+                "USER",
+                "PASSWORD",
+                "IMAGE",
+                "SYS_PATH",
+            }
+            extra = {k: val for k, val in v.items() if k not in _std}
             write_container_system(
                 out=out,
                 system_type=sys_obj.slug,
@@ -620,6 +633,7 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
                 image=v.get("IMAGE") or None,
                 sys_path=(_resolve_env(sp) if sp else None),
                 sys_path_env=(sp.env_var if sp else None),
+                extra_vars=extra,
             )
         elif cat in ("cloud", "native"):  # object stores + local fs
             sp = settings["SYS_PATH"]

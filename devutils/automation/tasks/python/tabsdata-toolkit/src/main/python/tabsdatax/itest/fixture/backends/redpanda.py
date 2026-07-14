@@ -40,6 +40,9 @@ class RedpandaDomain(Domain):
     sqlalchemy_uri: str
     topic: str  # redpanda calls the entity container a topic (== db here)
     group_id: str  # consumer group id — the build identity (see GROUP_ID)
+    # Confluent-compatible schema registry the broker publishes (always on);
+    # optional so a descriptor stamped before TD-<this> still constructs.
+    schema_registry_url: str | None = None
     model: str | None = None
     data: str | None = None
     entities: dict[str, int] | None = None  # {table: record count}, once loaded
