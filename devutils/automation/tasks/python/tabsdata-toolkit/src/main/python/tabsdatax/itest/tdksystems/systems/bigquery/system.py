@@ -62,8 +62,13 @@ class BigQuerySystem(System):
 
     # ---- system lifecycle ----
 
-    def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
-        values = self.resolve_values(spec.settings)
+    def plan_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
+        return dict(spec.settings)
+
+    def provision_system(
+        self, spec: CreateSystemSpec, settings: dict[str, Setting]
+    ) -> None:
+        values = self.resolve_values(settings)
         try:
             self._bq(values).ping()
         except Exception as exc:  # noqa: BLE001
@@ -90,7 +95,6 @@ class BigQuerySystem(System):
                     f"root prefix has objects: gs://{values.get('BUCKET', '')}/"
                     f"{root} (use --force to clear)"
                 )
-        return dict(spec.settings)
 
     def destroy_system(self, ctx: SystemContext) -> None:
         return None  # project/bucket external
@@ -110,7 +114,7 @@ class BigQuerySystem(System):
 
     # ---- domain lifecycle ----
 
-    def create_domain(
+    def plan_domain(
         self, ctx: SystemContext, spec: CreateDomainSpec
     ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
@@ -119,8 +123,18 @@ class BigQuerySystem(System):
         # segment, so `tdx-domain create --sys wh --domain <name>` is all it
         # takes — same as every other system (it's a validated identifier).
         dataset = spec.entity_name
-        full = self._base_path(values, dataset)
+        settings["DATASET"] = Setting("DATASET", value=dataset)
+        settings["BASE_PATH"] = Setting(
+            "BASE_PATH", value=self._base_path(values, dataset), is_path=True
+        )
+        return settings
 
+    def provision_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec, settings: dict[str, Setting]
+    ) -> None:
+        values = self.resolve_values(settings)
+        dataset = settings["DATASET"].value or ""
+        full = settings["BASE_PATH"].value or ""
         self._bq(values).create_dataset(dataset, force=spec.force)
         # If the GCS prefix is dirty and we're not forcing, roll the dataset back
         # so a failed domain create leaves nothing behind.
@@ -134,10 +148,6 @@ class BigQuerySystem(System):
                     f"domain prefix has objects: gs://{values.get('BUCKET', '')}/"
                     f"{full} (use --force to clear)"
                 )
-
-        settings["DATASET"] = Setting("DATASET", value=dataset)
-        settings["BASE_PATH"] = Setting("BASE_PATH", value=full, is_path=True)
-        return settings
 
     def destroy_domain(self, ctx: DomainContext) -> None:
         values = self.resolve_values(self.settings_from_meta(ctx.meta))

@@ -15,7 +15,6 @@ from ...shell import (
     docker_exec,
     docker_exec_check,
     docker_run,
-    gen_password,
 )
 from .._container import AdminConn, ContainerBase, DomainResult
 
@@ -132,24 +131,28 @@ class StarrocksSystem(ContainerBase):
             f"@{admin.host}:{admin.port}"
         )
 
-    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
-        pw = gen_password()
+    def domain_result(self, admin: AdminConn, name: str, password: str) -> DomainResult:
+        uri = (
+            f"mysql+mysqlconnector://{name}:{password}@{admin.host}:{admin.port}/{name}"
+        )
+        return DomainResult(db=name, user=name, password=password, sqlalchemy_uri=uri)
+
+    def do_create(self, admin: AdminConn, result: DomainResult) -> None:
         self._run_admin_sql(
             admin,
             [
-                f"CREATE DATABASE `{name}`",
-                f"CREATE USER '{name}'@'%' IDENTIFIED BY '{pw}'",
+                f"CREATE DATABASE `{result.db}`",
+                f"CREATE USER '{result.user}'@'%' IDENTIFIED BY '{result.password}'",
                 # StarRocks RBAC splits these: CREATE TABLE is a DATABASE-level
                 # privilege, while DML (SELECT/INSERT/...) is a TABLE-level one.
                 # `ON ALL TABLES IN DATABASE` is a standing grant covering current
                 # and future tables, so the user can load data into the tables it
                 # creates.
-                f"GRANT ALL ON DATABASE `{name}` TO '{name}'@'%'",
-                f"GRANT ALL ON ALL TABLES IN DATABASE `{name}` TO '{name}'@'%'",
+                f"GRANT ALL ON DATABASE `{result.db}` TO '{result.user}'@'%'",
+                f"GRANT ALL ON ALL TABLES IN DATABASE `{result.db}` "
+                f"TO '{result.user}'@'%'",
             ],
         )
-        uri = f"mysql+mysqlconnector://{name}:{pw}@{admin.host}:{admin.port}/{name}"
-        return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
         self._run_admin_sql(

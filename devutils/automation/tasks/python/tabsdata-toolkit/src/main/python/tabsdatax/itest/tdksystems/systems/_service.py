@@ -40,8 +40,13 @@ class ServiceBase(System):
 
     # ---- system lifecycle (account is external: nothing to provision) ----
 
-    def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
+    def plan_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
         return dict(spec.settings)
+
+    def provision_system(
+        self, spec: CreateSystemSpec, settings: dict[str, Setting]
+    ) -> None:
+        return None
 
     def destroy_system(self, ctx: SystemContext) -> None:
         return None
@@ -51,10 +56,15 @@ class ServiceBase(System):
 
     # ---- domain lifecycle (credentials clone, no entity container) ----
 
-    def create_domain(
+    def plan_domain(
         self, ctx: SystemContext, spec: CreateDomainSpec
     ) -> dict[str, Setting]:
         return self.settings_from_meta(ctx.meta)
+
+    def provision_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec, settings: dict[str, Setting]
+    ) -> None:
+        return None
 
     def destroy_domain(self, ctx: DomainContext) -> None:
         return None

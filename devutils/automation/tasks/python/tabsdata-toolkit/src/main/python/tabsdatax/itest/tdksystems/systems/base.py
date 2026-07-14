@@ -276,16 +276,37 @@ class System(ABC):
     # ==================================================================
 
     @abstractmethod
-    def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
-        """Provision the system (start the container / verify the bucket /
-        validate creds) and return the settings to bake into the descriptor.
+    def plan_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
+        """Compute the COMPLETE descriptor settings — generating any values that
+        would otherwise be minted during provisioning (a container's password
+        and published port, …) — with NO external side effects.
 
-        Returns Settings (not raw strings) so the framework's `descriptor.write`
-        can honour the literal-vs-env distinction: a Setting with `env_var` is
-        stored as a forwarded reference (re-resolved at use time, so secrets are
-        never written to disk); a Setting with `value` is baked literally (and
-        the descriptor file is itself encrypted). Idempotent under `spec.force`;
-        the framework adds identity (slug/category/kind/name/started)."""
+        The create verbs persist these BEFORE calling `provision_system`, so a
+        provision that fails partway can be torn down from the descriptor
+        already on disk. Returns Settings (not raw strings) so the framework's
+        `descriptor.write` can honour the literal-vs-env distinction: a Setting
+        with `env_var` is a forwarded reference (re-resolved at use time, so
+        secrets are never written to disk); a Setting with `value` is baked
+        literally (and the descriptor file is itself encrypted)."""
+
+    @abstractmethod
+    def provision_system(
+        self, spec: CreateSystemSpec, settings: dict[str, Setting]
+    ) -> None:
+        """Provision the system (start the container / verify the bucket /
+        validate creds) from the already-planned `settings`. Idempotent under
+        `spec.force`; may be retried — the framework destroys any partial
+        resource between attempts, so each call starts from a clean slate."""
+
+    def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
+        """Plan then provision in one call, returning the planned settings. The
+        create verbs call `plan_system` / `provision_system` separately (so the
+        full descriptor is on disk before provisioning); this convenience form
+        is for callers that don't need the descriptor-first split (e.g.
+        `recreate`)."""
+        settings = self.plan_system(spec)
+        self.provision_system(spec, settings)
+        return settings
 
     @abstractmethod
     def destroy_system(self, ctx: SystemContext) -> None:
@@ -308,16 +329,32 @@ class System(ABC):
     # ==================================================================
 
     @abstractmethod
+    def plan_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec
+    ) -> dict[str, Setting]:
+        """Compute the COMPLETE domain settings to bake (e.g. SQLALCHEMY_URI +
+        system back-refs, or BASE_PATH + the forwarded connection settings),
+        generating any per-domain credentials up front, with NO external side
+        effects. The entity container is named `spec.entity_name` (the
+        run-prefixed external name, defaulting to the logical `spec.name`); the
+        descriptor's logical name is stamped separately. Persisted before
+        `provision_domain`, same Setting-vs-string contract as `plan_system`."""
+
+    @abstractmethod
+    def provision_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec, settings: dict[str, Setting]
+    ) -> None:
+        """Create the domain resource inside the system — a database, schema,
+        Kafka topic, object-store prefix, or directory — from the already-planned
+        `settings`. Idempotent under `spec.force`; may be retried."""
+
     def create_domain(
         self, ctx: SystemContext, spec: CreateDomainSpec
     ) -> dict[str, Setting]:
-        """Create the domain resource inside the system — a database, schema,
-        Kafka topic, object-store prefix, or directory — and return the domain
-        settings to bake (e.g. SQLALCHEMY_URI + system back-refs, or BASE_PATH +
-        the forwarded connection settings). The entity container is named
-        `spec.entity_name` (the run-prefixed external name, defaulting to the
-        logical `spec.name`); the descriptor's logical name is stamped
-        separately. Same Setting-vs-string contract as `create_system`."""
+        """Plan then provision the domain in one call (see `create_system`)."""
+        settings = self.plan_domain(ctx, spec)
+        self.provision_domain(ctx, spec, settings)
+        return settings
 
     @abstractmethod
     def destroy_domain(self, ctx: DomainContext) -> None:

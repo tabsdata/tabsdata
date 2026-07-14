@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import platform
 
-from ...shell import docker_exec_check, docker_run, gen_password
+from ...shell import docker_exec_check, docker_run
 from .._container import AdminConn, ContainerBase, DomainResult
 
 
@@ -52,19 +52,22 @@ class PostgresSystem(ContainerBase):
             f"@{admin.host}:{admin.port}/postgres"
         )
 
-    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
-        pw = gen_password()
+    def domain_result(self, admin: AdminConn, name: str, password: str) -> DomainResult:
+        uri = (
+            f"postgresql+psycopg2://{name}:{password}@{admin.host}:{admin.port}/{name}"
+        )
+        return DomainResult(db=name, user=name, password=password, sqlalchemy_uri=uri)
+
+    def do_create(self, admin: AdminConn, result: DomainResult) -> None:
         self._run_admin_sql(
             admin,
             [
-                f'CREATE DATABASE "{name}"',
-                f"CREATE USER \"{name}\" WITH PASSWORD '{pw}'",
-                f'ALTER DATABASE "{name}" OWNER TO "{name}"',
-                f'GRANT ALL PRIVILEGES ON DATABASE "{name}" TO "{name}"',
+                f'CREATE DATABASE "{result.db}"',
+                f"CREATE USER \"{result.user}\" WITH PASSWORD '{result.password}'",
+                f'ALTER DATABASE "{result.db}" OWNER TO "{result.user}"',
+                f'GRANT ALL PRIVILEGES ON DATABASE "{result.db}" TO "{result.user}"',
             ],
         )
-        uri = f"postgresql+psycopg2://{name}:{pw}@{admin.host}:{admin.port}/{name}"
-        return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
         self._run_admin_sql(

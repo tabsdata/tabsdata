@@ -11,7 +11,7 @@ import platform
 import subprocess
 
 from ...errors import DatagenError
-from ...shell import docker_run, gen_password
+from ...shell import docker_run
 from .._container import AdminConn, ContainerBase, DomainContext, DomainResult
 
 
@@ -72,19 +72,22 @@ class MongodbSystem(ContainerBase):
             serverSelectionTimeoutMS=10000,
         )
 
-    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
-        pw = gen_password()
+    def domain_result(self, admin: AdminConn, name: str, password: str) -> DomainResult:
+        uri = f"mongodb://{name}:{password}@{admin.host}:{admin.port}/{name}"
+        return DomainResult(db=name, user=name, password=password, sqlalchemy_uri=uri)
+
+    def do_create(self, admin: AdminConn, result: DomainResult) -> None:
         client = self._client(admin)
         try:
-            db = client[name]
-            db.command("createUser", name, pwd=pw, roles=["dbOwner"])
+            db = client[result.db]
+            db.command(
+                "createUser", result.user, pwd=result.password, roles=["dbOwner"]
+            )
             db.create_collection("_init")  # materialise DB so it lists
         except Exception as exc:
-            raise DatagenError(f"mongodb create '{name}' failed: {exc}") from exc
+            raise DatagenError(f"mongodb create '{result.db}' failed: {exc}") from exc
         finally:
             client.close()
-        uri = f"mongodb://{name}:{pw}@{admin.host}:{admin.port}/{name}"
-        return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
         client = self._client(admin)

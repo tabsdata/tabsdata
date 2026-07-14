@@ -15,7 +15,7 @@ import os
 import platform
 import sys
 
-from ...shell import docker_exec_check, docker_run, gen_password
+from ...shell import docker_exec_check, docker_run
 from .._container import AdminConn, ContainerBase, DomainResult
 
 _MYSQL_USER_MAXLEN = 32
@@ -79,21 +79,23 @@ class MysqlSystem(ContainerBase):
             )
         return trimmed
 
-    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
-        pw = gen_password()
+    def domain_result(self, admin: AdminConn, name: str, password: str) -> DomainResult:
         login = self._login(name, warn=True)
+        uri = f"mysql+mysqlconnector://{login}:{password}@{admin.host}:{admin.port}/{name}"
+        return DomainResult(db=name, user=login, password=password, sqlalchemy_uri=uri)
+
+    def do_create(self, admin: AdminConn, result: DomainResult) -> None:
         self._run_admin_sql(
             admin,
             [
-                f"CREATE DATABASE `{name}`",
-                f"CREATE USER '{login}'@'%' IDENTIFIED BY '{pw}'",
-                f"GRANT ALL PRIVILEGES ON `{name}`.* TO '{login}'@'%'",
-                f"GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO '{login}'@'%'",
+                f"CREATE DATABASE `{result.db}`",
+                f"CREATE USER '{result.user}'@'%' IDENTIFIED BY '{result.password}'",
+                f"GRANT ALL PRIVILEGES ON `{result.db}`.* TO '{result.user}'@'%'",
+                f"GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* "
+                f"TO '{result.user}'@'%'",
                 "FLUSH PRIVILEGES",
             ],
         )
-        uri = f"mysql+mysqlconnector://{login}:{pw}@{admin.host}:{admin.port}/{name}"
-        return DomainResult(db=name, user=login, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
         self._run_admin_sql(

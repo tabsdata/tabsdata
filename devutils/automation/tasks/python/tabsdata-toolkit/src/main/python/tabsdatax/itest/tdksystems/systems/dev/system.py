@@ -40,8 +40,13 @@ class DevSystem(System):
     domain_options = ()
     domain_flag = ""  # no entity container, so no system-terminology term
 
-    def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
+    def plan_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
         return {}
+
+    def provision_system(
+        self, spec: CreateSystemSpec, settings: dict[str, Setting]
+    ) -> None:
+        return None
 
     def destroy_system(self, ctx: SystemContext) -> None:
         return None
@@ -49,10 +54,15 @@ class DevSystem(System):
     def system_status(self, ctx: SystemContext) -> Health:
         return Health(True, "dev system (no external resource)")
 
-    def create_domain(
+    def plan_domain(
         self, ctx: SystemContext, spec: CreateDomainSpec
     ) -> dict[str, Setting]:
         return {}
+
+    def provision_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec, settings: dict[str, Setting]
+    ) -> None:
+        return None
 
     def destroy_domain(self, ctx: DomainContext) -> None:
         return None

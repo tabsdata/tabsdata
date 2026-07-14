@@ -142,47 +142,16 @@ class ContainerBase(System):
             return Setting("SYS_PATH", value=sp.value, env_var=sp.env_var, is_path=True)
         return Setting("SYS_PATH", value=spec.name, is_path=True)
 
-    def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
-        staging_setting = (
-            self._staging_setting(spec) if self.uses_file_staging else None
-        )
+    def plan_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
         require_docker()
         container = container_name(spec.name)
-        if container_exists(container):
-            if spec.force:
-                docker_rm(container, force=True)
-                print(f">>> --force: removed existing container {container}")
-            else:
-                raise DatagenError(
-                    f"container already exists: {container} (use --force)"
-                )
         password = self.generate_password()
         port = spec.host_port or find_free_port()
-        # flush so our line precedes docker's own pull output when stdout is
-        # redirected to a log (block-buffered), not just on a TTY.
-        print(f">>> pulling docker image {self.image} …", flush=True)
-        docker_pull(self.image, self.image_platform)
-        print(f">>> starting container {container} from image {self.image}")
-        self._docker_run(container, port, password)
-        # Once the container is up, any failure (readiness timeout, a failing
-        # _post_start, or a Ctrl-C) must not leave it running.
-        try:
-            print(
-                f">>> waiting for {self.label} to become ready "
-                f"(timeout: {spec.ready_timeout}s)…"
-            )
-            self._wait_ready(container, password, spec.ready_timeout)
-            # Export PORT so hooks (do_create URIs, staging) that read env work.
-            os.environ["PORT"] = str(port)
-            os.environ["CONTAINER"] = container
-            self._post_start(container, password)
-        except BaseException:
-            print(f">>> create failed — removing container {container}")
-            try:
-                docker_rm(container, force=True)
-            except Exception:
-                pass
-            raise
+        # Export PORT / CONTAINER so a system's `_system_extra_vars` (e.g.
+        # redpanda's schema-registry endpoint) resolves against the planned
+        # values before the container exists.
+        os.environ["PORT"] = str(port)
+        os.environ["CONTAINER"] = container
         out: dict[str, Setting] = {
             "CONTAINER": Setting("CONTAINER", value=container),
             "IMAGE": Setting("IMAGE", value=self.image),
@@ -191,11 +160,42 @@ class ContainerBase(System):
             "USER": Setting("USER", value=self.system_user),
             "PASSWORD": Setting("PASSWORD", value=password),
         }
-        if staging_setting is not None:
-            out["SYS_PATH"] = staging_setting
+        if self.uses_file_staging:
+            out["SYS_PATH"] = self._staging_setting(spec)
         for k, v in self._system_extra_vars().items():
             out[k] = Setting(k, value=v)
         return out
+
+    def provision_system(
+        self, spec: CreateSystemSpec, settings: dict[str, Setting]
+    ) -> None:
+        require_docker()
+        container = settings["CONTAINER"].value or ""
+        password = settings["PASSWORD"].value or ""
+        port = int(settings["PORT"].value or "0")
+        if container_exists(container):
+            if spec.force:
+                docker_rm(container, force=True)
+                print(f">>> --force: removed existing container {container}")
+            else:
+                raise DatagenError(
+                    f"container already exists: {container} (use --force)"
+                )
+        # flush so our line precedes docker's own pull output when stdout is
+        # redirected to a log (block-buffered), not just on a TTY.
+        print(f">>> pulling docker image {self.image} …", flush=True)
+        docker_pull(self.image, self.image_platform)
+        print(f">>> starting container {container} from image {self.image}")
+        self._docker_run(container, port, password)
+        print(
+            f">>> waiting for {self.label} to become ready "
+            f"(timeout: {spec.ready_timeout}s)…"
+        )
+        self._wait_ready(container, password, spec.ready_timeout)
+        # Export PORT so hooks (do_create URIs, staging) that read env work.
+        os.environ["PORT"] = str(port)
+        os.environ["CONTAINER"] = container
+        self._post_start(container, password)
 
     def destroy_system(self, ctx: SystemContext) -> None:
         pid = ctx.meta.get("SSH_TUNNEL_PID")
@@ -264,45 +264,32 @@ class ContainerBase(System):
     # Domain lifecycle
     # ==================================================================
 
-    def create_domain(
-        self, ctx: SystemContext, spec: CreateDomainSpec
-    ) -> dict[str, Setting]:
-        cname = ctx.meta.get("CONTAINER", "")
-        entity = spec.entity_name
-        validate_name(entity, label=self.domain_flag)
-        # Domain admin runs over TCP as the superuser on the published host port
-        # (no `docker exec`), so a network-only client can provision domains.
-        admin = AdminConn(
+    @staticmethod
+    def _admin_conn(ctx: SystemContext) -> AdminConn:
+        """The superuser admin connection to the running container's engine,
+        built from the SYSTEM descriptor's HOST / PORT / USER / PASSWORD. Domain
+        admin runs over TCP on the published host port (no `docker exec`), so a
+        network-only client can provision domains."""
+        return AdminConn(
             host=ctx.meta.get("HOST", "localhost"),
             port=ctx.meta.get("PORT", os.environ.get("PORT", "")),
             user=ctx.meta.get("USER", ""),
             password=ctx.meta.get("PASSWORD", ""),
         )
-        # Some hooks still read PORT / CONTAINER from env (e.g. redpanda's
-        # broker / schema-registry extra vars); keep exporting them.
+
+    def plan_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec
+    ) -> dict[str, Setting]:
+        cname = ctx.meta.get("CONTAINER", "")
+        entity = spec.entity_name
+        validate_name(entity, label=self.domain_flag)
+        admin = self._admin_conn(ctx)
+        # Some hooks read PORT / CONTAINER from env (e.g. redpanda's broker /
+        # schema-registry extra vars); export them for `_domain_extra_vars`.
         os.environ["PORT"] = admin.port
         os.environ["CONTAINER"] = cname
-        exists = any(d.lower() == entity.lower() for d in self.do_list(admin))
-        if exists and not spec.force:
-            raise DatagenError(
-                f"{self.domain_flag} '{entity}' already exists (use --force)"
-            )
-        if spec.force and exists:
-            # A leftover entity (typically an orphan whose descriptor was lost, so
-            # the tdx-level destroy-first couldn't find it) is torn down over the
-            # system admin before recreating. Do NOT swallow a real drop failure —
-            # otherwise a half-dropped entity resurfaces as a confusing "already
-            # exists" during the later DDL install.
-            self.do_delete(admin, entity)
-            print(f">>> --force: removed existing {self.domain_flag} '{entity}'")
-        elif spec.force:
-            # Not present per do_list — best-effort drop of a partial leftover
-            # do_list can't see; do_create surfaces any real conflict.
-            try:
-                self.do_delete(admin, entity)
-            except DatagenError:
-                pass
-        result = self.do_create(admin, entity)
+        password = self.generate_password()
+        result = self.domain_result(admin, entity, password)
         out: dict[str, Setting] = {
             "HOST": Setting("HOST", value="localhost"),
             "PORT": Setting("PORT", value=ctx.meta.get("PORT", "")),
@@ -325,6 +312,44 @@ class ContainerBase(System):
         for k, v in self._domain_extra_vars().items():
             out[k] = Setting(k, value=v)
         return out
+
+    def provision_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec, settings: dict[str, Setting]
+    ) -> None:
+        cname = ctx.meta.get("CONTAINER", "")
+        entity = spec.entity_name
+        admin = self._admin_conn(ctx)
+        os.environ["PORT"] = admin.port
+        os.environ["CONTAINER"] = cname
+        exists = any(d.lower() == entity.lower() for d in self.do_list(admin))
+        if exists and not spec.force:
+            raise DatagenError(
+                f"{self.domain_flag} '{entity}' already exists (use --force)"
+            )
+        if spec.force and exists:
+            # A leftover entity (typically an orphan whose descriptor was lost, so
+            # the tdx-level destroy-first couldn't find it) is torn down over the
+            # system admin before recreating. Do NOT swallow a real drop failure —
+            # otherwise a half-dropped entity resurfaces as a confusing "already
+            # exists" during the later DDL install.
+            self.do_delete(admin, entity)
+            print(f">>> --force: removed existing {self.domain_flag} '{entity}'")
+        elif spec.force:
+            # Not present per do_list — best-effort drop of a partial leftover
+            # do_list can't see; do_create surfaces any real conflict.
+            try:
+                self.do_delete(admin, entity)
+            except DatagenError:
+                pass
+        self.do_create(
+            admin,
+            DomainResult(
+                db=settings["DB"].value or "",
+                user=settings["USER"].value or "",
+                password=settings["PASSWORD"].value or "",
+                sqlalchemy_uri=settings["SQLALCHEMY_URI"].value or "",
+            ),
+        )
 
     @staticmethod
     def _admin_from_domain_meta(meta: dict[str, str]) -> AdminConn:
@@ -560,7 +585,17 @@ class ContainerBase(System):
     def check_ready(self, container: str, password: str) -> bool:
         raise NotImplementedError
 
-    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
+    def domain_result(self, admin: AdminConn, name: str, password: str) -> DomainResult:
+        """Compute the domain's connection identity (db / user / URI) for the
+        pre-generated `password`, WITHOUT touching the system — the pure half of
+        domain creation, so the full descriptor can be planned before
+        `do_create` runs. Subclasses build their per-driver URI here."""
+        raise NotImplementedError
+
+    def do_create(self, admin: AdminConn, result: DomainResult) -> None:
+        """Create the entity container (database / schema / topic) described by
+        `result` (its `db` / `user` / `password`). Runs the admin DDL; the
+        identity was already computed by `domain_result`."""
         raise NotImplementedError
 
     def do_delete(self, admin: AdminConn, name: str) -> None:

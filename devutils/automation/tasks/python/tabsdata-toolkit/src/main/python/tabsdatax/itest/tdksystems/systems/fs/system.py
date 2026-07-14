@@ -102,7 +102,7 @@ class FsSystem(CloudBase):
     # neither errors on a pre-existing root nor deletes it (destroy is a no-op,
     # inherited from CloudBase). The root is made absolute so the localfile
     # connection's base_path is a full path from the filesystem root.
-    def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
+    def plan_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
         root = _normalize_path(
             str(
                 Path(
@@ -111,11 +111,15 @@ class FsSystem(CloudBase):
             )
         )
         _validate_fs_root(root)
-        Path(root).mkdir(parents=True, exist_ok=True)
         return {"SYS_PATH": Setting("SYS_PATH", value=root, is_path=True)}
 
+    def provision_system(
+        self, spec: CreateSystemSpec, settings: dict[str, Setting]
+    ) -> None:
+        Path(settings["SYS_PATH"].value or "").mkdir(parents=True, exist_ok=True)
+
     # fs materialises the domain as a real directory (mkdir).
-    def create_domain(
+    def plan_domain(
         self, ctx: SystemContext, spec: CreateDomainSpec
     ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
@@ -124,7 +128,15 @@ class FsSystem(CloudBase):
         if not base:
             raise DatagenError("domain name is empty")
         _validate_path(base, "name")
-        full = f"{root}/{base}"
+        settings["BASE_PATH"] = Setting(
+            "BASE_PATH", value=f"{root}/{base}", is_path=True
+        )
+        return settings
+
+    def provision_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec, settings: dict[str, Setting]
+    ) -> None:
+        full = settings["BASE_PATH"].value or ""
         full_p = Path(full)
         if full_p.exists():
             if spec.force:
@@ -134,5 +146,3 @@ class FsSystem(CloudBase):
                     f"domain already exists: {full} (use --force to recreate)"
                 )
         full_p.mkdir(parents=True)
-        settings["BASE_PATH"] = Setting("BASE_PATH", value=full, is_path=True)
-        return settings

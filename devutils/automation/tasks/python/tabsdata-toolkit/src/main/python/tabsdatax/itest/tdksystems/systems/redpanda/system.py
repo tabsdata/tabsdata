@@ -91,8 +91,10 @@ class RedpandaSystem(ContainerBase):
         # Redpanda needs `redpanda start` after the image AND --advertise-kafka-addr
         # baked at start time. We bind two listeners: internal:9092 (for rpk inside)
         # and external:HOST_PORT (for clients on the host). We also publish the
-        # schema registry (container 8081) on a free host port.
-        self._registry_port = find_free_port()
+        # schema registry (container 8081) on a free host port (allocated at plan
+        # time by `_system_extra_vars`, so it's in the descriptor before start).
+        if self._registry_port is None:
+            self._registry_port = find_free_port()
         args = [
             "-d",
             "--platform",
@@ -120,7 +122,10 @@ class RedpandaSystem(ContainerBase):
 
     def _system_extra_vars(self) -> dict[str, str]:
         # Baked into the system script + forwarded via its delegate export,
-        # so `<sys> create` (which runs create_domain) can read it.
+        # so `<sys> create` (which runs create_domain) can read it. Allocated
+        # here (plan time) so the port lands in the descriptor before start.
+        if self._registry_port is None:
+            self._registry_port = find_free_port()
         port = self._registry_port
         return {
             "REGISTRY_PORT": str(port or ""),
@@ -153,7 +158,17 @@ class RedpandaSystem(ContainerBase):
 
         return AdminClient({"bootstrap.servers": f"{admin.host}:{admin.port}"})
 
-    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
+    def domain_result(self, admin: AdminConn, name: str, password: str) -> DomainResult:
+        # Kafka topics carry no per-domain credentials, so the generated
+        # `password` is unused.
+        return DomainResult(
+            db=name,
+            user="",
+            password="",
+            sqlalchemy_uri=f"kafka://{admin.host}:{admin.port}/{name}",
+        )
+
+    def do_create(self, admin: AdminConn, result: DomainResult) -> None:
         from confluent_kafka.admin import NewTopic
 
         # Keep `client` referenced until the future resolves — if the
@@ -161,18 +176,14 @@ class RedpandaSystem(ContainerBase):
         # ("Handle is terminating") and the future fails.
         client = self._admin_client(admin)
         futures = client.create_topics([
-            NewTopic(name, num_partitions=1, replication_factor=1)
+            NewTopic(result.db, num_partitions=1, replication_factor=1)
         ])
         try:
-            futures[name].result()  # block until created; raises on failure
+            futures[result.db].result()  # block until created; raises on failure
         except Exception as exc:
-            raise DatagenError(f"kafka create topic '{name}' failed: {exc}") from exc
-        return DomainResult(
-            db=name,
-            user="",
-            password="",
-            sqlalchemy_uri=f"kafka://{admin.host}:{admin.port}/{name}",
-        )
+            raise DatagenError(
+                f"kafka create topic '{result.db}' failed: {exc}"
+            ) from exc
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
         # A domain seeds one topic per entity, named `<domain>.<entity>`, so drop

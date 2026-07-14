@@ -113,11 +113,7 @@ def test_staging_root_uses_explicit_sys_path():
 def test_create_domain_derives_base_path(monkeypatch):
     sysobj = systems.get("clickhouse")
     monkeypatch.setattr(sysobj, "do_list", lambda admin: [])
-    monkeypatch.setattr(
-        sysobj, "do_create",
-        lambda admin, name: DomainResult(
-            db=name, user=name, password="pw",
-            sqlalchemy_uri=f"clickhouse+http://{name}"))
+    monkeypatch.setattr(sysobj, "do_create", lambda admin, result: None)
     ctx = SystemContext("clickhouse", "clickhouse", {
         "CONTAINER": "clickhouse", "PASSWORD": "pw", "PORT": "8123",
         "SYS_PATH": "xp-staging"})

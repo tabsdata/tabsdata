@@ -118,9 +118,10 @@ class Db2System(ContainerBase):
             f"@{admin.host}:{admin.port}/{XP_DB}"
         )
 
-    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
+    def domain_result(self, admin: AdminConn, name: str, password: str) -> DomainResult:
+        # Db2 domains reuse the instance (admin) credentials; the domain is a
+        # schema, so the generated `password` is unused.
         schema = db2_schema_name(name)
-        self._run_admin_sql(admin, [f"CREATE SCHEMA {schema}"])
         # currentSchema pins unqualified DDL / DML to this domain's schema.
         uri = (
             f"db2+ibm_db://{admin.user}:{admin.password}"
@@ -129,6 +130,9 @@ class Db2System(ContainerBase):
         return DomainResult(
             db=schema, user=admin.user, password=admin.password, sqlalchemy_uri=uri
         )
+
+    def do_create(self, admin: AdminConn, result: DomainResult) -> None:
+        self._run_admin_sql(admin, [f"CREATE SCHEMA {result.db}"])
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
         # Drop the schema's objects, then the (now empty) schema. We avoid

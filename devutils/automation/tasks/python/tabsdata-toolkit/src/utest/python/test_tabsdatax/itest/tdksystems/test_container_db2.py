@@ -27,7 +27,9 @@ def test_do_create_makes_a_schema_in_the_shared_db(monkeypatch):
     monkeypatch.setattr(sysobj, "_run_admin_sql",
                         lambda admin, stmts: statements.extend(stmts))
 
-    res = sysobj.do_create(_admin(), "D_20260615T091316Z_tucu_db2_IN")
+    # domain_result computes the (admin-credentialled) identity; do_create runs
+    # the schema DDL for it.
+    res = sysobj.domain_result(_admin(), "D_20260615T091316Z_tucu_db2_IN", "unused")
     schema = "D_20260615T091316Z_TUCU_DB2_IN"
 
     # Connect as the instance user, into the shared XP database, schema pinned.
@@ -36,6 +38,7 @@ def test_do_create_makes_a_schema_in_the_shared_db(monkeypatch):
     assert res.db == schema
     assert f"db2inst1:instpw@localhost:55391/{XP_DB}?currentSchema={schema}" in res.sqlalchemy_uri
 
+    sysobj.do_create(_admin(), res)
     joined = "\n".join(statements)
     assert f"CREATE SCHEMA {schema}" in joined
     # No per-domain OS user, and no per-domain database.

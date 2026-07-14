@@ -39,9 +39,13 @@ class SaasBase(System):
 
     # ---- system lifecycle (account is external: verify, don't provision) ----
 
-    def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
-        self._ping(self.resolve_values(spec.settings))
+    def plan_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
         return dict(spec.settings)
+
+    def provision_system(
+        self, spec: CreateSystemSpec, settings: dict[str, Setting]
+    ) -> None:
+        self._ping(self.resolve_values(settings))
 
     def destroy_system(self, ctx: SystemContext) -> None:
         return None
@@ -51,16 +55,25 @@ class SaasBase(System):
 
     # ---- domain lifecycle ----
 
-    def create_domain(
+    def plan_domain(
         self, ctx: SystemContext, spec: CreateDomainSpec
     ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
         if self.domain_is_named:
             entity = spec.entity_name
             validate_name(entity, label="schema")
-            self.create_schema(self.resolve_values(settings), entity, force=spec.force)
             settings["SCHEMA"] = Setting("SCHEMA", value=entity)
         return settings
+
+    def provision_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec, settings: dict[str, Setting]
+    ) -> None:
+        if self.domain_is_named:
+            self.create_schema(
+                self.resolve_values(settings),
+                settings["SCHEMA"].value or spec.entity_name,
+                force=spec.force,
+            )
 
     def destroy_domain(self, ctx: DomainContext) -> None:
         schema = ctx.meta.get("SCHEMA")

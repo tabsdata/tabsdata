@@ -38,14 +38,17 @@ class CloudBase(System):
 
     # ---- system lifecycle ----
 
-    def create_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
-        values = self.resolve_values(spec.settings)
-        backend = self._backend(values)
+    def plan_system(self, spec: CreateSystemSpec) -> dict[str, Setting]:
+        return dict(spec.settings)
+
+    def provision_system(
+        self, spec: CreateSystemSpec, settings: dict[str, Setting]
+    ) -> None:
+        backend = self._backend(self.resolve_values(settings))
         try:
             backend.status()
         except Exception as exc:  # noqa: BLE001
             raise DatagenError(f"could not reach {self.slug}: {exc}")
-        return dict(spec.settings)
 
     def destroy_system(self, ctx: SystemContext) -> None:
         return None  # the root prefix is externally owned — never touch it
@@ -57,17 +60,24 @@ class CloudBase(System):
 
     # ---- domain lifecycle ----
 
-    def create_domain(
+    def plan_domain(
         self, ctx: SystemContext, spec: CreateDomainSpec
     ) -> dict[str, Setting]:
         settings = self.settings_from_meta(ctx.meta)
-        values = self.resolve_values(settings)
         base = _normalize_path(spec.entity_name)
         if not base:
             raise DatagenError("domain name is empty")
         _validate_path(base, "name")
-        root = values.get("SYS_PATH", "")
+        root = self.resolve_values(settings).get("SYS_PATH", "")
         full = f"{root}/{base}" if root else base
+        settings["BASE_PATH"] = Setting("BASE_PATH", value=full, is_path=True)
+        return settings
+
+    def provision_domain(
+        self, ctx: SystemContext, spec: CreateDomainSpec, settings: dict[str, Setting]
+    ) -> None:
+        values = self.resolve_values(settings)
+        full = settings["BASE_PATH"].value
         backend = self._backend(values)
         if backend.exists(full):
             if spec.force:
@@ -77,8 +87,6 @@ class CloudBase(System):
                     f"domain prefix has objects: {self.slug}://{full} "
                     f"(use --force to clear)"
                 )
-        settings["BASE_PATH"] = Setting("BASE_PATH", value=full, is_path=True)
-        return settings
 
     def destroy_domain(self, ctx: DomainContext) -> None:
         values = self.resolve_values(self.settings_from_meta(ctx.meta))

@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import platform
 
-from ...shell import docker_exec_check, docker_run, gen_password
+from ...shell import docker_exec_check, docker_run
 from .._container import AdminConn, ContainerBase, DomainResult
 
 
@@ -55,18 +55,20 @@ class ClickhouseSystem(ContainerBase):
             f"@{admin.host}:{admin.port}/default"
         )
 
-    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
-        pw = gen_password()
+    def domain_result(self, admin: AdminConn, name: str, password: str) -> DomainResult:
+        uri = f"clickhouse+http://{name}:{password}@{admin.host}:{admin.port}/{name}"
+        return DomainResult(db=name, user=name, password=password, sqlalchemy_uri=uri)
+
+    def do_create(self, admin: AdminConn, result: DomainResult) -> None:
         self._run_admin_sql(
             admin,
             [
-                f'CREATE DATABASE "{name}"',
-                f"CREATE USER \"{name}\" IDENTIFIED WITH plaintext_password BY '{pw}'",
-                f'GRANT ALL ON "{name}".* TO "{name}"',
+                f'CREATE DATABASE "{result.db}"',
+                f'CREATE USER "{result.user}" IDENTIFIED WITH '
+                f"plaintext_password BY '{result.password}'",
+                f'GRANT ALL ON "{result.db}".* TO "{result.user}"',
             ],
         )
-        uri = f"clickhouse+http://{name}:{pw}@{admin.host}:{admin.port}/{name}"
-        return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
         self._run_admin_sql(

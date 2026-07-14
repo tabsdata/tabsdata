@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from ...shell import docker_exec, docker_run, gen_password
+from ...shell import docker_exec, docker_run
 from .._container import AdminConn, ContainerBase, DomainResult
 
 ORACLE_SERVICE = "FREEPDB1"
@@ -56,23 +56,24 @@ class OracleSystem(ContainerBase):
             f"@{admin.host}:{admin.port}/?service_name={ORACLE_SERVICE}"
         )
 
-    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
-        pw = gen_password()
+    def domain_result(self, admin: AdminConn, name: str, password: str) -> DomainResult:
+        uri = (
+            f"oracle+oracledb://{name}:{password}@{admin.host}:{admin.port}"
+            f"/?service_name={ORACLE_SERVICE}"
+        )
+        return DomainResult(db=name, user=name, password=password, sqlalchemy_uri=uri)
+
+    def do_create(self, admin: AdminConn, result: DomainResult) -> None:
         # sqlplus directives (WHENEVER / SET / EXIT) are dropped — only the DDL
         # runs over the driver. Oracle DDL auto-commits.
         self._run_admin_sql(
             admin,
             [
-                f'CREATE USER {name} IDENTIFIED BY "{pw}"',
-                f"GRANT CONNECT, RESOURCE TO {name}",
-                f"GRANT UNLIMITED TABLESPACE TO {name}",
+                f'CREATE USER {result.user} IDENTIFIED BY "{result.password}"',
+                f"GRANT CONNECT, RESOURCE TO {result.user}",
+                f"GRANT UNLIMITED TABLESPACE TO {result.user}",
             ],
         )
-        uri = (
-            f"oracle+oracledb://{name}:{pw}@{admin.host}:{admin.port}"
-            f"/?service_name={ORACLE_SERVICE}"
-        )
-        return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
         if not any(u.lower() == name.lower() for u in self.do_list(admin)):

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from ...shell import docker_exec_check, docker_run, gen_password
+from ...shell import docker_exec_check, docker_run
 from .._container import AdminConn, ContainerBase, DomainResult
 
 
@@ -61,25 +61,27 @@ class MssqlSystem(ContainerBase):
             f"?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
         )
 
-    def do_create(self, admin: AdminConn, name: str) -> DomainResult:
-        pw = gen_password()
+    def domain_result(self, admin: AdminConn, name: str, password: str) -> DomainResult:
+        uri = (
+            f"mssql+pyodbc://{name}:{password}@{admin.host}:{admin.port}/{name}"
+            f"?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+        )
+        return DomainResult(db=name, user=name, password=password, sqlalchemy_uri=uri)
+
+    def do_create(self, admin: AdminConn, result: DomainResult) -> None:
         # No GO batches over pyodbc — each statement runs on its own; USE
         # switches the connection's DB context for the CREATE USER that follows.
         self._run_admin_sql(
             admin,
             [
-                f"CREATE DATABASE [{name}]",
-                f"CREATE LOGIN [{name}] WITH PASSWORD = '{pw}', CHECK_POLICY = OFF",
-                f"USE [{name}]",
-                f"CREATE USER [{name}] FOR LOGIN [{name}]",
-                f"ALTER ROLE db_owner ADD MEMBER [{name}]",
+                f"CREATE DATABASE [{result.db}]",
+                f"CREATE LOGIN [{result.user}] WITH PASSWORD = '{result.password}', "
+                f"CHECK_POLICY = OFF",
+                f"USE [{result.db}]",
+                f"CREATE USER [{result.user}] FOR LOGIN [{result.user}]",
+                f"ALTER ROLE db_owner ADD MEMBER [{result.user}]",
             ],
         )
-        uri = (
-            f"mssql+pyodbc://{name}:{pw}@{admin.host}:{admin.port}/{name}"
-            f"?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
-        )
-        return DomainResult(db=name, user=name, password=pw, sqlalchemy_uri=uri)
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
         self._run_admin_sql(

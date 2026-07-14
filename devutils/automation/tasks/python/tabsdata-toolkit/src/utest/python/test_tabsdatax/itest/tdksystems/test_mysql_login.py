@@ -11,21 +11,19 @@ def _admin() -> AdminConn:
     return AdminConn(host="localhost", port="3306", user="root", password="rootpw")
 
 
-def test_mysql_login_is_the_database_name(monkeypatch):
+def test_mysql_login_is_the_database_name():
     sysobj = MysqlSystem()
-    monkeypatch.setattr(sysobj, "_run_admin_sql", lambda admin, statements: None)
     # A name within the 32-char limit: login == database name.
-    res = sysobj.do_create(_admin(), "finance_in")
+    res = sysobj.domain_result(_admin(), "finance_in", "pw")
     assert res.db == "finance_in"
     assert res.user == "finance_in"
     assert res.user in res.sqlalchemy_uri
 
 
-def test_mysql_login_trimmed_to_32_with_warning(monkeypatch, capsys):
+def test_mysql_login_trimmed_to_32_with_warning(capsys):
     sysobj = MysqlSystem()
-    monkeypatch.setattr(sysobj, "_run_admin_sql", lambda admin, statements: None)
     long_name = "d" * 40                    # > 32 chars
-    res = sysobj.do_create(_admin(), long_name)
+    res = sysobj.domain_result(_admin(), long_name, "pw")
     assert res.db == long_name              # database keeps the full name (64 limit)
     assert res.user == long_name[:32]       # login trimmed to 32
     assert len(res.user) == 32
@@ -33,8 +31,7 @@ def test_mysql_login_trimmed_to_32_with_warning(monkeypatch, capsys):
     assert "WARNING" in err and "trimming" in err
 
 
-def test_mysql_no_warning_within_limit(monkeypatch, capsys):
+def test_mysql_no_warning_within_limit(capsys):
     sysobj = MysqlSystem()
-    monkeypatch.setattr(sysobj, "_run_admin_sql", lambda admin, statements: None)
-    sysobj.do_create(_admin(), "short_db")
+    sysobj.domain_result(_admin(), "short_db", "pw")
     assert capsys.readouterr().err == ""

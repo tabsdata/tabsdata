@@ -108,6 +108,13 @@ import sys
 import tempfile
 from pathlib import Path
 
+from tenacity import (
+    Retrying,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_fixed,
+)
+
 from . import (
     _venv,
     cli,
@@ -768,33 +775,75 @@ def _safe_remove(path: str) -> None:
         pass
 
 
-def _cleanup_after_failed_create(kind, sysobj, name, path, baked) -> None:
-    """Best-effort teardown after a create fails partway through: destroy
-    whatever the backend provisioned (container / database / schema / dir) and
-    remove any descriptor written, so a failed create leaves nothing behind.
-    Never raises — the original error is what the caller re-raises.
+# --- descriptor-first create with retry -----------------------------------
+# The create verbs write the FULL descriptor before provisioning, so a failed
+# provision can be torn down from the descriptor already on disk, then retried.
 
-    `baked` is the freshly-returned ``{name: Setting}`` from create_system /
-    create_domain; its literals carry the back-references destroy needs
-    (CONTAINER for a system, SYS_CONTAINER / DB for a container domain)."""
-    print(f">>> create failed — cleaning up {kind} '{name}' …", file=sys.stderr)
+CREATE_ATTEMPTS = 3
+CREATE_BACKOFF_S = 2
+
+
+def _system_ctx_from_descriptor(slug: str, path) -> SystemContext:
+    """Load a just-written system descriptor into the resolved handle destroy
+    reads (mirrors `_sys_destroy_one`)."""
+    doc = descriptor.load(path)
+    meta = descriptor.resolve(doc)
+    _setenv(meta)
+    return SystemContext(slug, doc["name"], meta)
+
+
+def _domain_ctx_from_descriptor(slug: str, path, sys_dir: str | None) -> DomainContext:
+    """Load a just-written domain descriptor into the resolved handle destroy
+    reads, with the admin connection refreshed from the owning system (mirrors
+    `_domain_destroy_one`)."""
+    doc = descriptor.load(path)
+    meta = _domain_meta_via_system(doc, sys_dir)
+    _setenv(meta)
+    return DomainContext(slug, doc["name"], meta)
+
+
+def _provision_with_retry(kind, sysobj, name, out, ctx, provision) -> None:
+    """Provision a system/domain whose FULL descriptor is already on disk at
+    `out`, retrying up to CREATE_ATTEMPTS times with a fixed backoff. Each failed
+    attempt first best-effort destroys whatever it provisioned — reachable
+    because the complete descriptor was written before provisioning — swallowing
+    any teardown error, so the next attempt starts clean. If every attempt
+    fails, the descriptor is removed and the last error re-raised."""
+
+    def _destroy_partial() -> None:
+        try:
+            if kind == "system":
+                sysobj.destroy_system(ctx)
+            else:
+                sysobj.destroy_domain(ctx)
+        except Exception as exc:  # noqa: BLE001 - teardown is best-effort
+            print(
+                f">>> cleanup: could not destroy partial {kind} '{name}': {exc}",
+                file=sys.stderr,
+            )
+
     try:
-        meta = {k: (s.value or "") for k, s in (baked or {}).items()}
-        ctx = (
-            SystemContext(sysobj.slug, name, meta)
-            if kind == "system"
-            else DomainContext(sysobj.slug, name, meta)
-        )
-        if kind == "system":
-            sysobj.destroy_system(ctx)
-        else:
-            sysobj.destroy_domain(ctx)
-    except Exception as exc:
-        print(
-            f">>> cleanup: could not fully destroy {kind} '{name}': {exc}",
-            file=sys.stderr,
-        )
-    _safe_remove(path)
+        for attempt in Retrying(
+            stop=stop_after_attempt(CREATE_ATTEMPTS),
+            wait=wait_fixed(CREATE_BACKOFF_S),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        ):
+            with attempt:
+                try:
+                    provision()
+                except Exception:
+                    n = attempt.retry_state.attempt_number
+                    print(
+                        f">>> {kind} '{name}' provisioning failed "
+                        f"(attempt {n}/{CREATE_ATTEMPTS})",
+                        file=sys.stderr,
+                    )
+                    _destroy_partial()
+                    raise
+    except Exception:
+        _safe_remove(out)
+        raise
 
 
 # =====================================================================
@@ -999,30 +1048,33 @@ def _sys_dump(rest: list[str]) -> int:
 
 
 def _sys_create_single(args, slug: str) -> int:
-    """Provision one system from the parsed create namespace; the descriptor is
-    persisted by descriptor.write (no category branch)."""
+    """Provision one system from the parsed create namespace. Its FULL
+    descriptor is planned and written BEFORE provisioning, so a failed provision
+    is torn down from it and retried (no category branch)."""
     sysobj = systems.get(slug)
     out = _sys_target(args)
     _prepare_descriptor_path(out, args.force)
-    started = descriptor.now_stamp()
-    baked = sysobj.create_system(
-        CreateSystemSpec(
-            name=args.sys,
-            out=out,
-            force=args.force,
-            settings=sysobj.resolve_create_settings(args),
-            host_port=getattr(args, "port", None),
-            ready_timeout=getattr(args, "ready_timeout", 300),
-        )
+    spec = CreateSystemSpec(
+        name=args.sys,
+        out=out,
+        force=args.force,
+        settings=sysobj.resolve_create_settings(args),
+        host_port=getattr(args, "port", None),
+        ready_timeout=getattr(args, "ready_timeout", 300),
     )
-    # The system is provisioned now; if persisting its descriptor fails, tear
-    # it back down rather than leaking a running container / created resource.
-    try:
-        descriptor.write(sysobj, "sys", out, baked)
-        descriptor.stamp(out, name=args.sys, started=started)
-    except BaseException:
-        _cleanup_after_failed_create("system", sysobj, args.sys, out, baked)
-        raise
+    settings = sysobj.plan_system(spec)
+    started = descriptor.now_stamp()
+    descriptor.write(sysobj, "sys", out, settings)
+    descriptor.stamp(out, name=args.sys, started=started)
+    ctx = _system_ctx_from_descriptor(slug, out)
+    _provision_with_retry(
+        "system",
+        sysobj,
+        args.sys,
+        out,
+        ctx,
+        lambda: sysobj.provision_system(spec, settings),
+    )
     _print_created("system", out, _sys_hint(args))
     return 0
 
@@ -1119,24 +1171,33 @@ def _provision_system_auto(
     slug: str, name: str, sys_dir: str | None, force: bool
 ) -> None:
     """Create the system `name` of type `slug` with settings resolved purely
-    from `$<PREFIX>__<OPT>` env vars (the default-prefix fallback), then persist
-    its descriptor — tearing the resource back down if persisting fails."""
+    from `$<PREFIX>__<OPT>` env vars (the default-prefix fallback): plan and
+    persist its full descriptor, then provision with retry (see
+    `_provision_with_retry`)."""
     sysobj = systems.get(slug)
-    settings = sysobj.resolve_create_settings(
-        argparse.Namespace(env_prefix=sysobj.default_env_prefix)
-    )
     out = str(store.system_path(name, sys_dir))
-    _prepare_descriptor_path(out, force)
-    started = descriptor.now_stamp()
-    baked = sysobj.create_system(
-        CreateSystemSpec(name=name, out=out, force=force, settings=settings)
+    spec = CreateSystemSpec(
+        name=name,
+        out=out,
+        force=force,
+        settings=sysobj.resolve_create_settings(
+            argparse.Namespace(env_prefix=sysobj.default_env_prefix)
+        ),
     )
-    try:
-        descriptor.write(sysobj, "sys", out, baked)
-        descriptor.stamp(out, name=name, started=started)
-    except BaseException:
-        _cleanup_after_failed_create("system", sysobj, name, out, baked)
-        raise
+    _prepare_descriptor_path(out, force)
+    settings = sysobj.plan_system(spec)
+    started = descriptor.now_stamp()
+    descriptor.write(sysobj, "sys", out, settings)
+    descriptor.stamp(out, name=name, started=started)
+    ctx = _system_ctx_from_descriptor(slug, out)
+    _provision_with_retry(
+        "system",
+        sysobj,
+        name,
+        out,
+        ctx,
+        lambda: sysobj.provision_system(spec, settings),
+    )
 
 
 def _domains_using_system(sys_name: str, domain_dir: str | None) -> list[str]:
@@ -1878,38 +1939,46 @@ def _domain_create_single(args, peeked_sys) -> int:
     if (args.model or args.data) and not sysobj.supports_models:
         raise DatagenError(f"{slug} does not support --model / --data")
     external = _external_name(args.domain, args.domain_prefix)
-    baked = sysobj.create_domain(
-        SystemContext(slug, sysdoc["name"], sysmeta),
-        CreateDomainSpec(
-            name=args.domain,
-            out=domain_path,
-            force=args.force,
-            options=sysobj.resolve_domain_options(args),
-            external_name=external,
-        ),
+    sysctx = SystemContext(slug, sysdoc["name"], sysmeta)
+    spec = CreateDomainSpec(
+        name=args.domain,
+        out=domain_path,
+        force=args.force,
+        options=sysobj.resolve_domain_options(args),
+        external_name=external,
     )
-    # The domain resource (database / schema / prefix) exists now. If writing
-    # its descriptor OR the optional schema-install / data-load fails, drop the
-    # resource and remove the descriptor so nothing half-created is left behind.
-    try:
-        descriptor.write(sysobj, "env", domain_path, baked)
-        descriptor.stamp(
-            domain_path,
-            name=args.domain,
-            started=started,
-            model=args.model,
-            data=args.data,
-            external_name=external,
-            sys_name=args.sys,
-            entity_term=sysobj.domain_flag,
-        )
+    # The FULL descriptor is planned and written BEFORE the domain resource is
+    # provisioned, so a failed provision is torn down from it and retried.
+    settings = sysobj.plan_domain(sysctx, spec)
+    descriptor.write(sysobj, "env", domain_path, settings)
+    descriptor.stamp(
+        domain_path,
+        name=args.domain,
+        started=started,
+        model=args.model,
+        data=args.data,
+        external_name=external,
+        sys_name=args.sys,
+        entity_term=sysobj.domain_flag,
+    )
+    ctx = _domain_ctx_from_descriptor(slug, domain_path, args.sys_dir)
 
-        # Optional model + data — reuse the data pipeline (reads the descriptor
-        # we just wrote).
+    # Provision the domain resource AND seed its optional model/data as ONE
+    # retried unit: if either fails, the resource is destroyed and the whole
+    # thing re-attempted from the (unchanged) descriptor — the pinned settings
+    # mean the re-provisioned domain is identical, so the seed replays cleanly.
+    def _provision_and_seed() -> None:
+        sysobj.provision_domain(sysctx, spec, settings)
         _install_model_and_data(domain_path, args.model, args.data, force=args.force)
-    except BaseException:
-        _cleanup_after_failed_create("domain", sysobj, args.domain, domain_path, baked)
-        raise
+
+    _provision_with_retry(
+        "domain",
+        sysobj,
+        args.domain,
+        domain_path,
+        ctx,
+        _provision_and_seed,
+    )
     # Announced only once the domain (and any model/data) is fully in place.
     _print_created("domain", domain_path, _domain_hint(args))
     return 0
