@@ -110,8 +110,14 @@ def _print_result(result, sink: IO[str]) -> None:
 
     None becomes empty string. Other types stringified via str(). Rendering
     each result starts on a fresh line so multiple result sets in one batch
-    stay visually distinct."""
+    stay visually distinct.
+
+    Some drivers (e.g. ClickHouse) report ``returns_rows`` for column-less
+    statements such as INSERT; those yield no columns and are skipped so they
+    do not emit a blank line each."""
     cols = list(result.keys())
+    if not cols:
+        return
     print("\t".join(cols), file=sink)
     for row in result:
         print(

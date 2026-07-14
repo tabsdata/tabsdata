@@ -24,7 +24,7 @@ use crate::client::tdkserver::commands::service::{
     resolved_details, resolved_instance, resolved_yes,
 };
 #[cfg(feature = "enterprise")]
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::confirm;
 #[cfg(feature = "enterprise")]
 use crate::core::system::exit::abort;
 use crate::core::system::exit::{CommandResult, render_error};
@@ -155,7 +155,10 @@ pub async fn command_quickstart(
             overrides.insert(SECRET_CATEGORY_ANTHROPIC_KEY.to_owned(), value);
         }
         if overrides.is_empty()
-            && !prompt_yes_no("No OpenAI or Anthropic key provided. Proceed with no aiagent keys?")
+            && !confirm(
+                false,
+                "No OpenAI or Anthropic key provided. Proceed with no aiagent keys?",
+            )?
         {
             return abort(Cancelled);
         }

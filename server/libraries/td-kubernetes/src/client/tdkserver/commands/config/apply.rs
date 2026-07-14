@@ -11,7 +11,7 @@ use crate::base::reporter::InteractiveReporter;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::client::tdkserver::commands::config::put::{PutSource, ensure_source, put_configs};
 use crate::client::tdkserver::commands::server::restart::restart_server;
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::preview;
 use crate::core::system::exit::CommandResult;
 use crate::runtime::provider::provider_for_or_tdkcontext;
@@ -80,7 +80,7 @@ pub async fn command_apply(arguments: ApplyArguments, globals: &GlobalArguments)
     if details {
         preview::apply_config(&provider.summary());
     }
-    if !yes && !prompt_yes_no("Proceed with the apply?") {
+    if !confirm(yes, "Proceed with the apply?")? {
         info!("Operation cancelled.");
         return Ok(());
     }

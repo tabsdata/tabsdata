@@ -12,7 +12,7 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
     instance_label, instance_markers, resolved_details, resolved_instance, resolved_yes,
 };
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::CommandResult;
 use crate::cwarn;
@@ -98,7 +98,7 @@ pub async fn command_restart(
         let markers = instance_markers(&provider.summary(), instance.pinned);
         preview::restart_service(&provider.summary(), &markers);
     }
-    if !yes.value && !prompt_yes_no("Proceed with the restart?") {
+    if !confirm(yes.value, "Proceed with the restart?")? {
         info!("Operation cancelled.");
         return Ok(());
     }

@@ -116,6 +116,7 @@ WINDOWS_SYSTEM_DLLS = {
     "secur32.dll",
     "setupapi.dll",
     "shell32.dll",
+    "user32.dll",
     "userenv.dll",
     "vcruntime140_1.dll",
     "vcruntime140.dll",

@@ -19,7 +19,7 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
     resolved_details, resolved_instance, resolved_yes,
 };
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::preview;
 use crate::core::system::exit::{CommandError, CommandResult, render_error};
 use crate::cwarn;
@@ -96,7 +96,7 @@ pub async fn command_trash(arguments: TrashArguments, globals: &GlobalArguments)
             &trash_root.display().to_string(),
         );
     }
-    if !yes.value && !prompt_yes_no("Proceed with trashing the instance?") {
+    if !confirm(yes.value, "Proceed with trashing the instance?")? {
         info!("Operation cancelled.");
         return Ok(());
     }

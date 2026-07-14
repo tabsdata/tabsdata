@@ -3,8 +3,17 @@
 //
 
 use std::io::{self, BufRead, Write};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
+use td_common::status::ExitStatus;
 
 use crate::base::constants::{VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
+use crate::cerror;
+use crate::core::system::exit::{CommandResult, abort};
+
+pub const PROMPT_TIMEOUT: Duration = Duration::from_secs(60);
 
 const MAX_INSTANCE_NAME_LENGTH: usize = 256;
 
@@ -64,18 +73,76 @@ pub fn parse_yes_no(value: &str) -> Option<bool> {
     }
 }
 
-pub fn prompt_yes_no(message: &str) -> bool {
-    let stdin = io::stdin();
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Confirmation {
+    Yes,
+    No,
+    TimedOut,
+}
+
+enum LineOutcome {
+    Line(String),
+    Closed,
+}
+
+pub fn prompt_yes_no(message: &str) -> Confirmation {
+    prompt_yes_no_with_timeout(message, PROMPT_TIMEOUT)
+}
+
+fn prompt_yes_no_with_timeout(message: &str, timeout: Duration) -> Confirmation {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        loop {
+            let mut line = String::new();
+            let outcome = match stdin.lock().read_line(&mut line) {
+                Ok(0) | Err(_) => LineOutcome::Closed,
+                Ok(_) => LineOutcome::Line(line),
+            };
+            let closed = matches!(outcome, LineOutcome::Closed);
+            if sender.send(outcome).is_err() || closed {
+                break;
+            }
+        }
+    });
+
+    let started = std::time::Instant::now();
     loop {
         print!("{message} [{VALUE_Y}/{VALUE_YES}/{VALUE_N}/{VALUE_NO}]: ");
         io::stdout().flush().ok();
-        let mut line = String::new();
-        match stdin.lock().read_line(&mut line) {
-            Ok(0) | Err(_) => return false,
-            Ok(_) => {}
+        let Some(remaining) = timeout.checked_sub(started.elapsed()) else {
+            return Confirmation::TimedOut;
+        };
+        match receiver.recv_timeout(remaining) {
+            Ok(LineOutcome::Line(line)) => {
+                if let Some(answer) = parse_yes_no(line.trim()) {
+                    return if answer {
+                        Confirmation::Yes
+                    } else {
+                        Confirmation::No
+                    };
+                }
+            }
+            Ok(LineOutcome::Closed) => return Confirmation::No,
+            Err(mpsc::RecvTimeoutError::Timeout) => return Confirmation::TimedOut,
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Confirmation::No,
         }
-        if let Some(answer) = parse_yes_no(line.trim()) {
-            return answer;
+    }
+}
+
+pub fn confirm(skip: bool, message: &str) -> CommandResult<bool> {
+    if skip {
+        return Ok(true);
+    }
+    match prompt_yes_no(message) {
+        Confirmation::Yes => Ok(true),
+        Confirmation::No => Ok(false),
+        Confirmation::TimedOut => {
+            cerror!(
+                "No response received within {} seconds; the operation was cancelled.",
+                PROMPT_TIMEOUT.as_secs()
+            );
+            abort(ExitStatus::Aborted)
         }
     }
 }

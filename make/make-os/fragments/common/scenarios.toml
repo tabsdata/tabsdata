@@ -52,9 +52,22 @@ script = [
     shared_pg_exists = is_path_exists ${shared_pg_folder}
     if ${shared_pg_exists}
         info "🧹 Removing the shared test PostgreSQL folder: ${shared_pg_folder}"
-        removed = rm -r ${shared_pg_folder}
-        if not ${removed}
-            info "🧹 Could not remove the shared test PostgreSQL folder now; it will be recreated on the next run"
+        attempts = range 0 24
+        for attempt in ${attempts}
+            still_present = is_path_exists ${shared_pg_folder}
+            if ${still_present}
+                exec python -c "import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)" ${shared_pg_folder}
+                still_present = is_path_exists ${shared_pg_folder}
+                if ${still_present}
+                    info "🧹 Shared test PostgreSQL folder still locked; retrying in 5s"
+                    sleep 5000
+                end
+            end
+        end
+        release ${attempts}
+        still_present = is_path_exists ${shared_pg_folder}
+        if ${still_present}
+            warn "🧹 Could not remove the shared test PostgreSQL folder after 2 minutes; leaving it in place (it will be recreated on the next run)"
         end
     end
 

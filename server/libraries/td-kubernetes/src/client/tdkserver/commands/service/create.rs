@@ -17,7 +17,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, Ins
 use crate::client::tdkserver::commands::service::{
     instance_markers, resolved_details, resolved_instance, resolved_yes,
 };
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::preview;
 use crate::client::tdkserver::render::report::helper::common::activation_command;
 use crate::core::system::exit::{CommandResult, abort};
@@ -155,7 +155,7 @@ pub async fn create_instance(
         preview::create_service(&provider.summary(), &markers);
         report_ports(&assigned);
     }
-    if !yes && !prompt_yes_no("Proceed with the creation?") {
+    if !confirm(yes, "Proceed with the creation?")? {
         info!("Operation cancelled.");
         return abort(Cancelled);
     }

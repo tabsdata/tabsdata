@@ -161,3 +161,8 @@ fn parse_yes_no_rejects_other_strings() {
     assert_eq!(parse_yes_no("1"), None);
     assert_eq!(parse_yes_no(" y "), None);
 }
+
+#[test]
+fn confirm_short_circuits_when_skip_is_set() {
+    assert!(confirm(true, "should not prompt").unwrap());
+}

@@ -8,7 +8,7 @@ use tracing::info;
 
 use crate::client::session::pin::{PinContext, PinSelection};
 use crate::client::tdkserver::arguments::GlobalArguments;
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::confirm;
 use crate::core::system::exit::{CommandResult, abort};
 use crate::cwarn;
 
@@ -65,7 +65,7 @@ pub async fn command_unpin(arguments: UnpinArguments, _globals: &GlobalArguments
     let cleared = if selection.any() {
         PinContext::unpin_values(&selection)?
     } else {
-        if !prompt_yes_no("Unpin all pinned tabsdata values?") {
+        if !confirm(false, "Unpin all pinned tabsdata values?")? {
             info!("Operation cancelled.");
             return abort(Cancelled);
         }

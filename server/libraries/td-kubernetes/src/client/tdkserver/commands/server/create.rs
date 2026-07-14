@@ -7,7 +7,7 @@ use td_common::status::ExitStatus::Cancelled;
 
 use crate::base::reporter::InteractiveReporter;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::runtime::provider::provider_for;
@@ -60,7 +60,7 @@ pub async fn command_create(
     if details {
         preview::create_server(&provider.summary());
     }
-    if !yes && !prompt_yes_no("Proceed with the creation?") {
+    if !confirm(yes, "Proceed with the creation?")? {
         return abort(Cancelled);
     }
 

@@ -24,7 +24,7 @@ use crate::client::tdkserver::commands::service::{
     resolved_cluster, resolved_details, resolved_instance, resolved_save, resolved_yes,
 };
 use crate::client::tdkserver::commands::template::get::get_templates;
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort, abort_with};
 use crate::runtime::instance::cluster::ClusterProperties;
@@ -149,7 +149,7 @@ pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -
             loglevel.map(|level| (level.as_str(), loglevel_defaulted)),
         );
     }
-    if !yes.value && !prompt_yes_no("Proceed with the initialization?") {
+    if !confirm(yes.value, "Proceed with the initialization?")? {
         info!("Operation cancelled.");
         return abort(Cancelled);
     }

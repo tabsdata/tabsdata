@@ -23,7 +23,7 @@ use crate::client::tdkserver::commands::service::restart::restart_service;
 use crate::client::tdkserver::commands::service::{
     resolved_details, resolved_instance, resolved_yes,
 };
-use crate::client::tdkserver::common::prompt_yes_no;
+use crate::client::tdkserver::common::confirm;
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::api::configmap::replace_configmap;
 use crate::kube::api::secret::{get_secret, upsert_secret};
@@ -124,7 +124,7 @@ pub async fn command_put(arguments: PutArguments, globals: &GlobalArguments) -> 
             info!("The instance will be restarted after the replacement.");
         }
     }
-    if !yes.value && !prompt_yes_no("Proceed with the replacement?") {
+    if !confirm(yes.value, "Proceed with the replacement?")? {
         info!("Operation cancelled.");
         return abort(Cancelled);
     }
