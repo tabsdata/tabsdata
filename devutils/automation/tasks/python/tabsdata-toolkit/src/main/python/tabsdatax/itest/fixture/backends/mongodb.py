@@ -37,6 +37,7 @@ class MongodbDomain(Domain):
     user: str
     password: str
     db: str
+    uri: str  # credential-less mongodb:// uri; creds supplied as UserPassword
     sqlalchemy_uri: str
     database: str  # mongodb calls the entity container a database (== db here)
     model: str | None = None
