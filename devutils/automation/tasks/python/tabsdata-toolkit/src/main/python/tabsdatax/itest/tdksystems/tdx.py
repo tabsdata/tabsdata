@@ -478,13 +478,39 @@ def _teardown_and_remove(
     return f"({slug}); removed {path}"
 
 
-def _sys_destroy_one(name: str, sys_dir: str | None, *, force: bool = False) -> str:
+def _sys_destroy_one(
+    name: str,
+    sys_dir: str | None,
+    domain_dir: str | None = None,
+    *,
+    force: bool = False,
+) -> str:
     path = store.system_path(name, sys_dir)
     doc = descriptor.load(path)
     _require_role(doc, "sys", "tdx-system", "tdx-domain")
     meta = descriptor.resolve(doc)
     _setenv(meta)
     slug = doc["system"]
+    # Domains built on this system depend on it (and borrow its credentials to
+    # tear down). Refuse unless -f; with -f, destroy each domain FIRST — while
+    # the system is still around to lend its creds — ignoring per-domain
+    # failures, then drop the system.
+    users = _domains_using_system(name, domain_dir)
+    if users:
+        if not force:
+            raise DatagenError(
+                f"system '{name}' is in use by domain(s): {', '.join(users)} "
+                f"(use -f to destroy them too, then the system)"
+            )
+        for dom in users:
+            try:
+                _domain_destroy_one(dom, domain_dir, sys_dir, force=True)
+                print(f">>> destroyed dependent domain '{dom}'", file=sys.stderr)
+            except Exception as exc:  # noqa: BLE001 - cascade ignores per-domain failures
+                print(
+                    f">>> WARNING: could not destroy domain '{dom}': {exc}",
+                    file=sys.stderr,
+                )
     stale = _container_stale(meta)
     if stale:
         return _remove_stale_descriptor("system", name, path, slug, stale, force)
@@ -1105,7 +1131,11 @@ def _sys_sync_from_manifest(args) -> int:
             users = _domains_using_system(name, args.domain_dir)
             if users:
                 raise DatagenError(f"in use by domain(s): {', '.join(users)}")
-            destroyed.append((name, True, _sys_destroy_one(name, args.sys_dir)))
+            destroyed.append((
+                name,
+                True,
+                _sys_destroy_one(name, args.sys_dir, args.domain_dir),
+            ))
         except Exception as exc:  # noqa: BLE001 - one bad target must not stop the rest
             destroyed.append((name, False, str(exc)))
     return _report_synced("system", created, destroyed, unchanged)
@@ -1371,16 +1401,17 @@ def _sys_batch_ns(
 def _sys_destroy_from_manifest(args) -> int:
     """`--sys-manifest FILE|-`: destroy every system named in a `tdx-system`
     manifest. A system missing from the store is warned to stderr and skipped; one
-    still referenced by a domain fails (and the rest still run)."""
+    still referenced by a domain fails unless -f (which cascades — destroys the
+    dependent domains too), and the rest still run."""
     names = _sys_names_from_manifest(args.sys_manifest, args.sys_dir)
-
-    def destroy(name: str) -> str:
-        users = _domains_using_system(name, args.domain_dir)
-        if users:
-            raise DatagenError(f"in use by domain(s): {', '.join(users)}")
-        return _sys_destroy_one(name, args.sys_dir, force=args.force)
-
-    return _multi_apply(names, "system", destroy, past="destroyed")
+    return _multi_apply(
+        names,
+        "system",
+        lambda name: _sys_destroy_one(
+            name, args.sys_dir, args.domain_dir, force=args.force
+        ),
+        past="destroyed",
+    )
 
 
 def _require_single_system(name: str) -> None:
@@ -1396,7 +1427,8 @@ def _require_single_system(name: str) -> None:
 def _sys_destroy(rest: list[str]) -> int:
     """`tdx-system destroy`: drop a single system (`--sys NAME`), a batch
     (`--auto ALL|N1,N2,...`), or every system in a `tdx-system` manifest
-    (`--sys-manifest`, where one still used by a domain fails)."""
+    (`--sys-manifest`). A system still used by domains fails unless -f, which
+    cascades — destroying the dependent domains (ignoring failures) first."""
     args = _sys_batch_ns("tdx-system destroy", rest, with_force=True)
     if args.sys_manifest:
         return _sys_destroy_from_manifest(args)
@@ -1407,11 +1439,13 @@ def _sys_destroy(rest: list[str]) -> int:
         return _multi_apply(
             names,
             "system",
-            lambda n: _sys_destroy_one(n, args.sys_dir, force=args.force),
+            lambda n: _sys_destroy_one(
+                n, args.sys_dir, args.domain_dir, force=args.force
+            ),
             past="destroyed",
         )
     _require_single_system(args.sys)
-    detail = _sys_destroy_one(args.sys, args.sys_dir, force=args.force)
+    detail = _sys_destroy_one(args.sys, args.sys_dir, args.domain_dir, force=args.force)
     print()
     print(f">>> destroyed system '{args.sys}' {detail}")
     print()
