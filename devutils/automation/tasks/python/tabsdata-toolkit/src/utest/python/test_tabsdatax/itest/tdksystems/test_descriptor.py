@@ -159,6 +159,37 @@ def test_info_export_renders_entities_as_json(tmp_path):
     assert "ENTITIES" in unset
 
 
+def test_containers_system_and_domain_shape(tmp_path):
+    sysf = tmp_path / "druid.json"
+    descriptor.write_containers_system(
+        out=str(sysf), system_type="druid", system_kind="druid",
+        project="tdx_d1", image="apache/druid:31.0.0",
+        endpoints={"OVERLORD_URL": "http://localhost:18081",
+                   "ROUTER_URL": "http://localhost:18888"},
+        extra_vars={"SECRET_BACKREF": "x"})
+    doc = _load(sysf)
+    assert (doc["kind"], doc["category"], doc["system"], doc["role"]) == (
+        "containers-system", "containers", "druid", "sys")
+    # endpoints + PROJECT + IMAGE are exported; back-refs are not.
+    assert doc["exported"] == ["SYSTEM_TYPE", "SYSTEM_KIND", "PROJECT", "IMAGE",
+                               "OVERLORD_URL", "ROUTER_URL"]
+    meta = {e["name"]: e.get("value") for e in doc["meta"]}
+    assert meta["PROJECT"] == "tdx_d1" and meta["SECRET_BACKREF"] == "x"
+    assert "SECRET_BACKREF" not in doc["exported"]
+
+    domf = tmp_path / "events.json"
+    descriptor.write_containers_domain(
+        out=str(domf), system_type="druid", system_kind="druid",
+        endpoints={"DATASOURCE": "events",
+                   "OVERLORD_URL": "http://localhost:18081",
+                   "ROUTER_URL": "http://localhost:18888"})
+    dom = _load(domf)
+    assert (dom["kind"], dom["category"], dom["role"]) == (
+        "containers-domain", "containers", "env")
+    assert dom["exported"] == ["SYSTEM_TYPE", "SYSTEM_KIND",
+                               "DATASOURCE", "OVERLORD_URL", "ROUTER_URL"]
+
+
 def test_cloud_and_saas_categories(tmp_path):
     s3 = tmp_path / "s3.json"
     descriptor.write_cloud_system(

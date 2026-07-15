@@ -271,6 +271,13 @@ class System(ABC):
         one (azureblob -> AZ), else the slug upper-cased (s3 -> S3)."""
         return self.env_prefix or self.slug.upper()
 
+    def docker_images(self) -> list[tuple[str, str]]:
+        """The `(image, platform)` docker images this system runs, for
+        `tdx-system types` / `fetch-images`. Empty for systems that start no
+        containers (cloud / native / saas / service); a single-container system
+        returns one, a compose stack returns each service image."""
+        return []
+
     # ==================================================================
     # System lifecycle
     # ==================================================================

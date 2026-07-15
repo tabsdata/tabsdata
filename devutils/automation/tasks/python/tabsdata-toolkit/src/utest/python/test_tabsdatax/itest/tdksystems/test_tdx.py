@@ -38,7 +38,7 @@ def fs_root(tmp_path):
 
 def test_registry_covers_every_system():
     from tabsdatax.itest.tdksystems import systems
-    assert len(systems.all_slugs()) == 20
+    assert len(systems.all_slugs()) == 21
     for slug in systems.all_slugs():
         assert systems.get(slug).slug == slug
 
@@ -427,11 +427,12 @@ def test_fetch_images_pulls_every_container_image(monkeypatch, capsys):
     monkeypatch.setattr(tdx, "docker_pull",
                         lambda image, platform="": pulled.append((image, platform)))
     assert tdx._sys_fetch_images([]) == 0
-    # Exactly the container systems' (image, platform) pairs were pulled — no
-    # cloud / saas / native system (which have no image) was.
-    container = [systems.get(s) for s in systems.all_slugs()
-                 if systems.get(s).category == "container"]
-    expected = {(c.image, c.image_platform) for c in container}
+    # Exactly every system's docker images were pulled: the single-container
+    # systems' (image, platform) plus each compose-stack (containers) system's
+    # service images — no cloud / saas / native system (which have none) was.
+    expected: set[tuple[str, str]] = set()
+    for s in systems.all_slugs():
+        expected.update(systems.get(s).docker_images())
     assert set(pulled) == expected
     out = capsys.readouterr().out
     assert f"fetched {len(expected)}/{len(expected)} image(s)" in out

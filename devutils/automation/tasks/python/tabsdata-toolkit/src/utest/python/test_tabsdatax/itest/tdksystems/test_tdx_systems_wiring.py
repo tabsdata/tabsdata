@@ -10,7 +10,8 @@ import pytest
 from tabsdatax.itest.tdksystems import data_gen, descriptor, store, systems, tdx
 from tabsdatax.itest.tdksystems.errors import DatagenError
 from tabsdatax.itest.tdksystems.shell import ArgumentParser
-from tabsdatax.itest.tdksystems.systems.base import System
+from tabsdatax.itest.tdksystems.systems.base import Health, System
+from tabsdatax.itest.tdksystems.systems.druid.system import DruidSystem
 from tabsdatax.itest.tdksystems.systems.gcs.system import GcsSystem
 from tabsdatax.itest.tdksystems.systems.mysql.system import MysqlSystem
 from tabsdatax.itest.tdksystems.systems.s3.system import S3System
@@ -54,10 +55,11 @@ def fake_sf(monkeypatch):
 
 
 def test_registry_serves_every_system():
-    # All 20 systems are now on the unified registry.
+    # All 21 systems are now on the unified registry.
     assert set(tdx.systems.all_slugs()) == {
         "mysql", "postgres", "mssqlserver", "oracle", "db2", "clickhouse",
         "mongodb", "starrocks", "redpanda",
+        "druid",
         "s3", "gcs", "azureblob", "fs",
         "databricks", "snowflake", "salesforce", "bigquery",
         "anthropic", "openai",
@@ -216,6 +218,87 @@ def test_snowflake_lifecycle_through_tdx(stores, fake_sf):
         tdx._sys_pause(["--sys", "snow"])
     assert tdx._domain_destroy(["--domain", "finance"]) == 0
     assert tdx._sys_destroy(["--sys", "snow"]) == 0
+
+
+# ---- druid (containers / compose stack) -----------------------------------
+
+@pytest.fixture
+def fake_druid(monkeypatch):
+    """Run the druid compose lifecycle offline: no docker, no HTTP. The stack's
+    endpoints are pinned so the descriptor content is deterministic."""
+    from tabsdatax.itest.tdksystems.systems import _containers
+    monkeypatch.setattr(_containers, "require_docker", lambda: None)
+    monkeypatch.setattr(_containers, "compose_container_ids", lambda p, f: [])
+    monkeypatch.setattr(DruidSystem, "_plan_endpoints", lambda self: {
+        "OVERLORD_URL": "http://localhost:18081",
+        "ROUTER_URL": "http://localhost:18888",
+    })
+    monkeypatch.setattr(DruidSystem, "_compose_pull", lambda self, p, env=None: None)
+    monkeypatch.setattr(DruidSystem, "_compose_up", lambda self, p, env=None: None)
+    monkeypatch.setattr(DruidSystem, "_compose_down", lambda self, p: None)
+    monkeypatch.setattr(DruidSystem, "_wait_ready", lambda self, settings, t: None)
+    monkeypatch.setattr(DruidSystem, "_system_health",
+                        lambda self, meta: Health(True, "ready"))
+
+
+def test_druid_lifecycle_through_tdx(stores, fake_druid, monkeypatch):
+    deleted: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        DruidSystem, "_delete_datasource",
+        lambda self, url, ds, user="", password="": deleted.append((url, ds, user)))
+
+    assert tdx._sys_create(["--type", "druid", "--sys", "d1", "-f"]) == 0
+    doc = descriptor.load(store.system_path("d1"))
+    assert doc["category"] == "containers"
+    assert (doc["system"], doc["role"]) == ("druid", "sys")
+    m = descriptor.read_meta(store.system_path("d1"))
+    assert m["KIND"] == "containers-system"
+    assert m["PROJECT"] == "tdx_d1"          # the compose project (destroy finds it)
+    assert m["OVERLORD_URL"] == "http://localhost:18081"
+    assert m["ROUTER_URL"] == "http://localhost:18888"
+    assert m["IMAGE"].startswith("apache/druid:")
+    # Basic-auth admin credentials are minted + exported; the internal-client
+    # password is baked but NOT exported.
+    assert m["USER"] == "admin" and m["PASSWORD"]
+    assert "INTERNAL_PASSWORD" not in descriptor.load(store.system_path("d1"))["exported"]
+    assert tdx._sys_status(["--sys", "d1"]) == 0
+
+    # Domain == a datasource; pin the prefix off so the name is exactly "events".
+    assert tdx._domain_create(["--sys", "d1", "--domain", "events",
+                               "--domain-prefix", "", "-f"]) == 0
+    dm = descriptor.read_meta(store.domain_path("events"))
+    assert dm["KIND"] == "containers-domain"
+    assert dm["DATASOURCE"] == "events"
+    assert dm["OVERLORD_URL"] == "http://localhost:18081"
+    assert dm["ROUTER_URL"] == "http://localhost:18888"
+    assert dm["USER"] == "admin" and dm["PASSWORD"] == m["PASSWORD"]  # inherited
+
+    assert tdx._domain_destroy(["--domain", "events"]) == 0
+    # coordinator DELETE, authenticated as the admin user.
+    assert deleted == [("http://localhost:18081", "events", "admin")]
+    assert not store.domain_path("events").exists()
+    assert tdx._sys_destroy(["--sys", "d1"]) == 0
+    assert not store.system_path("d1").exists()
+
+
+def test_druid_datasource_is_prefixed(stores, fake_druid):
+    """The datasource created carries the DOMAIN_PREFIX; the descriptor's logical
+    name stays bare and the prefixed name is recorded as EXTERNAL_NAME."""
+    tdx._sys_create(["--type", "druid", "--sys", "d1", "-f"])
+    assert tdx._domain_create(["--sys", "d1", "--domain", "events",
+                               "--domain-prefix", "ci_1_", "-f"]) == 0
+    doc = descriptor.load(store.domain_path("events"))
+    assert doc["name"] == "events"                      # logical name unchanged
+    assert doc["external_name"] == "ci_1_events"
+    m = descriptor.read_meta(store.domain_path("events"))
+    assert m["DATASOURCE"] == "ci_1_events"             # the actual datasource
+
+
+def test_druid_rejects_models(stores, fake_druid):
+    tdx._sys_create(["--type", "druid", "--sys", "d1", "-f"])
+    with pytest.raises(DatagenError, match="does not support --model"):
+        tdx._domain_create(["--sys", "d1", "--domain", "events",
+                            "--model", "world", "-f"])
 
 
 # ---- create --help advertises the available choices -----------------------

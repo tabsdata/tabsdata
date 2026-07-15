@@ -318,6 +318,91 @@ def write_container_domain(
     )
 
 
+def write_containers_system(
+    *,
+    out: str,
+    system_type: str,
+    system_kind: str,
+    project: str,
+    image: str | None = None,
+    endpoints: dict[str, str],
+    extra_vars: dict[str, str] | None = None,
+) -> None:
+    """Descriptor for a multi-container (compose-stack) system, e.g. Druid.
+
+    Unlike a single-container system there is no one HOST/PORT/USER/PASSWORD; the
+    stack is addressed by its compose `project` (the analogue of CONTAINER, so
+    destroy / status / pause / resume find it) and reached through one or more
+    HTTP `endpoints` (e.g. Druid's OVERLORD_URL / ROUTER_URL) which are exported
+    so `info` and the test fixtures can surface them. `image` is the primary
+    service image (recorded + exported). `extra_vars` are baked into `meta` but
+    not exported (system back-references)."""
+    extra = extra_vars or {}
+    meta: list[tuple[str, str | None, str | None]] = [
+        ("SYSTEM_TYPE", system_type, None),
+        ("SYSTEM_KIND", system_kind, None),
+        ("PROJECT", project, None),
+    ]
+    if image:
+        meta.append(("IMAGE", image, None))
+    for k, v in endpoints.items():
+        meta.append((k, v, None))
+    for k, v in extra.items():
+        meta.append((k, v, None))
+    exported = ["SYSTEM_TYPE", "SYSTEM_KIND", "PROJECT"]
+    if image:
+        exported.append("IMAGE")
+    exported += list(endpoints)
+    _write(
+        out,
+        category="containers",
+        system=system_type,
+        role="sys",
+        kind="containers-system",
+        meta=meta,
+        exported=exported,
+    )
+
+
+def write_containers_domain(
+    *,
+    out: str,
+    system_type: str,
+    system_kind: str,
+    image: str | None = None,
+    endpoints: dict[str, str],
+    extra_vars: dict[str, str] | None = None,
+) -> None:
+    """Descriptor for a multi-container (compose-stack) domain, e.g. a Druid
+    datasource. The domain records the connection `endpoints` it inherits from
+    the system plus its own identifiers (e.g. DATASOURCE), all exported.
+    `extra_vars` are baked into `meta` but not exported (back-references)."""
+    extra = extra_vars or {}
+    meta: list[tuple[str, str | None, str | None]] = [
+        ("SYSTEM_TYPE", system_type, None),
+        ("SYSTEM_KIND", system_kind, None),
+    ]
+    if image:
+        meta.append(("IMAGE", image, None))
+    for k, v in endpoints.items():
+        meta.append((k, v, None))
+    for k, v in extra.items():
+        meta.append((k, v, None))
+    exported = ["SYSTEM_TYPE", "SYSTEM_KIND"]
+    if image:
+        exported.append("IMAGE")
+    exported += list(endpoints)
+    _write(
+        out,
+        category="containers",
+        system=system_type,
+        role="env",
+        kind="containers-domain",
+        meta=meta,
+        exported=exported,
+    )
+
+
 def write_cloud_system(
     *,
     out: str,
@@ -641,6 +726,19 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
                 sys_path_env=(sp.env_var if sp else None),
                 extra_vars=extra,
             )
+        elif cat == "containers":  # compose-stack systems (druid)
+            v = _settings_literals(settings)
+            ep = getattr(sys_obj, "system_endpoints", ())
+            reserved = {"PROJECT", "IMAGE", *ep}
+            write_containers_system(
+                out=out,
+                system_type=sys_obj.slug,
+                system_kind=sys_obj.kind,
+                project=v.get("PROJECT", ""),
+                image=v.get("IMAGE") or None,
+                endpoints={k: v[k] for k in ep if k in v},
+                extra_vars={k: val for k, val in v.items() if k not in reserved},
+            )
         elif cat in ("cloud", "native"):  # object stores + local fs
             sp = settings["SYS_PATH"]
             write_cloud_system(
@@ -707,6 +805,18 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
             image=v.get("IMAGE") or None,
             extra_vars=extra,
             exported_extra=getattr(sys_obj, "exported_domain_vars", ()),
+        )
+    elif cat == "containers":  # compose-stack domains (druid datasource)
+        v = _settings_literals(settings)
+        ep = getattr(sys_obj, "domain_endpoints", ())
+        reserved = {"IMAGE", *ep}
+        write_containers_domain(
+            out=out,
+            system_type=sys_obj.slug,
+            system_kind=sys_obj.kind,
+            image=v.get("IMAGE") or None,
+            endpoints={k: v[k] for k in ep if k in v},
+            extra_vars={k: val for k, val in v.items() if k not in reserved},
         )
     elif cat in ("cloud", "native"):  # object stores + local fs
         sp, bp = settings["SYS_PATH"], settings["BASE_PATH"]

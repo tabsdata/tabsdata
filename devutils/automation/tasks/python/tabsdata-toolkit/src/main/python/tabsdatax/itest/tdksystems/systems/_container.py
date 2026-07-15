@@ -110,6 +110,9 @@ class ContainerBase(System):
     def staging_root(self) -> bool:  # base adds the SYS_PATH option
         return self.uses_file_staging
 
+    def docker_images(self) -> list[tuple[str, str]]:
+        return [(self.image, self.image_platform)]
+
     def add_create_options(self, parser) -> None:
         super().add_create_options(parser)  # --sys-path/--env-prefix if staging
         parser.add_argument(

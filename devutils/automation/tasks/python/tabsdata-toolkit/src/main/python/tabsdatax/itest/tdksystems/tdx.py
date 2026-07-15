@@ -1223,9 +1223,13 @@ def _sys_types(rest: list[str]) -> int:
     for slug in slugs:
         sysobj = systems.get(slug)
         line = f"  {slug:<{width}}  {sysobj.category}"
-        if sysobj.category == "container":
-            # platform first, then the image (which already carries repo:tag).
-            line += f"  {sysobj.image_platform}  {sysobj.image}"
+        # platform first, then the image (which already carries repo:tag); a
+        # compose stack lists each of its images.
+        imgs = sysobj.docker_images()
+        if imgs:
+            line += "  " + ", ".join(
+                (f"{plat}  {img}" if plat else img) for img, plat in imgs
+            )
         print(line)
     print()
     print(f">>> {len(slugs)} types")
@@ -1252,8 +1256,8 @@ def _sys_fetch_images(rest: list[str]) -> int:
     images: dict[tuple[str, str], list[str]] = {}
     for slug in systems.all_slugs():
         sysobj = systems.get(slug)
-        if sysobj.category == "container":
-            images.setdefault((sysobj.image, sysobj.image_platform), []).append(slug)
+        for image, plat in sysobj.docker_images():
+            images.setdefault((image, plat), []).append(slug)
     total = len(images)
     print()
     print(f">>> fetching {total} docker image(s) for container systems")

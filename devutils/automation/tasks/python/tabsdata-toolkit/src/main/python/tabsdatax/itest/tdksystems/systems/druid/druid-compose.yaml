@@ -1,0 +1,132 @@
+# Apache Druid single-server cluster for tdx: one ZooKeeper + the five Druid
+# processes (coordinator[+overlord] / broker / historical / middleManager /
+# router) sharing a volume for local deep storage. Only the coordinator (8081,
+# the overlord/coordinator API) and router (8888, queries + console) are
+# published; the rest talk over the compose network. The host ports are chosen
+# at plan time and passed in via $TDX_DRUID_COORDINATOR_PORT /
+# $TDX_DRUID_ROUTER_PORT (default 0 = ephemeral, e.g. for `pull` / `down` when
+# no port is set) so concurrent stacks don't collide. Image tags are overridable
+# via $DRUID_IMAGE_VERSION / $ZOOKEEPER_IMAGE_VERSION. The apache/druid image is
+# amd64-only, so its services pin platform: linux/amd64 (run under emulation on
+# arm64 hosts) — this is explicit, so docker doesn't warn about the mismatch;
+# zookeeper is multi-arch and left to resolve natively.
+
+x-druid-env: &druid-env
+  DRUID_SINGLE_NODE_CONF: micro-quickstart
+  AWS_EC2_METADATA_DISABLED: "true"
+  AWS_REGION: us-east-1
+  druid_extensions_loadList: '["druid-parquet-extensions", "druid-s3-extensions", "druid-google-extensions", "druid-azure-extensions", "druid-basic-security"]'
+  druid_zk_service_host: zookeeper
+  druid_storage_type: local
+  druid_storage_storageDirectory: /opt/shared/segments
+  druid_indexer_logs_type: file
+  druid_indexer_logs_directory: /opt/shared/indexing-logs
+  druid_processing_numThreads: "1"
+  druid_processing_numMergeBuffers: "1"
+  druid_worker_capacity: "4"
+  druid_emitter_logging_logLevel: info
+  druid_indexer_runner_javaOptsArray: '["-server", "-Xmx512m", "-XX:MaxDirectMemorySize=400m"]'
+  # Basic HTTP auth (druid-basic-security): a metadata-backed authenticator
+  # bootstraps the `admin` user from $TDX_DRUID_ADMIN_PASSWORD, and the escalator
+  # lets the services authenticate to each other as the internal `druid_system`
+  # user ($TDX_DRUID_INTERNAL_PASSWORD). Both passwords are minted at plan time
+  # and passed in via the environment; every API call (and SQL) then needs creds.
+  druid_auth_authenticatorChain: '["tdx"]'
+  druid_auth_authenticator_tdx_type: basic
+  druid_auth_authenticator_tdx_initialAdminPassword: ${TDX_DRUID_ADMIN_PASSWORD:-}
+  druid_auth_authenticator_tdx_initialInternalClientPassword: ${TDX_DRUID_INTERNAL_PASSWORD:-}
+  druid_auth_authenticator_tdx_credentialsValidator_type: metadata
+  druid_auth_authenticator_tdx_skipOnFailure: "false"
+  druid_auth_authenticator_tdx_authorizerName: tdx
+  druid_auth_authorizers: '["tdx"]'
+  druid_auth_authorizer_tdx_type: basic
+  druid_escalator_type: basic
+  druid_escalator_internalClientUsername: druid_system
+  druid_escalator_internalClientPassword: ${TDX_DRUID_INTERNAL_PASSWORD:-}
+  druid_escalator_authorizerName: tdx
+
+services:
+  zookeeper:
+    image: zookeeper:${ZOOKEEPER_IMAGE_VERSION:-3.5.10}
+    environment:
+      ZOO_MY_ID: 1
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/commands/ruok || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  coordinator:
+    image: apache/druid:${DRUID_IMAGE_VERSION:-31.0.0}
+    platform: linux/amd64
+    command: ["coordinator"]
+    ports:
+      - "${TDX_DRUID_COORDINATOR_PORT:-0}:8081"
+    environment:
+      <<: *druid-env
+    volumes:
+      - druid_shared:/opt/shared
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+
+  broker:
+    image: apache/druid:${DRUID_IMAGE_VERSION:-31.0.0}
+    platform: linux/amd64
+    command: ["broker"]
+    environment:
+      <<: *druid-env
+    volumes:
+      - druid_shared:/opt/shared
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+      coordinator:
+        condition: service_started
+
+  historical:
+    image: apache/druid:${DRUID_IMAGE_VERSION:-31.0.0}
+    platform: linux/amd64
+    command: ["historical"]
+    environment:
+      <<: *druid-env
+    volumes:
+      - druid_shared:/opt/shared
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+      coordinator:
+        condition: service_started
+
+  middlemanager:
+    image: apache/druid:${DRUID_IMAGE_VERSION:-31.0.0}
+    platform: linux/amd64
+    command: ["middleManager"]
+    environment:
+      <<: *druid-env
+    volumes:
+      - druid_shared:/opt/shared
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+      coordinator:
+        condition: service_started
+
+  router:
+    image: apache/druid:${DRUID_IMAGE_VERSION:-31.0.0}
+    platform: linux/amd64
+    command: ["router"]
+    ports:
+      - "${TDX_DRUID_ROUTER_PORT:-0}:8888"
+    environment:
+      <<: *druid-env
+    volumes:
+      - druid_shared:/opt/shared
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+      coordinator:
+        condition: service_started
+
+volumes:
+  druid_shared:

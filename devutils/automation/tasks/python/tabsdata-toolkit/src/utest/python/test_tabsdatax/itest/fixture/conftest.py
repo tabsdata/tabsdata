@@ -73,6 +73,22 @@ def _mock_provisioning(monkeypatch, sysobj):
                             _container.DomainResult(db=name, user="u", password="p",
                                                     sqlalchemy_uri=f"proto://{name}"))
         monkeypatch.setattr(cls, "do_delete", lambda self, admin, name: None)
+    elif cat == "containers":               # druid (compose stack)
+        from tabsdatax.itest.tdksystems.systems import _containers
+        from tabsdatax.itest.tdksystems.systems.base import Health
+        monkeypatch.setattr(_containers, "require_docker", lambda: None)
+        monkeypatch.setattr(_containers, "compose_container_ids", lambda p, f: [])
+        monkeypatch.setattr(cls, "_plan_endpoints", lambda self: {
+            "OVERLORD_URL": "http://localhost:18081",
+            "ROUTER_URL": "http://localhost:18888"})
+        monkeypatch.setattr(cls, "_compose_pull", lambda self, p, env=None: None)
+        monkeypatch.setattr(cls, "_compose_up", lambda self, p, env=None: None)
+        monkeypatch.setattr(cls, "_compose_down", lambda self, p: None)
+        monkeypatch.setattr(cls, "_wait_ready", lambda self, settings, t: None)
+        monkeypatch.setattr(cls, "_system_health",
+                            lambda self, meta: Health(True, "ready"))
+        monkeypatch.setattr(cls, "_delete_datasource",
+                            lambda self, url, ds, user="", password="": None)
     elif sysobj.slug == "bigquery":
         monkeypatch.setattr(cls, "_bq", lambda self, values: _FakeBq())
         monkeypatch.setattr(cls, "_gcs", lambda self, values: _FakeStore())

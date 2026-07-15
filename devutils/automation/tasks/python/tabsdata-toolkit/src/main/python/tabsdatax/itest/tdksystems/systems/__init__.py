@@ -24,6 +24,8 @@ _SLUGS = {
     "mongodb": ("mongodb.system", "MongodbSystem"),
     "starrocks": ("starrocks.system", "StarrocksSystem"),
     "redpanda": ("redpanda.system", "RedpandaSystem"),
+    # containers (compose stack)
+    "druid": ("druid.system", "DruidSystem"),
     # cloud / fs
     "s3": ("s3.system", "S3System"),
     "gcs": ("gcs.system", "GcsSystem"),

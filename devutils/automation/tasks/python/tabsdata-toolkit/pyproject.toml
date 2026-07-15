@@ -219,6 +219,7 @@ namespaces = true
     "models/*/*.yml",
     "models/*/*.md",
 ]
+"tabsdatax.itest.tdksystems.systems.druid" = ["*.yaml"]
 
 [tool.tabsdata]
 name = "tabsdata-toolkit"

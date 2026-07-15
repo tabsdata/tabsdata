@@ -220,6 +220,72 @@ def docker_exec_check(container: str, *cmd: str) -> bool:
     )
 
 
+def http_ok(
+    url: str,
+    timeout: float = 5.0,
+    *,
+    user: str | None = None,
+    password: str | None = None,
+) -> bool:
+    """True if a GET to `url` returns a 2xx status within `timeout` seconds.
+    An HTTP readiness probe (used for services that expose a status endpoint
+    over a published port, e.g. Druid's `/status`). When `user` is given, the
+    request carries HTTP basic-auth credentials (for an authenticated service)."""
+    import base64
+    import urllib.request
+
+    req = urllib.request.Request(url)  # noqa: S310
+    if user is not None:
+        token = base64.b64encode(f"{user}:{password or ''}".encode()).decode()
+        req.add_header("Authorization", f"Basic {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            return 200 <= resp.status < 300
+    except Exception:
+        return False
+
+
+# --- docker compose (multi-container stacks) -------------------------------
+#
+# Single-container systems use `docker run` (above); a compose stack is driven
+# through the `docker compose` CLI, addressed by an explicit project name so
+# concurrent stacks (and their `<project>_<service>` containers / volumes) stay
+# isolated. Errors surface docker's own message rather than a traceback.
+
+
+def docker_compose(
+    project: str,
+    compose_file: str,
+    *args: str,
+    capture: bool = False,
+    env: dict[str, str] | None = None,
+) -> str:
+    """Run `docker compose -p <project> -f <file> <args...>`. Streams docker's
+    output by default (so `up` / `pull` show progress); pass `capture=True` to
+    capture and return stdout (for `ps`). `env` adds variables the compose file
+    interpolates (e.g. the planned host ports the stack binds)."""
+    cmd = ["docker", "compose", "-p", project, "-f", compose_file, *args]
+    run_env = {**os.environ, **env} if env else None
+    if capture:
+        cp = subprocess.run(cmd, capture_output=True, text=True, env=run_env)
+    else:
+        cp = subprocess.run(cmd, env=run_env)
+    if cp.returncode != 0:
+        detail = (cp.stderr or cp.stdout or "").strip() if capture else ""
+        raise DatagenError(
+            f"docker compose {args[0] if args else ''} failed for project "
+            f"{project}" + (f": {detail}" if detail else "")
+        )
+    return cp.stdout.strip() if capture else ""
+
+
+def compose_container_ids(project: str, compose_file: str) -> list[str]:
+    """Ids of every container of the compose project (running or stopped), for
+    an existence check before `up`."""
+    out = docker_compose(project, compose_file, "ps", "-a", "-q", capture=True)
+    return [line for line in out.splitlines() if line.strip()]
+
+
 def env_required(name: str) -> str:
     v = os.environ.get(name, "")
     if not v:
