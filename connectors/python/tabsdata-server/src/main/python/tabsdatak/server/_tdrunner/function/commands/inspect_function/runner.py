@@ -22,11 +22,27 @@ def run(args: argparse.Namespace) -> int:
     decorator = os.environ.get("TD_DECORATOR", "<unset>")
     runid = os.environ.get("TD_RUNID", "<unset>")
     print(
-        f"--- inspect-function: worker={worker} runid={runid} "
-        f"decorator={decorator} ---",
+        "--- inspect-function (start) ---",
         flush=True,
     )
-    for key in sorted(os.environ):
-        print(f"  {key}={os.environ[key]}", flush=True)
-    print("--- inspect-function: done ---", flush=True)
+    print(
+        f"worker={worker}",
+        flush=True,
+    )
+    print(
+        f"runid={runid}",
+        flush=True,
+    )
+    print(
+        f"decorator={decorator}",
+        flush=True,
+    )
+    print(
+        " ---",
+        flush=True,
+    )
+    print(
+        "--- inspect-function (end) ---",
+        flush=True,
+    )
     return 0

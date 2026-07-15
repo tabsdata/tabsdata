@@ -56,7 +56,7 @@ MYPY_ARGUMENTS = [
     "--output=json",
 ]
 
-SKIP_PACKAGES = {"resources", "scripts"}
+SKIP_PACKAGES = {"resources", "scripts", "tabsdata"}
 
 
 def python_path_entries() -> list[str]:
@@ -79,6 +79,22 @@ def roots(entries: list[str], suffixes) -> list[str]:
 
 def under(path: str, root: str) -> bool:
     return path == root or path.startswith(f"{root}/")
+
+
+def project_real_prefixes(project_root: str) -> list[str]:
+    prefixes = [normalize(os.path.realpath(project_root))]
+    try:
+        children = os.listdir(project_root)
+    except OSError:
+        children = []
+    for child in children:
+        prefixes.append(normalize(os.path.realpath(os.path.join(project_root, child))))
+    return prefixes
+
+
+def in_project(path: str, prefixes: list[str]) -> bool:
+    real = normalize(os.path.realpath(path))
+    return any(under(real, prefix) for prefix in prefixes)
 
 
 def normalize(path: str) -> str:
@@ -198,7 +214,8 @@ def run_mypy(
     test_roots = roots(entries, TEST_SUFFIXES)
     all_roots = main_roots + test_roots
 
-    check_targets = [root for root in all_roots if under(root, project_root)]
+    prefixes = project_real_prefixes(project_root)
+    check_targets = [root for root in all_roots if in_project(root, prefixes)]
 
     if not check_targets:
         logger.warning(
@@ -222,7 +239,7 @@ def run_mypy(
             package, python_path, mypy_path, cache_dir, config_file
         ):
             error["file"] = normalize(error.get("file", ""))
-            if under(error["file"], project_root):
+            if in_project(error["file"], prefixes):
                 errors.append(error)
     return errors
 

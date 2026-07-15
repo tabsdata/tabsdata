@@ -544,20 +544,16 @@ def order_sys_path():
         else:
             non_tabsdata_sys_paths.append(path)
 
-    tabsdata_paths = None
+    tabsdata_paths = []
     other_paths = []
 
     for path in tabsdata_sys_paths:
         if path.endswith(tabsdatax_fragment):
-            tabsdata_paths = path
-        else:
-            pass
+            tabsdata_paths.append(path)
 
     for path in tabsdata_sys_paths:
         if path.endswith(tabsdata_fragment):
-            tabsdata_paths = path
-        else:
-            pass
+            tabsdata_paths.append(path)
 
     for path in tabsdata_sys_paths:
         if path.endswith(tabsdata_fragment) or path.endswith(tabsdatax_fragment):
@@ -567,9 +563,7 @@ def order_sys_path():
 
     other_paths.sort()
 
-    ordered_tabsdata_paths = []
-    if tabsdata_paths:
-        ordered_tabsdata_paths.append(tabsdata_paths)
+    ordered_tabsdata_paths = list(tabsdata_paths)
     ordered_tabsdata_paths.extend(other_paths)
     sys.path[:] = non_tabsdata_sys_paths + ordered_tabsdata_paths
 

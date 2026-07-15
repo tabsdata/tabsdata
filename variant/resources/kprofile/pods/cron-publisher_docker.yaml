@@ -41,7 +41,7 @@ spec:
         tabsdata.com/worker: function
     spec:
       backoffLimit: 0
-      ttlSecondsAfterFinished: 300
+      ttlSecondsAfterFinished: 60
       template:
         metadata:
           labels:
@@ -58,7 +58,7 @@ spec:
           restartPolicy: Never
           serviceAccountName: default
           automountServiceAccountToken: false
-          terminationGracePeriodSeconds: 30
+          terminationGracePeriodSeconds: 60
           dnsPolicy: ClusterFirst
           securityContext:
             runAsNonRoot: true
