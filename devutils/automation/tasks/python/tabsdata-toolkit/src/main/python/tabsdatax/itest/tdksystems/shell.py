@@ -120,6 +120,26 @@ def container_state(name: str) -> str | None:
     return cp.stdout.strip() or None
 
 
+def container_id(name: str) -> str | None:
+    """The full docker id of container `name`, or None if no such container
+    exists. Raises `DatagenError` if docker itself is unavailable (daemon down /
+    binary missing) — the caller can't tell staleness apart from that, so a
+    best-effort check should treat the raise as "can't determine"."""
+    try:
+        cp = subprocess.run(
+            ["docker", "container", "inspect", "-f", "{{.Id}}", name],
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise DatagenError("docker is not available") from exc
+    if cp.returncode != 0:
+        if "no such" in (cp.stderr or "").lower():
+            return None
+        raise DatagenError(f"docker inspect failed: {cp.stderr.strip()}")
+    return cp.stdout.strip() or None
+
+
 def docker_pull(image: str, platform: str = "") -> None:
     """Pull `image` (for `platform`, if given), streaming docker's own download
     progress straight to our stdout/stderr — unlike the capturing helpers, so a

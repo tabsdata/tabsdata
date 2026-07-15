@@ -130,6 +130,7 @@ from . import (
 from .errors import DatagenError, DecryptError, run
 from .shell import (
     ArgumentParser as _ArgumentParser,
+    container_id,
     docker_pull,
     find_free_port,
     require_docker,
@@ -425,9 +426,32 @@ def _sys_status_one(name: str, sys_dir: str | None) -> tuple[bool, str]:
     _require_role(doc, "sys", "tdx-system", "tdx-domain")
     meta = descriptor.resolve(doc)
     _setenv(meta)
+    reason = _container_stale(meta)
+    if reason:
+        return False, f"stale: {reason}"
     slug = doc["system"]
     h = systems.get(slug).system_status(SystemContext(slug, doc["name"], meta))
     return h.ok, h.detail
+
+
+def _remove_stale_descriptor(
+    kind: str, name: str, path, slug: str, reason: str, force: bool
+) -> str:
+    """Destroy of a descriptor whose container was removed/replaced: refuse
+    unless `-f`; with `-f`, drop the descriptor WITHOUT touching the foreign
+    container (docker rm would hit the wrong one)."""
+    if not force:
+        raise DatagenError(
+            f"refusing to destroy {kind} '{name}': {reason} "
+            f"(use -f to remove the stale descriptor without touching docker)"
+        )
+    os.remove(path)
+    print(
+        f">>> WARNING: {reason}; removed descriptor {path} without touching "
+        f"docker (-f)",
+        file=sys.stderr,
+    )
+    return f"({slug}); stale, removed {path} without touching docker (-f)"
 
 
 def _teardown_and_remove(
@@ -461,6 +485,9 @@ def _sys_destroy_one(name: str, sys_dir: str | None, *, force: bool = False) -> 
     meta = descriptor.resolve(doc)
     _setenv(meta)
     slug = doc["system"]
+    stale = _container_stale(meta)
+    if stale:
+        return _remove_stale_descriptor("system", name, path, slug, stale, force)
     ctx = SystemContext(slug, doc["name"], meta)
     return _teardown_and_remove(
         "system",
@@ -477,6 +504,9 @@ def _domain_status_one(name: str, domain_dir: str | None) -> tuple[bool, str]:
     _require_role(doc, "env", "tdx-domain", "tdx-system")
     meta = descriptor.resolve(doc)
     _setenv(meta)
+    reason = _container_stale(meta)
+    if reason:
+        return False, f"stale: {reason}"
     slug = doc["system"]
     h = systems.get(slug).domain_status(DomainContext(slug, doc["name"], meta))
     return h.ok, h.detail
@@ -523,6 +553,9 @@ def _domain_destroy_one(
     meta = _domain_meta_via_system(doc, sys_dir)
     _setenv(meta)
     slug = doc["system"]
+    stale = _container_stale(meta)
+    if stale:
+        return _remove_stale_descriptor("domain", name, path, slug, stale, force)
     ctx = DomainContext(slug, doc["name"], meta)
     return _teardown_and_remove(
         "domain",
@@ -547,6 +580,7 @@ def _recreate_one(name: str, domain_dir: str | None) -> str:
     _require_role(doc, "env", "tdx-domain", "tdx-system")
     meta = descriptor.resolve(doc)
     _setenv(meta)
+    _guard_container_fresh(meta)
     slug = doc["system"]
     sysobj = systems.get(slug)
     model, data = doc.get("model"), doc.get("data")
@@ -742,6 +776,8 @@ def _print_listing(kind: str, directory: Path, *, role: str) -> None:
             extras = [f"{k}={doc[k]}" for k in ("model", "data") if doc.get(k)]
             if extras:
                 line += "  " + " ".join(extras)
+        if _container_stale(descriptor.resolve(doc)):
+            line += "  [STALE: container replaced/removed]"
         print(line.rstrip())
     print()
 
@@ -844,6 +880,64 @@ def _provision_with_retry(kind, sysobj, name, out, ctx, provision) -> None:
     except Exception:
         _safe_remove(out)
         raise
+
+
+def _record_provisioned_meta(sysobj, out: str, settings) -> None:
+    """After a successful provision, bake any post-provision descriptor keys the
+    backend reports (e.g. a container's real docker id) into the on-disk
+    descriptor. No-op for backends that report none."""
+    extra = sysobj.provisioned_meta(settings)
+    if extra:
+        descriptor.record_meta(out, extra)
+
+
+# --- container staleness guard --------------------------------------------
+# A container system descriptor records the container's real docker id
+# (CONTAINER_ID; SYS_CONTAINER_ID on its domains). If the live container named in
+# the descriptor is gone or has a different id, the container was removed or
+# replaced and the descriptor is stale — read commands flag it, mutating
+# commands refuse to act on the wrong container.
+
+_CONTAINER_ID_KEYS = (
+    ("CONTAINER", "CONTAINER_ID"),
+    ("SYS_CONTAINER", "SYS_CONTAINER_ID"),
+)
+
+
+def _container_stale(meta: dict) -> str | None:
+    """A staleness reason if a container-backed descriptor's recorded id no
+    longer matches the live container, else None. Best-effort: a descriptor with
+    no recorded id (non-container / ssh-tunnel / pre-CONTAINER_ID) or an
+    unavailable docker daemon returns None (can't determine)."""
+    if meta.get("SYSTEM_LOCATION") == "ssh-tunnel":
+        return None
+    for name_key, id_key in _CONTAINER_ID_KEYS:
+        recorded = meta.get(id_key)
+        name = meta.get(name_key)
+        if not recorded or not name:
+            continue
+        try:
+            live = container_id(name)
+        except DatagenError:
+            return None  # docker unavailable — can't determine, don't flag
+        if live == recorded:
+            return None
+        where = "is gone" if live is None else f"was replaced (live id {live[:12]})"
+        role = "domain" if name_key == "SYS_CONTAINER" else "system"
+        return (
+            f"container '{name}' {where}; the descriptor expects id "
+            f"{recorded[:12]} — this {role} is stale"
+        )
+    return None
+
+
+def _guard_container_fresh(meta: dict) -> None:
+    """Refuse a mutating command if the descriptor's container is stale."""
+    reason = _container_stale(meta)
+    if reason:
+        raise DatagenError(
+            f"refusing to run: {reason} (destroy with -f to remove the descriptor)"
+        )
 
 
 # =====================================================================
@@ -1075,6 +1169,7 @@ def _sys_create_single(args, slug: str) -> int:
         ctx,
         lambda: sysobj.provision_system(spec, settings),
     )
+    _record_provisioned_meta(sysobj, out, settings)
     _print_created("system", out, _sys_hint(args))
     return 0
 
@@ -1198,6 +1293,7 @@ def _provision_system_auto(
         ctx,
         lambda: sysobj.provision_system(spec, settings),
     )
+    _record_provisioned_meta(sysobj, out, settings)
 
 
 def _domains_using_system(sys_name: str, domain_dir: str | None) -> list[str]:
@@ -1349,6 +1445,11 @@ def _sys_info(rest: list[str]) -> int:
     doc = descriptor.load(_sys_target(args))
     _require_role(doc, "sys", "tdx-system", "tdx-domain")
     print(descriptor.info(doc, args.format, prefix=args.prefix))
+    # Flag (on stderr, so json/export stdout stays clean) when the recorded
+    # container no longer matches the live one.
+    reason = _container_stale(descriptor.resolve(doc))
+    if reason:
+        print(f">>> STALE: {reason}", file=sys.stderr)
     return 0
 
 
@@ -1369,6 +1470,7 @@ def _sys_lifecycle(rest: list[str], verb: str) -> int:
     slug = doc["system"]
     meta = descriptor.resolve(doc)
     _setenv(meta)
+    _guard_container_fresh(meta)
     sysobj = systems.get(slug)
     ctx = SystemContext(slug, doc["name"], meta)
     try:
@@ -1932,6 +2034,7 @@ def _domain_create_single(args, peeked_sys) -> int:
     _require_role(sysdoc, "sys", "tdx-system", "tdx-domain")
     sysmeta = descriptor.resolve(sysdoc)
     _setenv(sysmeta)
+    _guard_container_fresh(sysmeta)
     slug = sysdoc["system"]
     started = descriptor.now_stamp()
 
@@ -2025,6 +2128,7 @@ def _domain_seed(rest: list[str]) -> int:
     sysobj = systems.get(slug)
     if not sysobj.supports_models:
         raise DatagenError(f"{slug} does not support --model / --data")
+    _guard_container_fresh(descriptor.resolve(doc))
     # Reuse the same pipeline `create --model` runs, with force=False so an
     # already-populated schema/tables make it fail rather than clobber.
     _install_model_and_data(path, args.model, args.data, force=False)
@@ -2147,6 +2251,9 @@ def _domain_info(rest: list[str]) -> int:
     doc = descriptor.load(_domain_target(args))
     _require_role(doc, "env", "tdx-domain", "tdx-system")
     print(descriptor.info(doc, args.format, prefix=args.prefix))
+    reason = _container_stale(descriptor.resolve(doc))
+    if reason:
+        print(f">>> STALE: {reason}", file=sys.stderr)
     return 0
 
 

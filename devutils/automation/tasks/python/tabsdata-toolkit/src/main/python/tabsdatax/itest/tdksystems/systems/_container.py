@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from ..errors import DatagenError
 from ..shell import (
     container_exists,
+    container_id,
     container_state,
     docker_pull,
     docker_rm,
@@ -197,6 +198,12 @@ class ContainerBase(System):
         os.environ["CONTAINER"] = container
         self._post_start(container, password)
 
+    def provisioned_meta(self, settings: dict[str, Setting]) -> dict[str, str]:
+        # The container's real docker id, recorded so later commands can detect a
+        # replaced/removed container and refuse to act on the wrong one.
+        cid = container_id(settings["CONTAINER"].value or "")
+        return {"CONTAINER_ID": cid} if cid else {}
+
     def destroy_system(self, ctx: SystemContext) -> None:
         pid = ctx.meta.get("SSH_TUNNEL_PID")
         if pid:
@@ -306,6 +313,11 @@ class ContainerBase(System):
             "IMAGE": Setting("IMAGE", value=ctx.meta.get("IMAGE", "")),
             # Back-refs so destroy_domain needs only the domain descriptor.
             "SYS_CONTAINER": Setting("SYS_CONTAINER", value=cname),
+            # The system container's docker id at domain-create time, so domain
+            # commands can detect a replaced/removed system container.
+            "SYS_CONTAINER_ID": Setting(
+                "SYS_CONTAINER_ID", value=ctx.meta.get("CONTAINER_ID", "")
+            ),
             "SYS_ADMIN_USER": Setting("SYS_ADMIN_USER", value=admin.user),
             "SYS_ADMIN_PASSWORD": Setting("SYS_ADMIN_PASSWORD", value=admin.password),
         }

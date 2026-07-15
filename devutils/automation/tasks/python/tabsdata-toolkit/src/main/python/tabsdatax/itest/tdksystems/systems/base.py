@@ -308,6 +308,12 @@ class System(ABC):
         self.provision_system(spec, settings)
         return settings
 
+    def provisioned_meta(self, settings: dict[str, Setting]) -> dict[str, str]:
+        """Descriptor keys knowable only AFTER a successful provision (e.g. a
+        container's real docker id). The create verbs record these into the
+        already-written descriptor once provisioning succeeds. Default: none."""
+        return {}
+
     @abstractmethod
     def destroy_system(self, ctx: SystemContext) -> None:
         """Tear down the system (rm container / rmtree fs root / no-op for a

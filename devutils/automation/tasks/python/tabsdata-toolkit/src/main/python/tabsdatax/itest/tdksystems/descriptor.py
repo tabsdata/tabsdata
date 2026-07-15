@@ -155,6 +155,7 @@ def write_container_system(
     password: str,
     domain_desc: str,
     image: str | None = None,
+    container_id: str | None = None,
     sys_path: str | None = None,
     sys_path_env: str | None = None,
     extra_vars: dict[str, str] | None = None,
@@ -187,6 +188,8 @@ def write_container_system(
     ]
     if image:
         meta.insert(4, ("IMAGE", image, None))  # after CONTAINER
+    if container_id:
+        meta.insert(4, ("CONTAINER_ID", container_id, None))  # after CONTAINER
     if staging:
         meta.append(("SYS_PATH", sys_path, sys_path_env))
     for k, v in extra.items():
@@ -203,6 +206,8 @@ def write_container_system(
     ]
     if image:
         exported.insert(4, "IMAGE")  # after CONTAINER
+    if container_id:
+        exported.insert(4, "CONTAINER_ID")  # after CONTAINER
     if staging:
         exported.append("SYS_PATH")
     _write(
@@ -631,6 +636,7 @@ def write(sys_obj, role: str, out: str, settings: dict) -> None:
                 password=v["PASSWORD"],
                 domain_desc=getattr(sys_obj, "domain_desc", ""),
                 image=v.get("IMAGE") or None,
+                container_id=v.get("CONTAINER_ID") or None,
                 sys_path=(_resolve_env(sp) if sp else None),
                 sys_path_env=(sp.env_var if sp else None),
                 extra_vars=extra,
@@ -891,6 +897,27 @@ def record_entities(path: str | Path, entities: dict[str, int]) -> dict:
     data pipeline right after a model's data is loaded."""
     doc = load(path)
     doc["entities"] = {str(k): int(v) for k, v in entities.items()}
+    _write_doc(path, doc)
+    return doc
+
+
+def record_meta(path: str | Path, extra: dict[str, str]) -> dict:
+    """Add (or replace) resolvable, exported meta keys on an existing descriptor
+    — used to bake values that are only known AFTER provisioning, e.g. a
+    container's real docker id (CONTAINER_ID), which can't be in the plan-time
+    descriptor. Idempotent per key."""
+    doc = load(path)
+    meta = doc.setdefault("meta", [])
+    exported = doc.setdefault("exported", [])
+    for k, val in extra.items():
+        for entry in meta:
+            if entry["name"] == k:
+                entry["value"] = val
+                break
+        else:
+            meta.append({"name": k, "value": val})
+        if k not in exported:
+            exported.append(k)
     _write_doc(path, doc)
     return doc
 
