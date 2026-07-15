@@ -15,6 +15,7 @@ from sqlalchemy import (
     table as sa_table,
     text as sa_text,
 )
+from sqlalchemy.exc import NoSuchTableError
 
 import tabsdatak._api as _api
 from tabsdatak.conn.common._explorer import BaseConnMetaModel, Column
@@ -179,8 +180,14 @@ class SqlAlchemyConnectionExplorer(Explorer):
             fields = self.map_entity_fields(conn, schema)
 
             for table_name in table_names + view_names:
-                pk_columns = _get_primary_keys(insp, table_name, schema)
-                columns = _get_columns(insp, table_name, schema, pk_columns)
+                try:
+                    pk_columns = _get_primary_keys(insp, table_name, schema)
+                    columns = _get_columns(insp, table_name, schema, pk_columns)
+                except NoSuchTableError:
+                    # The table was listed but has since been dropped
+                    # (concurrent DDL on a shared / live database); skip it
+                    # rather than failing the whole scan.
+                    continue
 
                 entities.append(
                     SQLEntity(
