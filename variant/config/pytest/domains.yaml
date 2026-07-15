@@ -2,6 +2,8 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+- name: anthropic
+  sys: anthropic
 - name: azureblob
   sys: azureblob
 - name: azureblob_world_xs
@@ -28,6 +30,8 @@
   sys: db2
   model: world
   data: xs
+- name: druid
+  sys: druid
 - name: fs
   sys: fs
 - name: fs_world_xs
@@ -54,6 +58,8 @@
   sys: mysql
   model: world
   data: xs
+- name: openai
+  sys: openai
 - name: oracle
   sys: oracle
 - name: oracle_world_xs

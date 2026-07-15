@@ -2,6 +2,10 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+- name: anthropic
+  type: anthropic
+  api-key:
+    env: ANTHROPIC__API_KEY
 - name: azureblob
   type: azureblob
   container:
@@ -39,6 +43,10 @@
     env: DATABRICKS__VOLUME
 - name: db2
   type: db2
+- name: dev
+  type: dev
+- name: druid
+  type: druid
 - name: fs
   type: fs
   sys-path: target/backends/fs
@@ -48,6 +56,10 @@
     env: GCS__BUCKET
   service-account-key:
     env: GCS__SERVICE_ACCOUNT_KEY
+  hmac-access-key:
+    env: GCS__HMAC_ACCESS_KEY
+  hmac-secret-key:
+    env: GCS__HMAC_SECRET_KEY
   sys-path:
     env: GCS__SYS_PATH
 - name: mongodb
@@ -56,6 +68,10 @@
   type: mssqlserver
 - name: mysql
   type: mysql
+- name: openai
+  type: openai
+  api-key:
+    env: OPENAI__API_KEY
 - name: oracle
   type: oracle
 - name: postgres
