@@ -353,7 +353,7 @@ class ClickHouseDialect(Dialect):
         columns = ",\n    ".join(f"`{name}` {typ}" for name, typ in col_defs)
         fq = self._fqn(table_name)
         ddl = (
-            f"CREATE TABLE {fq} (\n"
+            f"CREATE TABLE IF NOT EXISTS {fq} (\n"
             f"    {columns}\n"
             f") ENGINE = MergeTree()\n"
             f"ORDER BY tuple()"
@@ -484,10 +484,10 @@ class ClickHouseDialect(Dialect):
 
     # --- Data operations ---------------------------------------------
 
-    def truncate_table(self, load_mode: LoadMode, table_name: str) -> None:
+    def drop_table(self, load_mode: LoadMode, table_name: str) -> None:
         fq = self._fqn(table_name)
-        self._client.command(f"TRUNCATE TABLE {fq}")
-        logger.debug("Truncated table: %s", fq)
+        self._client.command(f"DROP TABLE IF EXISTS {fq}")
+        logger.debug("Dropped table: %s", fq)
 
     def bulk_load(
         self,

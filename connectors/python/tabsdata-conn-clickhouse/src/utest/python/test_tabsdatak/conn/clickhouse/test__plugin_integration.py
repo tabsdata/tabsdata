@@ -164,10 +164,10 @@ def test_fqn_append_to_existing_table(
 
 
 @pytest.mark.parametrize("template", _FQN_FORMS)
-def test_fqn_replace_truncates_existing(
+def test_fqn_replace_recreates_existing(
     fresh_clickhouse, work_dir, template, fqn_table,
 ):
-    """``if_table_exists='replace'`` exercises ``truncate_table`` +
+    """``if_table_exists='replace'`` exercises ``drop_table`` + recreate +
     ``bulk_load``."""
     db, tbl = fqn_table
     seed_src = _make_parquet(

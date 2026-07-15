@@ -81,15 +81,18 @@ class CloudStagedBulkLoader:
 
     def phase_validate_and_prepare(self, tables: dict[str, list[Path]]) -> None:
         """Phase 1 -- Validate all tables and prepare them
-        (create/evolve/truncate). Fails fast before any data movement."""
+        (create/evolve). Fails fast before any data movement."""
         logger.info("Phase 1: Validate & Prepare")
-        for table_name, parquet_paths in tables.items():
-            self.validate_and_prepare_table(table_name, parquet_paths)
-
+        # 'replace' drops the target up front so it is recreated fresh from the
+        # incoming schema (honouring a changed schema too); the create path below
+        # then sees no table and rebuilds it.
         if self.write_mode == WriteMode.REPLACE:
             table_names = list(tables.keys())
-            logger.debug(f"Truncating tables: {table_names}")
-            self.dialect.truncate_tables(self.load_mode, table_names)
+            logger.debug(f"Dropping tables for replace: {table_names}")
+            self.dialect.drop_tables(self.load_mode, table_names)
+
+        for table_name, parquet_paths in tables.items():
+            self.validate_and_prepare_table(table_name, parquet_paths)
 
         logger.info("Phase 1 complete: all tables validated and prepared.")
 

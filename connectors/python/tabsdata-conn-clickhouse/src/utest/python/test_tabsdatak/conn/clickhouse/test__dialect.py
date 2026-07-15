@@ -165,7 +165,7 @@ class TestDialectCreateTable:
         d.create_table(MagicMock(), "users", _arrow_schema())
         assert len(captured_client.commands) == 1
         ddl = captured_client.commands[0]
-        assert "CREATE TABLE `analytics`.`users`" in ddl
+        assert "CREATE TABLE IF NOT EXISTS `analytics`.`users`" in ddl
 
     def test_qualified_name_overrides_default_db(
         self, captured_client
@@ -173,7 +173,7 @@ class TestDialectCreateTable:
         d = ClickHouseDialect(_config("analytics"), MagicMock())
         d.create_table(MagicMock(), "warehouse.events", _arrow_schema())
         ddl = captured_client.commands[0]
-        assert "CREATE TABLE `warehouse`.`events`" in ddl
+        assert "CREATE TABLE IF NOT EXISTS `warehouse`.`events`" in ddl
 
     def test_quoted_table_name_unwrapped_and_reescaped(
         self, captured_client
@@ -185,7 +185,7 @@ class TestDialectCreateTable:
             _arrow_schema(),
         )
         ddl = captured_client.commands[0]
-        assert "CREATE TABLE `analytics`.`weird name`" in ddl
+        assert "CREATE TABLE IF NOT EXISTS `analytics`.`weird name`" in ddl
 
     def test_embedded_backtick_doubled_in_output(
         self, captured_client
@@ -199,7 +199,7 @@ class TestDialectCreateTable:
             _arrow_schema(),
         )
         ddl = captured_client.commands[0]
-        assert "CREATE TABLE `analytics`.`some``tbl`" in ddl
+        assert "CREATE TABLE IF NOT EXISTS `analytics`.`some``tbl`" in ddl
 
 
 class TestDialectAlterTable:
@@ -242,19 +242,19 @@ class TestDialectAlterTable:
         assert ts.table_name == "`weird db`.`weird tbl`"
 
 
-class TestDialectTruncateTable:
-    def test_truncate_uses_fqn(self, captured_client):
+class TestDialectDropTable:
+    def test_drop_uses_fqn(self, captured_client):
         d = ClickHouseDialect(_config("analytics"), MagicMock())
-        d.truncate_table(MagicMock(), "users")
+        d.drop_table(MagicMock(), "users")
         assert captured_client.commands == [
-            "TRUNCATE TABLE `analytics`.`users`"
+            "DROP TABLE IF EXISTS `analytics`.`users`"
         ]
 
-    def test_truncate_qualified_name(self, captured_client):
+    def test_drop_qualified_name(self, captured_client):
         d = ClickHouseDialect(_config("analytics"), MagicMock())
-        d.truncate_table(MagicMock(), "warehouse.events")
+        d.drop_table(MagicMock(), "warehouse.events")
         assert captured_client.commands == [
-            "TRUNCATE TABLE `warehouse`.`events`"
+            "DROP TABLE IF EXISTS `warehouse`.`events`"
         ]
 
 
