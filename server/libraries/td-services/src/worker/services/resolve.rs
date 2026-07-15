@@ -191,7 +191,7 @@ mod tests {
 
         // Resolve the message via the endpoint service (worker-scoped).
         let param = WorkerIdParam {
-            worker_id: worker.id,
+            worker_id: worker.id.clone(),
         };
         let read = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .read(param)

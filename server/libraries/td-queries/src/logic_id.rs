@@ -23,10 +23,11 @@ use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::transaction::TransactionDB;
+use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
     EP, ExecutionId, FV, FunctionVersionId, LDV, LFR, LogicalFunctionRunId,
     LogicalTableDataVersionId, PDV, PFR, PhysicalFunctionRunId, PhysicalTableDataVersionId, TX,
-    TransactionId,
+    TransactionId, WKR, WorkerId,
 };
 use td_tower::error::ConnectionError;
 
@@ -114,6 +115,9 @@ pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
     let id = find_last_idl::<LogicalTableDataVersionDB, LogicalTableDataVersionId, LDV>(&mut conn)
         .await?;
     LogicalTableDataVersionId::init(id)?;
+
+    let id = find_last_idl::<WorkerDB, WorkerId, WKR>(&mut conn).await?;
+    WorkerId::init(id)?;
 
     if let Some(tx) = conn.into_transaction() {
         tx.commit()

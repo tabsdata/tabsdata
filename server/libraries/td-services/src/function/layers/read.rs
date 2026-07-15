@@ -43,8 +43,8 @@ pub async fn map_create_worker(
     let workers = workers
         .iter()
         .filter_map(|w| match w.worker_type {
-            WorkerType::CronTrigger => Some((WorkerTypeDto::CronTrigger, w.id)),
-            WorkerType::StageTrigger => Some((WorkerTypeDto::StageTrigger, w.id)),
+            WorkerType::CronTrigger => Some((WorkerTypeDto::CronTrigger, w.id.clone())),
+            WorkerType::StageTrigger => Some((WorkerTypeDto::StageTrigger, w.id.clone())),
             _ => None,
         })
         .collect();

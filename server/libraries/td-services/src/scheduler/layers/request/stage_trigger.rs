@@ -125,7 +125,7 @@ pub async fn create_locked_stage_trigger_workers_start_request(
             OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
                 StageTriggerRequest::Start(StageTriggerStartRequest {
                     worker: WorkerName::StageTrigger,
-                    worker_id: stage_trigger_worker.id,
+                    worker_id: stage_trigger_worker.id.clone(),
                     decorator: f.decorator.to_message(),
                     resolver,
                     trigger: Callback::Http(fn_trigger),
@@ -194,7 +194,7 @@ pub async fn create_locked_stage_trigger_workers_start_request(
             // Build info
             // TODO Urls are wrong as of now
             let info = stage_trigger::Info {
-                worker_id: stage_trigger_worker.id,
+                worker_id: stage_trigger_worker.id.clone(),
                 project_id: stage_trigger_worker.project_id,
                 collection_id: stage_trigger_worker.collection_id,
                 collection: stage_trigger_worker.collection.clone(),
@@ -279,7 +279,7 @@ pub async fn create_locked_stage_trigger_workers_stop_request(
                         OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
                             StageTriggerRequest::Stop(StageTriggerStopRequest {
                                 worker: WorkerName::StageTrigger,
-                                worker_id: stage_trigger_worker.id,
+                                worker_id: stage_trigger_worker.id.clone(),
                                 responder: callback,
                             }),
                         ),

@@ -260,7 +260,7 @@ mod tests {
                 .find(|f| f.name.as_str() == callback_function)
                 .unwrap();
             let physical_function_run = (*f[&test_function].id).clone();
-            let worker = *w[&test_function].id;
+            let worker = (*w[&test_function].id).clone();
 
             async move {
                 let response: CallbackRequest = ResponseMessagePayload {

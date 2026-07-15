@@ -428,7 +428,10 @@ def _set_exe_list_worker(c: MagicMock) -> None:
         _DTO(_WORKERS[0], collection=_DTO({"name": "coll-a"}),
              function=_DTO({"name": "fn-a"}),
              execution=_DTO({"name": "plan-a", "id": "EID_1"}),
-             transaction=_DTO({"id": "TID_1"}))
+             transaction=_DTO({"id": "TID_1"}),
+             # the Patch column reads the raw row via `.kwargs`
+             kwargs={"logical_function_run_id": "LFR_1",
+                     "function_version_patch_id": "FV_9"})
     ]
 
 
@@ -558,7 +561,7 @@ CASES: tuple[RenderCase, ...] = (
     ),
     RenderCase(
         "exe-list-worker", ["exe", "list-worker"], _set_exe_list_worker, _WORKERS,
-        ("WK_1", "coll-a", "fn-a", "plan-a", "EID_1", "TID_1", "Done"),
+        ("WK_1", "coll-a", "fn-a", "plan-a", "EID_1", "TID_1", "Done", "FV_9"),
     ),
     RenderCase(
         "table-versions", ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
@@ -732,6 +735,70 @@ def test_exe_logs_file_dash_writes_raw_logs_to_stdout(tmp_path):
     assert "W1" in result.output
     assert "line-1" in result.output and "line-2" in result.output
     assert "Saving logs to file" not in result.output
+
+
+def _run_client(*workers: tuple[str, str]) -> MagicMock:
+    """Client whose worker list resolves to ``workers`` (in the given order).
+
+    ``latest_workers`` keeps the server order, so the last one passed here is
+    treated as the latest. ``get_worker_log`` echoes the worker id so tests can
+    assert which one was fetched.
+    """
+    client = _client()
+    client.list_workers.return_value = [
+        _DTO(
+            {"id": wid, "status": status},
+            kwargs={"function_version_patch_id": None},
+        )
+        for wid, status in workers
+    ]
+    client.get_worker_log.side_effect = lambda wid: f"log-of-{wid}"
+    return client
+
+
+def test_exe_logs_fn_run_returns_latest_worker(tmp_path):
+    client = _run_client(("WKR20260713.1", "Failed"), ("WKR20260713.2", "Done"))
+    result = _invoke(
+        ["exe", "logs", "--fn-run", "LFR_1"], client=client, tmp_path=tmp_path
+    )
+    assert result.exit_code == 0, result.output
+    # the run's latest worker, and only it
+    assert "log-of-WKR20260713.2" in result.output
+    assert "log-of-WKR20260713.1" not in result.output
+
+
+def test_exe_logs_by_function_name(tmp_path):
+    client = _run_client(("WKR20260713.1", "Failed"), ("WKR20260713.2", "Done"))
+    result = _invoke(
+        ["exe", "logs", "--fn", "my_fn", "--coll", "my_coll"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    assert "log-of-WKR20260713.2" in result.output
+    # the function name + collection were pushed into the workers filter
+    sent = client.list_workers.call_args.kwargs["filter"]
+    assert "function:eq:my_fn" in sent and "collection:eq:my_coll" in sent
+
+
+def test_exe_logs_fn_run_with_no_workers_errors(tmp_path):
+    client = _run_client()
+    result = _invoke(
+        ["exe", "logs", "--fn-run", "LFR_1"], client=client, tmp_path=tmp_path
+    )
+    assert result.exit_code != 0
+    assert "no workers yet" in result.output
+
+
+def test_exe_logs_requires_exactly_one_target(tmp_path):
+    neither = _invoke(["exe", "logs"], client=_client(), tmp_path=tmp_path)
+    assert neither.exit_code != 0 and "exactly one" in neither.output
+    both = _invoke(
+        ["exe", "logs", "--fn-run", "LFR_1", "--worker", "WKR20260713.1"],
+        client=_client(),
+        tmp_path=tmp_path,
+    )
+    assert both.exit_code != 0 and "exactly one" in both.output
 
 
 # ---------------------------------------------------------------------------

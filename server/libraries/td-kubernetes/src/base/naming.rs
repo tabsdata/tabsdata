@@ -19,9 +19,6 @@ pub fn worker_pod_stem(worker: &WorkerName) -> &'static str {
 
 const KUBE_IDENTIFIER_MAX_LENGTH: usize = 253;
 
-static IDENTIFIER_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[a-z0-9]+$").expect("invalid identifier pattern"));
-
 static DNS_SUBDOMAIN_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$").expect("invalid dns subdomain pattern")
 });
@@ -133,13 +130,47 @@ pub fn name_from_kube_resource_name<'a>(
 }
 
 fn normalize_segment(segment: NameSegment, value: &str) -> Result<String, NamingError> {
-    let lowered = value.to_lowercase();
-    if !IDENTIFIER_PATTERN.is_match(&lowered) {
+    // Reduce the value to a valid Kubernetes name segment: lowercase, keep only
+    // ASCII alphanumerics. Logical ids carry separators (e.g. `WKR20260713.3`)
+    // that a name segment forbids but that survive on labels/env, so drop them
+    // here rather than reject. Callers passing already-clean ids are unaffected.
+    let normalized: String = value
+        .to_lowercase()
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .collect();
+    if normalized.is_empty() {
         return Err(NamingError::InvalidNameSegment {
             segment,
             value: value.to_owned(),
-            reason: "must contain only ASCII alphanumeric characters".to_owned(),
+            reason: "must contain at least one ASCII alphanumeric character".to_owned(),
         });
     }
-    Ok(lowered)
+    Ok(normalized)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_fn_pod_name_normalizes_logical_worker_id() {
+        // A logical worker id (`WKR<date>.<counter>`) has a `.` that a kube name
+        // segment forbids; the derived pod name drops it (and lowercases).
+        let name = to_fn_pod_name("function", "WKR20260713.0000000005").unwrap();
+        assert!(name.ends_with("wkr202607130000000005"), "{name}");
+        assert!(DNS_SUBDOMAIN_PATTERN.is_match(&name), "{name}");
+    }
+
+    #[test]
+    fn to_fn_pod_name_accepts_legacy_alnum_worker_id() {
+        // Legacy base32 ids are already alphanumeric and pass through unchanged.
+        let name = to_fn_pod_name("function", "06ABCDEF0123456789ABCDEFGH").unwrap();
+        assert!(name.ends_with("06abcdef0123456789abcdefgh"), "{name}");
+    }
+
+    #[test]
+    fn normalize_segment_rejects_all_separators() {
+        assert!(normalize_segment(NameSegment::WorkerId, "...").is_err());
+    }
 }

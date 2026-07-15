@@ -158,7 +158,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
                 WorkerIdParam {
-                    worker_id: worker.id,
+                    worker_id: worker.id.clone(),
                 },
                 response,
             )
@@ -188,7 +188,7 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .update(
                 WorkerIdParam {
-                    worker_id: worker.id,
+                    worker_id: worker.id.clone(),
                 },
                 response,
             )

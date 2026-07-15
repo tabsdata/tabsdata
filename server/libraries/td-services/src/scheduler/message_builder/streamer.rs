@@ -66,7 +66,7 @@ pub(crate) async fn build_streamer_input(
         function_bundle,
         function_stage,
         scheduled_on: AtTime::now(),
-        worker_id: worker.id,
+        worker_id: worker.id.clone(),
     };
     Ok(StreamerInput { info })
 }

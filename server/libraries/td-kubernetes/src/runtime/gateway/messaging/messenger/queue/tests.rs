@@ -61,7 +61,7 @@ fn function_start_routes_with_decorator() {
         OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
             FunctionRequest::Start(FunctionStartRequest {
                 worker: WorkerName::Function,
-                worker_id: WorkerId::default(),
+                worker_id: WorkerId::new(),
                 decorator: Decorator::Publisher,
                 resolver: resolver(),
                 responder: responder(),
@@ -107,7 +107,7 @@ fn stream_publisher_start_routes_by_worker_name() {
         OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
             StageTriggerRequest::Start(StageTriggerStartRequest {
                 worker: WorkerName::StageTrigger,
-                worker_id: WorkerId::default(),
+                worker_id: WorkerId::new(),
                 decorator: Decorator::Publisher,
                 resolver: resolver(),
                 trigger: trigger(),
@@ -136,7 +136,7 @@ fn stream_publisher_stop_routes_by_worker_name() {
         OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
             StageTriggerRequest::Stop(StageTriggerStopRequest {
                 worker: WorkerName::StageTrigger,
-                worker_id: WorkerId::default(),
+                worker_id: WorkerId::new(),
                 responder: responder(),
             }),
         );
@@ -165,7 +165,7 @@ fn cron_publisher_start_routes_by_worker_name() {
         OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Start(
             CronStartRequest {
                 worker: WorkerName::CronTrigger,
-                worker_id: WorkerId::default(),
+                worker_id: WorkerId::new(),
                 resolver: resolver(),
                 trigger: trigger(),
                 responder: responder(),
@@ -194,7 +194,7 @@ fn cron_publisher_stop_routes_by_worker_name() {
         OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Stop(
             CronStopRequest {
                 worker: WorkerName::CronTrigger,
-                worker_id: WorkerId::default(),
+                worker_id: WorkerId::new(),
                 responder: responder(),
             },
         ));

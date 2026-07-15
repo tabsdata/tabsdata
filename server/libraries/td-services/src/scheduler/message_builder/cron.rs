@@ -13,7 +13,7 @@ use td_objects::types::basic::{AtTime, WorkerConfig};
 /// addresses, or storage -- so the resolve endpoint can call it directly.
 pub(crate) fn build_cron_input(worker: &WorkerDBWithNames) -> Result<CronInput, TdError> {
     let info = CronInfo {
-        worker_id: worker.id,
+        worker_id: worker.id.clone(),
         collection_id: worker.collection_id,
         collection: worker.collection.clone(),
         function_version_id: worker.function_version_id.clone(),

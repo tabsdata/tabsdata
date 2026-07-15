@@ -53,7 +53,7 @@ mod tests {
         };
         let input = WorkerInput::Cron(Box::new(CronInput {
             info: CronInfo {
-                worker_id: WorkerId::default(),
+                worker_id: WorkerId::new(),
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
                 function_version_id: FunctionVersionId::new(),

@@ -231,7 +231,7 @@ pub async fn create_locked_function_runner_workers_start_request(
 
     let mut results = Vec::new();
     for f in physical_function_runs.iter() {
-        let worker_id = WorkerId::default();
+        let worker_id = WorkerId::new();
 
         let server_address = server_addresses.first();
         let fr_id = f.id.to_string();
@@ -285,7 +285,7 @@ pub async fn create_locked_function_runner_workers_start_request(
                 OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
                     FunctionRequest::Start(FunctionStartRequest {
                         worker: WorkerName::Function,
-                        worker_id,
+                        worker_id: worker_id.clone(),
                         decorator: f.decorator.to_message(),
                         resolver,
                         responder,

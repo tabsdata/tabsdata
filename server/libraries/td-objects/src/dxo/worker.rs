@@ -28,7 +28,7 @@ mod definitions {
     #[dao(sql_table = "workers")]
     #[dxo(builder(try_from = FunctionDB, skip_all))]
     pub struct WorkerDB {
-        #[builder(default)]
+        #[builder(default = "WorkerId::new()")]
         #[dxo(extractor)]
         pub id: WorkerId,
         /// The project this worker belongs to. Workers always belong to the
@@ -89,6 +89,8 @@ mod definitions {
         pub function: FunctionName,
         pub enabled: Enabled,
         pub worker_type: WorkerType,
+        // Patch the attempt's PFR ran (NULL = head), from physical_function_runs.
+        pub function_version_patch_id: Option<FunctionVersionId>,
     }
 
     #[ta_objects::Dto]
@@ -126,6 +128,8 @@ mod definitions {
         pub function: FunctionName,
         #[dto(list(filter, order_by))]
         pub worker_type: WorkerType,
+        #[dto(list(filter, order_by))]
+        pub function_version_patch_id: Option<FunctionVersionId>,
     }
 
     pub type CallbackRequest = ResponseMessagePayload<WorkerOutput>;

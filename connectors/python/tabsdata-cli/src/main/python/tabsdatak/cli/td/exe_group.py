@@ -19,7 +19,6 @@ from tabsdatak.cli.cli_utils import (
     beautify_time,
     get_currently_pinned_object,
     hint_common_solutions,
-    is_valid_id,
     logical_prompt,
     output_format,
     output_option,
@@ -415,9 +414,10 @@ def list_plan(
         ]):
             show_hint(
                 ctx,
-                "If you want to explore why a plan failed, you can "
-                "use the 'tdk exe logs' command with the '--plan "
-                "<PLAN-ID>' option to see the logs.",
+                "If you want to explore why a plan failed, run "
+                "'tdk exe list-worker --plan <PLAN-ID>' to find the failed "
+                "worker(s), then 'tdk exe logs --worker <WORKER-ID>' (or "
+                "'--fn-run <RUN-ID>') to read their logs.",
             )
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -623,9 +623,10 @@ def list_trx(
         ]):
             show_hint(
                 ctx,
-                "If you want to explore why a transaction failed, you can "
-                "use the 'tdk exe logs' command with the '--trx "
-                "<TRANSACTION-ID>' option to see the logs.",
+                "If you want to explore why a transaction failed, run "
+                "'tdk exe list-worker --trx <TRANSACTION-ID>' to find the failed "
+                "worker(s), then 'tdk exe logs --worker <WORKER-ID>' (or "
+                "'--fn-run <RUN-ID>') to read their logs.",
             )
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -798,6 +799,7 @@ def list_worker(
         table.add_column("Plan name")
         table.add_column("Plan ID")
         table.add_column("Transaction ID")
+        table.add_column("Patch")
         table.add_column("Status")
 
         for worker in list_of_workers:
@@ -808,6 +810,7 @@ def list_worker(
                 worker.execution.name,
                 worker.execution.id,
                 worker.transaction.id,
+                worker_patch(worker),
                 worker.status,
             )
 
@@ -818,9 +821,8 @@ def list_worker(
         click.echo()
         show_hint(
             ctx,
-            "If you want to explore why a worker failed, you can "
-            "use the 'tdk exe logs' command with the '--worker "
-            "<WORKER-ID>' option to see the logs.",
+            "Read logs with 'tdk exe logs --worker <WORKER-ID>', or "
+            "'tdk exe logs --fn-run <RUN-ID>' for the run's latest worker.",
         )
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -909,10 +911,39 @@ def info(ctx: click.Context, plan: str):
 @exe.command()
 @proj_option
 @click.option(
+    "--fn-run",
+    "fn_run",
+    type=str,
+    help="ID of the function run whose logs to show (its latest worker).",
+)
+@click.option(
     "--worker",
-    help="ID of the worker that generated the logs.",
-    cls=MutuallyExclusiveOption,
-    mutually_exclusive=["status", "plan", "exec-name", "fn", "coll", "trx"],
+    type=str,
+    help="ID of a specific worker whose logs to show.",
+)
+@click.option(
+    "--fn",
+    type=str,
+    help=(
+        "Name of a function whose logs to show (its latest worker). Requires a "
+        "collection (--coll); narrow to one run with --plan or --trx."
+    ),
+)
+@click.option(
+    "--coll",
+    "-c",
+    type=str,
+    help="Collection of the function named with --fn.",
+)
+@click.option(
+    "--plan",
+    type=str,
+    help="With --fn, narrow to a specific plan (execution) ID.",
+)
+@click.option(
+    "--trx",
+    type=str,
+    help="With --fn, narrow to a specific transaction ID.",
 )
 @click.option(
     "--file",
@@ -921,120 +952,56 @@ def info(ctx: click.Context, plan: str):
         "stdout. Any folders provided before the file must already exist."
     ),
 )
-@click.option(
-    "--status",
-    type=str,
-    multiple=True,
-    help=(
-        "Filter workers by status. The possible statuses are "
-        f"'{WORKER_VALID_USER_PROVIDED_STATUSES}'. This field is "
-        "case-insensitive. "
-    ),
-)
-@click.option(
-    "--plan",
-    type=str,
-    cls=MutuallyExclusiveOption,
-    help="ID of the plan to which the workers belong.",
-    mutually_exclusive=["plan-name", "fn", "fn-run", "trx"],
-)
-@click.option(
-    "--plan-name",
-    help=(
-        "A plan name wildcard to match. "
-        "For example, 'my_plan*' will match all plans "
-        "with names starting with 'my_plan'."
-    ),
-    cls=MutuallyExclusiveOption,
-    mutually_exclusive=["plan"],
-)
-@click.option(
-    "--fn",
-    type=str,
-    cls=MutuallyExclusiveOption,
-    help=(
-        "Name of the function to which the workers belong. If this is provided, "
-        "collection must also be provided."
-    ),
-    mutually_exclusive=["fn-run", "plan", "trx"],
-)
-@click.option(
-    "--fn-run",
-    type=str,
-    cls=MutuallyExclusiveOption,
-    help="ID of the function run to which the workers belong.",
-    mutually_exclusive=["fn", "plan", "trx"],
-)
-@click.option(
-    "--coll",
-    type=str,
-    help="Collection of the function to which the workers belong.",
-)
-@click.option(
-    "--trx",
-    type=str,
-    cls=MutuallyExclusiveOption,
-    help="ID of the transaction to which the workers belong.",
-    mutually_exclusive=["fn-run", "plan", "fn"],
-)
 @output_option
 @click.pass_context
 def logs(
     ctx: click.Context,
-    worker: str,
-    file: str,
-    status: List[str],
-    plan: str,
-    plan_name: str,
-    fn: str,
     fn_run: str,
+    worker: str,
+    fn: str,
     coll: str,
+    plan: str,
     trx: str,
+    file: str,
 ):
     """
-    Show the logs generated by a worker.
+    Show logs for one worker (--worker), a function run's latest worker
+    (--fn-run), or a named function's latest worker (--fn with --coll).
     """
     verify_login_or_prompt(ctx)
-    if not worker:
-        coll = coll or get_currently_pinned_object(ctx, "collection")
-    if fn and not coll:
-        coll = logical_prompt(
-            ctx, "Name of the collection to which the function belongs"
+    if len([t for t in (worker, fn_run, fn) if t]) != 1:
+        raise click.ClickException(
+            "Provide exactly one of --worker, --fn-run, or --fn."
         )
+    if (plan or trx) and not fn:
+        raise click.ClickException("--plan and --trx only apply with --fn.")
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        request_filter = obtain_list_worker_filters(
-            status=status,
-            exe_name=plan_name,
-            execution_id=plan,
-            fn=fn,
-            fn_run=fn_run,
-            collection=coll,
-            trx=trx,
-        )
-        if request_filter:
-            list_of_workers = obtain_worker_list_from_filters(
-                server, request_filter, ctx
-            )
+        if worker:
+            target = worker
         else:
-            # If no filters are provided, we can directly use the worker ID provided
-            # by the user
-            worker = worker or logical_prompt(
-                ctx, "ID of the worker that generated the logs"
-            )
-            list_of_workers = [worker]
-        generated_logs = ""
-        for w in list_of_workers:
-            generated_logs = (
-                f"Logs from worker '{w}' underneath:"
-                + os.linesep
-                + "*" * 20
-                + os.linesep
-            )
-            generated_logs += server.get_worker_log(w)
-            generated_logs += os.linesep + "*" * 20 + os.linesep
+            if fn_run:
+                request_filter = [f"logical_function_run_id:eq:{fn_run}"]
+                subject = f"Function run '{fn_run}'"
+            else:
+                coll = coll or get_currently_pinned_object(ctx, "collection")
+                if not coll:
+                    coll = logical_prompt(
+                        ctx, "Name of the collection to which the function belongs"
+                    )
+                request_filter = obtain_list_worker_filters(
+                    fn=fn, collection=coll, execution_id=plan, trx=trx
+                )
+                subject = f"Function '{fn}'"
+            workers = latest_workers(server, request_filter)
+            if not workers:
+                raise click.ClickException(
+                    f"{subject} has no workers yet — nothing has run."
+                )
+            target = workers[-1].id
+
+        generated_logs = f"Worker {target}" + os.linesep + server.get_worker_log(target)
         if file == "-":
-            # The file is stdout: emit the raw log text, nothing else.
             click.echo(generated_logs, nl=False)
             return
         if output_format(ctx) != "table":
@@ -1052,80 +1019,21 @@ def logs(
             click.echo(generated_logs)
     except Exception as e:
         hint_common_solutions(ctx, e)
-        raise click.ClickException(f"Failed to show worker logs: {e}")
+        raise click.ClickException(f"Failed to show logs: {e}")
 
 
-def obtain_worker_list_from_filters(
-    server: TabsdataServer, request_filter: List[str], ctx: click.Context
-) -> List[str]:
-    # If filters are provided, we must show a list of all possible workers for
-    # that filter, and then allow the user to select one of them or all of them.
+def latest_workers(server: TabsdataServer, request_filter: list) -> list:
+    """Workers matching a filter, in server order; the last is the latest."""
+    return server.list_workers(filter=request_filter)
 
-    list_of_workers = server.list_workers(filter=request_filter)
 
-    table = Table(title="Workers")
-    table.add_column("Worker ID", style="cyan", no_wrap=True)
-    table.add_column("Index", style="cyan", no_wrap=True)
-    table.add_column("Collection")
-    table.add_column("Function")
-    table.add_column("Plan name")
-    table.add_column("Plan ID")
-    table.add_column("Transaction ID")
-    table.add_column("Status")
+def worker_patch(worker) -> str:
+    """The patch a worker ran (a function-version id), or '-' for head code.
 
-    for index, worker in enumerate(list_of_workers, 1):
-        table.add_row(
-            worker.id,
-            str(index),
-            worker.collection.name,
-            worker.function.name,
-            worker.execution.name,
-            worker.execution.id,
-            worker.transaction.id,
-            worker.status,
-        )
-
-    click.echo()
-    console = Console()
-    console.print(table)
-    click.echo(f"Number of workers: {len(list_of_workers)}")
-    click.echo()
-
-    worker_id_or_index = logical_prompt(
-        ctx,
-        "Index or ID of the worker to recover logs from. If "
-        "none is provided (by pressing the return key without writing anything), "
-        "all worker logs will be shown.",
-        default_value="",
-    )
-    if not worker_id_or_index:
-        if not list_of_workers:
-            raise click.ClickException("No workers found for the provided filters.")
-        list_of_workers = [w.id for w in list_of_workers]
-    else:
-        # We must check if the provided value is an index, an ID or neither.
-        if is_valid_id(worker_id_or_index):
-            # If it's a valid ID, we can use it directly.
-            list_of_workers = [worker_id_or_index]
-        else:
-            try:
-                chosen_worker = list_of_workers[int(worker_id_or_index) - 1]
-                list_of_workers = [chosen_worker.id]
-            except IndexError:
-                raise click.ClickException(
-                    f"Invalid worker index '{worker_id_or_index}'. Please provide a"
-                    " valid index from the list (in this instance, a number between 1"
-                    f" and {len(list_of_workers)})."
-                )
-            except ValueError:
-                raise click.ClickException(
-                    f"Invalid value provided '{worker_id_or_index}'. It seems it is "
-                    "neither a valid worker ID nor a valid index. You can obtain "
-                    "one of these values from either the 'Worker ID' or the 'Index' "
-                    "column in the table above, or provide none to obtain the logs "
-                    "of all workers in the table above."
-                )
-    return list_of_workers
+    The patch id lives on the physical function run, surfaced onto the worker
+    row as `function_version_patch_id`; absent/None means unpatched (head).
+    """
+    return worker.kwargs.get("function_version_patch_id") or "-"
 
 
 @exe.command()

@@ -8,6 +8,7 @@ use super::collections::Collections;
 use super::executions::Executions;
 use super::functions::Functions;
 use super::logical_function_runs::LogicalFunctionRuns;
+use super::physical_function_runs::PhysicalFunctionRuns;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
 use crate::schema::sql::ViewDef;
@@ -75,6 +76,12 @@ impl Entity for Defs {
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .expr_as(Expr::col((Functions::Table, Functions::Enabled)), Alias::new("enabled"))
+                // Patch id from the attempt's PFR (NULL = head). Distinguishes
+                // which code each attempt ran; the worker row itself lacks it.
+                .expr_as(
+                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::FunctionVersionPatchId)),
+                    Alias::new("function_version_patch_id"),
+                )
                 .from(Workers::Table)
                 .join(
                     JoinType::LeftJoin,
@@ -104,6 +111,12 @@ impl Entity for Defs {
                             Expr::col((Functions::Table, Functions::FunctionId))
                                 .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::FunctionId)),
                         ),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    PhysicalFunctionRuns::Table,
+                    Expr::col((Workers::Table, Workers::PhysicalFunctionRunId))
+                        .equals((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)),
                 )
                 .and_where(Expr::col((Workers::Table, Workers::WorkerEnabled)).eq(true))
                 .to_owned(),

@@ -73,7 +73,7 @@ async fn unlock_workers_request_infallible(
                         &mut *conn,
                         message_queue,
                         &message,
-                        worker_id,
+                        worker_id.clone(),
                         payload,
                     )
                     .await
@@ -83,7 +83,7 @@ async fn unlock_workers_request_infallible(
                         &mut *conn,
                         message_queue,
                         &message,
-                        worker_id,
+                        worker_id.clone(),
                         payload,
                     )
                     .await
@@ -93,7 +93,7 @@ async fn unlock_workers_request_infallible(
                         &mut *conn,
                         message_queue,
                         &message,
-                        worker_id,
+                        worker_id.clone(),
                         payload,
                     )
                     .await

@@ -59,7 +59,7 @@ mod tests {
 
     #[test]
     fn test_stage_trigger_input_ser_deser() {
-        let worker_id = WorkerId::default();
+        let worker_id = WorkerId::new();
         let collection_id = CollectionId::default();
         let function_version_id = FunctionVersionId::new();
         let scheduled_on = AtTime::default();
@@ -76,7 +76,7 @@ mod tests {
         let project_id = ProjectId::default();
         let input = WorkerInput::StageTrigger(Box::new(StageTriggerInput {
             info: Info {
-                worker_id,
+                worker_id: worker_id.clone(),
                 project_id,
                 collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
@@ -130,6 +130,7 @@ mod tests {
         let defined_on = serde_json::to_string(&defined_on).unwrap();
 
         let function_version_id = function_version_id.unpadded_str();
+        let worker_id = worker_id.unpadded_str();
 
         assert_eq!(
             serialized.as_str(),

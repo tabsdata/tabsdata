@@ -67,7 +67,7 @@ mod tests {
                     env_prefix: None,
                 },
                 scheduled_on: AtTime::default(),
-                worker_id: WorkerId::default(),
+                worker_id: WorkerId::new(),
             },
         }));
         let serialized = serde_yaml::to_string(&input).unwrap();

@@ -200,5 +200,5 @@ impl UserId {
 #[ta_objects::typed(id)]
 pub struct UserRoleId;
 
-#[ta_objects::typed(id)]
+#[ta_objects::typed(idlogic(key = WKR))]
 pub struct WorkerId;

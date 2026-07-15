@@ -108,7 +108,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                     OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(
                         CronRequest::Start(CronStartRequest {
                             worker: WorkerName::CronTrigger,
-                            worker_id: cron_trigger_worker.id,
+                            worker_id: cron_trigger_worker.id.clone(),
                             resolver,
                             trigger: Callback::Http(task),
                             responder: callback,
@@ -125,7 +125,7 @@ pub async fn create_locked_cron_trigger_workers_start_request(
                     // Supervisor: resolve the full message here.
                     // TODO ADD get_states to states
                     let info = cron_trigger::Info {
-                        worker_id: cron_trigger_worker.id,
+                        worker_id: cron_trigger_worker.id.clone(),
                         collection_id: cron_trigger_worker.collection_id,
                         collection: cron_trigger_worker.collection.clone(),
                         function_version_id: cron_trigger_worker.function_version_id.clone(),
@@ -204,7 +204,7 @@ pub async fn create_locked_cron_trigger_workers_stop_request(
                         OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(
                             CronRequest::Stop(CronStopRequest {
                                 worker: WorkerName::CronTrigger,
-                                worker_id: cron_trigger_worker.id,
+                                worker_id: cron_trigger_worker.id.clone(),
                                 responder: callback,
                             }),
                         ),
