@@ -93,7 +93,7 @@ def _conn_from(cfg, staging) -> StarRocksDestConn:
     and the configured S3 staging area."""
     return StarRocksDestConn(
         host=cfg.host,
-        port=cfg.port,
+        port=str(cfg.port),
         database=cfg.database,
         staging=staging,
         credentials=cfg.credentials,

@@ -160,12 +160,13 @@ class CHConfig:
 
     The ``credentials`` / ``staging`` properties produce new-model
     (``tabsdatak.conn.common.types``) values, so an integration
-    test can build a ``ClickHouseDestConn`` straight from the fields::
+    test can build a ``ClickHouseDestConn`` from the fields (``port`` /
+    ``secure`` are string-or-secret, so pass them as strings)::
 
         ClickHouseDestConn(
-            host=cfg.host, port=cfg.port, database=cfg.database,
+            host=cfg.host, port=str(cfg.port), database=cfg.database,
             credentials=cfg.credentials, staging=cfg.staging,
-            secure=cfg.secure,
+            secure="true" if cfg.secure else "false",
         )
     """
 

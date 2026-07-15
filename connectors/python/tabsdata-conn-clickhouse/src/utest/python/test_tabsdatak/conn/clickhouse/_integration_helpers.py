@@ -131,11 +131,11 @@ def _conn_from(cfg) -> ClickHouseDestConn:
     """Build a ClickHouseDestConn from a :class:`conftest.CHConfig`."""
     return ClickHouseDestConn(
         host=cfg.host,
-        port=cfg.port,
+        port=str(cfg.port),
         database=cfg.database,
         credentials=cfg.credentials,
         staging=cfg.staging,
-        secure=cfg.secure,
+        secure="true" if cfg.secure else "false",
     )
 
 

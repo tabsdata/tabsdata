@@ -6,9 +6,9 @@
   one parquet slot per table. Writes go through a cloud-staged
   bulk loader (S3 / GCS / Azure) rather than row-by-row inserts.
 
-``port`` and ``secure`` accept ``int|bool|Secret``; call
-``_convert(...)`` from ``tabsdatak.conn.common.types`` at the
-use site to resolve to a concrete ``int`` / ``bool`` for the
+``port`` and ``secure`` are string-or-secret fields (``PortSpec`` /
+``BoolSpec``); call ``_convert(...)`` from ``tabsdatak.conn.common.types``
+at the use site to resolve them to a concrete ``int`` / ``bool`` for the
 plugin. Iceberg-style schema evolution is supported on the dest.
 """
 
