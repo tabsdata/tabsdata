@@ -44,9 +44,9 @@ def _az_uri(container: str, path_entry: str) -> str:
 def build_location(
     conn: _AnyAzureBlobConn, path_entry: str, handler: TransporterHandler
 ) -> Any:
-    container = _convert(conn.container, str)
+    container = conn._container()
     if not (path_entry.startswith("az://") or path_entry.startswith("abfss://")):
-        path_entry = full_path(conn.base_path, path_entry)
+        path_entry = full_path(conn._base_path(), path_entry)
     return handler.azure_location(
         uri=_az_uri(container, path_entry),
         account_name_env=handler.azure_account_name_env,

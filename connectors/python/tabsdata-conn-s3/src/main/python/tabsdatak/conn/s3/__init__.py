@@ -46,6 +46,7 @@ from tabsdatak.conn.common.types import (
     CfgSpec,
     FullPathSpec,
     S3BucketSpec,
+    _convert,
 )
 from tabsdatak.conn.s3.error import S3ErrorCode
 from tabsdatak.spi import Conn
@@ -92,6 +93,15 @@ class S3SrcConn(Conn):
     base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
+    def _bucket(self) -> str:
+        return _convert(self.bucket, str)
+
+    def _region(self) -> str:
+        return _convert(self.region, str)
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
+
 
 @_api.dataclass(S3ErrorCode.S3_1, kw_only=True)
 class S3DestConn(Conn):
@@ -107,6 +117,15 @@ class S3DestConn(Conn):
     credentials: CredentialsSpec
     base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
+
+    def _bucket(self) -> str:
+        return _convert(self.bucket, str)
+
+    def _region(self) -> str:
+        return _convert(self.region, str)
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
 
 
 # --- Source ----------------------------------------------------------

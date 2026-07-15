@@ -8,9 +8,6 @@ from urllib.parse import parse_qsl, urlparse
 from sqlalchemy import engine
 
 from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.postgres import PostgresDestConn, PostgresSrcConn
 
 # Either Postgres connection flavour -- source or destination.
@@ -35,7 +32,7 @@ class PostgresConnectionExplorer(SqlAlchemyConnectionExplorer):
         })
 
     def map_entity_fields(self, conn: PostgresConn, schema: str | None) -> dict:
-        parsed = urlparse(_convert(conn.uri, str))
+        parsed = urlparse(conn._uri())
         return {
             "database": parsed.path.lstrip("/") if parsed.path else "",
             "schema": schema or "",
@@ -45,9 +42,9 @@ class PostgresConnectionExplorer(SqlAlchemyConnectionExplorer):
         return conn.conn_cfg or {}
 
     def make_url(self, conn: PostgresConn) -> engine.URL:
-        # `uri` is a str or a `Secret`; `_convert` yields the plain str
+        # `uri` is a str or a `Secret`; `_uri()` yields the plain str
         # form either way (mirrors the runtime `build_postgres_engine`).
-        parsed = urlparse(_convert(conn.uri, str))
+        parsed = urlparse(conn._uri())
         user = password = ""
         if conn.credentials is not None:
             user = conn.credentials.user.value()

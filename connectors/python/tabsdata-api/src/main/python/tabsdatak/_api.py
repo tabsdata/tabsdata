@@ -30,6 +30,7 @@ import dataclasses
 import functools
 import importlib
 import inspect
+import json
 import re
 import typing
 from datetime import datetime
@@ -278,6 +279,120 @@ NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
 
 
 # ---------------------------------------------------------------------------
+# Secret -- implementation of the public `tabsdatak.api.Secret`.
+#
+# All behaviour lives here; the public class is a thin, body-less subclass so
+# that (a) the public name stays `tabsdatak.api.Secret` and (b) every method
+# uses `cls` / `type(self)`, so a `Secret`-typed field validates to `Secret`
+# instances -- not `_Secret` -- without any code in `api.py`.
+# ---------------------------------------------------------------------------
+
+
+class _Secret:
+    # Serialized (always dehydrated) marker.
+    _DEHYDRATED = ":secret:"
+    # Hydrated wire prefix accepted on deserialization ("secret:<value>").
+    _PREFIX = "secret:"
+
+    def __init__(self, value: str | None = None):
+        # ``Secret("x")`` -> hydrated; ``Secret()`` -> dehydrated.
+        if value is not None and not isinstance(value, str):
+            raise ApiErrorCode.API_5.exception(type=type(value).__name__)
+        self._value = value
+
+    def value(self) -> str:
+        """The hydrated value; raises if this secret is dehydrated."""
+        if self._value is None:
+            raise ApiErrorCode.API_11.exception(name=type(self).__name__)
+        return self._value
+
+    # --- serde helpers (a Secret round-trips to the bare ``":secret:"``
+    # string, never an envelope) -----------------------------------------
+
+    def to_dict(self) -> str:
+        return TypeAdapter(type(self)).dump_python(self, mode="json")
+
+    def to_json(self, indent: int | None = None) -> str:
+        return TypeAdapter(type(self)).dump_json(self, indent=indent).decode()
+
+    @classmethod
+    def from_dict(cls, d: Any) -> "_Secret":
+        # from_dict is deserialization -> decode via json-mode so the wire
+        # forms (``":secret:"`` / ``"secret:<value>"``) are interpreted.
+        return TypeAdapter(cls).validate_json(json.dumps(d))
+
+    @classmethod
+    def from_json(cls, s: str | bytes) -> "_Secret":
+        return TypeAdapter(cls).validate_json(s)
+
+    @classmethod
+    def _parse(cls, s: str) -> str | None:
+        # ``":secret:"`` -> dehydrated (None); ``"secret:<value>"`` ->
+        # hydrated with ``<value>`` (which may be empty). Any other string
+        # is rejected: an unprefixed value is not accepted on the wire.
+        if s == cls._DEHYDRATED:
+            return None
+        if s.startswith(cls._PREFIX):
+            return s[len(cls._PREFIX) :]
+        raise ValueError(
+            f"{cls.__name__} expects '{cls._PREFIX}<value>' or "
+            f"'{cls._DEHYDRATED}', got {s!r}"
+        )
+
+    def __eq__(self, other: Any) -> bool:
+        return type(self) is type(other) and self._value == other._value
+
+    def __hash__(self) -> int:
+        return hash((type(self), self._value))
+
+    def __repr__(self) -> str:
+        # Never leak the value through repr / logs.
+        return f"{type(self).__name__}(***redacted***)"
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls,
+        source_type: Any,
+        handler: GetCoreSchemaHandler,
+    ) -> core_schema.CoreSchema:
+        def py_validate(value: Any) -> Any:
+            # Python: the value is literal -- a Secret passes through, a str is
+            # the literal secret value, None is dehydrated.
+            if isinstance(value, cls):
+                return value
+            if value is None:
+                return cls()
+            if isinstance(value, str):
+                return cls(value)
+            raise ValueError(
+                f"{cls.__name__} expects a string, None, or {cls.__name__} "
+                f"instance (got {type(value).__name__})"
+            )
+
+        def json_validate(value: Any) -> Any:
+            # JSON/wire: only the marked string forms; an unmarked string is
+            # rejected by ``_parse``.
+            if isinstance(value, str):
+                return cls(cls._parse(value))
+            raise ValueError(
+                f"{cls.__name__} expects a string (got {type(value).__name__})"
+            )
+
+        def serialize(instance: Any) -> str:
+            # A secret always serializes dehydrated -- its value never
+            # lands in the serialized form.
+            return cls._DEHYDRATED
+
+        return core_schema.json_or_python_schema(
+            json_schema=core_schema.no_info_plain_validator_function(json_validate),
+            python_schema=core_schema.no_info_plain_validator_function(py_validate),
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                serialize, return_schema=core_schema.str_schema()
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Field-site value constraint for `tabsdatak.api.Secret`.
 #
 # Use as ``Annotated[Secret, SecretValueConstraints(pattern=<regex>)]``.
@@ -289,11 +404,10 @@ NON_EMPTY_LIST_CONSTRAINTS = Field(min_length=1)
 #
 # The pattern is a field-site constraint: it is never serialized (the
 # wire form is just the ``":secret:"`` marker) and is re-applied from the
-# field annotation on every validation. As a side effect a bad bare
-# string at a ``Union[Annotated[str, StringConstraints(<re>)],
-# Annotated[Secret, SecretValueConstraints(<re>)]]`` field is rejected by
-# *both* union members instead of silently falling through to a literal
-# secret.
+# field annotation on every validation. This gates a pure-``Secret``
+# field; to gate a string-or-secret field with a single pattern use
+# ``tabsdatak.conn.common.types.StrOrSecretConstraints`` on a
+# ``StrOrSecretSpec`` instead.
 # ---------------------------------------------------------------------------
 
 
@@ -343,6 +457,69 @@ class SecretValueConstraints:
             return secret
 
         return core_schema.no_info_after_validator_function(check, base)
+
+
+# ---------------------------------------------------------------------------
+# str-or-secret union -- backs `tabsdatak.api.StrOrSecretSpec`.
+# ---------------------------------------------------------------------------
+
+# Wire prefix for the plain-string arm. On the wire the plain and secret arms
+# are both strings, so a plain value is encoded ``"str:<value>"`` to keep it
+# distinct from a secret (``"secret:<value>"`` / ``":secret:"``). The prefix is
+# a *wire encoding* only: in Python the value is the literal string.
+_STR_PREFIX = "str:"
+
+
+class StrOrSecretHandler:
+    """Annotation handler backing :data:`~tabsdatak.api.StrOrSecretSpec`.
+
+    Splits validation by source (``json_or_python_schema``):
+
+    * **python** -- the value is taken literally: a ``str`` is a plain value
+      stored verbatim (no marker interpretation), a :class:`~tabsdatak.api.Secret`
+      instance is a secret.
+    * **json** -- the wire form is decoded: ``"str:<v>"`` -> plain ``<v>``,
+      ``"secret:<v>"`` -> ``Secret(<v>)``, ``":secret:"`` -> dehydrated
+      ``Secret``, and a bare ``"<v>"`` -> plain ``<v>``.
+
+    Serialization dispatches on the runtime type: a plain ``str`` renders as
+    ``"str:<value>"`` and a ``Secret`` as ``":secret:"``. So ``str:`` /
+    ``:secret:`` are purely a wire encoding -- added on serialize, stripped on
+    (json) deserialize, never seen in Python.
+    """
+
+    def __get_pydantic_core_schema__(
+        self, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        from tabsdatak.api import Secret
+
+        python_schema = core_schema.union_schema(
+            [core_schema.is_instance_schema(Secret), core_schema.str_schema()]
+        )
+
+        def decode(value: Any) -> Any:
+            if not isinstance(value, str):
+                raise ValueError(f"expected a string, got {type(value).__name__}")
+            if value == Secret._DEHYDRATED:
+                return Secret()
+            if value.startswith(Secret._PREFIX):
+                return Secret(value[len(Secret._PREFIX) :])
+            if value.startswith(_STR_PREFIX):
+                return value[len(_STR_PREFIX) :]
+            return value
+
+        def serialize(value: Any) -> str:
+            if isinstance(value, Secret):
+                return Secret._DEHYDRATED
+            return f"{_STR_PREFIX}{value}"
+
+        return core_schema.json_or_python_schema(
+            json_schema=core_schema.no_info_plain_validator_function(decode),
+            python_schema=python_schema,
+            serialization=core_schema.plain_serializer_function_ser_schema(
+                serialize, return_schema=core_schema.str_schema()
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -836,7 +1013,11 @@ class JsonSerde:
                         f"{target.__kind__!r}"
                     )
                 spec = _migrate(value["spec"], value["apiVersion"], target)
-                return TypeAdapter(target).validate_python(spec)
+                # An envelope is a wire document: validate its spec in
+                # json-mode so string-or-secret / Secret leaves decode their
+                # ``str:`` / ``secret:`` / ``:secret:`` markers (python-mode
+                # would keep them as literal strings).
+                return TypeAdapter(target).validate_json(json.dumps(spec))
             # Anything else (e.g. plain field dict produced by a parent
             # wrap-validator that already resolved the envelope): defer
             # to default validation.

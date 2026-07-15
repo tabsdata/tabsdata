@@ -30,7 +30,7 @@ from pydantic import StringConstraints
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
-from tabsdatak.api import Secret, StreamSrc
+from tabsdatak.api import StreamSrc, StrOrSecretSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
@@ -38,7 +38,9 @@ from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
     CfgSpec,
+    StrOrSecretConstraints,
     UserPassword,
+    _convert,
 )
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.spi import Conn
@@ -80,14 +82,9 @@ KafkaMessageFormatSpec: TypeAlias = Union[Literal["avro", "json"], Protobuf]
 # --- Schema registries ----------------------------------------------
 
 _CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR = r".*"
-ConfluentSchemaRegistryUrlNameSpec: TypeAlias = Union[
-    Annotated[
-        str, StringConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR)
-    ],
-    Annotated[
-        Secret,
-        _api.SecretValueConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR),
-    ],
+ConfluentSchemaRegistryUrlNameSpec: TypeAlias = Annotated[
+    StrOrSecretSpec,
+    StrOrSecretConstraints(pattern=_CONFLUENT_SCHEMA_REGISTRY_URL_NAME_RE_STR),
 ]
 
 
@@ -108,17 +105,18 @@ class ConfluentSchemaRegistry:
     credentials: ConfluentSchemaRegistryCredentialsSpec | None = None
     configs: CfgSpec | None = None
 
+    def _url(self) -> str:
+        return _convert(self.url, str)
+
 
 _REGISTRY_NAME_RE_STR = r".*"
-RegistryNameSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_REGISTRY_NAME_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_REGISTRY_NAME_RE_STR)],
+RegistryNameSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_REGISTRY_NAME_RE_STR)
 ]
 
 _SCHEMA_NAME_RE_STR = r".*"
-SchemaNameSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_SCHEMA_NAME_RE_STR)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_SCHEMA_NAME_RE_STR)],
+SchemaNameSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_SCHEMA_NAME_RE_STR)
 ]
 
 
@@ -142,6 +140,15 @@ class AwsGlueSchemaRegistry:
     schema_name: SchemaNameSpec
     configs: CfgSpec | None = None
 
+    def _region_name(self) -> str:
+        return _convert(self.region_name, str)
+
+    def _registry_name(self) -> str:
+        return _convert(self.registry_name, str)
+
+    def _schema_name(self) -> str:
+        return _convert(self.schema_name, str)
+
 
 # Discriminated union of supported schema-registry types. ``None``
 # (the default on :class:`KafkaStreamSrcConn`) means schema-less ingest.
@@ -156,17 +163,15 @@ SchemaRegistrySpec: TypeAlias = Union[
 
 # Bootstrap-server list. A single comma-separated string of (host[:port]).
 _SERVERS_VALUE_PATTERN = r".+"
-KafkaServersSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_SERVERS_VALUE_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_SERVERS_VALUE_PATTERN)],
+KafkaServersSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_SERVERS_VALUE_PATTERN)
 ]
 
 # Topic name -- Kafka topics permit a wide alphabet, validation is
 # left to the broker on subscribe.
 _GROUP_VALUE_PATTERN = r".+"
-KafkaGroupSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_GROUP_VALUE_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_GROUP_VALUE_PATTERN)],
+KafkaGroupSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_GROUP_VALUE_PATTERN)
 ]
 
 # Schema
@@ -208,6 +213,12 @@ class KafkaStreamSrcConn(Conn):
     group_id: KafkaGroupSpec
     schema_registry: SchemaRegistrySpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _servers(self) -> str:
+        return _convert(self.servers, str)
+
+    def _group_id(self) -> str:
+        return _convert(self.group_id, str)
 
 
 # --- KafkaStreamSrc.src_cfg keys ------------------------------------

@@ -2,7 +2,7 @@
 # Copyright 2026 Tabs Data Inc.
 #
 
-"""Tests for the connection-template engine :mod:`tabsdatak._template`.
+"""Tests for the connection-template engine :mod:`tabsdatak.cli.template`.
 
 The engine introspects whatever connectors are installed (via the SPI
 registry); ``localfile`` ships with the api package's reference install and is
@@ -18,7 +18,7 @@ import typing
 import pytest
 
 # noinspection PyProtectedMember
-from tabsdatak import _template as template
+from tabsdatak.cli import template
 
 # noinspection PyProtectedMember
 from tabsdatak._api import resolve_class
@@ -81,7 +81,7 @@ def test_localfile_template_round_trips():
     full = template.build_template(info.conn_cls, all_fields=True)
     assert set(full["spec"]) == {"base_path"}
     text = template.to_yaml(full)
-    assert "base_path: /" in text
+    assert "base_path: str:/" in text
     assert "# conn_cfg" in text
     # Still a valid connection (the commented conn_cfg is not parsed).
     assert template.validate(template.from_yaml(text)) == "connectionDef"
@@ -93,7 +93,7 @@ def test_all_fields_comments_out_none_defaults():
     info = template.resolve_conn("local-file-in", "src")
     text = template.to_yaml(template.build_template(info.conn_cls, all_fields=True))
     assert "# optional (default: '/')" in text
-    assert "base_path: /" in text
+    assert "base_path: str:/" in text
     assert "# conn_cfg  (optional, default: none) -- a dict (str-keyed)" in text
     assert "# conn_cfg: {}" in text
 
@@ -167,7 +167,7 @@ def test_expected_note():
     assert template._expected_note([list]) == "a list"
     assert (
         template._expected_note(template._members(typing.Union[str, Secret]))
-        == "accepts: <value> | secret:<value>"
+        == "accepts: str:<value> | secret:<value>"
     )
     assert template._expected_note([typing.Literal["a", "b"]]) == "one of: a | b"
     assert template._expected_note([str]) is None
@@ -258,7 +258,7 @@ def test_type_comment_lists_accepted_forms():
     # Forms are listed in the union's declaration order.
     assert (
         template._type_comment(template._members(typing.Union[str, Secret]))
-        == "accepts: <value> | secret:<value>"
+        == "accepts: str:<value> | secret:<value>"
     )
     # A single accepted form -- a plain scalar, or a lone Secret credential --
     # gets no comment.
@@ -287,12 +287,17 @@ def test_yaml_template_has_header():
     lines = text.splitlines()
     # Names the connector/direction the template targets.
     assert lines[0] == "# Connection template for: local-file-in (src)"
-    # Reminds that secret values carry the 'secret:' prefix, or a
-    # '$secret:<ENV_VAR>' environment reference.
-    assert "secret:" in lines[1]
-    assert "$secret:" in lines[1]
-    # Notes that a '$secret:' value is resolved client-side at create/update.
-    assert "client" in lines[2]
+    # The header comment block reminds that a plain value carries the 'str:'
+    # prefix and a secret the 'secret:' prefix (or a '$secret:<ENV_VAR>' ref
+    # resolved client-side at create/update). Checked over the whole block, not
+    # by line index, since prose is wrapped to keep comments within 80 columns.
+    header = "\n".join(line for line in lines if line.startswith("#"))
+    assert "str:" in header
+    assert "secret:" in header
+    assert "$secret:" in header
+    assert "client" in header
+    # Every comment line stays within 80 columns.
+    assert all(len(line) <= 80 for line in lines if line.startswith("#"))
     # The header is a comment, so the document still parses + validates.
     assert template.validate(template.from_yaml(text)) == "connectionDef"
 
@@ -304,7 +309,7 @@ def test_yaml_template_carries_accepts_comments():
     info = template.resolve_conn("mysql-sql-in", "src")
     text = template.to_yaml(template.build_template(info.conn_cls))
     # uri (str|Secret) lists its forms in the union's declaration order.
-    assert "# accepts: <value> | secret:<value>" in text  # uri
+    assert "# accepts: str:<value> | secret:<value>" in text  # uri
     # Single-form fields (the Secret-only credentials) carry no comment, so uri
     # is the only "# accepts:" note.
     assert text.count("# accepts:") == 1
@@ -313,7 +318,7 @@ def test_yaml_template_carries_accepts_comments():
     # valid connection -- the user replaces it).
     parsed = template.from_yaml(text)
     assert parsed["kind"] == "connectionDef"
-    assert parsed["spec"]["uri"] == "<value> or secret:<value>"
+    assert parsed["spec"]["uri"] == "str:<value> or secret:<value>"
     # Each fill-in field carries a "replace <value> ..." line in its block.
     assert "# replace <value> with the actual uri" in text
 
@@ -334,12 +339,12 @@ def test_mysql_secrets_render_as_refs_and_wizard_validates():
     info = template.resolve_conn("mysql-sql-in", "src")
     # Each field renders a fill-in placeholder showing its accepted forms.
     # credentials.user/password are Secret-only -> 'secret:<value>'. uri is
-    # Union[str, Secret] -> '<value> or secret:<value>'.
+    # str|Secret -> 'str:<value> or secret:<value>'.
     doc = template.build_template(info.conn_cls)
     creds = doc["spec"]["credentials"]["spec"]
     assert creds["user"] == "secret:<value>"
     assert creds["password"] == "secret:<value>"
-    assert doc["spec"]["uri"] == "<value> or secret:<value>"
+    assert doc["spec"]["uri"] == "str:<value> or secret:<value>"
     # Wizard: secret-first leaves are prompted as refs; the str-first uri is
     # a plain prompt. A valid uri makes the result validate.
     record: list = []

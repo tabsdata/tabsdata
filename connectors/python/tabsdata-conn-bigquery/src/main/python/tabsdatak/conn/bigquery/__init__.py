@@ -16,15 +16,13 @@ from __future__ import annotations
 
 from abc import ABC
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, TypeAlias, Union
-
-from pydantic import StringConstraints
+from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Dest, Secret
+from tabsdatak.api import Dest, StrOrSecretSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _validation
@@ -40,6 +38,8 @@ from tabsdatak.conn.common.types import (
     FullPathSpec,
     GCPJson,
     GCSBucketSpec,
+    StrOrSecretConstraints,
+    _convert,
 )
 from tabsdatak.spi import Conn
 
@@ -49,14 +49,12 @@ from tabsdatak.spi import Conn
 CredentialsSpec: TypeAlias = GCPJson
 
 
-ProjectSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.PROJECT_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.PROJECT_PATTERN)],
+ProjectSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.PROJECT_PATTERN)
 ]
 
-DatasetSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.DATASET_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.DATASET_PATTERN)],
+DatasetSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.DATASET_PATTERN)
 ]
 
 BigQueryTableNameSpec: TypeAlias = Annotated[
@@ -110,6 +108,12 @@ class GCSLocation(CloudLocation):
     base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
 
+    def _bucket(self) -> str:
+        return _convert(self.bucket, str)
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
+
 
 # --- Connection ------------------------------------------------------
 
@@ -134,6 +138,12 @@ class BigQueryDestConn(Conn):
     dataset: DatasetSpec | None = None
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _project(self) -> str:
+        return _convert(self.project, str)
+
+    def _dataset(self) -> str:
+        return _convert(self.dataset, str)
 
     def validate(self) -> None:
         if self.dataset is not None and self.project is None:

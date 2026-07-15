@@ -39,9 +39,9 @@ def _gcs_uri(bucket: str, path_entry: str) -> str:
 def build_location(
     conn: _AnyGCSConn, path_entry: str, handler: TransporterHandler
 ) -> Any:
-    bucket = _convert(conn.bucket, str)
+    bucket = conn._bucket()
     if not path_entry.startswith("gs://"):
-        path_entry = full_path(conn.base_path, path_entry)
+        path_entry = full_path(conn._base_path(), path_entry)
     return handler.gcs_location(
         uri=_gcs_uri(bucket, path_entry),
         service_account_key_env=handler.gcp_service_account_json_env,

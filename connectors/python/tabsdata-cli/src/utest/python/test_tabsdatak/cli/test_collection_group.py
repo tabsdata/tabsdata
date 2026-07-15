@@ -22,7 +22,7 @@ from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 def _installed(type_: str, direction: str) -> bool:
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
 
     try:
         template.resolve_conn(type_, direction)
@@ -58,7 +58,7 @@ def _write(tmp_path, text: str) -> str:
 )
 def test_load_connection_document_dehydrates(tmp_path):
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
 
     connection, group, secrets = collection_group._load_connection_document(
         _write(tmp_path, _MYSQL_SRC_YAML), None
@@ -76,9 +76,9 @@ def test_load_connection_document_dehydrates(tmp_path):
 
 
 # Same connection, but the secret values are supplied WITHOUT the `secret:`
-# prefix. They are `Secret`-typed fields, so dehydration must still harvest
-# them (driven by the validated model, not by the prefix) -- otherwise the
-# plain values would leak into the stored connection.
+# prefix. A `Secret`-typed field only accepts `secret:<value>` or `:secret:`,
+# so a bare value is rejected at validation time -- the plain value can never
+# reach the stored connection.
 _MYSQL_SRC_YAML_BARE = """\
 kind: connectionDef
 apiVersion: '1.0'
@@ -98,21 +98,17 @@ spec:
 @pytest.mark.skipif(
     not _installed("mysql-sql-in", "src"), reason="mysql connector not installed"
 )
-def test_load_connection_document_dehydrates_unprefixed_secret_values(tmp_path):
-    # noinspection PyProtectedMember
-    from tabsdatak import _template as template
-
-    connection, group, secrets = collection_group._load_connection_document(
-        _write(tmp_path, _MYSQL_SRC_YAML_BARE), None
-    )
-    # Bare values are harvested just like prefixed ones -- no plaintext leak.
-    assert {kv["value"] for kv in secrets} == {"etl", "hunter2"}
-    sent = template.from_yaml(connection)
-    creds = sent["spec"]["credentials"]["spec"]
-    assert creds["user"] == ":secret:"
-    assert creds["password"] == ":secret:"
-    # `uri` resolves to the str member of `str | Secret`, so it is NOT a secret.
-    assert sent["spec"]["uri"] == "mysql://h:3306/db"
+def test_load_connection_document_rejects_unprefixed_secret_values(tmp_path):
+    with pytest.raises(click.ClickException) as ei:
+        collection_group._load_connection_document(
+            _write(tmp_path, _MYSQL_SRC_YAML_BARE), None
+        )
+    # Both offending secret fields are named and the required `secret:` form
+    # is spelled out; the load aborts, so nothing is stored or sent.
+    message = str(ei.value)
+    assert "credentials.user" in message
+    assert "credentials.password" in message
+    assert "secret:<value>" in message
 
 
 # Secret values supplied as `$secret:<ENV_VAR>` are read from the environment
@@ -141,7 +137,7 @@ def test_load_connection_document_resolves_env_secret_refs(
     tmp_path, monkeypatch, capsys
 ):
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
 
     monkeypatch.setenv("DB_USER", "etl")
     monkeypatch.setenv("DB_PASS", "hunter2")

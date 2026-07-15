@@ -113,7 +113,7 @@ def _bare_conn(staging=None) -> ClickHouseDestConn:
     return ClickHouseDestConn(
         host="ch.example.invalid",
         staging=staging or _s3_staging(),
-        port=8123,
+        port="8123",
         database="analytics",
         credentials=UserPassword(
             user=Secret("u"),

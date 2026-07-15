@@ -7,9 +7,6 @@
 from sqlalchemy import engine
 
 from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.starrocks import StarRocksDestConn
 
 
@@ -22,7 +19,7 @@ class StarRocksConnectionExplorer(SqlAlchemyConnectionExplorer):
     """
 
     def schema_filter(self, conn: StarRocksDestConn) -> str | None:
-        return _convert(conn.database, str) or None
+        return conn._database() or None
 
     def map_entity_fields(self, conn: StarRocksDestConn, schema: str | None) -> dict:
         return {"database": schema or conn.database or "", "schema": ""}
@@ -47,7 +44,7 @@ class StarRocksConnectionExplorer(SqlAlchemyConnectionExplorer):
             drivername="mysql+pymysql",
             username=user,
             password=password,
-            host=_convert(conn.host, str) or "localhost",
-            port=_convert(conn.port, int),
-            database=_convert(conn.database, str) or "",
+            host=conn._host() or "localhost",
+            port=conn._port(),
+            database=conn._database() or "",
         )

@@ -43,7 +43,7 @@ def build_location(
     # ``base_path`` is an absolute local path (leading "/"). ``full_path``
     # composes cloud-style, from a slash-stripped prefix, so it drops the
     # leading "/"; re-anchor the joined result at the filesystem root.
-    resolved = "/" + full_path(conn.base_path, entry)
+    resolved = "/" + full_path(conn._base_path(), entry)
     if "*" in resolved:
         head, sep, basename = resolved.rpartition("/")
         head_uri = handler.local_uri(head + sep)

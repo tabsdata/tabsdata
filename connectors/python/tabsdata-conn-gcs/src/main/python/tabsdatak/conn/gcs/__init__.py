@@ -17,16 +17,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal, TypeAlias, Union
-
-from pydantic import StringConstraints
+from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.api import (
     Dest,
-    Secret,
     Src,
+    StrOrSecretSpec,
 )
 
 # noinspection PyProtectedMember
@@ -48,6 +46,8 @@ from tabsdatak.conn.common.types import (
     FullPathSpec,
     GCPJson,
     GCSBucketSpec,
+    StrOrSecretConstraints,
+    _convert,
 )
 from tabsdatak.conn.gcs.error import GcsErrorCode
 from tabsdatak.spi import Conn
@@ -64,9 +64,8 @@ CredentialsSpec: TypeAlias = GCPJson
 
 # GCP project id: no regex shape; permissive ``.+`` enables the
 # bare-string shortcut at the field site.
-ProjectSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=r".+")],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
+ProjectSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=r".+")
 ]
 
 
@@ -108,6 +107,15 @@ class GCSSrcConn(Conn):
     base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
+    def _bucket(self) -> str:
+        return _convert(self.bucket, str)
+
+    def _project(self) -> str | None:
+        return _convert(self.project, str) if self.project is not None else None
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
+
 
 @_api.dataclass(GcsErrorCode.GCS_1, kw_only=True)
 class GCSDestConn(Conn):
@@ -123,6 +131,15 @@ class GCSDestConn(Conn):
     project: ProjectSpec | None = None
     base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
+
+    def _bucket(self) -> str:
+        return _convert(self.bucket, str)
+
+    def _project(self) -> str | None:
+        return _convert(self.project, str) if self.project is not None else None
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
 
 
 # --- Source ----------------------------------------------------------

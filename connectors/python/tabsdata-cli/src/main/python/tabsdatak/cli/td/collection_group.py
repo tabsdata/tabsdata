@@ -119,7 +119,7 @@ def _group_for_conn(conn_cls) -> str:
     direction is taken from the registered binding rather than parsed out of
     the kind string."""
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
 
     for r in template.list_connectors():
         if r.conn_cls is conn_cls:
@@ -147,7 +147,7 @@ def _load_connection_document(conn_file, group):
     client, at create/update time); the env vars read are echoed to the user.
     """
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
     from tabsdatak.common._error import CommonException
     from tabsdatak.common._json_serde import (
         dehydrate,
@@ -189,8 +189,10 @@ def _load_connection_document(conn_file, group):
             f"collection, but --group says '{group}'"
         )
     # Dehydrate type-awarely: a Secret field serializes to ":secret:" in the
-    # validated model, so its value is harvested whether or not the user
-    # prefixed it with "secret:" -- no secret leaks into the stored document.
+    # validated model, so its value is harvested into the secret payload and
+    # never leaks into the stored document. A bare (unprefixed) value in a
+    # Secret field is rejected by validation above -- secret values must be
+    # spelled "secret:<value>".
     model = conn_cls.from_dict(document)
     dehydrated, secrets = dehydrate(document, model.to_dict())
     return template.to_yaml(dehydrated), implied, _kv_list(secrets)

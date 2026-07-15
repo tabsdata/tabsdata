@@ -21,9 +21,6 @@ from typing import ClassVar, TypeAlias
 
 from tabsdatak.conn.common._explorer import Column
 from tabsdatak.conn.common.sql._explorer import SQLConnMetaModel, SQLEntity
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn
 from tabsdatak.spi import ConnMetaModel, Entity, Explorer
 
@@ -59,8 +56,8 @@ class DatabricksConnectionExplorer(Explorer):
         # noinspection PyProtectedMember
         from tabsdatak.conn.databricks import _impl
 
-        catalog = _convert(conn.catalog, str) if conn.catalog is not None else ""
-        schema_filter = _convert(conn.schema, str) if conn.schema is not None else None
+        catalog = conn._catalog() if conn.catalog is not None else ""
+        schema_filter = conn._schema() if conn.schema is not None else None
 
         client = _impl._build_workspace_client(conn)
 

@@ -131,8 +131,8 @@ class BigQueryWriteCfg:
         # from the upstream input plugin's table list, which the new
         # SPI does not yet surface. The defensive check in
         # ``_plugin.write_out`` raises BIGQUERY_4 in that case.
-        project = _convert(conn.project, str) if conn.project is not None else None
-        dataset = _convert(conn.dataset, str) if conn.dataset is not None else None
+        project = conn._project() if conn.project is not None else None
+        dataset = conn._dataset() if conn.dataset is not None else None
         target_tables: list[str] = []
         if dest.tables is not None:
             for t in dest.tables:

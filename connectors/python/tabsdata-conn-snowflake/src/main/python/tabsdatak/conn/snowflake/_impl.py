@@ -78,18 +78,18 @@ def _connection_parameters(conn: SnowflakeDestConn) -> dict[str, str]:
     the driver accepts both at the same slot."""
     creds = _credentials(conn)
     params: dict[str, str] = {
-        "account": _convert(conn.account, str),
+        "account": conn._account(),
         "user": _convert(creds.user, str),
         "password": _convert(creds.password, str),
     }
     if conn.role is not None:
-        params["role"] = _convert(conn.role, str)
+        params["role"] = conn._role()
     if conn.database is not None:
-        params["database"] = _convert(conn.database, str)
+        params["database"] = conn._database()
     if conn.schema is not None:
-        params["schema"] = _convert(conn.schema, str)
+        params["schema"] = conn._schema()
     if conn.warehouse is not None:
-        params["warehouse"] = _convert(conn.warehouse, str)
+        params["warehouse"] = conn._warehouse()
     return params
 
 
@@ -133,7 +133,7 @@ def _stage(conn: SnowflakeDestConn) -> tuple[str, bool]:
     owns its lifecycle); otherwise a session-scoped TEMPORARY stage
     is used."""
     if conn.stage is not None:
-        return _convert(conn.stage, str), False
+        return conn._stage(), False
     return _DEFAULT_TEMP_STAGE, True
 
 
@@ -203,12 +203,12 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
     per call and re-uses it across every (file, table) pair."""
     logger.debug(
         "snowflake: establishing connection to account %r",
-        _convert(cfg.conn.account, str),
+        cfg.conn._account(),
     )
     sf_conn = build_snowflake_connection(cfg.conn)
     try:
         if cfg.conn.warehouse is not None:
-            warehouse = _convert(cfg.conn.warehouse, str)
+            warehouse = cfg.conn._warehouse()
             logger.debug("Using warehouse %r", warehouse)
             with sf_conn.cursor() as cur:
                 cur.execute(f"USE WAREHOUSE {warehouse}")

@@ -26,7 +26,7 @@ from tabsdatak.conn.clickhouse import (
     PortSpec,
     S3Location,
     SchemaEvolutionSpec,
-    SecureSpec,
+    BoolSpec,
 )
 from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
 
@@ -76,7 +76,7 @@ def test_clickhouse_conn_fields_wire_expected_specs():
     assert _hint(ClickHouseDestConn, "port") == PortSpec
     assert _hint(ClickHouseDestConn, "database") == DatabaseSpec
     assert _hint(ClickHouseDestConn, "credentials") == CredentialsSpec
-    assert _hint(ClickHouseDestConn, "secure") == SecureSpec
+    assert _hint(ClickHouseDestConn, "secure") == BoolSpec
     assert _hint(ClickHouseDestConn, "conn_cfg") == CfgSpec | None
 
 
@@ -92,7 +92,7 @@ def test_clickhouse_dest_fields_wire_expected_specs():
 # ---------------------------------------------------------------------------
 
 
-def _bare_conn(*, port, secure=False):
+def _bare_conn(*, port, secure="false"):
     return ClickHouseDestConn(
         host="ch.example.com",
         staging=_staging(),
@@ -105,29 +105,20 @@ def _bare_conn(*, port, secure=False):
 
 
 def test_port_resolves_int():
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    assert _convert(_bare_conn(port=8443).port, int) == 8443
+    assert _bare_conn(port="8443")._port() == 8443
 
 
 
 
 def test_port_resolves_secret_literal():
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    assert _convert(_bare_conn(port=Secret("9002")).port, int) == 9002
+    assert _bare_conn(port=Secret("9002"))._port() == 9002
 
 
 def test_port_unhydrated_ref_rejected_at_value():
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    # An unhydrated port ref carries no value yet; converting it raises.
+    # An unhydrated port ref carries no value yet; the getter raises.
     conn = _bare_conn(port=Secret())
     with pytest.raises(Exception):
-        _convert(conn.port, int)
+        conn._port()
 
 
 def test_port_secret_literal_non_numeric_rejected_at_construction():
@@ -137,11 +128,8 @@ def test_port_secret_literal_non_numeric_rejected_at_construction():
 
 
 def test_secure_resolves_bool():
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    assert _convert(_bare_conn(port=1, secure=True).secure, bool) is True
-    assert _convert(_bare_conn(port=1, secure=False).secure, bool) is False
+    assert _bare_conn(port="1", secure="true")._secure() is True
+    assert _bare_conn(port="1", secure="false")._secure() is False
 
 
 
@@ -149,22 +137,13 @@ def test_secure_resolves_bool():
 
 
 def test_secure_resolves_secret_literal():
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    assert (
-        _convert(_bare_conn(port=1, secure=Secret("true")).secure, bool)
-        is True
-    )
-    assert (
-        _convert(_bare_conn(port=1, secure=Secret("false")).secure, bool)
-        is False
-    )
+    assert _bare_conn(port="1", secure=Secret("true"))._secure() is True
+    assert _bare_conn(port="1", secure=Secret("false"))._secure() is False
 
 
 def test_secure_secret_literal_invalid_token_rejected_at_construction():
     with pytest.raises(Exception):
-        _bare_conn(port=1, secure=Secret("maybe"))
+        _bare_conn(port="1", secure=Secret("maybe"))
 
 
 # ---------------------------------------------------------------------------

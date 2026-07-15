@@ -40,9 +40,9 @@ def build_location(
     conn: _AnyS3Conn, path_entry: str, handler: TransporterHandler
 ) -> Any:
     if not path_entry.startswith("s3://"):
-        path_entry = full_path(conn.base_path, path_entry)
+        path_entry = full_path(conn._base_path(), path_entry)
     return handler.s3_location(
-        uri=_s3_uri(_convert(conn.bucket, str), path_entry),
+        uri=_s3_uri(conn._bucket(), path_entry),
         access_key_env=handler.aws_access_key_id_env,
         secret_key_env=handler.aws_secret_access_key_env,
         region_env=handler.aws_region_env,
@@ -54,7 +54,7 @@ def run_env(conn: _AnyS3Conn, handler: TransporterHandler) -> dict[str, str]:
     return {
         handler.aws_access_key_id_env: _convert(creds.access_key_id, str),
         handler.aws_secret_access_key_env: _convert(creds.secret_access_key, str),
-        handler.aws_region_env: _convert(conn.region, str),
+        handler.aws_region_env: conn._region(),
     }
 
 

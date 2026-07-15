@@ -46,9 +46,9 @@ class _FakeClient:
 def _conn(database: str = "analytics") -> ClickHouseDestConn:
     return ClickHouseDestConn(
         host="ch.example.invalid",
-        port=8123,
+        port="8123",
         database=database,
-        secure=False,
+        secure="false",
         staging=S3Location(
             bucket="staging-bucket",
             region="us-east-1",

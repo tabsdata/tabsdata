@@ -9,9 +9,6 @@ from tabsdatak.common._transporter.invoker.transporter1 import (
     TransporterReportError,
     TransporterRunError,
 )
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.druid import (
     DestCfgKey,
     DestCfgSpec,
@@ -188,7 +185,7 @@ class DruidDestPlugin(DestPlugin[DruidDestConn, DruidDest]):
                         datasource=datasource,
                         # noinspection PyProtectedMember
                         url=adapter._sanitize_url(
-                            _convert(conn.overlord_url, str),
+                            conn._overlord_url(),
                         ),
                     )
 

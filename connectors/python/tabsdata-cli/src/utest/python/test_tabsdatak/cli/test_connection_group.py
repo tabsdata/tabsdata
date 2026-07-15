@@ -16,7 +16,7 @@ from tabsdatak.cli.td.cli import cli
 
 def _installed(type_: str, direction: str) -> bool:
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
 
     try:
         template.resolve_conn(type_, direction)
@@ -95,8 +95,9 @@ def test_template_rejects_dash_o_output_flag():
 def test_template_yaml_carries_accepts_comments():
     result = CliRunner().invoke(cli, ["connection", "template", "-t", "mysql-sql-in"])
     assert result.exit_code == 0, result.output
-    # uri (str|Secret) carries an "# accepts:" note in union order.
-    assert "# accepts: <value> | secret:<value>" in result.output
+    # uri (str|Secret) carries an "# accepts:" note in union order; the plain
+    # arm shows the ``str:`` prefix that keeps it distinct from a secret.
+    assert "# accepts: str:<value> | secret:<value>" in result.output
 
 
 def test_validate_reads_yaml(tmp_path):

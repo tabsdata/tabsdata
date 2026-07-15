@@ -1,13 +1,13 @@
 from abc import ABC
-from typing import Annotated, Union
+from typing import Annotated
 
 import pytest
-from pydantic import StringConstraints
 
 from tabsdatak import _api, _connectors as _connectors, _info, api as m, spi, tableframe
 from tabsdatak.api import (
     Secret,
     Src,
+    StrOrSecretSpec,
 )
 from tabsdatak.error import ApiErrorCode, ApiException, ApiInternalException
 
@@ -1352,9 +1352,12 @@ def test_secret_deserializes_dehydrated_marker():
 
 
 def test_secret_deserializes_hydrated_forms():
-    # Both the prefixed and the bare form hydrate with the value.
+    # The prefixed form hydrates with the value (which may be empty); an
+    # unprefixed string is rejected.
     assert Secret.from_dict("secret:etl").value() == "etl"
-    assert Secret.from_dict("etl").value() == "etl"
+    assert Secret.from_dict("secret:").value() == ""
+    with pytest.raises(Exception):
+        Secret.from_dict("etl")
 
 
 def test_secret_serialize_drops_value_on_round_trip():
@@ -1367,10 +1370,14 @@ def test_secret_serialize_drops_value_on_round_trip():
 # --- fields ----------------------------------------------------------------
 
 
-def test_secret_field_accepts_instance_and_bare_string():
+def test_secret_field_python_takes_literal_value():
+    # Python construction is literal: a str is the secret's value verbatim, a
+    # Secret instance passes through. Wire decoding is covered separately.
     assert _SrcWithSecret(s=Secret("h")).s == Secret("h")
     assert _SrcWithSecret(s="h").s == Secret("h")
     assert _SrcWithSecret(s="h").s.value() == "h"
+    # A marker string is NOT decoded in Python -- it is the literal value.
+    assert _SrcWithSecret(s="secret:h").s.value() == "secret:h"
 
 
 def test_secret_field_dumps_dehydrated():
@@ -1413,18 +1420,15 @@ class _SrcWithConstrainedSecret(Src):
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _SrcWithUnionSpec(Src):
-    # The realistic spec shape: a plain string OR a Secret, both pinned to
-    # the same regex.
-    v: Union[
-        Annotated[str, StringConstraints(pattern=r"\d+")],
-        Annotated[Secret, _api.SecretValueConstraints(pattern=r"\d+")],
-    ]
+    # The realistic spec shape: a plain string OR a Secret. The plain arm is
+    # spelled ``str:<value>``, the secret arm ``secret:<value>`` /
+    # ``":secret:"``; an unmarked string matches neither.
+    v: StrOrSecretSpec
 
 
 def test_secret_constraint_accepts_matching_hydrated_value():
     assert _SrcWithConstrainedSecret(s=Secret("123")).s.value() == "123"
-    # A bare string is wrapped into a Secret and validated against the
-    # field's pattern.
+    # A bare Python string is the literal secret value, checked by the regex.
     assert _SrcWithConstrainedSecret(s="123").s == Secret("123")
 
 
@@ -1451,12 +1455,25 @@ def test_secret_constraint_enforced_on_rehydration():
     assert excinfo.value.api_error is ApiErrorCode.API_6
 
 
-def test_union_spec_bad_bare_string_does_not_fall_through_to_secret():
-    # Regression guard: a bare string that fails the str member must not
-    # silently become a literal Secret. The constrained Secret member
-    # rejects it too, so construction fails instead of producing a Secret.
-    assert _SrcWithUnionSpec(v="123").v == "123"  # str member
-    assert _SrcWithUnionSpec(v=Secret("123")).v == Secret("123")  # secret member
-    with pytest.raises(ApiException) as excinfo:
-        _SrcWithUnionSpec(v="nope")
-    assert excinfo.value.api_error is ApiErrorCode.API_6
+def test_union_spec_python_is_literal():
+    # Python construction is literal: a str is a plain value stored verbatim
+    # (markers are NOT interpreted), a Secret instance is a secret.
+    assert _SrcWithUnionSpec(v="abc").v == "abc"
+    assert _SrcWithUnionSpec(v="str:abc").v == "str:abc"
+    assert _SrcWithUnionSpec(v="secret:abc").v == "secret:abc"
+    assert _SrcWithUnionSpec(v=Secret("abc")).v == Secret("abc")
+
+
+def _union_from_wire(value):
+    # Round-trip a raw leaf through the connector envelope so it is validated
+    # in json-mode (the wire path), where markers are decoded.
+    payload = _SrcWithUnionSpec(v="seed").to_dict()
+    payload["spec"]["v"] = value
+    return _SrcWithUnionSpec.from_dict(payload).v
+
+
+def test_union_spec_json_decodes_markers():
+    assert _union_from_wire("str:abc") == "abc"
+    assert _union_from_wire("abc") == "abc"  # bare -> plain
+    assert _union_from_wire("secret:abc") == Secret("abc")
+    assert _union_from_wire(":secret:") == Secret()

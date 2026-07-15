@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -172,25 +173,56 @@ def testfull_path_result_never_starts_or_ends_with_slash():
 _full_path = TypeAdapter(FullPathSpec)
 
 
-def _accepts(adapter, value) -> bool:
+def _accepts_json(value) -> bool:
+    # Wire form: markers are decoded (``str:`` -> plain, ``secret:`` -> Secret).
     try:
-        adapter.validate_python(value)
+        _full_path.validate_json(json.dumps(value))
         return True
     except Exception:
         return False
 
 
-@pytest.mark.parametrize("value", ["/", "/a", "/a/b", "/data/sub"])
-def test_full_path_accepts_absolute_paths(value):
-    assert _accepts(_full_path, value)
+def _accepts_python(value) -> bool:
+    # Python construction: the value is literal (no marker interpretation).
+    try:
+        _full_path.validate_python(value)
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.parametrize("path", ["/", "/a", "/a/b", "/data/sub"])
+def test_full_path_wire_accepts_absolute(path):
+    # On the wire a plain value may be ``str:``-marked or bare, a secret
+    # ``secret:``-marked; the full-path regex gates the plain value and the
+    # secret's hydrated value alike.
+    assert _accepts_json(f"str:{path}")
+    assert _accepts_json(path)
+    assert _accepts_json(f"secret:{path}")
+
+
+def test_full_path_wire_accepts_dehydrated_secret():
+    # A dehydrated secret carries no value, so it is left unchecked.
+    assert _accepts_json(":secret:")
 
 
 @pytest.mark.parametrize(
-    "value",
+    "path",
     ["", "a", "a/b", "staging", "/a/", "//", "/a/b/", "/a\\b", "/a\x00"],
 )
-def test_full_path_rejects_relative_or_trailing_slash(value):
-    assert not _accepts(_full_path, value)
+def test_full_path_wire_rejects_bad_shape(path):
+    # The regex rejects these whether the value is plain (str:/bare) or secret.
+    assert not _accepts_json(f"str:{path}")
+    assert not _accepts_json(path)
+    assert not _accepts_json(f"secret:{path}")
+
+
+@pytest.mark.parametrize("path", ["/", "/a", "/a/b", "/data/sub"])
+def test_full_path_python_takes_literal_value(path):
+    # In Python the value is literal: a valid absolute path passes the regex,
+    # while a ``str:``-prefixed value is taken verbatim and fails it.
+    assert _accepts_python(path)
+    assert not _accepts_python(f"str:{path}")
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@ from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
 from tabsdatak.conn.bigquery.error import BigqueryErrorCode
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert, full_path
+from tabsdatak.conn.common.types import full_path
 from tabsdatak.spi import (
     DestContext,
     DestDef,
@@ -97,7 +97,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                 slots=len(tables),
             )
 
-        project_str = _convert(conn.project, str) if conn.project is not None else None
+        project_str = conn._project() if conn.project is not None else None
 
         logger.debug("bigquery: establishing BigQuery client (project=%r)", project_str)
         try:
@@ -118,14 +118,14 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
             conn.staging.cfg,
         )
 
-        staging_bucket = _convert(conn.staging.bucket, str)
+        staging_bucket = conn.staging._bucket()
 
         staging_uris: list[str] = []
         for index in range(len(tables)):
             file_name = (f"auxiliary_{index}_{uuid.uuid4().hex[:16]}.parquet").replace(
                 "-", "_"
             )
-            relative = full_path(conn.staging.base_path, file_name)
+            relative = full_path(conn.staging._base_path(), file_name)
             staging_uris.append(f"gs://{staging_bucket}/{relative}")
 
         total = len(write_cfg.target_tables)

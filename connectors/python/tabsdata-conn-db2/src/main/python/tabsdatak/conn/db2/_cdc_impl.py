@@ -464,7 +464,7 @@ class SqlReplicaIngester(CdcIngester):
     def _resolve_url(self):
         from sqlalchemy import make_url
 
-        url = make_url(_convert(self._conn.uri, str))
+        url = make_url(self._conn._uri())
         creds = self._conn.credentials
         return url.set(
             username=_convert(creds.user, str),

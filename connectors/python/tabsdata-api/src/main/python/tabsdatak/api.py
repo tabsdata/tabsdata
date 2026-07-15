@@ -28,10 +28,9 @@ per-flow scratch state across invocations.
 
 import importlib
 from abc import ABC, abstractmethod
-from typing import Annotated, Any, Callable, TypeAlias, Union
+from typing import Annotated, Callable, TypeAlias, Union
 
-from pydantic import Field, GetCoreSchemaHandler, TypeAdapter
-from pydantic_core import core_schema
+from pydantic import Field
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
@@ -155,7 +154,7 @@ SubscriberTriggerBySpec: TypeAlias = Union[
 FlushIntervalSpec: TypeAlias = Annotated[int, Field(ge=1)]
 
 
-class Secret:
+class Secret(_api._Secret):
     """Reference to a secret value.
 
     A ``Secret`` is either *hydrated* (it carries a value) or
@@ -168,101 +167,36 @@ class Secret:
       sentinel.
 
     A ``Secret`` always serializes to the dehydrated marker
-    ``":secret:"`` -- its value never lands in the serialized form.
-    Deserialization accepts that marker as well as the two hydrated
-    forms ``"secret:<value>"`` and a bare ``"<value>"`` (both yield a
-    secret hydrated with ``<value>``).
+    ``":secret:"`` -- its value never lands in the serialized form. In
+    Python the value is literal (``Secret("x")``); on the wire it is the
+    marked form ``"secret:<value>"`` / ``":secret:"``, decoded on
+    (json) deserialization -- an unmarked string is rejected there.
 
     The string representation is always redacted.
-
-    A ``Secret`` is a plain value type, not a :class:`~tabsdatak._api.JsonSerde`
-    envelope: it round-trips to a bare string via its own pydantic core
-    schema (see :meth:`__get_pydantic_core_schema__`), so it carries its
-    own thin ``TypeAdapter``-based serde helpers rather than inheriting the
-    envelope machinery.
     """
 
-    # Serialized (always dehydrated) marker.
-    _DEHYDRATED = ":secret:"
-    # Hydrated wire prefix accepted on deserialization ("secret:<value>").
-    _PREFIX = "secret:"
-
     def __init__(self, value: str | None = None):
-        # ``Secret("x")`` -> hydrated; ``Secret()`` -> dehydrated.
-        if value is not None and not isinstance(value, str):
-            raise ApiErrorCode.API_5.exception(type=type(value).__name__)
-        self._value = value
+        super().__init__(value)
 
-    def value(self) -> str:
-        """The hydrated value; raises if this secret is dehydrated."""
-        if self._value is None:
-            raise ApiErrorCode.API_11.exception(name=type(self).__name__)
-        return self._value
 
-    # --- serde helpers (a Secret round-trips to the bare ``":secret:"``
-    # string, never an envelope) -----------------------------------------
+StrOrSecretSpec: TypeAlias = Annotated[Union[str, Secret], _api.StrOrSecretHandler()]
+"""A connector field that accepts either a plain string or a :class:`Secret`.
 
-    def to_dict(self) -> str:
-        return TypeAdapter(type(self)).dump_python(self, mode="json")
+Annotate a field with it directly::
 
-    def to_json(self, indent: int | None = None) -> str:
-        return TypeAdapter(type(self)).dump_json(self, indent=indent).decode()
+    class MyConn(Conn):
+        bucket: StrOrSecretSpec
 
-    @classmethod
-    def from_dict(cls, d: Any) -> "Secret":
-        return TypeAdapter(cls).validate_python(d)
+Each value carries a marker so the two shapes are unambiguous on the wire:
 
-    @classmethod
-    def from_json(cls, s: str | bytes) -> "Secret":
-        return TypeAdapter(cls).validate_json(s)
+* ``"str:<value>"``    -- a plain string (``<value>`` may be empty);
+* ``"secret:<value>"`` -- a secret carrying ``<value>``;
+* ``":secret:"``       -- a secret with no value yet (resolved at run time).
 
-    @classmethod
-    def _parse(cls, s: str) -> str | None:
-        # ``":secret:"`` -> dehydrated (None); ``"secret:<value>"`` and a
-        # bare ``"<value>"`` -> hydrated with ``<value>``.
-        if s == cls._DEHYDRATED:
-            return None
-        if s.startswith(cls._PREFIX):
-            return s[len(cls._PREFIX) :]
-        return s
-
-    def __eq__(self, other: Any) -> bool:
-        return type(self) is type(other) and self._value == other._value
-
-    def __hash__(self) -> int:
-        return hash((type(self), self._value))
-
-    def __repr__(self) -> str:
-        # Never leak the value through repr / logs.
-        return f"{type(self).__name__}(***redacted***)"
-
-    @classmethod
-    def __get_pydantic_core_schema__(
-        cls,
-        source_type: Any,
-        handler: GetCoreSchemaHandler,
-    ) -> core_schema.CoreSchema:
-        def validate(value: Any) -> Any:
-            if isinstance(value, cls):
-                return value
-            if isinstance(value, str):
-                return cls(cls._parse(value))
-            raise ValueError(
-                f"{cls.__name__} expects a string or {cls.__name__} "
-                f"instance (got {type(value).__name__})"
-            )
-
-        def serialize(instance: Any) -> str:
-            # A secret always serializes dehydrated -- its value never
-            # lands in the serialized form.
-            return cls._DEHYDRATED
-
-        return core_schema.no_info_plain_validator_function(
-            validate,
-            serialization=core_schema.plain_serializer_function_ser_schema(
-                serialize, return_schema=core_schema.str_schema()
-            ),
-        )
+An unmarked string is rejected. After validation a plain arm is a ``str`` and
+a secret arm a :class:`Secret`, so read the value with a normal ``str`` or with
+``Secret.value()`` respectively.
+"""
 
 
 # `__kind__` discriminator values for the descriptor-base JsonSerde

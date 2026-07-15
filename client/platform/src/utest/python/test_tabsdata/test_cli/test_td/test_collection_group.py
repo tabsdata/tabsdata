@@ -467,33 +467,6 @@ def test_collection_create_source_with_conn_file(login, tmp_path):
         )
 
 
-def _installed(type_: str, direction: str) -> bool:
-    # noinspection PyProtectedMember
-    from tabsdatak import _template as template
-
-    try:
-        template.resolve_conn(type_, direction)
-        return True
-    except template.TemplateError:
-        return False
-
-
-_MYSQL_SRC_YAML = """\
-kind: connectionDef
-apiVersion: '1.0'
-type: tabsdatak.conn.mysql:MySQLSrcConn
-spec:
-  uri: mysql://h:3306/db
-  credentials:
-    kind: userPasswordCredentials
-    apiVersion: '1.0'
-    type: tabsdatak.conn.common.types:UserPassword
-    spec:
-      user: secret:etl
-      password: secret:hunter2
-"""
-
-
 def test_group_for_kind():
     assert collection_group._group_for_kind("mysqlSrcConn") == "sources"
     assert collection_group._group_for_kind("mysqlDestConn") == "destinations"
@@ -501,33 +474,6 @@ def test_group_for_kind():
 
     with pytest.raises(click.ClickException):
         collection_group._group_for_kind("notAConn")
-
-
-@pytest.mark.skip(
-    reason="Outdated: platform `_load_connection_document` / `_group_for_kind` predates "
-    "the uniform `connectionDef` envelope migration (see "
-    "`test_collection_create_source_with_conn_file`); needs the registry-based "
-    "`_group_for_conn` port the tabsdatak CLI already has."
-)
-@pytest.mark.skipif(
-    not _installed("mysql", "src"), reason="mysql connector not installed"
-)
-def test_load_connection_document_dehydrates(tmp_path):
-    # noinspection PyProtectedMember
-    from tabsdatak import _template as template
-
-    path = tmp_path / "conn.yaml"
-    path.write_text(_MYSQL_SRC_YAML)
-    connection, group, secrets = collection_group._load_connection_document(
-        str(path), None
-    )
-    assert group == "sources"
-    assert {kv["value"] for kv in secrets} == {"etl", "hunter2"}
-    sent = template.from_yaml(connection)
-    creds = sent["spec"]["credentials"]["spec"]
-    assert creds["user"] == ":secret:"
-    assert creds["password"] == ":secret:"
-    assert sent["spec"]["uri"] == "mysql://h:3306/db"
 
 
 @pytest.mark.integration

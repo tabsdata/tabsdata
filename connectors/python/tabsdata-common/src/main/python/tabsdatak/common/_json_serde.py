@@ -266,6 +266,9 @@ def hydrate(
         raise CommonErrorCode.COMMON_6.exception(keys=missing_values)
 
     refs = _secret_refs(out)
+    plaintext = sorted(path for path, value in refs if value is not None)
+    if plaintext:
+        raise CommonErrorCode.COMMON_13.exception(paths=plaintext)
     expected = {_SECRET_KEY_PREFIX + _to_key(path) for path, _ in refs}
     provided = {kv.key for kv in secrets}
     if expected != provided:
@@ -297,10 +300,12 @@ def env_hydrate(data: JsonSerdeData) -> JsonSerdeData:
     out = deepcopy(data)
     plan: list[tuple[JsonPath, str]] = []
     missing: list[str] = []
+    plaintext: list[JsonPath] = []
     for path, value in _secret_refs(out):
-        # Hydrated leaves are left untouched; only dehydrated leaves
-        # (``":secret:"``) are resolved from the environment.
+        # The input must be dehydrated: a leaf still carrying a value
+        # (``"secret:<value>"``) is a plaintext secret and is rejected.
         if value is not None:
+            plaintext.append(path)
             continue
         key = _SECRET_KEY_PREFIX + _to_key(path)
         env_value = os.environ.get(key)
@@ -308,6 +313,8 @@ def env_hydrate(data: JsonSerdeData) -> JsonSerdeData:
             missing.append(key)
         else:
             plan.append((path, _SECRET_PREFIX + env_value))
+    if plaintext:
+        raise CommonErrorCode.COMMON_13.exception(paths=sorted(plaintext))
     if missing:
         raise CommonErrorCode.COMMON_6.exception(keys=sorted(set(missing)))
     for path, new_value in plan:

@@ -86,13 +86,13 @@ def _staging_subdir(ctx_trx_id: str) -> str:
 def staged_uri(location: CloudLocation, key: str) -> str:
     """Build the cloud-native URI for a key under ``location``."""
     if isinstance(location, S3Location):
-        bucket = _convert(location.bucket, str)
+        bucket = location._bucket()
         return f"s3://{bucket}/{key}"
     if isinstance(location, GCSLocation):
-        bucket = _convert(location.bucket, str)
+        bucket = location._bucket()
         return f"gs://{bucket}/{key}"
     if isinstance(location, AzBlobLocation):
-        container = _convert(location.container, str)
+        container = location._container()
         account = _convert(location.credentials.account_name, str)
         return f"azureStorage://{account}/{container}/{key}"
     # noinspection PyProtectedMember
@@ -114,7 +114,7 @@ def _transporter_target(
     target object under ``location``.
     """
     if isinstance(location, S3Location):
-        bucket = _convert(location.bucket, str)
+        bucket = location._bucket()
         return handler.s3_location(
             uri=f"s3://{bucket}/{key}",
             access_key_env=handler.aws_access_key_id_env,
@@ -122,13 +122,13 @@ def _transporter_target(
             region_env=handler.aws_region_env,
         )
     if isinstance(location, GCSLocation):
-        bucket = _convert(location.bucket, str)
+        bucket = location._bucket()
         return handler.gcs_location(
             uri=f"gs://{bucket}/{key}",
             service_account_key_env=handler.gcp_service_account_json_env,
         )
     if isinstance(location, AzBlobLocation):
-        container = _convert(location.container, str)
+        container = location._container()
         return handler.azure_location(
             uri=f"az://{container}/{key}",
             account_name_env=handler.azure_account_name_env,
@@ -151,7 +151,7 @@ def _transporter_env(
         return {
             handler.aws_access_key_id_env: _convert(creds.access_key_id, str),
             handler.aws_secret_access_key_env: _convert(creds.secret_access_key, str),
-            handler.aws_region_env: _convert(location.region, str),
+            handler.aws_region_env: location._region(),
         }
     if isinstance(location, GCSLocation):
         return {
@@ -190,7 +190,7 @@ def upload_staged_files(
     keys: list[str] = []
     for idx, src_path in enumerate(parquet_files):
         name = f"part-{idx:05d}-{Path(src_path).name}"
-        key = full_path(staging.base_path, f"{subdir}/{name}")
+        key = full_path(staging._base_path(), f"{subdir}/{name}")
         target = _transporter_target(staging, key, handler)
         source = handler.local_path_location(Path(src_path))
         pairs.append((source, target))
@@ -229,7 +229,7 @@ def build_input_source(location: CloudLocation, uris: list[str]) -> dict:
             "type": "s3",
             "uris": uris,
             "endpointConfig": {
-                "signingRegion": _convert(location.region, str),
+                "signingRegion": location._region(),
             },
             "properties": {
                 "accessKeyId": _convert(creds.access_key_id, str),
@@ -550,7 +550,7 @@ def make_overlord_client(conn: DruidDestConn) -> OverlordClient:
     creds = conn.credentials
     auth = (_convert(creds.user, str), _convert(creds.password, str))
     return OverlordClient(
-        base_url=_convert(conn.overlord_url, str),
+        base_url=conn._overlord_url(),
         auth=auth,
     )
 
@@ -563,7 +563,7 @@ def make_overlord_client_for_dest(
     creds = conn.credentials
     auth = (_convert(creds.user, str), _convert(creds.password, str))
     return OverlordClient(
-        base_url=_convert(conn.overlord_url, str),
+        base_url=conn._overlord_url(),
         auth=auth,
         timeout_sec=dest.http_timeout_sec,
     )

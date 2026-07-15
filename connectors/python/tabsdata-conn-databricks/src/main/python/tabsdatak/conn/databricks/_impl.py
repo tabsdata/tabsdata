@@ -131,13 +131,13 @@ def _resolve_warehouse_id(
     one is set.
     """
     if conn.warehouse_id is not None:
-        return _convert(conn.warehouse_id, str)
+        return conn._warehouse_id()
     if conn.warehouse is None:
         raise ValueError(
             "_AnyDatabricksConn requires either ``warehouse`` (name) or"
             " ``warehouse_id`` for runtime operations"
         )
-    target_name = _convert(conn.warehouse, str)
+    target_name = conn._warehouse()
     for w in ws_client.warehouses.list():
         if w.name == target_name:
             return w.id
@@ -363,8 +363,8 @@ def execute_query(
     # names (e.g. ``SELECT * FROM wld_country``) resolve against the right
     # schema instead of the warehouse default.
     conn = cfg.conn
-    catalog = _convert(conn.catalog, str) if conn.catalog is not None else None
-    schema = _convert(conn.schema, str) if conn.schema is not None else None
+    catalog = conn._catalog() if conn.catalog is not None else None
+    schema = conn._schema() if conn.schema is not None else None
     response = ws_client.statement_execution.execute_statement(
         warehouse_id=warehouse_id,
         statement=statement,
@@ -436,8 +436,8 @@ def _fully_qualify_table(conn: _AnyDatabricksConn, table: str) -> str:
     Raises a :class:`DatabricksValidateException` (DATABRICKS_10) if
     the result is not 3-part.
     """
-    catalog = _convert(conn.catalog, str) if conn.catalog is not None else None
-    schema = _convert(conn.schema, str) if conn.schema is not None else None
+    catalog = conn._catalog() if conn.catalog is not None else None
+    schema = conn._schema() if conn.schema is not None else None
     parts = unfqn(table, _DATABRICKS_FQN_DEF, total_parts=3)
     parts = complete_levels(parts, [catalog or None, schema or None, None])
     if any(p is None for p in parts):
@@ -461,7 +461,7 @@ def _volume_path(conn: _AnyDatabricksConn, fq_table: str) -> str:
     """
     parts = fq_table.split(".", maxsplit=2)
     t_catalog, t_schema, _t_name = parts
-    volume_raw = _convert(conn.volume, str)
+    volume_raw = conn._volume()
     vol_parts = volume_raw.split(".")
     if len(vol_parts) == 3:
         v_catalog, v_schema, v_name = vol_parts

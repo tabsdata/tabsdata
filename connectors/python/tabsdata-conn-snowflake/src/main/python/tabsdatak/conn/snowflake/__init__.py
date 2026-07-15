@@ -19,21 +19,24 @@ environment rather than hard-coded.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, TypeAlias, Union
-
-from pydantic import StringConstraints
+from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Dest, Secret
+from tabsdatak.api import Dest, StrOrSecretSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import CfgSpec, UserPassword
+from tabsdatak.conn.common.types import (
+    CfgSpec,
+    StrOrSecretConstraints,
+    UserPassword,
+    _convert,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.snowflake import _validation
@@ -45,9 +48,8 @@ from tabsdatak.spi import Conn
 
 CredentialsSpec: TypeAlias = UserPassword
 
-AccountSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.ACCOUNT_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.ACCOUNT_PATTERN)],
+AccountSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.ACCOUNT_PATTERN)
 ]
 
 
@@ -56,11 +58,8 @@ AccountSpec: TypeAlias = Union[
 # (``role`` / ``database`` / ``schema`` / ``warehouse``) -- all four
 # follow the same identifier rules.
 
-IdentifierSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
-    ],
+IdentifierSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.IDENTIFIER_PATTERN)
 ]
 
 NameSpec: TypeAlias = IdentifierSpec
@@ -112,6 +111,24 @@ class SnowflakeDestConn(Conn):
     warehouse: NameSpec | None = None
     stage: IdentifierSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _account(self) -> str:
+        return _convert(self.account, str)
+
+    def _role(self) -> str:
+        return _convert(self.role, str)
+
+    def _database(self) -> str:
+        return _convert(self.database, str)
+
+    def _schema(self) -> str:
+        return _convert(self.schema, str)
+
+    def _warehouse(self) -> str:
+        return _convert(self.warehouse, str)
+
+    def _stage(self) -> str:
+        return _convert(self.stage, str)
 
     def validate(self) -> None:
         if self.schema is not None and self.database is None:

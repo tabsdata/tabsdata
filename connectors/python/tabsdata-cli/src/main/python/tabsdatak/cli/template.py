@@ -9,16 +9,16 @@ Introspects the connectors registered through the SPI registry
 ``avail_dests``) and emits the connectors' own envelope dialect as YAML::
 
     # Connection template for: mysql-sql-in (src)
-    # Secret values must be prefixed with 'secret:'.
+    # Plain values use the 'str:' prefix; secret values the 'secret:' prefix.
     kind: connectionDef
     apiVersion: '1.0'
     type: tabsdatak.conn.mysql:MySQLSrcConn
     spec:
 
-      # accepts: <value> | secret:<value>
+      # accepts: str:<value> | secret:<value>
       # replace <value> with the actual uri
       #
-      uri: '<value> or secret:<value>'
+      uri: 'str:<value> or secret:<value>'
       credentials:           # ... nested userPasswordCredentials envelope ...
         ...
 
@@ -27,8 +27,9 @@ pydantic fields. Each fill-in field renders a ``<value>`` placeholder generated
 from the **first** member of its type union:
 
 - a :class:`~tabsdatak.api.Secret` first member renders as ``'secret:<value>'``
-  (or ``'<value> or secret:<value>'`` when the union also accepts a plain
-  literal); the runtime store resolves the value the user fills in;
+  (or ``'str:<value> or secret:<value>'`` when the union also accepts a plain
+  string, whose ``str:`` prefix keeps it distinct from a secret); the runtime
+  store resolves the value the user fills in;
 - a nested-object first member recurses into its own envelope; when that object
   is an abstract base with more than one concrete subclass (a polymorphic field
   like ``staging: CloudLocation`` -> S3 / AzBlob / GCS) there is no single
@@ -58,6 +59,7 @@ from __future__ import annotations
 
 import enum as _enum
 import io
+import textwrap
 import types as _types
 import typing
 from dataclasses import dataclass
@@ -70,7 +72,7 @@ from ruamel.yaml.scalarstring import SingleQuotedScalarString
 from ruamel.yaml.tokens import CommentToken
 
 # noinspection PyProtectedMember
-from tabsdatak._api import DescriptorBase, qualified_class, resolve_class
+from tabsdatak._api import _STR_PREFIX, DescriptorBase, qualified_class, resolve_class
 from tabsdatak._connectors import avail_dests, avail_srcs, avail_stream_srcs
 from tabsdatak.api import Secret
 from tabsdatak.spi import Conn
@@ -217,10 +219,12 @@ def _ref_class(first: Any) -> Optional[type]:
 
 def _type_comment(members: list[Any]) -> Optional[str]:
     """A one-line note listing the forms a field accepts, in the union's
-    declaration order -- e.g. ``Union[str, Secret]`` (uri, bucket, region)
-    -> ``accepts: <value> | secret:<value>``. ``None`` for a field
-    that accepts a single form (a plain scalar, a lone ``Secret`` credential, or
-    a nested object carries no such note)."""
+    declaration order -- e.g. a ``str`` | ``Secret`` field (uri, bucket,
+    region) -> ``accepts: str:<value> | secret:<value>``. The plain arm of a
+    string-or-secret field carries the ``str:`` prefix (it and the secret arm
+    are both strings on the wire); an ``int`` / ``bool`` plain arm stays bare.
+    ``None`` for a field that accepts a single form (a plain scalar, a lone
+    ``Secret`` credential, or a nested object carries no such note)."""
     has_ref = any(isinstance(m, type) and issubclass(m, Secret) for m in members)
     if not has_ref:
         return None
@@ -228,6 +232,8 @@ def _type_comment(members: list[Any]) -> Optional[str]:
     for m in members:
         if isinstance(m, type) and issubclass(m, Secret):
             forms.append("secret:<value>")
+        elif m is str:
+            forms.append("str:<value>")
         else:
             forms.append("<value>")
     if len(forms) <= 1:
@@ -270,6 +276,22 @@ def _pattern_of(ann: Any) -> Optional[str]:
                 pat = getattr(meta, "pattern", None)
                 if isinstance(pat, str):
                     return pat
+    return None
+
+
+def _field_pattern(fi: Any) -> Optional[str]:
+    """The regex a field advertises for the wizard prompt. Checks the
+    annotation's inline ``Annotated`` metadata first, then the field-level
+    metadata -- where ``StrOrSecretConstraints`` (and a plain field's
+    ``StringConstraints``) end up once pydantic peels the outer
+    ``Annotated`` off ``fi.annotation``."""
+    pat = _pattern_of(fi.annotation)
+    if pat is not None:
+        return pat
+    for meta in getattr(fi, "metadata", ()):
+        candidate = getattr(meta, "pattern", None)
+        if isinstance(candidate, str):
+            return candidate
     return None
 
 
@@ -328,13 +350,18 @@ def _set_template_header(env: CommentedMap, conn_cls: type) -> None:
         if r.conn_cls is conn_cls:
             label = f"{r.type} ({r.direction})"
             break
-    env.yaml_set_start_comment(
-        f"Connection template for: {label}\n"
-        "Secret values use the 'secret:' prefix, or '$secret:<ENV_VAR>' to "
-        "read the value from an environment variable.\n"
-        "A '$secret:' value is resolved on the client when the "
-        "source/destination is created or updated with this connection."
-    )
+    # Keep every rendered comment line within 80 columns: ruamel prefixes each
+    # with ``"# "`` (2 cols), so wrap the prose paragraphs at 78.
+    lines = [f"Connection template for: {label}"]
+    for paragraph in (
+        "In a string-or-secret field, a plain value uses the 'str:' prefix "
+        "and a secret value the 'secret:' prefix (or '$secret:<ENV_VAR>' to "
+        "read the value from an environment variable).",
+        "A '$secret:' value is resolved on the client when the source or "
+        "destination is created or updated with this connection.",
+    ):
+        lines.extend(textwrap.wrap(paragraph, width=78))
+    env.yaml_set_start_comment("\n".join(lines))
 
 
 def build_template(conn_cls: type, *, all_fields: bool = False) -> CommentedMap:
@@ -361,10 +388,20 @@ def _placeholder_value(members: list[Any], default: Any, path: str) -> Any:
     YAML rendering and marks the value as a fill-in placeholder, so
     :func:`_field_comment` knows to annotate it."""
     if default is not None:
+        # A str|Secret field's string default carries the ``str:`` marker so the
+        # emitted value re-parses (a bare string is no longer accepted). Kept a
+        # plain str (not a fill-in placeholder) so it renders as a real default.
+        if (
+            isinstance(default, str)
+            and any(_is_secret(m) for m in members)
+            and any(m is str for m in members)
+        ):
+            return f"{_STR_PREFIX}{default}"
         return default
     if any(_is_secret(m) for m in members):
         if any(not _is_secret(m) for m in members):
-            return SingleQuotedScalarString("<value> or secret:<value>")
+            plain = "str:<value>" if any(m is str for m in members) else "<value>"
+            return SingleQuotedScalarString(f"{plain} or secret:<value>")
         return SingleQuotedScalarString("secret:<value>")
     if members[0] is str:
         return SingleQuotedScalarString("<value>")
@@ -624,16 +661,24 @@ def _prompt_spec(cls: type, prefix: str, prompt: PromptFn) -> dict:
             # written and the value is resolved at run time.
             out[name] = f"{ref._PREFIX}{value}" if value else ref().to_dict()
         else:
+            members = _members(fi.annotation)
             value = prompt(
                 path,
                 secret=False,
                 optional=optional,
                 default=(None if fi.default is _UNSET else fi.default),
-                pattern=_pattern_of(fi.annotation),
+                pattern=_field_pattern(fi),
                 choices=None,
             )
             if value is not None and value != "":
-                out[name] = value
+                # A string-or-secret field stores its plain arm with the
+                # ``str:`` marker (plain and secret arms are both strings on
+                # the wire); a bare scalar (int / bool / plain-str field) is
+                # stored as typed.
+                if any(_is_secret(m) for m in members) and members[0] is str:
+                    out[name] = f"{_STR_PREFIX}{value}"
+                else:
+                    out[name] = value
             elif not optional:
                 out[name] = f"<FILL: {path}>"
     return out

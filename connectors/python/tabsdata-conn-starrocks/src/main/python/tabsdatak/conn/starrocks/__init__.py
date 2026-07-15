@@ -6,20 +6,17 @@
   one parquet slot per table. Writes go through an S3 staging
   area + native ``FILES()`` ingestion.
 
-``port`` accepts ``int|Secret``; call
-``_convert(conn.port, int)`` from
-``tabsdatak.conn.common.types`` at the use site to resolve to a
-runtime ``int``. Iceberg-style schema evolution is supported on
-the dest.
+Every string-or-secret field carries the value as a plain string
+or a ``Secret``; the plugin reads the parsed value through the
+``_host`` / ``_port`` / ``_database`` getters. Iceberg-style
+schema evolution is supported on the dest.
 """
 
 from __future__ import annotations
 
 from abc import ABC
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, TypeAlias, Union
-
-from pydantic import StringConstraints
+from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
@@ -27,11 +24,13 @@ import tabsdatak._api as _api
 # noinspection PyProtectedMember
 from tabsdatak.api import (
     Dest,
-    Secret,
+    StrOrSecretSpec,
 )
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
@@ -42,8 +41,12 @@ from tabsdatak.conn.common.types import (
     FullPathSpec,
     GCPJson,
     GCSBucketSpec,
+    HostSpec,
+    PortSpec,
     S3BucketSpec,
+    StrOrSecretConstraints,
     UserPassword,
+    _convert,
 )
 
 # noinspection PyProtectedMember
@@ -55,27 +58,14 @@ from tabsdatak.spi import Conn
 
 CredentialsSpec: TypeAlias = UserPassword
 
-# Host: no regex shape; permissive ``.+`` enables the bare-string
-# shortcut at the field site.
-HostSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=r".+")],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
-]
+# host / port are the shared string-or-secret specs from
+# ``tabsdatak.conn.common.types`` (HostSpec / PortSpec). Read their parsed
+# values through the ``_host`` / ``_port`` getters.
 
-# Port: plain int, or a Secret whose resolved value parses as an
-# unsigned integer. Call ``_convert(conn.port, int)`` at the use site to
-# do the final cast.
-_PORT_PATTERN = r"[0-9]+"
-PortSpec: TypeAlias = Union[
-    int,
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_PORT_PATTERN)],
-]
-
-
+# Database: StarRocks identifier shape (alphanumeric + underscore).
 _IDENTIFIER_PATTERN = r"^(?:[A-Za-z_][A-Za-z0-9_]*)$"
-DatabaseSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_IDENTIFIER_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_IDENTIFIER_PATTERN)],
+DatabaseSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_IDENTIFIER_PATTERN)
 ]
 StarRocksTableNameSpec: TypeAlias = Annotated[
     str,
@@ -128,6 +118,15 @@ class S3Location(CloudLocation):
     base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
 
+    def _bucket(self) -> str:
+        return _convert(self.bucket, str)
+
+    def _region(self) -> str:
+        return _convert(self.region, str)
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
+
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_9, kw_only=True)
 class AzBlobLocation(CloudLocation):
@@ -146,6 +145,12 @@ class AzBlobLocation(CloudLocation):
     credentials: AzureAccountKey
     base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
+
+    def _container(self) -> str:
+        return _convert(self.container, str)
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
 
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_10, kw_only=True)
@@ -166,6 +171,12 @@ class GCSLocation(CloudLocation):
     base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
 
+    def _bucket(self) -> str:
+        return _convert(self.bucket, str)
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
+
 
 # --- Connection ------------------------------------------------------
 
@@ -174,10 +185,12 @@ class GCSLocation(CloudLocation):
 class StarRocksDestConn(Conn):
     """StarRocks connection.
 
+    Every string-or-secret field carries the value as a plain string or a
+    ``Secret``; the plugin reads the parsed value through the ``_host`` /
+    ``_port`` / ``_database`` getters.
+
     :param host: StarRocks FE host.
-    :param port: MySQL-protocol port; default 9030. Accepts
-        ``int`` or ``Secret`` -- resolve at the use site
-        with ``_convert(conn.port, int)``.
+    :param port: MySQL-protocol port; default ``"9030"``.
     :param credentials: :class:`UserPassword`.
     :param staging: :class:`CloudLocation` (S3 / AzBlob / GCS).
     :param database: Default database; default ``"default"``.
@@ -186,12 +199,21 @@ class StarRocksDestConn(Conn):
     """
 
     host: HostSpec
-    port: PortSpec = 9030
+    port: PortSpec = "9030"
     credentials: CredentialsSpec
     staging: CloudLocation
     database: DatabaseSpec = "default"
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _host(self) -> str:
+        return _convert(self.host, str)
+
+    def _port(self) -> int:
+        return _convert(self.port, int)
+
+    def _database(self) -> str:
+        return _convert(self.database, str)
 
 
 # --- Destination -----------------------------------------------------

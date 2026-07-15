@@ -115,11 +115,9 @@ def test_s3_conn_accepts_absolute_base_path(conn_cls):
 
 @pytest.mark.parametrize("bad", ["data", "data/sub", "/data/"])
 def test_s3_conn_rejects_non_absolute_or_trailing_slash_base_path(conn_cls, bad):
-    # A bare string that fails the FullPathSpec pattern is coerced onto the
-    # Secret union member, whose value check raises API_6.
-    from tabsdatak.error import ApiRuntimeException
-
-    with pytest.raises(ApiRuntimeException):
+    # A bare string that fails the FullPathSpec pattern is rejected by the
+    # StrOrSecretConstraints regex at construction time.
+    with pytest.raises(Exception):
         _conn_with_base(conn_cls, bad)
 
 

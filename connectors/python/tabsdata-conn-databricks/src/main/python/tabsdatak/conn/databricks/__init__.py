@@ -14,9 +14,7 @@ Token, host, identifier fields accept ``Secret``.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, TypeAlias, Union
-
-from pydantic import StringConstraints
+from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
@@ -27,13 +25,19 @@ from tabsdatak.api import (
     Dest,
     Secret,
     Src,
+    StrOrSecretSpec,
 )
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec
+from tabsdatak.conn.common.types import (
+    CfgSpec,
+    EntityWhitelistSpec,
+    StrOrSecretConstraints,
+    _convert,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.databricks import _validation
@@ -48,32 +52,20 @@ DatabricksTokenSpec: TypeAlias = Secret
 CredentialsSpec: TypeAlias = DatabricksTokenSpec
 
 
-IdentifierSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.IDENTIFIER_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.IDENTIFIER_PATTERN)
-    ],
+IdentifierSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.IDENTIFIER_PATTERN)
 ]
 
-WarehouseSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
-    ],
+WarehouseSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.WAREHOUSE_NAME_PATTERN)
 ]
 
-WarehouseIdSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)
-    ],
+WarehouseIdSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.WAREHOUSE_ID_PATTERN)
 ]
 
-VolumeSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
-    ],
+VolumeSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.QUALIFIED_NAME_PATTERN)
 ]
 QueriesSpec: TypeAlias = list[str]
 DatabricksTableNameSpec: TypeAlias = Annotated[
@@ -134,6 +126,21 @@ class DatabricksSrcConn(Conn):
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
+    def _volume(self) -> str:
+        return _convert(self.volume, str)
+
+    def _warehouse(self) -> str:
+        return _convert(self.warehouse, str)
+
+    def _warehouse_id(self) -> str:
+        return _convert(self.warehouse_id, str)
+
+    def _catalog(self) -> str:
+        return _convert(self.catalog, str)
+
+    def _schema(self) -> str:
+        return _convert(self.schema, str)
+
     def validate(self) -> None:
         _validate_databricks_conn(self)
 
@@ -156,6 +163,21 @@ class DatabricksDestConn(Conn):
     schema: IdentifierSpec | None = None
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _volume(self) -> str:
+        return _convert(self.volume, str)
+
+    def _warehouse(self) -> str:
+        return _convert(self.warehouse, str)
+
+    def _warehouse_id(self) -> str:
+        return _convert(self.warehouse_id, str)
+
+    def _catalog(self) -> str:
+        return _convert(self.catalog, str)
+
+    def _schema(self) -> str:
+        return _convert(self.schema, str)
 
     def validate(self) -> None:
         _validate_databricks_conn(self)

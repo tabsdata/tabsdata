@@ -98,29 +98,18 @@ def _conn_with_port(port):
 
 
 def test_port_resolves_int():
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    assert _convert(_conn_with_port(9031).port, int) == 9031
-
-
+    assert _conn_with_port("9031")._port() == 9031
 
 
 def test_port_resolves_secret_literal():
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    assert _convert(_conn_with_port(Secret("9102")).port, int) == 9102
+    assert _conn_with_port(Secret("9102"))._port() == 9102
 
 
 def test_port_unhydrated_ref_rejected_at_value():
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common.types import _convert
-
-    # An unhydrated port ref carries no value yet; converting it raises.
+    # An unhydrated port ref carries no value yet; the getter raises.
     conn = _conn_with_port(Secret())
     with pytest.raises(Exception):
-        _convert(conn.port, int)
+        conn._port()
 
 
 def test_port_secret_literal_non_numeric_rejected_at_construction():

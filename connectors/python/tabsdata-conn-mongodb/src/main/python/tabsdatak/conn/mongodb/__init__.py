@@ -15,19 +15,22 @@ No ``MongoDBSrc`` today.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, TypeAlias, Union
-
-from pydantic import StringConstraints
+from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Dest, Secret
+from tabsdatak.api import Dest, StrOrSecretSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
-from tabsdatak.conn.common.types import CfgSpec, UserPassword
+from tabsdatak.conn.common.types import (
+    CfgSpec,
+    StrOrSecretConstraints,
+    UserPassword,
+    _convert,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.mongodb import _validation
@@ -39,9 +42,8 @@ from tabsdatak.spi import Conn
 
 CredentialsSpec: TypeAlias = UserPassword
 
-UriSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.URI_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URI_PATTERN)],
+UriSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.URI_PATTERN)
 ]
 CollectionSpec: TypeAlias = Annotated[str, _validation.COLLECTION_NAME_VALIDATOR]
 ColumnNameSpec: TypeAlias = Annotated[str, _validation.FIELD_NAME_VALIDATOR]
@@ -74,6 +76,9 @@ class MongoDBDestConn(Conn):
     uri: UriSpec
     credentials: CredentialsSpec
     conn_cfg: CfgSpec | None = None
+
+    def _uri(self) -> str:
+        return _convert(self.uri, str)
 
 
 # --- Destination -----------------------------------------------------

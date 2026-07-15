@@ -10,9 +10,6 @@ from urllib.parse import parse_qsl, quote_plus, urlparse
 from sqlalchemy import engine, make_url as sa_make_url
 
 from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.mssql import MSSQLDestConn, MSSQLSrcConn
 
 # Either SQL Server connection flavour -- source or destination.
@@ -51,9 +48,9 @@ class MSSQLServerConnectionExplorer(SqlAlchemyConnectionExplorer):
         })
 
     def make_url(self, conn: MSSQLConn) -> engine.URL:
-        # `uri` is a str or a `Secret`; `_convert` yields the plain str
+        # `uri` is a str or a `Secret`; `_uri()` yields the plain str
         # form either way (mirrors the runtime `build_mssql_engine`).
-        uri = _convert(conn.uri, str)
+        uri = conn._uri()
         if _is_odbc_connection_string(uri):
             # A raw ODBC connection string can't be parsed into URL parts;
             # pyodbc reads it verbatim from the ``odbc_connect`` query param.
@@ -83,7 +80,7 @@ class MSSQLServerConnectionExplorer(SqlAlchemyConnectionExplorer):
         # be supplied as ``UID`` / ``PWD`` via connect_args -- mirroring the
         # runtime `build_mssql_engine`. The URI form keeps them in the URL.
         conn_cfg = conn.conn_cfg or {}
-        uri = _convert(conn.uri, str)
+        uri = conn._uri()
         if not _is_odbc_connection_string(uri) or conn.credentials is None:
             return conn_cfg
         return conn_cfg | {

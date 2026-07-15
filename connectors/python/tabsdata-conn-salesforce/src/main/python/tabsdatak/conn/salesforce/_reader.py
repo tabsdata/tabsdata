@@ -91,7 +91,7 @@ def login(conn: SalesforceSrcConn, api_version: str | None = None) -> Any:
         raise SalesforceErrorCode.SALESFORCE_12.exception(
             kind=type(credentials).__name__,
         )
-    instance_url = _convert(conn.instance_url, str) if conn.instance_url else None
+    instance_url = conn._instance_url() if conn.instance_url else None
     version = api_version or sf_api.DEFAULT_API_VERSION
     try:
         return Salesforce(

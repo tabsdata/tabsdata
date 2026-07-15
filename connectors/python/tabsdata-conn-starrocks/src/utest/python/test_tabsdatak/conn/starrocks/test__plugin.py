@@ -81,7 +81,7 @@ def _staging() -> S3Location:
 def _bare_conn() -> StarRocksDestConn:
     return StarRocksDestConn(
         host="stub.invalid",
-        port=9030,
+        port="9030",
         database="testdb",
         staging=_staging(),
         credentials=UserPassword(

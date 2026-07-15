@@ -26,7 +26,7 @@ from tabsdatak.conn.common.file._explorer import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert, normalize_dir_path
+from tabsdatak.conn.common.types import normalize_dir_path
 from tabsdatak.conn.s3 import S3DestConn, S3SrcConn
 from tabsdatak.spi import ConnMetaModel, Entity, Explorer
 
@@ -44,15 +44,15 @@ class S3ConnectionExplorer(Explorer):
 
     def check_connect(self, conn: S3Conn) -> None:
         client = _s3_client(conn)
-        client.head_bucket(Bucket=_convert(conn.bucket, str))
+        client.head_bucket(Bucket=conn._bucket())
 
     def metadata(self, conn: S3Conn) -> list[FileStorageEntity]:
-        bucket = _convert(conn.bucket, str)
+        bucket = conn._bucket()
         # base_path is a FullPathSpec (leading "/"); the S3 list_objects_v2
         # Prefix wants no leading "/" and a trailing "/", so normalize it
         # (root "/" -> "" -> list the whole bucket).
         prefix = normalize_dir_path(
-            _convert(conn.base_path, str), lead_separator=False, back_separator=True
+            conn._base_path(), lead_separator=False, back_separator=True
         )
         # ``bucket`` holds the raw bucket name and ``prefix`` the object's
         # full key directory (which already includes base_path), so the
@@ -90,7 +90,7 @@ class S3ConnectionExplorer(Explorer):
         if entity.file is None:
             return []
         fmt = (entity.file.format or "").lower()
-        bucket = entity.bucket or _convert(conn.bucket, str)
+        bucket = entity.bucket or conn._bucket()
         key = (
             f"{entity.prefix}/{entity.file.pattern}"
             if entity.prefix
@@ -119,7 +119,7 @@ def _s3_client(conn: S3Conn):
         "s3",
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        region_name=_convert(conn.region, str) or None,
+        region_name=conn._region() or None,
     )
 
 
@@ -191,7 +191,7 @@ def _read_parquet(conn: S3Conn, bucket: str, key: str, limit: int) -> list[dict]
     fs = pafs.S3FileSystem(
         access_key=access_key,
         secret_key=secret_key,
-        region=_convert(conn.region, str) or None,
+        region=conn._region() or None,
     )
     with fs.open_input_file(f"{bucket}/{key}") as handle:
         parquet_file = pq.ParquetFile(handle)

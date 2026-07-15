@@ -8,9 +8,6 @@ from sqlalchemy import engine
 from sqlalchemy.sql.elements import quoted_name
 
 from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.snowflake import SnowflakeDestConn
 
 
@@ -25,7 +22,7 @@ class SnowflakeConnectionExplorer(SqlAlchemyConnectionExplorer):
     def schema_filter(self, conn: SnowflakeDestConn) -> str | None:
         if conn.schema is None:
             return None
-        name = _convert(conn.schema, str) or None
+        name = conn._schema() or None
         # Snowflake schema names are case-sensitive as stored; tdx provisions them
         # lowercase (quoted), so force-quote to reference them verbatim rather than
         # letting the dialect upper-fold an unquoted name.
@@ -40,7 +37,7 @@ class SnowflakeConnectionExplorer(SqlAlchemyConnectionExplorer):
     def map_entity_fields(self, conn: SnowflakeDestConn, schema: str | None) -> dict:
         """Map the iterated schema name to entity database/schema fields."""
         return {
-            "database": conn.database or "",
+            "database": conn._database() if conn.database is not None else "",
             "schema": schema or "",
         }
 
@@ -53,9 +50,9 @@ class SnowflakeConnectionExplorer(SqlAlchemyConnectionExplorer):
     def make_url(self, conn: SnowflakeDestConn) -> engine.URL:
         query: dict[str, str] = {}
         if conn.warehouse is not None:
-            query["warehouse"] = _convert(conn.warehouse, str)
+            query["warehouse"] = conn._warehouse()
         if conn.role is not None:
-            query["role"] = _convert(conn.role, str)
+            query["role"] = conn._role()
         user = password = ""
         if conn.credentials is not None:
             user = conn.credentials.user.value()
@@ -65,9 +62,7 @@ class SnowflakeConnectionExplorer(SqlAlchemyConnectionExplorer):
             username=user,
             password=password,
             # The account locator is the host for the snowflake dialect.
-            host=_convert(conn.account, str),
-            database=(
-                _convert(conn.database, str) if conn.database is not None else None
-            ),
+            host=conn._account(),
+            database=(conn._database() if conn.database is not None else None),
             query=query,
         )

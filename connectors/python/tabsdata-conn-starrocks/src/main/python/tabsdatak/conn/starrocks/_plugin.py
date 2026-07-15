@@ -5,8 +5,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.starrocks import (
     DestCfgKey,
     DestCfgSpec,
@@ -89,9 +87,9 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDestConn, StarRocksDest]):
                 slots=len(tables),
             )
 
-        host = _convert(conn.host, str)
-        port = _convert(conn.port, int)
-        database = _convert(conn.database, str)
+        host = conn._host()
+        port = conn._port()
+        database = conn._database()
 
         write_cfg = adapter.StarRocksWriteCfg(
             host=host,

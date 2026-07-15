@@ -5,9 +5,8 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 
 # --- URI -------------------------------------------------------------
 
-# Pure-regex equivalent (for use as ``value_pattern`` on Secret
-# subclasses); same prefix shape as ``_URI_RE`` plus an unrestricted
-# tail so ``re.fullmatch`` matches whole URIs.
+# Pattern gating ``UriSpec`` via ``StrOrSecretConstraints`` -- enforced on
+# a plain-string URI and on a ``Secret``'s hydrated URI value alike.
 MSYQL_URI_PATTERN = r"(?i)^(?:(?:mysql|mariadb)(?:\+[a-z0-9]+)?://.*)$"
 # --- Table FQN ------------------------------------------------------
 

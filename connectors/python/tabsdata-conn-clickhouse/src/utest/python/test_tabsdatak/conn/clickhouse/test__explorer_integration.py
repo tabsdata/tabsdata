@@ -50,7 +50,7 @@ def _conn_from(cfg: ClickhouseDomain) -> ClickHouseDestConn:
         port=cfg.port,
         database=cfg.database,
         staging=_STAGING,
-        secure=False,
+        secure="false",
         credentials=UserPassword(user=Secret(cfg.user), password=Secret(cfg.password)),
     )
 

@@ -9,9 +9,6 @@ from urllib.parse import urlparse
 from sqlalchemy import engine
 
 from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.druid import DruidDestConn
 
 # Druid's SQL endpoint lives on the Broker; its standard port.
@@ -47,7 +44,7 @@ class DruidConnectionExplorer(SqlAlchemyConnectionExplorer):
         return frozenset({"INFORMATION_SCHEMA", "sys", "lookup"})
 
     def make_url(self, conn: DruidDestConn) -> engine.URL:
-        parsed = urlparse(_convert(conn.overlord_url, str))
+        parsed = urlparse(conn._overlord_url())
         user = password = ""
         if conn.credentials is not None:
             user = conn.credentials.user.value()

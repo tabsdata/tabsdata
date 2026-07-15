@@ -10,9 +10,6 @@ from urllib.parse import parse_qsl, urlparse
 from sqlalchemy import engine
 
 from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.oracle import OracleDestConn, OracleSrcConn
 
 # Either Oracle connection flavour -- source or destination.
@@ -74,9 +71,9 @@ class OracleConnectionExplorer(SqlAlchemyConnectionExplorer):
         return {"exclude_tablespaces": ()} | (conn.conn_cfg or {})
 
     def make_url(self, conn: OracleConn) -> engine.URL:
-        # `uri` is a str or a `Secret`; `_convert` yields the plain str
+        # `uri` is a str or a `Secret`; `_uri()` yields the plain str
         # form either way (mirrors the runtime `build_oracle_engine`).
-        parsed = urlparse(_convert(conn.uri, str))
+        parsed = urlparse(conn._uri())
         user = password = ""
         if conn.credentials is not None:
             user = conn.credentials.user.value()

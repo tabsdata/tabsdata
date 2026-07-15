@@ -33,7 +33,7 @@ def connection():
 def types(ctx):
     """List the connection types available from installed connectors"""
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
 
     rows = template.list_connectors()
 
@@ -68,7 +68,7 @@ def _type_option(fn):
 
 def _resolve(ctx, type_):
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
 
     type_ = type_ or logical_prompt(ctx, "Connector type (see 'tdk connection types')")
     try:
@@ -80,7 +80,7 @@ def _resolve(ctx, type_):
 
 def _emit(document, file):
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
 
     text = template.to_yaml(document)
     if file and file != "-":
@@ -107,7 +107,7 @@ def _emit(document, file):
 def template_(ctx, type_, file):
     """Print a fill-in connection template for a connector type"""
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
 
     info = _resolve(ctx, type_)
     # Show every config: required fields as fill-ins, optional ones with their
@@ -126,7 +126,7 @@ def template_(ctx, type_, file):
 def validate(file):
     """Validate a connection YAML document against its connector schema"""
     # noinspection PyProtectedMember
-    from tabsdatak import _template as template
+    from tabsdatak.cli import template
     from tabsdatak.common._error import CommonException
     from tabsdatak.common._json_serde import (
         env_secret_ref_vars,

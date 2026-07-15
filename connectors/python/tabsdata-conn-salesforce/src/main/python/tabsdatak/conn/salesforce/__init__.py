@@ -16,21 +16,27 @@ from __future__ import annotations
 from abc import ABC
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal, TypeAlias, Union
+from typing import Annotated, Any, Literal, TypeAlias
 
-from pydantic import Field, StringConstraints
+from pydantic import Field
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 
 # noinspection PyProtectedMember
-from tabsdatak.api import Secret, Src
+from tabsdatak.api import Secret, Src, StrOrSecretSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import CfgSpec, Credentials, EntityWhitelistSpec
+from tabsdatak.conn.common.types import (
+    CfgSpec,
+    Credentials,
+    EntityWhitelistSpec,
+    StrOrSecretConstraints,
+    _convert,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.salesforce import _validation
@@ -77,11 +83,8 @@ ObjectsNameSpec: TypeAlias = Annotated[
     list[ApiNameSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
 ]
 
-InstanceUrlSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.INSTANCE_URL_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.INSTANCE_URL_PATTERN)
-    ],
+InstanceUrlSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.INSTANCE_URL_PATTERN)
 ]
 # Salesforce SOQL query list. Today exactly one query (one input
 # slot) -- the list shape leaves room for future multi-query
@@ -149,6 +152,9 @@ class SalesforceSrcConn(Conn):
     objects: ObjectsNameSpec | None = None
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _instance_url(self) -> str:
+        return _convert(self.instance_url, str)
 
 
 # --- Source: SOQL queries --------------------------------------------

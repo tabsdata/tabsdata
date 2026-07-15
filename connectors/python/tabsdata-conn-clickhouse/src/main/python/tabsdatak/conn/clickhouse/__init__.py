@@ -16,9 +16,7 @@ from __future__ import annotations
 
 from abc import ABC
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, TypeAlias, Union
-
-from pydantic import StringConstraints
+from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
@@ -26,7 +24,7 @@ import tabsdatak._api as _api
 # noinspection PyProtectedMember
 from tabsdatak.api import (
     Dest,
-    Secret,
+    StrOrSecretSpec,
 )
 
 # noinspection PyProtectedMember
@@ -35,19 +33,26 @@ from tabsdatak.conn.clickhouse.error import ClickHouseErrorCode
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
     AzContainerSpec,
     AzureAccountKey,
+    BoolSpec,
     CfgSpec,
     EntityWhitelistSpec,
     FullPathSpec,
     GCPHmac,
     GCPJson,
     GCSBucketSpec,
+    HostSpec,
+    PortSpec,
     S3BucketSpec,
+    StrOrSecretConstraints,
     UserPassword,
+    _convert,
 )
 from tabsdatak.spi import Conn
 
@@ -56,41 +61,14 @@ from tabsdatak.spi import Conn
 CredentialsSpec: TypeAlias = UserPassword
 
 
-# Host: no regex shape; any non-empty string passes. The permissive
-# ``.+`` pattern is what enables the bare-string shortcut at the field
-# site (the ``EnvValuePattern`` / ``SecretValuePattern`` wrapper promotes
-# a plain str to a literal); without it, callers would have to spell
-# ``Secret("ch.example")`` themselves.
-HostSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=r".+")],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=r".+")],
-]
-
-# Port: plain int, or a Secret whose resolved value parses as an
-# unsigned integer. The Secret arm carries a digit-only pattern so
-# the value is validated at ``value()`` time. Call
-# ``_convert(conn.port, int)`` at the use site to do the final cast.
-_PORT_PATTERN = r"[0-9]+"
-PortSpec: TypeAlias = Union[
-    int,
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_PORT_PATTERN)],
-]
-
-# Secure: plain bool, or a Secret whose resolved value is one of
-# the accepted truthy / falsy tokens. Call ``_convert(conn.secure, bool)``
-# at the use site to do the final cast.
-_BOOL_PATTERN = r"(?i)(?:true|false|1|0|yes|no)"
-SecureSpec: TypeAlias = Union[
-    bool,
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_BOOL_PATTERN)],
-]
-
+# host / port / secure are the shared string-or-secret specs from
+# ``tabsdatak.conn.common.types`` (HostSpec / PortSpec / BoolSpec). Read
+# their parsed values through the ``_host`` / ``_port`` / ``_secure`` getters.
 
 # Database: ClickHouse identifier shape (alphanumeric + underscore).
 _IDENTIFIER_PATTERN = r"^(?:[A-Za-z_][A-Za-z0-9_]*)$"
-DatabaseSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_IDENTIFIER_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_IDENTIFIER_PATTERN)],
+DatabaseSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_IDENTIFIER_PATTERN)
 ]
 ClickHouseTableNameSpec: TypeAlias = Annotated[
     str,
@@ -158,6 +136,15 @@ class S3Location(CloudLocation):
     base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
 
+    def _bucket(self) -> str:
+        return _convert(self.bucket, str)
+
+    def _region(self) -> str:
+        return _convert(self.region, str)
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
+
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_9, kw_only=True)
 class AzBlobLocation(CloudLocation):
@@ -180,6 +167,12 @@ class AzBlobLocation(CloudLocation):
     credentials: AzureAccountKey
     base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
+
+    def _container(self) -> str:
+        return _convert(self.container, str)
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
 
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_10, kw_only=True)
@@ -208,6 +201,12 @@ class GCSLocation(CloudLocation):
     base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
 
+    def _bucket(self) -> str:
+        return _convert(self.bucket, str)
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
+
 
 # --- Connection ------------------------------------------------------
 
@@ -216,28 +215,40 @@ class GCSLocation(CloudLocation):
 class ClickHouseDestConn(Conn):
     """ClickHouse connection.
 
+    Every string-or-secret field carries the value as a plain string or a
+    ``Secret``; the plugin reads the parsed value through the ``_host`` /
+    ``_port`` / ``_database`` / ``_secure`` getters.
+
     :param host: ClickHouse host.
-    :param port: HTTP port; default 8123. Accepts ``int``
-        or ``Secret`` -- resolve at the use site with
-        ``_convert(conn.port, int)``.
+    :param port: HTTP port; default ``"8123"``.
     :param credentials: :class:`UserPassword`.
     :param staging: :class:`CloudLocation` (S3 / AzBlob / GCS).
     :param database: Default database; default ``"default"``.
-    :param secure: ``True`` for HTTPS, ``False`` for HTTP.
-        Accepts ``bool`` or ``Secret`` -- resolve at the
-        use site with ``_convert(conn.secure, bool)``.
+    :param secure: ``true`` for HTTPS, ``false`` for HTTP; default ``"false"``.
     :param entity_whitelist: Optional regex-based table filter.
     :param conn_cfg: Optional driver-side config dict.
     """
 
     host: HostSpec
-    port: PortSpec = 8123
+    port: PortSpec = "8123"
     credentials: CredentialsSpec
     staging: CloudLocation
     database: DatabaseSpec = "default"
-    secure: SecureSpec = False
+    secure: BoolSpec = "false"
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _host(self) -> str:
+        return _convert(self.host, str)
+
+    def _port(self) -> int:
+        return _convert(self.port, int)
+
+    def _database(self) -> str:
+        return _convert(self.database, str)
+
+    def _secure(self) -> bool:
+        return _convert(self.secure, bool)
 
 
 # --- Destination -----------------------------------------------------

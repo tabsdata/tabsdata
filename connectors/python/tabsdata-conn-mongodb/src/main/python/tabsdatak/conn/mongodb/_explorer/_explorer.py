@@ -115,7 +115,7 @@ def _client(conn: MongoDBDestConn) -> MongoClient:
     if conn.credentials is not None:
         kwargs["username"] = _convert(conn.credentials.user, str) or None
         kwargs["password"] = _convert(conn.credentials.password, str) or None
-    return MongoClient(_convert(conn.uri, str), **kwargs)
+    return MongoClient(conn._uri(), **kwargs)
 
 
 def _list_indexes(db, coll_name: str) -> list[MongoIndex]:

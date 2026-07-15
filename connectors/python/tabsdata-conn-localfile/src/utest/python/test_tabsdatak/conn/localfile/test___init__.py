@@ -103,11 +103,9 @@ def test_localfile_conn_accepts_absolute_base_path(conn_cls):
 @pytest.mark.parametrize("bad", ["", "data", "data/sub", "/data/"])
 def test_localfile_conn_rejects_non_absolute_or_trailing_slash(conn_cls, bad):
     # FullPathSpec requires a leading "/" and forbids a trailing one;
-    # a bare string that fails the pattern is coerced onto the Secret union
-    # member, whose value check raises API_6.
-    from tabsdatak.error import ApiRuntimeException
-
-    with pytest.raises(ApiRuntimeException):
+    # a bare string that fails the pattern is rejected by the
+    # StrOrSecretConstraints regex at construction time.
+    with pytest.raises(Exception):
         conn_cls(base_path=bad)
 
 

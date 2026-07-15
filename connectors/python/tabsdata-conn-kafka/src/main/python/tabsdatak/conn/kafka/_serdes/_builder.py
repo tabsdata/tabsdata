@@ -130,8 +130,8 @@ def build_serde(
 
     if mode == "glue":
         assert isinstance(schema_registry, AwsGlueSchemaRegistry)
-        registry_name = _convert(schema_registry.registry_name, str)
-        schema_name = _convert(schema_registry.schema_name, str)
+        registry_name = schema_registry._registry_name()
+        schema_name = schema_registry._schema_name()
         if data_format == "json":
             return JsonGlueKafkaSerde(
                 glue_client=sr_client,
@@ -180,7 +180,7 @@ def build_schema_registry_client(
         from confluent_kafka.schema_registry import SchemaRegistryClient
 
         configs: dict[str, Any] = dict(schema_registry.configs or {})
-        configs["url"] = _convert(schema_registry.url, str)
+        configs["url"] = schema_registry._url()
         if schema_registry.credentials is not None:
             user = _convert(schema_registry.credentials.user, str)
             password = _convert(schema_registry.credentials.password, str)
@@ -199,7 +199,7 @@ def build_schema_registry_client(
             schema_registry.credentials.secret_access_key, str
         )
         boto_kwargs: dict[str, Any] = {
-            "region_name": _convert(schema_registry.region_name, str),
+            "region_name": schema_registry._region_name(),
         }
         if schema_registry.configs:
             boto_kwargs.update(schema_registry.configs)

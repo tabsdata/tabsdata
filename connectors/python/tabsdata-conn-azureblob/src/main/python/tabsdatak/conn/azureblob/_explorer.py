@@ -26,7 +26,7 @@ from tabsdatak.conn.common.file._explorer import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert, normalize_dir_path
+from tabsdatak.conn.common.types import normalize_dir_path
 from tabsdatak.spi import ConnMetaModel, Entity, Explorer
 
 # Either Azure Blob connection flavour -- source or destination.
@@ -48,12 +48,12 @@ class AzureBlobConnectionExplorer(Explorer):
         container.get_container_properties()
 
     def metadata(self, conn: AzureBlobConn) -> list[FileStorageEntity]:
-        container = _convert(conn.container, str)
+        container = conn._container()
         # base_path is a FullPathSpec (leading "/"); the blob
         # name_starts_with wants no leading "/" and a trailing "/", so
         # normalize it (root "/" -> "" -> list the whole container).
         prefix = normalize_dir_path(
-            _convert(conn.base_path, str), lead_separator=False, back_separator=True
+            conn._base_path(), lead_separator=False, back_separator=True
         )
         # ``bucket`` holds the raw container name and ``prefix`` the blob's
         # full key directory (which already includes base_path), so the
@@ -121,7 +121,7 @@ def _container_client(conn: AzureBlobConn):
         max_single_get_size=1024 * 1024,
         max_chunk_get_size=1024 * 1024,
     )
-    return service.get_container_client(_convert(conn.container, str))
+    return service.get_container_client(conn._container())
 
 
 def _stream_lines(container, key: str, n: int) -> list[str]:
@@ -180,7 +180,7 @@ def _read_parquet(conn: AzureBlobConn, key: str, limit: int) -> list[dict]:
 
     account_name = conn.credentials.account_name.value()
     account_key = conn.credentials.account_key.value()
-    container = _convert(conn.container, str)
+    container = conn._container()
     fs = pafs.AzureFileSystem(account_name=account_name, account_key=account_key)
     with fs.open_input_file(f"{container}/{key}") as handle:
         parquet_file = pq.ParquetFile(handle)

@@ -38,8 +38,6 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
-from pydantic import StringConstraints
-
 # Private modules are imported as modules (not by symbol) so each
 # call-site is explicit about reaching into private surface.
 # noinspection PyProtectedMember
@@ -47,15 +45,21 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     BasicDictSpec,
     Dest,
-    Secret,
     Src,
     StreamSrc,
+    StrOrSecretSpec,
 )
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
-from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPassword
+from tabsdatak.conn.common.types import (
+    CfgSpec,
+    EntityWhitelistSpec,
+    StrOrSecretConstraints,
+    UserPassword,
+    _convert,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql import _validation
@@ -139,11 +143,8 @@ MySQLCdcStartFromSpec: TypeAlias = Union[
 
 CredentialsSpec: TypeAlias = UserPassword
 
-UriSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.MSYQL_URI_PATTERN)],
-    Annotated[
-        Secret, _api.SecretValueConstraints(pattern=_validation.MSYQL_URI_PATTERN)
-    ],
+UriSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.MSYQL_URI_PATTERN)
 ]
 QueriesSpec: TypeAlias = list[str]
 MySQLTableNameSpec: TypeAlias = Annotated[str, _validation.MYSQL_TABLE_FQN_VALIDATOR]
@@ -206,6 +207,9 @@ class MySQLSrcConn(Conn):
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
+    def _uri(self) -> str:
+        return _convert(self.uri, str)
+
 
 @_api.dataclass(MysqlErrorCode.MYSQL_1, kw_only=True)
 class MySQLDestConn(Conn):
@@ -220,6 +224,9 @@ class MySQLDestConn(Conn):
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _uri(self) -> str:
+        return _convert(self.uri, str)
 
 
 # --- Source ----------------------------------------------------------
@@ -343,6 +350,9 @@ class MySQLCdcStreamSrcConn(Conn):
     server_id: int = DEFAULT_SERVER_ID
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _uri(self) -> str:
+        return _convert(self.uri, str)
 
 
 @_api.dataclass(MysqlErrorCode.MYSQL_11, kw_only=True)

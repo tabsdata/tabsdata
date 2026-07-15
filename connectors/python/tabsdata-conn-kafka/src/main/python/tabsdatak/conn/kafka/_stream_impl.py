@@ -305,7 +305,7 @@ def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:
     ``auto.offset.reset=earliest`` + ``enable.auto.commit=False``
     (the plugin commits explicitly after each rollover)."""
     cfg: dict = dict(conn.conn_cfg or {})
-    cfg[_BOOTSTRAP_SERVERS_KEY] = _convert(conn.servers, str)
+    cfg[_BOOTSTRAP_SERVERS_KEY] = conn._servers()
     cfg[_AUTO_OFFSET_RESET_KEY] = "earliest"
     cfg[_ENABLE_AUTO_COMMIT_KEY] = False
     if conn.credentials is not None:
@@ -313,5 +313,5 @@ def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:
         cfg[_SASL_MECHANISM_KEY] = "SCRAM-SHA-256"
         cfg[_SASL_USERNAME_KEY] = _convert(conn.credentials.user, str)
         cfg[_SASL_PASSWORD_KEY] = _convert(conn.credentials.password, str)
-    cfg[_GROUP_ID_KEY] = _convert(conn.group_id, str)
+    cfg[_GROUP_ID_KEY] = conn._group_id()
     return cfg

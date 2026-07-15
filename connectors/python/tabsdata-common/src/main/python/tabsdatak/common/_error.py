@@ -83,3 +83,10 @@ class CommonErrorCode(ErrorCode):
         CommonRuntimeException,
         "environment variable(s) referenced by '$secret:' not set: {vars!r}",
     )  # resolve_env_secret_refs: a $secret:<VAR> input names an unset env var
+
+    # --- hydration integrity (tabsdatak.common._json_serde) --------
+    COMMON_13 = ErrorDef(
+        CommonRuntimeException,
+        "hydration input carries a plaintext secret at {paths!r}; a stored "
+        "document must only carry the ':secret:' placeholder",
+    )  # hydrate / env_hydrate: a leaf is already 'secret:<value>'

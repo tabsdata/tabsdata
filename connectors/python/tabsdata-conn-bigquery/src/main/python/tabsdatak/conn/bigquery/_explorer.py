@@ -26,10 +26,10 @@ class BigQueryConnectionExplorer(SqlAlchemyConnectionExplorer):
     def schema_filter(self, conn: BigQueryDestConn) -> str | None:
         if conn.dataset is None:
             return None
-        return _convert(conn.dataset, str) or None
+        return conn._dataset() or None
 
     def map_entity_fields(self, conn: BigQueryDestConn, schema: str | None) -> dict:
-        project = _convert(conn.project, str) if conn.project is not None else ""
+        project = conn._project() if conn.project is not None else ""
         return {"database": project, "schema": schema or ""}
 
     def system_schemas(self) -> frozenset[str]:
@@ -49,8 +49,8 @@ class BigQueryConnectionExplorer(SqlAlchemyConnectionExplorer):
         return conn_cfg | {"credentials_info": payload}
 
     def make_url(self, conn: BigQueryDestConn) -> engine.URL:
-        project = _convert(conn.project, str) if conn.project is not None else ""
-        dataset = _convert(conn.dataset, str) if conn.dataset is not None else ""
+        project = conn._project() if conn.project is not None else ""
+        dataset = conn._dataset() if conn.dataset is not None else ""
 
         return engine.URL.create(
             drivername="bigquery",

@@ -21,7 +21,7 @@ class MySQLConnectionExplorer(SqlAlchemyConnectionExplorer):
     """
 
     def schema_filter(self, conn: MySQLConn) -> str | None:
-        return urlparse(conn.uri).path.lstrip("/") or None
+        return urlparse(conn._uri()).path.lstrip("/") or None
 
     def map_entity_fields(self, conn: MySQLConn, schema: str | None) -> dict:
         return {"database": schema or "", "schema": ""}
@@ -38,7 +38,7 @@ class MySQLConnectionExplorer(SqlAlchemyConnectionExplorer):
         return conn.conn_cfg or {}
 
     def make_url(self, conn: MySQLConn) -> engine.URL:
-        parsed = urlparse(conn.uri)
+        parsed = urlparse(conn._uri())
         user = password = ""
         if conn.credentials is not None:
             user = conn.credentials.user.value()

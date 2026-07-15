@@ -14,9 +14,7 @@ size, read/write engine selection).
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, TypeAlias, Union
-
-from pydantic import StringConstraints
+from typing import Annotated, Any, Literal, TypeAlias
 
 # Private modules are imported as modules (not by symbol) so each
 # call-site is explicit about reaching into private surface.
@@ -25,14 +23,20 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     BasicDictSpec,
     Dest,
-    Secret,
     Src,
+    StrOrSecretSpec,
 )
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
-from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPassword
+from tabsdatak.conn.common.types import (
+    CfgSpec,
+    EntityWhitelistSpec,
+    StrOrSecretConstraints,
+    UserPassword,
+    _convert,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.oracle import _validation
@@ -44,9 +48,8 @@ from tabsdatak.spi import Conn
 
 CredentialsSpec: TypeAlias = UserPassword
 
-UriSpec: TypeAlias = Union[
-    Annotated[str, StringConstraints(pattern=_validation.URI_PATTERN)],
-    Annotated[Secret, _api.SecretValueConstraints(pattern=_validation.URI_PATTERN)],
+UriSpec: TypeAlias = Annotated[
+    StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.URI_PATTERN)
 ]
 QueriesSpec: TypeAlias = list[str]
 OracleTableNameSpec: TypeAlias = Annotated[
@@ -93,6 +96,9 @@ class OracleSrcConn(Conn):
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
 
+    def _uri(self) -> str:
+        return _convert(self.uri, str)
+
 
 @_api.dataclass(OracleErrorCode.ORACLE_1, kw_only=True)
 class OracleDestConn(Conn):
@@ -107,6 +113,9 @@ class OracleDestConn(Conn):
     credentials: CredentialsSpec
     entity_whitelist: EntityWhitelistSpec | None = None
     conn_cfg: CfgSpec | None = None
+
+    def _uri(self) -> str:
+        return _convert(self.uri, str)
 
 
 # --- Source ----------------------------------------------------------

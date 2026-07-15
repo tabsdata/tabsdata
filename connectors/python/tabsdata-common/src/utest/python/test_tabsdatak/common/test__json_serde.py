@@ -261,12 +261,15 @@ def test_env_hydrate_reads_prefixed_env_vars(monkeypatch):
     assert out["spec"] == {"password": "secret:hunter2", "token": "secret:etl"}
 
 
-def test_env_hydrate_leaves_inline_literals_untouched(monkeypatch):
+def test_env_hydrate_rejects_inline_plaintext_secret(monkeypatch):
+    # A stored/dehydrated doc must carry only the ``":secret:"`` placeholder;
+    # a leaf still holding a value (``"secret:<value>"``) is a plaintext secret
+    # and is rejected.
     monkeypatch.setenv("SECRET_CONN__TOKEN", "from-env")
     data = _wrap({"token": _secret(None), "pw": _secret("keepme")})
-    out = env_hydrate(data)
-    assert out["spec"]["token"] == "secret:from-env"
-    assert out["spec"]["pw"] == "secret:keepme"
+    with pytest.raises(CommonRuntimeException) as exc_info:
+        env_hydrate(data)
+    assert exc_info.value.api_error is CommonErrorCode.COMMON_13
 
 
 def test_env_hydrate_raises_on_missing_env(monkeypatch):

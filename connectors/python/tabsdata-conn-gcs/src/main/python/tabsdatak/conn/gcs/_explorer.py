@@ -45,16 +45,16 @@ class GCSConnectionExplorer(Explorer):
         client = _storage_client(conn)
         # A bounded object list proves auth + bucket reachability using only
         # object-level access (``storage.objects.list``).
-        blobs = client.list_blobs(_convert(conn.bucket, str), max_results=1)
+        blobs = client.list_blobs(conn._bucket(), max_results=1)
         next(iter(blobs), None)
 
     def metadata(self, conn: GCSConn) -> list[FileStorageEntity]:
-        bucket = _convert(conn.bucket, str)
+        bucket = conn._bucket()
         # base_path is a FullPathSpec (leading "/"); the GCS list prefix
         # wants no leading "/" and a trailing "/", so normalize it
         # (root "/" -> "" -> list the whole bucket).
         prefix = normalize_dir_path(
-            _convert(conn.base_path, str), lead_separator=False, back_separator=True
+            conn._base_path(), lead_separator=False, back_separator=True
         )
         # ``bucket`` holds the raw bucket name and ``prefix`` the object's
         # full key directory (which already includes base_path), so the
@@ -87,7 +87,7 @@ class GCSConnectionExplorer(Explorer):
         if entity.file is None:
             return []
         fmt = (entity.file.format or "").lower()
-        bucket = entity.bucket or _convert(conn.bucket, str)
+        bucket = entity.bucket or conn._bucket()
         key = (
             f"{entity.prefix}/{entity.file.pattern}"
             if entity.prefix
@@ -116,7 +116,7 @@ def _storage_client(conn: GCSConn):
         payload = json.loads(raw) if raw else {}
         if payload:
             creds = service_account.Credentials.from_service_account_info(payload)
-    project = _convert(conn.project, str) if conn.project is not None else None
+    project = conn._project()
     return storage.Client(project=project or None, credentials=creds)
 
 

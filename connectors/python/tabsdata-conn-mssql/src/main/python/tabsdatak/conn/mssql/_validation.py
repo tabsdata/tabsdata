@@ -14,8 +14,8 @@ from tabsdatak.conn.common._validation import FqnDef, name_validate
 #   ``DRIVER={...};SERVER=...;DATABASE=...``. The adapter wraps it
 #   as ``mssql+pyodbc:///?odbc_connect=<urlencoded>``.
 #
-# Pure-regex form used as ``value_pattern`` on Secret subclasses
-# and as ``StringConstraints`` on the bare-str branch of ``UriSpec``.
+# Pattern gating ``UriSpec`` via ``StrOrSecretConstraints`` -- enforced on
+# a plain-string URI and on a ``Secret``'s hydrated URI value alike.
 MSSQL_URI_PATTERN = r"(?i)^(?:(?:mssql(?:\+[a-z0-9]+)?://.*|[A-Za-z][A-Za-z0-9 ]*=.+))$"
 # --- Table FQN ------------------------------------------------------
 

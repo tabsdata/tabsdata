@@ -9,9 +9,6 @@ from typing import TypeAlias
 from sqlalchemy import engine, make_url as sa_make_url
 
 from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.db2 import Db2DestConn, Db2SrcConn
 
 # Either Db2 connection flavour -- source or destination.
@@ -31,7 +28,7 @@ class Db2ConnectionExplorer(SqlAlchemyConnectionExplorer):
         return "SELECT 1 FROM SYSIBM.SYSDUMMY1"
 
     def schema_filter(self, conn: Db2Conn) -> str | None:
-        src = sa_make_url(_convert(conn.uri, str))
+        src = sa_make_url(conn._uri())
         cur = src.query.get("currentSchema") or src.query.get("CurrentSchema")
         if cur:
             return (cur[0] if isinstance(cur, (list, tuple)) else cur).upper()
@@ -52,7 +49,7 @@ class Db2ConnectionExplorer(SqlAlchemyConnectionExplorer):
         })
 
     def make_url(self, conn: Db2Conn) -> engine.URL:
-        src = sa_make_url(_convert(conn.uri, str))
+        src = sa_make_url(conn._uri())
         user = password = ""
         if conn.credentials is not None:
             user = conn.credentials.user.value()

@@ -40,7 +40,7 @@ from tabsdatak.conn.common.file.typing_ import (
     SrcFormatCfgSpec,
     SrcPathsSpec,
 )
-from tabsdatak.conn.common.types import CfgSpec, FullPathSpec
+from tabsdatak.conn.common.types import CfgSpec, FullPathSpec, _convert
 from tabsdatak.conn.localfile.error import LocalFileErrorCode
 from tabsdatak.spi import Conn
 
@@ -75,6 +75,9 @@ class LocalFileSrcConn(Conn):
     base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
 
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
+
 
 @_api.dataclass(LocalFileErrorCode.LOCALFILE_1, kw_only=True)
 class LocalFileDestConn(Conn):
@@ -87,6 +90,9 @@ class LocalFileDestConn(Conn):
 
     base_path: FullPathSpec = "/"
     conn_cfg: CfgSpec | None = None
+
+    def _base_path(self) -> str:
+        return _convert(self.base_path, str)
 
 
 # --- Source ---------------------------------------------------------
