@@ -2,11 +2,12 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Mint-at-dispatch: mint FR + output TDV placeholders for each ready
-//! LFR and bind the LFR/LTDV pointers to the freshly-minted ids in one
-//! transaction. Every DB read is hoisted to a chunked fetch before the
-//! per-LFR loop; FR and TDV rows are bulk-inserted; only the
-//! pointer-event appends remain per-row.
+//! Mint-at-dispatch: mint FR + output TDV placeholders for each ready LFR in
+//! one transaction. A first dispatch (pointer `Pending`) also binds the
+//! LFR/LTDV pointers to the minted ids; a re-run (recover — pointer `Bound`)
+//! skips the bind and lets `redirect_pointers_at_finish` rebind on success,
+//! as replay does. DB reads are hoisted to chunked fetches before the per-LFR
+//! loop; FR and TDV rows are bulk-inserted; only pointer appends stay per-row.
 
 use crate::function::layers::topology::{RunnableVersion, latest_patch_or_head_batch};
 use crate::logical::layers::mint::{build_function_run, build_output_table_data_versions};
@@ -22,7 +23,8 @@ use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
-    AtTime, FunctionVersionId, LogicalFunctionRunId, LogicalTableDataVersionId, UserId,
+    AtTime, FunctionVersionId, LogicalFunctionRunId, LogicalPointerStatus,
+    LogicalTableDataVersionId, UserId,
 };
 use td_queries::{ChunkedQueries, LfrEntry, LtdvEntry, VersionedEntry};
 use td_tower::extractors::{MutRef, Ref};
@@ -209,51 +211,62 @@ pub async fn mint_function_runs_on_dispatch(
                 lfr.id
             )
         })?;
-        conn.lfr()
-            .pointers()
-            .bind_with_known_state(
-                &lfr.project_id,
-                &lfr.id,
-                &fr.id,
-                latest_lfr,
-                at.deref(),
-                &by,
-            )
-            .await?;
-
-        for tdv in &tdvs {
-            let ltdv = ltdvs_all
-                .iter()
-                .find(|f| {
-                    f.producer_logical_function_run_id.as_ref() == Some(&lfr.id)
-                        && f.table_id == tdv.table_id
-                })
-                .ok_or_else(|| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "no LTDV for LFR {} table {} during mint+bind",
-                        lfr.id,
-                        tdv.table_id
-                    )
-                })?;
-            let latest_ltdv = latest_ltdv_by_id.get(&ltdv.id).ok_or_else(|| {
-                api_error!(
-                    ApiError::InternalError,
-                    "no LTDV pointer event for {} at dispatch",
-                    ltdv.id
-                )
-            })?;
-            conn.ltdv()
+        // A re-run (recover) has a Bound pointer: defer the rebind to
+        // redirect_pointers_at_finish on success, as replay does. Binding here
+        // would hit bind_with_known_state's Bound→different refusal.
+        if matches!(latest_lfr.status, LogicalPointerStatus::Bound) {
+            debug!(
+                lfr_id = %lfr.id,
+                fr_id = %fr.id,
+                "scheduler.dispatch: re-run of bound LFR — deferring pointer rebind to redirect_at_finish"
+            );
+        } else {
+            conn.lfr()
                 .pointers()
                 .bind_with_known_state(
-                    &ltdv.project_id,
-                    &ltdv.id,
-                    &tdv.id,
-                    latest_ltdv,
+                    &lfr.project_id,
+                    &lfr.id,
+                    &fr.id,
+                    latest_lfr,
                     at.deref(),
                     &by,
                 )
                 .await?;
+
+            for tdv in &tdvs {
+                let ltdv = ltdvs_all
+                    .iter()
+                    .find(|f| {
+                        f.producer_logical_function_run_id.as_ref() == Some(&lfr.id)
+                            && f.table_id == tdv.table_id
+                    })
+                    .ok_or_else(|| {
+                        api_error!(
+                            ApiError::InternalError,
+                            "no LTDV for LFR {} table {} during mint+bind",
+                            lfr.id,
+                            tdv.table_id
+                        )
+                    })?;
+                let latest_ltdv = latest_ltdv_by_id.get(&ltdv.id).ok_or_else(|| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "no LTDV pointer event for {} at dispatch",
+                        ltdv.id
+                    )
+                })?;
+                conn.ltdv()
+                    .pointers()
+                    .bind_with_known_state(
+                        &ltdv.project_id,
+                        &ltdv.id,
+                        &tdv.id,
+                        latest_ltdv,
+                        at.deref(),
+                        &by,
+                    )
+                    .await?;
+            }
         }
 
         output.push(MintedDispatch {
@@ -286,8 +299,8 @@ mod tests {
     use td_objects::dxo::logical::LogicalPointerDao;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus, ProjectId,
-        TableNameDto, TransactionKey, UserId,
+        LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,
+        PhysicalFunctionRunId, ProjectId, TableNameDto, TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -448,6 +461,88 @@ mod tests {
         }
         // Distinct, sanity check the two branches actually diverged.
         assert_ne!(override_base, coll_base);
+        Ok(())
+    }
+
+    /// Seed a function + Scheduled PFR whose LFR pointer is left `Bound` to that
+    /// seeded PFR — an identity that already ran (the recover re-run case).
+    /// Returns the LFR and the id of the PFR its pointer is bound to.
+    async fn seed_bound_lfr(
+        db: &TdPool,
+        collection: &CollectionDB,
+        name: &str,
+    ) -> Result<(LogicalFunctionRunDB, PhysicalFunctionRunId), TdError> {
+        let create = FunctionRegister::builder()
+            .try_name(name)?
+            .try_description("d")?
+            .bundle_id(BundleId::default())
+            .try_snippet("s")?
+            .decorator(Decorator::Publisher)
+            .base_path(None)
+            .dependencies(None)
+            .triggers(None)
+            .tables(Some(vec![TableNameDto::try_from("t0")?]))
+            .runtime_values(FunctionRuntimeValues::try_from("rv")?)
+            .reuse_frozen_tables(false)
+            .build()?;
+        let func = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .function(collection, &create)
+            .await?;
+        let exec = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .execution(&func)
+            .await?;
+        let txn = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .transaction(&exec, &TransactionKey::try_from("ANY")?)
+            .await?;
+        let pfr = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .physical_function_run(
+                collection,
+                &func,
+                &exec,
+                &txn,
+                &LogicalFunctionRunStatus::Scheduled,
+            )
+            .await?;
+        let lfr = db
+            .live()
+            .fetch_one::<LogicalFunctionRunDB>(and!(&pfr.execution_id, &pfr.function_id))
+            .await?;
+        // No Pending append (unlike seed_dispatch_lfr): the pointer stays Bound
+        // to `pfr`, so the mint loop sees an already-run identity.
+        Ok((lfr, pfr.id))
+    }
+
+    /// Recover re-run (LFR pointer already Bound): mint must succeed without
+    /// rebinding — pre-fix the eager bind made this Err (the recover deadlock).
+    #[td_test::test(db)]
+    async fn test_dispatch_rerun_of_bound_lfr_does_not_rebind(db: TdPool) -> Result<(), TdError> {
+        let coll = db
+            .scoped(ProjectId::sandbox())
+            .seed()
+            .collection(&CollectionName::try_from("c0")?, &UserId::admin())
+            .await?;
+        let (lfr, bound_pfr) = seed_bound_lfr(&db, &coll, "fr").await?;
+
+        let conn = MutRef::new(DomainConnection::ready(
+            db.begin().await.unwrap().into_connection(),
+        ));
+        let ready = Ref::new(vec![lfr.clone()]);
+        let at = Ref::new(AtTime::now());
+        let minted = mint_function_runs_on_dispatch(conn, ready, at).await?;
+
+        assert_eq!(minted.len(), 1, "the bound LFR is re-minted");
+        assert_ne!(
+            minted[0].fr.id, bound_pfr,
+            "re-run mints a NEW PFR, distinct from the one the pointer is bound to"
+        );
         Ok(())
     }
 }

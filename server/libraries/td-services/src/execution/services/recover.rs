@@ -42,7 +42,8 @@ fn service() {
         from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
         from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
-        // Set recover status
+        // Set recover status (ReScheduled). Dispatch re-mints per LFR; already-run
+        // (Bound) LFRs rebind at redirect_pointers_at_finish, not at dispatch.
         from_fn(UpdateLogicalFunctionRunDB::recover),
         // Update function requirements status
         from_fn(update_function_run_status),
