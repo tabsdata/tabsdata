@@ -114,7 +114,7 @@ const VERSION_PATTERN: &str = concat!(
     "|HEAD~(?<head_minus>[0-9]{1,7})",
     "|INITIAL(?<initial_forward>\\^{0,10})",
     "|INITIAL~(?<initial_plus>[0-9]{1,7})",
-    "|(?<id>([A-Z0-9]{26}|[0-9]{8}[A-Z]{1,3}[0-9]{1,10}))",
+    "|(?<id>([A-Za-z0-9]{26}|[0-9]{8}[A-Za-z]{1,3}[0-9]{1,10}))",
     ")$"
 );
 
@@ -153,7 +153,7 @@ pub fn parse_version(s: impl Into<String>) -> Result<Version, TdError> {
 }
 
 const UNNAMED_VERSION_PATTERN: &str =
-    "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})|INITIAL(\\^{0,10})|INITIAL(\\~[0-9]{1,7})|[A-Z0-9]{26})";
+    "(HEAD(\\^{0,10})|HEAD(~[0-9]{1,7})|INITIAL(\\^{0,10})|INITIAL(\\~[0-9]{1,7})|[A-Za-z0-9]{26})";
 const NEW_VERSION_PATTERN: &str = "NEW";
 const VERSIONS_PATTERN: &str = concat!(
     "(?<new>",

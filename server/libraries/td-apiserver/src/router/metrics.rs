@@ -390,7 +390,7 @@ mod routes {
             use axum::http::Uri;
             // Enums use the lowercased-ident aliases (`group`, `done`, ...).
             let uri: Uri = "/snapshot?dim=group&unit=hour\
-                &collection=00000000000000000000000C00&collection=00000000000000000000000C00\
+                &collection=00000000000000000000000c00&collection=00000000000000000000000c00\
                 &status=done&status=failed&inflight_status=running"
                 .parse()
                 .unwrap();

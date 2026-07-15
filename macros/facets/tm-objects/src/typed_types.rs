@@ -829,6 +829,8 @@ pub fn typed_idlogic(input: &ItemStruct, typed: TypedIdL) -> proc_macro2::TokenS
     let name = &input.ident;
     let gen_var = format_ident!("{}_GENERATOR", name.to_string().to_uppercase());
     let key = &typed.key;
+    // The logical ID prefix is always lowercase, regardless of the key's struct-tag casing.
+    let key_str = quote!(#key).to_string().to_ascii_lowercase();
     let uninit_msg = format!(
         "{name} generator not initialised — call {name}::init() at startup before generating IDs"
     );
@@ -844,7 +846,7 @@ pub fn typed_idlogic(input: &ItemStruct, typed: TypedIdL) -> proc_macro2::TokenS
         pub struct #key;
 
         impl td_common::logic_id::KeyId for #key {
-            fn key() -> &'static str { stringify!(#key) }
+            fn key() -> &'static str { #key_str }
         }
 
         #(#attrs)*

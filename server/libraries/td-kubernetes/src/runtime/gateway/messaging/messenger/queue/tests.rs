@@ -116,7 +116,7 @@ fn stream_publisher_start_routes_by_worker_name() {
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
                 connection_id: None,
-                function_version_id: FunctionVersionId::try_from("FV20260101.0000000001").unwrap(),
+                function_version_id: FunctionVersionId::try_from("fv20260101-0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
             }),
         );
@@ -173,7 +173,7 @@ fn cron_publisher_start_routes_by_worker_name() {
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
                 connection_id: None,
-                function_version_id: FunctionVersionId::try_from("FV20260101.0000000001").unwrap(),
+                function_version_id: FunctionVersionId::try_from("fv20260101-0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
                 schedule: CronMask::try_from("* * * * *").unwrap(),
             },

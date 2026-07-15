@@ -90,13 +90,14 @@ impl TryFrom<&String> for Id {
 impl TryFrom<&str> for Id {
     type Error = IdError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        let input = s.as_bytes();
-        if input.len() != ID_LENGTH {
-            return Err(IdError::InvalidBase32HexValue(input.len()));
+        if s.len() != ID_LENGTH {
+            return Err(IdError::InvalidBase32HexValue(s.len()));
         }
+        // The string representation is lowercase, but decoding accepts either case.
+        let input = s.to_ascii_uppercase();
         let mut bytes = vec![0; 16];
         BASE32HEX_NOPAD
-            .decode_mut(s.as_bytes(), &mut bytes)
+            .decode_mut(input.as_bytes(), &mut bytes)
             .map_err(|_| IdError::InvalidStringRepresentation(s.to_string()))?;
         Ok(Id(bytes.as_slice()[..16].try_into().unwrap()))
     }
@@ -104,7 +105,11 @@ impl TryFrom<&str> for Id {
 
 impl Display for Id {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", BASE32HEX_NOPAD.encode(&self.0))
+        write!(
+            f,
+            "{}",
+            BASE32HEX_NOPAD.encode(&self.0).to_ascii_lowercase()
+        )
     }
 }
 
@@ -222,12 +227,12 @@ mod tests {
     #[test]
     fn test_default_ids() {
         for (b, s) in DEFAULT_IDS.iter().zip(DEFAULT_ENCODED_IDS.iter()) {
-            let encoded = BASE32HEX_NOPAD.encode(b);
+            let encoded = BASE32HEX_NOPAD.encode(b).to_ascii_lowercase();
             assert_eq!(&encoded, s);
 
             let mut decoded = vec![0; 16];
             BASE32HEX_NOPAD
-                .decode_mut(s.as_bytes(), &mut decoded)
+                .decode_mut(s.to_ascii_uppercase().as_bytes(), &mut decoded)
                 .map_err(|_| IdError::InvalidStringRepresentation(s.to_string()))
                 .unwrap();
             assert_eq!(&decoded, b);

@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn test_list_by_tdv_query_sql() {
-        let tdv_id = Some(PhysicalTableDataVersionId::try_from("PDV20260101.0000000001").unwrap());
+        let tdv_id = Some(PhysicalTableDataVersionId::try_from("pdv20260101-0000000001").unwrap());
         let sql = list_by_tdv_query(&tdv_id).to_string(SqliteQueryBuilder);
         assert!(sql.contains("EXISTS"), "should use EXISTS subquery: {sql}");
         assert!(
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn test_list_by_fv_query_sql() {
-        let fv_id = FunctionVersionId::try_from("FV20260101.0000000001").unwrap();
+        let fv_id = FunctionVersionId::try_from("fv20260101-0000000001").unwrap();
         let sql = list_by_fv_query(&fv_id).to_string(SqliteQueryBuilder);
         assert!(sql.contains("EXISTS"), "should use EXISTS subquery: {sql}");
         assert!(

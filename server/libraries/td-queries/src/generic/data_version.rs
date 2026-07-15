@@ -411,15 +411,15 @@ mod tests {
     });
 
     static DV_1: LazyLock<LogicalTableDataVersionId> =
-        LazyLock::new(|| LogicalTableDataVersionId::try_from("LDV20260101.0000000001").unwrap());
+        LazyLock::new(|| LogicalTableDataVersionId::try_from("ldv20260101-0000000001").unwrap());
     static DV_2: LazyLock<LogicalTableDataVersionId> =
-        LazyLock::new(|| LogicalTableDataVersionId::try_from("LDV20260101.0000000002").unwrap());
+        LazyLock::new(|| LogicalTableDataVersionId::try_from("ldv20260101-0000000002").unwrap());
     static DV_3: LazyLock<LogicalTableDataVersionId> =
-        LazyLock::new(|| LogicalTableDataVersionId::try_from("LDV20260101.0000000003").unwrap());
+        LazyLock::new(|| LogicalTableDataVersionId::try_from("ldv20260101-0000000003").unwrap());
     static _DV_4: LazyLock<LogicalTableDataVersionId> =
-        LazyLock::new(|| LogicalTableDataVersionId::try_from("LDV20260101.0000000004").unwrap());
+        LazyLock::new(|| LogicalTableDataVersionId::try_from("ldv20260101-0000000004").unwrap());
     static DV_5: LazyLock<LogicalTableDataVersionId> =
-        LazyLock::new(|| LogicalTableDataVersionId::try_from("LDV20260101.0000000005").unwrap());
+        LazyLock::new(|| LogicalTableDataVersionId::try_from("ldv20260101-0000000005").unwrap());
 
     // --- Versions::None ---
 
@@ -748,7 +748,7 @@ mod tests {
 
     #[td_test::test(db(crate::fixtures::DataVersion))]
     async fn test_relative_offset_nonexistent(db: TdPool) -> Result<(), TdError> {
-        let nonexistent = LogicalTableDataVersionId::try_from("LDV20260101.9999999999")?;
+        let nonexistent = LogicalTableDataVersionId::try_from("ldv20260101-9999999999")?;
         let r = (&db)
             .versioned(ON.deref())
             .data_version(P0.deref())
@@ -845,7 +845,7 @@ mod tests {
 
         #[test]
         fn test_version_condition_single_fixed() {
-            let dv = LogicalTableDataVersionId::try_from("LDV20260101.0000000002").unwrap();
+            let dv = LogicalTableDataVersionId::try_from("ldv20260101-0000000002").unwrap();
             let cond =
                 version_condition::<TestDvDao>(&Versions::Single(Version::Fixed(dv))).unwrap();
             let sql = Query::select()
@@ -854,7 +854,7 @@ mod tests {
                 .cond_where(cond)
                 .to_string(SqliteQueryBuilder);
             assert!(
-                sql.contains(r#""id" = 'LDV20260101.0000000002'"#),
+                sql.contains(r#""id" = 'ldv20260101-0000000002'"#),
                 "Fixed version should match id: {sql}"
             );
         }

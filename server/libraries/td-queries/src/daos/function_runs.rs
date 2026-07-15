@@ -1053,8 +1053,8 @@ mod tests {
     #[test]
     fn test_fetch_to_commit_query_sql() {
         let ids = vec![
-            ExecutionId::try_from("EP20260101.0000000001").unwrap(),
-            ExecutionId::try_from("EP20260101.0000000002").unwrap(),
+            ExecutionId::try_from("ep20260101-0000000001").unwrap(),
+            ExecutionId::try_from("ep20260101-0000000002").unwrap(),
         ];
         let sql = fetch_ids_to_commit_query(&ids).to_string(SqliteQueryBuilder);
         assert!(sql.starts_with("WITH"), "should be a WITH query: {sql}");
@@ -1225,7 +1225,7 @@ mod tests {
 
     #[test]
     fn test_blocked_ids_query_sql() {
-        let eid = ExecutionId::try_from("EP20260101.0000000001").unwrap();
+        let eid = ExecutionId::try_from("ep20260101-0000000001").unwrap();
         let at = AtTime::now();
         let sql = blocked_ids_query(&eid, &at).to_string(SqliteQueryBuilder);
         assert!(sql.contains("SELECT DISTINCT"), "should be distinct: {sql}");
@@ -1253,7 +1253,7 @@ mod tests {
 
     #[test]
     fn test_in_flight_query_sql() {
-        let exec = ExecutionId::try_from("EP20260101.0000000001").unwrap();
+        let exec = ExecutionId::try_from("ep20260101-0000000001").unwrap();
         let func = FunctionId::default();
         let sql = fetch_in_flight_pfr_query(&exec, &func).to_string(SqliteQueryBuilder);
         assert!(

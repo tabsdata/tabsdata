@@ -515,7 +515,7 @@ mod tests {
     /// `CollectionId::default()` mints a new id per call; tests need
     /// a stable id so fold keys collapse.
     fn fixed_collection_id() -> CollectionId {
-        CollectionId::try_from("00000000000000000000000C00").unwrap()
+        CollectionId::try_from("00000000000000000000000c00").unwrap()
     }
 
     /// Stable group id for the synthetic rows (same rationale as

@@ -110,8 +110,8 @@ impl Entity for Defs {
         // (all system + manage-all-projects) and default (auto-assigned to every
         // user). Built-in system roles are additive, not mutually exclusive.
         let assignments = [
-            ("0000000000000000000000000K", ADMIN_USER_NAME, "sys_admin"),
-            ("0000000000000000000000000O", ADMIN_USER_NAME, "default"),
+            ("0000000000000000000000000k", ADMIN_USER_NAME, "sys_admin"),
+            ("0000000000000000000000000o", ADMIN_USER_NAME, "default"),
         ];
 
         assignments

@@ -113,8 +113,8 @@ impl Entity for Defs {
         // system roles (per-project roles carry a project_id, but none are seeded).
         let role_inserts = [
             ("00000000000000000000000008", "sys_admin", "System Administrator Role", "sys_admin"),
-            ("0000000000000000000000000G", "default", "Default Role", "default"),
-            ("0000000000000000000000020O", "project_creator", "Project Creator Role", "project_creator"),
+            ("0000000000000000000000000g", "default", "Default Role", "default"),
+            ("0000000000000000000000020o", "project_creator", "Project Creator Role", "project_creator"),
         ];
 
         role_inserts
