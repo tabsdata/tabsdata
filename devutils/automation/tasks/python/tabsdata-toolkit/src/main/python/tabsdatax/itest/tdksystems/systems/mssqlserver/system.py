@@ -84,6 +84,9 @@ class MssqlSystem(ContainerBase):
         )
 
     def do_delete(self, admin: AdminConn, name: str) -> None:
+        if name not in self.do_list(admin):
+            return  # database already gone — idempotent (ALTER DATABASE on a
+            # missing db raises Msg 911, and DROP DATABASE has no IF EXISTS here)
         self._run_admin_sql(
             admin,
             [
