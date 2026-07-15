@@ -129,6 +129,18 @@ def _write_database_options(connection: Connection) -> dict[str, Any]:
     return {}
 
 
+def _drop_table_if_exists(connection: Connection, table: str) -> None:
+    from sqlalchemy import MetaData, Table
+
+    # Mirror polars.write_database's [schema.]table unpacking so the DROP targets
+    # the same identifier polars/pandas would CREATE. `checkfirst` uses the
+    # dialect's has_table (identifier-aware) rather than MetaData.reflect, so it
+    # never raises Oracle's "requested table(s) not available".
+    *prefix, name = table.split(".")
+    schema = prefix[-1] if prefix else None
+    Table(name, MetaData(), schema=schema).drop(bind=connection, checkfirst=True)
+
+
 def _polars_write(
     *,
     connection: Connection,
@@ -142,6 +154,15 @@ def _polars_write(
 
     pf = pq.ParquetFile(parquet_file)
     options = _write_database_options(connection)
+    # Create-on-write for 'replace': drop the target up front, then always
+    # append. pandas' own 'replace' reflects the existing table before dropping
+    # it, which fails on Oracle -- its identifier normalize/denormalize asymmetry
+    # makes the reflect's name-membership check miss the table ("requested
+    # table(s) not available"). Dropping via has_table (checkfirst) avoids the
+    # reflect, and appending create-on-writes exactly like the other dialects.
+    if if_table_exists == "replace":
+        _drop_table_if_exists(connection, table)
+        if_table_exists = "append"
     wrote_any = False
     for batch in pf.iter_batches(batch_size=chunk_size):
         df = cast(DataFrame, pl.from_arrow(batch))

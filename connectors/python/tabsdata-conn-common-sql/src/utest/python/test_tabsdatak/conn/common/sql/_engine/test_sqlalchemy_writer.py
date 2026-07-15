@@ -123,6 +123,34 @@ def test_polars_replace_drops_existing_rows(db_path, work_dir):
         engine.dispose()
 
 
+def test_polars_replace_does_not_reflect_the_table(db_path, work_dir, monkeypatch):
+    # Regression for the Oracle "Could not reflect: requested table(s) not
+    # available" flake: 'replace' must drop + append (create-on-write) and never
+    # reflect the existing table (pandas' native 'replace' path does).
+    import sqlalchemy
+
+    reflected: list = []
+    monkeypatch.setattr(
+        sqlalchemy.MetaData, "reflect", lambda self, *a, **k: reflected.append(k)
+    )
+    src = _make_parquet(work_dir / "r.parquet", [{"id": 1, "name": "x"}])
+    # An existing table ('users', pre-created by the fixture) ...
+    saw.PolarsWriteEngine().write(_cfg(db_path, if_table_exists="replace"), [src])
+    # ... and a table that does not exist yet (must create-on-write, not fail).
+    saw.PolarsWriteEngine().write(
+        _cfg(db_path, target_tables=["brand_new"], if_table_exists="replace"), [src]
+    )
+    assert reflected == []
+    engine = create_engine(sqlite_uri(db_path))
+    try:
+        with engine.connect() as conn:
+            assert (
+                conn.execute(text("SELECT COUNT(*) FROM brand_new")).scalar_one() == 1
+            )
+    finally:
+        engine.dispose()
+
+
 def test_polars_replace_chunked_does_not_truncate_itself(db_path, work_dir):
     # Multi-chunk replace: first batch replaces, subsequent batches
     # must append -- otherwise batch N+1 wipes batch N. Drive
