@@ -1,7 +1,8 @@
+import contextlib
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Iterable, Literal, cast
+from typing import Any, Callable, Iterable, Iterator, Literal, cast
 
 from polars import DataFrame
 from sqlalchemy import Connection
@@ -112,13 +113,54 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
         logger.info("sql-writer: finished writing %d table(s)", total)
 
 
+@contextlib.contextmanager
+def _unmasked_ibm_db_errors() -> Iterator[None]:
+    """Stop ibm_db from masking a failed executemany's real error.
+
+    When ``ibm_db_dbi.Cursor.executemany`` fails, its except handler calls
+    ``_set_rowcount()`` -> ``ibm_db.num_rows()`` on the already-failed statement
+    handle. That itself raises ``CLI0125E`` ("Function sequence error", SQLSTATE
+    HY010) -- and, being raised from the except block *before* the original error
+    is re-raised, it REPLACES the real error (e.g. a binding error) with a
+    meaningless ``CLI0125E``. So every DB2 executemany failure surfaces the
+    driver's cleanup crash instead of its cause.
+
+    Neutralize ``_set_rowcount``'s own failure for the duration of the write so
+    the driver re-raises the original error. It resets the rowcount to ``-1``
+    before the ``num_rows`` read, and DB2 rowcounts are never consumed here (see
+    :func:`_insert_without_rowcount`), so swallowing that read is harmless.
+    """
+    try:
+        import ibm_db_dbi
+    except ImportError:
+        yield
+        return
+
+    cursor_cls = ibm_db_dbi.Cursor
+    original = cursor_cls._set_rowcount
+
+    def _guarded(self):
+        try:
+            return original(self)
+        except Exception:
+            return True
+
+    cursor_cls._set_rowcount = _guarded
+    try:
+        yield
+    finally:
+        cursor_cls._set_rowcount = original
+
+
 def _insert_without_rowcount(pd_table, conn, keys, data_iter) -> None:
     # ibm_db raises CLI0125E "Function sequence error" (SQLSTATE HY010) when
     # cursor.rowcount is read after an executemany INSERT. Mirror pandas' default
     # insert (SQLTable._execute_insert) but skip the rowcount read; pandas
-    # tolerates a None return.
+    # tolerates a None return. The unmask guard keeps a *failed* executemany from
+    # reporting the same CLI0125E in place of its real cause.
     data = [dict(zip(keys, row)) for row in data_iter]
-    conn.execute(pd_table.table.insert(), data)
+    with _unmasked_ibm_db_errors():
+        conn.execute(pd_table.table.insert(), data)
 
 
 def _write_database_options(connection: Connection) -> dict[str, Any]:
@@ -127,6 +169,44 @@ def _write_database_options(connection: Connection) -> dict[str, Any]:
     if connection.dialect.name == "ibm_db_sa":
         return {"engine_options": {"method": _insert_without_rowcount}}
     return {}
+
+
+# (max_precision, max_scale) per SQLAlchemy dialect for DECIMAL/NUMERIC. Arrow
+# decimal128 sources carry precision <= 38; DB2 (31) and MySQL (scale 30) are the
+# only targets below that, so a faithful map would emit an invalid DDL there.
+_DECIMAL_MAX: dict[str, tuple[int, int]] = {
+    "ibm_db_sa": (31, 31),
+    "oracle": (38, 38),
+    "mssql": (38, 38),
+    "mysql": (65, 30),
+    "postgresql": (1000, 1000),
+}
+
+
+def _decimal_dtype_overrides(connection: Connection, arrow_schema) -> dict:
+    # pandas' create-on-write does not map an Arrow decimal column to a numeric
+    # column (on DB2 it lands as CLOB, so the bulk INSERT can't bind the Decimal
+    # values). Force every decimal column to SQLAlchemy Numeric so the table is
+    # created as DECIMAL(precision, scale). Precision/scale are clamped to the
+    # target's maximum (see _DECIMAL_MAX) -- a stopgap that keeps writes working
+    # where the source precision exceeds the engine's limit (e.g. decimal(38,10)
+    # -> DECIMAL(31,10) on DB2), pending a fuller Arrow -> SQLAlchemy type map.
+    limits = _DECIMAL_MAX.get(connection.dialect.name)
+    if limits is None:
+        return {}
+    import pyarrow as pa
+    from sqlalchemy import Numeric
+
+    max_precision, max_scale = limits
+    overrides: dict[str, Any] = {}
+    for field in arrow_schema:
+        if not pa.types.is_decimal(field.type):
+            continue
+        precision = min(field.type.precision, max_precision)
+        # Scale can exceed neither the clamped precision nor the engine's max.
+        scale = min(field.type.scale, max_scale, precision)
+        overrides[field.name] = Numeric(precision, scale)
+    return overrides
 
 
 def _drop_table_if_exists(connection: Connection, table: str) -> None:
@@ -154,6 +234,10 @@ def _polars_write(
 
     pf = pq.ParquetFile(parquet_file)
     options = _write_database_options(connection)
+    # Force decimal columns to a (clamped) DECIMAL on create, across dialects.
+    _dtype = _decimal_dtype_overrides(connection, pf.schema_arrow)
+    if _dtype:
+        options.setdefault("engine_options", {})["dtype"] = _dtype
     # Create-on-write for 'replace': drop the target up front, then always
     # append. pandas' own 'replace' reflects the existing table before dropping
     # it, which fails on Oracle -- its identifier normalize/denormalize asymmetry

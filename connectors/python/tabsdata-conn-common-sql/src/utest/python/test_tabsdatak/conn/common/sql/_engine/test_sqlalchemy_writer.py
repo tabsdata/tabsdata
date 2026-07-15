@@ -370,3 +370,55 @@ def test_insert_without_rowcount_skips_rowcount_read():
     out = saw._insert_without_rowcount(pd_table, conn, ["id"], iter([(1,), (2,)]))
     assert out is None
     conn.execute.assert_called_once()
+
+
+def test_unmasked_ibm_db_errors_surfaces_the_real_error(monkeypatch):
+    # Fake ibm_db_dbi.Cursor reproducing the driver's masking: a failed
+    # executemany runs _set_rowcount() in its except block, which itself raises
+    # CLI0125E and thereby replaces the original error.
+    import sys
+    import types
+
+    class _Cursor:
+        def _set_rowcount(self):
+            raise RuntimeError("CLI0125E Function sequence error (HY010)")
+
+        def executemany(self):
+            try:
+                raise ValueError("REAL binding error")
+            except Exception as inst:
+                self._set_rowcount()  # driver masks the real error here
+                raise inst  # reached only when _set_rowcount does not raise
+
+    fake = types.ModuleType("ibm_db_dbi")
+    fake.Cursor = _Cursor
+    monkeypatch.setitem(sys.modules, "ibm_db_dbi", fake)
+
+    # Unguarded: the cleanup crash (CLI0125E) masks the real cause.
+    with pytest.raises(RuntimeError, match="CLI0125E"):
+        _Cursor().executemany()
+
+    # Guarded: _set_rowcount's own failure is neutralized, so the real error wins.
+    with saw._unmasked_ibm_db_errors():
+        with pytest.raises(ValueError, match="REAL binding error"):
+            _Cursor().executemany()
+
+    # ...and the driver method is restored on exit.
+    with pytest.raises(RuntimeError, match="CLI0125E"):
+        _Cursor().executemany()
+
+
+def test_unmasked_ibm_db_errors_noop_without_driver(monkeypatch):
+    # When ibm_db_dbi is not installed, the guard is a transparent no-op.
+    import builtins
+
+    real_import = builtins.__import__
+
+    def _no_ibm_db(name, *args, **kwargs):
+        if name == "ibm_db_dbi":
+            raise ImportError("no ibm_db_dbi")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _no_ibm_db)
+    with saw._unmasked_ibm_db_errors():
+        pass  # must not raise
