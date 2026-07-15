@@ -121,6 +121,7 @@ from . import (
     crypto,
     data_gen,
     descriptor,
+    dispatch,
     manifest,
     secret,
     ssh,
@@ -305,74 +306,158 @@ def _system_meta_from_domain(meta: dict[str, str]) -> dict[str, str]:
 # returns 0 iff every target succeeded.
 
 
-def _report_created_batch(kind: str, results: list[tuple[str, str, bool, str]]) -> int:
-    """Per-item + summary report for an `--auto` create. Each result is
-    (name, type, ok, detail)."""
-    print()
+def _report_created_batch(
+    kind: str, results: list[tuple[str, str, bool, str]], *, quiet: bool = False
+) -> int:
+    """Summary (and, unless `quiet`, per-item) report for an `--auto` create. Each
+    result is (name, type, ok, detail). `quiet` skips the per-item lines when the
+    caller has already streamed them live via `_progress`."""
     if not results:
+        print()
         print(f">>> no {kind}s to create")
         print()
         return 0
     ok_n = sum(1 for r in results if r[2])
-    for name, typ, ok, detail in results:
-        line = f"  {'ok  ' if ok else 'FAIL'}  {name} ({typ})"
-        if detail:
-            line += f": {detail}"
-        print(line)
+    if not quiet:
+        print()
+        for name, typ, ok, detail in results:
+            line = f"  {'ok  ' if ok else 'FAIL'}  {name} ({typ})"
+            if detail:
+                line += f": {detail}"
+            print(line)
     print()
     print(f">>> created {ok_n}/{len(results)} {kind}s")
     print()
     return 0 if ok_n == len(results) else 1
 
 
-def _multi_status(names: list[str], kind: str, per_name) -> int:
-    """Run `per_name(name) -> (ok, detail)` over many targets; print each + a
-    summary. Returns 0 iff all are ready."""
+def _emit_captured(outcome: dispatch.Outcome) -> None:
+    """Replay a forked worker's captured stdout / stderr into this process's own
+    stdout / stderr, so a batch's per-target logs print grouped and in order
+    (never interleaved) ahead of the target's result line — each on the stream
+    the worker wrote it to."""
+    for text, stream in ((outcome.stdout, sys.stdout), (outcome.stderr, sys.stderr)):
+        if text:
+            stream.write(text)
+            if not text.endswith("\n"):
+                stream.write("\n")
+
+
+def _batch_banner(verb: str, n: int, kind: str) -> None:
+    """Announce a batch before its targets start, so the user sees work is under
+    way (and how much of it runs at once) before any per-target line lands."""
+    if n == 0:
+        return
     print()
+    print(
+        f">>> {verb} {n} {kind}{'' if n == 1 else 's'} "
+        f"(up to {dispatch.max_workers(n)} in parallel) ..."
+    )
+    print()
+
+
+def _progress(
+    done: int, total: int, mark: str, name: str, seconds: float, detail: str = ""
+) -> None:
+    """One live per-target line as a batch target completes: ``[k/N] <mark> name
+    (1.2s): detail``. Flushed so it shows immediately even when stdout is a log."""
+    line = f"  [{done}/{total}] {mark}  {name} ({seconds:.1f}s)"
+    if detail:
+        line += f": {detail}"
+    print(line, flush=True)
+
+
+def _batch_create(
+    entries: list[dict], entry_worker, kind: str
+) -> list[tuple[str, str, bool, str]]:
+    """Fan ``entry_worker(entry) -> (name, type, ok, detail)`` out across forked
+    processes (each entry's create isolated in its own ``os.environ``), streaming
+    each entry's captured log + a live `_progress` line as it finishes, and return
+    the per-entry result tuples for `_report_created_batch`. `entry_worker`
+    captures its own failures, so a worker whose *process* dies is the only path
+    that synthesizes a FAIL tuple here."""
+    _batch_banner("creating", len(entries), kind)
+    results: list[tuple[str, str, bool, str]] = []
+
+    def on_done(done: int, total: int, entry: dict, outcome: dispatch.Outcome) -> None:
+        _emit_captured(outcome)
+        if outcome.ok and outcome.value is not None:
+            name, typ, ok, detail = outcome.value
+        else:
+            name = str(entry.get("name") or entry.get("sys") or "?")
+            typ = str(entry.get("type") or "?")
+            ok, detail = False, outcome.error or "worker process died"
+        results.append((name, typ, ok, detail))
+        _progress(
+            done,
+            total,
+            "ok  " if ok else "FAIL",
+            f"{name} ({typ})",
+            outcome.seconds,
+            detail,
+        )
+
+    dispatch.run(entries, entry_worker, on_done=on_done)
+    return results
+
+
+def _multi_status(names: list[str], kind: str, per_name) -> int:
+    """Run `per_name(name) -> (ok, detail)` over many targets (each in its own
+    forked process, concurrently), streaming a live `_progress` line per target as
+    it finishes + a summary. Returns 0 iff all are ready."""
     if not names:
+        print()
         print(f">>> no {kind}s found")
         print()
         return 0
-    rc = 0
-    ok_n = 0
-    for name in names:
-        try:
-            ok, detail = per_name(name)
-        except Exception as exc:  # noqa: BLE001 - one bad target must not stop the rest
-            ok, detail = False, str(exc)
-        ok_n += 1 if ok else 0
-        rc = rc or (0 if ok else 1)
-        print(f"  {'ready    ' if ok else 'not ready'}  {name}: {detail}")
+    _batch_banner("checking", len(names), kind)
+
+    def on_done(done: int, total: int, name: str, outcome: dispatch.Outcome) -> None:
+        _emit_captured(outcome)
+        ok, detail = outcome.value if outcome.ok else (False, outcome.error)
+        _progress(
+            done,
+            total,
+            "ready    " if ok else "not ready",
+            name,
+            outcome.seconds,
+            detail,
+        )
+
+    outcomes = dispatch.run(names, per_name, on_done=on_done)
+    ok_n = sum(1 for o in outcomes if o.ok and o.value and o.value[0])
     print()
     print(f">>> {ok_n}/{len(names)} {kind}s ready")
     print()
-    return rc
+    return 0 if ok_n == len(names) else 1
 
 
 def _multi_apply(names: list[str], kind: str, per_name, *, past: str) -> int:
-    """Run `per_name(name) -> detail` (raises on failure) over many targets;
-    print each + a ``<past> N/M`` summary (e.g. "destroyed 2/3"). Returns 0 iff
-    every target succeeded. Used by the `ALL`/comma destroy and recreate paths."""
-    print()
+    """Run `per_name(name) -> detail` (raises on failure) over many targets (each
+    in its own forked process, concurrently), streaming a live `_progress` line
+    per target as it finishes + a ``<past> N/M`` summary (e.g. "destroyed 2/3").
+    Returns 0 iff every target succeeded. Used by the `ALL`/comma destroy and
+    recreate paths."""
     if not names:
+        print()
         print(f">>> no {kind}s found")
         print()
         return 0
-    rc = 0
-    ok_n = 0
-    for name in names:
-        try:
-            detail = per_name(name)
-            ok = True
-        except Exception as exc:  # noqa: BLE001 - keep going across the rest
-            detail, ok = str(exc), False
-        ok_n += 1 if ok else 0
-        rc = rc or (0 if ok else 1)
-        print(f"  {'ok  ' if ok else 'FAIL'}  {name}: {detail}")
+    _batch_banner("processing", len(names), kind)
+
+    def on_done(done: int, total: int, name: str, outcome: dispatch.Outcome) -> None:
+        _emit_captured(outcome)
+        detail = outcome.value if outcome.ok else outcome.error
+        _progress(
+            done, total, "ok  " if outcome.ok else "FAIL", name, outcome.seconds, detail
+        )
+
+    outcomes = dispatch.run(names, per_name, on_done=on_done)
+    ok_n = sum(1 for o in outcomes if o.ok)
     print()
     print(f">>> {past} {ok_n}/{len(names)} {kind}s")
     print()
-    return rc
+    return 0 if ok_n == len(names) else 1
 
 
 def _report_synced(
@@ -1094,11 +1179,12 @@ def _sys_create_entry(entry: dict, common: list[str]) -> tuple[str, str, bool, s
 
 def _sys_create_from_manifest(args) -> int:
     """`--sys-manifest FILE|-`: create every system entry in the manifest, reusing
-    the single-create path per entry (full validation). One failed entry is
-    reported and the rest still run."""
+    the single-create path per entry (full validation), run concurrently (each in
+    its own forked process). One failed entry is reported and the rest still run."""
     common = _sys_common_argv(args)
-    results = [_sys_create_entry(e, common) for e in manifest.read(args.sys_manifest)]
-    return _report_created_batch("system", results)
+    entries = list(manifest.read(args.sys_manifest))
+    results = _batch_create(entries, lambda e: _sys_create_entry(e, common), "system")
+    return _report_created_batch("system", results, quiet=True)
 
 
 def _sys_sync_from_manifest(args) -> int:
@@ -1284,16 +1370,26 @@ def _sys_create_auto(args) -> int:
     (``s3``, ``mysql``, …), reading every connection setting from its
     ``$<PREFIX>__<OPT>`` env vars (no per-type flags — containers need none,
     cloud/saas read the vars `tdx-system secrets` populates). Systems are created
-    independently: a per-type failure is reported and the rest run."""
+    independently and concurrently (each in its own forked process): a per-type
+    failure is reported and the rest run."""
+    slugs = _expand_types(args.auto)
+    _batch_banner("creating", len(slugs), "system")
     results: list[tuple[str, str, bool, str]] = []
-    for slug in _expand_types(args.auto):
-        name = slug
-        try:
-            _provision_system_auto(slug, name, args.sys_dir, args.force)
-            results.append((name, slug, True, ""))
-        except Exception as exc:  # noqa: BLE001 - one failed type must not stop the rest
-            results.append((name, slug, False, str(exc)))
-    return _report_created_batch("system", results)
+
+    def on_done(done: int, total: int, slug: str, outcome: dispatch.Outcome) -> None:
+        _emit_captured(outcome)
+        detail = "" if outcome.ok else outcome.error
+        results.append((slug, slug, outcome.ok, detail))
+        _progress(
+            done, total, "ok  " if outcome.ok else "FAIL", slug, outcome.seconds, detail
+        )
+
+    dispatch.run(
+        slugs,
+        lambda slug: _provision_system_auto(slug, slug, args.sys_dir, args.force),
+        on_done=on_done,
+    )
+    return _report_created_batch("system", results, quiet=True)
 
 
 def _provision_system_auto(
@@ -1875,39 +1971,49 @@ def _domain_create_auto(args) -> int:
     each named after its system, seeding --model/--data where the system supports
     it. A system that can't take the model/data gets an empty domain and a warning
     (to stderr) that it was left unseeded. Reuses the single-create path per
-    system; a per-system failure is reported, the rest run."""
+    system, run concurrently (each in its own forked process); a per-system
+    failure is reported, the rest run."""
     if args.data and not args.model:
         raise DatagenError("--data requires --model")
     common = _domain_common_argv(args)
+
+    def _create_one(sname: str) -> str:
+        argv = [*common, "--sys", sname]
+        seed = bool(args.model) and _system_can_seed(sname, args.model, args.sys_dir)
+        if args.model and not seed:
+            print(
+                f">>> {sname}: model {args.model!r} is not seedable here; "
+                f"creating an empty domain",
+                file=sys.stderr,
+            )
+        if seed:
+            argv += ["--model", args.model]
+            if args.data:
+                argv += ["--data", args.data]
+        _domain_create(argv)
+        if seed or not args.model:
+            return ""
+        return f"empty (model {args.model!r} not seeded)"
+
+    names = _expand_names(args.auto, store.system_dir(args.sys_dir), "sys", "--auto")
+    _batch_banner("creating", len(names), "domain")
     results: list[tuple[str, str, bool, str]] = []
-    for sname in _expand_names(
-        args.auto, store.system_dir(args.sys_dir), "sys", "--auto"
-    ):
-        try:
-            argv = [*common, "--sys", sname]
-            seed = bool(args.model) and _system_can_seed(
-                sname, args.model, args.sys_dir
-            )
-            if args.model and not seed:
-                print(
-                    f">>> {sname}: model {args.model!r} is not seedable here; "
-                    f"creating an empty domain",
-                    file=sys.stderr,
-                )
-            if seed:
-                argv += ["--model", args.model]
-                if args.data:
-                    argv += ["--data", args.data]
-            _domain_create(argv)
-            detail = (
-                ""
-                if seed or not args.model
-                else f"empty (model {args.model!r} not seeded)"
-            )
-            results.append((sname, sname, True, detail))
-        except Exception as exc:  # noqa: BLE001 - one failed system must not stop the rest
-            results.append((sname, sname, False, str(exc)))
-    return _report_created_batch("domain", results)
+
+    def on_done(done: int, total: int, sname: str, outcome: dispatch.Outcome) -> None:
+        _emit_captured(outcome)
+        detail = outcome.value if outcome.ok else outcome.error
+        results.append((sname, sname, outcome.ok, detail))
+        _progress(
+            done,
+            total,
+            "ok  " if outcome.ok else "FAIL",
+            sname,
+            outcome.seconds,
+            detail,
+        )
+
+    dispatch.run(names, _create_one, on_done=on_done)
+    return _report_created_batch("domain", results, quiet=True)
 
 
 def _domain_create_entry(entry: dict, common: list[str]) -> tuple[str, str, bool, str]:
@@ -1937,13 +2043,14 @@ def _domain_create_entry(entry: dict, common: list[str]) -> tuple[str, str, bool
 
 def _domain_create_from_manifest(args) -> int:
     """`--domain-manifest FILE|-`: create every domain entry in a `tdx-domain`
-    manifest, reusing the single-create path per entry. One failed entry is
-    reported and the rest still run."""
+    manifest, reusing the single-create path per entry, run concurrently (each in
+    its own forked process). One failed entry is reported and the rest still run."""
     common = _domain_common_argv(args)
-    results = [
-        _domain_create_entry(e, common) for e in manifest.read(args.domain_manifest)
-    ]
-    return _report_created_batch("domain", results)
+    entries = list(manifest.read(args.domain_manifest))
+    results = _batch_create(
+        entries, lambda e: _domain_create_entry(e, common), "domain"
+    )
+    return _report_created_batch("domain", results, quiet=True)
 
 
 def _domain_sync_from_manifest(args) -> int:
