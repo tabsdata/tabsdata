@@ -17,6 +17,7 @@
 //! the `projects` row already exists (the `roles.project_id` FK is satisfied)
 //! and `ProjectId` is in context.
 
+use crate::project::service::layer::per_project_roles::{PER_PROJECT_ROLES, per_project_role_name};
 use std::ops::Deref;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -26,46 +27,11 @@ use td_objects::dxo::project::ProjectCreateDB;
 use td_objects::dxo::role::{RoleCreate, RoleDB, RoleDBBuilder};
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::{
-    Description, EntityId, Fixed, PermissionEntityType, PermissionType, ProjectId, ProjectName,
-    RoleKind, RoleName,
+    Description, EntityId, Fixed, PermissionEntityType, PermissionType, ProjectId, RoleKind,
 };
 use td_objects::{Buildable, Setter, TryUpdater};
 use td_queries::LiveEntry;
 use td_tower::extractors::{MutRef, Ref};
-
-/// The three per-project roles minted for every project, in
-/// (kind, name suffix, permission, description template) form.
-// Permission held as a `&str` (built at use-site): the permission type is now
-// an open string, no longer a const-constructible enum variant.
-const PER_PROJECT_ROLES: [(RoleKind, &str, &str, &str); 3] = [
-    (
-        RoleKind::ProjectAdmin,
-        "admin",
-        "manage_project",
-        "Project {name} administrators",
-    ),
-    (
-        RoleKind::ProjectDev,
-        "dev",
-        "develop_project",
-        "Project {name} developers",
-    ),
-    (
-        RoleKind::ProjectView,
-        "view",
-        "view_project",
-        "Project {name} viewers",
-    ),
-];
-
-/// Derive a per-project role name `<project>_<suffix>` and parse it through the
-/// `RoleName` parser. The project name is already a valid identifier
-/// (`[A-Za-z][A-Za-z0-9_]*`), and `RoleName` shares that grammar, so
-/// `<project>_admin` etc. always parse — but we surface any parser rejection
-/// rather than weaken the parser.
-fn per_project_role_name(project: &ProjectName, suffix: &str) -> Result<RoleName, TdError> {
-    RoleName::try_from(format!("{project}_{suffix}"))
-}
 
 pub async fn seed_project_roles(
     mut conn: MutRef<DomainConnection<Apiserver>>,

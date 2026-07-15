@@ -2,6 +2,9 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
+use crate::project::service::layer::rename_project_roles::{
+    assert_project_roles_rename_available, rename_project_roles,
+};
 use crate::project::service::layer::update::{
     UpdateProjectDBBuilderUpdate, assert_project_rename_available, update_project_validate,
 };
@@ -45,6 +48,9 @@ fn service() {
         // "already exists" error instead of the raw unique-constraint
         // violation from the update write.
         from_fn(assert_project_rename_available),
+        // Keep the derived per-project roles in step with the rename.
+        from_fn(assert_project_roles_rename_available),
+        from_fn(rename_project_roles),
         from_fn(With::<ProjectDB>::try_convert_to::<ProjectUpdateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<ProjectUpdateDBBuilder, _>),
         from_fn(With::<ProjectUpdate>::update_project_update_db_builder),
@@ -85,6 +91,8 @@ mod tests {
                 ),
                 type_of_val(&update_project_validate),
                 type_of_val(&assert_project_rename_available),
+                type_of_val(&assert_project_roles_rename_available),
+                type_of_val(&rename_project_roles),
                 type_of_val(&With::<ProjectDB>::try_convert_to::<ProjectUpdateDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<ProjectUpdateDBBuilder, _>),
                 type_of_val(&With::<ProjectUpdate>::update_project_update_db_builder),

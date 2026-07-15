@@ -421,6 +421,124 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
     Ok(())
 }
 
+/// Renaming a project rewrites its per-project roles in place, freeing the old
+/// names and keeping ids/kind/project_id/fixed.
+#[td_test::test(db)]
+async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError> {
+    let create = ProjectCreate::builder()
+        .name(&ProjectName::try_from("orbit")?)
+        .description(Description::try_from("Orbit project")?)
+        .build()?;
+    let created = CreateProjectService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(admin_ctx().create((), create))
+        .await?;
+
+    let before = project_roles(&db, created.id).await?;
+    let admin_before_id = before
+        .iter()
+        .find(|r| r.kind == RoleKind::ProjectAdmin)
+        .expect("admin role")
+        .id;
+
+    let upd = ProjectUpdate::builder()
+        .name(Some(ProjectName::try_from("galaxy")?))
+        .description(None)
+        .build()?;
+    UpdateProjectService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(admin_ctx().update(project_param("orbit"), upd))
+        .await?;
+
+    let after = project_roles(&db, created.id).await?;
+    assert_eq!(after.len(), 3, "still exactly three roles");
+
+    let expected = [
+        (
+            RoleKind::ProjectAdmin,
+            "galaxy_admin",
+            "Project galaxy administrators",
+        ),
+        (
+            RoleKind::ProjectDev,
+            "galaxy_dev",
+            "Project galaxy developers",
+        ),
+        (
+            RoleKind::ProjectView,
+            "galaxy_view",
+            "Project galaxy viewers",
+        ),
+    ];
+    for (kind, role_name, description) in expected {
+        let role = after
+            .iter()
+            .find(|r| r.kind == kind)
+            .unwrap_or_else(|| panic!("missing {kind:?} role"));
+        assert_eq!(role.name, RoleName::try_from(role_name)?, "renamed name");
+        assert_eq!(
+            role.description,
+            Description::try_from(description)?,
+            "refreshed description"
+        );
+        assert_eq!(role.project_id, Some(created.id), "project_id unchanged");
+        assert!(*role.fixed, "{role_name} still fixed");
+    }
+
+    let admin_after_id = after
+        .iter()
+        .find(|r| r.kind == RoleKind::ProjectAdmin)
+        .unwrap()
+        .id;
+    assert_eq!(admin_after_id, admin_before_id, "role id preserved");
+
+    for old in ["orbit_admin", "orbit_dev", "orbit_view"] {
+        assert!(
+            db.live()
+                .fetch_optional::<RoleDB>(&RoleName::try_from(old)?)
+                .await?
+                .is_none(),
+            "{old} freed"
+        );
+    }
+    Ok(())
+}
+
+/// Regression: after a rename, creating a new project with the old name
+/// succeeds (previously collided on the stranded `<name>_*` role names).
+#[td_test::test(db)]
+async fn test_rename_then_recreate_old_name(db: TdPool) -> Result<(), TdError> {
+    let create_foo = || {
+        ProjectCreate::builder()
+            .name(ProjectName::try_from("foo").unwrap())
+            .description(Description::try_from("Foo").unwrap())
+            .build()
+            .unwrap()
+    };
+
+    CreateProjectService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(admin_ctx().create((), create_foo()))
+        .await?;
+
+    let upd = ProjectUpdate::builder()
+        .name(Some(ProjectName::try_from("bar")?))
+        .description(None)
+        .build()?;
+    UpdateProjectService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(admin_ctx().update(project_param("foo"), upd))
+        .await?;
+
+    let new_foo = CreateProjectService::with_defaults(db.clone())
+        .service()
+        .raw_oneshot(admin_ctx().create((), create_foo()))
+        .await?;
+    let roles = project_roles(&db, new_foo.id).await?;
+    assert_eq!(roles.len(), 3, "new foo mints its own three roles");
+    Ok(())
+}
+
 #[cfg(sqlite)]
 mod sqlite_single_project {
     use super::*;
