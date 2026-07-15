@@ -123,3 +123,25 @@ def test_salesforce_has_no_sql_schema():
         assert False, "expected install_schema to refuse"
     except Exception as exc:
         assert "schema" in str(exc).lower()
+
+
+def test_databricks_create_schema_creates_schema_and_volume(monkeypatch):
+    from tabsdatax.itest.tdksystems.systems.databricks import connection
+
+    sysobj = DatabricksSystem()
+    sql: list[str] = []
+    monkeypatch.setattr(sysobj, "_resolve", lambda values: ("h", "t", "wh", "cat"))
+    monkeypatch.setattr(sysobj, "_ensure_running", lambda host, token, wh: None)
+    monkeypatch.setattr(
+        connection, "exec_sql",
+        lambda host, token, wh, catalog, stmt, **kw: sql.append(stmt),
+    )
+
+    sysobj.create_schema({"VOLUME": "staging"}, "d_in", force=False)
+    assert "CREATE SCHEMA `cat`.`d_in`" in sql
+    assert "CREATE VOLUME IF NOT EXISTS `cat`.`d_in`.`staging`" in sql
+
+    # No volume statement when the VOLUME option is unset.
+    sql.clear()
+    sysobj.create_schema({}, "d_in", force=False)
+    assert not any("CREATE VOLUME" in s for s in sql)

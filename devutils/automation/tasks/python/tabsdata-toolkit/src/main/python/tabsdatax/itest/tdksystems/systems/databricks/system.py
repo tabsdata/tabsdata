@@ -5,8 +5,8 @@
 """Databricks SaaS system — hooks only; the lifecycle is in SaasBase.
 
 Domain == schema (`<catalog>.<name>`), created via the SQL Statement
-Execution REST API. The `VOLUME` option is included for downstream use
-(Unity Catalog Volume name) but isn't touched by the schema lifecycle here.
+Execution REST API, together with a Unity Catalog staging Volume
+(`<catalog>.<name>.<VOLUME>`) when the `VOLUME` option is set.
 """
 
 from __future__ import annotations
@@ -42,6 +42,7 @@ class DatabricksSystem(SaasBase):
 
     def create_schema(self, values: dict[str, str], name: str, *, force: bool) -> None:
         host, token, wh_id, catalog = self._resolve(values)
+        volume = values.get("VOLUME")
         self._ensure_running(host, token, wh_id)
         if force:
             connection.exec_sql(
@@ -54,6 +55,17 @@ class DatabricksSystem(SaasBase):
         connection.exec_sql(
             host, token, wh_id, catalog, f"CREATE SCHEMA `{catalog}`.`{name}`"
         )
+        # Staging Volume the connector PUTs files into before COPY INTO; lives
+        # inside the schema, so it is created after it (and dropped with it via
+        # the CASCADE above).
+        if volume:
+            connection.exec_sql(
+                host,
+                token,
+                wh_id,
+                catalog,
+                f"CREATE VOLUME IF NOT EXISTS `{catalog}`.`{name}`.`{volume}`",
+            )
 
     def drop_schema(self, values: dict[str, str], name: str) -> None:
         host, token, wh_id, catalog = self._resolve(values)
