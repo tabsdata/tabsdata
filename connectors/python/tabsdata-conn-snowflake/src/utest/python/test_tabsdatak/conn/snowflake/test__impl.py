@@ -223,6 +223,61 @@ def test_write_all_tables_drives_use_warehouse_first(
     assert fake_sf_connection.log[0] == "USE WAREHOUSE ETL_WH"
 
 
+def test_write_all_tables_forces_database_and_schema_before_stage(
+    fake_sf_connection, tmp_path
+):
+    parquet = tmp_path / "in.parquet"
+    parquet.write_bytes(b"\x00")
+    cfg = impl.SnowflakeWriteCfg(
+        conn=_conn(),  # database=ANALYTICS, schema=PUBLIC
+        target_tables=["ANALYTICS.PUBLIC.T"],
+        if_table_exists="append",
+    )
+    impl.write_all_tables(cfg, [parquet])
+    sql = fake_sf_connection.log
+    use_wh = sql.index("USE WAREHOUSE ETL_WH")
+    use_db = sql.index('USE DATABASE "ANALYTICS"')
+    use_schema = sql.index('USE SCHEMA "PUBLIC"')
+    first_ddl = next(i for i, s in enumerate(sql) if s.startswith("CREATE"))
+    assert use_wh < use_db < use_schema < first_ddl
+
+
+def test_write_all_tables_skips_namespace_when_database_unset(
+    fake_sf_connection, tmp_path
+):
+    parquet = tmp_path / "in.parquet"
+    parquet.write_bytes(b"\x00")
+    cfg = impl.SnowflakeWriteCfg(
+        conn=_conn(database=None, schema=None, warehouse=None),
+        target_tables=["T"],
+        if_table_exists="append",
+    )
+    impl.write_all_tables(cfg, [parquet])
+    assert not any(s.startswith("USE DATABASE") for s in fake_sf_connection.log)
+    assert not any(s.startswith("USE SCHEMA") for s in fake_sf_connection.log)
+
+
+def test_write_all_tables_raises_when_namespace_not_adopted(monkeypatch, tmp_path):
+    from tabsdatak.conn.snowflake.error import SnowflakeRuntimeException
+
+    class _BoomOnUseCursor(_FakeCursor):
+        def execute(self, sql: str) -> None:
+            if sql.startswith("USE DATABASE"):
+                raise RuntimeError("Object does not exist or not authorized")
+            super().execute(sql)
+
+    fake = _FakeConnection()
+    fake.cursor = lambda: _BoomOnUseCursor(fake.log)  # type: ignore[method-assign]
+    monkeypatch.setattr(impl, "build_snowflake_connection", lambda conn: fake)
+    parquet = tmp_path / "in.parquet"
+    parquet.write_bytes(b"\x00")
+    cfg = impl.SnowflakeWriteCfg(
+        conn=_conn(), target_tables=["ANALYTICS.PUBLIC.T"], if_table_exists="append"
+    )
+    with pytest.raises(SnowflakeRuntimeException, match="could not adopt database"):
+        impl.write_all_tables(cfg, [parquet])
+
+
 def test_write_all_tables_creates_stage_puts_then_copies(
     fake_sf_connection, tmp_path
 ):

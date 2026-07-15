@@ -43,3 +43,7 @@ class SnowflakeErrorCode(ErrorCode):
         SnowflakeRuntimeException,
         "Snowflake write failed (table={table})",
     )  # _SnowflakeDestPlugin: write failure inside write_out
+    SNOWFLAKE_7 = ErrorDef(
+        SnowflakeRuntimeException,
+        "Snowflake session could not adopt database={database!r} schema={schema!r}",
+    )  # write_all_tables: USE DATABASE / USE SCHEMA failed

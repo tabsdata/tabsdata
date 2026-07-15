@@ -25,6 +25,7 @@ from tabsdatak.conn.common._validation import fqn, unfqn
 from tabsdatak.conn.common.types import UserPassword, _convert
 from tabsdatak.conn.snowflake import SnowflakeDestConn
 from tabsdatak.conn.snowflake._validation import _SNOWFLAKE_FQN_DEF
+from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
 
 if TYPE_CHECKING:
     import snowflake.connector as sfc
@@ -124,6 +125,28 @@ def _fq_for_sql(fq_table: str) -> str:
     return fqn(parts, _SNOWFLAKE_FQN_DEF)
 
 
+def _use_namespace(sf_conn, conn: SnowflakeDestConn) -> None:
+    """Force the session onto ``conn``'s database/schema so every bare object
+    reference (the stage, unqualified target tables) resolves where the caller
+    intends. ``connect()`` passes database/schema as login parameters only; the
+    session silently falls back to the role's default namespace when the
+    requested one can't be adopted, so re-assert it explicitly and fail with a
+    clear error if the database/schema is missing or not granted."""
+    if conn.database is None:
+        return
+    database = conn._database()
+    schema = conn._schema() if conn.schema is not None else None
+    try:
+        with sf_conn.cursor() as cur:
+            cur.execute(f"USE DATABASE {_fq_for_sql(database)}")
+            if schema is not None:
+                cur.execute(f"USE SCHEMA {_fq_for_sql(schema)}")
+    except Exception as e:
+        raise SnowflakeErrorCode.SNOWFLAKE_7.exception(
+            cause=e, database=database, schema=schema
+        ) from e
+
+
 # --- Stage / upload / load helpers ---------------------------------
 
 
@@ -212,6 +235,7 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
             logger.debug("Using warehouse %r", warehouse)
             with sf_conn.cursor() as cur:
                 cur.execute(f"USE WAREHOUSE {warehouse}")
+        _use_namespace(sf_conn, cfg.conn)
         stage, is_temp = _stage(cfg.conn)
         for i, (file_path, table) in enumerate(
             zip(
