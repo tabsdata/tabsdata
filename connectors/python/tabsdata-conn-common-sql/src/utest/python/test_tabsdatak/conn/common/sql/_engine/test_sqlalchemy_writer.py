@@ -307,3 +307,38 @@ def test_engine_disposed_after_write_failure(monkeypatch, tmp_path: Path):
             [parquet],
         )
     fake_engine.dispose.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# ibm_db (DB2) rowcount guard
+# ---------------------------------------------------------------------------
+
+
+class _RowcountForbidden:
+    """A DBAPI result whose ``rowcount`` read raises, mirroring ibm_db's
+    CLI0125E 'Function sequence error' after an executemany INSERT."""
+
+    @property
+    def rowcount(self):
+        raise AssertionError("rowcount must not be read for ibm_db")
+
+
+def test_write_database_options_only_for_ibm_db_sa():
+    ibm = MagicMock()
+    ibm.dialect.name = "ibm_db_sa"
+    assert saw._write_database_options(ibm) == {
+        "engine_options": {"method": saw._insert_without_rowcount}
+    }
+    for other in ("sqlite", "postgresql", "mysql", "oracle"):
+        conn = MagicMock()
+        conn.dialect.name = other
+        assert saw._write_database_options(conn) == {}
+
+
+def test_insert_without_rowcount_skips_rowcount_read():
+    pd_table = MagicMock()
+    conn = MagicMock()
+    conn.execute.return_value = _RowcountForbidden()
+    out = saw._insert_without_rowcount(pd_table, conn, ["id"], iter([(1,), (2,)]))
+    assert out is None
+    conn.execute.assert_called_once()

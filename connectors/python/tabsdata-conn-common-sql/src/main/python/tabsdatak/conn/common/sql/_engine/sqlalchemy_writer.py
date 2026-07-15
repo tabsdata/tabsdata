@@ -112,6 +112,23 @@ class SqlAlchemyWriteEngine(SqlWriteEngine, ABC):
         logger.info("sql-writer: finished writing %d table(s)", total)
 
 
+def _insert_without_rowcount(pd_table, conn, keys, data_iter) -> None:
+    # ibm_db raises CLI0125E "Function sequence error" (SQLSTATE HY010) when
+    # cursor.rowcount is read after an executemany INSERT. Mirror pandas' default
+    # insert (SQLTable._execute_insert) but skip the rowcount read; pandas
+    # tolerates a None return.
+    data = [dict(zip(keys, row)) for row in data_iter]
+    conn.execute(pd_table.table.insert(), data)
+
+
+def _write_database_options(connection: Connection) -> dict[str, Any]:
+    # ibm_db_sa needs the rowcount-free insert method above; every other dialect
+    # keeps pandas' default insert (real rowcounts), unchanged.
+    if connection.dialect.name == "ibm_db_sa":
+        return {"engine_options": {"method": _insert_without_rowcount}}
+    return {}
+
+
 def _polars_write(
     *,
     connection: Connection,
@@ -124,6 +141,7 @@ def _polars_write(
     import pyarrow.parquet as pq
 
     pf = pq.ParquetFile(parquet_file)
+    options = _write_database_options(connection)
     wrote_any = False
     for batch in pf.iter_batches(batch_size=chunk_size):
         df = cast(DataFrame, pl.from_arrow(batch))
@@ -131,6 +149,7 @@ def _polars_write(
             table_name=table,
             connection=connection,
             if_table_exists=if_table_exists,
+            **options,
         )
         if_table_exists = "append"
         wrote_any = True
@@ -144,6 +163,7 @@ def _polars_write(
             table_name=table,
             connection=connection,
             if_table_exists=if_table_exists,
+            **options,
         )
 
 
