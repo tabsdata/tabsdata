@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from tenacity import retry, stop_after_delay, wait_fixed
+from tenacity import retry, retry_if_exception, stop_after_delay, wait_fixed
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import UserPassword, _convert, full_path
@@ -21,13 +21,28 @@ logger = logging.getLogger(__name__)
 # ``tabsdata/_io/cloud_staging/starrocks/dialect.py``: StarRocks
 # transiently reports "Current available backends: []" under heavy
 # concurrent transactional load. Retry the SQL block for up to 5
-# minutes on a 5-second cadence.
+# minutes on a 5-second cadence -- but only for that transient
+# condition. Deterministic failures (e.g. a missing target table, which
+# surfaces as a 1064 "analyzing error") must fail immediately instead of
+# being retried for the full timeout.
 _STARROCKS_QUERY_RETRY_TIMEOUT_SECONDS = 300
 _STARROCKS_QUERY_RETRY_INTERVAL_SECONDS = 5
+
+# Substrings marking a StarRocks error as transient and worth retrying.
+# "Current available backends: []" is reported under concurrent load on a
+# single-BE cluster before a backend (re)registers.
+_STARROCKS_TRANSIENT_MARKERS = ("current available backends",)
+
+
+def _is_transient_starrocks_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in _STARROCKS_TRANSIENT_MARKERS)
+
 
 _starrocks_retry = retry(
     stop=stop_after_delay(_STARROCKS_QUERY_RETRY_TIMEOUT_SECONDS),
     wait=wait_fixed(_STARROCKS_QUERY_RETRY_INTERVAL_SECONDS),
+    retry=retry_if_exception(_is_transient_starrocks_error),
     reraise=True,
 )
 
@@ -121,15 +136,20 @@ def build_files_function(staging: CloudLocation, staged_uris: list[str]) -> str:
             + ")"
         )
     if isinstance(staging, GCSLocation):
-        # StarRocks reads from GCS via the S3-compatible HMAC layer; the
-        # ``s3a://`` paths are constructed by the caller before this
-        # point. ``GCPJson`` credentials are not HMAC keys, so we fall
-        # through to the unsupported branch -- GCS staging requires
-        # users wire HMAC creds via a future credentials subclass.
-        from tabsdatak.conn.starrocks.error import StarRocksErrorCode
-
-        raise StarRocksErrorCode.STARROCKS_7.exception(
-            kind="gcsLocation (HMAC required)",
+        # StarRocks reads GCS only through its S3-compatible endpoint, so the
+        # ``s3a://`` paths built by ``staged_uri`` are fed to ``FILES()`` with
+        # the HMAC access/secret keys and the GCS endpoint.
+        creds = staging.hmac_credentials
+        return (
+            "FILES("
+            + _kv({
+                "path": _path_expr(staged_uris),
+                "format": "parquet",
+                "aws.s3.access_key": _convert(creds.access_key, str),
+                "aws.s3.secret_key": _convert(creds.secret_key, str),
+                "aws.s3.endpoint": "https://storage.googleapis.com",
+            })
+            + ")"
         )
     from tabsdatak.conn.starrocks.error import StarRocksErrorCode
 

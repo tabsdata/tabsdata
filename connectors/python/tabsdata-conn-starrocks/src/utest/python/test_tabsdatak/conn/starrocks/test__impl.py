@@ -10,6 +10,7 @@ from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AzureAccountKey,
+    GCPHmac,
     GCPJson,
     UserPassword,
 )
@@ -154,7 +155,7 @@ def test_build_files_function_azure():
 
 
 # ---------------------------------------------------------------------------
-# build_files_function -- GCS (HMAC not supported via GCPJson)
+# build_files_function -- GCS (S3-compatible endpoint via HMAC)
 # ---------------------------------------------------------------------------
 
 
@@ -162,14 +163,25 @@ def _gcs_staging() -> GCSLocation:
     return GCSLocation(
         bucket="gbk",
         credentials=GCPJson(json=Secret("{}")),
+        hmac_credentials=GCPHmac(
+            access_key=Secret("GOOG1..."),
+            secret_key=Secret("goog-secret"),
+        ),
         base_path="/prefix",
     )
 
 
-def test_build_files_function_gcs_rejects_gcp_json_creds():
-    with pytest.raises(StarRocksRuntimeException) as ei:
-        impl.build_files_function(_gcs_staging(), ["s3a://gbk/x"])
-    assert ei.value.api_error is StarRocksErrorCode.STARROCKS_7
+def test_build_files_function_gcs_uses_hmac_and_endpoint():
+    sql = impl.build_files_function(
+        _gcs_staging(),
+        ["s3a://gbk/prefix/up1/t/a.parquet"],
+    )
+    assert sql.startswith("FILES(")
+    assert '"path" = "s3a://gbk/prefix/up1/t/a.parquet"' in sql
+    assert '"format" = "parquet"' in sql
+    assert '"aws.s3.access_key" = "GOOG1..."' in sql
+    assert '"aws.s3.secret_key" = "goog-secret"' in sql
+    assert '"aws.s3.endpoint" = "https://storage.googleapis.com"' in sql
 
 
 # ---------------------------------------------------------------------------
@@ -324,3 +336,63 @@ def test_execute_rejects_unknown_if_table_exists(work_dir):
     parquet = _make_parquet(work_dir / "x.parquet", [{"id": 1}])
     with pytest.raises(ValueError):
         impl.execute(cfg, [parquet], work_dir, upload_id="up1")
+
+
+# ---------------------------------------------------------------------------
+# Retry policy -- transient errors only
+# ---------------------------------------------------------------------------
+
+
+def test_transient_predicate_matches_backends_unavailable():
+    exc = Exception(
+        "(mysql.connector.errors.DatabaseError) 1064 (HY000): "
+        "Current available backends: []"
+    )
+    assert impl._is_transient_starrocks_error(exc) is True
+
+
+def test_transient_predicate_rejects_table_not_found():
+    exc = Exception(
+        "1064 (HY000): Getting analyzing error. "
+        "Detail message: Table wld_country_s3 is not found."
+    )
+    assert impl._is_transient_starrocks_error(exc) is False
+
+
+def test_execute_does_not_retry_on_non_transient_error(monkeypatch, work_dir):
+    # A deterministic failure (e.g. a missing target table) must surface on the
+    # first attempt rather than being retried for the full timeout.
+    monkeypatch.setattr(
+        impl,
+        "upload_parquet",
+        lambda *a, **kw: "s3://stg/prefix/up1/t/x.parquet",
+    )
+    attempts = {"n": 0}
+
+    class _Conn:
+        def execute(self, stmt):
+            attempts["n"] += 1
+            raise RuntimeError("Table `t` is not found")
+
+    class _BeginCtx:
+        def __enter__(self):
+            return _Conn()
+
+        def __exit__(self, *a):
+            return False
+
+    engine = MagicMock()
+    engine.begin.side_effect = lambda: _BeginCtx()
+    monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: engine)
+
+    cfg = impl.StarRocksWriteCfg(
+        host="h", port=9030, database="db",
+        credentials=_credentials(),
+        staging=_s3_staging(),
+        target_tables=["t"],
+        if_table_exists="replace",
+    )
+    parquet = _make_parquet(work_dir / "x.parquet", [{"id": 1}])
+    with pytest.raises(RuntimeError, match="is not found"):
+        impl.execute(cfg, [parquet], work_dir, upload_id="up1")
+    assert attempts["n"] == 1

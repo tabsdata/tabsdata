@@ -39,6 +39,7 @@ from tabsdatak.conn.common.types import (
     CfgSpec,
     EntityWhitelistSpec,
     FullPathSpec,
+    GCPHmac,
     GCPJson,
     GCSBucketSpec,
     HostSpec,
@@ -157,8 +158,21 @@ class AzBlobLocation(CloudLocation):
 class GCSLocation(CloudLocation):
     """GCS staging area used by ``StarRocksDest``.
 
+    Carries two credentials -- one per code path, mirroring the ClickHouse
+    connector:
+
+    - :attr:`credentials` (:class:`~tabsdatak.conn.common.types.GCPJson`):
+      service-account JSON used to upload the staged Parquet to the bucket
+      via the native GCS API.
+    - :attr:`hmac_credentials` (:class:`~tabsdatak.conn.common.types.GCPHmac`):
+      HMAC access / secret key pair fed to StarRocks' ``FILES()`` table
+      function so the server reads the staged file back through the
+      S3-compatible endpoint (``https://storage.googleapis.com``) -- the
+      only protocol StarRocks speaks to GCS.
+
     :param bucket: GCS bucket name.
-    :param credentials: GCP service-account JSON credentials.
+    :param credentials: GCP service-account JSON credentials (upload).
+    :param hmac_credentials: GCS HMAC keys for StarRocks' S3-compatible read.
     :param base_path: Full path (object-key prefix) from the bucket
         root: starts with ``/``, no trailing ``/``. The leading ``/`` is
         trimmed when forming the object key. Defaults to ``/``.
@@ -168,6 +182,7 @@ class GCSLocation(CloudLocation):
     __kind__ = "startRocksGcsLocation"
     bucket: GCSBucketSpec
     credentials: GCPJson
+    hmac_credentials: GCPHmac
     base_path: FullPathSpec = "/"
     cfg: CfgSpec | None = None
 
@@ -223,7 +238,16 @@ class StarRocksDestConn(Conn):
 class StarRocksDest(Dest):
     """StarRocks destination — one parquet slot per table.
 
-    :param tables: FQN table names; one parquet slot per entry.
+    The target tables **must already exist**; this destination does not
+    create them. StarRocks table creation requires physical layout that
+    cannot be inferred from the data alone -- a key definition (e.g.
+    ``DUPLICATE KEY`` / ``PRIMARY KEY``) and a ``DISTRIBUTED BY`` clause --
+    so ``append`` issues ``INSERT INTO`` and ``replace`` issues
+    ``TRUNCATE`` + ``INSERT INTO`` against the existing table. Writing to a
+    missing table fails with a StarRocks table-not-found error.
+
+    :param tables: FQN table names; one parquet slot per entry. Each must
+        reference an existing StarRocks table.
     :param if_table_exists: ``"append"`` (default) or
         ``"replace"``.
     :param schema_evolution: ``"strict"`` (default) or

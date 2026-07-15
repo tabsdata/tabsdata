@@ -8,14 +8,14 @@ context -- unlike ``test__plugin_e2e.py``, which goes through a running tabsdata
 instance. StarRocks is destination-only (no ``StarRocksSrc``) and bulk-loads
 through cloud staging, so each test also declares the object-store backends whose
 credentials build the staging ``CloudLocation``. Every test is parametrized over
-the supported staging providers -- ``s3`` (``S3Location``) and ``azblob``
-(``AzBlobLocation``); GCS is skipped because the connector raises STARROCKS_7 for
-it (missing HMAC credential type, TD-2803). Writes land in uniquely-named scratch
-tables (dropped on teardown) and are verified over StarRocks' MySQL wire protocol
-(the ``sql`` fixture), never through the connector.
+the supported staging providers -- ``s3`` (``S3Location``), ``azblob``
+(``AzBlobLocation``) and ``gcs`` (``GCSLocation``, read back via the S3-compatible
+endpoint using HMAC keys). Writes land in uniquely-named scratch tables (dropped
+on teardown) and are verified over StarRocks' MySQL wire protocol (the ``sql``
+fixture), never through the connector.
 
 Requires a StarRocks docker container, the ``starrocks`` domain provisioned, and
-the ``s3`` / ``azureblob`` backends whose buckets are reachable from the
+the ``s3`` / ``azureblob`` / ``gcs`` backends whose buckets are reachable from the
 container.
 """
 
@@ -27,6 +27,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.azureblob import AzureblobDomain, azureblob_domain
+from tabsdatax.itest.fixture.backends.gcs import GcsDomain, gcs_domain
 from tabsdatax.itest.fixture.backends.s3 import S3Domain, s3_domain
 from tabsdatax.itest.fixture.backends.starrocks import StarrocksDomain, starrocks_domain
 from tabsdatax.itest.fixture.functions.files import PluginDestCtx
@@ -46,13 +47,12 @@ from tabsdatak.conn.starrocks import (
 
 pytestmark = pytest.mark.starrocks
 
-# Once TD-2803 lands (GCS staging gains an HMAC credential type instead of always
-# raising STARROCKS_7), add "gcs" here to parametrize these tests over it too.
-_STAGING_PROVIDERS = ["s3", "azblob"]
+_STAGING_PROVIDERS = ["s3", "azblob", "gcs"]
 
 
 def _staging_path(backend) -> str:
-    # S3Domain isolates under its base_path; AzureblobDomain under its prefix.
+    # S3Domain isolates under its base_path; AzureblobDomain / GcsDomain under
+    # their prefix.
     base = str(backend.base_path) if isinstance(backend, S3Domain) else backend.prefix
     return f"/{base.strip('/')}/starrocks-staging/{uuid.uuid4().hex}"
 
@@ -67,26 +67,28 @@ def _dest_conn(domain: StarrocksDomain, staging_backend, staging) -> StarRocksDe
     )
 
 
-def _staging_backend(provider: str, domain_s3, domain_azureblob):
-    return domain_s3 if provider == "s3" else domain_azureblob
+def _staging_backend(provider: str, domain_s3, domain_azureblob, domain_gcs):
+    return {"s3": domain_s3, "azblob": domain_azureblob, "gcs": domain_gcs}[provider]
 
 
 @pytest.mark.parametrize("provider", _STAGING_PROVIDERS)
 @starrocks_domain("starrocks")
 @s3_domain("s3")
 @azureblob_domain("azureblob")
+@gcs_domain("gcs")
 def test_dest_then_read_round_trip(
     provider: str,
     domain_starrocks: StarrocksDomain,
     domain_s3: S3Domain,
     domain_azureblob: AzureblobDomain,
+    domain_gcs: GcsDomain,
     sql,
     staging,
     create_table,
     tmp_path: Path,
 ):
     db = sql(domain_starrocks)
-    backend = _staging_backend(provider, domain_s3, domain_azureblob)
+    backend = _staging_backend(provider, domain_s3, domain_azureblob, domain_gcs)
     table = scratch_table()
     work = tmp_path / "work"
     work.mkdir()
@@ -114,18 +116,20 @@ def test_dest_then_read_round_trip(
 @starrocks_domain("starrocks")
 @s3_domain("s3")
 @azureblob_domain("azureblob")
+@gcs_domain("gcs")
 def test_dest_append_accumulates(
     provider: str,
     domain_starrocks: StarrocksDomain,
     domain_s3: S3Domain,
     domain_azureblob: AzureblobDomain,
+    domain_gcs: GcsDomain,
     sql,
     staging,
     create_table,
     tmp_path: Path,
 ):
     db = sql(domain_starrocks)
-    backend = _staging_backend(provider, domain_s3, domain_azureblob)
+    backend = _staging_backend(provider, domain_s3, domain_azureblob, domain_gcs)
     table = scratch_table()
     work = tmp_path / "work"
     work.mkdir()
@@ -155,18 +159,20 @@ def test_dest_append_accumulates(
 @starrocks_domain("starrocks")
 @s3_domain("s3")
 @azureblob_domain("azureblob")
+@gcs_domain("gcs")
 def test_dest_replace_drops_existing(
     provider: str,
     domain_starrocks: StarrocksDomain,
     domain_s3: S3Domain,
     domain_azureblob: AzureblobDomain,
+    domain_gcs: GcsDomain,
     sql,
     staging,
     create_table,
     tmp_path: Path,
 ):
     db = sql(domain_starrocks)
-    backend = _staging_backend(provider, domain_s3, domain_azureblob)
+    backend = _staging_backend(provider, domain_s3, domain_azureblob, domain_gcs)
     table = scratch_table()
     work = tmp_path / "work"
     work.mkdir()

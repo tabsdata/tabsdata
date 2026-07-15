@@ -6,19 +6,20 @@
 
 StarRocks is a destination-only connector (no ``StarRocksSrc``) that bulk-loads
 *through* cloud staging, so a test declares the ``@starrocks_domain`` load target
-plus one object-store backend (``@s3_domain`` / ``@azureblob_domain``) purely to
-build the staging ``CloudLocation`` from its credentials -- no separate staging
-secrets needed. The ``staging`` factory dispatches on the backend type, so the
-integration tests parametrize the same body over S3 and Azure Blob. (GCS staging
-is not exercised: the connector raises STARROCKS_7 for ``GCSLocation`` -- it needs
-an HMAC credential type it does not yet have; see TD-2803.) Writes are verified
-over StarRocks' MySQL wire protocol with a ``SqlAlchemyStore`` (backtick quoting),
-the same verification client the SQL connectors use."""
+plus one object-store backend (``@s3_domain`` / ``@azureblob_domain`` / ``@gcs_domain``)
+purely to build the staging ``CloudLocation`` from its credentials -- no separate
+staging secrets needed. The ``staging`` factory dispatches on the backend type, so
+the integration tests parametrize the same body over S3, Azure Blob and GCS. (GCS
+uploads via the native GCS API using ``GCPJson`` and is read back by StarRocks'
+``FILES()`` through the S3-compatible endpoint using the ``GCPHmac`` keys.) Writes
+are verified over StarRocks' MySQL wire protocol with a ``SqlAlchemyStore``
+(backtick quoting), the same verification client the SQL connectors use."""
 
 from __future__ import annotations
 
 import pytest
 from tabsdatax.itest.fixture.backends.azureblob import AzureblobDomain
+from tabsdatax.itest.fixture.backends.gcs import GcsDomain
 from tabsdatax.itest.fixture.backends.s3 import S3Domain
 from tabsdatax.itest.fixture.functions.sql import SqlAlchemyStore
 
@@ -27,6 +28,9 @@ from tabsdatak.conn.starrocks import (
     AwsAccessSecretKey,
     AzBlobLocation,
     AzureAccountKey,
+    GCPHmac,
+    GCPJson,
+    GCSLocation,
     S3Location,
 )
 
@@ -76,8 +80,8 @@ def create_table():
 def staging():
     """Factory building a StarRocks staging ``CloudLocation`` from an object-store
     backend's credentials, dispatching on the backend type -- call it with
-    ``domain_s3`` or ``domain_azureblob`` and a unique ``base_path`` so concurrent
-    runs never share a prefix."""
+    ``domain_s3``, ``domain_azureblob`` or ``domain_gcs`` and a unique ``base_path``
+    so concurrent runs never share a prefix."""
 
     def make(backend, base_path: str):
         if isinstance(backend, S3Domain):
@@ -96,6 +100,16 @@ def staging():
                 credentials=AzureAccountKey(
                     account_name=Secret(backend.account_name),
                     account_key=Secret(backend.account_key),
+                ),
+                base_path=base_path,
+            )
+        if isinstance(backend, GcsDomain):
+            return GCSLocation(
+                bucket=backend.bucket,
+                credentials=GCPJson(json=Secret(backend.service_account_key)),
+                hmac_credentials=GCPHmac(
+                    access_key=Secret(backend.hmac_access_key),
+                    secret_key=Secret(backend.hmac_secret_key),
                 ),
                 base_path=base_path,
             )
