@@ -143,8 +143,12 @@ class _FakeDatabase:
     def __init__(self, name: str = "") -> None:
         self.name = name
         self.collections: dict[str, _FakeCollection] = {}
+        self.last_codec_options: Any = None
 
-    def get_collection(self, name: str) -> _FakeCollection:
+    def get_collection(
+        self, name: str, codec_options: Any = None
+    ) -> _FakeCollection:
+        self.last_codec_options = codec_options
         if name not in self.collections:
             self.collections[name] = _FakeCollection(name)
         return self.collections[name]
@@ -634,3 +638,38 @@ def test_resolve_dest_cfg_warns_on_unknown_key_via_raw_dict(caplog):
     with caplog.at_level("WARNING", logger=plugin.logger.name):
         plugin._resolve_dest_cfg({"bogus.key": "value"})
     assert any("Unknown dest_cfg key" in r.getMessage() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Decimal -> Decimal128 codec
+# ---------------------------------------------------------------------------
+
+
+def test_decimal_codec_options_encodes_decimal128():
+    import decimal
+
+    import bson
+    from bson.decimal128 import Decimal128
+
+    opts = plugin._decimal_codec_options()
+    doc = {
+        "gnp": decimal.Decimal("193.00"),
+        "nested": {"rate": decimal.Decimal("1.5")},
+        "lst": [decimal.Decimal("2.25")],
+        "none": None,
+    }
+    raw = bson.encode(doc, codec_options=opts)  # InvalidDocument before the fix
+    wire = bson.decode(raw)
+    assert isinstance(wire["gnp"], Decimal128)
+    assert isinstance(wire["nested"]["rate"], Decimal128)
+    assert isinstance(wire["lst"][0], Decimal128)
+    assert wire["none"] is None
+    assert bson.decode(raw, codec_options=opts)["gnp"] == decimal.Decimal("193.00")
+
+
+def test_write_out_opens_collection_with_decimal_codec(monkeypatch, work_dir):
+    client = _install_client(monkeypatch, _FakeClient())
+    parquet = _make_parquet(work_dir / "c.parquet", [{"name": "us", "pop": 1}])
+    dest = MongoDBDest(collections_with_ids=[("app.country", None)])
+    plugin._MongoDBDestPlugin().write_out(_Ctx(work_dir), _bare_conn(), dest, [parquet])
+    assert client["app"].last_codec_options is not None

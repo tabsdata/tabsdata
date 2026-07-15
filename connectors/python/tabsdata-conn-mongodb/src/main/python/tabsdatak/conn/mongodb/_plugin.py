@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -153,6 +154,33 @@ def _default_database_name(client: Any) -> str | None:
     return db.name if db is not None else None
 
 
+@functools.lru_cache(maxsize=1)
+def _decimal_codec_options() -> Any:
+    """CodecOptions that BSON-encode ``decimal.Decimal`` as ``Decimal128``.
+
+    Polars materialises parquet Decimal columns as Python ``decimal.Decimal``
+    (via ``iter_rows``), which pymongo cannot BSON-encode natively. A
+    ``TypeRegistry`` codec maps every such value in the document -- including
+    values nested inside sub-documents and lists -- to ``bson.Decimal128``.
+    """
+    import decimal
+
+    from bson.codec_options import CodecOptions, TypeCodec, TypeRegistry
+    from bson.decimal128 import Decimal128
+
+    class _DecimalCodec(TypeCodec):
+        python_type = decimal.Decimal
+        bson_type = Decimal128
+
+        def transform_python(self, value: decimal.Decimal) -> Decimal128:
+            return Decimal128(value)
+
+        def transform_bson(self, value: Decimal128) -> decimal.Decimal:
+            return value.to_decimal()
+
+    return CodecOptions(type_registry=TypeRegistry([_DecimalCodec()]))
+
+
 def _ensure_clean_collection(collection: "Collection") -> None:
     """Implement ``if_collection_exists="replace"``.
 
@@ -271,7 +299,9 @@ class _MongoDBDestPlugin(DestPlugin[MongoDBDestConn, MongoDBDest]):
 
         db_name, coll_name = _split_collection(collection_fqn, default_db)
         database = client[db_name]
-        collection = database.get_collection(coll_name)
+        collection = database.get_collection(
+            coll_name, codec_options=_decimal_codec_options()
+        )
 
         if dest.if_collection_exists == "replace":
             _ensure_clean_collection(collection)
