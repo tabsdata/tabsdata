@@ -14,6 +14,7 @@ from tabsdatak.tableframe._engine.constant.column.prefixes import (
 )
 from tabsdatak.tableframe._engine.model.column import SystemColumn
 from tabsdatak.tableframe._engine.taxonomy.column import (
+    ColumnKind,
     Inception,
     SystemColumnCategory,
 )
@@ -102,6 +103,22 @@ class Registry:
             if name.startswith(prefix):
                 return category
         return None
+
+    def kind_of(self, name: str) -> ColumnKind:
+        category = self.category_of(name)
+        if category is None:
+            return ColumnKind.USER
+        if category is SystemColumnCategory.CONNECTOR:
+            return ColumnKind.CONNECTOR
+        return ColumnKind.INTERNAL
+
+    def keep(self, names, *, with_internal: bool, with_connector: bool) -> list[str]:
+        kept = {ColumnKind.USER}
+        if with_internal:
+            kept.add(ColumnKind.INTERNAL)
+        if with_connector:
+            kept.add(ColumnKind.CONNECTOR)
+        return [name for name in names if self.kind_of(name) in kept]
 
 
 def is_namespaced_column(name: str) -> bool:

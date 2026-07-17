@@ -41,6 +41,12 @@ class NotSupportedError(TableFrameRuntimeException): ...
 class SystemColumnWriteError(TableFrameRuntimeException): ...
 
 
+class MultipleRowsError(TableFrameRuntimeException): ...
+
+
+class EmptyFrameError(TableFrameRuntimeException): ...
+
+
 class TableFrameErrorCode(ErrorCode):
     TF1 = ErrorDef(
         DirectConstructionError,
@@ -72,4 +78,12 @@ class TableFrameErrorCode(ErrorCode):
         SystemColumnWriteError,
         "The {op} operation cannot create, overwrite, or drop the system columns "
         "{columns}; they are managed by TableFrame.",
+    )
+    TF7 = ErrorDef(
+        MultipleRowsError,
+        "The {op} operation requires at most one row; the TableFrame has more.",
+    )
+    TF8 = ErrorDef(
+        EmptyFrameError,
+        "The {op} operation requires at least one row; the TableFrame is empty.",
     )

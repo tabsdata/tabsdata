@@ -41,6 +41,12 @@ class SystemColumnCategory(Enum):
     EXTENDED = "extended"
 
 
+class ColumnKind(Enum):
+    USER = "user"
+    INTERNAL = "internal"
+    CONNECTOR = "connector"
+
+
 class SysCol(StrEnum):
     VERSION_EXECUTION = TD_EXECUTION_SYSTEM_COLUMN_NAME
     VERSION_TRANSACTION = TD_TRANSACTION_SYSTEM_COLUMN_NAME

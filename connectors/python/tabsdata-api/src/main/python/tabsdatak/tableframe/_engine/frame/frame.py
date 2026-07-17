@@ -4,10 +4,13 @@
 
 from __future__ import annotations
 
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from tabsdatak.tableframe._core.base import BaseFrame
 from tabsdatak.tableframe._engine.model.frame import TableFrameState
+
+if TYPE_CHECKING:
+    from tabsdatak.tableframe.datatypes import DataType
 
 
 class EngineFrame(BaseFrame):
@@ -102,21 +105,19 @@ class EngineFrame(BaseFrame):
 
     @classmethod
     def _arrange(cls, lf):
-        from tabsdatak.tableframe._engine.constant.column.prefixes import (
-            TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
-            TD_SYSTEM_COLUMN_PREFIX,
-        )
+        from tabsdatak.extensions.tableframe._engine.column.registry import registry
+        from tabsdatak.tableframe._engine.taxonomy.column import ColumnKind
 
-        prefixes = (TD_SYSTEM_COLUMN_PREFIX, TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
+        tf_registry = registry()
         names = lf.collect_schema().names()
-        user = [name for name in names if not name.startswith(prefixes)]
+        user = [name for name in names if tf_registry.kind_of(name) is ColumnKind.USER]
         connector = sorted(
-            name for name in names if name.startswith(TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
+            name for name in names if tf_registry.kind_of(name) is ColumnKind.CONNECTOR
         )
-        standard = sorted(
-            name for name in names if name.startswith(TD_SYSTEM_COLUMN_PREFIX)
+        internal = sorted(
+            name for name in names if tf_registry.kind_of(name) is ColumnKind.INTERNAL
         )
-        return lf.select(user + connector + standard)
+        return lf.select(user + connector + internal)
 
     @classmethod
     def _check_required(cls, lf, registry) -> None:
@@ -166,20 +167,19 @@ class EngineFrame(BaseFrame):
         return cls._build(lf, mode)
 
     def _strip(self, drop_system_columns, drop_internal_columns=False):
-        from tabsdatak.tableframe._engine.constant.column.prefixes import (
-            TD_CONNECTOR_SYSTEM_COLUMN_PREFIX,
-            TD_SYSTEM_COLUMN_PREFIX,
+        if not drop_system_columns and not drop_internal_columns:
+            return self._lf
+        return self._select(
+            with_internal=False, with_connector=not drop_internal_columns
         )
 
-        if drop_internal_columns:
-            prefixes = (TD_SYSTEM_COLUMN_PREFIX, TD_CONNECTOR_SYSTEM_COLUMN_PREFIX)
-        elif drop_system_columns:
-            prefixes = (TD_SYSTEM_COLUMN_PREFIX,)
-        else:
-            return self._lf
+    def _select(self, *, with_internal: bool, with_connector: bool):
+        from tabsdatak.extensions.tableframe._engine.column.registry import registry
 
         names = self._lf.collect_schema().names()
-        keep = [name for name in names if not name.startswith(prefixes)]
+        keep = registry().keep(
+            names, with_internal=with_internal, with_connector=with_connector
+        )
         return self._lf.select(keep)
 
     def _persisted(self):
@@ -214,7 +214,7 @@ class EngineFrame(BaseFrame):
             lf = observer(lf, "sink_parquet", path)
         lf.sink_parquet(path, engine="streaming")
 
-    # Construction surface. Classmethods so cls is the concrete subclass and the
+    # Construction surface. Class methods so cls is the concrete subclass and the
     # wrapped result is a TableFrame; each normalizes its input to a polars
     # LazyFrame, then routes through _assemble to seed the edition's system columns.
     @classmethod
@@ -283,7 +283,7 @@ class EngineFrame(BaseFrame):
         return cls._assemble(pl.LazyFrame(schema=schema), CreationMode.TAB)
 
     # Materialization surface. Exits the wrapper into a plain polars / pandas / dict;
-    # drop_system_columns (default True) removes the standard `$td.` columns.
+    # drop_system_columns (default True) removes the internal `$td.` columns.
     def to_polars_lf(self, drop_system_columns=True):
         return self._strip(drop_system_columns)
 
@@ -302,3 +302,69 @@ class EngineFrame(BaseFrame):
             .collect(no_optimization=True)
             .to_dict(as_series=False)
         )
+
+    def extract_one(
+        self, with_connector_columns: bool = False, fail_if_empty: bool = False
+    ) -> dict[str, DataType | None] | None:
+        """Return the only row as a column-to-value dictionary.
+
+        Internal columns are always dropped; connector columns are kept only when
+        with_connector_columns is set. Fails if the TableFrame has more than one
+        row. Returns None when the TableFrame is empty, unless fail_if_empty is
+        set, in which case it fails.
+        """
+        lf = self._select(with_internal=False, with_connector=with_connector_columns)
+        df = lf.limit(2).collect(engine="streaming")
+        if df.height == 0:
+            return self._on_empty("extract_one", fail_if_empty)
+        if df.height > 1:
+            from tabsdatak.tableframe._engine.event.error import TableFrameErrorCode
+
+            raise TableFrameErrorCode.TF7.exception(op="extract_one")
+        return df.row(0, named=True)
+
+    def max_for(
+        self, *cols: str, fail_if_empty: bool = False
+    ) -> dict[str, DataType | None] | None:
+        """Return the given columns of the row that ranks highest by them.
+
+        Each column is compared in its own natural order (numbers numerically,
+        dates chronologically, strings alphabetically). The columns are ordered
+        comparison keys: the first is primary, each subsequent one breaks ties on
+        the previous. Returns None when the TableFrame is empty, unless
+        fail_if_empty is set, in which case it fails.
+        """
+        if not cols:
+            raise ValueError("At least one column is required.")
+        keyed = self._strip(drop_system_columns=True).top_k(1, by=list(cols))
+        df = keyed.select(*cols).collect(engine="streaming")
+        if df.height == 0:
+            return self._on_empty("max_for", fail_if_empty)
+        return df.row(0, named=True)
+
+    def min_for(
+        self, *cols: str, fail_if_empty: bool = False
+    ) -> dict[str, DataType | None] | None:
+        """Return the given columns of the row that ranks lowest by them.
+
+        Each column is compared in its own natural order (numbers numerically,
+        dates chronologically, strings alphabetically). The columns are ordered
+        comparison keys: the first is primary, each subsequent one breaks ties on
+        the previous. Returns None when the TableFrame is empty, unless
+        fail_if_empty is set, in which case it fails.
+        """
+        if not cols:
+            raise ValueError("At least one column is required.")
+        keyed = self._strip(drop_system_columns=True).bottom_k(1, by=list(cols))
+        df = keyed.select(*cols).collect(engine="streaming")
+        if df.height == 0:
+            return self._on_empty("min_for", fail_if_empty)
+        return df.row(0, named=True)
+
+    @staticmethod
+    def _on_empty(op: str, fail_if_empty: bool):
+        if not fail_if_empty:
+            return None
+        from tabsdatak.tableframe._engine.event.error import TableFrameErrorCode
+
+        raise TableFrameErrorCode.TF8.exception(op=op)
