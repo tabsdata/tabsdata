@@ -33,6 +33,11 @@
                                                     # system in a manifest (a
                                                     # missing one warns and is
                                                     # skipped)
+    tdx-system restart [--sys-dir DIR]              # docker-restart every container
+                                                    # system in the store (after the
+                                                    # host machine / Docker was
+                                                    # restarted); systems with no
+                                                    # container are skipped
     tdx-system info    --sys NAME [--sys-dir DIR] [--format json|export|unset] \\
                        [--prefix PREFIX]            # PREFIX -> <PREFIX>__<KEY>
     tdx-system pause | resume --sys NAME [--sys-dir DIR]  # stop / start container
@@ -98,7 +103,13 @@ the env var named by `--secret-env` (default $TD_BACKENDS_CRYPTO_KEY) and fails
 if it is unset. `--type` names the external system — every backend in the
 `container` / `cloud` / `saas` / `service` helper packages is a valid type, so
 adding a new system is just a new module.
-"""
+
+The mutating verbs (`create`, `destroy`, `status`, `restart`, and the
+`tdx-domain` `recreate` / `seed`) keep the console output brief: colored
+per-target progress and success / failure counters, with any docker image
+fetch called out so slow first-time downloads are visible. Their full detail
+(docker / SQL / per-worker logs) is written to a timestamped
+`<YYYYMMDD>T<hhmmss>.log` in the store directory (see the `console` module)."""
 
 from __future__ import annotations
 
@@ -118,6 +129,7 @@ from tenacity import (
 from . import (
     _venv,
     cli,
+    console,
     crypto,
     data_gen,
     descriptor,
@@ -306,6 +318,12 @@ def _system_meta_from_domain(meta: dict[str, str]) -> dict[str, str]:
 # returns 0 iff every target succeeded.
 
 
+def _summary(text: str, ok: bool) -> None:
+    """A batch summary line on the console: green when everything succeeded,
+    red otherwise."""
+    (console.good if ok else console.bad)(text)
+
+
 def _report_created_batch(
     kind: str, results: list[tuple[str, str, bool, str]], *, quiet: bool = False
 ) -> int:
@@ -313,21 +331,21 @@ def _report_created_batch(
     result is (name, type, ok, detail). `quiet` skips the per-item lines when the
     caller has already streamed them live via `_progress`."""
     if not results:
-        print()
-        print(f">>> no {kind}s to create")
-        print()
+        console.out()
+        console.out(f">>> no {kind}s to create")
+        console.out()
         return 0
     ok_n = sum(1 for r in results if r[2])
     if not quiet:
-        print()
+        console.out()
         for name, typ, ok, detail in results:
             line = f"  {'ok  ' if ok else 'FAIL'}  {name} ({typ})"
             if detail:
                 line += f": {detail}"
-            print(line)
-    print()
-    print(f">>> created {ok_n}/{len(results)} {kind}s")
-    print()
+            (console.good if ok else console.bad)(line)
+    console.out()
+    _summary(f">>> created {ok_n}/{len(results)} {kind}s", ok_n == len(results))
+    console.out()
     return 0 if ok_n == len(results) else 1
 
 
@@ -348,23 +366,26 @@ def _batch_banner(verb: str, n: int, kind: str) -> None:
     way (and how much of it runs at once) before any per-target line lands."""
     if n == 0:
         return
-    print()
-    print(
+    console.out()
+    console.out(
         f">>> {verb} {n} {kind}{'' if n == 1 else 's'} "
         f"(up to {dispatch.max_workers(n)} in parallel) ..."
     )
-    print()
+    console.out()
 
 
 def _progress(
-    done: int, total: int, mark: str, name: str, seconds: float, detail: str = ""
+    done: int,
+    total: int,
+    ok: bool,
+    mark: str,
+    name: str,
+    seconds: float,
+    detail: str = "",
 ) -> None:
     """One live per-target line as a batch target completes: ``[k/N] <mark> name
-    (1.2s): detail``. Flushed so it shows immediately even when stdout is a log."""
-    line = f"  [{done}/{total}] {mark}  {name} ({seconds:.1f}s)"
-    if detail:
-        line += f": {detail}"
-    print(line, flush=True)
+    (1.2s): detail`` — green when `ok`, red otherwise (see `console.progress`)."""
+    console.progress(done, total, ok, mark, name, seconds, detail)
 
 
 def _batch_create(
@@ -391,6 +412,7 @@ def _batch_create(
         _progress(
             done,
             total,
+            ok,
             "ok  " if ok else "FAIL",
             f"{name} ({typ})",
             outcome.seconds,
@@ -406,9 +428,9 @@ def _multi_status(names: list[str], kind: str, per_name) -> int:
     forked process, concurrently), streaming a live `_progress` line per target as
     it finishes + a summary. Returns 0 iff all are ready."""
     if not names:
-        print()
-        print(f">>> no {kind}s found")
-        print()
+        console.out()
+        console.out(f">>> no {kind}s found")
+        console.out()
         return 0
     _batch_banner("checking", len(names), kind)
 
@@ -418,6 +440,7 @@ def _multi_status(names: list[str], kind: str, per_name) -> int:
         _progress(
             done,
             total,
+            ok,
             "ready    " if ok else "not ready",
             name,
             outcome.seconds,
@@ -426,9 +449,9 @@ def _multi_status(names: list[str], kind: str, per_name) -> int:
 
     outcomes = dispatch.run(names, per_name, on_done=on_done)
     ok_n = sum(1 for o in outcomes if o.ok and o.value and o.value[0])
-    print()
-    print(f">>> {ok_n}/{len(names)} {kind}s ready")
-    print()
+    console.out()
+    _summary(f">>> {ok_n}/{len(names)} {kind}s ready", ok_n == len(names))
+    console.out()
     return 0 if ok_n == len(names) else 1
 
 
@@ -439,9 +462,9 @@ def _multi_apply(names: list[str], kind: str, per_name, *, past: str) -> int:
     Returns 0 iff every target succeeded. Used by the `ALL`/comma destroy and
     recreate paths."""
     if not names:
-        print()
-        print(f">>> no {kind}s found")
-        print()
+        console.out()
+        console.out(f">>> no {kind}s found")
+        console.out()
         return 0
     _batch_banner("processing", len(names), kind)
 
@@ -449,14 +472,20 @@ def _multi_apply(names: list[str], kind: str, per_name, *, past: str) -> int:
         _emit_captured(outcome)
         detail = outcome.value if outcome.ok else outcome.error
         _progress(
-            done, total, "ok  " if outcome.ok else "FAIL", name, outcome.seconds, detail
+            done,
+            total,
+            outcome.ok,
+            "ok  " if outcome.ok else "FAIL",
+            name,
+            outcome.seconds,
+            detail,
         )
 
     outcomes = dispatch.run(names, per_name, on_done=on_done)
     ok_n = sum(1 for o in outcomes if o.ok)
-    print()
-    print(f">>> {past} {ok_n}/{len(names)} {kind}s")
-    print()
+    console.out()
+    _summary(f">>> {past} {ok_n}/{len(names)} {kind}s", ok_n == len(names))
+    console.out()
     return 0 if ok_n == len(names) else 1
 
 
@@ -473,33 +502,34 @@ def _report_synced(
     (name, ok, detail). Returns 0 iff no create/destroy failed."""
     created_ok = sum(1 for _, _, ok, _ in created if ok)
     destroyed_ok = sum(1 for _, ok, _ in destroyed if ok)
-    print()
+    console.out()
     if created:
-        print("created (in the manifest, not the store):")
+        console.out("created (in the manifest, not the store):")
         for name, typ, ok, detail in created:
             line = f"  {'ok  ' if ok else 'FAIL'}  {name} ({typ})"
             if detail:
                 line += f": {detail}"
-            print(line)
+            (console.good if ok else console.bad)(line)
     if destroyed:
-        print("destroyed (in the store, not the manifest):")
+        console.out("destroyed (in the store, not the manifest):")
         for name, ok, detail in destroyed:
             line = f"  {'ok  ' if ok else 'FAIL'}  {name}"
             if detail:
                 line += f": {detail}"
-            print(line)
+            (console.good if ok else console.bad)(line)
     if unchanged:
-        print("unchanged (in both — not updated):")
+        console.out("unchanged (in both — not updated):")
         for name in unchanged:
-            print(f"  --    {name}")
-    print()
-    print(
+            console.out(f"  --    {name}")
+    console.out()
+    failed = (len(created) - created_ok) + (len(destroyed) - destroyed_ok)
+    _summary(
         f">>> synced {kind}s: created {created_ok}/{len(created)}, "
         f"destroyed {destroyed_ok}/{len(destroyed)}, "
-        f"{len(unchanged)} left unchanged (not updated)"
+        f"{len(unchanged)} left unchanged (not updated)",
+        failed == 0,
     )
-    print()
-    failed = (len(created) - created_ok) + (len(destroyed) - destroyed_ok)
+    console.out()
     return 0 if failed == 0 else 1
 
 
@@ -840,20 +870,20 @@ def _setenv(meta: dict[str, str]) -> None:
 
 def _print_created(kind: str, path: str, hint: str) -> None:
     doc = descriptor.load(path)
-    print()
-    print(f">>> {kind} '{doc['name']}' ({doc['system']}) created")
-    print(f"    started:    {doc['started']}")
+    console.out()
+    console.good(f">>> {kind} '{doc['name']}' ({doc['system']}) created")
+    console.out(f"    started:    {doc['started']}")
     if doc.get("external_name"):
-        print(f"    external:   {doc['external_name']}")
+        console.out(f"    external:   {doc['external_name']}")
     if "model" in doc:
         model = doc.get("model") or "-"
         data = doc.get("data") or "-"
-        print(f"    model/data: {model} / {data}")
-    print(f"    descriptor: {path}")
-    print()
+        console.out(f"    model/data: {model} / {data}")
+    console.out(f"    descriptor: {path}")
+    console.out()
     verb = "tdx-domain" if kind == "domain" else "tdx-system"
-    print(f"    info:  {verb} info {hint}")
-    print()
+    console.out(f"    info:  {verb} info {hint}")
+    console.out()
 
 
 def _print_listing(kind: str, directory: Path, *, role: str) -> None:
@@ -908,7 +938,7 @@ def _prepare_descriptor_path(path: str, force: bool) -> None:
 
 
 def _report_status(ok: bool, msg: str) -> int:
-    print(("ready: " if ok else "not ready: ") + msg)
+    (console.good if ok else console.bad)(("ready: " if ok else "not ready: ") + msg)
     return 0 if ok else 1
 
 
@@ -1000,6 +1030,29 @@ def _record_provisioned_meta(sysobj, out: str, settings) -> None:
     extra = sysobj.provisioned_meta(settings)
     if extra:
         descriptor.record_meta(out, extra)
+
+
+def _prefetch_images(slugs: list[str]) -> None:
+    """Pull the docker images the given container system types need — one brief
+    console line per image, so on a cold cache the user sees the download is
+    where the time is going — before provisioning starts. The pull's own layer
+    output is detail (it lands in the log). Types that start no container
+    (cloud / saas / fs / service) contribute nothing, so a docker-free batch
+    never touches docker here. Best-effort: a pull failure is only surfaced —
+    `provision_system` re-pulls and reports it per target."""
+    images: dict[tuple[str, str], None] = {}
+    for slug in slugs:
+        for image, plat in systems.get(slug).docker_images():
+            images.setdefault((image, plat), None)
+    if not images:
+        return
+    console.out(f">>> fetching {len(images)} docker image(s) …")
+    for image, plat in sorted(images):
+        console.out(f"    {image}" + (f" ({plat})" if plat else "") + " …")
+        try:
+            docker_pull(image, plat)
+        except Exception as exc:  # noqa: BLE001 - non-fatal; provisioning re-pulls + reports
+            console.warn(f"    could not pre-fetch {image}: {exc}")
 
 
 # --- container staleness guard --------------------------------------------
@@ -1183,6 +1236,9 @@ def _sys_create_from_manifest(args) -> int:
     its own forked process). One failed entry is reported and the rest still run."""
     common = _sys_common_argv(args)
     entries = list(manifest.read(args.sys_manifest))
+    _prefetch_images([
+        t for t in (str(e.get("type", "")) for e in entries) if t in systems.all_slugs()
+    ])
     results = _batch_create(entries, lambda e: _sys_create_entry(e, common), "system")
     return _report_created_batch("system", results, quiet=True)
 
@@ -1277,6 +1333,7 @@ def _sys_create_single(args, slug: str) -> int:
     descriptor.write(sysobj, "sys", out, settings)
     descriptor.stamp(out, name=args.sys, started=started)
     ctx = _system_ctx_from_descriptor(slug, out)
+    _prefetch_images([slug])
     _provision_with_retry(
         "system",
         sysobj,
@@ -1373,6 +1430,7 @@ def _sys_create_auto(args) -> int:
     independently and concurrently (each in its own forked process): a per-type
     failure is reported and the rest run."""
     slugs = _expand_types(args.auto)
+    _prefetch_images(slugs)
     _batch_banner("creating", len(slugs), "system")
     results: list[tuple[str, str, bool, str]] = []
 
@@ -1381,7 +1439,13 @@ def _sys_create_auto(args) -> int:
         detail = "" if outcome.ok else outcome.error
         results.append((slug, slug, outcome.ok, detail))
         _progress(
-            done, total, "ok  " if outcome.ok else "FAIL", slug, outcome.seconds, detail
+            done,
+            total,
+            outcome.ok,
+            "ok  " if outcome.ok else "FAIL",
+            slug,
+            outcome.seconds,
+            detail,
         )
 
     dispatch.run(
@@ -1546,9 +1610,9 @@ def _sys_destroy(rest: list[str]) -> int:
         )
     _require_single_system(args.sys)
     detail = _sys_destroy_one(args.sys, args.sys_dir, args.domain_dir, force=args.force)
-    print()
-    print(f">>> destroyed system '{args.sys}' {detail}")
-    print()
+    console.out()
+    console.good(f">>> destroyed system '{args.sys}' {detail}")
+    console.out()
     return 0
 
 
@@ -1572,6 +1636,69 @@ def _sys_status(rest: list[str]) -> int:
     _require_single_system(args.sys)
     ok, detail = _sys_status_one(args.sys, args.sys_dir)
     return _report_status(ok, detail)
+
+
+def _sys_restart_one(name: str, sys_dir: str | None) -> str:
+    """Restart one container system from its descriptor (docker restart)."""
+    doc = descriptor.load(store.system_path(name, sys_dir))
+    _require_role(doc, "sys", "tdx-system", "tdx-domain")
+    meta = descriptor.resolve(doc)
+    _setenv(meta)
+    slug = doc["system"]
+    state = systems.get(slug).restart(SystemContext(slug, doc["name"], meta))
+    return f"({slug}); {state}"
+
+
+def _restartable_systems(
+    sys_dir: str | None,
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """Partition the store's systems into (restartable names, [(name, reason)]
+    skipped). Only container-backed systems (`supports_pause`) are restartable;
+    an ssh-tunnel handle (remote container) or a stale descriptor (container gone
+    / replaced) is skipped with a reason. Systems with no container (cloud / saas
+    / service / fs) are simply not applicable and omitted."""
+    targets: list[str] = []
+    skipped: list[tuple[str, str]] = []
+    for name, doc in _store_entries(store.system_dir(sys_dir), "sys"):
+        if not systems.get(doc["system"]).supports_pause:
+            continue
+        meta = descriptor.resolve(doc)
+        if meta.get("SYSTEM_LOCATION") == "ssh-tunnel" or meta.get("SSH_TUNNEL_PID"):
+            skipped.append((name, "ssh-tunnel (its container is remote)"))
+            continue
+        stale = _container_stale(meta)
+        if stale:
+            skipped.append((name, stale))
+            continue
+        targets.append(name)
+    return targets, skipped
+
+
+def _sys_restart(rest: list[str]) -> int:
+    """`tdx-system restart`: restart the docker container(s) of every container
+    system in the store — the one command to run after the host machine or Docker
+    was restarted. Systems with no container (cloud / SaaS / service / fs) are not
+    applicable and skipped; an ssh-tunnel handle or a stale descriptor is reported
+    and skipped. Restarts run concurrently."""
+    p = _ArgumentParser(
+        prog="tdx-system restart",
+        add_help=True,
+        description="Restart the docker container(s) of every container system in "
+        "the store (useful after the host machine or Docker was restarted).",
+    )
+    _add_sys_dir(p)
+    _add_secret_env(p)
+    args = p.parse_args(rest)
+    _apply_secret(args)
+    targets, skipped = _restartable_systems(args.sys_dir)
+    for name, why in skipped:
+        console.warn(f">>> skipping '{name}': {why}")
+    return _multi_apply(
+        targets,
+        "system",
+        lambda n: _sys_restart_one(n, args.sys_dir),
+        past="restarted",
+    )
 
 
 def _sys_info(rest: list[str]) -> int:
@@ -1614,9 +1741,9 @@ def _sys_lifecycle(rest: list[str], verb: str) -> int:
             f"{verb} only applies to container systems "
             f"({doc['name']} is a {doc['category']} system)"
         )
-    print()
-    print(f">>> {verb}d {doc['name']} ({slug}): {state}")
-    print()
+    console.out()
+    console.good(f">>> {verb}d {doc['name']} ({slug}): {state}")
+    console.out()
     return 0
 
 
@@ -2006,6 +2133,7 @@ def _domain_create_auto(args) -> int:
         _progress(
             done,
             total,
+            outcome.ok,
             "ok  " if outcome.ok else "FAIL",
             sname,
             outcome.seconds,
@@ -2285,12 +2413,12 @@ def _domain_seed(rest: list[str]) -> int:
         model=args.model,
         data=args.data,
     )
-    print()
-    print(
+    console.out()
+    console.good(
         f">>> seeded domain '{doc['name']}' ({slug}) with "
         f"model={args.model} data={args.data or '-'}"
     )
-    print()
+    console.out()
     return 0
 
 
@@ -2313,9 +2441,9 @@ def _domain_recreate(rest: list[str]) -> int:
         )
     descriptor.validate_name(args.domain)
     detail = _recreate_one(args.domain, args.domain_dir)
-    print()
-    print(f">>> recreated domain '{args.domain}' {detail}")
-    print()
+    console.out()
+    console.good(f">>> recreated domain '{args.domain}' {detail}")
+    console.out()
     return 0
 
 
@@ -2366,9 +2494,9 @@ def _domain_destroy(rest: list[str]) -> int:
     detail = _domain_destroy_one(
         args.domain, args.domain_dir, args.sys_dir, force=args.force
     )
-    print()
-    print(f">>> destroyed domain '{args.domain}' {detail}")
-    print()
+    console.out()
+    console.good(f">>> destroyed domain '{args.domain}' {detail}")
+    console.out()
     return 0
 
 
@@ -2529,6 +2657,7 @@ _SYS_VERBS = {
     "list": _sys_list,
     "destroy": _sys_destroy,
     "status": _sys_status,
+    "restart": _sys_restart,
     "info": _sys_info,
     "pause": _sys_pause,
     "resume": _sys_resume,
@@ -2593,6 +2722,27 @@ def _dispatch(cmd: str, verbs: dict, argv: list[str]) -> int:
     return verbs[verb](rest)
 
 
+# Verbs whose (chatty) detail is redirected to a timestamped log under the store
+# dir while the console shows only brief, colored progress + counters (see the
+# `console` module). The quick read-only / machine-output verbs (list / info /
+# dump / types / secrets / fetch-images / connect / pause / resume) keep printing
+# straight to the terminal.
+_LOGGED_VERBS = {"create", "destroy", "status", "restart", "recreate", "seed"}
+
+
+def _run_dispatch(cmd: str, verbs: dict, argv: list[str], log_dir: Path) -> int:
+    """Dispatch `argv`, routing a logged verb's detail into a fresh timestamped
+    log under `log_dir` (the console then shows only brief, colored progress);
+    every other verb prints straight to the terminal. A bare `-h`/`--help` is
+    left un-redirected so no empty log is minted just to print help."""
+    verb = argv[0] if argv else ""
+    wants_help = any(a in ("-h", "--help") for a in argv[1:])
+    if verb in _LOGGED_VERBS and verb in verbs and not wants_help:
+        with console.activate(log_dir):
+            return _dispatch(cmd, verbs, argv)
+    return _dispatch(cmd, verbs, argv)
+
+
 def _main_system() -> int:
     import sys
 
@@ -2601,14 +2751,25 @@ def _main_system() -> int:
     # in the zero-dependency launcher.
     if not (argv and argv[0] in _NO_DESCRIPTOR_VERBS):
         _venv.bootstrap(module="tabsdatax.itest.tdksystems.tdx_system")
-    return _dispatch("tdx-system", _SYS_VERBS, argv)
+    return _run_dispatch(
+        "tdx-system",
+        _SYS_VERBS,
+        argv,
+        store.system_dir(_extract_opt(argv, "--sys-dir")),
+    )
 
 
 def _main_domain() -> int:
     _venv.bootstrap(module="tabsdatax.itest.tdksystems.tdx_domain")
     import sys
 
-    return _dispatch("tdx-domain", _DOMAIN_VERBS, sys.argv[1:])
+    argv = sys.argv[1:]
+    return _run_dispatch(
+        "tdx-domain",
+        _DOMAIN_VERBS,
+        argv,
+        store.domain_dir(_extract_opt(argv, "--domain-dir")),
+    )
 
 
 def main_system() -> None:

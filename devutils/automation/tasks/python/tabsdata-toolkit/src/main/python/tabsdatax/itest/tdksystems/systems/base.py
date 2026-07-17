@@ -337,6 +337,12 @@ class System(ABC):
     def resume(self, ctx: SystemContext) -> str:
         raise Unsupported(f"{self.slug} does not support resume")
 
+    def restart(self, ctx: SystemContext) -> str:
+        """Restart the system's container(s) (docker restart) — bringing them
+        back after the host machine or Docker was restarted. Default:
+        unsupported (a system with no container has nothing to restart)."""
+        raise Unsupported(f"{self.slug} does not support restart")
+
     # ==================================================================
     # Domain lifecycle
     # ==================================================================

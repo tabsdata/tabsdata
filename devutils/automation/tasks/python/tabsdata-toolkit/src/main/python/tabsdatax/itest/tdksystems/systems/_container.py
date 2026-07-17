@@ -24,6 +24,7 @@ from ..shell import (
     container_id,
     container_state,
     docker_pull,
+    docker_restart,
     docker_rm,
     docker_start,
     docker_stop,
@@ -269,6 +270,17 @@ class ContainerBase(System):
             return "already-running"
         docker_start(cname)
         return "started"
+
+    def restart(self, ctx: SystemContext) -> str:
+        if ctx.meta.get("SSH_TUNNEL_PID"):
+            raise DatagenError(
+                "cannot restart an ssh-tunnel system (its container is remote)"
+            )
+        cname = ctx.meta["CONTAINER"]
+        if container_state(cname) is None:
+            raise DatagenError(f"container does not exist: {cname}")
+        docker_restart(cname)
+        return "restarted"
 
     # ==================================================================
     # Domain lifecycle

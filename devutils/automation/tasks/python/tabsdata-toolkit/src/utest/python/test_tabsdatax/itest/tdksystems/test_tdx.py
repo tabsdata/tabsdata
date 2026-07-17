@@ -518,6 +518,78 @@ def test_sys_status_and_destroy_all(stores, fs_root, capsys):
     assert "destroyed 2/2 systems" in capsys.readouterr().out
 
 
+# ---- tdx-system restart: bring container systems back after a host restart -
+
+def _write_container_sys(name, *, container=None, location="container", extra=None):
+    """Write a container-system descriptor directly (no docker), so the restart
+    selection / dispatch can be exercised without provisioning."""
+    descriptor.write_container_system(
+        out=str(store.system_path(name)),
+        system_type="mysql",
+        system_kind="sql",
+        label="MySQL",
+        container=container or f"tdx_{name}",
+        host="localhost",
+        port="3306",
+        user="root",
+        password="pw",
+        domain_desc="",
+        location=location,
+        extra_vars=extra,
+    )
+    descriptor.stamp(store.system_path(name), name=name, started="t")
+
+
+def test_restart_selects_only_container_systems(stores, fs_root):
+    # fs (native, no container) is not applicable; the mysql descriptor is.
+    tdx._sys_create(["--type", "fs", "--sys", "myfs",
+                     "--sys-path", str(fs_root), "-f"])
+    _write_container_sys("mydb")
+    targets, skipped = tdx._restartable_systems(None)
+    assert targets == ["mydb"] and skipped == []
+
+
+def test_restart_skips_ssh_tunnel_systems(stores):
+    _write_container_sys(
+        "remote", location="ssh-tunnel", extra={"SSH_TUNNEL_PID": "4321"}
+    )
+    targets, skipped = tdx._restartable_systems(None)
+    assert targets == []
+    assert len(skipped) == 1 and skipped[0][0] == "remote"
+    assert "ssh-tunnel" in skipped[0][1]
+
+
+def test_sys_restart_runs_container_systems(stores, monkeypatch, capsys):
+    # Restart the container without docker: stub the backend's restart hook.
+    from tabsdatax.itest.tdksystems.systems._container import ContainerBase
+
+    calls: list[str] = []
+
+    def fake_restart(self, ctx):
+        calls.append(ctx.name)
+        return "restarted"
+
+    monkeypatch.setattr(ContainerBase, "restart", fake_restart)
+    _write_container_sys("mydb")
+    assert tdx._sys_restart([]) == 0
+    assert calls == ["mydb"]
+    out = capsys.readouterr().out
+    assert "restarted 1/1 systems" in out and "mydb" in out
+
+
+def test_sys_restart_no_container_systems_is_friendly(stores, fs_root, capsys):
+    tdx._sys_create(["--type", "fs", "--sys", "myfs",
+                     "--sys-path", str(fs_root), "-f"])
+    capsys.readouterr()
+    assert tdx._sys_restart([]) == 0
+    assert "no systems found" in capsys.readouterr().out
+
+
+def test_restart_is_a_registered_system_verb():
+    assert "restart" in tdx._SYS_VERBS
+    assert "restart" not in tdx._DOMAIN_VERBS
+
+
 # ---- tdx-domain create --auto: one domain per system ----------------------
 
 def test_domain_create_auto_names_after_system(stores, fs_root, capsys):

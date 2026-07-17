@@ -38,6 +38,8 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import console
+
 DEFAULT_MAX_WORKERS = 8
 _MAX_WORKERS_ENV = "TDX_PARALLELISM"
 
@@ -87,6 +89,12 @@ def _child(worker: Callable, item, paths: tuple[str, str, str]) -> None:
     out_path, err_path, res_path = paths
     sys.stdout = _redirect(1, out_path)
     sys.stderr = _redirect(2, err_path)
+    # The child inherited the parent's active console (its terminal handle is a
+    # dup of the real stdout that survived the fork). Reset it so this worker's
+    # brief output falls back to `print` — landing in the capture files above,
+    # which the parent replays into the log — instead of racing straight to the
+    # user's terminal.
+    console.CONSOLE.reset_for_child()
     value = None
     error = None
     try:

@@ -18,7 +18,6 @@ import secrets
 import socket
 import string
 import subprocess
-import sys
 
 from .errors import DatagenError
 
@@ -26,10 +25,17 @@ from .errors import DatagenError
 class ArgumentParser(argparse.ArgumentParser):
     """argparse parser that wraps every help/usage/error block with a
     leading and trailing blank line, consistent with the rest of the
-    CLI's output style."""
+    CLI's output style.
+
+    Help / usage / errors go to the real terminal (not the detail log) when a
+    verb is running under the `console` split — otherwise `--help` and argument
+    errors would be redirected into the log file and never seen. When no console
+    is active this is exactly stdout / stderr, as before."""
 
     def print_help(self, file=None):
-        file = file or sys.stdout
+        from . import console
+
+        file = file or console.stream()
         print(file=file)
         super().print_help(file)
         print(file=file)
@@ -39,15 +45,23 @@ class ArgumentParser(argparse.ArgumentParser):
         # leading blank here and the trailing blank is added by error()
         # (after the error message) or by print_help() (after the help
         # text, when print_usage is part of the help layout).
-        file = file or sys.stdout
+        from . import console
+
+        file = file or console.stream()
         print(file=file)
         super().print_usage(file)
 
     def error(self, message: str):
         # Default chain: print_usage(stderr) → exit(2, "prog: error: msg\n").
-        # Trail an extra newline so a blank line appears below the error.
-        self.print_usage(sys.stderr)
-        self.exit(2, f"{self.prog}: error: {message}\n\n")
+        # Route both to the console's error stream (the real terminal while a
+        # verb is logging) and trail an extra newline for a blank line below.
+        from . import console
+
+        err = console.err_stream()
+        self.print_usage(err)
+        err.write(f"{self.prog}: error: {message}\n\n")
+        err.flush()
+        raise SystemExit(2)
 
 
 def gen_password(length: int = 24) -> str:
@@ -189,6 +203,16 @@ def docker_stop(name: str) -> None:
         raise DatagenError(
             f"could not stop container {name}: {cp.stderr.strip() or cp.stdout.strip()}"
         )
+
+
+def docker_restart(name: str) -> None:
+    """Restart container `name` (stops it if running, then starts it; starts it
+    if stopped). Used by `tdx-system restart` to bring containers back after the
+    host machine or Docker was restarted."""
+    cp = subprocess.run(["docker", "restart", name], capture_output=True, text=True)
+    if cp.returncode != 0:
+        detail = cp.stderr.strip() or cp.stdout.strip()
+        raise DatagenError(f"could not restart container {name}: {detail}")
 
 
 def docker_exec(

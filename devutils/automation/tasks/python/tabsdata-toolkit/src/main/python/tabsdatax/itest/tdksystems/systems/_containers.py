@@ -143,6 +143,10 @@ class ContainersBase(System):
         docker_compose(ctx.meta["PROJECT"], self.compose_file, "start")
         return "started"
 
+    def restart(self, ctx: SystemContext) -> str:
+        docker_compose(ctx.meta["PROJECT"], self.compose_file, "restart")
+        return "restarted"
+
     # ==================================================================
     # Compose primitives (overridable for testing)
     # ==================================================================
