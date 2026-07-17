@@ -3,34 +3,30 @@
 #
 
 """End-to-end ``DruidConnectionExplorer`` tests against a real Druid
-cluster.
+cluster provisioned through the tdx systems / domains machinery.
 
-Druid datasources are created by ingestion (there is no ``users`` /
-``orders`` CREATE-TABLE seed), so the catalog surface of
-``DruidConnectionExplorer`` -- ``check_connect`` / ``metadata`` /
-``data`` -- is exercised structurally: the probe succeeds, ``metadata``
-returns ``SQLEntity`` objects for the ``druid`` schema, and ``data``
-samples whatever datasource is present.
+The ``druid_world_xs`` domain seeds the ``world`` model: the tdx Druid
+system stages the generated parquet to S3 and ingests one datasource per
+table (``<datasource>__wld_country`` / ``__wld_city`` /
+``__wld_country_language``), so the catalog surface of
+``DruidConnectionExplorer`` -- ``check_connect`` / ``metadata`` / ``data``
+-- is exercised against real datasources with real rows.
 
-The ``fresh_druid`` fixture below mirrors the one in the plugin
-integration suite (built from the session-scoped ``druid_config`` and the
-shared ``S30__*`` S3 staging bundle); it skips when S3 staging isn't
-configured.
-
-Note: the explorer queries the Druid **Broker**'s SQL endpoint, and
-``make_url`` uses the port carried by the connection URL (falling back to
-the Broker's standard port only when none is given). A ``DruidDestConn``
-nominally holds the *Overlord* URL, but this explorer never touches the
-Overlord -- so the fixture points ``overlord_url`` at
-``druid_config.broker_url``, letting the port-aware ``make_url`` reach the
-Broker even though the docker stack maps it to its own host port.
+Note: the explorer queries Druid's SQL endpoint, which the **Router**
+serves at ``/druid/v2/sql``. ``DruidDestConn`` only carries
+``overlord_url``, and ``make_url`` builds the SQL URL from the host and
+port it finds there -- so the conn is fed the domain's ``router_url`` to
+reach the SQL service. The cloud staging area is required to construct the
+conn but the explorer never touches it, so a placeholder is used.
 """
 
 from __future__ import annotations
 
-import os
-
 import pytest
+from tabsdatax.itest.fixture.backends.druid import (
+    DruidDomain,
+    druid_domain,
+)
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.sql._explorer import SQLEntity
@@ -38,72 +34,76 @@ from tabsdatak.conn.common.types import AwsAccessSecretKey, UserPassword
 from tabsdatak.conn.druid import DruidDestConn, S3Location
 from tabsdatak.conn.druid.explorer import DruidConnectionExplorer
 
-# Share the serialization domain of the other ``druid_config`` consumers.
-pytestmark = [
-    pytest.mark.druid,
-    pytest.mark.xdist_group("druid-plugin_integration_seq"),
-]
+pytestmark = pytest.mark.druid
 
-_S3_URI = os.environ.get("S30__S3_URI")
-_S3_REGION = os.environ.get("S30__S3_REGION")
-_S3_ACCESS_KEY = os.environ.get("S30__S3_ACCESS_KEY")
-_S3_SECRET_KEY = os.environ.get("S30__S3_SECRET_KEY")
+# The explorer only issues catalog SQL over the Broker/Router endpoint; the
+# staging area is never used, so a placeholder is enough to construct the conn.
+_STAGING = S3Location(
+    bucket="unused",
+    region="us-east-1",
+    credentials=AwsAccessSecretKey(
+        access_key_id=Secret("unused"), secret_access_key=Secret("unused")
+    ),
+)
+
+# The world model's tables — each seeded as its own datasource. A subset of each
+# table's columns is asserted so the check is robust to Druid's synthetic time
+# columns (__time / __td_dummy_time) that ingestion adds.
+_WORLD_COLUMNS = {
+    "wld_country": {"code", "name", "continent", "population"},
+    "wld_city": {"id", "name", "country_code", "population"},
+    "wld_country_language": {"country_code", "language", "percentage"},
+}
 
 
-def _parse_s3_uri(uri: str) -> tuple[str, str]:
-    body = uri[len("s3://") :] if uri.startswith("s3://") else uri
-    bucket, _, base_path = body.partition("/")
-    # base_path is a FullPathSpec (leading "/", no trailing "/"); a
-    # bucket-only URI yields the bare root "/".
-    return bucket, "/" + base_path.strip("/")
-
-
-@pytest.fixture
-def fresh_druid(druid_config) -> DruidDestConn:
-    if not all((_S3_URI, _S3_REGION, _S3_ACCESS_KEY, _S3_SECRET_KEY)):
-        pytest.skip(
-            "Druid staging not configured. Set S30__S3_URI / S30__S3_REGION "
-            "/ S30__S3_ACCESS_KEY / S30__S3_SECRET_KEY to run these tests."
-        )
-    bucket, base_path = _parse_s3_uri(_S3_URI)
+def _conn_from(cfg: DruidDomain) -> DruidDestConn:
     return DruidDestConn(
-        # The explorer only reads ``overlord_url`` to build the Broker SQL
-        # URL, and ``make_url`` honors the port in it -- so feed the Broker
-        # endpoint here to reach Druid's SQL service in the docker stack.
-        overlord_url=druid_config.broker_url,
-        staging=S3Location(
-            bucket=bucket,
-            region=_S3_REGION,
-            credentials=AwsAccessSecretKey(
-                access_key_id=Secret(_S3_ACCESS_KEY),
-                secret_access_key=Secret(_S3_SECRET_KEY),
-            ),
-            base_path=base_path,
-        ),
-        credentials=UserPassword(user=Secret("admin"), password=Secret("")),
+        # SQL is served by the Router; make_url honors the port carried here.
+        overlord_url=cfg.router_url,
+        staging=_STAGING,
+        credentials=UserPassword(user=Secret(cfg.user), password=Secret(cfg.password)),
     )
 
 
-def test_check_connect_succeeds(fresh_druid):
-    assert DruidConnectionExplorer().check_connect(fresh_druid) is None
+def _table_of(datasource: str) -> str:
+    """The world table a seeded datasource carries (its ``__<table>`` suffix)."""
+    _, _, table = datasource.rpartition("__")
+    return table
 
 
-def test_metadata_returns_sql_entities(fresh_druid):
-    entities = DruidConnectionExplorer().metadata(fresh_druid)
-    assert isinstance(entities, list)
+@druid_domain("druid_world_xs")
+def test_check_connect_succeeds(domain_druid_world_xs: DruidDomain):
+    conn = _conn_from(domain_druid_world_xs)
+    assert DruidConnectionExplorer().check_connect(conn) is None
+
+
+@druid_domain("druid_world_xs")
+def test_metadata_lists_world_datasources(domain_druid_world_xs: DruidDomain):
+    entities = DruidConnectionExplorer().metadata(_conn_from(domain_druid_world_xs))
+    assert entities
     assert all(isinstance(e, SQLEntity) for e in entities)
-    # The scan is pinned to the ``druid`` schema.
     assert all(e.schema == "druid" for e in entities)
 
+    tables = {_table_of(e.table) for e in entities}
+    assert _WORLD_COLUMNS.keys() <= tables
 
-def test_data_reads_sample_rows(fresh_druid):
+    by_table = {_table_of(e.table): e for e in entities}
+    for table, expected in _WORLD_COLUMNS.items():
+        found = {c.name for c in by_table[table].columns}
+        assert expected <= found, f"{table} missing columns: {expected - found}"
+
+
+@druid_domain("druid_world_xs")
+def test_data_reads_world_rows(domain_druid_world_xs: DruidDomain):
+    conn = _conn_from(domain_druid_world_xs)
     explorer = DruidConnectionExplorer()
-    entities = explorer.metadata(fresh_druid)
-    if not entities:
-        pytest.skip("no datasources present in the Druid cluster")
+    entities = explorer.metadata(conn)
+    by_table = {_table_of(e.table): e for e in entities}
 
-    rows = explorer.data(fresh_druid, entities[0], limit=5)
-    assert isinstance(rows, list)
+    country = by_table["wld_country"]
+    rows = explorer.data(conn, country, limit=5)
+    assert rows
     assert len(rows) <= 5
-    expected = {c.name for c in entities[0].columns}
-    assert all(set(r) == expected for r in rows)
+    field_names = {c.name for c in country.columns}
+    assert all(set(r) <= field_names for r in rows)
+    assert all(_WORLD_COLUMNS["wld_country"] <= set(r) for r in rows)

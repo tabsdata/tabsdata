@@ -47,6 +47,16 @@
   type: dev
 - name: druid
   type: druid
+  bucket:
+    env: S3__BUCKET
+  region:
+    env: S3__REGION
+  access-key:
+    env: S3__ACCESS_KEY
+  secret-key:
+    env: S3__SECRET_KEY
+  sys-path:
+    env: S3__SYS_PATH
 - name: fs
   type: fs
   sys-path: target/backends/fs

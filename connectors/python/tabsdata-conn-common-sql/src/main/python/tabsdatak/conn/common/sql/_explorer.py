@@ -15,7 +15,7 @@ from sqlalchemy import (
     table as sa_table,
     text as sa_text,
 )
-from sqlalchemy.exc import NoSuchTableError
+from sqlalchemy.exc import NoSuchTableError, ResourceClosedError
 
 import tabsdatak._api as _api
 from tabsdatak.conn.common._explorer import BaseConnMetaModel, Column
@@ -175,8 +175,13 @@ class SqlAlchemyConnectionExplorer(Explorer):
         for schema in schemas:
             if schema is not None and schema.upper() in skip:
                 continue
-            table_names = insp.get_table_names(schema=schema)
-            view_names = insp.get_view_names(schema=schema)
+            try:
+                table_names = insp.get_table_names(schema=schema)
+                view_names = insp.get_view_names(schema=schema)
+            except ResourceClosedError:
+                # Druid (pydruid) iterates a description-less cursor for an
+                # empty schema instead of returning []; treat as no tables.
+                continue
             fields = self.map_entity_fields(conn, schema)
 
             for table_name in table_names + view_names:

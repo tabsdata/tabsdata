@@ -2,7 +2,8 @@
   "kinds": [
     "sql",
     "file",
-    "kafka"
+    "kafka",
+    "druid"
   ],
   "prolific": "--cities",
   "prolific_base": 4000,

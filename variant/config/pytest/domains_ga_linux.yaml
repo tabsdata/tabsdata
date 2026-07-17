@@ -32,6 +32,10 @@
   data: xs
 - name: druid
   sys: druid
+- name: druid_world_xs
+  sys: druid
+  model: world
+  data: xs
 - name: fs
   sys: fs
 - name: fs_world_xs

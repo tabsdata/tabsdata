@@ -37,6 +37,7 @@ class DruidDomain(Domain):
     router_url: str
     user: str
     password: str
+    entities: dict[str, int] | None = None  # {datasource: record count}, once loaded
 
 
 def druid_system(name: str):

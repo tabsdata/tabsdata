@@ -124,6 +124,13 @@ def _run_data_create(args: argparse.Namespace) -> int:
         print("data create: no schema needed for kafka domains (topics only)")
         print()
         return 0
+    if meta.get("SYSTEM_KIND") == "druid":
+        # Druid datasources have no schema to install — they materialise when
+        # `data load` stages the parquet and ingests it.
+        print()
+        print("data create: no schema needed for druid domains (datasources only)")
+        print()
+        return 0
     if not sysobj.supports_sql:
         if kind.startswith("saas") and ctx.slug == "salesforce":
             print()
@@ -221,6 +228,16 @@ def _run_data_load(args: argparse.Namespace) -> int:
                 ),
                 schema_sidecar=sidecar,
             )
+            if meta.get("SYSTEM_KIND") == "druid":
+                # Druid fans each table out to its own datasource; record the
+                # counts under the datasource names the cluster will expose.
+                from .systems.druid.system import _table_datasource
+
+                base = ctx.meta.get("DATASOURCE", "")
+                entities = {
+                    _table_datasource(base, table): rows
+                    for table, rows in entities.items()
+                }
         print()
         sysobj.load_data(
             ctx,
@@ -319,6 +336,9 @@ def _resolve_size(model: str, size: str | None) -> str | None:
 
 
 def _default_format_for(kind: str, meta: dict[str, str]) -> str:
+    if meta.get("SYSTEM_KIND") == "druid":
+        # Druid ingests its input from staged parquet (see DruidSystem.load_data).
+        return "parquet"
     if kind.startswith("container"):
         if meta.get("SUPPORTS_SQL") != "1":
             raise DatagenError(

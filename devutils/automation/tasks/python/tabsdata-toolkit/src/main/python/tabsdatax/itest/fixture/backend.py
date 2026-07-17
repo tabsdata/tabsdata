@@ -179,11 +179,11 @@ def require(name: str, cls: type):
     return getattr(pytest.mark, MARKER)(name, cls)
 
 
-def declared_backends(request) -> dict[str, type]:
-    declared: dict[str, type] = {}
+def declared_backends(request) -> dict[tuple[str, str], type]:
+    declared: dict[tuple[str, str], type] = {}
     for marker in request.node.iter_markers(MARKER):
         name, cls = marker.args
-        declared.setdefault(name, cls)
+        declared.setdefault((_kind_of(cls), name), cls)
     return declared
 
 
@@ -215,19 +215,14 @@ def requested_backends(fixturenames) -> set[tuple[str, str]]:
     return requested
 
 
-def resolve_declared(request, name: str, expected: type | None = None):
+def resolve_declared(request, name: str, expected: type):
     declared = declared_backends(request)
-    if name not in declared:
+    kind = _kind_of(expected)
+    cls = declared.get((kind, name))
+    if cls is None:
         pytest.fail(
-            f"No backend {name!r} declared — add a @<type>_system / "
+            f"No {kind} {name!r} declared — add a @<type>_system / "
             f"@<type>_domain decorator for it",
-            pytrace=False,
-        )
-    cls = declared[name]
-    if expected is not None and not issubclass(cls, expected):
-        pytest.fail(
-            f"Backend {name!r} is declared as {cls.__name__}, "
-            f"not a {expected.__name__.lower()}",
             pytrace=False,
         )
     return load(name, cls)
