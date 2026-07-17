@@ -634,6 +634,9 @@ version = "0.10.9"
 [workspace.dependencies.shlex]
 version = "1.3.0"
 
+[workspace.dependencies.spin]
+version = "0.9.9"
+
 [workspace.dependencies.sqlx]
 version = "0.8.6"
 features = ["chrono", "runtime-tokio"]

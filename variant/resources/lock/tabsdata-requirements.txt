@@ -4,7 +4,7 @@
 
 accessify==0.3.1
 annotated-types==0.7.0
-anyio==4.14.1
+anyio==4.14.2
 archspec==0.2.5
 asn1crypto==1.5.1
 attrs==26.1.0
@@ -39,7 +39,7 @@ fastparquet==2026.3.0
 filelock==3.25.2
 fsspec==2026.6.0
 google-api-core==2.30.3
-google-auth==2.55.2
+google-auth==2.56.0
 google-cloud-bigquery==3.40.1
 google-cloud-core==2.6.0
 google-cloud-storage==3.10.0
