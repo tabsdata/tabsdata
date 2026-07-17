@@ -557,3 +557,44 @@ def test_src_plugin_empty_result_materializes_typed_empty_table(
     schema = pl.scan_parquet(out).collect_schema()
     assert list(schema.keys()) == ["id", "name"]
     assert pl.read_parquet(out).height == 0
+
+
+def test_src_plugin_binds_named_parameter(
+    databricks_config, work_dir, scratch_table,
+):
+    """`:wm` binds natively as a typed (BIGINT) parameter and filters
+    correctly -- no UNBOUND_SQL_PARAMETER, no text interpolation. An
+    advanced watermark returns zero rows (also exercises the
+    empty-result path).
+    """
+    from tabsdatak.conn.databricks import _impl
+
+    seed = _make_parquet(
+        work_dir / "seed.parquet",
+        [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}, {"id": 3, "name": "c"}],
+    )
+    plugin._DatabricksDestPlugin().write_out(
+        _DestCtx(work_dir),
+        _dest_conn_from(databricks_config),
+        DatabricksDest(
+            tables=[scratch_table],
+        ),
+        [seed],
+    )
+
+    sql_fq = _impl._fq_for_sql(scratch_table)
+
+    def _read(wm: int):
+        run_dir = work_dir / f"wm_{wm}"
+        run_dir.mkdir()
+        src = DatabricksSrc(
+            queries=[f"SELECT id FROM {sql_fq} WHERE id > :wm ORDER BY id"],
+            initial_values={"wm": wm},
+        )
+        result = plugin._DatabricksSrcPlugin().read_in(
+            _SrcCtx(run_dir), _src_conn_from(databricks_config), src,
+        )
+        return pl.read_parquet(result[0][0].file)
+
+    assert _read(1)["id"].to_list() == [2, 3]  # bound and filtered numerically
+    assert _read(10).height == 0  # advanced watermark -> empty result

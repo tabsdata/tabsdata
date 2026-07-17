@@ -176,19 +176,67 @@ def _build_sql_connection(
 # --- Source: query execution + chunked download ---------------------
 
 
-def _replace_initial_values(statement: str, initial_values: dict[str, Any]) -> str:
-    """Naive ``{key}`` -> repr-value substitution. Matches the legacy
-    behaviour: dict keys are interpolated as ``{key}`` placeholders in
-    the statement string. Strings are quoted; non-strings use
-    ``repr()``."""
-    out = statement
-    for k, v in initial_values.items():
-        token = "{" + k + "}"
-        if isinstance(v, str):
-            out = out.replace(token, repr(v))
-        else:
-            out = out.replace(token, repr(v))
-    return out
+def _param_sql_type(value: Any) -> str | None:
+    """Map a Python bind value to the Databricks SQL type name for a
+    ``StatementParameterListItem``. Returns ``None`` for a ``None``
+    value (typed NULL is left to Databricks). ``bool`` is checked
+    before ``int`` because ``bool`` is a subclass of ``int``.
+
+    Getting this right matters: an unset type defaults to STRING, which
+    breaks numeric comparisons like ``unix_timestamp(data_ts) > :wm``
+    (bigint vs string)."""
+    from datetime import date, datetime
+    from decimal import Decimal
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "BOOLEAN"
+    if isinstance(value, int):
+        return "BIGINT"
+    if isinstance(value, float):
+        return "DOUBLE"
+    if isinstance(value, Decimal):
+        return "DECIMAL"
+    if isinstance(value, datetime):
+        return "TIMESTAMP"
+    if isinstance(value, date):
+        return "DATE"
+    return "STRING"
+
+
+def _param_value_str(value: Any) -> str | None:
+    """Render a Python bind value as the string form Databricks expects
+    for a ``StatementParameterListItem.value`` (``None`` -> typed NULL)."""
+    from datetime import date, datetime
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return str(value)
+
+
+def _statement_parameters(initial_values: dict[str, Any] | None):
+    """Build the native ``parameters`` list for
+    ``statement_execution.execute_statement`` from the resolved bind
+    dict, so ``:name`` markers in the SQL are bound as real, typed
+    parameters (no text interpolation). Returns ``None`` when there are
+    no binds."""
+    if not initial_values:
+        return None
+    from databricks.sdk.service.sql import StatementParameterListItem
+
+    return [
+        StatementParameterListItem(
+            name=name,
+            value=_param_value_str(value),
+            type=_param_sql_type(value),
+        )
+        for name, value in initial_values.items()
+    ]
 
 
 def _chunk_links_iterator(ws_client, response):
@@ -431,8 +479,9 @@ def execute_query(
         StatementState,
     )
 
-    if cfg.initial_values is not None:
-        statement = _replace_initial_values(statement, cfg.initial_values)
+    # ``:name`` markers stay in the SQL; the resolved values bind natively as
+    # typed parameters (no text interpolation).
+    parameters = _statement_parameters(cfg.initial_values)
 
     uuid_string = uuid.uuid4().hex[:16]
     out_path = work_dir / f"intermediate_{index}_{uuid_string}.parquet"
@@ -452,6 +501,7 @@ def execute_query(
         disposition=Disposition.EXTERNAL_LINKS,
         format=Format.ARROW_STREAM,
         wait_timeout=_ASYNC_EXECUTION_WAIT_TIMEOUT,
+        parameters=parameters,
     )
 
     while response.status.state in (

@@ -158,39 +158,99 @@ class TestVolumePath:
 
 
 # ---------------------------------------------------------------------------
-# _replace_initial_values
+# Native :name parameter binding (replaces the legacy {name} substitution)
 # ---------------------------------------------------------------------------
 
 
-class TestReplaceInitialValues:
-    def test_replaces_string_with_repr_quoted(self):
-        out = _impl._replace_initial_values(
-            "SELECT * FROM t WHERE name = {name}",
-            {"name": "alice"},
-        )
-        assert out == "SELECT * FROM t WHERE name = 'alice'"
+class TestParamSqlType:
+    @pytest.mark.parametrize(
+        "value, sql_type",
+        [
+            (True, "BOOLEAN"),  # bool before int (bool is an int subclass)
+            (42, "BIGINT"),
+            (3.5, "DOUBLE"),
+            ("x", "STRING"),
+            (None, None),
+        ],
+    )
+    def test_type_mapping(self, value, sql_type):
+        assert _impl._param_sql_type(value) == sql_type
 
-    def test_replaces_int_unquoted(self):
-        out = _impl._replace_initial_values(
-            "SELECT * FROM t WHERE id = {id}",
-            {"id": 42},
-        )
-        assert out == "SELECT * FROM t WHERE id = 42"
+    def test_decimal_and_temporal(self):
+        from datetime import date, datetime
+        from decimal import Decimal
 
-    def test_replaces_multiple_keys(self):
-        out = _impl._replace_initial_values(
-            "SELECT * FROM t WHERE id > {min_id} AND id < {max_id}",
-            {"min_id": 10, "max_id": 100},
-        )
-        assert out == "SELECT * FROM t WHERE id > 10 AND id < 100"
+        assert _impl._param_sql_type(Decimal("1.5")) == "DECIMAL"
+        assert _impl._param_sql_type(datetime(2026, 1, 1)) == "TIMESTAMP"
+        assert _impl._param_sql_type(date(2026, 1, 1)) == "DATE"
 
-    def test_missing_key_leaves_placeholder(self):
-        out = _impl._replace_initial_values(
-            "SELECT * FROM t WHERE id = {missing}",
-            {"other": "x"},
+
+class TestParamValueStr:
+    def test_bool_is_lowercase(self):
+        assert _impl._param_value_str(True) == "true"
+        assert _impl._param_value_str(False) == "false"
+
+    def test_int_and_none(self):
+        assert _impl._param_value_str(0) == "0"
+        assert _impl._param_value_str(None) is None
+
+
+class TestStatementParameters:
+    def test_none_or_empty_binds_no_parameters(self):
+        assert _impl._statement_parameters(None) is None
+        assert _impl._statement_parameters({}) is None
+
+    def test_builds_typed_parameter_items(self):
+        from databricks.sdk.service.sql import StatementParameterListItem
+
+        params = _impl._statement_parameters({"wm": 0, "name": "alice"})
+        assert params == [
+            StatementParameterListItem(name="wm", value="0", type="BIGINT"),
+            StatementParameterListItem(name="name", value="alice", type="STRING"),
+        ]
+
+
+class TestExecuteQueryParameterBinding:
+    """``execute_query`` binds ``:name`` markers natively via
+    ``parameters=[...]`` and leaves the SQL text untouched."""
+
+    @staticmethod
+    def _execute_statement_kwargs(statement, initial_values, tmp_path) -> dict:
+        from databricks.sdk.service.sql import StatementState
+
+        conn = _src_conn(warehouse=None, warehouse_id="a1b2c3d4e5f60718")
+        cfg = _impl.DatabricksReadCfg(
+            conn=conn,
+            queries=[statement],
+            initial_values=initial_values,
+            download_threads=1,
         )
-        # Placeholder stays intact when no matching key.
-        assert "{missing}" in out
+        ws_client = MagicMock()
+        response = MagicMock()
+        response.status.state = StatementState.SUCCEEDED
+        ws_client.statement_execution.execute_statement.return_value = response
+        with (
+            patch.object(_impl, "_chunk_links_iterator"),
+            patch.object(_impl, "_process_chunks"),
+            patch.object(_impl, "_ChunkWriter"),
+        ):
+            _impl.execute_query(ws_client, cfg, statement, tmp_path, 0)
+        return ws_client.statement_execution.execute_statement.call_args.kwargs
+
+    def test_binds_named_parameters_and_keeps_sql(self, tmp_path):
+        from databricks.sdk.service.sql import StatementParameterListItem
+
+        stmt = "SELECT * FROM t WHERE unix_timestamp(data_ts) > :wm"
+        kwargs = self._execute_statement_kwargs(stmt, {"wm": 0}, tmp_path)
+        # SQL text keeps the :wm marker -- no {wm}, no interpolated 0.
+        assert kwargs["statement"] == stmt
+        assert kwargs["parameters"] == [
+            StatementParameterListItem(name="wm", value="0", type="BIGINT")
+        ]
+
+    def test_no_initial_values_passes_none_parameters(self, tmp_path):
+        kwargs = self._execute_statement_kwargs("SELECT 1", None, tmp_path)
+        assert kwargs["parameters"] is None
 
 
 # ---------------------------------------------------------------------------
