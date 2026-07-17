@@ -540,4 +540,41 @@ mod tests {
         assert_eq!(*dto.name(), name);
         assert_eq!(*dto.renamed_description(), Some(desc));
     }
+
+    #[test]
+    fn test_builder_conversion_error_names_field_and_types() {
+        // Unconstrained source string type.
+        #[tm_objects::typed(string)]
+        #[derive(Eq, PartialEq)]
+        struct Loose;
+
+        // Strict target, convertible from `Loose` but rejecting >3 chars.
+        #[tm_objects::typed(string(max_len = 3), try_from = Loose)]
+        #[derive(Eq, PartialEq)]
+        struct Strict;
+
+        #[Dao]
+        #[dao(sql_table = "src_dao")]
+        struct SrcDao {
+            value: Loose,
+        }
+
+        #[Dao]
+        #[dao(sql_table = "dst_dao")]
+        #[dxo(builder(try_from = SrcDao))]
+        struct DstDao {
+            value: Strict,
+        }
+
+        let bad: Loose = "toolong".try_into().unwrap();
+        let src = SrcDao::builder().value(bad).build().unwrap();
+
+        let msg = match DstDaoBuilder::try_from(&src) {
+            Ok(_) => panic!("expected conversion to fail on over-long value"),
+            Err(e) => format!("{e}"),
+        };
+        // The failing hop must name source.field -> target.field, not just
+        // the bare validation message.
+        assert!(msg.contains("SrcDao.value -> DstDao.value"), "conversion error lacks field/type context: {msg}");
+    }
 }

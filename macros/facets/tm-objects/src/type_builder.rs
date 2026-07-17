@@ -304,13 +304,20 @@ fn gen_field_initializers(
             IncludeField::Rename(ref name) => format_ident!("{}", name),
             _ => field_name.clone(),
         };
+        // Name the source and target of the failing hop so multi-hop DXO
+        // conversions point at the exact field that failed, not just the
+        // inner validation message.
+        let context = format!(
+            "{}.{} -> {}.{}",
+            from, source_field, target.ident, field_name
+        );
         let initializer = quote! {
             .#field_name::<#field_type>(
                 from
                 .#source_field
                 .clone()
                 .try_into()
-                .map_err(|e| #builder_error_type::ValidationError(format!("{}", e)))?,
+                .map_err(|e| #builder_error_type::ValidationError(format!("{}: {}", #context, e)))?,
             )
         };
         initializers.push(initializer);
