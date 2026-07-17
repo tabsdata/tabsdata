@@ -86,11 +86,11 @@ def test_subscriber_writes_table_to_clickhouse_domain(
     base = str(domain_s3.base_path).strip("/")
     dest_conn = ClickHouseDestConn(
         host=domain_clickhouse.host,
-        port=int(domain_clickhouse.port),
+        port=str(domain_clickhouse.port),
         credentials=sql_credentials(domain_clickhouse),
         staging=staging(domain_s3, f"/{base}/clickhouse-staging/{uuid.uuid4().hex}"),
         database=domain_clickhouse.database,
-        secure=False,
+        secure="false",
     )
     subscriber_root = tmp_path / "sub"
     subscriber_root.mkdir()

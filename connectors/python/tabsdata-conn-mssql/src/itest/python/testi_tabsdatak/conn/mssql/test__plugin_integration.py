@@ -64,9 +64,11 @@ def _dest_conn(domain: MssqlserverDomain) -> MSSQLDestConn:
     return MSSQLDestConn(uri=_conn_uri(domain), credentials=sql_credentials(domain))
 
 
-@mssqlserver_domain("mssql")
-def test_dest_then_src_round_trip(domain_mssql: MssqlserverDomain, sql, tmp_path: Path):
-    db = sql(domain_mssql)
+@mssqlserver_domain("mssqlserver")
+def test_dest_then_src_round_trip(
+    domain_mssqlserver: MssqlserverDomain, sql, tmp_path: Path
+):
+    db = sql(domain_mssqlserver)
     table = scratch_table()
     work = tmp_path / "work"
     work.mkdir()
@@ -76,13 +78,13 @@ def test_dest_then_src_round_trip(domain_mssql: MssqlserverDomain, sql, tmp_path
     try:
         plugin.MSSQLDestPlugin().write_out(
             PluginDestCtx(work),
-            _dest_conn(domain_mssql),
+            _dest_conn(domain_mssqlserver),
             MSSQLDest(tables=[table], if_table_exists="replace"),
             [parquet],
         )
         src = MSSQLSrc(queries=[f"SELECT id, name FROM {db.quote(table)} ORDER BY id"])
         out = plugin.MSSQLSrcPlugin().read_in(
-            PluginSrcCtx(work), _src_conn(domain_mssql), src
+            PluginSrcCtx(work), _src_conn(domain_mssqlserver), src
         )
         assert len(out) == 1
         got = pl.concat([read_parquet_slot(p) for p in out[0]])
@@ -92,15 +94,17 @@ def test_dest_then_src_round_trip(domain_mssql: MssqlserverDomain, sql, tmp_path
         db.drop_table(table)
 
 
-@mssqlserver_domain("mssql")
-def test_dest_append_accumulates(domain_mssql: MssqlserverDomain, sql, tmp_path: Path):
-    db = sql(domain_mssql)
+@mssqlserver_domain("mssqlserver")
+def test_dest_append_accumulates(
+    domain_mssqlserver: MssqlserverDomain, sql, tmp_path: Path
+):
+    db = sql(domain_mssqlserver)
     table = scratch_table()
     work = tmp_path / "work"
     work.mkdir()
     first = write_parquet(tmp_path / "a.parquet", [{"id": 1, "name": "alice"}])
     second = write_parquet(tmp_path / "b.parquet", [{"id": 2, "name": "bob"}])
-    dest_conn = _dest_conn(domain_mssql)
+    dest_conn = _dest_conn(domain_mssqlserver)
     try:
         plugin.MSSQLDestPlugin().write_out(
             PluginDestCtx(work),
@@ -119,11 +123,11 @@ def test_dest_append_accumulates(domain_mssql: MssqlserverDomain, sql, tmp_path:
         db.drop_table(table)
 
 
-@mssqlserver_domain("mssql")
+@mssqlserver_domain("mssqlserver")
 def test_src_multiple_queries_with_initial_values(
-    domain_mssql: MssqlserverDomain, sql, tmp_path: Path
+    domain_mssqlserver: MssqlserverDomain, sql, tmp_path: Path
 ):
-    db = sql(domain_mssql)
+    db = sql(domain_mssqlserver)
     table = scratch_table()
     work = tmp_path / "work"
     work.mkdir()
@@ -133,7 +137,7 @@ def test_src_multiple_queries_with_initial_values(
     try:
         plugin.MSSQLDestPlugin().write_out(
             PluginDestCtx(work),
-            _dest_conn(domain_mssql),
+            _dest_conn(domain_mssqlserver),
             MSSQLDest(tables=[table], if_table_exists="replace"),
             [parquet],
         )
@@ -146,7 +150,7 @@ def test_src_multiple_queries_with_initial_values(
             initial_values={"cut": 3},
         )
         out = plugin.MSSQLSrcPlugin().read_in(
-            PluginSrcCtx(work), _src_conn(domain_mssql), src
+            PluginSrcCtx(work), _src_conn(domain_mssqlserver), src
         )
         assert len(out) == 2
         ge = pl.concat([read_parquet_slot(p) for p in out[0]])["id"].to_list()

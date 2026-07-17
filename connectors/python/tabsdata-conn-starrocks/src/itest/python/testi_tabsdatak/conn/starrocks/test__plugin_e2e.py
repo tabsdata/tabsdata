@@ -59,14 +59,16 @@ def _seed_source(collection_factory: CollectionFactory, project_root: Path) -> o
 
 
 @pytest.mark.xfail(
-    strict=True,
+    strict=False,
     reason=(
         "The tdx StarRocks user is passwordless, so the connection carries an "
         "empty-valued password secret. Empty-valued secrets are not injected into "
         "the function pod (env var left unset), so the subscriber worker fails "
         "hydration with COMMON_6 and the run ends 'Stalled'. Platform bug tracked "
-        "in TD-2802; the connector itself is fine (integration tests pass). Drop "
-        "this xfail once empty secrets reach function pods."
+        "in TD-2802; the connector itself is fine (integration tests pass). "
+        "Non-strict: the empty secret sometimes does reach the pod, so an "
+        "unexpected pass must not fail the suite. Drop this xfail once empty "
+        "secrets reliably reach function pods."
     ),
 )
 @tabsdata_instance(consumer="tdtest")
@@ -97,7 +99,7 @@ def test_subscriber_writes_table_to_starrocks_domain(
     base = str(domain_s3.base_path).strip("/")
     dest_conn = StarRocksDestConn(
         host=domain_starrocks.host,
-        port=int(domain_starrocks.port),
+        port=str(domain_starrocks.port),
         credentials=sql_credentials(domain_starrocks),
         staging=staging(domain_s3, f"/{base}/starrocks-staging/{uuid.uuid4().hex}"),
         database=domain_starrocks.database,

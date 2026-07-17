@@ -146,6 +146,14 @@ class Instance:
 
 REGISTRY_FILE = "tdkpytest.yaml"
 REGISTRY_FILE_ENV = "ITEST_REGISTRY_FILE"
+ARENA_ENV = "TD_TEST_INSTANCES_ARENA"
+
+
+def arena_consumers() -> set[str] | None:
+    arena = (os.environ.get(ARENA_ENV) or "").strip()
+    if not arena:
+        return None
+    return {part.strip() for part in arena.split(",") if part.strip()}
 
 
 def registry_file() -> Path:
@@ -166,7 +174,11 @@ def registered_instance_names() -> list[str]:
     names = data.get(REGISTRY_KEY_INSTANCES)
     if not isinstance(names, list):
         return []
-    return [str(name) for name in names]
+    allowed = arena_consumers()
+    result = [str(name) for name in names]
+    if allowed is not None:
+        result = [name for name in result if consumer_of(name) in allowed]
+    return result
 
 
 def instance_folder(name: str) -> Path:

@@ -60,7 +60,7 @@ def _staging_path(backend) -> str:
 def _dest_conn(domain: StarrocksDomain, staging_backend, staging) -> StarRocksDestConn:
     return StarRocksDestConn(
         host=domain.host,
-        port=int(domain.port),
+        port=str(domain.port),
         credentials=sql_credentials(domain),
         staging=staging(staging_backend, _staging_path(staging_backend)),
         database=domain.database,

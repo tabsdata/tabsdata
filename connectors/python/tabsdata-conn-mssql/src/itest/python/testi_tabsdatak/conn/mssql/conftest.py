@@ -32,5 +32,5 @@ def _uri(backend) -> str:
 @pytest.fixture
 def sql():
     """Factory building a ``SqlStore`` over the mssqlserver backend the test
-    declared -- call it with ``domain_mssql``."""
+    declared -- call it with ``domain_mssqlserver``."""
     return lambda backend: SqlAlchemyStore(_uri(backend), delimiters=("[", "]"))

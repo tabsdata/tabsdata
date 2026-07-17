@@ -66,11 +66,11 @@ def _dest_conn(
 ) -> ClickHouseDestConn:
     return ClickHouseDestConn(
         host=domain.host,
-        port=int(domain.port),
+        port=str(domain.port),
         credentials=sql_credentials(domain),
         staging=staging(staging_backend, _staging_path(staging_backend)),
         database=domain.database,
-        secure=False,
+        secure="false",
     )
 
 

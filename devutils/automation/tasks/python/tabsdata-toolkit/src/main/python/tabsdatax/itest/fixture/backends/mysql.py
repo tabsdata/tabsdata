@@ -37,6 +37,7 @@ class MysqlDomain(Domain):
     user: str
     password: str
     db: str
+    uri: str  # credential-less; creds are supplied separately as UserPassword
     sqlalchemy_uri: str
     database: str  # mysql calls the entity container a database (== db here)
     model: str | None = None

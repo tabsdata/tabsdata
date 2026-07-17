@@ -52,6 +52,8 @@ script = [
         end
     end
 
+    exec uv run --no-project --with platformdirs python -c "import shutil; from platformdirs import PlatformDirs; shutil.rmtree(PlatformDirs('licensecheck', 'fredhappyface').user_cache_dir, ignore_errors=True)"
+
     debug "🚀 uvx licensecheck@2026.0.8 --license \"PROPRIETARY\" --requirements-paths requirements.txt ${authorized_licenses} ${authorized_packages} ${ignored_licenses} --show-only-failing --zero"
     exec --fail-on-error uvx licensecheck@2026.0.8 --license "PROPRIETARY" --requirements-paths requirements.txt %{authorized_licenses} %{authorized_packages} %{ignored_licenses} --show-only-failing --zero
 

@@ -37,6 +37,7 @@ class MssqlserverDomain(Domain):
     user: str
     password: str
     db: str
+    uri: str  # credential-less; creds are supplied separately as UserPassword
     sqlalchemy_uri: str
     schema: str  # mssqlserver calls the entity container a schema (== db here)
     model: str | None = None

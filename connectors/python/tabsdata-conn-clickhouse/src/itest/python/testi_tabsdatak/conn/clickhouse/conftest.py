@@ -46,11 +46,11 @@ class _ClickHouseStore:
         self._db = backend.database
         self._client = clickhouse_connect.get_client(
             host=backend.host,
-            port=int(backend.port),
+            port=str(backend.port),
             username=backend.user,
             password=backend.password,
             database=backend.database,
-            secure=False,
+            secure="false",
         )
 
     def _fq(self, table: str) -> str:

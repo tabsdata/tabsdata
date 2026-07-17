@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -33,16 +34,7 @@ def create_editable_binary_symlinks(
     if not is_editable_install():
         return
 
-    try:
-        import site
-
-        site_packages_list = site.getsitepackages()
-        if not site_packages_list:
-            return
-        site_packages = Path(site_packages_list[0])
-        venv_root = site_packages.parent.parent.parent
-    except (AttributeError, IndexError):
-        return
+    venv_root = Path(sys.prefix)
 
     for dest_dir, binary_paths in datafiles:
         venv_dest_dir = venv_root / dest_dir
@@ -70,8 +62,17 @@ def create_editable_binary_symlinks(
                 logger.info(
                     f"Created symlink: {symlink_path} -> {binary_path.resolve()}"
                 )
-            except OSError as e:
-                logger.warning(f"Failed to create symlink for {binary_name}: {e}")
+            except OSError:
+                try:
+                    shutil.copy2(binary_path.resolve(), symlink_path)
+                    logger.info(
+                        f"Copied binary: {binary_path.resolve()} -> {symlink_path}"
+                    )
+                except OSError as copy_err:
+                    logger.error(
+                        f"Failed to stage {binary_name} into "
+                        f"{venv_dest_dir}: {copy_err}"
+                    )
 
 
 def create_editable_libexec_links(
@@ -83,16 +84,7 @@ def create_editable_libexec_links(
     if not paths:
         return
 
-    try:
-        import site
-
-        site_packages_list = site.getsitepackages()
-        if not site_packages_list:
-            return
-        venv_root = Path(site_packages_list[0]).parent.parent.parent
-    except (AttributeError, IndexError):
-        return
-
+    venv_root = Path(sys.prefix)
     target_dir = venv_root / install_subfolder
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -116,5 +108,11 @@ def create_editable_libexec_links(
         try:
             link_path.symlink_to(source_path.resolve())
             logger.info(f"Created symlink: {link_path} -> {source_path.resolve()}")
-        except OSError as e:
-            logger.warning(f"Failed to create symlink for {source_path.name}: {e}")
+        except OSError:
+            try:
+                shutil.copy2(source_path.resolve(), link_path)
+                logger.info(f"Copied binary: {source_path.resolve()} -> {link_path}")
+            except OSError as copy_err:
+                logger.error(
+                    f"Failed to stage {source_path.name} into {target_dir}: {copy_err}"
+                )

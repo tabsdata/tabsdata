@@ -20,7 +20,7 @@ script = [
         set_env TD_TEST_RS_PARALLEL true
     end
 
-    aiagent_source_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-ag/src/main/python/tabsdata/ag/resources/registry/_generated"
+    aiagent_source_folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-ag/src/main/python/tabsdatak/ag/resources/registry/_generated"
     aiagent_source_baseline = set "${aiagent_source_folder}/baseline.jsonl"
     aiagent_source_embeddings = set "${aiagent_source_folder}/baseline_embeddings.jsonl"
     aiagent_baseline_exists = is_file ${aiagent_source_baseline}
