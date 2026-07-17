@@ -8,13 +8,11 @@
 //! it stays focused on low-level primitives (`build_schema`, `build_query`)
 //! and small expression helpers (`name_or_id`, `json_object_agg`, etc.).
 
-pub(crate) mod latest_bound_pointer;
 pub(crate) mod rls;
 pub(crate) mod seed_current;
 pub(crate) mod trigger;
 pub(crate) mod view;
 
-pub(crate) use latest_bound_pointer::LatestBoundPointer;
 pub(crate) use seed_current::SeedCurrent;
 pub(crate) use trigger::{ImmutableTriggerDef, StickyTerminalsTriggerDef, TriggerDef, TriggerSpec, VersionedTriggerDef};
 pub(crate) use view::ViewDef;

@@ -15,18 +15,15 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::logical::{
-    LogicalFunctionRunDB, LogicalFunctionRunPointerDB, LogicalTableDataVersionDB,
-    LogicalTableDataVersionPointerDB,
-};
+use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
-    AtTime, FunctionVersionId, LogicalFunctionRunId, LogicalPointerStatus,
-    LogicalTableDataVersionId, UserId,
+    AtTime, FunctionVersionId, LogicalFunctionRunId, LogicalTableDataVersionId,
+    PhysicalFunctionRunId, PhysicalTableDataVersionId, UserId,
 };
-use td_queries::{ChunkedQueries, LfrEntry, LtdvEntry, VersionedEntry};
+use td_queries::{Bind, ChunkedQueries, LfrEntry, LtdvEntry};
 use td_tower::extractors::{MutRef, Ref};
 use tracing::{debug, instrument};
 
@@ -73,30 +70,6 @@ pub async fn mint_function_runs_on_dispatch(
             &producer_filters,
         )
         .await?;
-
-    let latest_lfr_pointers: Vec<LogicalFunctionRunPointerDB> = conn
-        .versioned(at.deref())
-        .fetch_all_chunked::<LogicalFunctionRunPointerDB>(&lfr_ids)
-        .await?;
-    let latest_lfr_by_id: HashMap<LogicalFunctionRunId, LogicalFunctionRunPointerDB> =
-        latest_lfr_pointers
-            .into_iter()
-            .map(|p| (p.logical_function_run_id.clone(), p))
-            .collect();
-
-    let ltdv_ids: Vec<LogicalTableDataVersionId> = ltdvs_all.iter().map(|f| f.id.clone()).collect();
-    let latest_ltdv_pointers: Vec<LogicalTableDataVersionPointerDB> = if ltdv_ids.is_empty() {
-        Vec::new()
-    } else {
-        conn.versioned(at.deref())
-            .fetch_all_chunked::<LogicalTableDataVersionPointerDB>(&ltdv_ids)
-            .await?
-    };
-    let latest_ltdv_by_id: HashMap<LogicalTableDataVersionId, LogicalTableDataVersionPointerDB> =
-        latest_ltdv_pointers
-            .into_iter()
-            .map(|p| (p.logical_table_data_version_id.clone(), p))
-            .collect();
 
     // Resolve latest_patch_or_head for every distinct fvid in the tick.
     let distinct_fvids: Vec<FunctionVersionId> = ready_lfrs
@@ -183,7 +156,6 @@ pub async fn mint_function_runs_on_dispatch(
             .await?;
     }
 
-    // Bind LFR pointer + each output LTDV pointer per minted run.
     let mut output = Vec::with_capacity(ready_lfrs.len());
     let mut frs_iter = frs.into_iter();
     let mut tdvs_iter = all_tdvs.into_iter();
@@ -203,78 +175,74 @@ pub async fn mint_function_runs_on_dispatch(
                     lfr.function_version_id
                 )
             })?;
-
-        let latest_lfr = latest_lfr_by_id.get(&lfr.id).ok_or_else(|| {
-            api_error!(
-                ApiError::InternalError,
-                "no LFR pointer event for {} at dispatch (identity should always carry an InitialMint)",
-                lfr.id
-            )
-        })?;
-        // A re-run (recover) has a Bound pointer: defer the rebind to
-        // redirect_pointers_at_finish on success, as replay does. Binding here
-        // would hit bind_with_known_state's Bound→different refusal.
-        if matches!(latest_lfr.status, LogicalPointerStatus::Bound) {
-            debug!(
-                lfr_id = %lfr.id,
-                fr_id = %fr.id,
-                "scheduler.dispatch: re-run of bound LFR — deferring pointer rebind to redirect_at_finish"
-            );
-        } else {
-            conn.lfr()
-                .pointers()
-                .bind_with_known_state(
-                    &lfr.project_id,
-                    &lfr.id,
-                    &fr.id,
-                    latest_lfr,
-                    at.deref(),
-                    &by,
-                )
-                .await?;
-
-            for tdv in &tdvs {
-                let ltdv = ltdvs_all
-                    .iter()
-                    .find(|f| {
-                        f.producer_logical_function_run_id.as_ref() == Some(&lfr.id)
-                            && f.table_id == tdv.table_id
-                    })
-                    .ok_or_else(|| {
-                        api_error!(
-                            ApiError::InternalError,
-                            "no LTDV for LFR {} table {} during mint+bind",
-                            lfr.id,
-                            tdv.table_id
-                        )
-                    })?;
-                let latest_ltdv = latest_ltdv_by_id.get(&ltdv.id).ok_or_else(|| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "no LTDV pointer event for {} at dispatch",
-                        ltdv.id
-                    )
-                })?;
-                conn.ltdv()
-                    .pointers()
-                    .bind_with_known_state(
-                        &ltdv.project_id,
-                        &ltdv.id,
-                        &tdv.id,
-                        latest_ltdv,
-                        at.deref(),
-                        &by,
-                    )
-                    .await?;
-            }
-        }
-
         output.push(MintedDispatch {
             lfr,
             fr,
             runnable,
             tdvs,
         });
+    }
+
+    // A re-run comes back in `deferred`: its rebind waits for redirect_at_finish.
+    let lfr_binds: Vec<Bind<LogicalFunctionRunId, PhysicalFunctionRunId>> = output
+        .iter()
+        .map(|m| Bind {
+            project_id: m.lfr.project_id,
+            logical_id: m.lfr.id.clone(),
+            new_concrete_id: m.fr.id.clone(),
+        })
+        .collect();
+    let deferred = conn
+        .lfr()
+        .pointers()
+        .bind_all(&lfr_binds, at.deref(), &by)
+        .await?;
+
+    let mut ltdv_binds: Vec<Bind<LogicalTableDataVersionId, PhysicalTableDataVersionId>> =
+        Vec::new();
+    for m in &output {
+        if deferred.contains(&m.lfr.id) {
+            debug!(
+                lfr_id = %m.lfr.id,
+                "scheduler.dispatch: re-run of bound LFR — deferring pointer rebind to redirect_at_finish"
+            );
+            continue;
+        }
+        for tdv in &m.tdvs {
+            let ltdv = ltdvs_all
+                .iter()
+                .find(|f| {
+                    f.producer_logical_function_run_id.as_ref() == Some(&m.lfr.id)
+                        && f.table_id == tdv.table_id
+                })
+                .ok_or_else(|| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "no LTDV for LFR {} table {} during mint+bind",
+                        m.lfr.id,
+                        tdv.table_id
+                    )
+                })?;
+            ltdv_binds.push(Bind {
+                project_id: ltdv.project_id,
+                logical_id: ltdv.id.clone(),
+                new_concrete_id: tdv.id.clone(),
+            });
+        }
+    }
+    // Deferral only applies to LFRs; an output LTDV of a Pending LFR must
+    // itself be Pending — its TDV was minted in this very tick.
+    let bound_ltdvs = conn
+        .ltdv()
+        .pointers()
+        .bind_all(&ltdv_binds, at.deref(), &by)
+        .await?;
+    if let Some(ltdv_id) = bound_ltdvs.into_iter().next() {
+        return Err(api_error!(
+            ApiError::InternalError,
+            "LTDV {} already Bound at dispatch while its producer LFR is Pending",
+            ltdv_id
+        ));
     }
 
     debug!(
@@ -296,7 +264,7 @@ mod tests {
     };
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::dxo::logical::LogicalPointerDao;
+    use td_objects::dxo::logical::{LogicalFunctionRunPointerDB, LogicalPointerDao};
     use td_objects::types::basic::{
         AccessTokenId, BasePath, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
         LogicalFunctionRunStatus, LogicalPointerReason, LogicalPointerStatus,

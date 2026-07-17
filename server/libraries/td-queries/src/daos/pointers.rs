@@ -6,32 +6,36 @@
 //!
 //! Each operation appends a single event to the relevant pointer-event
 //! table. The "current" pointer for a logical identity is the latest
-//! event row by `(set_on DESC, id DESC)` for that logical id. The
-//! caller must already hold a transactional connection.
+//! event row for that logical id, resolved through the trigger-maintained
+//! `_current` peer table rather than by ranking the event log. The caller
+//! must already hold a transactional connection.
 //!
 //! LFR and LTDV share a common state machine. The schema shape lives on
 //! [`LogicalPointerDao`] (in `td_objects` — emitted by the `Dao` macro's
-//! `logical_pointer(...)` arg).
-//!
-//! Sync builders [`redirect_event`] / [`void_event`] take the latest
-//! pointer event the caller already has and return `Option<P>` — `None`
-//! when idempotent. The caller inserts. Async reads go through the
-//! entity handles' `.pointers()` constructor; the at-time variant adds
-//! an `.at(&at)` step (mirrors [`crate::VersionedEntry`]).
+//! `logical_pointer(...)` arg). The batched writers own their reads: callers
+//! pass intents, not pre-fetched rows.
 
-use crate::{LiveEntry, QueryExecutor, VersionedEntry};
-use sea_query::{Expr, ExprTrait, Iden, Order, Query};
-use std::collections::HashMap;
+use crate::primitives::chunked::{
+    MAX_INSERT_ROWS, MAX_QUERY_CONDITIONS, fetch_all_current_chunk_query, insert_vec_query,
+    warn_if_chunked,
+};
+use crate::{CurrentEntry, QueryExecutor, VersionedEntry};
+use sea_query::Iden;
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::marker::PhantomData;
+use ta_objects::DaoCore;
 use ta_objects::errors::SqlError;
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_error::{ApiError, TdError, api_error};
-use td_objects::SeaValue;
-use td_objects::dxo::logical::LogicalPointerDao;
+use td_objects::dxo::logical::{
+    LogicalFunctionRunPointerDB, LogicalPointerDao, LogicalTableDataVersionPointerDB,
+};
 use td_objects::types::basic::{
-    AtTime, LogicalPointerReason, LogicalPointerStatus, ProjectId, UserId,
+    AtTime, LogicalFunctionRunId, LogicalPointerReason, LogicalPointerStatus,
+    LogicalTableDataVersionId, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId,
+    TriggeredOn, UserId,
 };
 
 /// Pointer-event log handle, type-pinned to a specific
@@ -40,7 +44,7 @@ use td_objects::types::basic::{
 ///
 /// ```ignore
 /// conn.lfr().pointers().concrete(&lfr_id).await?;
-/// conn.ltdv().pointers().at(&at).latest_chunked(&ltdv_ids).await?;
+/// conn.ltdv().pointers().at(&at).concrete(&ltdv_id).await?;
 /// ```
 ///
 /// At-time reads live behind [`at`](Self::at) (returns [`PointersAt`]).
@@ -76,79 +80,247 @@ where
     /// Concrete id this logical pointer is *currently* bound to.
     /// `Ok(None)` when the latest event is `Pending` or `Voided` —
     /// i.e. when there is no live binding *right now*, even if a
-    /// prior `Bound` event exists in history.
+    /// prior `Bound` event exists in history. Resolved from the
+    /// trigger-maintained `_current` peer (one indexed row per logical id).
     pub async fn concrete(
         self,
         logical_id: &P::LogicalId,
     ) -> Result<Option<P::ConcreteId>, SqlError> {
-        let row: Option<P> = Query::select()
-            .columns(P::columns())
-            .from(P::table())
-            .and_where(Expr::col(P::partition_col()).eq(logical_id.as_sea_value()))
-            .order_by(P::version_order_col(), Order::Desc)
-            .order_by(P::pk_col(), Order::Desc)
-            .limit(1)
-            .build_query_as()
-            .fetch_optional(self.executor)
-            .await
-            .map_err(SqlError::on_read::<P>)?;
+        let row: Option<P> = self
+            .executor
+            .current()
+            .fetch_optional::<P>(logical_id)
+            .await?;
         Ok(bound_concrete(row))
     }
 
-    /// Auto-dispatch `Pending → Bound` (or idempotent `Bound → same`).
-    /// Caller must already have fetched the latest pointer for
-    /// `logical_id`. Refuses `Bound → different concrete` (would be a
-    /// silent rebind without operator action — use [`redirect_event`]
-    /// for that), `Voided → Bound` (a voided identity must be
-    /// explicitly revived via [`redirect_event`]), and `Requested → Bound`
-    /// (a replay attempt is in flight — the worker callback's
-    /// redirect-at-finish layer is the only path that flips
-    /// `Requested → Bound`).
-    pub async fn bind_with_known_state(
-        self,
-        project_id: &ProjectId,
-        logical_id: &P::LogicalId,
-        new_concrete_id: &P::ConcreteId,
-        latest: &P,
+    /// Bind every `Pending` pointer; returns already-`Bound` ids (a re-run,
+    /// deferred to redirect-at-finish). `Voided` is an error.
+    pub async fn bind_all(
+        mut self,
+        binds: &[Bind<P::LogicalId, P::ConcreteId>],
         set_on: &AtTime,
         set_by_id: &UserId,
-    ) -> Result<(), TdError> {
-        match latest.status() {
-            LogicalPointerStatus::Bound => {
-                if latest.concrete_id() == Some(new_concrete_id) {
-                    return Ok(());
-                }
-                return Err(api_error!(
-                    ApiError::InternalError,
-                    "{} {} already Bound to {:?}; refusing to rebind to {} automatically",
-                    P::KIND,
-                    logical_id,
-                    latest.concrete_id(),
-                    new_concrete_id,
-                ));
-            }
-            LogicalPointerStatus::Voided => {
-                return Err(api_error!(
-                    ApiError::InternalError,
-                    "{} {} is Voided; cannot bind",
-                    P::KIND,
-                    logical_id,
-                ));
-            }
-            LogicalPointerStatus::Pending => {}
+    ) -> Result<HashSet<P::LogicalId>, TdError>
+    where
+        P::LogicalId: Hash + Eq,
+    {
+        if binds.is_empty() {
+            return Ok(HashSet::new());
         }
-        let event = P::build_event(
-            *project_id,
-            logical_id,
-            LogicalPointerStatus::Bound,
-            Some(new_concrete_id.clone()),
-            *set_on,
-            *set_by_id,
-            LogicalPointerReason::InitialDispatch,
-        )?;
-        self.executor.live().insert::<P>(&event).await?;
+        let ids: Vec<P::LogicalId> = binds.iter().map(|b| b.logical_id.clone()).collect();
+        let latest = current_by_id::<E, P>(&mut self.executor, &ids).await?;
+
+        let mut deferred = HashSet::new();
+        let mut events = Vec::with_capacity(binds.len());
+        for bind in binds {
+            let current = latest.get(&bind.logical_id).ok_or_else(|| {
+                api_error!(
+                    ApiError::InternalError,
+                    "no {} pointer event for {} at dispatch (identity should carry an InitialMint)",
+                    P::KIND,
+                    bind.logical_id,
+                )
+            })?;
+            match current.status() {
+                LogicalPointerStatus::Bound => {
+                    deferred.insert(bind.logical_id.clone());
+                }
+                LogicalPointerStatus::Voided => {
+                    return Err(api_error!(
+                        ApiError::InternalError,
+                        "{} {} is Voided; cannot bind",
+                        P::KIND,
+                        bind.logical_id,
+                    ));
+                }
+                LogicalPointerStatus::Pending => events.push(P::build_event(
+                    bind.project_id,
+                    &bind.logical_id,
+                    LogicalPointerStatus::Bound,
+                    Some(bind.new_concrete_id.clone()),
+                    *set_on,
+                    *set_by_id,
+                    LogicalPointerReason::InitialDispatch,
+                )?),
+            }
+        }
+        insert_events::<E, P>(&mut self.executor, &events).await?;
+        Ok(deferred)
+    }
+}
+
+async fn current_by_id<E, P>(
+    executor: &mut E,
+    ids: &[P::LogicalId],
+) -> Result<HashMap<P::LogicalId, P>, SqlError>
+where
+    E: QueryExecutor + Domained<Domain = P::Db>,
+    P: LogicalPointerDao,
+    P::LogicalId: Hash + Eq,
+{
+    warn_if_chunked::<P>(ids.len());
+    let mut out = HashMap::new();
+    for chunk in ids.chunks(MAX_QUERY_CONDITIONS) {
+        let rows: Vec<P> = fetch_all_current_chunk_query::<P, P::LogicalId>(chunk, None)?
+            .build_query_as()
+            .fetch_all(executor.reuse())
+            .await
+            .map_err(SqlError::on_read::<P>)?;
+        for r in rows {
+            out.insert(r.logical_id().clone(), r);
+        }
+    }
+    Ok(out)
+}
+
+async fn insert_events<E, P>(executor: &mut E, events: &[P]) -> Result<(), SqlError>
+where
+    E: QueryExecutor + Domained<Domain = P::Db>,
+    P: LogicalPointerDao,
+{
+    for chunk in events.chunks(MAX_INSERT_ROWS) {
+        insert_vec_query::<P>(chunk)?
+            .build_query()
+            .execute(executor.reuse())
+            .await
+            .map_err(|e| SqlError::on_write::<P>(e, &[]))?;
+    }
+    Ok(())
+}
+
+pub struct Bind<Id, Concrete> {
+    pub project_id: ProjectId,
+    pub logical_id: Id,
+    pub new_concrete_id: Concrete,
+}
+
+pub struct ReplayRedirect {
+    pub project_id: ProjectId,
+    pub logical_function_run_id: LogicalFunctionRunId,
+    pub new_physical_function_run_id: PhysicalFunctionRunId,
+    pub reporting_triggered_on: TriggeredOn,
+    pub set_by_id: UserId,
+}
+
+impl<E> LogicalPointers<E, LogicalFunctionRunPointerDB>
+where
+    E: QueryExecutor + Domained<Domain = <LogicalFunctionRunPointerDB as DaoCore>::Db>,
+{
+    /// Append `Bound(ReplayRedirect)` for each item that [`is_replay_attempt`].
+    /// Returns the redirected LFR ids, which gate the caller's output-LTDV pass.
+    pub async fn redirect_replay_attempts(
+        mut self,
+        items: &[ReplayRedirect],
+        set_on: &AtTime,
+    ) -> Result<HashSet<LogicalFunctionRunId>, TdError> {
+        if items.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let ids: Vec<LogicalFunctionRunId> = items
+            .iter()
+            .map(|i| i.logical_function_run_id.clone())
+            .collect();
+        let latest =
+            current_by_id::<E, LogicalFunctionRunPointerDB>(&mut self.executor, &ids).await?;
+
+        let mut redirected = HashSet::new();
+        let mut events = Vec::new();
+        for item in items {
+            let Some(current) = latest.get(&item.logical_function_run_id) else {
+                continue;
+            };
+            if !is_replay_attempt(
+                current,
+                &item.new_physical_function_run_id,
+                &item.reporting_triggered_on,
+            ) {
+                continue;
+            }
+            events.push(LogicalFunctionRunPointerDB::build_event(
+                item.project_id,
+                &item.logical_function_run_id,
+                LogicalPointerStatus::Bound,
+                Some(item.new_physical_function_run_id.clone()),
+                *set_on,
+                item.set_by_id,
+                LogicalPointerReason::ReplayRedirect,
+            )?);
+            redirected.insert(item.logical_function_run_id.clone());
+        }
+        insert_events::<E, LogicalFunctionRunPointerDB>(&mut self.executor, &events).await?;
+        Ok(redirected)
+    }
+}
+
+pub struct OutputRedirect {
+    pub project_id: ProjectId,
+    pub logical_table_data_version_id: LogicalTableDataVersionId,
+    pub new_physical_table_data_version_id: PhysicalTableDataVersionId,
+    pub set_by_id: UserId,
+}
+
+impl<E> LogicalPointers<E, LogicalTableDataVersionPointerDB>
+where
+    E: QueryExecutor + Domained<Domain = <LogicalTableDataVersionPointerDB as DaoCore>::Db>,
+{
+    /// Redirect output LTDV pointers to freshly-produced TDVs. No monotonicity
+    /// gate — the producer LFR's [`is_replay_attempt`] already established it.
+    pub async fn redirect_outputs(
+        mut self,
+        items: &[OutputRedirect],
+        set_on: &AtTime,
+    ) -> Result<(), TdError> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        let ids: Vec<LogicalTableDataVersionId> = items
+            .iter()
+            .map(|i| i.logical_table_data_version_id.clone())
+            .collect();
+        let latest =
+            current_by_id::<E, LogicalTableDataVersionPointerDB>(&mut self.executor, &ids).await?;
+
+        let mut events = Vec::new();
+        for item in items {
+            let Some(current) = latest.get(&item.logical_table_data_version_id) else {
+                continue;
+            };
+            if let Some(event) = redirect_event::<LogicalTableDataVersionPointerDB>(
+                &item.project_id,
+                current,
+                &item.logical_table_data_version_id,
+                &item.new_physical_table_data_version_id,
+                set_on,
+                &item.set_by_id,
+                LogicalPointerReason::ReplayRedirect,
+            )? {
+                events.push(event);
+            }
+        }
+        insert_events::<E, LogicalTableDataVersionPointerDB>(&mut self.executor, &events).await?;
         Ok(())
     }
+}
+
+/// The reporting PFR is a *replay attempt* iff the LFR's current pointer is
+/// `Bound` to a *different* PFR and the reporting PFR postdates that binding.
+/// The monotonicity guard (`triggered_on > set_on`) stops an older PFR that
+/// finishes late from regressing a newer replay's binding.
+fn is_replay_attempt(
+    pointer: &LogicalFunctionRunPointerDB,
+    reporting_pfr_id: &PhysicalFunctionRunId,
+    reporting_triggered_on: &TriggeredOn,
+) -> bool {
+    if !matches!(pointer.status, LogicalPointerStatus::Bound) {
+        return false;
+    }
+    if pointer.physical_function_run_id.as_ref() == Some(reporting_pfr_id) {
+        return false;
+    }
+    AtTime::try_from(*reporting_triggered_on)
+        .map(|t| t > pointer.set_on)
+        .unwrap_or(false)
 }
 
 /// At-time pointer-event surface. Reached via
@@ -178,29 +350,6 @@ where
             .await?;
         Ok(bound_concrete(row))
     }
-
-    /// Latest pointer event row per partition at-or-before `at`,
-    /// batched. Each `logical_id` in `ids` maps to its latest event
-    /// row at `at`; partitions with no events at all are absent from
-    /// the map.
-    pub async fn latest_chunked(
-        self,
-        ids: &[P::LogicalId],
-    ) -> Result<HashMap<P::LogicalId, P>, SqlError>
-    where
-        P::LogicalId: Hash + Eq,
-    {
-        let rows: Vec<P> = self
-            .executor
-            .versioned(self.at)
-            .fetch_all_chunked::<P>(ids)
-            .await?;
-        let mut out = HashMap::with_capacity(rows.len());
-        for row in rows {
-            out.insert(row.logical_id().clone(), row);
-        }
-        Ok(out)
-    }
 }
 
 /// Joined-with-AS alias for the producer LFR (canonical status source
@@ -225,24 +374,9 @@ fn bound_concrete<P: LogicalPointerDao>(row: Option<P>) -> Option<P::ConcreteId>
     })
 }
 
-/// Build a `Bound` event tagged with `reason`, or `None` if idempotent.
-///
-/// Idempotency: when `latest` is already `Bound` to `new_concrete_id`,
-/// returns `Ok(None)` — re-issuing the same redirect must not append a
-/// duplicate event. Otherwise returns `Ok(Some(event))` and the caller
-/// inserts the event into the relevant pointer table.
-///
-/// Allowed by the state machine:
-/// - `Pending → Bound(new_concrete_id)` (commit a pending identity),
-/// - `Requested → Bound(new_concrete_id)` (worker finish on a replay),
-/// - `Bound(old) → Bound(new_concrete_id)` when `old != new_concrete_id`,
-/// - `Voided → Bound(new_concrete_id)` (revive a voided identity).
-///
-/// `reason` distinguishes operator-driven redirects (`OperatorRedirect`,
-/// requires `set_by_id` = the operator's user id, never `UserId::admin`)
-/// from worker-finish replay redirects (`ReplayRedirect`,
-/// `set_by_id` = the FR's `triggered_by_id`).
-pub fn redirect_event<P: LogicalPointerDao>(
+/// Build a `Bound(new_concrete_id)` event, or `None` when already `Bound` to
+/// the same id (idempotent).
+fn redirect_event<P: LogicalPointerDao>(
     project_id: &ProjectId,
     latest: &P,
     logical_id: &P::LogicalId,
@@ -268,30 +402,10 @@ pub fn redirect_event<P: LogicalPointerDao>(
     Ok(Some(event))
 }
 
-/// Build a `Voided` event tagged with `reason`, or `None` if idempotent.
-///
-/// **Currently unused in production** — kept (with tests) as the
-/// state-machine counterpart to [`redirect_event`]. The void path is
-/// covered by the pointer-event design but no live caller exercises it
-/// yet; the operator force-void and replay-void flows will reach for
-/// this helper when they land.
-///
-/// Idempotency: when `latest` is already `Voided`, returns `Ok(None)`.
-/// Otherwise returns `Ok(Some(event))` and the caller inserts the
-/// event into the relevant pointer table. The void event row carries a
-/// NULL concrete id; the prior binding (if any) is reachable by
-/// walking back to the previous event row in the log.
-///
-/// Allowed by the state machine:
-/// - `Pending → Voided`,
-/// - `Requested → Voided` (a replay attempt failed; previous Bound
-///   stands),
-/// - `Bound(_) → Voided`.
-///
-/// `reason` distinguishes operator-driven voids (`OperatorForceVoid`,
-/// requires `set_by_id` = operator user id) from replay failure-side
-/// voids (`ReplayVoid`, `set_by_id` = the FR's `triggered_by_id`).
-pub fn void_event<P: LogicalPointerDao>(
+/// Build a `Voided` event, or `None` when already `Voided` (idempotent). Kept
+/// as the state-machine counterpart to [`redirect_event`]; no live caller yet.
+#[allow(dead_code)]
+fn void_event<P: LogicalPointerDao>(
     project_id: &ProjectId,
     latest: &P,
     logical_id: &P::LogicalId,
@@ -338,6 +452,115 @@ mod tests {
             .reason(LogicalPointerReason::InitialDispatch)
             .build()
             .unwrap()
+    }
+
+    mod replay_attempt {
+        use super::*;
+        use td_common::datetime::Timestamp;
+
+        fn at(ms: i64) -> AtTime {
+            AtTime::try_from(Timestamp::try_from(ms).unwrap()).unwrap()
+        }
+
+        fn pointer(
+            status: LogicalPointerStatus,
+            pfr: Option<PhysicalFunctionRunId>,
+            reason: LogicalPointerReason,
+            set_on: AtTime,
+        ) -> LogicalFunctionRunPointerDB {
+            LogicalFunctionRunPointerDB::build_event(
+                ProjectId::default(),
+                &LogicalFunctionRunId::new(),
+                status,
+                pfr,
+                set_on,
+                UserId::admin(),
+                reason,
+            )
+            .unwrap()
+        }
+
+        #[test]
+        fn initial_dispatch_is_not_replay() {
+            let pfr_id = PhysicalFunctionRunId::new();
+            let p = pointer(
+                LogicalPointerStatus::Bound,
+                Some(pfr_id.clone()),
+                LogicalPointerReason::InitialDispatch,
+                at(1_000),
+            );
+            assert!(!is_replay_attempt(
+                &p,
+                &pfr_id,
+                &TriggeredOn::try_from(*at(2_000)).unwrap()
+            ));
+        }
+
+        #[test]
+        fn bound_to_different_and_newer_is_replay() {
+            let p = pointer(
+                LogicalPointerStatus::Bound,
+                Some(PhysicalFunctionRunId::new()),
+                LogicalPointerReason::ReplayRedirect,
+                at(1_000),
+            );
+            let reporting = PhysicalFunctionRunId::new();
+            assert!(is_replay_attempt(
+                &p,
+                &reporting,
+                &TriggeredOn::try_from(*at(2_000)).unwrap()
+            ));
+        }
+
+        /// Monotonicity guard: an older PFR finishing late after a newer replay
+        /// already bound the LFR must NOT trigger a redirect.
+        #[test]
+        fn older_pfr_finishing_late_is_not_replay() {
+            let p = pointer(
+                LogicalPointerStatus::Bound,
+                Some(PhysicalFunctionRunId::new()),
+                LogicalPointerReason::ReplayRedirect,
+                at(2_000),
+            );
+            let stale = PhysicalFunctionRunId::new();
+            assert!(!is_replay_attempt(
+                &p,
+                &stale,
+                &TriggeredOn::try_from(*at(1_000)).unwrap()
+            ));
+        }
+
+        #[test]
+        fn pending_pointer_is_not_replay() {
+            let p = pointer(
+                LogicalPointerStatus::Pending,
+                None,
+                LogicalPointerReason::InitialMint,
+                at(1_000),
+            );
+            let reporting = PhysicalFunctionRunId::new();
+            assert!(!is_replay_attempt(
+                &p,
+                &reporting,
+                &TriggeredOn::try_from(*at(2_000)).unwrap()
+            ));
+        }
+
+        #[test]
+        fn voided_pointer_is_not_replay() {
+            let p = pointer(
+                LogicalPointerStatus::Voided,
+                None,
+                LogicalPointerReason::OperatorForceVoid,
+                at(1_000),
+            );
+            let reporting = PhysicalFunctionRunId::new();
+            assert!(!is_replay_attempt(
+                &p,
+                &reporting,
+                &TriggeredOn::try_from(*at(2_000)).unwrap()
+            ));
+        }
     }
 
     #[test]
@@ -608,7 +831,14 @@ mod tests {
                 .concrete(&lfr.id)
                 .await
                 .unwrap();
-            assert_eq!(after_later, Some(fr_id));
+            assert_eq!(after_later, Some(fr_id.clone()));
+
+            let live = db.lfr().pointers().concrete(&lfr.id).await.unwrap();
+            assert_eq!(
+                live,
+                Some(fr_id),
+                "live concrete() must resolve via the maintained _current peer"
+            );
         }
 
         /// `table_data_version_at` mirror of `function_run_at`: pre-mint None,
@@ -724,7 +954,14 @@ mod tests {
                 .concrete(&ltdv.id)
                 .await
                 .unwrap();
-            assert_eq!(after_later, Some(tdv_id));
+            assert_eq!(after_later, Some(tdv_id.clone()));
+
+            let live = conn.ltdv().pointers().concrete(&ltdv.id).await.unwrap();
+            assert_eq!(
+                live,
+                Some(tdv_id),
+                "live concrete() must resolve via the maintained _current peer"
+            );
         }
     }
 }

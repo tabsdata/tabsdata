@@ -19,18 +19,19 @@ use sea_query::{
     Query, SubQueryStatement, Table, TableCreateStatement,
 };
 
+use super::POINTER_STATUS_BOUND;
 use super::collections::Collections;
 use super::executions::Executions;
 use super::functions::Functions;
 use super::groups::Groups;
-use super::logical_function_run_pointers::LogicalFunctionRunPointers;
+use super::logical_function_run_pointers_current::LogicalFunctionRunPointersCurrent;
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::projects::Projects;
 use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
-use crate::schema::sql::{LatestBoundPointer, StickyTerminalsTriggerDef, TriggerSpec, ViewDef};
+use crate::schema::sql::{StickyTerminalsTriggerDef, TriggerSpec, ViewDef};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "function_runs__with_names"]
@@ -191,15 +192,6 @@ impl Entity for Defs {
     }
 
     fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
-        let current_pfr_subquery = LatestBoundPointer {
-            pointer_table: LogicalFunctionRunPointers::Table.into_iden(),
-            concrete_id_col: LogicalFunctionRunPointers::PhysicalFunctionRunId.into_iden(),
-            logical_id_col: LogicalFunctionRunPointers::LogicalFunctionRunId.into_iden(),
-            outer_table: LogicalFunctionRuns::Table.into_iden(),
-            outer_id_col: LogicalFunctionRuns::Id.into_iden(),
-        }
-        .into_subquery();
-
         // function_runs__with_names — names-joined view of the LFR identity
         // row. Backs the listing endpoint that powers the execution-plan
         // graph — `status` here is the canonical (sticky-Committed)
@@ -273,11 +265,24 @@ impl Entity for Defs {
                     Users::Table,
                     Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::TriggeredById)).equals((Users::Table, Users::Id)),
                 )
+                // Currently-bound PFR via the pointer-current snapshot; the
+                // status predicate makes non-Bound rows read as unbound
+                // without relying on their NULL concrete id.
+                .join(
+                    JoinType::LeftJoin,
+                    LogicalFunctionRunPointersCurrent::Table,
+                    Expr::col((LogicalFunctionRunPointersCurrent::Table, LogicalFunctionRunPointersCurrent::LogicalFunctionRunId))
+                        .equals((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id))
+                        .and(
+                            Expr::col((LogicalFunctionRunPointersCurrent::Table, LogicalFunctionRunPointersCurrent::Status))
+                                .eq(POINTER_STATUS_BOUND),
+                        ),
+                )
                 .join(
                     JoinType::LeftJoin,
                     PhysicalFunctionRuns::Table,
                     Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id))
-                        .eq(Expr::SubQuery(None, Box::new(SubQueryStatement::SelectStatement(current_pfr_subquery)))),
+                        .equals((LogicalFunctionRunPointersCurrent::Table, LogicalFunctionRunPointersCurrent::PhysicalFunctionRunId)),
                 )
                 .to_owned(),
         );

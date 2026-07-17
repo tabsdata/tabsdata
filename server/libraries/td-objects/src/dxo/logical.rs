@@ -24,7 +24,8 @@
 //! `Bound` `InitialMaterialization` event.
 
 use crate::types::basic::{AtTime, LogicalPointerReason, LogicalPointerStatus, ProjectId, UserId};
-use ta_objects::{Dao, SeaValue, VersionedDao};
+use ta_objects::sql_condition::SqlCondition;
+use ta_objects::{CurrentDao, Dao, SeaValue, VersionedDao};
 use td_error::TdError;
 
 /// Pointer-event-log DAO for a logical identity.
@@ -44,10 +45,12 @@ use td_error::TdError;
 /// `VersionOrder = AtTime`. So `db.versioned(&at).fetch_one::<P>(logical_id)`
 /// type-checks for any `P: LogicalPointerDao`.
 pub trait LogicalPointerDao:
-    VersionedDao<VersionOrder = AtTime, Partition = <Self as LogicalPointerDao>::LogicalId> + Sized
+    VersionedDao<VersionOrder = AtTime, Partition = <Self as LogicalPointerDao>::LogicalId>
+    + CurrentDao
+    + Sized
 {
     /// The logical identity column's value type (e.g. `LogicalFunctionRunId`).
-    type LogicalId: SeaValue + Clone + Send + Sync + std::fmt::Display;
+    type LogicalId: SeaValue + SqlCondition + Clone + Send + Sync + std::fmt::Display;
 
     /// The concrete-binding column's value type when present (e.g.
     /// `PhysicalFunctionRunId` / `PhysicalTableDataVersionId`). The column itself is
@@ -354,7 +357,8 @@ mod definitions {
         versioned(
             pk = "id",
             version_by = "set_on",
-            partition_by = "logical_function_run_id"
+            partition_by = "logical_function_run_id",
+            current = "logical_function_run_pointers_current"
         ),
         logical_pointer(
             logical_id_col = "logical_function_run_id",
@@ -565,7 +569,8 @@ mod definitions {
         versioned(
             pk = "id",
             version_by = "set_on",
-            partition_by = "logical_table_data_version_id"
+            partition_by = "logical_table_data_version_id",
+            current = "logical_table_data_version_pointers_current"
         ),
         logical_pointer(
             logical_id_col = "logical_table_data_version_id",

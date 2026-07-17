@@ -1932,6 +1932,52 @@ mod tests {
         Ok(())
     }
 
+    #[td_test::test(db)]
+    async fn test_nodes_out_magnitudes_cleared_by_void(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let (_coll, _lfr, ltdv) =
+            seed_publisher_with_ltdv(&db, p.id, "void_coll", "void_fn").await?;
+
+        let req = empty_request(Dim::Collection);
+        let before = db.metrics().metrics_nodes(&req).await?;
+        assert_eq!(*before[0].row_count_out.as_ref(), 10);
+        assert_eq!(*before[0].data_bytes_out.as_ref(), 100);
+
+        // A later Voided event unbinds the LTDV in the pointer-current
+        // snapshot, so the view stops resolving its PTDV magnitudes.
+        let void = LogicalTableDataVersionPointerDB::build_event(
+            ltdv.project_id,
+            &ltdv.id,
+            LogicalPointerStatus::Voided,
+            None,
+            AtTime::try_from(Timestamp::try_from(4_102_444_800_000_i64)?)?,
+            ltdv.triggered_by_id,
+            LogicalPointerReason::OperatorForceVoid,
+        )?;
+        db.scoped(ltdv.project_id)
+            .live()
+            .insert::<LogicalTableDataVersionPointerDB>(&void)
+            .await?;
+
+        let after = db.metrics().metrics_nodes(&req).await?;
+        assert_eq!(
+            after.len(),
+            1,
+            "the run still exists, only its binding is gone"
+        );
+        assert_eq!(
+            *after[0].row_count_out.as_ref(),
+            0,
+            "void clears the bound PTDV row_count"
+        );
+        assert_eq!(
+            *after[0].data_bytes_out.as_ref(),
+            0,
+            "void clears the bound PTDV data_bytes"
+        );
+        Ok(())
+    }
+
     // ----- /metrics edges ----------------------------------------------
 
     #[td_test::test(db)]

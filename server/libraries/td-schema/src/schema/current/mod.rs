@@ -15,8 +15,10 @@ mod functions_current;
 mod groups;
 mod logical_function_run_inputs;
 mod logical_function_run_pointers;
+mod logical_function_run_pointers_current;
 mod logical_function_runs;
 mod logical_table_data_version_pointers;
+mod logical_table_data_version_pointers_current;
 mod logical_table_data_versions;
 mod permissions;
 mod physical_function_runs;
@@ -41,6 +43,10 @@ use tracing::{debug, info};
 use crate::schema::backend::Backend;
 use crate::schema::sql;
 use crate::schema::{Entity, SchemaVersion};
+
+/// `LogicalPointerStatus::Bound` discriminant, hoisted as a `&str` because
+/// td-schema sits below td-objects in the dep graph.
+pub(crate) const POINTER_STATUS_BOUND: &str = "B";
 
 /// Marker type for the current schema version.
 pub struct Schema;
@@ -87,8 +93,10 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &workers::Defs,
     &logical_function_runs::Defs,
     &logical_function_run_pointers::Defs,
+    &logical_function_run_pointers_current::Defs,
     &logical_table_data_versions::Defs,
     &logical_table_data_version_pointers::Defs,
+    &logical_table_data_version_pointers_current::Defs,
     &logical_function_run_inputs::Defs,
     &with_status_views::Defs,
 ];
@@ -127,7 +135,9 @@ pub(crate) const PROJECT_SCOPED_TABLES: &[&str] = &[
     "logical_table_data_versions",
     "logical_function_run_inputs",
     "logical_function_run_pointers",
+    "logical_function_run_pointers_current",
     "logical_table_data_version_pointers",
+    "logical_table_data_version_pointers_current",
 ];
 
 impl SchemaVersion for Schema {

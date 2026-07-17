@@ -10,23 +10,24 @@
 //! LTDV pointer event log).
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
-    Query, SubQueryStatement, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
+    TableCreateStatement,
 };
 
+use super::POINTER_STATUS_BOUND;
 use super::collections::Collections;
 use super::executions::Executions;
 use super::functions::Functions;
 use super::groups::Groups;
 use super::logical_function_runs::LogicalFunctionRuns;
-use super::logical_table_data_version_pointers::LogicalTableDataVersionPointers;
+use super::logical_table_data_version_pointers_current::LogicalTableDataVersionPointersCurrent;
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::physical_table_data_versions::PhysicalTableDataVersions;
 use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
-use crate::schema::sql::{LatestBoundPointer, ViewDef};
+use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "table_data_versions__with_names"]
@@ -166,19 +167,8 @@ impl Entity for Defs {
         //
         // The single table-data-version listing view: LTDV identity rows
         // merged with the currently-bound PTDV's per-attempt fields,
-        // resolved via the LTDV pointer-event log (`status = 'B'`, latest
-        // by `(set_on DESC, id DESC)`). PTDV-derived fields (and the
-        // PFR-side audit / function name / location reached through PTDV)
-        // are NULL when no PTDV is currently bound (Pending/Voided).
-        let bound_ptdv_subquery = LatestBoundPointer {
-            pointer_table: LogicalTableDataVersionPointers::Table.into_iden(),
-            concrete_id_col: LogicalTableDataVersionPointers::PhysicalTableDataVersionId.into_iden(),
-            logical_id_col: LogicalTableDataVersionPointers::LogicalTableDataVersionId.into_iden(),
-            outer_table: LogicalTableDataVersions::Table.into_iden(),
-            outer_id_col: LogicalTableDataVersions::Id.into_iden(),
-        }
-        .into_subquery();
-
+        // resolved via the pointer-current snapshot. PTDV-derived fields
+        // (and everything reached through PTDV) are NULL when not bound.
         let groups_alias = Alias::new("groups_for_ltdv");
         vec![
             ViewDef::new(
@@ -267,9 +257,24 @@ impl Entity for Defs {
                     )
                     .join(
                         JoinType::LeftJoin,
+                        LogicalTableDataVersionPointersCurrent::Table,
+                        Expr::col((
+                            LogicalTableDataVersionPointersCurrent::Table,
+                            LogicalTableDataVersionPointersCurrent::LogicalTableDataVersionId,
+                        ))
+                        .equals((LogicalTableDataVersions::Table, LogicalTableDataVersions::Id))
+                        .and(
+                            Expr::col((LogicalTableDataVersionPointersCurrent::Table, LogicalTableDataVersionPointersCurrent::Status))
+                                .eq(POINTER_STATUS_BOUND),
+                        ),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
                         PhysicalTableDataVersions::Table,
-                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id))
-                            .eq(Expr::SubQuery(None, Box::new(SubQueryStatement::SelectStatement(bound_ptdv_subquery)))),
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id)).equals((
+                            LogicalTableDataVersionPointersCurrent::Table,
+                            LogicalTableDataVersionPointersCurrent::PhysicalTableDataVersionId,
+                        )),
                     )
                     .join(
                         JoinType::LeftJoin,
@@ -296,7 +301,6 @@ impl Entity for Defs {
                         JoinType::LeftJoin,
                         Groups::Table,
                         groups_alias.clone(),
-                        // Group ids are only unique per project; match project_id too.
                         Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId))
                             .equals((groups_alias.clone(), Groups::Id))
                             .and(

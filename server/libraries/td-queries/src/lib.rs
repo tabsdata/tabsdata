@@ -20,7 +20,7 @@ pub use daos::dependency::{Dependencies, DependenciesEntry};
 pub use daos::execution::{Executions, ExecutionsEntry};
 pub use daos::function_runs::{Lfr, LfrEntry, Pfr, PfrEntry};
 pub use daos::metrics::{Metrics, MetricsEntry};
-pub use daos::pointers::{LogicalPointers, redirect_event, void_event};
+pub use daos::pointers::{Bind, LogicalPointers, OutputRedirect, ReplayRedirect};
 pub use daos::session::{Sessions, SessionsEntry};
 pub use daos::table_data_versions::{Ltdv, LtdvEntry};
 

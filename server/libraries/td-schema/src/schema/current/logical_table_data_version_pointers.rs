@@ -6,9 +6,10 @@
 
 use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, Table, TableCreateStatement};
 
+use super::logical_table_data_version_pointers_current::LogicalTableDataVersionPointersCurrent;
 use super::logical_table_data_versions::LogicalTableDataVersions;
 use crate::schema::Entity;
-use crate::schema::sql::{ImmutableTriggerDef, TriggerSpec};
+use crate::schema::sql::{ImmutableTriggerDef, SeedCurrent, TriggerSpec, VersionedTriggerDef, cols_of};
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum LogicalTableDataVersionPointers {
@@ -72,9 +73,32 @@ impl Entity for Defs {
     }
 
     fn create_db_triggers(&self) -> Vec<TriggerSpec> {
-        vec![TriggerSpec::Immutable(ImmutableTriggerDef {
-            name: format!("{}__immutable", LogicalTableDataVersionPointers::Table.to_string()),
-            source_table: LogicalTableDataVersionPointers::Table.into_iden(),
-        })]
+        vec![
+            // Latest event wins: a later Voided/Pending overwrites an earlier
+            // Bound, so the current row reflects being bound *now*.
+            TriggerSpec::VersionedCurrent(VersionedTriggerDef {
+                name: format!("{}__maintain_current", LogicalTableDataVersionPointers::Table.to_string()),
+                source_table: LogicalTableDataVersionPointers::Table.into_iden(),
+                target_table: LogicalTableDataVersionPointersCurrent::Table.into_iden(),
+                partition_col: LogicalTableDataVersionPointers::LogicalTableDataVersionId.into_iden(),
+                version_col: LogicalTableDataVersionPointers::SetOn.into_iden(),
+                tie_break_col: LogicalTableDataVersionPointers::Id.into_iden(),
+                columns: cols_of::<LogicalTableDataVersionPointers>(),
+            }),
+            TriggerSpec::Immutable(ImmutableTriggerDef {
+                name: format!("{}__immutable", LogicalTableDataVersionPointers::Table.to_string()),
+                source_table: LogicalTableDataVersionPointers::Table.into_iden(),
+            }),
+        ]
+    }
+
+    fn seed_current(&self) -> Vec<SeedCurrent> {
+        vec![SeedCurrent {
+            target: LogicalTableDataVersionPointersCurrent::Table.into_iden(),
+            source: LogicalTableDataVersionPointers::Table.into_iden(),
+            partition_col: LogicalTableDataVersionPointers::LogicalTableDataVersionId.into_iden(),
+            version_col: LogicalTableDataVersionPointers::SetOn.into_iden(),
+            columns: cols_of::<LogicalTableDataVersionPointers>(),
+        }]
     }
 }
