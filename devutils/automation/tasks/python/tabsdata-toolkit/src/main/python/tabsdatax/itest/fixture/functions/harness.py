@@ -157,7 +157,7 @@ def _connection_document(conn: Conn) -> tuple[str, list[dict]]:
     (e.g. LocalFile) yield an empty list, so this is a no-op for them."""
     from copy import deepcopy
 
-    from tabsdatak import _template
+    from tabsdatak.cli import template as _template
     from tabsdatak.common._json_serde import _secret_refs, dehydrate, replace_at
 
     reference = conn.to_dict()
