@@ -243,6 +243,7 @@ impl DatabaseConfig {
         let conn_options = sqlx::sqlite::SqliteConnectOptions::try_from(conn_options)?
             .create_if_missing(!read_only)
             .busy_timeout(Duration::from_secs(10))
+            .foreign_keys(true)
             .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
             .read_only(read_only);
         debug!("Database(read_only:{read_only}). Connection options: {conn_options:#?}");

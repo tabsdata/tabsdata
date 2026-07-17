@@ -2,7 +2,9 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use sea_query::{Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, JoinType, Query, Table, TableCreateStatement};
+use sea_query::{
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, JoinType, Query, Table, TableCreateStatement,
+};
 
 use super::collections::Collections;
 use super::executions::Executions;
@@ -10,6 +12,7 @@ use super::functions::Functions;
 use super::logical_function_runs::LogicalFunctionRuns;
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::projects::Projects;
+use super::transactions::Transactions;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
 use crate::schema::sql::ViewDef;
@@ -62,6 +65,41 @@ impl Entity for Defs {
                 // rejects text→BYTEA on INSERT ("column is of type bytea but
                 // expression is of type text").
                 .col(ColumnDef::new(Workers::WorkerConfig).text().null())
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Workers::Table, Workers::CollectionId)
+                        .to(Collections::Table, Collections::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Workers::Table, Workers::ExecutionId)
+                        .to(Executions::Table, Executions::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Workers::Table, Workers::TransactionId)
+                        .to(Transactions::Table, Transactions::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Workers::Table, Workers::FunctionVersionId)
+                        .to(Functions::Table, Functions::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Workers::Table, Workers::PhysicalFunctionRunId)
+                        .to(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
                 .to_owned(),
         ]
     }
