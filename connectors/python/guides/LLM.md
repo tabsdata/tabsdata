@@ -126,8 +126,8 @@ src = MySQLSrc(
   output_tables=["users_out"],
   trigger_by=CronTrigger(mask="@hourly"),
 )
-def my_pub(users: TableFrame) -> tuple[TableFrame]:
-  return (users,)
+def my_pub(users: TableFrame) -> TableFrame:
+  return users
 ```
 
 Three pieces, in order: build a `Src` (or `Dest`) from its own
@@ -136,7 +136,9 @@ a function whose first `N` positional parameters match the source's
 slot count -- the connector's `SrcDef.cardinality(src)` -- (each
 typed `TableFrame` for SINGLE-mode sources or `list[TableFrame]`
 for ARRAY-mode sources) and whose return is a fixed-length
-`tuple[TableFrame, ...]` of length `len(output_tables)`. The MySQL
+`tuple[TableFrame, ...]` of length `len(output_tables)` (a
+single-output function may return the lone `TableFrame` bare,
+without the enclosing 1-tuple). The MySQL
 connection itself is registered on the function's collection and
 resolved by the runtime; it is never named or built in flow code.
 
@@ -275,14 +277,14 @@ Specifically:
   - `DestDef.cardinality(destination)` for `@subscriber` (the
     framework looks the binding up via the
     ``tabsdatak.connectors`` registry).
+  A single-output function may return the lone `TableFrame`
+  directly, without the enclosing 1-tuple.
 
 Typical LLM mistakes:
 - Wrapping inputs in a single `tables` tuple parameter (the old
   shape). The new contract is one positional parameter per slot.
 - Variable-length return tuple `tuple[TableFrame, ...]` (Ellipsis
   means variable arity, framework rejects it).
-- Returning a bare `TableFrame` instead of `(tf,)` for a single
-  output slot.
 - Wrong arity (`output_tables=["a", "b"]` but return tuple has one
   element).
 
@@ -582,8 +584,6 @@ parameters and a matching `tuple[TableFrame, ...]` return. LLMs
 routinely:
 - pack inputs into one `tables` tuple parameter (the old shape),
 - use a variable-length return tuple `tuple[TableFrame, ...]`,
-- return a bare `TableFrame` instead of `(tf,)` for one-output
-  pipelines,
 - swap `TableFrame` for `list[TableFrame]` (or vice versa) against
   the source's `table_mode`.
 
@@ -599,6 +599,9 @@ Expected signature (2 input slot(s), 1 output slot(s); slot type = TableFrame  (
         in_1: TableFrame,
         in_2: TableFrame,
     ) -> tuple[TableFrame]:
+        ...
+    # a single output may also be returned bare, without the 1-tuple:
+    def my_pub(...) -> TableFrame:
         ...
 ```
 

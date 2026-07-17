@@ -99,8 +99,8 @@ from tabsdatak.conn.kafka import KafkaStreamSrc as _KafkaStreamSrc  # noqa: E402
     flush_interval_mins=1,
     output_tables=["t"],
 )
-def _module_level_stream_pub(t: TableFramesSpec) -> tuple[TableFrameSpec]:
-    return (None,)
+def _module_level_stream_pub(t: TableFramesSpec) -> TableFrameSpec:
+    return None
 
 
 # --- fixtures and helpers --------------------------------------------------
@@ -121,8 +121,8 @@ _SRC = LocalFileSrc(
     source=_SRC,
     output_tables=["my_table"],
 )
-def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec]:
-    return (None,)
+def my_publisher(in_1: TableFramesSpec) -> TableFrameSpec:
+    return None
 """
 
 
@@ -556,8 +556,8 @@ def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage(
         flush_interval_mins=1,
         output_tables=["t"],
     )
-    def _my_stream_pub(t: TableFramesSpec) -> tuple[TableFrameSpec]:
-        return (None,)
+    def _my_stream_pub(t: TableFramesSpec) -> TableFrameSpec:
+        return None
 
     # The stream-publisher path substitutes the conn from function_stage
     # and never reads the connection file, so a stub path is fine here.

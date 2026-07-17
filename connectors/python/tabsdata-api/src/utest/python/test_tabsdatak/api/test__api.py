@@ -178,16 +178,16 @@ _connectors.register_dest(spi.DestDef(
 ))
 
 
-def serde_pub_func(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-    return (t1,)
+def serde_pub_func(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+    return t1
 
 
-def serde_sub_func(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-    return (t1,)
+def serde_sub_func(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+    return t1
 
 
-def serde_xform_func(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-    return (t1,)
+def serde_xform_func(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+    return t1
 
 
 # Migration-chain fixtures must be at module top level so the type
@@ -254,8 +254,8 @@ def _build_publisher() -> _info.PublisherInfo:
         source=_SerdeSrc(name="src1"),
         output_tables=["out"],
     )
-    def p(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def p(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
     # Replace the local closure with a module-level function so the
     # serialization round-trip can resolve it. Decorators don't compose
     # neatly with module-level functions in test files, so we mutate

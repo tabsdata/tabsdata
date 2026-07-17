@@ -147,7 +147,7 @@ from tabsdatak.api import TableFrameSpec, TableFramesSpec, transformer
 )
 def my_transformer(
     a: TableFrameSpec, b: TableFramesSpec, c: TableFrameSpec
-) -> tuple[TableFrameSpec]:
+) -> TableFrameSpec:
     import polars as pl
 
     frames = []
@@ -158,8 +158,8 @@ def my_transformer(
     if c is not None:
         frames.append(c)
     if not frames:
-        return (None,)
-    return (pl.concat(frames, how="vertical_relaxed"),)
+        return None
+    return pl.concat(frames, how="vertical_relaxed")
 """
 
 

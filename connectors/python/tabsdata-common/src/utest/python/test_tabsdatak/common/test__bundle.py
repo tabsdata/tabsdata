@@ -56,9 +56,9 @@ _SRC = LocalFileSrc(
 
 
 @publisher(source=_SRC, output_tables=["t"])
-def _fixture_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec]:
+def _fixture_publisher(in_1: TableFramesSpec) -> TableFrameSpec:
     """Docstring for the test fixture publisher."""
-    return (None,)
+    return None
 
 
 def _info() -> PublisherInfo:

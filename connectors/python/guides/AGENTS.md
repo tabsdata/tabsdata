@@ -165,8 +165,8 @@ src = MySQLSrc(
     output_tables=["users_out"],
     trigger_by=CronTrigger(mask="@hourly"),
 )
-def my_pub(users: TableFrame) -> tuple[TableFrame]:
-    return (users,)
+def my_pub(users: TableFrame) -> TableFrame:
+    return users
 ```
 
 Notes the framework enforces:
@@ -182,7 +182,9 @@ Notes the framework enforces:
   Parameters past the first `N` are not type-checked.
 - The return must be `tuple[TableFrame, ...]` of exactly
   `len(output_tables)` elements (each `TableFrame` is
-  auto-nullable, so a slot may be returned as `None`).
+  auto-nullable, so a slot may be returned as `None`). A
+  single-output function may return the lone `TableFrame` bare,
+  without the enclosing 1-tuple.
 - Shape mismatches and argument-type mismatches both raise
   `ApiParamTypeException(api_error=API_4)` at decoration time
   (when `PublisherInfo` is constructed). The same applies for

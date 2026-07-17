@@ -49,8 +49,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
     flush_interval_mins=1,
     output_tables=["t"],
 )
-def _module_level_stream_pub(t: TableFramesSpec) -> tuple[TableFrameSpec]:
-    return (None,)
+def _module_level_stream_pub(t: TableFramesSpec) -> TableFrameSpec:
+    return None
 
 
 def _write_function_def(bundle_dir: Path, info) -> None:

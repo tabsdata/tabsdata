@@ -170,8 +170,8 @@ from tabsdatak.api import TableFrameSpec, transformer
 
 
 @transformer(input_tables=["c1/t_in"], output_tables=["t_out"])
-def my_transformer(in_1: TableFrameSpec) -> tuple[TableFrameSpec]:
-    return (in_1,)
+def my_transformer(in_1: TableFrameSpec) -> TableFrameSpec:
+    return in_1
 """
 
 
@@ -217,8 +217,8 @@ _DEST = LocalFileDest(
 
 
 @subscriber(destination=_DEST, input_tables=["c1/t_in"])
-def my_subscriber(in_1: TableFrameSpec) -> tuple[TableFrameSpec]:
-    return (in_1,)
+def my_subscriber(in_1: TableFrameSpec) -> TableFrameSpec:
+    return in_1
 """
 
 
@@ -266,8 +266,8 @@ from tabsdatak.conn.kafka import KafkaStreamSrc
     flush_interval_mins=1,
     output_tables=["people_streamed"],
 )
-def my_stream_publisher(t: TableFramesSpec) -> tuple[TableFrameSpec]:
-    return (None,)
+def my_stream_publisher(t: TableFramesSpec) -> TableFrameSpec:
+    return None
 """
 
 
@@ -315,7 +315,7 @@ _SRC = LocalFileSrc(
 @publisher(source=_SRC, output_tables=["concat"])
 def multi_publisher(
     in_a: TableFramesSpec, in_b: TableFramesSpec
-) -> tuple[TableFrameSpec]:
+) -> TableFrameSpec:
     import polars as pl
     from tabsdatak.tableframe import TableFrame
 
@@ -324,9 +324,9 @@ def multi_publisher(
         if slot:
             frames.extend(f.to_polars_lf() for f in slot if f is not None)
     if not frames:
-        return (None,)
+        return None
     combined = pl.concat(frames, how="vertical_relaxed")
-    return (TableFrame.from_polars(combined),)
+    return TableFrame.from_polars(combined)
 """
 
 
@@ -373,7 +373,7 @@ from tabsdatak.api import TableFrameSpec, TableFramesSpec, transformer
 )
 def multi_transformer(
     a: TableFrameSpec, b: TableFramesSpec, c: TableFrameSpec
-) -> tuple[TableFrameSpec]:
+) -> TableFrameSpec:
     import polars as pl
     from tabsdatak.tableframe import TableFrame
 
@@ -385,9 +385,9 @@ def multi_transformer(
     if c is not None:
         frames.append(c.to_polars_lf())
     if not frames:
-        return (None,)
+        return None
     combined = pl.concat(frames, how="vertical_relaxed")
-    return (TableFrame.from_polars(combined),)
+    return TableFrame.from_polars(combined)
 """
 
 
@@ -1188,8 +1188,8 @@ def test_infer_table_modes_skips_trailing_ctx_param():
     ``_infer_table_modes`` must skip it — only the input slots are
     real table-mode-bearing parameters."""
 
-    def f(in_1: TableFrameSpec, ctx: FunctionCtx) -> tuple[TableFrameSpec]:
-        return (None,)
+    def f(in_1: TableFrameSpec, ctx: FunctionCtx) -> TableFrameSpec:
+        return None
 
     modes = _infer_table_modes(f)
     assert modes == [TableMode.SINGLE]
@@ -1199,8 +1199,8 @@ def test_infer_table_modes_does_not_skip_without_ctx():
     """No trailing ctx → every parameter is a slot. Sanity check that
     the trim only kicks in when has_trx_ctx_param is True."""
 
-    def f(in_1: TableFrameSpec, in_2: TableFrameSpec) -> tuple[TableFrameSpec]:
-        return (None,)
+    def f(in_1: TableFrameSpec, in_2: TableFrameSpec) -> TableFrameSpec:
+        return None
 
     modes = _infer_table_modes(f)
     assert modes == [TableMode.SINGLE, TableMode.SINGLE]
@@ -1222,11 +1222,11 @@ _SRC = LocalFileSrc(
 
 
 @publisher(source=_SRC, output_tables=["my_table"])
-def my_publisher(in_1: TableFramesSpec, ctx: TrxCtx) -> tuple[TableFrameSpec]:
+def my_publisher(in_1: TableFramesSpec, ctx: TrxCtx) -> TableFrameSpec:
     seen = ctx.get_attr("my-key")
     new = "from-user-fn" if seen is None else "again-after-" + str(seen)
     ctx.set_attr("my-key", new)
-    return (None,)
+    return None
 """
 
 
@@ -1490,7 +1490,7 @@ _SRC = LocalFileSrc(
 @publisher(source=_SRC, output_tables=["my_table"])
 def my_publisher(
     in_1: TableFramesSpec, ctx: TrxCtx
-) -> tuple[TableFrameSpec]:
+) -> TableFrameSpec:
     import os
     # ctx.work_dir == --out-dir for run-function. Must already exist
     # by the time the user function runs, so a body that writes a
@@ -1499,7 +1499,7 @@ def my_publisher(
         f"ctx.work_dir {ctx.work_dir} does not exist; runtime "
         f"created out_dir too late"
     )
-    return (None,)
+    return None
 """)
     monkeypatch.syspath_prepend(str(project))
     importlib.invalidate_caches()
@@ -1556,10 +1556,10 @@ from tabsdatak.api import TableFrameSpec, TrxCtx, transformer
 @transformer(input_tables=["c1/t_in"], output_tables=["t_out"])
 def my_transformer(
     in_1: TableFrameSpec, ctx: TrxCtx
-) -> tuple[TableFrameSpec]:
+) -> TableFrameSpec:
     seen = ctx.get_attr("smoke.last-seen")
     ctx.set_attr("smoke.last-seen", "tx-after-" + str(seen))
-    return (in_1,)
+    return in_1
 """
 
 
@@ -1577,10 +1577,10 @@ _DEST = LocalFileDest(
 @subscriber(destination=_DEST, input_tables=["c1/t_in"])
 def my_subscriber(
     in_1: TableFrameSpec, ctx: TrxCtx
-) -> tuple[TableFrameSpec]:
+) -> TableFrameSpec:
     seen = ctx.get_attr("smoke.last-seen")
     ctx.set_attr("smoke.last-seen", "sub-after-" + str(seen))
-    return (in_1,)
+    return in_1
 """
 
 

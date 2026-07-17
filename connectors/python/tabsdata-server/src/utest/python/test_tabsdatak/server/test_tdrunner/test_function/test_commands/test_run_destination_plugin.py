@@ -76,8 +76,8 @@ _DEST = LocalFileDest(
     destination=_DEST,
     input_tables=["c1/t_in"],
 )
-def my_subscriber(in_1: TableFrameSpec) -> tuple[TableFrameSpec]:
-    return (in_1,)
+def my_subscriber(in_1: TableFrameSpec) -> TableFrameSpec:
+    return in_1
 """
 
 

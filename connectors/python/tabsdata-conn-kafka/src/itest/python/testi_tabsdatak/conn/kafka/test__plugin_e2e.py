@@ -69,9 +69,9 @@ def _write_stream_publisher(
         "\n"
         f"@stream_publisher(source={src_expr}, flush_interval_mins=1, "
         f"output_tables=[{output_table!r}])\n"
-        "def e2e_stream_pub(inputs: TableFramesSpec) -> tuple[TableFrameSpec]:\n"
+        "def e2e_stream_pub(inputs: TableFramesSpec) -> TableFrameSpec:\n"
         "    frames = [f for f in (inputs or []) if f is not None]\n"
-        "    return (frames[0] if frames else None,)\n",
+        "    return frames[0] if frames else None\n",
     )
     return module.e2e_stream_pub
 

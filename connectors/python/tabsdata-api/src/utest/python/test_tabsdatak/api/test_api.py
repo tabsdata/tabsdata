@@ -100,11 +100,11 @@ class _OnTab(m.OnTablesAction):
 # Helper function whose flat-signature shape matches the default fixtures
 # (SINGLE-mode src/dest table_count=1, one element in
 # output_tables / input_tables). One positional input parameter typed as
-# `TableFrame` (auto-nullable) and a `tuple[TableFrame]` return.
+# `TableFrame` (auto-nullable) and a bare single-output `TableFrame` return.
 def _good_1in_1out(
     t1: tableframe.TableFrame | None,
-) -> tuple[tableframe.TableFrame | None]:
-    return (t1,)
+) -> tableframe.TableFrame | None:
+    return t1
 
 
 # Stream-source variant: input slot is array-mode (`TableFramesSpec`)
@@ -113,8 +113,8 @@ def _good_1in_1out(
 # per event. Output stays single-mode per output table.
 def _good_1in_1out_stream(
     t1: list[tableframe.TableFrame | None] | None,
-) -> tuple[tableframe.TableFrame | None]:
-    return (None,)
+) -> tableframe.TableFrame | None:
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -209,8 +209,8 @@ def test_publisher_dataclass_empty_tables_raises_api_4():
 
 def test_publisher_decorator_returns_publisher_instance():
     @m.publisher(source=_src(), output_tables=["t1"])
-    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_pub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert isinstance(my_pub, _info.PublisherInfo)
     assert callable(my_pub)
@@ -218,8 +218,8 @@ def test_publisher_decorator_returns_publisher_instance():
 
 def test_publisher_descriptor_call_raises_typeerror_pointing_at_func():
     @m.publisher(source=_src(), output_tables=["t1"])
-    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_pub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     # The decorated name is a PublisherInfo descriptor, not a callable.
     # Calling it from user code would be a bug; the friendly error
@@ -227,7 +227,7 @@ def test_publisher_descriptor_call_raises_typeerror_pointing_at_func():
     with pytest.raises(TypeError, match=r"\.func"):
         my_pub(None)
     # The underlying function is still reachable on .func.
-    assert my_pub.func(None) == (None,)
+    assert my_pub.func(None) is None
 
 
 def test_signature_error_includes_expected_signature_block():
@@ -259,8 +259,8 @@ def test_publisher_decorator_accepts_cron_trigger():
     cron = m.CronTrigger(mask="*/5 * * * *")
 
     @m.publisher(source=_src(), output_tables=["t1"], trigger_by=cron)
-    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_pub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert my_pub.trigger_by is cron
 
@@ -270,8 +270,8 @@ def test_publisher_decorator_accepts_tables_trigger():
     trig = m.TablesTrigger(tables=["users", "orders"])
 
     @m.publisher(source=_src(), output_tables=["t1"], trigger_by=trig)
-    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_pub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert my_pub.trigger_by is trig
 
@@ -305,8 +305,8 @@ def test_transformer_decorator_wraps_with_all_tables_trigger():
         trigger_by=trig,
         on_tables=[_OnTab()],
     )
-    def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_xf(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert isinstance(my_xf, _info.TransformerInfo)
     assert my_xf.trigger_by is trig
@@ -340,8 +340,8 @@ def test_transformer_decorator_rejects_empty_input_tables_with_api_5():
 
 def test_transformer_decorator_allows_default_none_trigger_and_on_tables():
     @m.transformer(input_tables=["in1"], output_tables=["out1"])
-    def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_xf(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert isinstance(my_xf, _info.TransformerInfo)
     assert my_xf.trigger_by is None
@@ -357,8 +357,8 @@ def test_transformer_decorator_accepts_all_tables_trigger():
         output_tables=["b"],
         trigger_by=trig,
     )
-    def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_xf(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert my_xf.trigger_by is trig
 
@@ -371,8 +371,8 @@ def test_transformer_decorator_accepts_tables_trigger():
         output_tables=["b"],
         trigger_by=trig,
     )
-    def my_xf(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_xf(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert my_xf.trigger_by is trig
 
@@ -387,8 +387,8 @@ def test_subscriber_decorator_wraps_with_all_tables_trigger():
     trig = m.AllTablesTrigger()
 
     @m.subscriber(destination=dest, input_tables=["in1"], trigger_by=trig)
-    def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_sub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert isinstance(my_sub, _info.SubscriberInfo)
     assert my_sub.destination is dest
@@ -407,8 +407,8 @@ def test_subscriber_decorator_rejects_empty_input_tables_with_api_6():
 
 def test_subscriber_decorator_allows_default_none_trigger():
     @m.subscriber(destination=_dest(), input_tables=["in1"])
-    def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_sub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert isinstance(my_sub, _info.SubscriberInfo)
     assert my_sub.trigger_by is None
@@ -422,8 +422,8 @@ def test_subscriber_decorator_accepts_all_tables_trigger():
         input_tables=["in1"],
         trigger_by=trig,
     )
-    def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_sub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert my_sub.trigger_by is trig
 
@@ -436,8 +436,8 @@ def test_subscriber_decorator_accepts_tables_trigger():
         input_tables=["in1"],
         trigger_by=trig,
     )
-    def my_sub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_sub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert my_sub.trigger_by is trig
 
@@ -736,8 +736,8 @@ def test_publisher_input_accepts_list_elements_when_mode_is_array():
     def my_pub(
         t1: list[tableframe.TableFrame | None] | None,
         t2: list[tableframe.TableFrame | None] | None,
-    ) -> tuple[tableframe.TableFrame | None]:
-        return (None,)
+    ) -> tableframe.TableFrame | None:
+        return None
 
     assert isinstance(my_pub, _info.PublisherInfo)
 
@@ -819,8 +819,8 @@ def test_publisher_signature_allows_optional_trailing_trx_ctx():
     def my_pub(
         t1: tableframe.TableFrame | None,
         ctx: m.TrxCtx,
-    ) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    ) -> tableframe.TableFrame | None:
+        return t1
 
     assert isinstance(my_pub, _info.PublisherInfo)
 
@@ -846,15 +846,15 @@ def test_publisher_signature_rejects_trailing_non_trx_ctx_param():
 def test_has_trx_ctx_param_detects_trailing_ctx():
     def f(
         t1: tableframe.TableFrame | None, ctx: m.TrxCtx
-    ) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    ) -> tableframe.TableFrame | None:
+        return t1
 
     assert _api.has_trx_ctx_param(f) is True
 
 
 def test_has_trx_ctx_param_false_without_ctx():
-    def f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def f(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert _api.has_trx_ctx_param(f) is False
 
@@ -885,8 +885,8 @@ def test_has_trx_ctx_param_accepts_trx_ctx_subclass():
 
     def f(
         t1: tableframe.TableFrame | None, ctx: _MyCtx
-    ) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    ) -> tableframe.TableFrame | None:
+        return t1
 
     assert _api.has_trx_ctx_param(f) is True
 
@@ -895,8 +895,8 @@ def test_publisher_signature_accepts_explicit_table_frame_or_none():
     src = _src()
 
     @m.publisher(source=src, output_tables=["t"])
-    def my_pub(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    def my_pub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
 
     assert isinstance(my_pub, _info.PublisherInfo)
 
@@ -1044,8 +1044,8 @@ def test_auto_publisher_decorator_returns_auto_publisher_instance():
     )
     def my_pub(
         t1: list[tableframe.TableFrame | None] | None,
-    ) -> tuple[tableframe.TableFrame | None]:
-        return (None,)
+    ) -> tableframe.TableFrame | None:
+        return None
 
     assert isinstance(my_pub, _info.StreamPublisherInfo)
     assert my_pub.fallback_rollover_mins == 10
@@ -1077,8 +1077,8 @@ def test_auto_publisher_decorator_accepts_on_tables_hooks():
     )
     def my_pub(
         t1: list[tableframe.TableFrame | None] | None,
-    ) -> tuple[tableframe.TableFrame | None]:
-        return (None,)
+    ) -> tableframe.TableFrame | None:
+        return None
 
     assert my_pub.on_tables is not None
     assert len(my_pub.on_tables) == 1
@@ -1092,8 +1092,8 @@ def test_auto_publisher_decorator_default_none_on_tables():
     )
     def my_pub(
         t1: list[tableframe.TableFrame | None] | None,
-    ) -> tuple[tableframe.TableFrame | None]:
-        return (None,)
+    ) -> tableframe.TableFrame | None:
+        return None
 
     assert my_pub.on_tables is None
 
@@ -1146,8 +1146,8 @@ def test_subscriber_signature_allows_optional_trailing_trx_ctx():
     def my_sub(
         t1: tableframe.TableFrame | None,
         ctx: m.TrxCtx,
-    ) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    ) -> tableframe.TableFrame | None:
+        return t1
 
     assert isinstance(my_sub, _info.SubscriberInfo)
 
@@ -1157,8 +1157,8 @@ def test_transformer_signature_allows_optional_trailing_trx_ctx():
     def my_trf(
         t1: tableframe.TableFrame | None,
         ctx: m.TrxCtx,
-    ) -> tuple[tableframe.TableFrame | None]:
-        return (t1,)
+    ) -> tableframe.TableFrame | None:
+        return t1
 
     assert isinstance(my_trf, _info.TransformerInfo)
 
