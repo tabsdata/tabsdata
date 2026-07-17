@@ -489,11 +489,14 @@ class ContainerBase(System):
 
         print(">>> --force: dropping existing tables ...")
         engine = create_engine(uri)
-        md = MetaData()
-        md.reflect(bind=engine)
-        if md.tables:
-            md.drop_all(bind=engine)
-            print(f">>> dropped {len(md.tables)} table(s)")
+        try:
+            md = MetaData()
+            md.reflect(bind=engine)
+            if md.tables:
+                md.drop_all(bind=engine)
+                print(f">>> dropped {len(md.tables)} table(s)")
+        finally:
+            engine.dispose()  # don't leave a connection that blocks DROP DATABASE
 
     # ==================================================================
     # Admin plane (TCP) — provision domains over the published port

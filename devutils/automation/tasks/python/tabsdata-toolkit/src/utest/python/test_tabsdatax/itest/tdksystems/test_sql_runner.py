@@ -9,7 +9,13 @@ from pathlib import Path
 import pytest
 
 from tabsdatax.itest.tdksystems.errors import DatagenError
-from tabsdatax.itest.tdksystems.sql_runner import _print_result, run_sql_file, run_sql_text
+from tabsdatax.itest.tdksystems.sql_runner import (
+    _is_only_comments,
+    _print_result,
+    run_sql_file,
+    run_sql_text,
+    split_sql_statements,
+)
 
 
 @pytest.fixture
@@ -108,6 +114,100 @@ def test_run_sql_file_dispatches_to_text(sqlite_uri, tmp_path):
 def test_run_sql_file_missing_path_errors(tmp_path):
     with pytest.raises(DatagenError, match="SQL file does not exist"):
         run_sql_file("sqlite:///:memory:", tmp_path / "nope.sql")
+
+
+# ---- engine disposal: no leaked connection to the (per-domain) DB ----------
+
+
+def _spy_create_engine(monkeypatch):
+    """Patch sqlalchemy.create_engine to record every engine made and whether it
+    was disposed. A leaked engine keeps a live connection to the per-domain
+    database, which blocks the DROP DATABASE that create-cleanup / destroy runs
+    (and orphans the DB, masking the real error as a later 'already exists')."""
+    import sqlalchemy
+
+    real_create = sqlalchemy.create_engine
+    made: list = []
+    disposed: list = []
+
+    def spy(*args, **kwargs):
+        eng = real_create(*args, **kwargs)
+        original = eng.dispose
+
+        def tracked(*a, **k):
+            disposed.append(eng)
+            return original(*a, **k)
+
+        eng.dispose = tracked
+        made.append(eng)
+        return eng
+
+    monkeypatch.setattr(sqlalchemy, "create_engine", spy)
+    return made, disposed
+
+
+def test_run_sql_text_disposes_engine_on_success(sqlite_uri, monkeypatch):
+    made, disposed = _spy_create_engine(monkeypatch)
+    run_sql_text(sqlite_uri, "CREATE TABLE t (id INT)")
+    assert len(made) == 1
+    assert made[0] in disposed
+
+
+def test_run_sql_text_disposes_engine_on_error(sqlite_uri, monkeypatch):
+    made, disposed = _spy_create_engine(monkeypatch)
+    with pytest.raises(DatagenError, match="SQL error"):
+        run_sql_text(sqlite_uri, "SELEC bad")
+    assert len(made) == 1
+    assert made[0] in disposed
+
+
+# ---- `:word` in SQL is literal, not a bind parameter -----------------------
+
+
+def test_bind_token_in_comment_is_not_a_bind_parameter(sqlite_uri):
+    # A model DDL comment such as `WHERE sim_counter > :last LIMIT :size` must run
+    # as-is — regression for "A value is required for bind parameter 'last'" when
+    # SQLAlchemy's text() treated `:word` in a comment as a bind. A block comment
+    # survives both splitter paths (sqlparse and the comment-stripping fallback).
+    run_sql_text(
+        sqlite_uri,
+        "CREATE TABLE t (id INT) /* read: WHERE id > :last LIMIT :size */",
+    )
+    sink = io.StringIO()
+    run_sql_text(sqlite_uri, "SELECT count(*) AS n FROM t", out=sink)
+    assert sink.getvalue().rstrip("\n") == "n\n0"
+
+
+# ---- comment-only fragments are dropped (no "empty query") -----------------
+
+
+def test_is_only_comments():
+    assert _is_only_comments("-- just a line comment")
+    assert _is_only_comments("/* just a block comment */")
+    assert _is_only_comments("   \n  ")
+    assert not _is_only_comments("SELECT 1")
+    assert not _is_only_comments("-- lead\nSELECT 1")
+
+
+def test_split_drops_comment_only_fragments():
+    frags = split_sql_statements(
+        "CREATE TABLE t (id INT); /* standalone comment */; SELECT 1;"
+    )
+    assert len(frags) == 2
+    assert frags[0].startswith("CREATE TABLE")
+    assert frags[1].startswith("SELECT")
+
+
+def test_run_sql_text_tolerates_comment_only_fragment(sqlite_uri):
+    # A comment-only fragment between statements must not raise "can't execute an
+    # empty query" — it is skipped.
+    run_sql_text(
+        sqlite_uri,
+        "CREATE TABLE t (id INT); /* a note */; INSERT INTO t VALUES (1);",
+    )
+    sink = io.StringIO()
+    run_sql_text(sqlite_uri, "SELECT id FROM t", out=sink)
+    assert sink.getvalue().rstrip("\n") == "id\n1"
 
 
 # ---- _print_result low-level test (skipped: covered indirectly above) ------

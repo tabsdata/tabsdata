@@ -1068,11 +1068,15 @@ def _provision_with_retry(kind, sysobj, name, out, ctx, provision) -> None:
             with attempt:
                 try:
                     provision()
-                except Exception:
+                except Exception as exc:
                     n = attempt.retry_state.attempt_number
+                    # Log the actual error each attempt: a retry can convert it
+                    # (e.g. attempt 1's real failure leaves an entity that makes
+                    # attempt 2 raise "already exists"), so without this the real
+                    # first-attempt cause would never be visible.
                     print(
                         f">>> {kind} '{name}' provisioning failed "
-                        f"(attempt {n}/{CREATE_ATTEMPTS})",
+                        f"(attempt {n}/{CREATE_ATTEMPTS}): {exc}",
                         file=sys.stderr,
                     )
                     _destroy_partial()

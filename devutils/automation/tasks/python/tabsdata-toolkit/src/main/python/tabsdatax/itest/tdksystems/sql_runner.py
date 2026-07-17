@@ -21,11 +21,21 @@ multi-frame Python traceback.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import IO
 
 from .errors import DatagenError
+
+_SQL_COMMENT_RE = re.compile(r"/\*.*?\*/|--[^\n]*", re.DOTALL)
+
+
+def _is_only_comments(fragment: str) -> bool:
+    """True if `fragment` carries no executable SQL — only `--` / block comments
+    and whitespace. A DBAPI driver rejects such a statement ("can't execute an
+    empty query"), so these fragments are dropped rather than run."""
+    return not _SQL_COMMENT_RE.sub("", fragment).strip()
 
 
 def split_sql_statements(sql: str) -> list[str]:
@@ -48,7 +58,7 @@ def split_sql_statements(sql: str) -> list[str]:
     out: list[str] = []
     for st in parts:
         st = st.strip().rstrip(";").strip()
-        if st:
+        if st and not _is_only_comments(st):
             out.append(st)
     return out
 
@@ -66,14 +76,14 @@ def run_sql_text(
     if not uri:
         raise DatagenError("SQLALCHEMY_URI is empty")
 
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import create_engine
     from sqlalchemy.exc import SQLAlchemyError
 
     statements = split_sql_statements(sql)
 
     sink = out if out is not None else sys.stdout
+    engine = create_engine(uri)
     try:
-        engine = create_engine(uri)
         with engine.begin() as conn:
             if engine.dialect.name == "oracle":
                 for stmt in (
@@ -86,12 +96,23 @@ def run_sql_text(
                 stmt = stmt.rstrip(";").strip()
                 if not stmt:
                     continue
-                result = conn.execute(text(stmt))
+                # exec_driver_sql passes the raw statement to the DBAPI driver
+                # with NO SQLAlchemy bind parsing — so a `:word` token in the
+                # DDL/DML (e.g. `LIMIT :size` inside a comment) is literal SQL,
+                # not a bind parameter demanding a value. This runs trusted
+                # generated SQL, so there are no binds to interpolate anyway.
+                result = conn.exec_driver_sql(stmt)
                 if getattr(result, "returns_rows", False):
                     _print_result(result, sink)
     except SQLAlchemyError as exc:
         orig = getattr(exc, "orig", None) or exc
         raise DatagenError(f"SQL error while running {label}: {orig}") from None
+    finally:
+        # Dispose the pool so no connection to the (per-domain) database lingers:
+        # a leaked connection blocks the DROP DATABASE that create's cleanup /
+        # destroy runs, orphaning the database and masking the real error as a
+        # later "already exists".
+        engine.dispose()
 
 
 def run_sql_file(

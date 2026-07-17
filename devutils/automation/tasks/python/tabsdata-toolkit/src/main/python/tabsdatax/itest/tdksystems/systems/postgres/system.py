@@ -73,7 +73,10 @@ class PostgresSystem(ContainerBase):
         self._run_admin_sql(
             admin,
             [
-                f'DROP DATABASE IF EXISTS "{name}"',
+                # WITH (FORCE) (PG 13+) terminates any session still connected to
+                # the database, so a leftover client connection can't block the
+                # drop (Postgres refuses DROP DATABASE while any session is on it).
+                f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)',
                 f'DROP USER IF EXISTS "{name}"',
             ],
         )

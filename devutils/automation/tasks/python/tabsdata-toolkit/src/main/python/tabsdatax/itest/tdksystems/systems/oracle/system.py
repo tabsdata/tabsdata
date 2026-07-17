@@ -78,7 +78,27 @@ class OracleSystem(ContainerBase):
     def do_delete(self, admin: AdminConn, name: str) -> None:
         if not any(u.lower() == name.lower() for u in self.do_list(admin)):
             return  # user already gone — idempotent (avoids a noisy ORA-01918)
+        self._kill_user_sessions(admin, name)
         self._run_admin_sql(admin, [f"DROP USER {name} CASCADE"])
+
+    def _kill_user_sessions(self, admin: AdminConn, name: str) -> None:
+        """Best-effort: terminate the schema-user's sessions so DROP USER doesn't
+        hit ORA-01940 (cannot drop a user that is currently connected). Swallowed
+        if it can't run — the DROP below then surfaces any real problem — so it
+        never regresses the drop."""
+        block = (
+            "BEGIN "
+            "FOR s IN (SELECT sid, serial# FROM v$session "
+            f"WHERE username = UPPER('{name}')) LOOP "
+            "BEGIN EXECUTE IMMEDIATE 'ALTER SYSTEM KILL SESSION ''' "
+            "|| s.sid || ',' || s.serial# || ''' IMMEDIATE'; "
+            "EXCEPTION WHEN OTHERS THEN NULL; END; "
+            "END LOOP; END;"
+        )
+        try:
+            self._run_admin_sql(admin, [block])
+        except Exception:  # noqa: BLE001 - best-effort; the DROP surfaces real errors
+            pass
 
     def do_list(self, admin: AdminConn) -> list[str]:
         return self._query_admin_names(
