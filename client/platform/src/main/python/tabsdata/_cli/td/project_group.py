@@ -4,12 +4,12 @@
 
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdata._cli.cli_utils import (
     hint_common_solutions,
     logical_prompt,
+    make_console,
     verify_login_or_prompt,
 )
 from tabsdata.api.tabsdata_server import TabsdataServer
@@ -105,7 +105,7 @@ def info(ctx: click.Context, name: str):
         )
 
         click.echo()
-        Console().print(table)
+        make_console().print(table)
         click.echo()
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -140,7 +140,7 @@ def list(ctx: click.Context):
             )
 
         click.echo()
-        Console().print(table)
+        make_console().print(table)
         click.echo(f"Number of projects: {len(list_of_projects)}")
         click.echo()
     except Exception as e:

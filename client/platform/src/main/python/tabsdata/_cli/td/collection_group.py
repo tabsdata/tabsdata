@@ -7,13 +7,13 @@ import sys
 from pathlib import Path
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdata._cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
+    make_console,
     verify_login_or_prompt,
 )
 
@@ -235,7 +235,7 @@ def info(ctx: click.Context, name: str):
         )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo()
     except Exception as e:
@@ -269,7 +269,7 @@ def list(ctx: click.Context):
             )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(f"Number of collections: {len(list_of_collections)}")
         click.echo()

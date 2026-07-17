@@ -9,16 +9,17 @@ import textwrap
 from pathlib import Path
 
 import rich_click as click
-from rich.console import Console
 
 from tabsdata import __version__
 from tabsdata._cli.cli_utils import (
+    RENDER_WIDTH,
     get_credentials_file_path,
     hint_common_solutions,
     initialise_tabsdata_server_connection,
     load_cli_options,
     load_pinned_objects,
     logical_prompt,
+    make_console,
     set_current_cli_option,
     show_hint,
     store_cli_options,
@@ -59,7 +60,11 @@ NO_BOLD = "[/bold]"
 UNDERLINE = "[underline]"
 NO_UNDERLINE = "[underline]"
 
-console = Console()
+_render_width = None if sys.stdout.isatty() else RENDER_WIDTH
+click.rich_click.WIDTH = _render_width
+click.rich_click.MAX_WIDTH = _render_width
+
+console = make_console()
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 

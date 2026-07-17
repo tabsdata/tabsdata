@@ -3,7 +3,6 @@
 #
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdata._cli.cli_utils import (
@@ -11,6 +10,7 @@ from tabsdata._cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
+    make_console,
     show_hint,
     verify_login_or_prompt,
 )
@@ -229,7 +229,7 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
             )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(cli_table)
         click.echo(f"Number of tables in collection '{coll}': {len(list_of_tables)}")
         click.echo()
@@ -434,7 +434,7 @@ def schema(
             table.add_row(column["name"], column["type"])
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo()
 
@@ -517,7 +517,7 @@ def versions(ctx: click.Context, coll: str, name: str, details: bool):
             table.add_row(*row_content)
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(f"Number of data versions: {len(data_version_list)}")
         if not details:

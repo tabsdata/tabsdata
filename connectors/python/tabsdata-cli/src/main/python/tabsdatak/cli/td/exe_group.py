@@ -9,7 +9,6 @@ from time import sleep
 from typing import TYPE_CHECKING, List
 
 import rich_click as click
-from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
@@ -20,6 +19,7 @@ from tabsdatak.cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
+    make_console,
     output_format,
     output_option,
     proj_option,
@@ -231,7 +231,7 @@ def list_fn_run(
             )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(f"Number of function runs: {len(list_of_function_runs)}")
         click.echo()
@@ -385,7 +385,7 @@ def list_plan(
 
             refresh_rate = 1  # seconds
             with Live(
-                build_table(), refresh_per_second=refresh_rate, console=Console()
+                build_table(), refresh_per_second=refresh_rate, console=make_console()
             ) as live:
                 while True:
                     if all([
@@ -405,7 +405,7 @@ def list_plan(
         else:
             table = build_table()
             click.echo()
-            console = Console()
+            console = make_console()
             console.print(table)
         click.echo()
         if not all([
@@ -592,7 +592,7 @@ def list_trx(
 
             refresh_rate = 1  # seconds
             with Live(
-                build_table(), refresh_per_second=refresh_rate, console=Console()
+                build_table(), refresh_per_second=refresh_rate, console=make_console()
             ) as live:
                 while True:
                     if all([
@@ -614,7 +614,7 @@ def list_trx(
         else:
             table = build_table()
             click.echo()
-            console = Console()
+            console = make_console()
             console.print(table)
         click.echo()
         if not all([
@@ -815,7 +815,7 @@ def list_worker(
             )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(f"Number of workers: {len(list_of_workers)}")
         click.echo()
@@ -899,7 +899,7 @@ def info(ctx: click.Context, plan: str):
         )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo()
 

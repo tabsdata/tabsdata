@@ -8,13 +8,13 @@ import sys
 from pathlib import Path
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     beautify_list,
     logical_prompt,
+    make_console,
     output_option,
     render,
     verify_login_or_prompt,
@@ -121,7 +121,7 @@ def info(ctx: click.Context):
                 beautify_list(info["roles"]),
             )
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo()
 
         render(ctx, data=info, table=_table)

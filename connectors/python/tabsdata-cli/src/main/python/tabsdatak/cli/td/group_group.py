@@ -7,13 +7,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     hint_common_solutions,
     logical_prompt,
+    make_console,
     output_option,
     proj_option,
     render,
@@ -109,7 +109,7 @@ def info(ctx: click.Context, name: str):
                 grp.created_by,
             )
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo()
 
         render(ctx, data=lambda: grp._data, table=_table)
@@ -145,7 +145,7 @@ def list(ctx: click.Context):
                     grp.created_by,
                 )
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo(f"Number of groups: {len(list_of_groups)}")
             click.echo()
 

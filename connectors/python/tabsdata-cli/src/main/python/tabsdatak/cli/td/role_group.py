@@ -4,7 +4,6 @@
 
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
@@ -13,6 +12,7 @@ from tabsdatak.cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
+    make_console,
     store_pinned_objects,
     verify_login_or_prompt,
 )
@@ -419,7 +419,7 @@ def info(ctx: click.Context, name: str):
         )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo()
     except Exception as e:
@@ -453,7 +453,7 @@ def list(ctx: click.Context):
             )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(f"Number of roles: {len(list_of_roles)}")
         click.echo()
@@ -507,7 +507,7 @@ def list_perm(ctx: click.Context, name: str):
             )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(f"Number of permissions: {len(list_of_permissions)}")
         click.echo()
@@ -542,7 +542,7 @@ def list_user(ctx: click.Context, name: str):
             table.add_row(user.name, user.full_name, user.email, str(user.enabled))
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(f"Number of users: {len(list_of_users)}")
         click.echo()

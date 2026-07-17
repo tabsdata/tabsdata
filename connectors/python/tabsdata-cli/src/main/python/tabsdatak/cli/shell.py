@@ -18,9 +18,10 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.styles import Style
-from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
+
+from tabsdatak.cli.cli_utils import make_console
 
 # noinspection PyProtectedMember
 from tabsdatak.sdk._apiserver import APIServer
@@ -190,7 +191,7 @@ _utils_mod._internal_commands.pop("?", None)
 
 def show_banner(title, version):
     """Display the shell welcome banner."""
-    console = Console()
+    console = make_console()
 
     body = Text()
     body.append("\n")

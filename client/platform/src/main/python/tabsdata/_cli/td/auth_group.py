@@ -6,12 +6,12 @@ import os
 import shutil
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdata._cli.cli_utils import (
     beautify_list,
     logical_prompt,
+    make_console,
     verify_login_or_prompt,
 )
 from tabsdata.api.apiserver import (
@@ -101,7 +101,7 @@ def info(ctx: click.Context):
         )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo()
     except Exception as e:

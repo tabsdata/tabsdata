@@ -35,7 +35,10 @@ def setup_tests_logging() -> logging.Logger:
         show_time=False,
         show_level=True,
         show_path=False,
-        console=Console(file=sys.stderr),
+        console=Console(
+            file=sys.stderr,
+            width=None if sys.stderr.isatty() else 1024,
+        ),
     )
     handler.addFilter(NewlineOnFirstLog())
     logger.addHandler(handler)

@@ -32,6 +32,19 @@ from rich_click import Option, UsageError
 # functions that use them so importing this shared helper -- which every command
 # module does -- stays cheap. Type-only names live under TYPE_CHECKING.
 if TYPE_CHECKING:
+    from rich.console import Console
+
+RENDER_WIDTH = 1024
+
+
+def make_console(**kwargs) -> "Console":
+    from rich.console import Console
+
+    width = None if sys.stdout.isatty() else RENDER_WIDTH
+    return Console(width=width, **kwargs)
+
+
+if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import Function
 
 CONNECTION_FILE = "connection.json"

@@ -5,11 +5,11 @@
 import json
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdata._cli.cli_utils import (
     hint_common_solutions,
+    make_console,
     verify_login_or_prompt,
 )
 from tabsdata.api.tabsdata_server import TabsdataServer
@@ -130,7 +130,7 @@ def _render_summary(data: dict) -> None:
             cells.append(str(r["bytes_out"]))
         table.add_row(*cells)
 
-    Console().print(table)
+    make_console().print(table)
 
 
 @click.group()
@@ -333,7 +333,7 @@ def inflight(
                 str(r.get("status", "")),
                 str(r.get("count", 0)),
             )
-        Console().print(table)
+        make_console().print(table)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to fetch inflight: {e}")

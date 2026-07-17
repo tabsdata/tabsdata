@@ -18,11 +18,10 @@ import sys
 from pathlib import Path
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
-from tabsdatak.cli.cli_utils import output_option, render, show_hint
+from tabsdatak.cli.cli_utils import make_console, output_option, render, show_hint
 
 EXAMPLES_RESOURCE = "tdresources/examples"
 META_FILE = "_meta.yaml"
@@ -93,7 +92,7 @@ def list_(ctx: click.Context):
         for row in rows:
             table.add_row(row["name"], row["description"])
         click.echo()
-        Console().print(table)
+        make_console().print(table)
         click.echo(f"Number of examples: {len(rows)}")
         click.echo()
 

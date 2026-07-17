@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
@@ -16,6 +15,7 @@ from tabsdatak.cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
+    make_console,
     output_option,
     proj_option,
     render,
@@ -241,7 +241,7 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
                     table.function.name,
                 )
             click.echo()
-            Console().print(cli_table)
+            make_console().print(cli_table)
             click.echo(
                 f"Number of tables in collection '{coll}': {len(list_of_tables)}"
             )
@@ -463,7 +463,7 @@ def schema(
             for column in table_schema:
                 table.add_row(column["name"], column["type"])
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo()
 
         # table_schema is already the raw list of column dicts -> full info.
@@ -549,7 +549,7 @@ def versions(ctx: click.Context, coll: str, name: str, details: bool):
                     ])
                 table.add_row(*row_content)
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo(f"Number of data versions: {len(data_version_list)}")
             if not details:
                 show_hint(

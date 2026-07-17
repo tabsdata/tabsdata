@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
@@ -15,6 +14,7 @@ from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
     hint_common_solutions,
     logical_prompt,
+    make_console,
     output_option,
     render,
     verify_login_or_prompt,
@@ -223,7 +223,7 @@ def _list_by_user(ctx: click.Context, server: TabsdataServer, user: str):
         for perm in permissions:
             table.add_row(perm.permission, perm.project if perm.project else "-")
         click.echo()
-        Console().print(table)
+        make_console().print(table)
         click.echo(f"Number of permissions: {len(permissions)}")
         click.echo()
 
@@ -245,7 +245,7 @@ def _list_by_project(ctx: click.Context, server: TabsdataServer, project: str):
         for entry in access:
             table.add_row(entry.user, entry.permission, entry.source)
         click.echo()
-        Console().print(table)
+        make_console().print(table)
         click.echo(f"Number of grants: {len(access)}")
         click.echo()
 

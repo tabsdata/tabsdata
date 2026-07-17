@@ -7,13 +7,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     hint_common_solutions,
     logical_prompt,
+    make_console,
     output_option,
     render,
     verify_login_or_prompt,
@@ -104,7 +104,7 @@ def info(ctx: click.Context, name: str):
                 prj.created_by,
             )
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo()
 
         render(ctx, data=lambda: prj._data, table=_table)
@@ -139,7 +139,7 @@ def list(ctx: click.Context):
                     prj.created_by,
                 )
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo(f"Number of projects: {len(list_of_projects)}")
             click.echo()
 

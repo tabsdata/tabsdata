@@ -11,7 +11,7 @@ import rich_click as click
 from rich.console import Console
 from rich.text import Text
 
-console = Console()
+console = Console(width=None if sys.stdout.isatty() else 1024)
 
 
 def print_dpi1047(message: str) -> bool:

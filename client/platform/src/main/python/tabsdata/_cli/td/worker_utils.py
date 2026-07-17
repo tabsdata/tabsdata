@@ -2,7 +2,6 @@
 #  Copyright 2026. Tabs Data Inc.
 #
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdata._cli.cli_utils import (
@@ -10,6 +9,7 @@ from tabsdata._cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
+    make_console,
     verify_login_or_prompt,
     verify_trigger_type,
 )
@@ -161,7 +161,7 @@ def list(
             )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(f"Number of {worker_name} workers: {len(list_of_workers)}")
         click.echo()

@@ -4,12 +4,12 @@
 
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdata._cli.cli_utils import (
     hint_common_solutions,
     logical_prompt,
+    make_console,
     verify_login_or_prompt,
 )
 
@@ -113,7 +113,7 @@ def info(ctx: click.Context, name: str):
         table.add_row(user.name, user.full_name, user.email, str(user.enabled))
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo()
     except Exception as e:
@@ -139,7 +139,7 @@ def list(ctx: click.Context):
             table.add_row(user.name, user.full_name, user.email, str(user.enabled))
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(f"Number of users: {len(list_of_users)}")
         click.echo()

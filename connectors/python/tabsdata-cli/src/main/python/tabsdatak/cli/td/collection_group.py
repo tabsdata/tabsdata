@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
@@ -17,6 +16,7 @@ from tabsdatak.cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
+    make_console,
     output_option,
     proj_option,
     render,
@@ -260,7 +260,7 @@ def info(ctx: click.Context, name: str):
                 collection.created_by,
             )
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo()
 
         render(ctx, data=lambda: collection._data, table=_table)
@@ -306,7 +306,7 @@ def connection(ctx: click.Context, name: str):
                 ", ".join(conn_read.get("var_names") or []),
             )
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo()
 
         render(ctx, data=conn_read, table=_table)
@@ -340,7 +340,7 @@ def list(ctx: click.Context):
                     collection.created_by,
                 )
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo(f"Number of collections: {len(list_of_collections)}")
             click.echo()
 

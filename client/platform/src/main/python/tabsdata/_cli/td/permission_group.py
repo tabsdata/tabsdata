@@ -4,13 +4,13 @@
 
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdata._cli.cli_utils import (
     MutuallyExclusiveOption,
     hint_common_solutions,
     logical_prompt,
+    make_console,
     verify_login_or_prompt,
 )
 from tabsdata.api.tabsdata_server import (
@@ -209,7 +209,7 @@ def _list_by_user(server: TabsdataServer, user: str):
         table.add_row(perm.permission, perm.project if perm.project else "-")
 
     click.echo()
-    console = Console()
+    console = make_console()
     console.print(table)
     click.echo(f"Number of permissions: {len(permissions)}")
     click.echo()
@@ -227,7 +227,7 @@ def _list_by_project(server: TabsdataServer, project: str):
         table.add_row(entry.user, entry.permission, entry.source)
 
     click.echo()
-    console = Console()
+    console = make_console()
     console.print(table)
     click.echo(f"Number of grants: {len(access)}")
     click.echo()

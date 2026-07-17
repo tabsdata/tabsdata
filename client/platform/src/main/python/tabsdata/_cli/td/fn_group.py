@@ -6,7 +6,6 @@ from time import sleep
 from typing import Tuple
 
 import rich_click as click
-from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
@@ -16,6 +15,7 @@ from tabsdata._cli.cli_utils import (
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
+    make_console,
     show_hint,
     verify_login_or_prompt,
 )
@@ -139,7 +139,7 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
                 )
 
             click.echo()
-            console = Console()
+            console = make_console()
             console.print(table)
             click.echo(f"Number of versions: {len(function_list)}")
             click.echo()
@@ -168,7 +168,7 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
             )
 
             click.echo()
-            console = Console()
+            console = make_console()
             console.print(table)
             click.echo()
 
@@ -213,7 +213,7 @@ def list(ctx: click.Context, coll: str):
             )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(
             f"Number of functions in collection '{coll}': {len(list_of_functions)}"
@@ -577,7 +577,7 @@ def _monitor_execution_or_transaction(
 
     refresh_rate = 1  # seconds
     with Live(
-        build_table(), refresh_per_second=refresh_rate, console=Console()
+        build_table(), refresh_per_second=refresh_rate, console=make_console()
     ) as live:
         while True:
             # Note: while it would initially make more sense to write this as
@@ -1007,7 +1007,7 @@ def list_patches(ctx: click.Context, name: str, coll: str):
             )
 
         click.echo()
-        console = Console()
+        console = make_console()
         console.print(table)
         click.echo(f"Number of patches: {len(patches)}")
         click.echo()

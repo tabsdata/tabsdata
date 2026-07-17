@@ -6,6 +6,8 @@ import json
 import os
 import platform
 import re
+import sys
+from typing import TYPE_CHECKING
 
 import requests
 import rich_click as click
@@ -19,6 +21,19 @@ from tabsdata.api.apiserver import (
     obtain_connection,
 )
 from tabsdata.api.tabsdata_server import Function, TabsdataServer
+
+if TYPE_CHECKING:
+    from rich.console import Console
+
+RENDER_WIDTH = 1024
+
+
+def make_console(**kwargs) -> "Console":
+    from rich.console import Console
+
+    width = None if sys.stdout.isatty() else RENDER_WIDTH
+    return Console(width=width, **kwargs)
+
 
 CONNECTION_FILE = "connection.json"
 

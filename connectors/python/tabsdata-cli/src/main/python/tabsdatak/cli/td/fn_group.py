@@ -8,7 +8,6 @@ from time import sleep
 from typing import TYPE_CHECKING, Tuple
 
 import rich_click as click
-from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
@@ -20,6 +19,7 @@ from tabsdatak.cli.cli_utils import (
     hint_common_solutions,
     load_info_and_project_root,
     logical_prompt,
+    make_console,
     output_option,
     proj_option,
     render,
@@ -146,7 +146,7 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
                         beautify_list([t.name for t in function.tables]),
                     )
                 click.echo()
-                Console().print(table)
+                make_console().print(table)
                 click.echo(f"Number of versions: {len(function_list)}")
                 click.echo()
 
@@ -177,7 +177,7 @@ def info(ctx: click.Context, name: str, coll: str, show_history: bool):
                     beautify_list([t.name for t in function.tables]),
                 )
                 click.echo()
-                Console().print(table)
+                make_console().print(table)
                 click.echo()
 
             render(ctx, data=lambda: function._data, table=_table)
@@ -231,7 +231,7 @@ def list_functions(ctx: click.Context, coll: str):
                     function.defined_by,
                 )
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo(
                 f"Number of functions in collection '{coll}': {len(list_of_functions)}"
             )
@@ -622,7 +622,7 @@ def _monitor_execution_or_transaction(
 
     refresh_rate = 1  # seconds
     with Live(
-        build_table(), refresh_per_second=refresh_rate, console=Console()
+        build_table(), refresh_per_second=refresh_rate, console=make_console()
     ) as live:
         while True:
             # Note: while it would initially make more sense to write this as
@@ -1065,7 +1065,7 @@ def list_patches(ctx: click.Context, name: str, coll: str):
                     p.get("status") or "",
                 )
             click.echo()
-            Console().print(table)
+            make_console().print(table)
             click.echo(f"Number of patches: {len(patches)}")
             click.echo()
 

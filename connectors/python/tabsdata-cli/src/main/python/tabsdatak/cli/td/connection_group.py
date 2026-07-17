@@ -14,11 +14,10 @@ import sys
 from pathlib import Path
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
-from tabsdatak.cli.cli_utils import logical_prompt, output_option, render
+from tabsdatak.cli.cli_utils import logical_prompt, make_console, output_option, render
 
 
 @cli_command
@@ -45,7 +44,7 @@ def types(ctx):
         for row in rows:
             table.add_row(row.type, row.mode, row.system)
         click.echo()
-        Console().print(table)
+        make_console().print(table)
         click.echo(f"Number of connectors: {len(rows)}")
         click.echo()
 

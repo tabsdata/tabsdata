@@ -7,12 +7,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.console import Console
 from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     hint_common_solutions,
+    make_console,
     output_option,
     proj_option,
     render,
@@ -124,7 +124,7 @@ def _render_summary(data: dict) -> None:
             cells.append(str(r["bytes_out"]))
         table.add_row(*cells)
 
-    Console().print(table)
+    make_console().print(table)
 
 
 @cli_command
@@ -313,7 +313,7 @@ def inflight(
                     str(r.get("status", "")),
                     str(r.get("count", 0)),
                 )
-            Console().print(table)
+            make_console().print(table)
 
         render(ctx, data=data, table=_table)
     except Exception as e:
