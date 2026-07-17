@@ -49,10 +49,18 @@ script = [
 
     exec tdx-itest banner --color green "👀 Processes for kubernetes instances (generation 2)"
 
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+
     exists = is_path_exists ${ITEST_TDKSERVER_BINARY}
     if ${exists}
-        debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y list"
-        exec ${ITEST_TDKSERVER_BINARY} --accept-terms y list
+        if ${on_ga_true}
+            debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y --verbose list"
+            exec ${ITEST_TDKSERVER_BINARY} --accept-terms y --verbose list
+        else
+            debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y list"
+            exec ${ITEST_TDKSERVER_BINARY} --accept-terms y list
+        end
     else
         warn "🚚 Binary for tdkserver not available. Skipping tdkserver list."
     end
@@ -128,6 +136,9 @@ script = [
                 array_push ${instance_arguments} ${ITEST_TDKSERVER_BINARY}
                 array_push ${instance_arguments} --accept-terms
                 array_push ${instance_arguments} y
+                if ${on_ga_true}
+                    array_push ${instance_arguments} --verbose
+                end
                 array_push ${instance_arguments} quickstart
                 array_push ${instance_arguments} --instance
                 array_push ${instance_arguments} ${instance}
@@ -193,6 +204,9 @@ script = [
 
     debug "🔷 _____ Checking tabsdata kubernetes testing servers..."
 
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+
     cm_run_task __os__set_venv_env
 
     exists = is_path_exists ${ITEST_TDKSERVER_BINARY}
@@ -215,7 +229,11 @@ script = [
                 status_checking = set true
 
                 while ${status_checking}
-                    output = exec ${ITEST_TDKSERVER_BINARY} --accept-terms y status --instance ${instance}
+                    if ${on_ga_true}
+                        output = exec ${ITEST_TDKSERVER_BINARY} --accept-terms y --verbose status --instance ${instance}
+                    else
+                        output = exec ${ITEST_TDKSERVER_BINARY} --accept-terms y status --instance ${instance}
+                    end
                     serving = eq ${output.code} "0"
                     if ${serving}
                         info "🚦 Verified instance ${instance} is running"
@@ -266,6 +284,9 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/gen.ds
 
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+
     cm_run_task __os__set_venv_env
 
     exec tdx-itest banner --color green "🚥 Status for kubernetes instances (generation 2)"
@@ -280,8 +301,13 @@ script = [
             in_arena = instance_in_arena ${instance}
             if ${in_arena}
                 info "🎯 Status of kubernetes instance: ${instance}"
-                debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y status --instance ${instance}"
-                exec ${ITEST_TDKSERVER_BINARY} --accept-terms y status --instance ${instance}
+                if ${on_ga_true}
+                    debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y --verbose status --instance ${instance}"
+                    exec ${ITEST_TDKSERVER_BINARY} --accept-terms y --verbose status --instance ${instance}
+                else
+                    debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y status --instance ${instance}"
+                    exec ${ITEST_TDKSERVER_BINARY} --accept-terms y status --instance ${instance}
+                end
             end
         end
     else
@@ -489,8 +515,11 @@ script = [
             if ${in_arena}
                 generation = get_env TD_TABSDATA_GENERATION
                 exec tdx-itest banner --color dark_orange "🔅 Stopping kubernetes instance: ${instance} (generation ${generation})"
-                debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y stop --instance ${instance} --yes"
-                if not ${verbose}
+                if ${on_ga_true}
+                    debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y --verbose stop --instance ${instance} --yes"
+                    exec ${ITEST_TDKSERVER_BINARY} --accept-terms y --verbose stop --instance ${instance} --yes
+                elseif not ${verbose}
+                    debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y stop --instance ${instance} --yes"
                     spinner = spawn python ${SPINNER_SCRIPT} "Stopping instance ${instance}..."
                     output = exec ${ITEST_TDKSERVER_BINARY} --accept-terms y stop --instance ${instance} --yes
                     exec kill ${spinner}
@@ -501,6 +530,7 @@ script = [
                         warn "\n${output.stderr}"
                     end
                 else
+                    debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y stop --instance ${instance} --yes"
                     exec ${ITEST_TDKSERVER_BINARY} --accept-terms y stop --instance ${instance} --yes
                 end
             end
@@ -554,8 +584,11 @@ script = [
             if ${in_arena}
                 generation = get_env TD_TABSDATA_GENERATION
                 exec tdx-itest banner --color red "🔅 Trashing kubernetes instance: ${instance} (generation ${generation})"
-                debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y trash --instance ${instance} --yes"
-                if not ${verbose}
+                if ${on_ga_true}
+                    debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y --verbose trash --instance ${instance} --yes"
+                    exec ${ITEST_TDKSERVER_BINARY} --accept-terms y --verbose trash --instance ${instance} --yes
+                elseif not ${verbose}
+                    debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y trash --instance ${instance} --yes"
                     spinner = spawn python ${SPINNER_SCRIPT} "Trashing instance ${instance}..."
                     output = exec ${ITEST_TDKSERVER_BINARY} --accept-terms y trash --instance ${instance} --yes
                     exec kill ${spinner}
@@ -566,6 +599,7 @@ script = [
                         warn "\n${output.stderr}"
                     end
                 else
+                    debug "🚀 ${ITEST_TDKSERVER_BINARY} --accept-terms y trash --instance ${instance} --yes"
                     exec ${ITEST_TDKSERVER_BINARY} --accept-terms y trash --instance ${instance} --yes
                 end
                 exec tdx-itest registry remove ${ITEST_REGISTRY_FILE} ${instance}

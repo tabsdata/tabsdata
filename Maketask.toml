@@ -582,8 +582,6 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    set_env COLUMNS 1024
-
     unset_env TD_UMBRELLA_SERVER_START
     unset_env TD_UMBRELLA_SERVER_STATUS
     set_env TD_UMBRELLA_SERVER_STOP "false"

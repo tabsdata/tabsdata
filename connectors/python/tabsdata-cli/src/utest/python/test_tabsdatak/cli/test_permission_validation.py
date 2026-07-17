@@ -20,6 +20,7 @@ Same mock-client seam as the render / mutating harnesses.
 
 from __future__ import annotations
 
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,6 +28,25 @@ from click.testing import CliRunner
 
 from tabsdatak.cli.td.cli import cli
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+_BOX_RE = re.compile(r"[─-╿]")  # box-drawing chars (panel borders)
+
+
+def _contains(output: str, needle: str) -> bool:
+    """Best-effort substring check that survives rich's error-panel rendering.
+
+    Tries a plain match first; if that fails (e.g. a narrow terminal wrapped the
+    message mid-line inside the box), retries after stripping ANSI escapes and
+    the panel's box-drawing borders, then collapsing every whitespace run --
+    newlines, padding -- to single spaces, so a message wrapped across lines
+    still matches its expected text.
+    """
+    if needle in output:
+        return True
+    stripped = _BOX_RE.sub(" ", _ANSI_RE.sub("", output))
+    flat = " ".join(stripped.split())
+    return " ".join(needle.split()) in flat
 
 
 def _client() -> MagicMock:
@@ -62,7 +82,7 @@ def test_unknown_permission_is_rejected(verb, method, tmp_path):
         tmp_path=tmp_path,
     )
     assert result.exit_code != 0
-    assert "invalid permission" in result.output
+    assert _contains(result.output, "invalid permission")
     assert getattr(client, method).call_count == 0
 
 
@@ -75,7 +95,7 @@ def test_project_scoped_permission_requires_proj(verb, method, tmp_path):
         tmp_path=tmp_path,
     )
     assert result.exit_code != 0
-    assert "project-scoped and requires --proj" in result.output
+    assert _contains(result.output, "project-scoped and requires --proj")
     assert getattr(client, method).call_count == 0
 
 
@@ -91,7 +111,7 @@ def test_system_scoped_permission_forbids_proj(verb, method, tmp_path):
         tmp_path=tmp_path,
     )
     assert result.exit_code != 0
-    assert "system-scoped" in result.output
+    assert _contains(result.output, "system-scoped")
     assert getattr(client, method).call_count == 0
 
 
@@ -105,7 +125,7 @@ def test_rbac_only_wildcard_is_rejected(verb, method, tmp_path):
     )
     assert result.exit_code != 0
     # RBAC_ONLY_WILDCARD_MESSAGE explains these are RBAC-Mode-View only.
-    assert "RBAC" in result.output
+    assert _contains(result.output, "RBAC")
     assert getattr(client, method).call_count == 0
 
 

@@ -63,6 +63,8 @@ NO_UNDERLINE = "[underline]"
 _render_width = None if sys.stdout.isatty() else RENDER_WIDTH
 click.rich_click.WIDTH = _render_width
 click.rich_click.MAX_WIDTH = _render_width
+if _render_width is not None:
+    os.environ.setdefault("TERMINAL_WIDTH", str(_render_width))
 
 console = make_console()
 
