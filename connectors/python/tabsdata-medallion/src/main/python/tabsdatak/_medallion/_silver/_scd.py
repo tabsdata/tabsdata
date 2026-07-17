@@ -296,7 +296,11 @@ def _strip_bronze_metadata(tf: TableFrame) -> TableFrame:
         TableFrame with the bronze metadata columns dropped.
     """
     cdc_meta_cols = [c for c in tf.columns if c.startswith("@td..cdc")]
-    return tf.drop(["$m.op", "$m.bronze_ts", *cdc_meta_cols])
+    # Periodic-snapshot bronze carries no $m.op, so drop only what's present.
+    drop_cols = [
+        c for c in ("$m.op", "$m.bronze_ts", *cdc_meta_cols) if c in tf.columns
+    ]
+    return tf.drop(drop_cols)
 
 
 def build_scd2_silver_cleanse(
