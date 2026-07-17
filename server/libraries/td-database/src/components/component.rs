@@ -13,7 +13,7 @@ use crate::pool::TdPool;
 use async_trait::async_trait;
 
 pub use td_schema::SchemaSource;
-pub use td_schema::schema::backend::{BACKEND_COUNT, Backend};
+pub use td_schema::schema::backend::Backend;
 
 /// Per-entry inputs to provisioning, resolved from the component's config entry.
 pub struct ProvisionSpec<'a> {

@@ -14,7 +14,7 @@ use crate::dynamic::DynamicConnection;
 use crate::test_utils::TestDb;
 use crate::test_utils::sqlite::pool;
 use td_schema::SchemaSource;
-use td_schema::schema::backend::{BACKEND_COUNT, Backend};
+use td_schema::schema::backend::Backend;
 use td_schema::schema::{SchemaDelta, SchemaVersion};
 
 /// A component's own content at v1 — just its table. Crucially it does **not**
@@ -23,7 +23,6 @@ struct WidgetV1;
 
 impl SchemaVersion for WidgetV1 {
     const VERSION: usize = 1;
-    const FINGERPRINTS: [&'static str; BACKEND_COUNT] = [""; BACKEND_COUNT];
     fn build(_backend: impl Into<Backend>) -> Vec<String> {
         vec!["CREATE TABLE widget (id TEXT PRIMARY KEY)".to_string()]
     }
@@ -36,7 +35,6 @@ struct WidgetV1ToV2;
 impl SchemaDelta for WidgetV1ToV2 {
     const FROM_VERSION: usize = 1;
     const TO_VERSION: usize = 2;
-    const FINGERPRINTS: [&'static str; BACKEND_COUNT] = [""; BACKEND_COUNT];
     fn up(_backend: Backend) -> Vec<String> {
         vec!["ALTER TABLE widget ADD COLUMN note TEXT".to_string()]
     }

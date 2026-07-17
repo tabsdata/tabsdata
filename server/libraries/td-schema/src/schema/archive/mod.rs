@@ -19,14 +19,15 @@
 //!
 //! When bumping to version N+1:
 //!
-//! 1. Copy the entire `current/` directory to `archive/vN/`.
+//! 1. Copy the entire `current/` directory to `archive/vN/`, including its
+//!    `snapshots/` dir — the frozen copy keeps its committed DDL snapshots.
 //!    (`current/` already uses `super::` imports, so the copy works as-is.)
-//! 2. In `vN/mod.rs`: hardcode `const VERSION: usize = N;`, keep `FINGERPRINTS`
-//!    with the real hash values, and remove the delegating `pub fn build()`.
+//! 2. In `vN/mod.rs`: hardcode `const VERSION: usize = N;` and remove the
+//!    delegating `pub fn build()`.
 //! 3. Add `pub(crate) mod vN;` to this file.
 //! 4. Add a match arm to `build()`: `N => vN::Schema::build(backend),`.
-//! 5. Add a match arm to `fingerprints()`: `N => vN::Schema::FINGERPRINTS,`.
 //!
+//! `test_archive_ddl_snapshots` then guards the frozen copy automatically.
 //! See the project README for a full guide and example.
 
 use crate::schema::backend::Backend;
@@ -39,18 +40,6 @@ use crate::schema::backend::Backend;
 #[allow(clippy::match_single_binding)]
 pub fn build(version: usize, backend: impl Into<Backend>) -> Vec<String> {
     let _backend = backend.into();
-    match version {
-        _ => panic!("No archived schema for version {version}"),
-    }
-}
-
-/// Return the stored fingerprints for an archived version.
-///
-/// # Panics
-///
-/// Panics if no archive exists for the given version.
-#[allow(clippy::match_single_binding)]
-pub fn fingerprints(version: usize) -> [&'static str; 3] {
     match version {
         _ => panic!("No archived schema for version {version}"),
     }

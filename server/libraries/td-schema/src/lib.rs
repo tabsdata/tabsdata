@@ -5,6 +5,8 @@
 use sea_query::Iden;
 
 pub mod schema;
+#[cfg(feature = "test-utils")]
+pub mod snapshot;
 
 pub use schema::{CurrentSource, SchemaSource, tabsdata_system_ddl};
 

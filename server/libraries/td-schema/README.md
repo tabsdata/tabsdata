@@ -15,17 +15,18 @@ src/schema/
 ├── mod.rs              # SchemaVersion + SchemaDelta trait definitions
 ├── backend.rs          # Backend enum (Sqlite, Postgres, MySql) + helpers
 ├── current/            # Live schema — the source of truth
-│   ├── mod.rs          # Schema (impl SchemaVersion with VERSION + FINGERPRINTS)
+│   ├── mod.rs          # Schema (impl SchemaVersion: VERSION + build); gated by snapshots/
+│   ├── snapshots/      # Committed rendered DDL per backend — the gate on current/
 │   ├── system.rs       # tabsdata_system table + seed data
 │   ├── users.rs        # users table, views, seed
 │   ├── functions.rs    # functions, function_patches, current views, indices
 │   ├── logical.rs      # logical_function_runs, LTDVs, pointer event logs
 │   └── …               # one file per subsystem
 ├── archive/            # Frozen snapshots of previous versions (empty in 2.0)
-│   └── mod.rs          # build(version, backend), fingerprints(version)
+│   └── mod.rs          # build(version, backend)
 ├── deltas/             # Incremental migration scripts (empty in 2.0)
-│   └── mod.rs          # get(target_version, backend), fingerprints(target_version)
-└── tests.rs            # Trait validation, fingerprint, migration guards
+│   └── mod.rs          # get(target_version, backend)
+└── tests.rs            # Trait validation, DDL snapshot, migration guards
 ```
 
 `archive/` and `deltas/` are wired (constants, dispatch fns, guard tests) but
@@ -66,7 +67,6 @@ contract:
 /// A complete schema snapshot for a specific database version.
 pub trait SchemaVersion {
     const VERSION: usize;
-    const FINGERPRINTS: [&'static str; backend::BACKEND_COUNT];
     fn build(backend: impl Into<Backend>) -> Vec<String>;
 }
 
@@ -74,16 +74,23 @@ pub trait SchemaVersion {
 pub trait SchemaDelta {
     const FROM_VERSION: usize;
     const TO_VERSION: usize;
-    const FINGERPRINTS: [&'static str; backend::BACKEND_COUNT];
     fn up(backend: Backend) -> Vec<String>;
 }
 ```
 
-- `current::Schema` implements `SchemaVersion` (the live version) with
-  `FINGERPRINTS` containing the SHA-256 hashes of the SQL output, one per
-  backend (Sqlite, Postgres, MySql).
-- Each `archive::vN::Schema` implements `SchemaVersion` (frozen snapshots).
-- Each `deltas::vN_to_vM::Migration` implements `SchemaDelta`.
+- `current::Schema` implements `SchemaVersion` (the live version). It is gated by
+  the committed DDL snapshots under `current/snapshots/` (see
+  `test_schema_ddl_snapshot`) — a schema edit surfaces as a reviewable SQL diff.
+- Each `archive::vN::Schema` implements `SchemaVersion` (frozen snapshots), gated
+  the same way: the archive copy keeps its `snapshots/` dir, checked by
+  `test_archive_ddl_snapshots`.
+- Each `deltas::vN_to_vM::Migration` implements `SchemaDelta`, gated by committed
+  snapshots under `deltas/snapshots/vN_to_vM/`, checked by
+  `test_delta_ddl_snapshots`.
+
+The snapshot guard itself (`crate::snapshot::assert_snapshot`, behind the
+`test-utils` feature) is generic over any `Fn(Backend) -> Vec<String>`, so other
+crates can gate their own schemas with it — `te-aiagent` does.
 
 ## How it works
 
@@ -91,9 +98,7 @@ pub trait SchemaDelta {
 |------|---------|
 | `current::Schema::build(backend)` | Generates the **full schema** for a fresh install at `Schema::VERSION`. |
 | `archive::build(version, backend)` | Dispatches to the archived `SchemaVersion` for a **previous** version. Panics if no archive exists for that version. |
-| `archive::fingerprints(version)` | Returns the stored per-backend fingerprints for an archived version. |
 | `deltas::get(target, backend)` | Dispatches to the `SchemaDelta` that upgrades from `target - 1` to `target`. Panics if no delta exists. |
-| `deltas::fingerprints(target)` | Returns the stored per-backend fingerprints for a delta. |
 
 **Fresh installs** run `current::Schema::build()`.
 
@@ -104,8 +109,9 @@ each step, executing the resulting SQL in its own transaction.
 ## Changing the schema within a major
 
 Follow these steps **every time** you modify tables, views, indices, or seed
-data in `current/`. The `test_schema_fingerprint` test will fail if you skip
-any step.
+data in `current/`. The `test_schema_ddl_snapshot` test will fail if you skip
+the snapshot refresh (step 6); the migration-guard tests fail if you skip the
+archive/delta wiring.
 
 ### 1. Archive the current version
 
@@ -120,8 +126,9 @@ Then clean up the archive copy:
   `Self::VERSION` (dynamic) to a literal (e.g., `1`).
 - Remove the delegating `pub fn build()` convenience function at the bottom
   of the archive's `mod.rs` (only `current/mod.rs` needs it).
-- Keep `FINGERPRINTS` as-is — the hashes are already correct for the frozen
-  version.
+- Keep the copied `snapshots/` dir as-is: it is the frozen gate on the archive,
+  checked by `test_archive_ddl_snapshots`. Archive **before** editing `current/`
+  so the snapshots match the version being frozen.
 
 The result should look like:
 
@@ -133,11 +140,6 @@ pub struct Schema;
 
 impl SchemaVersion for Schema {
     const VERSION: usize = 1;
-    const FINGERPRINTS: [&'static str; 3] = [
-        "...", // Sqlite
-        "...", // Postgres
-        "...", // MySql
-    ];
 
     fn build(backend: impl Into<Backend>) -> Vec<String> {
         let backend = backend.into();
@@ -157,15 +159,6 @@ pub fn build(version: usize, backend: impl Into<Backend>) -> Vec<String> {
         _ => panic!("No archived schema for version {version}"),
     }
 }
-
-pub fn fingerprints(version: usize) -> [&'static str; 3] {
-    match version {
-        1 => v1::Schema::FINGERPRINTS,
-        _ => panic!("No archived schema for version {version}"),
-    }
-}
-
-pub const MIN_ARCHIVE: usize = 1;
 ```
 
 ### 2. Create the delta
@@ -181,11 +174,6 @@ pub struct Migration;
 impl SchemaDelta for Migration {
     const FROM_VERSION: usize = 1;
     const TO_VERSION: usize = 2;
-    const FINGERPRINTS: [&'static str; 3] = [
-        "", // Sqlite  — filled in by step 6
-        "", // Postgres
-        "", // MySql
-    ];
 
     fn up(b: Backend) -> Vec<String> {
         vec![
@@ -207,13 +195,6 @@ pub fn get(target_version: usize, backend: impl Into<Backend>) -> Vec<String> {
     let backend = backend.into();
     match target_version {
         2 => v1_to_v2::Migration::up(backend),
-        _ => panic!("No delta migration for version {target_version}"),
-    }
-}
-
-pub fn fingerprints(target_version: usize) -> [&'static str; 3] {
-    match target_version {
-        2 => v1_to_v2::Migration::FINGERPRINTS,
         _ => panic!("No delta migration for version {target_version}"),
     }
 }
@@ -267,17 +248,17 @@ impl SchemaVersion for Schema {
 }
 ```
 
-### 6. Update the fingerprints
+### 6. Refresh the DDL snapshots
 
-Run the tests — the fingerprint test will fail and print the new hashes:
+`current/` and the new delta are gated by committed DDL snapshots, so
+regenerate them once the SQL is final:
 
 ```bash
-cargo test -p td-schema
+TD_SNAPSHOT_UPDATE=1 cargo test -p td-schema --lib ddl_snapshot
 ```
 
-Copy the `Actual fingerprints` values from the error output and update
-`FINGERPRINTS` in the `SchemaVersion` impl in `current/mod.rs`. Also update
-`FINGERPRINTS` in the new delta's `SchemaDelta` impl.
+The changes show up as reviewable SQL diffs under `current/snapshots/` and
+`deltas/snapshots/v1_to_v2/`.
 
 ### 7. Verify
 
@@ -290,12 +271,14 @@ Both should pass. The key tests are:
 
 | Test | What it checks |
 |------|---------------|
-| `test_schema_fingerprint` | SQL output (archives + deltas + current) hasn't changed without a version bump. |
+| `test_schema_ddl_snapshot` | `current/` SQL matches the committed `current/snapshots/` DDL (the gate on the editable baseline). |
+| `test_archive_ddl_snapshots` | Frozen archive SQL matches each archive's committed `snapshots/`. |
+| `test_delta_ddl_snapshots` | Frozen delta SQL matches the committed `deltas/snapshots/vN_to_vM/`. |
 | `test_validate_current_schema` | Current schema produces non-empty, consistent output across all backends. |
 | `test_validate_archive_vN` | Each archive produces non-empty, consistent output across all backends. |
 | `test_validate_delta_vN_to_vM` | Each delta is single-step, non-empty, consistent, and bumps `db_version`. |
-| `test_migration_guard_archives_exist` | An archive exists for every version from `MIN_ARCHIVE` to `Schema::VERSION - 1`. |
-| `test_migration_guard_deltas_exist` | A delta exists for every version from `MIN_ARCHIVE + 1` to `Schema::VERSION`. |
+| `test_migration_guard_archives_exist` | An archive exists for every version in `1..Schema::VERSION`. |
+| `test_migration_guard_deltas_exist` | A delta exists for every version in `2..=Schema::VERSION`. |
 | `test_migration_guard_backend_consistency` | Archives and deltas produce the same number of statements across all backends. |
 
 ## Why intra-major deltas were reset for 2.0

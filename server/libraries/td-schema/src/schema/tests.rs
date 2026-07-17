@@ -14,8 +14,6 @@ use super::{SchemaDelta, SchemaVersion, archive, current, deltas};
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
-const ALL_BACKENDS: &[Backend] = &[Backend::Sqlite, Backend::Postgres, Backend::MySql];
-
 /// Cached `current::build()` output per backend. The consistency tests
 /// only read this — `Schema::build()` is deterministic (gated by
 /// `test_schema_build_is_deterministic`) so a single build per backend
@@ -40,7 +38,7 @@ fn cached_build(b: Backend) -> &'static [String] {
 /// rejects multi-statement strings, so the backends legitimately diverge in
 /// total statement count even when the schema is logically identical.
 pub(crate) fn validate_schema_version<S: SchemaVersion>() {
-    for &b in ALL_BACKENDS {
+    for b in Backend::ALL {
         let stmts = S::build(b);
         assert!(!stmts.is_empty(), "SchemaVersion v{} produced empty output on {b:?}", S::VERSION);
     }
@@ -62,7 +60,7 @@ fn test_validate_current_schema() {
 pub(crate) fn validate_delta<D: SchemaDelta>() {
     assert_eq!(D::FROM_VERSION + 1, D::TO_VERSION, "Delta must be single-step: got {}->{}", D::FROM_VERSION, D::TO_VERSION,);
 
-    for &b in ALL_BACKENDS {
+    for b in Backend::ALL {
         let stmts = D::up(b);
         assert!(!stmts.is_empty(), "SchemaDelta v{}->v{} produced empty output on {b:?}", D::FROM_VERSION, D::TO_VERSION,);
         let last = stmts.last().unwrap();
@@ -76,73 +74,81 @@ pub(crate) fn validate_delta<D: SchemaDelta>() {
     }
 }
 
-/// Compute the SHA-256 fingerprint of SQL statements.
-fn compute_fingerprint(stmts: &[String]) -> String {
-    use sha2::{Digest, Sha256};
+// No real deltas exist at the v1 baseline; synthetic ones exercise the
+// migration harness (its application half lives in td-database's
+// `shared_schema` tests).
+struct SyntheticDelta;
 
-    let mut hasher = Sha256::new();
-    for stmt in stmts {
-        hasher.update(stmt.as_bytes());
-        hasher.update(b"\n");
+impl SchemaDelta for SyntheticDelta {
+    const FROM_VERSION: usize = 1;
+    const TO_VERSION: usize = 2;
+
+    fn up(backend: Backend) -> Vec<String> {
+        vec![
+            "ALTER TABLE users ADD COLUMN nickname text".to_string(),
+            backend.update_db_version(Self::TO_VERSION),
+        ]
     }
-    hex::encode(hasher.finalize())
 }
 
-/// Print the fingerprint of the current schema for every enabled backend.
-/// Run with `cargo test -p td-schema --lib print_schema_fingerprints --
-/// --ignored --nocapture` to refresh `FINGERPRINTS` on schema edits.
 #[test]
-#[ignore]
-fn print_schema_fingerprints() {
-    for &b in ALL_BACKENDS {
-        println!("{b:?} (idx {}): {}", b.index(), compute_fingerprint(&current::build(b)),);
+fn test_synthetic_delta_satisfies_validate_delta() {
+    validate_delta::<SyntheticDelta>();
+}
+
+struct MissingBumpDelta;
+
+impl SchemaDelta for MissingBumpDelta {
+    const FROM_VERSION: usize = 1;
+    const TO_VERSION: usize = 2;
+
+    fn up(_backend: Backend) -> Vec<String> {
+        vec!["ALTER TABLE users ADD COLUMN nickname text".to_string()]
     }
 }
 
-/// Pins the SHA-256 fingerprint of every schema version (archives,
-/// deltas, current) per backend. Catches silent edits to frozen
-/// archives/deltas and to `current/`. The archive/delta loops are
-/// no-ops at the v1 baseline (range `1..1` is empty) and activate
-/// automatically on the first version bump.
+#[test]
+#[should_panic(expected = "must update db_version")]
+fn test_validate_delta_rejects_missing_version_bump() {
+    validate_delta::<MissingBumpDelta>();
+}
+
+#[test]
+fn test_update_db_version_sql_is_stable() {
+    for b in Backend::ALL {
+        let last = SyntheticDelta::up(b).pop().unwrap();
+        assert_eq!(last, "UPDATE tabsdata_system SET value = '2' WHERE name = 'db_version'", "unexpected db_version bump SQL on {b:?}",);
+    }
+}
+
+fn snapshot_dir(sub: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/schema").join(sub)
+}
+
+/// The gate on `current/`: a schema edit surfaces as a reviewable SQL diff
+/// against the committed snapshots.
+#[test]
+fn test_schema_ddl_snapshot() {
+    crate::snapshot::assert_snapshot(&snapshot_dir("current/snapshots"), current::build);
+}
+
+/// Guards every frozen archive's committed snapshots. No-op at the v1
+/// baseline; activates on the first version bump.
 #[allow(clippy::reversed_empty_ranges)]
 #[test]
-fn test_schema_fingerprint() {
-    for &b in ALL_BACKENDS {
-        let idx = b.index();
+fn test_archive_ddl_snapshots() {
+    for v in 1..current::Schema::VERSION {
+        crate::snapshot::assert_snapshot(&snapshot_dir(&format!("archive/v{v}/snapshots")), |b| archive::build(v, b));
+    }
+}
 
-        for v in 1..current::Schema::VERSION {
-            let actual = compute_fingerprint(&archive::build(v, b));
-            let expected = archive::fingerprints(v)[idx];
-            assert_eq!(
-                actual, expected,
-                "\n\nArchived schema v{v} ({b:?}) SQL output changed.\n\
-                 Actual:   {actual}\nExpected: {expected}\n\n\
-                 Archives are frozen and must not be modified after creation.\n",
-            );
-        }
-
-        for v in 2..=current::Schema::VERSION {
-            let actual = compute_fingerprint(&deltas::get(v, b));
-            let expected = deltas::fingerprints(v)[idx];
-            assert_eq!(
-                actual,
-                expected,
-                "\n\nDelta v{from}->v{v} ({b:?}) SQL output changed.\n\
-                 Actual:   {actual}\nExpected: {expected}\n\n\
-                 Deltas are frozen and must not be modified after creation.\n",
-                from = v - 1,
-            );
-        }
-
-        let actual = compute_fingerprint(&current::build(b));
-        let expected = current::Schema::FINGERPRINTS[idx];
-        assert_eq!(
-            actual, expected,
-            "\n\nSchema SQL output ({b:?}) changed.\n\
-             Actual:   {actual}\nExpected: {expected}\n\n\
-             If the change is intentional, update FINGERPRINTS for {b:?} \
-             to: {actual}\n",
-        );
+/// Guards every frozen delta's committed snapshots. No-op at the v1 baseline;
+/// activates on the first version bump.
+#[allow(clippy::reversed_empty_ranges)]
+#[test]
+fn test_delta_ddl_snapshots() {
+    for v in 2..=current::Schema::VERSION {
+        crate::snapshot::assert_snapshot(&snapshot_dir(&format!("deltas/snapshots/v{}_to_v{v}", v - 1)), |b| deltas::get(v, b));
     }
 }
 
@@ -154,7 +160,7 @@ fn test_schema_fingerprint() {
 #[test]
 fn test_migration_guard_archives_exist() {
     for v in 1..current::Schema::VERSION {
-        for &b in ALL_BACKENDS {
+        for b in Backend::ALL {
             let result = std::panic::catch_unwind(|| archive::build(v, b));
             assert!(
                 result.is_ok(),
@@ -175,7 +181,7 @@ fn test_migration_guard_archives_exist() {
 #[test]
 fn test_migration_guard_deltas_exist() {
     for v in 2..=current::Schema::VERSION {
-        for &b in ALL_BACKENDS {
+        for b in Backend::ALL {
             let result = std::panic::catch_unwind(|| deltas::get(v, b));
             assert!(
                 result.is_ok(),
@@ -277,7 +283,7 @@ fn test_db_trigger_names_are_unique() {
 /// hidden nondeterminism.
 #[test]
 fn test_schema_build_is_deterministic() {
-    for &b in ALL_BACKENDS {
+    for b in Backend::ALL {
         let first = current::build(b);
         let second = current::build(b);
         assert_eq!(first, second, "current::build({b:?}) not deterministic");
@@ -290,7 +296,7 @@ fn test_schema_build_is_deterministic() {
 /// reorders the phase loops in `Schema::build` fails here.
 #[test]
 fn test_schema_build_phase_ordering() {
-    for &b in ALL_BACKENDS {
+    for b in Backend::ALL {
         let stmts = cached_build(b);
         let phases: Vec<Phase> = stmts.iter().map(|s| classify_stmt(s)).collect();
         // Permitted ordering: a strictly non-decreasing sequence of phase
@@ -451,11 +457,11 @@ fn test_migration_guard_backend_consistency() {
     };
 
     for v in 1..current::Schema::VERSION {
-        let counts = ALL_BACKENDS.iter().map(|&b| (b, archive::build(v, b).len())).collect();
+        let counts = Backend::ALL.iter().map(|&b| (b, archive::build(v, b).len())).collect();
         assert_consistent("Archive", v, counts);
     }
     for v in 2..=current::Schema::VERSION {
-        let counts = ALL_BACKENDS.iter().map(|&b| (b, deltas::get(v, b).len())).collect();
+        let counts = Backend::ALL.iter().map(|&b| (b, deltas::get(v, b).len())).collect();
         assert_consistent("Delta", v, counts);
     }
 }

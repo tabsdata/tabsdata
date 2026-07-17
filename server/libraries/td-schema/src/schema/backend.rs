@@ -16,18 +16,8 @@ pub enum Backend {
     MySql,
 }
 
-/// Number of backend variants.
-pub const BACKEND_COUNT: usize = 3;
-
 impl Backend {
-    /// Return a stable index for this backend (Sqlite=0, Postgres=1, MySql=2).
-    pub const fn index(self) -> usize {
-        match self {
-            Self::Sqlite => 0,
-            Self::Postgres => 1,
-            Self::MySql => 2,
-        }
-    }
+    pub const ALL: [Backend; 3] = [Backend::Sqlite, Backend::Postgres, Backend::MySql];
 
     /// Render a schema statement (CREATE TABLE, ALTER TABLE, CREATE INDEX, etc.) to SQL.
     pub fn build_schema(&self, stmt: impl SchemaStatementBuilder) -> String {

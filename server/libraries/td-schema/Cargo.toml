@@ -54,9 +54,6 @@ sea-query = { workspace = true, features = ["derive"] }
 strum = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 
-hex = { workspace = true }
-sha2 = { workspace = true }
-
 [dev-dependencies]
 td-schema = { workspace = true, features = ["td-test"] }
 

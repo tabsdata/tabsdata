@@ -6,7 +6,7 @@
 //! pool drives), the shared `tabsdata_system` ledger DDL ([`tabsdata_system_ddl`]),
 //! and [`CurrentSource`] for the built-in schema.
 
-use super::backend::{self, Backend};
+use super::backend::Backend;
 use super::version::SchemaVersion;
 use super::{current, deltas};
 use crate::TabsdataSystem;
@@ -27,11 +27,6 @@ pub trait SchemaSource: Send + Sync + 'static {
     /// Statements migrating the schema's own content to `target`. Defaults to none.
     fn delta(&self, _target: usize, _backend: Backend) -> Vec<String> {
         vec![]
-    }
-    /// Per-backend fingerprints guarding the build; defaults to none (no guard),
-    /// which only the versioned built-in schema overrides.
-    fn fingerprints(&self) -> [&'static str; backend::BACKEND_COUNT] {
-        [""; backend::BACKEND_COUNT]
     }
 }
 
@@ -61,8 +56,5 @@ impl SchemaSource for CurrentSource {
     }
     fn delta(&self, target: usize, backend: Backend) -> Vec<String> {
         deltas::get(target, backend)
-    }
-    fn fingerprints(&self) -> [&'static str; backend::BACKEND_COUNT] {
-        current::Schema::FINGERPRINTS
     }
 }

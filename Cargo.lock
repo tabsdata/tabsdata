@@ -9981,10 +9981,8 @@ dependencies = [
 name = "td-schema"
 version = "2.0.0"
 dependencies = [
- "hex",
  "openssl",
  "sea-query",
- "sha2 0.10.9",
  "strum 0.28.0",
  "td-schema",
  "td-security",

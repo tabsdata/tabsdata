@@ -15,7 +15,6 @@
 //! impl SchemaDelta for Migration {
 //!     const FROM_VERSION: usize = N;
 //!     const TO_VERSION: usize = N + 1;
-//!     const FINGERPRINTS: [&'static str; 3] = ["", "", ""];
 //!     fn up(b: Backend) -> Vec<String> { /* ... */ }
 //! }
 //! ```
@@ -28,13 +27,12 @@
 //! ## Adding a new delta
 //!
 //! 1. Create `vN_to_v{N+1}.rs` with `pub struct Migration;` and
-//!    `impl SchemaDelta` (include `FINGERPRINTS` — leave empty initially,
-//!    fill after running tests).
+//!    `impl SchemaDelta`.
 //! 2. Add `pub(crate) mod vN_to_v{N+1};` to this file.
 //! 3. Add a match arm to `get()`:
 //!    `{N+1} => vN_to_v{N+1}::Migration::up(backend),`.
-//! 4. Add a match arm to `fingerprints()`:
-//!    `{N+1} => vN_to_v{N+1}::Migration::FINGERPRINTS,`.
+//! 4. Freeze its DDL snapshots under `snapshots/v{N}_to_v{N+1}/` by running
+//!    `test_delta_ddl_snapshots` with `TD_SNAPSHOT_UPDATE=1`.
 //!
 //! The last statement in every delta **must** update `db_version` using the
 //! helper: `b.update_db_version(Self::TO_VERSION)`.
@@ -52,18 +50,6 @@ use crate::schema::backend::Backend;
 #[allow(clippy::match_single_binding)]
 pub fn get(target_version: usize, backend: impl Into<Backend>) -> Vec<String> {
     let _backend = backend.into();
-    match target_version {
-        _ => panic!("No delta migration for version {target_version}"),
-    }
-}
-
-/// Return the stored fingerprints for a delta targeting the given version.
-///
-/// # Panics
-///
-/// Panics if no delta exists for the given target version.
-#[allow(clippy::match_single_binding)]
-pub fn fingerprints(target_version: usize) -> [&'static str; 3] {
     match target_version {
         _ => panic!("No delta migration for version {target_version}"),
     }

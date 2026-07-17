@@ -133,14 +133,6 @@ pub(crate) const PROJECT_SCOPED_TABLES: &[&str] = &[
 impl SchemaVersion for Schema {
     const VERSION: usize = 1;
 
-    // Refresh via `cargo test -p td-schema --lib print_schema_fingerprints --
-    // --ignored --nocapture` after any intentional change to current/.
-    const FINGERPRINTS: [&'static str; 3] = [
-        "fd9cb4802cca5b0d57f851567dcba7d9748a5632173f1aebbb1f924c470e6b7d", // Sqlite
-        "af6ba6aa71fb6d03ebf0fd86488fc1d41fac400516dabada1eece0988c46d406", // Postgres
-        "584e94d1f169230328fecd867341c88e10f13f0c111c50cded2fd98354dc1a04", // MySql
-    ];
-
     fn build(backend: impl Into<Backend>) -> Vec<String> {
         let b = backend.into();
         info!(version = Self::VERSION, backend = ?b, "Building schema");
