@@ -846,6 +846,20 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
 
     let td_type = td_type(&input, &item);
 
+    // Generic DAOs have no single concrete type to register against;
+    // `cfg(not(test))` keeps a crate's own test-fixture DAOs out of the
+    // registry while dependency crates (compiled with cfg(test) off) register.
+    let dao_registration = if item.generics.params.is_empty() {
+        quote! {
+            #[cfg(not(test))]
+            ta_objects::inventory::submit! {
+                ta_objects::RegisteredDao { describe: ta_objects::dao_projection::<#ident> }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     quote! {
         #iden_enum
         #typed_columns
@@ -858,6 +872,7 @@ pub fn dao_type(input: TokenStream) -> TokenStream {
         #recursive
         #logical_pointer_impl
         #td_type
+        #dao_registration
     }
     .into()
 }

@@ -22,3 +22,6 @@ pub mod metrics;
 pub mod pointers;
 pub mod session;
 pub mod table_data_versions;
+
+#[cfg(test)]
+mod schema_consistency;

@@ -6,6 +6,7 @@
 mod tests;
 
 mod composed_string;
+pub mod dao_registry;
 mod dxo;
 pub mod errors;
 pub mod list_condition;
@@ -17,6 +18,7 @@ mod tagged;
 
 pub use {
     composed_string::ComposedString,
+    dao_registry::{DaoProjection, RegisteredDao, dao_projection, registered_daos},
     dxo::*,
     list_condition::{ListFilter, ListFilterExtract, ListRef, NoFilter},
     list_filter::ListFilterStr,
@@ -25,6 +27,10 @@ pub use {
     // re-exported so the `Dao` macro's emitted `type Db` default resolves
     td_database::domain::Apiserver,
 };
+
+// Re-exported so the `#[Dao]` macro can emit `ta_objects::inventory::submit!`
+// without consumer crates needing a direct `inventory` dependency.
+pub use inventory;
 
 // external macros
 pub use tm_objects::*;

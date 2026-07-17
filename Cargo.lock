@@ -9391,6 +9391,7 @@ dependencies = [
  "chrono",
  "derive_builder",
  "getset",
+ "inventory",
  "openssl",
  "paste",
  "regex",

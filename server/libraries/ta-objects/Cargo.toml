@@ -64,6 +64,7 @@ td-tower = { workspace = true }
 
 # External dependencies
 
+inventory = { workspace = true }
 paste = { workspace = true }
 sea-query = { workspace = true }
 serde = { workspace = true }
