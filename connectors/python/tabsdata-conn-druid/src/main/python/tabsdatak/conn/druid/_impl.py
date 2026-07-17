@@ -229,6 +229,7 @@ def build_input_source(location: CloudLocation, uris: list[str]) -> dict:
             "type": "s3",
             "uris": uris,
             "endpointConfig": {
+                "url": f"s3.{location._region()}.amazonaws.com",
                 "signingRegion": location._region(),
             },
             "properties": {
