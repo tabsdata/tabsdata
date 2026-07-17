@@ -35,6 +35,11 @@ const OS_WINDOWS: &str = "windows";
 const PROGRAM_EXTENSION_WINDOWS: &str = ".exe";
 const PROGRAM_EXTENSION_UNIX: &str = "";
 
+#[cfg(windows)]
+pub const EXE_SUFFIX: &str = PROGRAM_EXTENSION_WINDOWS;
+#[cfg(not(windows))]
+pub const EXE_SUFFIX: &str = PROGRAM_EXTENSION_UNIX;
+
 #[cfg(target_os = "linux")]
 const EXECUTABLE_MASK: u32 = S_IXUSR | S_IXGRP | S_IXOTH;
 

@@ -69,7 +69,7 @@ spec:
             - name: 1000-cron-publisher
               image: function
               imagePullPolicy: IfNotPresent
-              command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_cron_trigger"]
+              command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_cron_trigger${{system:tdk_exe_suffix}}"]
               args:
                 - --shared-dir
                 - $(CONTAINER_ROOT)/tabsdata/shared

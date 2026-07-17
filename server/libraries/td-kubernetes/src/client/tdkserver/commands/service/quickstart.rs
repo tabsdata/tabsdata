@@ -19,7 +19,7 @@ use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments};
 use crate::client::tdkserver::commands::service::create::create_instance;
 use crate::client::tdkserver::commands::service::init::{InitArguments, command_init};
 use crate::client::tdkserver::commands::service::start::{StartArguments, command_start};
-use crate::client::tdkserver::commands::service::trash::trash_instance_folder;
+use crate::client::tdkserver::commands::service::trash::{stop_if_possible, trash_instance_folder};
 use crate::client::tdkserver::commands::service::{
     resolved_details, resolved_instance, resolved_yes,
 };
@@ -177,6 +177,7 @@ pub async fn command_quickstart(
     .await;
 
     if outcome.is_err() && !preexisting && folder.exists() {
+        stop_if_possible(&name, globals.verbose).await;
         match trash_instance_folder(&name, &folder) {
             Ok(destination) => {
                 warn!(

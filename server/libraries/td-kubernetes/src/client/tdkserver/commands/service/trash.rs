@@ -151,7 +151,7 @@ pub fn trash_instance_folder(name: &str, folder: &Path) -> CommandResult<PathBuf
     .into())
 }
 
-async fn stop_if_possible(name: &str, verbose: bool) {
+pub(crate) async fn stop_if_possible(name: &str, verbose: bool) {
     let settings = match InstanceSettings::load(name) {
         Ok(settings) => settings,
         Err(error) => {

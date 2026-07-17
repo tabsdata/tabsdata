@@ -45,6 +45,8 @@ pub enum SystemKey {
     PyenvScriptsFolder,
     #[strum(serialize = "tdk_pyenv_libexec_folder")]
     PyenvLibexecFolder,
+    #[strum(serialize = "tdk_exe_suffix")]
+    ExeSuffix,
     #[strum(serialize = "tdk_instance_name")]
     InstanceName,
     #[strum(serialize = "tdk_apiserver_public_port")]
@@ -96,6 +98,7 @@ pub struct SystemValues {
     pub pyenv_ag_root: Option<String>,
     pub pyenv_scripts_folder: Option<String>,
     pub pyenv_libexec_folder: Option<String>,
+    pub exe_suffix: Option<String>,
     pub instance_name: Option<String>,
     pub apiserver_public_port: Option<String>,
     pub apiserver_private_port: Option<String>,
@@ -122,6 +125,7 @@ impl SystemValues {
             SystemKey::PyenvAgRoot => self.pyenv_ag_root.as_deref(),
             SystemKey::PyenvScriptsFolder => self.pyenv_scripts_folder.as_deref(),
             SystemKey::PyenvLibexecFolder => self.pyenv_libexec_folder.as_deref(),
+            SystemKey::ExeSuffix => self.exe_suffix.as_deref(),
             SystemKey::InstanceName => self.instance_name.as_deref(),
             SystemKey::ApiserverPublicPort => self.apiserver_public_port.as_deref(),
             SystemKey::ApiserverPrivatePort => self.apiserver_private_port.as_deref(),

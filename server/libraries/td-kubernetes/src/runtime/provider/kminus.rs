@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use indicatif::MultiProgress;
 use once_cell::sync::OnceCell;
-use td_common::os::name_program;
+use td_common::os::{EXE_SUFFIX, name_program};
 use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::NoAction;
 use td_python::python::{get_python_scripts_folder, resolve_python_binary};
@@ -856,6 +856,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
     };
     let pyenv_scripts_folder = Some(scripts_name.to_string());
     let pyenv_libexec_folder = Some(LIBEXEC_TABSDATA.to_owned());
+    let exe_suffix = Some(EXE_SUFFIX.to_owned());
     let instance_name = folder
         .file_name()
         .and_then(|name| name.to_str())
@@ -871,6 +872,7 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         pyenv_ag_root,
         pyenv_scripts_folder,
         pyenv_libexec_folder,
+        exe_suffix,
         instance_name,
         database_host: Some(DATABASE_HOST_LOOPBACK.to_owned()),
         ..SystemValues::default()

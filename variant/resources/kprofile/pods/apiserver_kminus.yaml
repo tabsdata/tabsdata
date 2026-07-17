@@ -41,7 +41,7 @@ spec:
     - name: dbready
       image: /dev/null
       imagePullPolicy: IfNotPresent
-      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_dbready"]
+      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_dbready${{system:tdk_exe_suffix}}"]
       args:
         - --config-file
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.database.yaml
@@ -84,7 +84,7 @@ spec:
     - name: conn-resources-extractor
       image: /dev/null
       imagePullPolicy: IfNotPresent
-      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_conn_resources_extractor"]
+      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_conn_resources_extractor${{system:tdk_exe_suffix}}"]
       args:
         - --output-dir
         - $(CONTAINER_ROOT)/tabsdata/resources/ui/connectors
@@ -119,7 +119,7 @@ spec:
     - name: apiserver
       image: /dev/null
       imagePullPolicy: IfNotPresent
-      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_apiserver"]
+      command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_apiserver${{system:tdk_exe_suffix}}"]
       args:
         - --config-file
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.service.yaml
