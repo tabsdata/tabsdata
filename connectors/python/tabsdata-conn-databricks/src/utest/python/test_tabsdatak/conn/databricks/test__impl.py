@@ -7,8 +7,10 @@ End-to-end coverage against a real Databricks workspace lives in
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pyarrow as pa
 import pytest
 
 from tabsdatak.api import Secret
@@ -17,8 +19,20 @@ from tabsdatak.api import Secret
 from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn, _impl
 from tabsdatak.conn.databricks.error import (
     DatabricksErrorCode,
+    DatabricksRuntimeException,
     DatabricksValidateException,
 )
+
+
+def _col(type_value, *, name="c", precision=None, scale=None):
+    """Build a minimal Databricks result-manifest ``ColumnInfo`` stand-in
+    (only the attributes ``_databricks_type_to_arrow`` reads)."""
+    return SimpleNamespace(
+        name=name,
+        type_name=SimpleNamespace(value=type_value),
+        type_precision=precision,
+        type_scale=scale,
+    )
 
 pytestmark = pytest.mark.databricks
 
@@ -239,3 +253,100 @@ class TestExecuteQueryScoping:
         kwargs = self._execute_statement_kwargs(conn, "SELECT 1", tmp_path)
         assert kwargs["catalog"] is None
         assert kwargs["schema"] is None
+
+
+# ---------------------------------------------------------------------------
+# _databricks_type_to_arrow -- manifest column type -> pyarrow type
+# ---------------------------------------------------------------------------
+
+
+class TestDatabricksTypeToArrow:
+    @pytest.mark.parametrize(
+        "dbx_type, arrow_type",
+        [
+            ("BOOLEAN", pa.bool_()),
+            ("BYTE", pa.int8()),
+            ("SHORT", pa.int16()),
+            ("INT", pa.int32()),
+            ("LONG", pa.int64()),
+            ("FLOAT", pa.float32()),
+            ("DOUBLE", pa.float64()),
+            ("STRING", pa.string()),
+            ("BINARY", pa.binary()),
+            ("DATE", pa.date32()),
+        ],
+    )
+    def test_scalar_types(self, dbx_type, arrow_type):
+        assert _impl._databricks_type_to_arrow(_col(dbx_type)) == arrow_type
+
+    def test_decimal_uses_precision_and_scale(self):
+        got = _impl._databricks_type_to_arrow(_col("DECIMAL", precision=18, scale=2))
+        assert got == pa.decimal128(18, 2)
+
+    def test_timestamp_is_utc(self):
+        assert _impl._databricks_type_to_arrow(_col("TIMESTAMP")) == pa.timestamp(
+            "us", tz="UTC"
+        )
+
+    def test_timestamp_ntz_is_naive(self):
+        assert _impl._databricks_type_to_arrow(_col("TIMESTAMP_NTZ")) == pa.timestamp(
+            "us"
+        )
+
+    def test_unmapped_type_falls_back_to_string(self):
+        # Exotic types can't be rebuilt from the flat manifest; string keeps the
+        # empty result valid rather than failing the read.
+        assert _impl._databricks_type_to_arrow(_col("ARRAY")) == pa.string()
+
+
+# ---------------------------------------------------------------------------
+# execute_query -- zero-row result still materializes a typed parquet
+# ---------------------------------------------------------------------------
+
+
+class TestExecuteQueryEmptyResult:
+    @staticmethod
+    def _run(tmp_path, columns):
+        from databricks.sdk.service.sql import StatementState
+
+        conn = _src_conn(
+            catalog="main",
+            schema="analytics",
+            warehouse=None,
+            warehouse_id="a1b2c3d4e5f60718",
+        )
+        cfg = _impl.DatabricksReadCfg(
+            conn=conn,
+            queries=["SELECT id, name FROM t WHERE 1=0"],
+            download_threads=1,
+        )
+        ws_client = MagicMock()
+        response = MagicMock()
+        response.status.state = StatementState.SUCCEEDED
+        response.statement_id = "stmt-1"
+        # No external links => the chunk iterator yields nothing => 0 chunks.
+        response.result = None
+        response.manifest.schema.columns = columns
+        ws_client.statement_execution.execute_statement.return_value = response
+        return _impl.execute_query(
+            ws_client, cfg, "SELECT id, name FROM t WHERE 1=0", tmp_path, 0
+        )
+
+    def test_zero_rows_writes_typed_empty_parquet(self, tmp_path):
+        import pyarrow.parquet as pq
+
+        out = self._run(
+            tmp_path,
+            [_col("LONG", name="id"), _col("STRING", name="name")],
+        )
+        assert out.exists()
+        table = pq.read_table(out)
+        assert table.num_rows == 0
+        assert table.column_names == ["id", "name"]
+        assert table.schema.field("id").type == pa.int64()
+        assert table.schema.field("name").type == pa.string()
+
+    def test_zero_rows_without_manifest_schema_raises(self, tmp_path):
+        with pytest.raises(DatabricksRuntimeException) as ei:
+            self._run(tmp_path, None)
+        assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_11

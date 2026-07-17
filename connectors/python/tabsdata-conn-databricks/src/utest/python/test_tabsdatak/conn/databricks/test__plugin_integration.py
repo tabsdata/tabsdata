@@ -513,3 +513,47 @@ def test_src_plugin_round_trip(
     df = pl.read_parquet(result[0][0].file)
     assert df.shape == (2, 2)
     assert df["name"].to_list() == ["alice", "bob"]
+
+
+def test_src_plugin_empty_result_materializes_typed_empty_table(
+    databricks_config, work_dir, scratch_table,
+):
+    """A zero-row query still writes a valid, typed empty parquet.
+
+    Regression: an empty result used to leave no file at the slot path,
+    so the next step's ``collect_schema()`` (stamp-inputs) blew up with
+    ``FileNotFoundError``. Seed a table, then read it back with a
+    never-matching predicate and assert the file exists, its schema is
+    readable (mirrors stamp-inputs), and it has zero rows.
+    """
+    from tabsdatak.conn.databricks import _impl
+
+    seed = _make_parquet(
+        work_dir / "seed.parquet",
+        [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}],
+    )
+    plugin._DatabricksDestPlugin().write_out(
+        _DestCtx(work_dir),
+        _dest_conn_from(databricks_config),
+        DatabricksDest(
+            tables=[scratch_table],
+        ),
+        [seed],
+    )
+
+    src = DatabricksSrc(
+        queries=[
+            f"SELECT id, name FROM {_impl._fq_for_sql(scratch_table)} WHERE 1=0"
+        ],
+    )
+    result = plugin._DatabricksSrcPlugin().read_in(
+        _SrcCtx(work_dir), _src_conn_from(databricks_config), src,
+    )
+    assert len(result) == 1  # one query
+    assert len(result[0]) == 1  # one parquet
+    out = Path(result[0][0].file)
+    assert out.exists()  # the slot's file must exist even with zero rows
+    # Mirror stamp-inputs' schema read: it must succeed and expose real columns.
+    schema = pl.scan_parquet(out).collect_schema()
+    assert list(schema.keys()) == ["id", "name"]
+    assert pl.read_parquet(out).height == 0

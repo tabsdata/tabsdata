@@ -61,3 +61,8 @@ class DatabricksErrorCode(ErrorCode):
         "qualified 'catalog.schema.table' (set conn.catalog and/or"
         " conn.schema, or use a 3-part name)",
     )  # _writer._fully_qualify_table
+    DATABRICKS_11 = ErrorDef(
+        DatabricksRuntimeException,
+        "Databricks query returned no rows and no result schema was available"
+        " to materialize an empty result (query_index={query_index})",
+    )  # execute_query: empty result with no manifest schema

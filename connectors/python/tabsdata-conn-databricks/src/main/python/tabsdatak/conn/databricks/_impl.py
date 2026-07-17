@@ -285,15 +285,86 @@ def _download_chunk(link):
     raise last_exc
 
 
+def _databricks_type_to_arrow(col) -> "pa.DataType":
+    """Map a single Databricks result-manifest ``ColumnInfo`` to a
+    pyarrow type. Used only to type an **empty** (0-row) result -- for
+    non-empty results the Arrow IPC stream carries its own schema.
+
+    Covers the scalar / temporal / decimal types; anything exotic
+    (``ARRAY`` / ``MAP`` / ``STRUCT`` / ``INTERVAL`` / ...) can't be
+    reconstructed from the flat manifest, so it falls back to
+    ``string`` with a warning rather than failing the whole read."""
+    import pyarrow as pa
+
+    name = (col.type_name.value if col.type_name is not None else "STRING").upper()
+    scalar = {
+        "BOOLEAN": pa.bool_(),
+        "BYTE": pa.int8(),
+        "SHORT": pa.int16(),
+        "INT": pa.int32(),
+        "INTEGER": pa.int32(),
+        "LONG": pa.int64(),
+        "FLOAT": pa.float32(),
+        "DOUBLE": pa.float64(),
+        "STRING": pa.string(),
+        "CHAR": pa.string(),
+        "VARCHAR": pa.string(),
+        "BINARY": pa.binary(),
+        "DATE": pa.date32(),
+        "TIMESTAMP": pa.timestamp("us", tz="UTC"),
+        "TIMESTAMP_NTZ": pa.timestamp("us"),
+    }
+    if name in scalar:
+        return scalar[name]
+    if name == "DECIMAL":
+        precision = getattr(col, "type_precision", None)
+        scale = getattr(col, "type_scale", None)
+        return pa.decimal128(
+            precision if precision is not None else 38,
+            scale if scale is not None else 0,
+        )
+    logger.warning(
+        "databricks: unmapped column type %r for empty-result schema;"
+        " defaulting to string",
+        name,
+    )
+    return pa.string()
+
+
+def _arrow_schema_from_manifest(response) -> "pa.Schema | None":
+    """Build a pyarrow schema from a statement response's result
+    manifest (``response.manifest.schema.columns``), which is present
+    even for a 0-row result. Returns ``None`` when the manifest carries
+    no column schema (the caller decides whether that's fatal)."""
+    import pyarrow as pa
+
+    manifest = getattr(response, "manifest", None)
+    schema = getattr(manifest, "schema", None) if manifest is not None else None
+    columns = getattr(schema, "columns", None) if schema is not None else None
+    if not columns:
+        return None
+    fields = [
+        pa.field(col.name or f"col_{i}", _databricks_type_to_arrow(col))
+        for i, col in enumerate(columns)
+    ]
+    return pa.schema(fields)
+
+
 class _ChunkWriter:
     """Drain pa.Tables to a single parquet file, preserving order
-    across worker threads."""
+    across worker threads.
 
-    def __init__(self, path: Path) -> None:
+    ``empty_schema`` is the result-set schema derived from the query
+    manifest; when no chunks arrive (a 0-row result), :meth:`close`
+    uses it to still emit a valid empty (0-row) parquet so downstream
+    steps that read the file's schema don't hit a missing path."""
+
+    def __init__(self, path: Path, empty_schema: "pa.Schema | None" = None) -> None:
         import pyarrow.parquet as pq
 
         self._path = path
         self._pq = pq
+        self._empty_schema = empty_schema
         self._lock = threading.Lock()
         self._pending: dict[int, "pa.Table"] = {}
         self._next = 0
@@ -324,6 +395,14 @@ class _ChunkWriter:
             if self._writer is not None:
                 self._writer.close()
                 self._writer = None
+            elif self._empty_schema is not None:
+                # Zero chunks arrived: materialize a valid empty parquet with
+                # the real column schema so the slot's file always exists.
+                self._pq.ParquetWriter(
+                    str(self._path),
+                    self._empty_schema,
+                    compression=_PARQUET_COMPRESSION,
+                ).close()
 
 
 def _process_chunks(next_link, chunk_writer: _ChunkWriter) -> None:
@@ -388,8 +467,12 @@ def execute_query(
             f" {response.status.state!r}: {response.status.error}"
         )
 
+    # The result manifest carries the column schema even for a 0-row result;
+    # capture it so an empty result still materializes a valid typed parquet.
+    empty_schema = _arrow_schema_from_manifest(response)
+
     next_link = _chunk_links_iterator(ws_client, response)
-    chunk_writer = _ChunkWriter(out_path)
+    chunk_writer = _ChunkWriter(out_path, empty_schema)
     try:
         if cfg.download_threads <= 1:
             _process_chunks(next_link, chunk_writer)
@@ -403,6 +486,11 @@ def execute_query(
                     future.result()
     finally:
         chunk_writer.close()
+
+    if chunk_writer.written == 0 and empty_schema is None:
+        from tabsdatak.conn.databricks.error import DatabricksErrorCode
+
+        raise DatabricksErrorCode.DATABRICKS_11.exception(query_index=index)
 
     return out_path
 
