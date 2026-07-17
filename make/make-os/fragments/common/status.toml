@@ -20,7 +20,10 @@ script = [
             set_env TD_FAIL_FAST_PY false
         end
     end
-    set_env TD_TESTS_CODE_PY 0
+    chain = get_env TD_TESTS_CHAIN_PY
+    if not eq ${chain} "true"
+        set_env TD_TESTS_CODE_PY 0
+    end
 
     td_symlink_polars_libs = get_env TD_SYMLINK_POLARS_LIBS
     if eq ${td_symlink_polars_libs} "true"
@@ -37,6 +40,12 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+
+    chain = get_env TD_TESTS_CHAIN_PY
+    if eq ${chain} "true"
+        info "⌛️ Deferring py tests run status to the chaining task."
+        exit 0
+    end
 
     exit_code = get_env TD_TESTS_CODE_PY
     if not eq ${exit_code} "0"

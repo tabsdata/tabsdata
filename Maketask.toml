@@ -582,6 +582,9 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
+    set_env TD_TESTS_CHAIN_PY "true"
+    set_env TD_TESTS_CODE_PY 0
+
     unset_env TD_UMBRELLA_SERVER_START
     unset_env TD_UMBRELLA_SERVER_STATUS
     set_env TD_UMBRELLA_SERVER_STOP "false"
@@ -597,6 +600,16 @@ script = [
     unset_env TD_UMBRELLA_SERVER_START
     unset_env TD_UMBRELLA_SERVER_STATUS
     unset_env TD_UMBRELLA_SERVER_STOP
+
+    exit_code = get_env TD_TESTS_CODE_PY
+    unset_env TD_TESTS_CHAIN_PY
+    if not eq ${exit_code} "0"
+        info "⌛️ Marking py tests run as failed: '${exit_code}'"
+        code = exit ${exit_code}
+    else
+        info "⌛️ Marking py tests run as successful: '${exit_code}'"
+        exit 0
+    end
     ''']
 
 [tasks.utest_py]
