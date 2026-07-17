@@ -306,10 +306,7 @@ jobs:
       S31__S3_SECRET_KEY: ${{ secrets.S31__S3_SECRET_KEY }}
       S31__S3_URI: ${{ secrets.S31__S3_URI }}
       S3__ACCESS_KEY: ${{ secrets.S3__ACCESS_KEY }}
-      S3__AWS_ACCOUNT: ${{ secrets.S3__AWS_ACCOUNT }}
-      S3__AWS_ACCOUNT_NAME: ${{ secrets.S3__AWS_ACCOUNT_NAME }}
       S3__BUCKET: ${{ secrets.S3__BUCKET }}
-      S3__IAM_USER: ${{ secrets.S3__IAM_USER }}
       S3__REGION: ${{ secrets.S3__REGION }}
       S3__SECRET_KEY: ${{ secrets.S3__SECRET_KEY }}
       S3__SYS_PATH: ${{ secrets.S3__SYS_PATH }}
