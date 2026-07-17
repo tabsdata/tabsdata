@@ -9959,6 +9959,7 @@ dependencies = [
  "regex",
  "sea-query",
  "serde",
+ "serde_json",
  "sqlx 0.8.6",
  "strum 0.28.0",
  "ta-objects",

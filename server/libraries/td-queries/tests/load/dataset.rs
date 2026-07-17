@@ -1,0 +1,516 @@
+//
+// Copyright 2026 Tabs Data Inc.
+//
+
+//! Seed datasets for the load cases — `metrics_dataset` and `chain_dataset`.
+//! Rows are built with the real DAO builders; the structural backbone goes
+//! through the Seed API (each row's id feeds the next) while the high-volume
+//! run graph is built in memory and bulk-inserted via [`crate::bulk`].
+
+use ta_objects::Buildable;
+use td_database::pool::TdPool;
+use td_error::TdError;
+use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::function::{FunctionDB, FunctionRegister};
+use td_objects::dxo::logical::{
+    LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB,
+    LogicalPointerDao, LogicalTableDataVersionDB, LogicalTableDataVersionPointerDB,
+};
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
+use td_objects::dxo::project::ProjectDB;
+use td_objects::dxo::table::TableDB;
+use td_objects::types::basic::{
+    AtTime, BundleId, ByteCount, CollectionName, Decorator, DependencyPos, EpochMs, FunctionId,
+    FunctionVersionId, HasData, InputIdx, LogicalFunctionRunId, LogicalFunctionRunStatus,
+    LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId, PhysicalFunctionRunId,
+    PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId, ProjectName, RowCount,
+    TableFunctionParamPos, TableId, TableNameDto, TableVersionCount, TransactionKey, Trigger,
+    TriggeredOn, UserId, VersionPos,
+};
+use td_objects::types::composed::TableDependencyDto;
+use td_queries::prelude::*;
+use td_queries::test_utils::SeedEntry;
+use td_security::ENCODED_ID_SYSTEM;
+
+use crate::bulk::bulk_insert;
+use crate::profile::{ChainKnobs, MetricsKnobs};
+
+/// Metrics window the generator stamps runs into; queries use the same bounds.
+pub const WINDOW_START_MS: i64 = 1_700_000_000_000;
+pub const WINDOW_END_MS: i64 = WINDOW_START_MS + 86_400_000;
+const IN_WINDOW_MS: i64 = WINDOW_START_MS + 3_600_000;
+
+/// Get-or-create: the two-size scaling passes build a dataset more than once
+/// against the same pool, and the project name is unique.
+async fn test_project(db: &TdPool) -> Result<ProjectDB, TdError> {
+    let name = ProjectName::try_from("test")?;
+    let existing: Vec<ProjectDB> = db.live().fetch_all::<ProjectDB>(()).await?;
+    match existing.into_iter().find(|p| p.name == name) {
+        Some(p) => Ok(p),
+        None => db.seed().project(name).await,
+    }
+}
+
+fn system_user() -> Result<UserId, TdError> {
+    UserId::try_from(ENCODED_ID_SYSTEM)
+}
+
+/// Per-call name salt so a dataset can be built more than once against the
+/// same pool without name collisions.
+fn next_salt() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SALT: AtomicU64 = AtomicU64::new(0);
+    SALT.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Build the metrics dataset and return the number of functions seeded.
+/// PFR window/magnitude columns are stamped at build time, so no per-row
+/// UPDATE is needed.
+pub async fn metrics_dataset(db: &TdPool, knobs: MetricsKnobs) -> Result<usize, TdError> {
+    let user = system_user()?;
+    let stamp = metrics_stamp()?;
+    let s = next_salt();
+    let project = test_project(db).await?;
+    let pid = project.id;
+    let mut graph = RunGraph::default();
+    let mut producers: Vec<LogicalTableDataVersionDB> = Vec::with_capacity(knobs.publishers);
+
+    for i in 0..knobs.publishers {
+        let coll = db
+            .scoped(pid)
+            .seed()
+            .collection(
+                &CollectionName::try_from(format!("pub_c{s}_{i}").as_str())?,
+                &user,
+            )
+            .await?;
+        let unit = build_unit(
+            db,
+            &coll,
+            &format!("pub_f{s}_{i}"),
+            "out",
+            &[],
+            Some(&stamp),
+            &mut graph,
+        )
+        .await?;
+        producers.push(unit.ltdv);
+    }
+
+    for j in 0..knobs.consumers {
+        let coll = db
+            .scoped(pid)
+            .seed()
+            .collection(
+                &CollectionName::try_from(format!("con_c{s}_{j}").as_str())?,
+                &user,
+            )
+            .await?;
+        let unit = build_unit(
+            db,
+            &coll,
+            &format!("con_f{s}_{j}"),
+            "out",
+            &[],
+            Some(&stamp),
+            &mut graph,
+        )
+        .await?;
+        let producer_ltdv = &producers[j % producers.len().max(1)];
+        graph.lfris.push(build_lfri(&coll, &unit, producer_ltdv)?);
+    }
+
+    graph.flush(db, &pid).await?;
+    Ok(knobs.publishers + knobs.consumers)
+}
+
+/// PFR window/metric stamp applied to seeded runs so they land inside the
+/// `/metrics` window with non-zero out-magnitudes.
+struct MetricsStamp {
+    ended_on: AtTime,
+    bucket: EpochMs,
+}
+
+fn metrics_stamp() -> Result<MetricsStamp, TdError> {
+    Ok(MetricsStamp {
+        ended_on: AtTime::try_from(td_common::datetime::Timestamp::try_from(IN_WINDOW_MS)?)?,
+        bucket: EpochMs::try_from(IN_WINDOW_MS)?,
+    })
+}
+
+/// `dep_refs` are table-name refs resolved within `collection`; the
+/// referenced tables must already exist (seed the producer first).
+async fn make_function(
+    db: &TdPool,
+    collection: &CollectionDB,
+    name: &str,
+    out_table: &str,
+    dep_refs: &[&str],
+) -> Result<FunctionDB, TdError> {
+    let dependencies = if dep_refs.is_empty() {
+        None
+    } else {
+        Some(
+            dep_refs
+                .iter()
+                .map(|r| TableDependencyDto::try_from(*r))
+                .collect::<Result<Vec<_>, _>>()?,
+        )
+    };
+    let create = FunctionRegister::builder()
+        .try_name(name)?
+        .try_description("load fn")?
+        .bundle_id(BundleId::default())
+        .try_snippet("snippet")?
+        .decorator(Decorator::Publisher)
+        .dependencies(dependencies)
+        .triggers(None)
+        .tables(vec![TableNameDto::try_from(out_table)?])
+        .try_runtime_values("rv")?
+        .reuse_frozen_tables(false)
+        .build()?;
+    db.scoped(collection.project_id)
+        .seed()
+        .function(collection, &create)
+        .await
+}
+
+/// Representative ids extracted from a seeded chain graph, used to build the
+/// arguments each chain query takes.
+pub struct ChainHandle {
+    pub execs: Vec<td_objects::types::basic::ExecutionId>,
+    pub fr_ids: Vec<PhysicalFunctionRunId>,
+    pub producer_lfrs: Vec<LogicalFunctionRunId>,
+    pub consumer_function_id: FunctionId,
+    pub producer_function_version_id: FunctionVersionId,
+    pub producer_tdv_id: PhysicalTableDataVersionId,
+    /// Producer LTDV logical ids — partitions for the pointer/versioned reads.
+    pub ltdv_ids: Vec<LogicalTableDataVersionId>,
+    /// A producer output-table id (for `latest_bound_tdv_with_data_for_table`).
+    pub table_id: TableId,
+    /// A seeded collection id (for live reads over `CollectionDB`).
+    pub collection_id: td_objects::types::basic::CollectionId,
+    /// First producer's transaction id, for building a fresh LFRI in the
+    /// Live write cases.
+    pub transaction_id: td_objects::types::basic::TransactionId,
+    /// The dataset's per-test project, for scoping field-less writes in cases.
+    pub project_id: ProjectId,
+    pub before_time: TriggeredOn,
+    pub at: AtTime,
+}
+
+/// Ids captured from one seeded function run.
+struct Unit {
+    function_id: FunctionId,
+    function_version_id: FunctionVersionId,
+    execution_id: td_objects::types::basic::ExecutionId,
+    transaction_id: td_objects::types::basic::TransactionId,
+    pfr_id: PhysicalFunctionRunId,
+    lfr_id: LogicalFunctionRunId,
+    ltdv: LogicalTableDataVersionDB,
+    ptdv_id: PhysicalTableDataVersionId,
+}
+
+/// Build a chain graph: `units` independent collections, each with a producer
+/// (publishes `src`) and a consumer (depends on `src` and consumes the
+/// producer's LTDV via an LFRI) — populating every table the chain queries
+/// scan.
+pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle, TdError> {
+    let user = system_user()?;
+    let project = test_project(db).await?;
+    let pid = project.id;
+    let mut execs = Vec::with_capacity(knobs.units * 2);
+    let mut fr_ids = Vec::with_capacity(knobs.units * 2);
+    let mut producer_lfrs = Vec::with_capacity(knobs.units);
+    let mut ltdv_ids = Vec::with_capacity(knobs.units);
+    let mut table_id: Option<TableId> = None;
+    let mut collection_id: Option<td_objects::types::basic::CollectionId> = None;
+    let mut transaction_id: Option<td_objects::types::basic::TransactionId> = None;
+    let mut first: Option<(FunctionId, FunctionVersionId, PhysicalTableDataVersionId)> = None;
+
+    let mut graph = RunGraph::default();
+    let s = next_salt();
+
+    for i in 0..knobs.units {
+        let coll = db
+            .scoped(pid)
+            .seed()
+            .collection(
+                &CollectionName::try_from(format!("chain_c{s}_{i}").as_str())?,
+                &user,
+            )
+            .await?;
+        if collection_id.is_none() {
+            collection_id = Some(coll.id);
+        }
+        // Producer first: the consumer's dependency ref resolves against its
+        // `src` table.
+        let producer = build_unit(
+            db,
+            &coll,
+            &format!("chain_p{s}_{i}"),
+            "src",
+            &[],
+            None,
+            &mut graph,
+        )
+        .await?;
+        let consumer = build_unit(
+            db,
+            &coll,
+            &format!("chain_q{s}_{i}"),
+            "dst",
+            &["src"],
+            None,
+            &mut graph,
+        )
+        .await?;
+        graph
+            .lfris
+            .push(build_lfri(&coll, &consumer, &producer.ltdv)?);
+
+        execs.push(producer.execution_id.clone());
+        execs.push(consumer.execution_id.clone());
+        fr_ids.push(producer.pfr_id.clone());
+        fr_ids.push(consumer.pfr_id.clone());
+        producer_lfrs.push(producer.lfr_id.clone());
+        ltdv_ids.push(producer.ltdv.id.clone());
+        if table_id.is_none() {
+            table_id = Some(producer.ltdv.table_id);
+            transaction_id = Some(producer.transaction_id.clone());
+        }
+
+        if first.is_none() {
+            first = Some((
+                consumer.function_id,
+                producer.function_version_id.clone(),
+                producer.ptdv_id.clone(),
+            ));
+        }
+    }
+
+    graph.flush(db, &pid).await?;
+
+    let (consumer_function_id, producer_function_version_id, producer_tdv_id) =
+        first.expect("chain_dataset requires units >= 1");
+
+    Ok(ChainHandle {
+        execs,
+        fr_ids,
+        producer_lfrs,
+        consumer_function_id,
+        producer_function_version_id,
+        producer_tdv_id,
+        ltdv_ids,
+        table_id: table_id.expect("chain_dataset requires units >= 1"),
+        collection_id: collection_id.expect("chain_dataset requires units >= 1"),
+        transaction_id: transaction_id.expect("chain_dataset requires units >= 1"),
+        project_id: pid,
+        before_time: TriggeredOn::now(),
+        at: AtTime::now(),
+    })
+}
+
+/// Run-graph rows accumulated across units, then bulk-inserted in FK order.
+#[derive(Default)]
+struct RunGraph {
+    lfrs: Vec<LogicalFunctionRunDB>,
+    pfrs: Vec<PhysicalFunctionRunDB>,
+    lfr_ptrs: Vec<LogicalFunctionRunPointerDB>,
+    ltdvs: Vec<LogicalTableDataVersionDB>,
+    ptdvs: Vec<PhysicalTableDataVersionDB>,
+    ltdv_ptrs: Vec<LogicalTableDataVersionPointerDB>,
+    lfris: Vec<LogicalFunctionRunInputDB>,
+}
+
+impl RunGraph {
+    /// FK-safe order: pointers go after the version rows they reference.
+    async fn flush(&self, db: &TdPool, project: &ProjectId) -> Result<(), TdError> {
+        // Field-less `lfris` rows source their `project_id` from this scope;
+        // the explicitly-stamped rows satisfy the RLS WITH CHECK.
+        let scoped = db.scoped(*project);
+        let db = &scoped;
+        bulk_insert(db, &self.lfrs).await?;
+        bulk_insert(db, &self.pfrs).await?;
+        bulk_insert(db, &self.lfr_ptrs).await?;
+        bulk_insert(db, &self.ltdvs).await?;
+        bulk_insert(db, &self.ptdvs).await?;
+        bulk_insert(db, &self.ltdv_ptrs).await?;
+        bulk_insert(db, &self.lfris).await?;
+        Ok(())
+    }
+}
+
+/// Register a function and its execution/transaction via the Seed API, then
+/// build its `Done` run graph (LFR, PFR, pointers, LTDV, bound PTDV) into
+/// `graph` for deferred bulk insert.
+async fn build_unit(
+    db: &TdPool,
+    collection: &CollectionDB,
+    fn_name: &str,
+    out_table: &str,
+    dep_refs: &[&str],
+    stamp: Option<&MetricsStamp>,
+    graph: &mut RunGraph,
+) -> Result<Unit, TdError> {
+    let func = make_function(db, collection, fn_name, out_table, dep_refs).await?;
+    let pid = collection.project_id;
+    let exec = db.scoped(pid).seed().execution(&func).await?;
+    let trx = db
+        .scoped(pid)
+        .seed()
+        .transaction(&exec, &TransactionKey::try_from("ANY")?)
+        .await?;
+    let set_on = AtTime::try_from(trx.triggered_on)?;
+
+    let lfr = LogicalFunctionRunDB::builder()
+        .project_id(collection.project_id)
+        .group_id(collection.group_id)
+        .collection_id(collection.id)
+        .execution_id(&exec.id)
+        .transaction_id(&trx.id)
+        .function_id(func.function_id)
+        .function_version_id(&func.id)
+        .trigger(Trigger::Manual)
+        .triggered_on(trx.triggered_on)
+        .triggered_by_id(trx.triggered_by_id)
+        .status(LogicalFunctionRunStatus::Done)
+        .build()?;
+    let mut pfr_b = PhysicalFunctionRunDB::builder();
+    pfr_b
+        .project_id(collection.project_id)
+        .collection_id(collection.id)
+        .function_id(func.function_id)
+        .function_version_id(&func.id)
+        .execution_id(&exec.id)
+        .transaction_id(&trx.id)
+        .triggered_on(trx.triggered_on)
+        .triggered_by_id(trx.triggered_by_id)
+        .trigger(Trigger::Manual)
+        .status(PhysicalFunctionRunStatus::from(
+            &LogicalFunctionRunStatus::Done,
+        ));
+    // Metrics datasets stamp the window/magnitude columns; chain datasets
+    // leave them NULL.
+    if let Some(s) = stamp {
+        pfr_b
+            .ended_on(Some(s.ended_on))
+            .ended_on_hour_ms(Some(s.bucket))
+            .ended_on_day_ms(Some(s.bucket))
+            .ended_on_week_ms(Some(s.bucket))
+            .ended_on_month_ms(Some(s.bucket))
+            .metric_table_versions(Some(TableVersionCount::try_from(1)?))
+            .metric_rows(Some(RowCount::try_from(10)?))
+            .metric_data_bytes(Some(ByteCount::try_from(100)?));
+    }
+    let pfr = pfr_b.build()?;
+    graph
+        .lfr_ptrs
+        .push(LogicalFunctionRunPointerDB::build_event(
+            lfr.project_id,
+            &lfr.id,
+            LogicalPointerStatus::Bound,
+            Some(pfr.id.clone()),
+            set_on,
+            trx.triggered_by_id,
+            LogicalPointerReason::InitialDispatch,
+        )?);
+
+    let tables: Vec<TableDB> = db.current().fetch_all::<TableDB>(&func.id).await?;
+    let table = tables
+        .into_iter()
+        .next()
+        .expect("function publishes one output table");
+
+    let ltdv = LogicalTableDataVersionDB::builder()
+        .project_id(collection.project_id)
+        .group_id(collection.group_id)
+        .collection_id(collection.id)
+        .execution_id(&exec.id)
+        .transaction_id(&trx.id)
+        .table_id(table.table_id)
+        .producer_logical_function_run_id(Some(lfr.id.clone()))
+        .function_param_pos(table.function_param_pos)
+        .triggered_on(trx.triggered_on)
+        .triggered_by_id(trx.triggered_by_id)
+        .build()?;
+    // Pending pointer first (lower id), then Bound (higher id wins the
+    // latest-pointer ordering).
+    graph
+        .ltdv_ptrs
+        .push(LogicalTableDataVersionPointerDB::build_event(
+            ltdv.project_id,
+            &ltdv.id,
+            LogicalPointerStatus::Pending,
+            None,
+            set_on,
+            trx.triggered_by_id,
+            LogicalPointerReason::InitialMint,
+        )?);
+    let ptdv = PhysicalTableDataVersionDB::builder()
+        .project_id(collection.project_id)
+        .collection_id(ltdv.collection_id)
+        .table_id(table.table_id)
+        .name(table.name.clone())
+        .table_version_id(table.id)
+        .function_version_id(&table.function_version_id)
+        .has_data(Some(HasData::TRUE))
+        .row_count(Some(RowCount::try_from(10)?))
+        .data_bytes(Some(ByteCount::try_from(100)?))
+        .execution_id(&ltdv.execution_id)
+        .transaction_id(&ltdv.transaction_id)
+        .physical_function_run_id(&pfr.id)
+        .function_param_pos(
+            table
+                .function_param_pos
+                .unwrap_or(TableFunctionParamPos::try_from(0)?),
+        )
+        .triggered_on(pfr.triggered_on)
+        .build()?;
+    graph
+        .ltdv_ptrs
+        .push(LogicalTableDataVersionPointerDB::build_event(
+            ltdv.project_id,
+            &ltdv.id,
+            LogicalPointerStatus::Bound,
+            Some(ptdv.id.clone()),
+            AtTime::try_from(pfr.triggered_on)?,
+            ltdv.triggered_by_id,
+            LogicalPointerReason::InitialDispatch,
+        )?);
+
+    let unit = Unit {
+        function_id: func.function_id,
+        function_version_id: func.id.clone(),
+        execution_id: exec.id.clone(),
+        transaction_id: trx.id.clone(),
+        pfr_id: pfr.id.clone(),
+        lfr_id: lfr.id.clone(),
+        ltdv: ltdv.clone(),
+        ptdv_id: ptdv.id.clone(),
+    };
+    graph.lfrs.push(lfr);
+    graph.pfrs.push(pfr);
+    graph.ltdvs.push(ltdv);
+    graph.ptdvs.push(ptdv);
+    Ok(unit)
+}
+
+/// Build (don't insert) the LFRI linking `consumer`'s LFR to `producer_ltdv`.
+fn build_lfri(
+    collection: &CollectionDB,
+    consumer: &Unit,
+    producer_ltdv: &LogicalTableDataVersionDB,
+) -> Result<LogicalFunctionRunInputDB, TdError> {
+    Ok(LogicalFunctionRunInputDB::builder()
+        .collection_id(collection.id)
+        .execution_id(&consumer.execution_id)
+        .transaction_id(&consumer.transaction_id)
+        .logical_function_run_id(consumer.lfr_id.clone())
+        .requirement_logical_table_data_version_id(Some(producer_ltdv.id.clone()))
+        .requirement_input_idx(Some(InputIdx::try_from(0)?))
+        .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
+        .requirement_version_pos(VersionPos::try_from(0)?)
+        .build()?)
+}

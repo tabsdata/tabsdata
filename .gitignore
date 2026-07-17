@@ -137,6 +137,7 @@ Pipfile.lock
 poetry.lock
 profile_default/
 sdist/
+server/libraries/td-queries/tests/load/baseline.jsonl
 share/python-wheels/
 site
 SOURCETRACK.yaml
