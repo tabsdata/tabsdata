@@ -1421,3 +1421,79 @@ def test_recreate_reuses_recorded_external_name(stores, fs_root, monkeypatch):
     assert (fs_root / "ci_7_inbox").is_dir()
     assert not (fs_root / "ci_9_inbox").exists()
     assert _read(store.domain_path("inbox"))["external_name"] == "ci_7_inbox"
+
+
+# ---- --latch completion markers (waitable background runs) -----------------
+
+
+def test_latch_success_writes_ok_then_latch(stores, fs_root, tmp_path):
+    latch = tmp_path / "latch"
+    rc = tdx._run_dispatch(
+        "tdx-system",
+        tdx._SYS_VERBS,
+        ["create", "--type", "fs", "--sys", "my_fs",
+         "--sys-path", str(fs_root), "-f", "--latch", str(latch)],
+        store.system_dir(None),
+    )
+    assert rc == 0
+    ok = tmp_path / "latch.ok"
+    assert ok.exists()
+    assert not (tmp_path / "latch.err").exists()
+    assert latch.exists()
+    # The latch is touched LAST, so a caller that waits for it to appear is
+    # guaranteed the outcome file is already there to read.
+    assert latch.stat().st_mtime_ns >= ok.stat().st_mtime_ns
+
+
+def test_latch_failure_writes_err_then_latch(stores, tmp_path, monkeypatch):
+    latch = tmp_path / "latch"
+
+    def boom(cmd, verbs, argv):
+        raise DatagenError("provisioning failed")
+
+    monkeypatch.setattr(tdx, "_dispatch", boom)
+    with pytest.raises(DatagenError, match="provisioning failed"):
+        tdx._run_dispatch(
+            "tdx-system",
+            tdx._SYS_VERBS,
+            ["create", "--type", "fs", "--sys", "x", "--latch", str(latch)],
+            store.system_dir(None),
+        )
+    assert (tmp_path / "latch.err").exists()
+    assert not (tmp_path / "latch.ok").exists()
+    assert latch.exists()
+
+
+def test_latch_clears_stale_markers_before_running(stores, fs_root, tmp_path):
+    latch = tmp_path / "latch"
+    # Markers left by a previous run at the same path must not fool a waiter.
+    latch.write_text("stale")
+    (tmp_path / "latch.ok").write_text("stale")
+    (tmp_path / "latch.err").write_text("stale")
+    tdx._run_dispatch(
+        "tdx-system",
+        tdx._SYS_VERBS,
+        ["create", "--type", "fs", "--sys", "my_fs",
+         "--sys-path", str(fs_root), "-f", "--latch", str(latch)],
+        store.system_dir(None),
+    )
+    assert (tmp_path / "latch.ok").exists()
+    assert not (tmp_path / "latch.err").exists()  # the stale .err was cleared
+
+
+def test_latch_rejected_on_non_completion_verb(stores, fs_root, tmp_path):
+    # `--latch` is only for create/destroy/seed/recreate; status must reject it
+    # (and never write a marker).
+    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
+                     "--sys-path", str(fs_root), "-f"])
+    latch = tmp_path / "latch"
+    with pytest.raises(SystemExit):
+        tdx._run_dispatch(
+            "tdx-system",
+            tdx._SYS_VERBS,
+            ["status", "--sys", "my_fs", "--latch", str(latch)],
+            store.system_dir(None),
+        )
+    assert not latch.exists()
+    assert not (tmp_path / "latch.ok").exists()
+    assert not (tmp_path / "latch.err").exists()

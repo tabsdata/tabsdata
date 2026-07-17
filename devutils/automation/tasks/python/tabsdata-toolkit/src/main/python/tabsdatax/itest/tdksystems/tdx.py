@@ -96,6 +96,13 @@ each name is a file in a *store directory* (see the `store` module):
 logical name, so the `info` keys are unprefixed by default; pass `info
 --prefix PREFIX` to emit every key as `<PREFIX>__<KEY>`.
 
+The long-running verbs — `create`, `destroy`, `seed`, `recreate` — accept
+`--latch FILE` to make a background run waitable: on completion the command
+writes `FILE.ok` (success) or `FILE.err` (failure) first, then touches `FILE`
+last. So a caller can `tdx-… --latch F &`, wait for `F` to appear, then read
+whether `F.ok` or `F.err` is present (use a fresh `F` per run — any stale
+markers there are cleared at start, but only after the process boots).
+
 Each `create` writes a *descriptor* — a JSON document stored as an encrypted
 file (AES-256-GCM in PEM armor, keyed by the personal secret; see the
 `descriptor` / `crypto` modules). Every descriptor verb reads that secret from
@@ -804,6 +811,24 @@ def _add_secret_env(p: _ArgumentParser) -> None:
     )
 
 
+def _add_latch(p: _ArgumentParser) -> None:
+    """The `--latch FILE` option carried by the long-running verbs (create /
+    destroy / seed / recreate). It makes the run waitable from a background
+    caller: on completion the command writes the outcome file `FILE.ok`
+    (success) or `FILE.err` (failure) first, then touches `FILE` last (see
+    `_run_dispatch`). A caller can `tdx-… --latch F &`, wait for `F` to appear,
+    then read whether `F.ok` or `F.err` is present. The value is only parsed
+    here so it shows in the verb's -h; the dispatcher does the touching."""
+    p.add_argument(
+        "--latch",
+        default=None,
+        metavar="FILE",
+        help="on completion touch FILE.ok (success) or FILE.err (failure), then "
+        "touch FILE last — so a background caller can wait on FILE and then read "
+        "the outcome",
+    )
+
+
 def _apply_secret(ns) -> None:
     """Point crypto at the verb's `--secret-env` and require it: fails if that
     env var (default $TD_BACKENDS_CRYPTO_KEY) is unset or shorter than 12 chars.
@@ -1148,6 +1173,7 @@ def _sys_create(rest: list[str]) -> int:
     _add_sys_dir(p)
     _add_domain_dir(p)
     _add_secret_env(p)
+    _add_latch(p)
     p.add_argument(
         "-f", "--force", action="store_true", help="recreate if it already exists"
     )
@@ -1518,13 +1544,14 @@ def _sys_names_from_manifest(manifest_path: str, sys_dir: str | None) -> list[st
 
 
 def _sys_batch_ns(
-    prog: str, rest: list[str], *, with_force: bool = False
+    prog: str, rest: list[str], *, with_force: bool = False, with_latch: bool = False
 ) -> argparse.Namespace:
     """Parse a batch-capable system verb (destroy / status): a single `--sys NAME`,
     `--auto ALL|N1,N2,...` for a batch (every system in the store, or a comma list
     of names), or `--sys-manifest FILE|-` for every system in a `tdx-system`
     manifest — mirroring the domain side. Exactly one is required. `with_force`
-    adds `-f/--force` (destroy only). Applies the secret before returning."""
+    adds `-f/--force` and `with_latch` adds `--latch` (destroy only). Applies the
+    secret before returning."""
     p = _ArgumentParser(
         prog=prog, add_help=True, description=f"Reads {_ENCRYPTED_DESC}."
     )
@@ -1554,6 +1581,8 @@ def _sys_batch_ns(
             help="remove the descriptor even if the backend teardown fails "
             "(warns instead of failing)",
         )
+    if with_latch:
+        _add_latch(p)
     _add_sys_dir(p)
     _add_domain_dir(p)
     _add_secret_env(p)
@@ -1593,7 +1622,7 @@ def _sys_destroy(rest: list[str]) -> int:
     (`--auto ALL|N1,N2,...`), or every system in a `tdx-system` manifest
     (`--sys-manifest`). A system still used by domains fails unless -f, which
     cascades — destroying the dependent domains (ignoring failures) first."""
-    args = _sys_batch_ns("tdx-system destroy", rest, with_force=True)
+    args = _sys_batch_ns("tdx-system destroy", rest, with_force=True, with_latch=True)
     if args.sys_manifest:
         return _sys_destroy_from_manifest(args)
     if args.auto is not None:
@@ -1970,6 +1999,7 @@ def _domain_create(rest: list[str]) -> int:
     _add_sys_dir(p)
     _add_domain_dir(p)
     _add_secret_env(p)
+    _add_latch(p)
     p.add_argument(
         "--model",
         default=None,
@@ -2402,6 +2432,7 @@ def _domain_seed(rest: list[str]) -> int:
     )
     _add_domain_locator(p)
     _add_secret_env(p)
+    _add_latch(p)
     p.add_argument(
         "--model",
         required=True,
@@ -2458,7 +2489,7 @@ def _domain_recreate(rest: list[str]) -> int:
     model/data each recorded at create time (so a seeded domain comes back with
     its DDL + data, an empty one comes back empty). Works over `ALL` / a comma
     list; a per-domain failure is reported and the rest still run."""
-    args = _locator_ns("tdx-domain recreate", "domain", rest)
+    args = _locator_ns("tdx-domain recreate", "domain", rest, with_latch=True)
     if _is_multi(args.domain):
         names = _expand_names(
             args.domain, store.domain_dir(args.domain_dir), "env", "--domain"
@@ -2497,7 +2528,9 @@ def _domain_names_from_manifest(
 
 
 def _domain_destroy(rest: list[str]) -> int:
-    args = _domain_batch_ns("tdx-domain destroy", rest, with_force=True)
+    args = _domain_batch_ns(
+        "tdx-domain destroy", rest, with_force=True, with_latch=True
+    )
     if args.domain_manifest:
         names = _domain_names_from_manifest(args.domain_manifest, args.domain_dir)
         return _multi_apply(
@@ -2597,14 +2630,14 @@ def _require_single_domain(name: str) -> None:
 
 
 def _domain_batch_ns(
-    prog: str, rest: list[str], *, with_force: bool = False
+    prog: str, rest: list[str], *, with_force: bool = False, with_latch: bool = False
 ) -> argparse.Namespace:
     """Parse a batch-capable domain verb (destroy / status): a single `--domain
     NAME`, `--auto ALL|N1,N2,...` for a batch (every domain in the store, or a
     comma list of names), or `--domain-manifest FILE|-` for every domain in a
     `tdx-domain` manifest — mirroring `create`'s modes. Exactly one is required.
-    `with_force` adds `-f/--force` (destroy only). Applies the secret before
-    returning."""
+    `with_force` adds `-f/--force` and `with_latch` adds `--latch` (destroy only).
+    Applies the secret before returning."""
     p = _ArgumentParser(
         prog=prog, add_help=True, description=f"Reads {_ENCRYPTED_DESC}."
     )
@@ -2634,6 +2667,8 @@ def _domain_batch_ns(
             help="remove the descriptor even if the backend teardown fails "
             "(warns instead of failing)",
         )
+    if with_latch:
+        _add_latch(p)
     _add_domain_dir(p)
     _add_sys_dir(p)
     _add_secret_env(p)
@@ -2643,11 +2678,17 @@ def _domain_batch_ns(
 
 
 def _locator_ns(
-    prog: str, kind: str, rest: list[str], *, want_format: bool = False
+    prog: str,
+    kind: str,
+    rest: list[str],
+    *,
+    want_format: bool = False,
+    with_latch: bool = False,
 ) -> argparse.Namespace:
-    """Parse a read-verb's `--sys`/`--domain` name (+ its `--…-dir` and
-    `--secret-env`), and `--format` for info. `kind` is "sys" or "domain".
-    Applies the secret before returning, so callers can do I/O immediately."""
+    """Parse a single-target verb's `--sys`/`--domain` name (+ its `--…-dir` and
+    `--secret-env`), `--format` for info, and `--latch` for recreate. `kind` is
+    "sys" or "domain". Applies the secret before returning, so callers can do I/O
+    immediately."""
     p = _ArgumentParser(
         prog=prog, add_help=True, description=f"Reads {_ENCRYPTED_DESC}."
     )
@@ -2655,6 +2696,8 @@ def _locator_ns(
         _add_sys_locator(p)
     else:
         _add_domain_locator(p)
+    if with_latch:
+        _add_latch(p)
     if want_format:
         p.add_argument(
             "--format",
@@ -2759,18 +2802,75 @@ def _dispatch(cmd: str, verbs: dict, argv: list[str]) -> int:
 # straight to the terminal.
 _LOGGED_VERBS = {"create", "destroy", "status", "restart", "recreate", "seed"}
 
+# Verbs that accept `--latch FILE` (see `_add_latch`): the long-running ones a
+# caller may want to run in the background and wait on.
+_LATCH_VERBS = {"create", "destroy", "seed", "recreate"}
+
+
+def _latch_files(latch: Path) -> tuple[Path, Path]:
+    """The (``<latch>.ok``, ``<latch>.err``) outcome files for a `--latch` path."""
+    return Path(f"{latch}.ok"), Path(f"{latch}.err")
+
+
+def _clear_latch(latch: Path) -> None:
+    """Remove any marker files a previous run left at this path, so a waiter only
+    ever observes markers produced by this invocation."""
+    ok, err = _latch_files(latch)
+    for p in (latch, ok, err):
+        try:
+            p.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _touch_latch(latch: Path, *, ok: bool) -> None:
+    """Signal completion for a background caller: create the outcome file
+    (``<latch>.ok`` on success, ``<latch>.err`` on failure) FIRST, then touch
+    ``<latch>`` LAST — so a caller that waits for ``<latch>`` to appear is
+    guaranteed the outcome file is already there to read. Best-effort: a
+    filesystem error here is warned but must not mask the command's own result
+    (nor turn a successful provision into a failure)."""
+    ok_file, err_file = _latch_files(latch)
+    try:
+        latch.parent.mkdir(parents=True, exist_ok=True)
+        (ok_file if ok else err_file).touch()
+        latch.touch()
+    except OSError as exc:
+        print(f">>> warning: could not write latch {latch}: {exc}", file=sys.stderr)
+
 
 def _run_dispatch(cmd: str, verbs: dict, argv: list[str], log_dir: Path) -> int:
     """Dispatch `argv`, routing a logged verb's detail into a fresh timestamped
     log under `log_dir` (the console then shows only brief, colored progress);
     every other verb prints straight to the terminal. A bare `-h`/`--help` is
-    left un-redirected so no empty log is minted just to print help."""
+    left un-redirected so no empty log is minted just to print help.
+
+    A `--latch FILE` on a create/destroy/seed/recreate verb makes the run
+    waitable: the outcome file `FILE.ok`/`FILE.err` is written first, then `FILE`
+    is touched last, so a background caller can wait for `FILE` then read which
+    outcome is present (see `_add_latch`)."""
     verb = argv[0] if argv else ""
     wants_help = any(a in ("-h", "--help") for a in argv[1:])
-    if verb in _LOGGED_VERBS and verb in verbs and not wants_help:
-        with console.activate(log_dir):
-            return _dispatch(cmd, verbs, argv)
-    return _dispatch(cmd, verbs, argv)
+    latch = None
+    if verb in _LATCH_VERBS and not wants_help:
+        raw = _extract_opt(argv, "--latch")
+        if raw:
+            latch = Path(raw)
+            _clear_latch(latch)
+    logged = verb in _LOGGED_VERBS and verb in verbs and not wants_help
+    try:
+        if logged:
+            with console.activate(log_dir):
+                rc = _dispatch(cmd, verbs, argv)
+        else:
+            rc = _dispatch(cmd, verbs, argv)
+    except BaseException:
+        if latch is not None:
+            _touch_latch(latch, ok=False)
+        raise
+    if latch is not None:
+        _touch_latch(latch, ok=(rc == 0))
+    return rc
 
 
 def _main_system() -> int:
