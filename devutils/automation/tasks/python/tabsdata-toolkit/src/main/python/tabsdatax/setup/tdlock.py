@@ -37,6 +37,8 @@ def write_requirements_lock(requirements, output_path, cwd=None):
             command,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=300,
             cwd=cwd,
         )

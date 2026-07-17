@@ -49,42 +49,11 @@ spec:
         # runAsUser: 1000
         # runAsGroup: 1000
         # fsGroup: 1000
-      initContainers:
-      - name: td-probe
-        image: /dev/null
-        imagePullPolicy: IfNotPresent
-        command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/python${{system:tdk_exe_suffix}}"]
-        args:
-          - -c
-          - "import os,sys\ndef show(lbl,p):\n    try: print('[td-probe]',lbl,repr(p),'->',sorted(os.listdir(p)))\n    except Exception as e: print('[td-probe]',lbl,repr(p),'ERR',type(e).__name__,e)\nr=os.environ.get('CONTAINER_ROOT','')\nprint('[td-probe] CONTAINER_ROOT',repr(r))\nprint('[td-probe] sys.executable',repr(sys.executable))\nprint('[td-probe] sys.prefix',repr(sys.prefix))\nprint('[td-probe] os.name',os.name,'sep',repr(os.sep))\np=os.path.join(r,'tabsdata','pyenv')\nshow('pyenv',p)\nfor s in ('Scripts','bin'): show(s,os.path.join(p,s))\nprint('[td-probe] PATH',os.environ.get('PATH',''))\n"
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: ["ALL"]
-        env:
-          - name: CONTAINER_ROOT
-            value: "$(KM_CONTAINER_ROOT)"
-        volumeMounts:
-          - name: pyenv
-            mountPath: /tabsdata/pyenv
-            readOnly: true
       containers:
         - name: inspector
           image: /dev/null
           imagePullPolicy: IfNotPresent
-          command: ["sh", "-c"]
-          args:
-            - |
-              set -e
-              for folder in pods configs; do
-                dir="${KM_CONTAINER_ROOT}/tabsdata/${folder}"
-                echo "Reading mounted '${folder}' folder under ${dir}"
-                for f in "${dir}"/*; do
-                  [ -f "$f" ] || continue
-                  printf '[inspector]   %s/%s = %s\n' "${folder}" "$(basename "$f")" "$(cat "$f")"
-                done
-              done
-              echo "Done!"
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_inspector${{system:tdk_exe_suffix}}"]
           resources:
             requests:
               cpu: "100m"

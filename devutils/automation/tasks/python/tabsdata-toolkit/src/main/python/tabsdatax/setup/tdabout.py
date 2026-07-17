@@ -60,6 +60,8 @@ def _run_git(arguments, timeout=5, cwd=None):
             ["git"] + arguments,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             cwd=cwd,
         )
@@ -99,6 +101,8 @@ def _obtain_rust_version():
             ["rustc", "--version", "--verbose"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -168,6 +172,8 @@ def _capture_node_information():
             ["node", "--version"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -498,6 +504,8 @@ def _inject_wheel_metadata(wheel_path):
                 check=True,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             unpacked_wheels = list(temp_path.glob("*"))
             if not unpacked_wheels:
@@ -526,6 +534,8 @@ def _inject_wheel_metadata(wheel_path):
                     check=True,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                 )
                 repacked_wheels = list(repacked_wheel_folder.glob("*.whl"))
                 if repacked_wheels:

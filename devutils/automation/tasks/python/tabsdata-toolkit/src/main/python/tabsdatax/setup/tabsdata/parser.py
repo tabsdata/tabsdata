@@ -15,7 +15,7 @@ def parse_python_file(path: str | Path) -> ast.Module | None:
     try:
         with open(path, "r", encoding="utf-8") as source:
             content = source.read()
-    except OSError as e:
+    except (OSError, UnicodeDecodeError) as e:
         logger.debug(f"Could not read {path}: {e}")
         return None
     try:

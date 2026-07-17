@@ -33,7 +33,7 @@ const TRASH_RENAME_BACKOFF: Duration = Duration::from_millis(250);
 #[cfg(not(windows))]
 const TRASH_RENAME_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(windows)]
-const TRASH_RENAME_TIMEOUT: Duration = Duration::from_secs(300);
+const TRASH_RENAME_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Args)]
 pub struct TrashArguments {

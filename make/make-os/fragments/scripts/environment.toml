@@ -144,6 +144,10 @@ env_scripts = [
     debug "🤞 Building on cross: '${td_build_on_cross}'"
 
     set_env RUSTFLAGS ""
+    os_family = os_family
+    if eq ${os_family} "windows"
+        set_env RUSTFLAGS "-Clink-arg=/STACK:16777216"
+    end
     td-profile = set ${profile}
     if is_empty ${profile}
         build-folder = set "debug"
@@ -156,7 +160,6 @@ env_scripts = [
             build-folder = set ${profile}
             is_assembly = eq ${profile} "assembly"
             if ${is_assembly}
-                os_family = os_family
                 flags = readfile ${project_tabsdata_base_folder}/.cargo/rustflags-${os_family}.cfg
                 rust-flags = replace ${flags} "\n" " "
                 set_env RUSTFLAGS ${rust-flags}

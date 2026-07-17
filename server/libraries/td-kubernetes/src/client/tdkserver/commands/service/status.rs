@@ -13,7 +13,7 @@ use crate::cwarn;
 use crate::kube::api::cronjob::list_cronjobs;
 use crate::kube::api::job::list_jobs;
 use crate::kube::api::pod::list_pods;
-use crate::runtime::provider::provider_for_instance;
+use crate::runtime::provider::provider_for_instance_any_state;
 
 pub async fn command_status(
     arguments: InstanceNameArguments,
@@ -22,7 +22,7 @@ pub async fn command_status(
     let pins = PinContext::pins();
     let instance = resolved_instance(arguments.instance, &pins);
     let verbose = globals.verbose;
-    let provider = provider_for_instance(instance.value, verbose, None).await?;
+    let provider = provider_for_instance_any_state(instance.value, verbose).await?;
     if !provider.cluster_alive().await {
         cwarn!(
             "Instance '{}' is not running.",

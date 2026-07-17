@@ -18,7 +18,7 @@ use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::CommandResult;
 use crate::cwarn;
 use crate::runtime::provider::outcome::{ClusterStopOutcome, InstanceStopOutcome};
-use crate::runtime::provider::provider_for_instance;
+use crate::runtime::provider::provider_for_instance_any_state;
 
 #[derive(Debug, Clone, Args)]
 pub struct StopArguments {
@@ -78,7 +78,7 @@ pub async fn command_stop(arguments: StopArguments, globals: &GlobalArguments) -
         return Ok(());
     }
 
-    let provider = provider_for_instance(instance.value, verbose, None).await?;
+    let provider = provider_for_instance_any_state(instance.value, verbose).await?;
     provider.ensure_stoppable_service().await?;
 
     if provider.service_dead().await {

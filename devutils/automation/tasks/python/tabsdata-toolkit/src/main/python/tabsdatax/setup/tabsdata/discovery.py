@@ -45,6 +45,8 @@ def discover_tabsdata_commands(
         for name in sorted(files):
             if not name.endswith(".py"):
                 continue
+            if name.startswith("."):
+                continue
             path = os.path.join(root, name)
             tree = parse_python_file(path)
             if tree is None:

@@ -523,8 +523,28 @@ pub async fn provider_for_instance(
     verbose: bool,
     loglevel: Option<LogLevel>,
 ) -> CommandResult<Box<dyn Provider>> {
+    provider_for_instance_inner(instance, verbose, loglevel, true).await
+}
+
+pub async fn provider_for_instance_any_state(
+    instance: Option<String>,
+    verbose: bool,
+) -> CommandResult<Box<dyn Provider>> {
+    provider_for_instance_inner(instance, verbose, None, false).await
+}
+
+async fn provider_for_instance_inner(
+    instance: Option<String>,
+    verbose: bool,
+    loglevel: Option<LogLevel>,
+    require_created: bool,
+) -> CommandResult<Box<dyn Provider>> {
     let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
-    let mut settings = InstanceSettings::load_required(&instance, &[InstanceState::Created])?;
+    let mut settings = if require_created {
+        InstanceSettings::load_required(&instance, &[InstanceState::Created])?
+    } else {
+        InstanceSettings::load(&instance)?
+    };
     if let Some(loglevel) = loglevel {
         if settings.provider != ClusterProvider::Kminus {
             return Err(ProviderError::ArgumentNotValidForProvider {

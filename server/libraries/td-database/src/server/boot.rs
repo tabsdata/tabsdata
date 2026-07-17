@@ -12,6 +12,7 @@ use crate::error::DbError;
 use crate::pool::connect::redacted_url;
 use postgresql_embedded::{PostgreSQL, Settings, VersionReq};
 use std::path::Path;
+use std::time::Duration;
 use tracing::{info, warn};
 use url::Url;
 
@@ -22,6 +23,9 @@ const EMBEDDED_POSTGRES_VERSION: &str = env!("POSTGRESQL_VERSION");
 
 /// PID file written by postgres on start and removed on clean shutdown.
 const POSTMASTER_PID_FILE: &str = "postmaster.pid";
+
+/// Timeout for the liveness probe against the postmaster's recorded port.
+const POSTMASTER_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Status line (8th line of `postmaster.pid`) written only once the postmaster
 /// accepts connections; `initdb`'s bootstrap backend writes none at all.
@@ -39,11 +43,17 @@ impl ServerHandle {
     /// Stop the owned server with an awaited `pg_ctl stop --wait`. Consumes the
     /// handle so the subsequent drop is a no-op.
     pub async fn stop(self) -> Result<(), DbError> {
-        self.server
+        let data_dir = self.server.settings().data_dir.clone();
+        let outcome = self
+            .server
             .stop()
             .await
-            .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
-        info!("embedded postgres stopped (owned)");
+            .map_err(|e| DbError::EmbeddedPostgres(e.to_string()));
+        // Whether or not `pg_ctl stop` succeeded, a pid file left by a killed or
+        // crashed server must not survive to block the next boot.
+        clear_stale_postmaster(&data_dir);
+        outcome?;
+        info!("Embedded postgres stopped (owned).");
         Ok(())
     }
 }
@@ -114,9 +124,10 @@ async fn boot(mut server: PostgreSQL) -> Result<Url, DbError> {
 /// responsible for not booting over a server it wants to keep; a boot that
 /// loses a race to a running postmaster fails cleanly (see [`boot`]).
 pub(crate) async fn boot_detached(cfg: &BootConfig) -> Result<(), DbError> {
+    clear_stale_postmaster(&cfg.data_dir_or_default());
     let url = boot(PostgreSQL::new(boot_settings(cfg)?)).await?;
     info!(
-        "embedded postgres started, listening at {}",
+        "Embedded postgres started, listening at {}.",
         redacted_url(&url)
     );
     Ok(())
@@ -128,13 +139,26 @@ pub(crate) async fn boot_detached(cfg: &BootConfig) -> Result<(), DbError> {
 /// pre-existing postmaster: the owning process must boot the server it owns.
 /// For the foreground `serve` runtime, not the detached `start`/tests path.
 pub(super) async fn boot_owned(cfg: &BootConfig) -> Result<ServerHandle, DbError> {
-    // A postmaster left running on this data directory (for example, an orphan
-    // from a previous run that exited without stopping it) would make
-    // `pg_ctl start` fail. Stop it first so this process starts and owns a
-    // fresh server.
-    if read_postmaster(&cfg.data_dir_or_default()).is_some() {
-        warn!("embedded postgres already running on the data dir; stopping it to take ownership");
-        stop_detached(cfg).await?;
+    // A postmaster left on this data directory would make `pg_ctl start` fail.
+    // A force-killed server leaves a pid file still marked "ready", so trust a
+    // live TCP connection, not the file: if the recorded port is actually
+    // accepting, stop the running server to take ownership; otherwise the pid
+    // file is stale and is removed so a fresh server can boot.
+    let data_dir = cfg.data_dir_or_default();
+    match read_postmaster(&data_dir) {
+        Some(pm) if postmaster_listening(&pm) => {
+            warn!(
+                "Embedded postgres is already running on the data dir; stopping it to take ownership."
+            );
+            stop_detached(cfg).await?;
+        }
+        Some(_) => {
+            warn!(
+                "The embedded postgres pid file is present but nothing is listening; treating it as stale."
+            );
+            clear_stale_postmaster(&data_dir);
+        }
+        None => {}
     }
     let mut server = PostgreSQL::new(boot_settings(cfg)?);
     server
@@ -148,7 +172,7 @@ pub(super) async fn boot_owned(cfg: &BootConfig) -> Result<ServerHandle, DbError
     let url = Url::parse(&server.settings().url("postgres"))
         .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
     info!(
-        "embedded postgres started (owned), listening at {}",
+        "Embedded postgres started (owned), listening at {}.",
         redacted_url(&url)
     );
     Ok(ServerHandle { server })
@@ -170,7 +194,7 @@ pub(super) async fn start_detached(cfg: &BootConfig) -> Result<(), DbError> {
                 configured,
             });
         }
-        info!("embedded postgres already running; reusing it");
+        info!("Embedded postgres is already running; reusing it.");
         return Ok(());
     }
     boot_detached(cfg).await
@@ -181,7 +205,7 @@ pub(super) async fn start_detached(cfg: &BootConfig) -> Result<(), DbError> {
 /// down, or the drift [`start_detached`] refuses could never be recovered.
 pub(super) async fn stop_detached(cfg: &BootConfig) -> Result<(), DbError> {
     let Some(pm) = read_postmaster(&cfg.data_dir_or_default()) else {
-        info!("embedded postgres not running; nothing to stop");
+        info!("Embedded postgres is not running; nothing to stop.");
         return Ok(());
     };
     if let Some(configured) = cfg.port
@@ -190,7 +214,8 @@ pub(super) async fn stop_detached(cfg: &BootConfig) -> Result<(), DbError> {
     {
         warn!(
             running = pm.port,
-            configured, "running server's port differs from the configured one; stopping it anyway"
+            configured,
+            "The running server's port differs from the configured one; stopping it anyway."
         );
     }
     let mut server = PostgreSQL::new(base_settings(cfg));
@@ -200,11 +225,15 @@ pub(super) async fn stop_detached(cfg: &BootConfig) -> Result<(), DbError> {
         .setup()
         .await
         .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
-    server
+    let outcome = server
         .stop()
         .await
-        .map_err(|e| DbError::EmbeddedPostgres(e.to_string()))?;
-    info!("embedded postgres stopped");
+        .map_err(|e| DbError::EmbeddedPostgres(e.to_string()));
+    // Whether or not `pg_ctl stop` succeeded, a pid file left by a killed or
+    // crashed server must not survive to block the next boot.
+    clear_stale_postmaster(&cfg.data_dir_or_default());
+    outcome?;
+    info!("Embedded postgres stopped.");
     Ok(())
 }
 
@@ -220,6 +249,41 @@ struct Postmaster {
 impl Postmaster {
     fn accepting(&self) -> bool {
         self.pid > 0 && self.ready
+    }
+}
+
+/// Whether a real server is accepting connections on the postmaster's recorded
+/// port. A force-killed server leaves a pid file still marked "ready", so this
+/// TCP probe — not the file's status line — is the source of truth for
+/// liveness.
+fn postmaster_listening(pm: &Postmaster) -> bool {
+    if !pm.accepting() {
+        return false;
+    }
+    let address = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, pm.port));
+    std::net::TcpStream::connect_timeout(&address, POSTMASTER_PROBE_TIMEOUT).is_ok()
+}
+
+/// Remove a `postmaster.pid` whose recorded server is not actually listening
+/// (killed or crashed). A leftover file makes `pg_ctl start` refuse to boot even
+/// though no postmaster is running. A live server is never disturbed.
+fn clear_stale_postmaster(data_dir: &Path) {
+    let Some(pm) = read_postmaster(data_dir) else {
+        return;
+    };
+    if postmaster_listening(&pm) {
+        return;
+    }
+    let pid_file = data_dir.join(POSTMASTER_PID_FILE);
+    match std::fs::remove_file(&pid_file) {
+        Ok(()) => warn!(
+            "Removed stale postmaster pid file at {}.",
+            pid_file.display()
+        ),
+        Err(error) => warn!(
+            "Could not remove stale postmaster pid file at {}: {error}.",
+            pid_file.display()
+        ),
     }
 }
 
@@ -251,6 +315,24 @@ mod tests {
         )
         .unwrap();
         dir
+    }
+
+    #[test]
+    fn clear_stale_postmaster_removes_ready_file_with_no_listener() {
+        // A force-killed server leaves the file marked "ready" on a port that
+        // nothing is listening on: it must be removed.
+        let dir = fake_postmaster(7433, "ready");
+        clear_stale_postmaster(&dir);
+        assert!(read_postmaster(&dir).is_none());
+    }
+
+    #[test]
+    fn clear_stale_postmaster_keeps_file_with_live_listener() {
+        let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let dir = fake_postmaster(port, "ready");
+        clear_stale_postmaster(&dir);
+        assert!(read_postmaster(&dir).is_some());
     }
 
     #[test]

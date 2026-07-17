@@ -3,7 +3,7 @@
 //
 
 use std::io::{self, BufRead, Write};
-use std::sync::mpsc;
+use std::sync::{Mutex, OnceLock, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -85,27 +85,35 @@ enum LineOutcome {
     Closed,
 }
 
+static STDIN_LINES: OnceLock<Mutex<mpsc::Receiver<LineOutcome>>> = OnceLock::new();
+
+fn stdin_lines() -> &'static Mutex<mpsc::Receiver<LineOutcome>> {
+    STDIN_LINES.get_or_init(|| {
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let stdin = io::stdin();
+            loop {
+                let mut line = String::new();
+                let outcome = match stdin.lock().read_line(&mut line) {
+                    Ok(0) | Err(_) => LineOutcome::Closed,
+                    Ok(_) => LineOutcome::Line(line),
+                };
+                let closed = matches!(outcome, LineOutcome::Closed);
+                if sender.send(outcome).is_err() || closed {
+                    break;
+                }
+            }
+        });
+        Mutex::new(receiver)
+    })
+}
+
 pub fn prompt_yes_no(message: &str) -> Confirmation {
     prompt_yes_no_with_timeout(message, PROMPT_TIMEOUT)
 }
 
 fn prompt_yes_no_with_timeout(message: &str, timeout: Duration) -> Confirmation {
-    let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
-        let stdin = io::stdin();
-        loop {
-            let mut line = String::new();
-            let outcome = match stdin.lock().read_line(&mut line) {
-                Ok(0) | Err(_) => LineOutcome::Closed,
-                Ok(_) => LineOutcome::Line(line),
-            };
-            let closed = matches!(outcome, LineOutcome::Closed);
-            if sender.send(outcome).is_err() || closed {
-                break;
-            }
-        }
-    });
-
+    let receiver = stdin_lines().lock().unwrap();
     let started = std::time::Instant::now();
     loop {
         print!("{message} [{VALUE_Y}/{VALUE_YES}/{VALUE_N}/{VALUE_NO}]: ");

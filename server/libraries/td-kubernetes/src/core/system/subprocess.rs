@@ -8,7 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use sysinfo::{Pid, ProcessStatus, ProcessesToUpdate, System};
-use tracing::info;
+use tracing::{info, warn};
 
 pub fn run(command: &mut SystemCommand, label: &str, verbose: bool) -> io::Result<Output> {
     if !verbose {
@@ -96,9 +96,20 @@ pub fn terminate_process(pid: u32, grace: Duration) {
     let descendants = collect_descendants(pid);
     request_graceful_shutdown(pid, &descendants);
     if wait_for_tree_exit(pid, &descendants, grace) {
+        warn!(pid, "Process tree terminated gracefully");
         return;
     }
+    warn!(
+        pid,
+        grace_secs = grace.as_secs(),
+        "Process tree did not exit within grace period; force-killing"
+    );
     force_kill_tree(pid, &descendants);
+    if is_alive(pid) {
+        warn!(pid, "Process still alive after force-kill");
+    } else {
+        warn!(pid, "Process tree force-killed");
+    }
 }
 
 fn collect_descendants(root: u32) -> Vec<u32> {

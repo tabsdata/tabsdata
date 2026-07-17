@@ -12,11 +12,13 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use indicatif::MultiProgress;
 use once_cell::sync::OnceCell;
+use std::net::{Ipv4Addr, SocketAddr, TcpStream};
+use std::time::Duration;
 use td_common::os::{EXE_SUFFIX, name_program};
 use td_common::settings::DEFAULT_INSTANCE;
 use td_common::status::ExitStatus::NoAction;
 use td_python::python::{get_python_scripts_folder, resolve_python_binary};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, DATABASE_HOST_LOOPBACK, DEFAULT_NAMESPACE, FOLDER_CLUSTER,
@@ -46,7 +48,10 @@ use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::launcher::{provision_database, start_database, stop_database};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
-use crate::runtime::instance::ports::{apply_ports, wait_for_ports_released};
+use crate::runtime::instance::ports::{
+    PORT_RELEASE_AFTER_KILL_TIMEOUT, apply_ports, database_port, kill_port_holders,
+    wait_for_ports_released, wait_for_ports_released_within,
+};
 use crate::runtime::instance::profile::{
     Profile, load_profile, parse_from_configmaps, read_family_configmaps, render_for_configmaps,
     resolve_kprofile_path,
@@ -100,6 +105,8 @@ impl DbManagerCommand {
 
 const DBMANAGER_BINARY: &str = "td_dbmanager";
 const PYVENV_BINARY: &str = "td_pyvenv";
+const POSTMASTER_PID_FILE: &str = "postmaster.pid";
+const DATABASE_PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 const APISERVER_SERVICE_CONFIG_KEY: &str = "apiserver.service.yaml";
 const APISERVER_DATABASE_CONFIG_KEY: &str = "apiserver.database.yaml";
 const APISERVER_STORAGE_CONFIG_KEY: &str = "apiserver.storage.yaml";
@@ -239,6 +246,32 @@ impl KminusProvider {
             .into());
         }
         Ok(())
+    }
+
+    fn clear_stale_database_pid(&self) {
+        let pid_file = self
+            .folder
+            .join(FOLDER_REPOSITORY)
+            .join(FOLDER_DATABASE)
+            .join(POSTMASTER_PID_FILE);
+        if !pid_file.is_file() {
+            return;
+        }
+        if let Ok(settings) = InstanceSettings::load(&self.name) {
+            if let Some(port) = database_port(&settings.ports) {
+                let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+                if TcpStream::connect_timeout(&address, DATABASE_PROBE_TIMEOUT).is_ok() {
+                    return;
+                }
+            }
+        }
+        match fs::remove_file(&pid_file) {
+            Ok(()) => warn!("Removed stale database pid file at {}.", pid_file.display()),
+            Err(error) => warn!(
+                "Could not remove stale database pid file at {}: {error}.",
+                pid_file.display()
+            ),
+        }
     }
 }
 
@@ -503,15 +536,21 @@ impl Provider for KminusProvider {
             return Ok(ClusterStopOutcome::AlreadyStopped);
         }
         if let Ok(settings) = InstanceSettings::load(&self.name) {
-            if let Some(entry) = wait_for_ports_released(&settings.ports) {
-                step.fail();
-                return Err(ProviderError::PortReleaseTimeout {
-                    port: entry.port,
-                    caption: entry.caption.clone(),
+            if wait_for_ports_released(&settings.ports).is_some() {
+                kill_port_holders(&settings.ports);
+                if let Some(entry) =
+                    wait_for_ports_released_within(&settings.ports, PORT_RELEASE_AFTER_KILL_TIMEOUT)
+                {
+                    step.fail();
+                    return Err(ProviderError::PortReleaseTimeout {
+                        port: entry.port,
+                        caption: entry.caption.clone(),
+                    }
+                    .into());
                 }
-                .into());
             }
         }
+        self.clear_stale_database_pid();
         step.done("Kminus cluster stopped");
         Ok(ClusterStopOutcome::Stopped)
     }

@@ -17,6 +17,9 @@ use tracing::debug;
 const PYTHON: &str = "python";
 const PYTHON_SCRIPTS_QUERY: &str = "import sysconfig; print(sysconfig.get_path('scripts'))";
 
+const LIBEXEC_DIR: &str = "libexec";
+const TABSDATA_DIR: &str = "tabsdata";
+
 const PYVENV_COMMAND_PYTHON: &str = "python";
 const PYVENV_COMMAND_SCRIPTS: &str = "scripts";
 const PYVENV_ARGUMENT_TARGET: &str = "--target";
@@ -53,10 +56,22 @@ pub fn resolve_python_binary(program_name: &str) -> Result<PathBuf, TdError> {
             program_name,
             program_path.display()
         );
-        Ok(program_path)
-    } else {
-        Err(TdError::new(PythonBinaryNotFound(program_path)))
+        return Ok(program_path);
     }
+    if let Some(prefix) = scripts_folder.parent() {
+        let libexec_path = prefix.join(LIBEXEC_DIR).join(TABSDATA_DIR).join(&program);
+        if libexec_path.exists() {
+            debug!(
+                program = %program_name,
+                path = %libexec_path.display(),
+                "python.resolve: {} -> {}",
+                program_name,
+                libexec_path.display()
+            );
+            return Ok(libexec_path);
+        }
+    }
+    Err(TdError::new(PythonBinaryNotFound(program_path)))
 }
 
 pub fn resolve_pyenv_python(pyvenv: &Path, target: &Path) -> Result<PathBuf, TdError> {

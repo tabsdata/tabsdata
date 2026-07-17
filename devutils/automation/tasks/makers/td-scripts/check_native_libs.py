@@ -143,6 +143,31 @@ class LibInfo:
         return self.is_static or self.is_system
 
 
+MACHO_MAGICS = {
+    b"\xfe\xed\xfa\xce",
+    b"\xfe\xed\xfa\xcf",
+    b"\xce\xfa\xed\xfe",
+    b"\xcf\xfa\xed\xfe",
+    b"\xca\xfe\xba\xbe",
+    b"\xbe\xba\xfe\xca",
+}
+
+
+def detect_file_type_by_magic(filepath: str) -> str | None:
+    try:
+        with open(filepath, "rb") as handle:
+            magic = handle.read(4)
+    except OSError:
+        return None
+    if magic[:2] == b"MZ":
+        return "pe"
+    if magic == b"\x7fELF":
+        return "elf"
+    if magic in MACHO_MAGICS:
+        return "macho"
+    return None
+
+
 def detect_file_type(filepath: str) -> str | None:
     try:
         result = subprocess.run(
@@ -162,7 +187,7 @@ def detect_file_type(filepath: str) -> str | None:
         if "PE32" in output:
             return "pe"
     except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+        return detect_file_type_by_magic(filepath)
     return None
 
 
