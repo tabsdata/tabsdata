@@ -84,6 +84,9 @@ _PYTHON_VERSION_KEY = "pythonVersion"
 # the universally-safe entries.
 _IGNORE_PATTERNS = (
     "__pycache__",
+    "*.pyc",
+    "*.pyo",
+    "*.pyd",
     ".git",
     ".hg",
     ".svn",
@@ -354,4 +357,9 @@ def _iter_project_entries(project_root: Path, include: list[str] | None) -> list
     if include is not None:
         wanted = set(include)
         entries = [e for e in entries if e.name in wanted]
-    return entries
+    ignored = set(
+        shutil.ignore_patterns(*_IGNORE_PATTERNS)(
+            str(project_root), [e.name for e in entries]
+        )
+    )
+    return [e for e in entries if e.name not in ignored]
