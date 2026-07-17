@@ -1453,6 +1453,67 @@ def test_domain_prefix_explicit_option(stores, fs_root):
     assert (fs_root / "run5_inbox").is_dir()
 
 
+def test_name_in_system_overrides_entity_name(stores, fs_root):
+    # --name-in-system names the external entity verbatim and wins over
+    # --domain-prefix (the prefixed name is never created).
+    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "my_fs", "--domain", "orders",
+                        "--domain-prefix", "ci_7_",
+                        "--name-in-system", "raw_orders", "-f"])
+    assert _read(store.domain_path("orders"))["external_name"] == "raw_orders"
+    assert (fs_root / "raw_orders").is_dir()
+    assert not (fs_root / "ci_7_orders").exists()
+
+
+def test_name_in_system_absent_keeps_default_naming(stores, fs_root):
+    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox",
+                        "--domain-prefix", "ci_7_", "-f"])
+    assert _read(store.domain_path("inbox"))["external_name"] == "ci_7_inbox"
+    assert (fs_root / "ci_7_inbox").is_dir()
+
+
+def test_name_in_system_reused_on_recreate(stores, fs_root, monkeypatch):
+    # The verbatim name is stamped as external_name, so recreate rebuilds the
+    # SAME entity even after the build identity changes.
+    monkeypatch.setenv("TD_BUILD_NUMBER", "7")
+    tdx._sys_create(["--type", "fs", "--sys", "a",
+                     "--sys-path", str(fs_root), "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "orders",
+                        "--name-in-system", "raw_orders", "-f"])
+    monkeypatch.setenv("TD_BUILD_NUMBER", "9")
+    assert tdx._domain_recreate(["--domain", "orders"]) == 0
+    assert _read(store.domain_path("orders"))["external_name"] == "raw_orders"
+    assert (fs_root / "raw_orders").is_dir()
+
+
+def test_name_in_system_rejected_in_batch_modes(stores, fs_root):
+    tdx._sys_create(["--type", "fs", "--sys", "a",
+                     "--sys-path", str(fs_root), "-f"])
+    for extra in (["--auto", "a"], ["--domain-manifest", "-"]):
+        with pytest.raises(DatagenError, match="name-in-system"):
+            tdx._domain_create([*extra, "--name-in-system", "x"])
+
+
+def test_name_in_system_via_manifest_entry_key(stores, fs_root, tmp_path):
+    # A manifest entry carries `name-in-system` per entry (the CLI flag is for
+    # single create only); it reaches the single-create path and names the entity.
+    tdx._sys_create(["--type", "fs", "--sys", "mysys",
+                     "--sys-path", str(fs_root), "-f"])
+    m = tmp_path / "domains.yaml"
+    m.write_text(
+        "- name: orders\n  sys: mysys\n  name-in-system: raw_orders\n  force: true\n"
+    )
+    assert tdx._domain_create(
+        ["--domain-manifest", str(m), "--domain-prefix", "ci_"]
+    ) == 0
+    assert _read(store.domain_path("orders"))["external_name"] == "raw_orders"
+    assert (fs_root / "raw_orders").is_dir()
+    assert not (fs_root / "ci_orders").exists()
+
+
 def test_recreate_reuses_recorded_external_name(stores, fs_root, monkeypatch):
     # A domain created under one build identity keeps that entity name on
     # recreate — even if the build number has since changed — so recreate

@@ -48,13 +48,16 @@
                                                     # destroy stops the tunnel
 
     tdx-domain create  --sys NAME [--domain NAME] [--model MODEL [--data xs|..|xl]] \\
-                       [--domain-prefix PREFIX] [--sys-dir DIR] [--domain-dir DIR]
+                       [--domain-prefix PREFIX | --name-in-system NAME] \\
+                       [--sys-dir DIR] [--domain-dir DIR]
                                                     # domain named <NAME> (defaults
                                                     # to the system); entity =
                                                     # <PREFIX><NAME>; PREFIX =
                                                     # --domain-prefix, else
                                                     # $TD_BUILD_USER_$TD_BUILD_NUMBER_,
-                                                    # else <os-user>_0_
+                                                    # else <os-user>_0_.
+                                                    # --name-in-system NAME sets the
+                                                    # entity name verbatim instead
     tdx-domain create  --auto ALL|S1,S2,... [--model MODEL [--data xs|..|xl]] [-f]
                                                     # one domain per system, each
                                                     # named after its system, seeded
@@ -286,7 +289,8 @@ def _expand_names(value: str, directory: Path, role: str, opt: str) -> list[str]
 # database) is named `<DOMAIN_PREFIX><domain>` so concurrent CI runs and
 # developers don't collide. The prefix is `--domain-prefix` if given, else
 # `$TD_BUILD_USER`_`$TD_BUILD_NUMBER`_ (the CI identity), else the OS login name
-# and build 0.
+# and build 0. `--name-in-system` bypasses this entirely, naming the entity
+# container verbatim; either way the chosen name is stamped as `external_name`.
 
 
 def _resolve_domain_prefix(explicit: str | None) -> str:
@@ -2002,7 +2006,8 @@ def _domain_create(rest: list[str]) -> int:
     batch (`--auto` / `--domain-manifest`). The domain is named by `--domain`
     (default: the system name); its external entity (schema / dataset / directory)
     is named `<PREFIX><domain>`, the PREFIX defaulting to the run's
-    `<user>_<build>_` (see `--domain-prefix`)."""
+    `<user>_<build>_` (see `--domain-prefix`), or named verbatim by
+    `--name-in-system` (single-domain create only)."""
     p = _ArgumentParser(
         prog="tdx-domain create",
         add_help=True,
@@ -2062,6 +2067,16 @@ def _domain_create(rest: list[str]) -> int:
         "manifest, so a manifest replays under each user's own prefix)",
     )
     p.add_argument(
+        "--name-in-system",
+        dest="name_in_system",
+        default=None,
+        metavar="NAME",
+        help="use NAME verbatim as the entity container (schema/dataset/folder/db) "
+        "created in the target system, instead of the default "
+        "<domain-prefix><domain>; overrides --domain-prefix. Single-domain create "
+        "only (in a manifest, use the per-entry `name-in-system` key)",
+    )
+    p.add_argument(
         "-f", "--force", action="store_true", help="recreate if it already exists"
     )
     p.add_argument(
@@ -2092,6 +2107,12 @@ def _domain_create(rest: list[str]) -> int:
     _apply_secret(args)
     if args.sync and not args.domain_manifest:
         raise DatagenError("--sync is only valid with --domain-manifest")
+    if args.name_in_system is not None and (args.domain_manifest or args.auto):
+        raise DatagenError(
+            "--name-in-system names a single entity container, so it is not used "
+            "with --auto / --domain-manifest (a manifest carries a per-entry "
+            "`name-in-system` key)"
+        )
     if args.domain_manifest:
         if args.sys or args.domain:
             raise DatagenError(
@@ -2419,7 +2440,12 @@ def _domain_create_single(args, peeked_sys) -> int:
             f"{slug} does not load data (--model records the model; --data is "
             f"not supported)"
         )
-    external = _external_name(args.domain, args.domain_prefix)
+    # `--name-in-system` names the external entity container verbatim (overriding
+    # the default <domain-prefix><domain>); it is stamped as external_name, so a
+    # later recreate rebuilds the SAME container.
+    external = getattr(args, "name_in_system", None) or _external_name(
+        args.domain, args.domain_prefix
+    )
     sysctx = SystemContext(slug, sysdoc["name"], sysmeta)
     spec = CreateDomainSpec(
         name=args.domain,
