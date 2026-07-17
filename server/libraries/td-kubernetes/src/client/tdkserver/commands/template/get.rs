@@ -9,7 +9,9 @@ use clap_derive::Args;
 use td_common::status::ExitStatus::GeneralError;
 use td_error::TdError;
 
-use crate::base::constants::{FOLDER_IMAGES, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY};
+use crate::base::constants::{
+    FOLDER_IMAGES, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+};
 use crate::base::error::cli::CliError;
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::tdkserver::arguments::GlobalArguments;
@@ -81,8 +83,9 @@ pub fn get_templates(
     };
 
     let initialize = || -> CommandResult {
-        write_family(folder, KPROFILE_CONFIGS_FAMILY.folder, profile.configs)?;
         write_family(folder, KPROFILE_PODS_FAMILY.folder, profile.pods)?;
+        write_family(folder, KPROFILE_ASSETS_FAMILY.folder, profile.assets)?;
+        write_family(folder, KPROFILE_CONFIGS_FAMILY.folder, profile.configs)?;
         copy_images(folder, verbose)
     };
     if let Err(error) = initialize() {

@@ -63,6 +63,11 @@ pub const KPROFILE_CONFIGS_FAMILY: Family = Family {
     scope: Scope::Application,
     kind: "config",
 };
+pub const KPROFILE_ASSETS_FAMILY: Family = Family {
+    folder: "assets",
+    scope: Scope::Application,
+    kind: "asset",
+};
 
 pub const KIND_SECRET: &str = "secret";
 pub const KIND_SECRET_CONFIG: &str = "secret-config";

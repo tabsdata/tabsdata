@@ -23,13 +23,11 @@ UV_PYTHON_HOME="$UV_HOME/python"
 UV_VENVS_HOME="$UV_HOME/venvs"
 
 VENV_TD="td"
-VENV_AG="ag"
 
 show_usage() {
    echo "Usage: $0 [options]"
    echo "  -p, --python VERSION           Python version                   (default: $PYTHON_VERSION)"
    echo "      --requirements-td FILE     Complementary packages for td    (default: none)"
-   echo "      --requirements-ag FILE     Complementary packages for ag    (default: none)"
    echo "  -o, --output FOLDER            Output folder                    (mandatory)"
    echo "  -h, --help                     Show this help"
 }
@@ -37,13 +35,11 @@ show_usage() {
 parse_arguments() {
    python_version="$PYTHON_VERSION"
    requirements_td=""
-   requirements_ag=""
    output=""
    while [[ $# -gt 0 ]]; do
       case "$1" in
          -p|--python)         python_version="$2";  shift 2 ;;
          --requirements-td)   requirements_td="$2"; shift 2 ;;
-         --requirements-ag)   requirements_ag="$2"; shift 2 ;;
          -o|--output)         output="$2";          shift 2 ;;
          -h|--help)           show_usage; exit 0 ;;
          *) echo "Unknown option: $1" >&2; show_usage; exit 2 ;;
@@ -72,10 +68,6 @@ validate_arguments() {
       echo "Requirements file for td not found: $requirements_td" >&2
       exit 1
    fi
-   if [[ -n "$requirements_ag" && ! -f "$requirements_ag" ]]; then
-      echo "Requirements file for ag not found: $requirements_ag" >&2
-      exit 1
-   fi
 
    if [[ -z "$output" ]]; then
       echo "Output folder is mandatory" >&2
@@ -88,7 +80,6 @@ setup_workspace() {
    work="$(mktemp -d "${TMPDIR:-/tmp}/tdvenvs.XXXXXX")"
    output_bundle="$output/$BUNDLE_NAME.tar.gz"
    virtual_environment_td="$UV_VENVS_HOME/$VENV_TD"
-   virtual_environment_ag="$UV_VENVS_HOME/$VENV_AG"
    export UV_PYTHON_INSTALL_DIR="$UV_PYTHON_HOME"
    echo ">> Using Python $python_version in work folder $work"
 }
@@ -117,9 +108,6 @@ create_virtual_environment() {
    echo ">> Creating relocatable virtual environment $virtual_environment_td"
    uv venv --seed --relocatable --python-preference only-managed --python "$python_version" "$virtual_environment_td"
    uv pip install --python "$virtual_environment_td/bin/python" --upgrade pip
-   echo ">> Creating relocatable virtual environment $virtual_environment_ag"
-   uv venv --seed --relocatable --python-preference only-managed --python "$python_version" "$virtual_environment_ag"
-   uv pip install --python "$virtual_environment_ag/bin/python" --upgrade pip
 }
 
 install_packages() {
@@ -129,19 +117,12 @@ install_packages() {
    else
       uv pip install --python "$virtual_environment_td/bin/python" "tabsdata[all]"
    fi
-   echo ">> Installing packages into virtual environment $virtual_environment_ag"
-   if [[ -n "$requirements_ag" ]]; then
-      uv pip install --python "$virtual_environment_ag/bin/python" "tabsdata[all]" tabsdata-agent -r "$requirements_ag"
-   else
-      uv pip install --python "$virtual_environment_ag/bin/python" "tabsdata[all]" tabsdata-agent
-   fi
 }
 
 assemble_bundle() {
    echo ">> Assembling self-contained bundle under $UV_HOME"
    test -d "$UV_PYTHON_HOME"
    test -d "$virtual_environment_td"
-   test -d "$virtual_environment_ag"
 }
 
 write_bundle() {
@@ -160,7 +141,7 @@ main() {
    install_prerequisites      || die "Installing prerequisites"
    install_uv                 || die "Installing uv"
    install_python             || die "Installing Python"
-   create_virtual_environment || die "Creating the virtual environments"
+   create_virtual_environment || die "Creating the virtual environment"
    install_packages           || die "Installing packages"
    assemble_bundle            || die "Assembling the bundle"
    write_bundle               || die "Writing the bundle"

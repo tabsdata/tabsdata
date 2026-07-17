@@ -21,8 +21,8 @@ use tracing::info;
 use crate::base::constants::{
     CONFIGMAP_TABSDATA_MANIFEST, DATABASE_HOST_LOOPBACK, DEFAULT_NAMESPACE, FOLDER_CLUSTER,
     FOLDER_DATABASE, FOLDER_IMAGES, FOLDER_PYENV_AG, FOLDER_PYENV_TD, FOLDER_PYTHON,
-    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel,
+    FOLDER_REPOSITORY, FOLDER_RUNTIMES, FOLDER_STORAGE, KPROFILE_ASSETS_FAMILY,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::reporter::Reporter;
@@ -624,6 +624,7 @@ impl KminusProvider {
         let rendered = render_for_configmaps(loaded, &resolver).await?;
         for (family, data) in [
             (&KPROFILE_PODS_FAMILY, rendered.pods),
+            (&KPROFILE_ASSETS_FAMILY, rendered.assets),
             (&KPROFILE_CONFIGS_FAMILY, rendered.configs),
         ] {
             let family_path = staging_profile.join(family.folder);
@@ -664,6 +665,7 @@ impl KminusProvider {
     async fn database_context(&self) -> CommandResult<(KubeContext, SystemValues, Profile)> {
         let context = self.kube_context().await?;
         let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
+        let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
         let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
         let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
         let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
@@ -673,7 +675,7 @@ impl KminusProvider {
             )
             .into());
         };
-        let profile = parse_from_configmaps(&pods, &configs, &manifest_yaml)?;
+        let profile = parse_from_configmaps(&pods, &assets, &configs, &manifest_yaml)?;
 
         let mut system = self.system_values()?;
         let settings = InstanceSettings::load(&self.name)?;

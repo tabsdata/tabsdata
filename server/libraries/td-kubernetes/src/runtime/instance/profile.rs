@@ -13,8 +13,8 @@ use td_python::tabsdata::tabsdata_version;
 use tracing::debug;
 
 use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, Family, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
-    PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE,
+    CONFIGMAP_FAMILY_LABEL, Family, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY, PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE,
 };
 use crate::base::error::profile::ProfileError;
 use crate::core::system::file::is_hidden_or_system;
@@ -31,11 +31,16 @@ pub type RenderedConfigmap = BTreeMap<String, String>;
 
 pub struct Profile {
     pub pods: RenderedConfigmap,
+    pub assets: RenderedConfigmap,
     pub configs: RenderedConfigmap,
     pub manifest: Manifest,
 }
 
-const CONFIGMAP_FAMILIES: &[&Family] = &[&KPROFILE_PODS_FAMILY, &KPROFILE_CONFIGS_FAMILY];
+const CONFIGMAP_FAMILIES: &[&Family] = &[
+    &KPROFILE_PODS_FAMILY,
+    &KPROFILE_ASSETS_FAMILY,
+    &KPROFILE_CONFIGS_FAMILY,
+];
 
 const SCHEMA_EXTENSION: &str = ".yamls";
 const SCHEMA_SOURCE_EXTENSION: &str = ".schema.yaml";
@@ -118,6 +123,9 @@ pub fn load_profile(provider: ClusterProvider, verbose: bool) -> Result<Profile,
     let manifest = Manifest::initial_install(&tabsdata_version, now, entries);
     Ok(Profile {
         pods: maps.remove(KPROFILE_PODS_FAMILY.folder).unwrap_or_default(),
+        assets: maps
+            .remove(KPROFILE_ASSETS_FAMILY.folder)
+            .unwrap_or_default(),
         configs: maps
             .remove(KPROFILE_CONFIGS_FAMILY.folder)
             .unwrap_or_default(),
@@ -218,11 +226,13 @@ pub async fn render_for_configmaps(
     resolver: &ConfigurationResolver,
 ) -> Result<RenderedConfigmaps, ProfileError> {
     let pods = resolve_map(&loaded.pods, &KPROFILE_PODS_FAMILY, resolver).await?;
+    let assets = loaded.assets.clone();
     let configs = resolve_map(&loaded.configs, &KPROFILE_CONFIGS_FAMILY, resolver).await?;
     let manifest = serde_yaml::to_string(&loaded.manifest)
         .map_err(|error| ProfileError::ManifestSerializeFailed(error.to_string()))?;
     Ok(RenderedConfigmaps {
         pods,
+        assets,
         configs,
         manifest,
     })
@@ -230,6 +240,7 @@ pub async fn render_for_configmaps(
 
 pub struct RenderedConfigmaps {
     pub pods: RenderedConfigmap,
+    pub assets: RenderedConfigmap,
     pub configs: RenderedConfigmap,
     pub manifest: String,
 }
@@ -300,6 +311,7 @@ pub async fn read_family_configmaps(
 
 pub fn parse_from_configmaps(
     pods: &RenderedConfigmap,
+    assets: &RenderedConfigmap,
     configs: &RenderedConfigmap,
     manifest_yaml: &str,
 ) -> Result<Profile, ProfileError> {
@@ -308,6 +320,7 @@ pub fn parse_from_configmaps(
     })?;
     Ok(Profile {
         pods: pods.clone(),
+        assets: assets.clone(),
         configs: configs.clone(),
         manifest,
     })

@@ -20,6 +20,7 @@ fn build_profile(configs: &[(&str, &str)]) -> Profile {
         .collect();
     Profile {
         pods: BTreeMap::new(),
+        assets: BTreeMap::new(),
         configs,
         manifest: Manifest::initial_install("0.0.0", Utc::now(), Vec::new()),
     }

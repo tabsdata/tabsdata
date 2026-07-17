@@ -11,7 +11,9 @@ use std::path::Path;
 
 use serde_yaml::Value;
 
-use crate::base::constants::{KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY};
+use crate::base::constants::{
+    KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+};
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::fusion::resolve::resolve_config_file;
 use crate::runtime::gateway::resolver::placeholder::SystemValues;
@@ -119,15 +121,17 @@ pub fn fuse(
     stage: &Path,
 ) -> Result<FusedSecrets, ResolverError> {
     wipe_stage(stage)?;
+    compare_family(init, KPROFILE_PODS_FAMILY.folder, &profile.pods, true)?;
+    compare_family(init, KPROFILE_ASSETS_FAMILY.folder, &profile.assets, true)?;
     compare_family(
         init,
         KPROFILE_CONFIGS_FAMILY.folder,
         &profile.configs,
         false,
     )?;
-    compare_family(init, KPROFILE_PODS_FAMILY.folder, &profile.pods, true)?;
-    let secrets = resolve_configs_files(profile, system, auto, init, stage)?;
     stage_pods_files(profile, stage)?;
+    stage_assets_files(profile, stage)?;
+    let secrets = resolve_configs_files(profile, system, auto, init, stage)?;
     stage_manifest_file(profile, stage)?;
     Ok(secrets)
 }
@@ -213,6 +217,15 @@ fn stage_pods_files(profile: &Profile, stage: &Path) -> Result<(), ResolverError
     Ok(())
 }
 
+fn stage_assets_files(profile: &Profile, stage: &Path) -> Result<(), ResolverError> {
+    let stage_assets = stage.join(KPROFILE_ASSETS_FAMILY.folder);
+    create_folder(&stage_assets)?;
+    for (file, content) in &profile.assets {
+        write_staged(&stage_assets.join(file), content)?;
+    }
+    Ok(())
+}
+
 fn create_folder(folder: &Path) -> Result<(), ResolverError> {
     fs::create_dir_all(folder).map_err(|cause| ResolverError::StageWriteFailed {
         path: folder.display().to_string(),
@@ -273,7 +286,10 @@ fn compare_family(
                 }
             })?;
             if &present_content != content {
-                return Err(ResolverError::InitializationPodModified { file: file.clone() });
+                return Err(ResolverError::InitializationTemplateModified {
+                    family: family.to_owned(),
+                    file: file.clone(),
+                });
             }
         }
     }

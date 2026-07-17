@@ -72,10 +72,10 @@ pub enum ResolverError {
     )]
     InitializationMissingFile { family: String, file: String } = 5023,
     #[error(
-        "The pod template '{file}' was modified, but pod templates cannot be customized; the \
-         initialization folder has been tampered with."
+        "The '{family}' template '{file}' was modified, but '{family}' templates cannot be \
+         customized; the initialization folder has been tampered with."
     )]
-    InitializationPodModified { file: String } = 5024,
+    InitializationTemplateModified { family: String, file: String } = 5024,
     #[error("The placeholder kind '{kind}' at '{path}' requires a category ('${{{kind}:...}}').")]
     MissingPlaceholderCategory { path: String, kind: String } = 5025,
     #[error("A value is required for placeholder '${{{kind}:{category}}}' at '{path}'.")]

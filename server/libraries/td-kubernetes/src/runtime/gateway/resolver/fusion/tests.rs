@@ -102,7 +102,7 @@ fn compare_family_strict_rejects_modified_pod() {
         .expect_err("modified pod must be rejected");
     assert!(matches!(
         error,
-        ResolverError::InitializationPodModified { .. }
+        ResolverError::InitializationTemplateModified { .. }
     ));
 }
 

@@ -16,8 +16,8 @@ use td_common::status::ExitStatus::NoAction;
 use std::collections::BTreeMap;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, DEFAULT_INSTANCE_NAME, Family, KPROFILE_CONFIGS_FAMILY,
-    KPROFILE_PODS_FAMILY,
+    CONFIGMAP_TABSDATA_MANIFEST, DEFAULT_INSTANCE_NAME, Family, KPROFILE_ASSETS_FAMILY,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
@@ -366,6 +366,7 @@ impl DockerProvider {
         let context = self.kube_context().await?;
         for (family, files) in [
             (&KPROFILE_PODS_FAMILY, rendered.pods),
+            (&KPROFILE_ASSETS_FAMILY, rendered.assets),
             (&KPROFILE_CONFIGS_FAMILY, rendered.configs),
         ] {
             store_family_configmaps(&context, family, files).await?;

@@ -17,8 +17,8 @@ use crate::runtime::provider::{ClusterProvider, Instance};
 use crate::runtime::reporting::build_kube_client;
 
 use crate::base::constants::{
-    CONFIGMAP_TABSDATA_MANIFEST, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, POD_PHASE_FAILED,
-    POD_PHASE_SUCCEEDED,
+    CONFIGMAP_TABSDATA_MANIFEST, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY,
+    KPROFILE_PODS_FAMILY, POD_PHASE_FAILED, POD_PHASE_SUCCEEDED,
 };
 use crate::base::error::provider::ProviderError;
 use crate::kube::api::require_configmap;
@@ -44,6 +44,7 @@ impl Instance for DockerInstance {
     async fn start(&self, multi: &MultiProgress) -> CommandResult {
         let context = self.kube_context().await?;
         let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
+        let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
         let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
         let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
         let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
@@ -53,7 +54,7 @@ impl Instance for DockerInstance {
             )
             .into());
         };
-        let profile = parse_from_configmaps(&pods, &configs, &manifest_yaml)?;
+        let profile = parse_from_configmaps(&pods, &assets, &configs, &manifest_yaml)?;
         let system = SystemValues::default();
         start_workload(&context, ClusterProvider::Docker, &system, &profile, multi).await
     }

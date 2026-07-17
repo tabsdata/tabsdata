@@ -58,6 +58,7 @@ fn profile_with_pods(entries: &[(&str, &str)]) -> Profile {
     }
     Profile {
         pods,
+        assets: BTreeMap::new(),
         configs: BTreeMap::new(),
         manifest: Manifest::initial_install("1.0.0", Utc::now(), std::iter::empty()),
     }

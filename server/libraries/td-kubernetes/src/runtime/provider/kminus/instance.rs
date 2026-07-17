@@ -12,8 +12,8 @@ use tracing::info;
 
 use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, CONFIGMAP_TABSDATA_MANIFEST, CONFIGMAP_TABSDATA_SETTINGS,
-    FOLDER_PROFILE, Family, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, POD_PHASE_FAILED,
-    POD_PHASE_SUCCEEDED, SETTINGS_FILE,
+    FOLDER_PROFILE, Family, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    POD_PHASE_FAILED, POD_PHASE_SUCCEEDED, SETTINGS_FILE,
 };
 use crate::base::error::provider::ProviderError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
@@ -66,13 +66,15 @@ impl KminusInstance {
             return Ok(None);
         }
         let pods = read_staged_family(&staged_folder, &KPROFILE_PODS_FAMILY)?;
+        let assets = read_staged_family(&staged_folder, &KPROFILE_ASSETS_FAMILY)?;
         let configs = read_staged_family(&staged_folder, &KPROFILE_CONFIGS_FAMILY)?;
         let manifest = read_staged_manifest(&staged_folder)?;
-        if pods.is_empty() && configs.is_empty() && manifest.is_none() {
+        if pods.is_empty() && assets.is_empty() && configs.is_empty() && manifest.is_none() {
             Ok(None)
         } else {
             Ok(Some(StagedConfigmaps {
                 pods,
+                assets,
                 configs,
                 manifest,
             }))
@@ -104,10 +106,12 @@ impl KminusInstance {
     pub async fn load_stage_to_kube(&self) -> CommandResult {
         let stage_folder = init_stage_folder_in(&self.folder);
         let pods = read_staged_family(&stage_folder, &KPROFILE_PODS_FAMILY)?;
+        let assets = read_staged_family(&stage_folder, &KPROFILE_ASSETS_FAMILY)?;
         let configs = read_staged_family(&stage_folder, &KPROFILE_CONFIGS_FAMILY)?;
         let manifest = read_staged_manifest(&stage_folder)?;
         self.replace_configmaps(StagedConfigmaps {
             pods,
+            assets,
             configs,
             manifest,
         })
@@ -118,6 +122,7 @@ impl KminusInstance {
         let context = self.kube_context().await?;
         for (family, files) in [
             (&KPROFILE_PODS_FAMILY, staged.pods),
+            (&KPROFILE_ASSETS_FAMILY, staged.assets),
             (&KPROFILE_CONFIGS_FAMILY, staged.configs),
         ] {
             replace_family_configmaps(&context, family, files).await?;
@@ -165,6 +170,7 @@ impl KminusInstance {
 
 struct StagedConfigmaps {
     pods: RenderedConfigmap,
+    assets: RenderedConfigmap,
     configs: RenderedConfigmap,
     manifest: Option<String>,
 }
@@ -267,6 +273,7 @@ impl Instance for KminusInstance {
     async fn start(&self, multi: &MultiProgress) -> CommandResult {
         let context = self.kube_context().await?;
         let pods = read_family_configmaps(&context, &KPROFILE_PODS_FAMILY).await?;
+        let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
         let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
         let mut manifest_data = require_configmap(&context, CONFIGMAP_TABSDATA_MANIFEST).await?;
         let Some(manifest_yaml) = manifest_data.remove(MANIFEST_FILE) else {
@@ -276,7 +283,7 @@ impl Instance for KminusInstance {
             )
             .into());
         };
-        let profile = parse_from_configmaps(&pods, &configs, &manifest_yaml)?;
+        let profile = parse_from_configmaps(&pods, &assets, &configs, &manifest_yaml)?;
 
         let instance_name = self
             .folder
