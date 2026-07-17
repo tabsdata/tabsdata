@@ -1369,11 +1369,11 @@ script = [
                     module_selector = array_get ${module_parts} 1
                     module_node = concat "::" ${module_selector}
                 end
-                module_has_prefix = starts_with  "test_"
+                module_has_prefix = starts_with ${module_path} "test_"
                 if ${module_has_prefix}
                     module_relative = set ${module_path}
                 else
-                    module_relative = concat "test_" 
+                    module_relative = concat "test_" ${module_path}
                 end
                 module_target = concat ${selected_tests_folder} "/" ${module_relative}
                 module_target = normalize ${module_target}

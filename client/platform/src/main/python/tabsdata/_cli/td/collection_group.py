@@ -16,11 +16,11 @@ from tabsdata._cli.cli_utils import (
     logical_prompt,
     verify_login_or_prompt,
 )
-from tabsdata.api.tabsdata_server import TabsdataServer
 
 # The legacy connection-template surface is retired; this stub keeps the
 # module importable (real engine: tabsdatak.cli.template in the tdk CLI).
 from tabsdata._cli.td import _template as template
+from tabsdata.api.tabsdata_server import TabsdataServer
 
 # noinspection PyProtectedMember
 from tabsdatak.common._error import CommonException

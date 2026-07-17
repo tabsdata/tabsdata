@@ -493,9 +493,10 @@ class StrOrSecretHandler:
     ) -> core_schema.CoreSchema:
         from tabsdatak.api import Secret
 
-        python_schema = core_schema.union_schema(
-            [core_schema.is_instance_schema(Secret), core_schema.str_schema()]
-        )
+        python_schema = core_schema.union_schema([
+            core_schema.is_instance_schema(Secret),
+            core_schema.str_schema(),
+        ])
 
         def decode(value: Any) -> Any:
             if not isinstance(value, str):
