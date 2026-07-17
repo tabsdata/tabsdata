@@ -256,6 +256,10 @@ class System(ABC):
     supports_sql: bool = False  # can install_schema + run INSERTs
     supports_models: bool = True  # accepts --model/--data on domain create
     # (False -> tdx-domain rejects them)
+    supports_data: bool = True  # loads row data via --data. False -> --model is
+    # accepted (records the model; create-only) but --data is rejected — for a
+    # system tdx can't seed with rows (e.g. druid: a datasource materialises only
+    # when the connector ingests, so tdx stages / loads nothing)
     domain_options: tuple[Option, ...] = ()  # extra create-domain inputs a
     # system needs beyond the name (bigquery:
     # --dataset / --domain-path)

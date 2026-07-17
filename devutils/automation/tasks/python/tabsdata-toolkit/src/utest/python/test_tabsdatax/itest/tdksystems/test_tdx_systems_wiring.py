@@ -294,11 +294,16 @@ def test_druid_datasource_is_prefixed(stores, fake_druid):
     assert m["DATASOURCE"] == "ci_1_events"             # the actual datasource
 
 
-def test_druid_rejects_models(stores, fake_druid):
+def test_druid_rejects_data_but_accepts_model(stores, fake_druid):
+    # Druid records a model (create-only) but loads no data: a datasource
+    # materialises when the connector ingests, so tdx stages/loads nothing.
+    from tabsdatax.itest.tdksystems import systems
+    d = systems.get("druid")
+    assert d.supports_models is True and d.supports_data is False
     tdx._sys_create(["--type", "druid", "--sys", "d1", "-f"])
-    with pytest.raises(DatagenError, match="does not support --model"):
+    with pytest.raises(DatagenError, match="does not load data"):
         tdx._domain_create(["--sys", "d1", "--domain", "events",
-                            "--model", "world", "-f"])
+                            "--model", "world", "--data", "xs", "-f"])
 
 
 # ---- create --help advertises the available choices -----------------------

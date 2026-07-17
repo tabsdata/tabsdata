@@ -125,10 +125,14 @@ def _run_data_create(args: argparse.Namespace) -> int:
         print()
         return 0
     if meta.get("SYSTEM_KIND") == "druid":
-        # Druid datasources have no schema to install — they materialise when
-        # `data load` stages the parquet and ingests it.
+        # Druid has no schema to install and tdx loads no data — a datasource
+        # materialises only when the connector under test ingests. `--model`
+        # just records the model on the domain.
         print()
-        print("data create: no schema needed for druid domains (datasources only)")
+        print(
+            "data create: no schema to install for druid domains "
+            "(datasources materialise on ingestion by the connector)"
+        )
         print()
         return 0
     if not sysobj.supports_sql:
@@ -166,6 +170,12 @@ def _run_data_load(args: argparse.Namespace) -> int:
     _check_kind_compat(args.model, meta, "data load")
     kind = meta.get("KIND", "")
     is_kafka = meta.get("SYSTEM_KIND") == "kafka"
+
+    if meta.get("SYSTEM_KIND") == "druid":
+        raise DatagenError(
+            "druid domains do not load data — a datasource materialises when the "
+            "connector under test ingests; create the domain with --model only"
+        )
 
     # saas non-SQL: salesforce loads via its own loader; anything else manual.
     if kind.startswith("saas") and not sysobj.supports_sql:
@@ -228,16 +238,6 @@ def _run_data_load(args: argparse.Namespace) -> int:
                 ),
                 schema_sidecar=sidecar,
             )
-            if meta.get("SYSTEM_KIND") == "druid":
-                # Druid fans each table out to its own datasource; record the
-                # counts under the datasource names the cluster will expose.
-                from .systems.druid.system import _table_datasource
-
-                base = ctx.meta.get("DATASOURCE", "")
-                entities = {
-                    _table_datasource(base, table): rows
-                    for table, rows in entities.items()
-                }
         print()
         sysobj.load_data(
             ctx,
@@ -336,9 +336,6 @@ def _resolve_size(model: str, size: str | None) -> str | None:
 
 
 def _default_format_for(kind: str, meta: dict[str, str]) -> str:
-    if meta.get("SYSTEM_KIND") == "druid":
-        # Druid ingests its input from staged parquet (see DruidSystem.load_data).
-        return "parquet"
     if kind.startswith("container"):
         if meta.get("SUPPORTS_SQL") != "1":
             raise DatagenError(

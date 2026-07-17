@@ -6,12 +6,19 @@
 / middleManager / router). Domain == a datasource.
 
 Druid has no SQL login and no `CREATE`-able schema: a datasource only comes into
-existence when data is ingested into it (and ingestion stages files through a
-separate object store). A tdx Druid domain therefore *names* a datasource and
-records the cluster's HTTP endpoints — the overlord (ingestion / coordinator
-API) and the router (SQL queries + console) — and `destroy` drops the datasource
-through the coordinator API. Models / data are out of scope (no `--model` /
-`--data`); ingestion belongs to the connector under test.
+existence when data is *ingested* into it, and ingestion reads its input from a
+cloud object store. tdx therefore does **not** stage or ingest data itself — the
+Druid system/domain carry no cloud configuration. A tdx Druid domain simply
+*names* a datasource and records the cluster's HTTP endpoints — the overlord
+(ingestion / coordinator API) and the router (SQL queries + console) — plus the
+admin credentials; `destroy` drops the datasource through the coordinator API.
+
+`--model` is accepted but only *records* the model on the domain (there is no
+schema to create); `--data` is rejected (`supports_data = False`). Staging + the
+ingestion that materialises a datasource are the connector-under-test's job,
+which reaches an object store through a *separately-created* `s3` / `gcs` /
+`azureblob` tdx domain (the same pattern ClickHouse / StarRocks use) — so Druid
+is cloud-agnostic and works with whichever staging domain a test pairs in.
 
 The cluster runs with HTTP basic auth (the `druid-basic-security` extension): an
 `admin` user is minted at create and exported as USER / PASSWORD, so every API
@@ -23,7 +30,6 @@ services authenticate to each other; it is passed to the stack but not exported.
 from __future__ import annotations
 
 import base64
-import json
 import os
 import time
 import urllib.error
@@ -31,7 +37,6 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from tabsdatax.itest.tdksystems import druid_ingest
 from tabsdatax.itest.tdksystems.errors import DatagenError
 from tabsdatax.itest.tdksystems.shell import (
     find_free_port,
@@ -39,19 +44,15 @@ from tabsdatax.itest.tdksystems.shell import (
     http_ok,
     validate_name,
 )
-from tabsdatax.itest.tdksystems.systems._backend import normalise_prefix
 from tabsdatax.itest.tdksystems.systems._containers import ContainersBase
 from tabsdatax.itest.tdksystems.systems.base import (
     CreateDomainSpec,
     CreateSystemSpec,
     DomainContext,
     Health,
-    LoadRequest,
-    Option,
     Setting,
     SystemContext,
 )
-from tabsdatax.itest.tdksystems.systems.s3.backend import S3Backend
 
 _HERE = Path(__file__).resolve().parent
 COMPOSE_FILE = str(_HERE / "druid-compose.yaml")
@@ -77,39 +78,16 @@ def _url_port(url: str) -> int:
     return port
 
 
-# A seeded domain ingests one datasource per model table, named
-# `<DATASOURCE><SEP><table>` so a single domain can carry several tables and
-# `destroy_domain` can find exactly the ones it created.
-_DATASOURCE_SEP = "__"
-
-
-def _table_datasource(base: str, table: str) -> str:
-    return f"{base}{_DATASOURCE_SEP}{table}"
-
-
-def _staging_prefix(sys_path: str, datasource: str) -> str:
-    root = (sys_path or "").strip("/")
-    return f"{root}/{datasource}" if root else datasource
-
-
 class DruidSystem(ContainersBase):
     slug = "druid"
     label = "Apache Druid"
     kind = "druid"
+    # `--model` records the model the domain will hold (no schema to create);
+    # `--data` is rejected — tdx never stages or ingests, so a datasource
+    # materialises only when the connector under test ingests through its own
+    # (separately-created) cloud staging domain.
     supports_models = True
-
-    # Druid datasources materialise only on ingestion, and native batch
-    # ingestion reads its input from an object store the cluster can reach. The
-    # tdx machinery stages the generated model parquet to S3 and ingests from
-    # there, so the system carries the S3 staging bucket + credentials (pointed
-    # at the same $S3__* env vars the s3 system uses).
-    staging_root = True  # -> base adds the SYS_PATH (--sys-path) option
-    options = (
-        Option("BUCKET", "bucket"),
-        Option("REGION", "region"),
-        Option("ACCESS_KEY", "access-key"),
-        Option("SECRET_KEY", "secret-key", secret=True),
-    )
+    supports_data = False
 
     image = DRUID_IMAGE
     # apache/druid is amd64-only, so pin it (emulated on arm64); zookeeper is
@@ -135,9 +113,6 @@ class DruidSystem(ContainersBase):
         settings["INTERNAL_PASSWORD"] = Setting(
             "INTERNAL_PASSWORD", value=gen_password()
         )
-        # Carry the S3 staging options (resolved from the CLI / $S3__* env) so
-        # `load_data` can reach the bucket the datasources are ingested from.
-        settings.update(spec.settings)
         return settings
 
     def _plan_endpoints(self) -> dict[str, str]:
@@ -207,7 +182,7 @@ class DruidSystem(ContainersBase):
         # A datasource materialises on ingestion, so there is nothing to create
         # server-side; record its name, the cluster endpoints, and the admin
         # credentials (inherited from the system) for consumers.
-        settings = {
+        return {
             "DATASOURCE": Setting("DATASOURCE", value=datasource),
             "OVERLORD_URL": Setting(
                 "OVERLORD_URL", value=ctx.meta.get("OVERLORD_URL", "")
@@ -216,10 +191,6 @@ class DruidSystem(ContainersBase):
             "USER": Setting("USER", value=ctx.meta.get("USER", "")),
             "PASSWORD": Setting("PASSWORD", value=ctx.meta.get("PASSWORD", "")),
         }
-        # Inherit the S3 staging options from the system so `load_data` can stage
-        # + ingest this datasource's data without re-resolving any env var.
-        settings.update(self.settings_from_meta(ctx.meta))
-        return settings
 
     def provision_domain(
         self, ctx: SystemContext, spec: CreateDomainSpec, settings: dict[str, Setting]
@@ -227,68 +198,10 @@ class DruidSystem(ContainersBase):
         # Nothing to provision: a datasource appears only when data is ingested.
         return None
 
-    # ==================================================================
-    # Data plane — stage model parquet to S3, ingest one datasource per table
-    # ==================================================================
-
-    def load_data(self, ctx: DomainContext, req: LoadRequest) -> int:
-        values = self.resolve_values(self.settings_from_meta(ctx.meta))
-        bucket = values.get("BUCKET", "")
-        if not bucket:
-            raise DatagenError("druid load_data needs an S3 staging bucket")
-
-        overlord = ctx.meta.get("OVERLORD_URL", "")
-        user, password = ctx.meta.get("USER", ""), ctx.meta.get("PASSWORD", "")
-        staging = druid_ingest.S3Staging(
-            access_key=values.get("ACCESS_KEY", ""),
-            secret_key=values.get("SECRET_KEY", ""),
-            region=values.get("REGION", ""),
-        )
-        prefix = _staging_prefix(values.get("SYS_PATH", ""), ctx.meta["DATASOURCE"])
-
-        # run-order.txt is a SQL-load manifest the ingest path doesn't use; drop
-        # it so only parquet is staged (matching the object-store data plane).
-        (req.data_dir / "run-order.txt").unlink(missing_ok=True)
-
-        backend = S3Backend(values)
-        if req.force:
-            try:
-                backend.clear(prefix)
-            except Exception:  # noqa: BLE001 - best-effort (prefix may be empty)
-                pass
-        print(f">>> staging parquet -> s3://{bucket}/{normalise_prefix(prefix)} ...")
-        backend.upload(prefix, [str(req.data_dir)])
-
-        counts: dict[str, int] = {}
-        for parquet in sorted(req.data_dir.glob("*.parquet")):
-            table = parquet.stem
-            datasource = _table_datasource(ctx.meta["DATASOURCE"], table)
-            key = normalise_prefix(prefix) + parquet.name
-            uri = f"s3://{bucket}/{key}"
-            print(f">>> ingesting datasource '{datasource}' from {uri} ...")
-            druid_ingest.ingest_parquet(
-                overlord_url=overlord,
-                datasource=datasource,
-                s3_uris=[uri],
-                staging=staging,
-                user=user,
-                password=password,
-            )
-            counts[datasource] = 1
-        print(f">>> ingested {len(counts)} datasource(s)")
-        return len(counts)
-
     def destroy_domain(self, ctx: DomainContext) -> None:
         overlord = ctx.meta.get("OVERLORD_URL", "")
         user, password = ctx.meta.get("USER", ""), ctx.meta.get("PASSWORD", "")
-        datasource = ctx.meta["DATASOURCE"]
-        # A seeded domain fans a datasource out per model table
-        # (<DATASOURCE>__<table>); drop the bare datasource and every seeded one.
-        seeded = self._datasources_with_prefix(
-            overlord, f"{datasource}{_DATASOURCE_SEP}", user, password
-        )
-        for ds in (datasource, *seeded):
-            self._delete_datasource(overlord, ds, user, password)
+        self._delete_datasource(overlord, ctx.meta["DATASOURCE"], user, password)
 
     def domain_status(self, ctx: DomainContext) -> Health:
         router, ds = ctx.meta.get("ROUTER_URL", ""), ctx.meta.get("DATASOURCE", "")
@@ -328,21 +241,3 @@ class DruidSystem(ContainersBase):
                 f"datasource '{datasource}' assumed removed"
             )
             return
-
-    @staticmethod
-    def _datasources_with_prefix(
-        overlord_url: str, prefix: str, user: str = "", password: str = ""
-    ) -> list[str]:
-        """The coordinator's datasources whose name starts with `prefix`
-        (best-effort: an unreachable cluster yields none)."""
-        url = f"{overlord_url}/druid/coordinator/v1/datasources"
-        req = urllib.request.Request(url)  # noqa: S310
-        if user:
-            token = base64.b64encode(f"{user}:{password}".encode()).decode()
-            req.add_header("Authorization", f"Basic {token}")
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
-                names = json.loads(resp.read().decode() or "[]")
-        except (urllib.error.URLError, ValueError):
-            return []
-        return [n for n in names if isinstance(n, str) and n.startswith(prefix)]

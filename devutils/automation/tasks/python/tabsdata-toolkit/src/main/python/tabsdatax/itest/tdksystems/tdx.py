@@ -2075,6 +2075,14 @@ def _system_can_seed(sys_name: str, model: str, sys_dir: str | None) -> bool:
     return True
 
 
+def _system_loads_data(sys_name: str, sys_dir: str | None) -> bool:
+    """Whether system `sys_name` loads row data (`--data`). False for a system
+    that accepts `--model` but seeds no rows (e.g. druid), so `--auto` gives it a
+    model-only domain instead of failing on `--data`."""
+    doc = descriptor.load(store.system_path(sys_name, sys_dir))
+    return systems.get(doc["system"]).supports_data
+
+
 def _domain_common_argv(args) -> list[str]:
     """The store/secret/prefix/force flags to forward from a batch domain-create to
     each per-item single create. `--domain-prefix` is forwarded only when given
@@ -2113,14 +2121,29 @@ def _domain_create_auto(args) -> int:
                 f"creating an empty domain",
                 file=sys.stderr,
             )
+        # A seedable system that loads no rows (e.g. druid) takes the model but
+        # not the data — creating a model-only domain rather than failing --data.
+        loads_data = (
+            bool(args.data) and seed and _system_loads_data(sname, args.sys_dir)
+        )
+        if args.data and seed and not loads_data:
+            print(
+                f">>> {sname}: loads no data; creating with model "
+                f"{args.model!r} only (no --data)",
+                file=sys.stderr,
+            )
         if seed:
             argv += ["--model", args.model]
-            if args.data:
+            if loads_data:
                 argv += ["--data", args.data]
         _domain_create(argv)
-        if seed or not args.model:
+        if not args.model:
             return ""
-        return f"empty (model {args.model!r} not seeded)"
+        if not seed:
+            return f"empty (model {args.model!r} not seeded)"
+        if args.data and not loads_data:
+            return f"model {args.model!r} (no data loaded)"
+        return ""
 
     names = _expand_names(args.auto, store.system_dir(args.sys_dir), "sys", "--auto")
     _batch_banner("creating", len(names), "domain")
@@ -2314,6 +2337,11 @@ def _domain_create_single(args, peeked_sys) -> int:
     sysobj = peeked_sys or systems.get(slug)
     if (args.model or args.data) and not sysobj.supports_models:
         raise DatagenError(f"{slug} does not support --model / --data")
+    if args.data and not sysobj.supports_data:
+        raise DatagenError(
+            f"{slug} does not load data (--model records the model; --data is "
+            f"not supported)"
+        )
     external = _external_name(args.domain, args.domain_prefix)
     sysctx = SystemContext(slug, sysdoc["name"], sysmeta)
     spec = CreateDomainSpec(
@@ -2401,6 +2429,8 @@ def _domain_seed(rest: list[str]) -> int:
     sysobj = systems.get(slug)
     if not sysobj.supports_models:
         raise DatagenError(f"{slug} does not support --model / --data")
+    if args.data and not sysobj.supports_data:
+        raise DatagenError(f"{slug} does not load data (--data is not supported)")
     _guard_container_fresh(descriptor.resolve(doc))
     # Reuse the same pipeline `create --model` runs, with force=False so an
     # already-populated schema/tables make it fail rather than clobber.
