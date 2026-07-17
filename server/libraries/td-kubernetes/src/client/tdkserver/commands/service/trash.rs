@@ -4,6 +4,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use chrono::Local;
 use clap_derive::Args;
@@ -27,6 +28,12 @@ use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::provider_for_instance;
 
 const TRASH_TIMESTAMP_FORMAT: &str = "%Y.%m.%d.%H.%M.%S%.3f";
+
+const TRASH_RENAME_BACKOFF: Duration = Duration::from_millis(250);
+#[cfg(not(windows))]
+const TRASH_RENAME_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(windows)]
+const TRASH_RENAME_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Debug, Clone, Args)]
 pub struct TrashArguments {
@@ -124,14 +131,24 @@ pub fn trash_instance_folder(name: &str, folder: &Path) -> CommandResult<PathBuf
     let timestamp = Local::now().format(TRASH_TIMESTAMP_FORMAT).to_string();
     let destination = trash_root.join(format!("{name}-{timestamp}"));
 
-    fs::rename(folder, &destination).map_err(|error| {
-        TdError::from(CliError::FileWriteFailed {
-            file: destination.display().to_string(),
-            cause: error.to_string(),
-        })
-    })?;
+    let deadline = Instant::now() + TRASH_RENAME_TIMEOUT;
+    let mut last_error;
+    loop {
+        match fs::rename(folder, &destination) {
+            Ok(()) => return Ok(destination),
+            Err(error) => last_error = error,
+        }
+        if Instant::now() + TRASH_RENAME_BACKOFF >= deadline {
+            break;
+        }
+        std::thread::sleep(TRASH_RENAME_BACKOFF);
+    }
 
-    Ok(destination)
+    Err(TdError::from(CliError::FileWriteFailed {
+        file: destination.display().to_string(),
+        cause: last_error.to_string(),
+    })
+    .into())
 }
 
 async fn stop_if_possible(name: &str, verbose: bool) {
