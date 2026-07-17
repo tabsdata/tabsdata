@@ -12,15 +12,14 @@ use td_objects::Buildable;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::UserUpdate;
 use td_objects::rest_urls::UserParam;
-use td_objects::types::basic::{
-    AccessTokenId, ProjectId, UserEnabled, UserId, UserIdName, UserName,
-};
+use td_objects::types::basic::{AccessTokenId, UserEnabled, UserId, UserIdName, UserName};
 use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(db)]
 async fn test_update_request_has_nothing_to_update(db: TdPool) {
+    let p = db.seed().test_project().await.unwrap();
     let _ = db
-        .scoped(ProjectId::sandbox())
+        .scoped(p.id)
         .seed()
         .user(
             &UserName::try_from("u0").unwrap(),

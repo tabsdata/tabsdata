@@ -46,8 +46,7 @@ mod tests {
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, ProjectId, ProjectName, UserId,
-        WildcardProject,
+        AccessTokenId, BundleId, CollectionName, Decorator, ProjectName, UserId, WildcardProject,
     };
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
     use td_tower::ctx_service::RawOneshot;
@@ -78,8 +77,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_execution(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -101,37 +101,22 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function_version = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
         let executions = [
-            db.scoped(ProjectId::sandbox())
-                .seed()
-                .execution(&function_version)
-                .await?,
-            db.scoped(ProjectId::sandbox())
-                .seed()
-                .execution(&function_version)
-                .await?,
-            db.scoped(ProjectId::sandbox())
-                .seed()
-                .execution(&function_version)
-                .await?,
-            db.scoped(ProjectId::sandbox())
-                .seed()
-                .execution(&function_version)
-                .await?,
-            db.scoped(ProjectId::sandbox())
-                .seed()
-                .execution(&function_version)
-                .await?,
+            db.scoped(p.id).seed().execution(&function_version).await?,
+            db.scoped(p.id).seed().execution(&function_version).await?,
+            db.scoped(p.id).seed().execution(&function_version).await?,
+            db.scoped(p.id).seed().execution(&function_version).await?,
+            db.scoped(p.id).seed().execution(&function_version).await?,
         ];
 
         let service = ExecutionListService::with_defaults(db.clone()).service();
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, executions.len());
@@ -145,14 +130,15 @@ mod tests {
         assert_eq!(response.data[3].triggered_on, executions[3].triggered_on);
         assert_eq!(response.data[4].id, executions[4].id);
         assert_eq!(response.data[4].triggered_on, executions[4].triggered_on);
-        let sandbox = Some(ProjectName::try_from("sandbox")?);
-        assert!(response.data.iter().all(|e| e.project == sandbox));
+        let base = Some(p.name.clone());
+        assert!(response.data.iter().all(|e| e.project == base));
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_list_execution_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
-        let sandbox_exec = seed_run(&db, ProjectId::sandbox()).await?.execution;
+        let base = db.seed().test_project().await?;
+        let base_exec = seed_run(&db, base.id).await?.execution;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         let alpha_exec = seed_run(&db, alpha.id).await?.execution;
 
@@ -166,8 +152,8 @@ mod tests {
             .await?;
 
         // The wildcard spans both projects and each row resolves to its own.
-        let sandbox_row = wildcard.data.iter().find(|e| e.id == sandbox_exec).unwrap();
-        assert_eq!(sandbox_row.project, Some(ProjectName::try_from("sandbox")?));
+        let base_row = wildcard.data.iter().find(|e| e.id == base_exec).unwrap();
+        assert_eq!(base_row.project, Some(base.name.clone()));
         let alpha_row = wildcard.data.iter().find(|e| e.id == alpha_exec).unwrap();
         assert_eq!(alpha_row.project, Some(ProjectName::try_from("alpha")?));
         Ok(())
@@ -175,11 +161,12 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_execution_wildcard_filters_to_viewable(db: TdPool) -> Result<(), TdError> {
-        let sandbox_exec = seed_run(&db, ProjectId::sandbox()).await?.execution;
+        let base = db.seed().test_project().await?;
+        let base_exec = seed_run(&db, base.id).await?.execution;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         let alpha_exec = seed_run(&db, alpha.id).await?.execution;
 
-        let user = seed_project_viewer(&db, ProjectId::sandbox()).await?;
+        let user = seed_project_viewer(&db, base.id).await?;
 
         let service = ExecutionListService::with_defaults(db.clone()).service();
         let response = service
@@ -190,14 +177,15 @@ mod tests {
             )
             .await?;
 
-        assert!(response.data.iter().any(|e| e.id == sandbox_exec));
+        assert!(response.data.iter().any(|e| e.id == base_exec));
         assert!(!response.data.iter().any(|e| e.id == alpha_exec));
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_list_execution_named_project_forbidden(db: TdPool) -> Result<(), TdError> {
-        seed_run(&db, ProjectId::sandbox()).await?;
+        let base = db.seed().test_project().await?;
+        seed_run(&db, base.id).await?;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         let user = seed_project_viewer(&db, alpha.id).await?;
 
@@ -205,7 +193,7 @@ mod tests {
         let service = ExecutionListService::with_defaults(db.clone()).service();
         let request = RequestContext::with(AccessTokenId::default(), user.id)
             .list((), ListParams::default())
-            .in_project(ProjectId::sandbox());
+            .in_project(base.id);
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
         })
@@ -215,18 +203,19 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_execution_named_project_viewer_allowed(db: TdPool) -> Result<(), TdError> {
-        let sandbox_exec = seed_run(&db, ProjectId::sandbox()).await?.execution;
-        let user = seed_project_viewer(&db, ProjectId::sandbox()).await?;
+        let base = db.seed().test_project().await?;
+        let base_exec = seed_run(&db, base.id).await?.execution;
+        let user = seed_project_viewer(&db, base.id).await?;
 
         let service = ExecutionListService::with_defaults(db.clone()).service();
         let response = service
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), user.id)
                     .list((), ListParams::default())
-                    .in_project(ProjectId::sandbox()),
+                    .in_project(base.id),
             )
             .await?;
-        assert!(response.data.iter().any(|e| e.id == sandbox_exec));
+        assert!(response.data.iter().any(|e| e.id == base_exec));
         Ok(())
     }
 }

@@ -149,7 +149,7 @@ mod tests {
     use td_objects::types::basic::TransactionKey;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, EP, ExecutionId, FV, FunctionVersionId, PDV,
-        PhysicalTableDataVersionId, ProjectId, TX, TableNameDto, TransactionId, UserId,
+        PhysicalTableDataVersionId, TX, TableNameDto, TransactionId, UserId,
     };
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -173,8 +173,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_initial_logical_ids(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection")?,
@@ -197,38 +198,34 @@ mod tests {
             .build()?;
 
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
 
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -244,7 +241,7 @@ mod tests {
             .fetch_one::<TableDB>(and!(&collection.id, TableName::try_from(table_name)?))
             .await?;
 
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .physical_table_data_version(
                 &collection,

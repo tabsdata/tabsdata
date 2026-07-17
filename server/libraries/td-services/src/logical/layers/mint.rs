@@ -144,7 +144,7 @@ mod tests {
     use td_objects::dxo::table::TableDBBuilder;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, BundleId, CollectionName, Decorator,
-        FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus, Private, ProjectId,
+        FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus, Private,
         StorageVersion, TableFunctionParamPos, TableId, TableName, TableNameDto, TableStatus,
         TransactionKey, UserId,
     };
@@ -180,8 +180,9 @@ mod tests {
     /// `seed_function` doesn't infer `private` from the name, so the
     /// private row is inserted via `TableDBBuilder` directly.
     async fn seed_mint_fixture(db: &TdPool) -> Result<MintFixture, TdError> {
+        let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -197,15 +198,8 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let func = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .function(&coll, &create)
-            .await?;
-        db.scoped(ProjectId::sandbox())
-            .seed()
-            .system_tables(&func)
-            .await?;
+        let func = db.scoped(p.id).seed().function(&coll, &create).await?;
+        db.scoped(p.id).seed().system_tables(&func).await?;
 
         let request_context =
             td_objects::dxo::crudl::RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -221,24 +215,17 @@ mod tests {
             .private(Private::TRUE)
             .status(TableStatus::Active)
             .build()?;
-        db.scoped(ProjectId::sandbox())
-            .live()
-            .insert(&private)
-            .await?;
+        db.scoped(p.id).live().insert(&private).await?;
 
         let tables: Vec<TableDB> = db.live().fetch_all::<TableDB>(&func.id).await?;
-        let exec = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&func)
-            .await?;
+        let exec = db.scoped(p.id).seed().execution(&func).await?;
         let txn = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &coll,

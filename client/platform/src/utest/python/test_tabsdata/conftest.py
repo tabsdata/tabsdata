@@ -290,10 +290,11 @@ APISERVER_URL = (
     TESTING_SUPERVISOR_INSTANCES.get("tdtest").get("apiserver").get("address")
 )
 
-# The bootstrap seeds exactly one project, `sandbox`; tenant-scoped tests target
-# it. The client never defaults a project (defaulting, if any, is the server's
-# job), so test connections must select one explicitly.
-TESTING_PROJECT = "sandbox"
+# The server boots with no project, so the suite creates its own tenant (see the
+# `ensure_testing_project` fixture) and points tenant-scoped tests at it. The
+# client never defaults a project (defaulting, if any, is the server's job), so
+# test connections must select one explicitly.
+TESTING_PROJECT = "test"
 
 
 @contextmanager
@@ -433,18 +434,29 @@ def clean_polars_df(df, sort=True):
     return df
 
 
+@pytest.fixture(scope="session", autouse=True)
+def ensure_testing_project() -> str:
+    # The server boots with no project, so create the tenant the tests target
+    # before any tenant-scoped connection uses it. Idempotent across xdist
+    # workers via `raise_for_status=False`.
+    server = TabsdataServer(APISERVER_URL, "admin", "tabsdata")
+    server.create_project(
+        TESTING_PROJECT, description="pytest tenant", raise_for_status=False
+    )
+    return TESTING_PROJECT
+
+
 @pytest.fixture(scope="session")
-def apiserver_connection() -> APIServer:
+def apiserver_connection(ensure_testing_project) -> APIServer:
     connection = obtain_connection(APISERVER_URL, "admin", "tabsdata")
-    # Tenant-scoped calls ride the active project on the connection; the tests
-    # target the bootstrap-seeded `sandbox` project (the only one the server
-    # seeds). Without it every tenant call fails with NoProjectSelectedError.
+    # Tenant-scoped calls ride the active project on the connection; without one
+    # every tenant call fails with NoProjectSelectedError.
     connection.project = TESTING_PROJECT
     return connection
 
 
 @pytest.fixture(scope="session")
-def tabsserver_connection() -> TabsdataServer:
+def tabsserver_connection(ensure_testing_project) -> TabsdataServer:
     server = TabsdataServer(APISERVER_URL, "admin", "tabsdata")
     server.connection.project = TESTING_PROJECT
     return server

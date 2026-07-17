@@ -63,11 +63,12 @@ mod tests {
 
     #[tokio::test]
     async fn project_accepts_concrete() {
-        let mut parts = parts_with(Some(basic::WildcardProject::Project(ProjectId::sandbox())));
+        let pid = ProjectId::default();
+        let mut parts = parts_with(Some(basic::WildcardProject::Project(pid)));
         let Ok(Project(id)) = Project::from_request_parts(&mut parts, &()).await else {
             panic!("expected a concrete project");
         };
-        assert_eq!(id, ProjectId::sandbox());
+        assert_eq!(id, pid);
     }
 
     #[tokio::test]
@@ -84,12 +85,13 @@ mod tests {
 
     #[tokio::test]
     async fn wildcard_accepts_concrete() {
-        let mut parts = parts_with(Some(basic::WildcardProject::Project(ProjectId::sandbox())));
+        let pid = ProjectId::default();
+        let mut parts = parts_with(Some(basic::WildcardProject::Project(pid)));
         let Ok(WildcardProject(scope)) = WildcardProject::from_request_parts(&mut parts, &()).await
         else {
             panic!("expected a concrete project");
         };
-        assert_eq!(scope, basic::WildcardProject::Project(ProjectId::sandbox()));
+        assert_eq!(scope, basic::WildcardProject::Project(pid));
     }
 
     #[tokio::test]

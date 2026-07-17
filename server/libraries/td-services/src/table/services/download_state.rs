@@ -73,7 +73,7 @@ mod tests {
     use td_objects::system::TD_FN_STATE_PREFIX;
     use td_objects::types::basic::AccessTokenId;
     use td_objects::types::basic::{
-        AtTime, BundleId, CollectionName, Decorator, ProjectId, TableNameDto, UserId,
+        AtTime, BundleId, CollectionName, Decorator, TableNameDto, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -85,7 +85,8 @@ mod tests {
         use td_objects::dxo::table::TableDBWithNames;
 
         use td_objects::types::basic::{
-            AtTime, CollectionIdName, TableId, TableIdName, TriggeredOn, UncommittedStatus,
+            AtTime, CollectionIdName, ProjectId, TableId, TableIdName, TriggeredOn,
+            UncommittedStatus,
         };
 
         use td_database::pool::scoped::Scoped;
@@ -147,11 +148,12 @@ mod tests {
 
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
     async fn test_download_state(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let context = Context::with_defaults(db);
 
         let collection = context
             .apiserver_pool
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -174,13 +176,13 @@ mod tests {
             .build()?;
         let function = context
             .apiserver_pool
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
         let system_tables = context
             .apiserver_pool
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .system_tables(&function)
             .await?;
@@ -201,7 +203,7 @@ mod tests {
                     function_version_id: function_version_id.clone(),
                     at: *at_time,
                 })
-                .in_project(ProjectId::sandbox());
+                .in_project(p.id);
             let service = TableStateDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
@@ -215,7 +217,7 @@ mod tests {
                     function_version_id: function_version_id.clone(),
                     at: *at_time,
                 })
-                .in_project(ProjectId::sandbox());
+                .in_project(p.id);
             let service = TableStateDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
@@ -228,6 +230,6 @@ mod tests {
         };
 
         let tables = std::slice::from_ref(&td_fn_state_table.name);
-        test_download_tables(&context, &collection, &function, tables, get_download).await
+        test_download_tables(&context, &p, &collection, &function, tables, get_download).await
     }
 }

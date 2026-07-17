@@ -97,18 +97,20 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_download_bundle(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let context = Context::with_defaults(db.clone());
 
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
 
         // Upload bundle A and register v1 of the function bound to it.
         let payload_a = b"BUNDLE-PAYLOAD-A".to_vec();
-        let bundle_a_id = upload_bundle(&context, &collection.name, payload_a.clone()).await?;
+        let bundle_a_id =
+            upload_bundle(&context, p.id, &collection.name, payload_a.clone()).await?;
 
         let create_v1 = FunctionRegister::builder()
             .try_name("joaquin")?
@@ -123,7 +125,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let v1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create_v1)
             .await?;
@@ -137,14 +139,15 @@ mod tests {
         // UpdateFunctionService would drag in trigger/dependency rebuilds
         // that are irrelevant to what we're asserting here.
         let payload_b = b"BUNDLE-PAYLOAD-B".to_vec();
-        let bundle_b_id = upload_bundle(&context, &collection.name, payload_b.clone()).await?;
+        let bundle_b_id =
+            upload_bundle(&context, p.id, &collection.name, payload_b.clone()).await?;
 
         let v2 = FunctionDBBuilder::try_from(&v1)?
             .id(FunctionVersionId::new())
             .bundle_id(bundle_b_id)
             .defined_on(AtTime::now())
             .build()?;
-        db.scoped(ProjectId::sandbox()).live().insert(&v2).await?;
+        db.scoped(p.id).live().insert(&v2).await?;
 
         let function_param = FunctionParam::builder()
             .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
@@ -165,7 +168,7 @@ mod tests {
                     function_param.clone(),
                     OptionalAtTimeParam { at },
                 ))
-                .in_project(ProjectId::sandbox());
+                .in_project(p.id);
             let response = service.clone().raw_oneshot(download_request).await?;
 
             assert_eq!(response.function_version_id, expected_fn.id);
@@ -189,17 +192,18 @@ mod tests {
     async fn test_download_bundle_falls_back_to_collection_base_path_when_bundle_row_missing(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let context = Context::with_defaults(db.clone());
 
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
 
         let payload = b"BUNDLE-PAYLOAD".to_vec();
-        let bundle_id = upload_bundle(&context, &collection.name, payload.clone()).await?;
+        let bundle_id = upload_bundle(&context, p.id, &collection.name, payload.clone()).await?;
 
         let create = FunctionRegister::builder()
             .try_name("joaquin")?
@@ -213,14 +217,14 @@ mod tests {
             .try_runtime_values("rv")?
             .reuse_frozen_tables(false)
             .build()?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
 
         // Reap the bundle row, leaving only the storage object and the live
         // collection base_path to locate it.
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .live()
             .delete::<BundleDB>(&bundle_id)
             .await?;
@@ -242,7 +246,7 @@ mod tests {
                 function_param,
                 OptionalAtTimeParam { at: None },
             ))
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let response = service.raw_oneshot(download_request).await?;
         assert_eq!(response.bundle_id, bundle_id);
 
@@ -258,6 +262,7 @@ mod tests {
 
     async fn upload_bundle(
         context: &Context,
+        project_id: ProjectId,
         collection: &CollectionName,
         payload: Vec<u8>,
     ) -> Result<BundleId, TdError> {
@@ -270,7 +275,7 @@ mod tests {
                     .build()?,
                 upload,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project_id);
         let bundle = UploadFunctionService::build(context)
             .service()
             .raw_oneshot(request)

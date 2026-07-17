@@ -14,9 +14,9 @@ use td_security::SYSTEM_GROUPS;
 use td_tower::extractors::{MutRef, Ref};
 
 /// Seed a freshly-created project with the system groups (`default`, `source`,
-/// `destination`) — the same set the schema bootstraps into `sandbox`. A
-/// collection resolves its group within its own project, so every project must
-/// carry these or `collection.create` would fail to resolve its group.
+/// `destination`). A collection resolves its group within its own project, so
+/// every project must carry these or `collection.create` would fail to resolve
+/// its group.
 ///
 /// The system groups carry the **well-known fixed ids** (group ids are unique
 /// per project, not globally), so `GroupId::source()/destination()` are valid in

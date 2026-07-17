@@ -312,6 +312,7 @@ mod tests {
     /// then `live().update`.
     async fn set_collection_base_path(
         db: &TdPool,
+        project_id: ProjectId,
         collection: &CollectionDB,
         base_path: &BasePath,
     ) -> Result<(), TdError> {
@@ -324,7 +325,7 @@ mod tests {
             .clone()
             .base_path(Some(Some(base_path.clone())))
             .build()?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(project_id)
             .live()
             .update::<CollectionUpdateDB, CollectionDB>(&update, &collection.id)
             .await?;
@@ -337,6 +338,7 @@ mod tests {
     /// function-version override (`FunctionRegister::base_path`).
     async fn seed_dispatch_lfr(
         db: &TdPool,
+        project_id: ProjectId,
         collection: &CollectionDB,
         name: &str,
         base_path: Option<BasePath>,
@@ -355,22 +357,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let func = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(collection, &create)
             .await?;
-        let exec = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&func)
-            .await?;
+        let exec = db.scoped(project_id).seed().execution(&func).await?;
         let txn = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .physical_function_run(
                 collection,
@@ -398,7 +396,7 @@ mod tests {
             UserId::admin(),
             LogicalPointerReason::InitialMint,
         )?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(project_id)
             .live()
             .insert::<LogicalFunctionRunPointerDB>(&pending)
             .await?;
@@ -412,19 +410,20 @@ mod tests {
     /// (override vs collection fallback) within a single batch.
     #[td_test::test(db)]
     async fn test_dispatch_batch_stamps_per_lfr_base_path(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let coll_base = BasePath::try_from("/coll")?;
-        set_collection_base_path(&db, &coll, &coll_base).await?;
+        set_collection_base_path(&db, p.id, &coll, &coll_base).await?;
         let coll: CollectionDB = db.live().fetch_one::<CollectionDB>(&coll.id).await?;
         assert_eq!(coll.base_path, Some(coll_base.clone()));
 
         let override_base = BasePath::try_from("/a")?;
-        let lfr_a = seed_dispatch_lfr(&db, &coll, "fa", Some(override_base.clone())).await?;
-        let lfr_b = seed_dispatch_lfr(&db, &coll, "fb", None).await?;
+        let lfr_a = seed_dispatch_lfr(&db, p.id, &coll, "fa", Some(override_base.clone())).await?;
+        let lfr_b = seed_dispatch_lfr(&db, p.id, &coll, "fb", None).await?;
         let fvid_a = lfr_a.function_version_id.clone();
         let fvid_b = lfr_b.function_version_id.clone();
 
@@ -469,6 +468,7 @@ mod tests {
     /// Returns the LFR and the id of the PFR its pointer is bound to.
     async fn seed_bound_lfr(
         db: &TdPool,
+        project_id: ProjectId,
         collection: &CollectionDB,
         name: &str,
     ) -> Result<(LogicalFunctionRunDB, PhysicalFunctionRunId), TdError> {
@@ -486,22 +486,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let func = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(collection, &create)
             .await?;
-        let exec = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&func)
-            .await?;
+        let exec = db.scoped(project_id).seed().execution(&func).await?;
         let txn = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .physical_function_run(
                 collection,
@@ -524,12 +520,13 @@ mod tests {
     /// rebinding — pre-fix the eager bind made this Err (the recover deadlock).
     #[td_test::test(db)]
     async fn test_dispatch_rerun_of_bound_lfr_does_not_rebind(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        let (lfr, bound_pfr) = seed_bound_lfr(&db, &coll, "fr").await?;
+        let (lfr, bound_pfr) = seed_bound_lfr(&db, p.id, &coll, "fr").await?;
 
         let conn = MutRef::new(DomainConnection::ready(
             db.begin().await.unwrap().into_connection(),

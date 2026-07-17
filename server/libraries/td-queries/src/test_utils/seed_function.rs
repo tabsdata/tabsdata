@@ -165,15 +165,14 @@ mod tests {
     use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
-    use td_objects::types::basic::{
-        AtTime, BundleId, CollectionName, Decorator, ProjectId, UserId,
-    };
+    use td_objects::types::basic::{AtTime, BundleId, CollectionName, Decorator, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_function(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -205,7 +204,7 @@ mod tests {
             .unwrap();
 
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await

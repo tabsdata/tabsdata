@@ -69,11 +69,13 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::metrics::{Dim, InflightRequest, MetricsRequest};
     use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
-    use td_objects::types::basic::{AccessTokenId, ProjectId, UserId};
+    use td_objects::types::basic::{AccessTokenId, UserId};
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
     async fn test_snapshot_empty_window(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let request = SnapshotRequest {
             metrics: MetricsRequest {
                 dim: Dim::Collection,
@@ -94,7 +96,7 @@ mod tests {
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(request)
-                    .in_project(ProjectId::sandbox()),
+                    .in_project(p.id),
             )
             .await?;
         assert_eq!(response.metrics.dim, Dim::Collection);

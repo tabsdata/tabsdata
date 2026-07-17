@@ -125,8 +125,8 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, ProjectId,
-        TableNameDto, UserId, UserName, WorkerConfig,
+        AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, TableNameDto,
+        UserId, UserName, WorkerConfig,
     };
     use td_objects::types::composed::{TableDependency, TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
@@ -136,6 +136,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_read_function_version(db: TdPool) {
         use td_database::pool::scoped::Scoped;
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         ReadFunctionService::with_defaults(db)
@@ -227,8 +228,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_read(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("cofnig")?, &UserId::admin())
             .await?;
@@ -255,7 +257,7 @@ mod tests {
             .build()?;
 
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -270,7 +272,7 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = ReadFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

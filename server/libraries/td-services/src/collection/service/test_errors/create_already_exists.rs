@@ -11,14 +11,15 @@ use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionCreate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::errors::SqlError;
-use td_objects::types::basic::{AccessTokenId, CollectionName, Description, ProjectId, UserId};
+use td_objects::types::basic::{AccessTokenId, CollectionName, Description, UserId};
 use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(db)]
 async fn test_create_already_existing(db: TdPool) {
+    let p = db.seed().test_project().await.unwrap();
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = db
-        .scoped(ProjectId::sandbox())
+        .scoped(p.id)
         .seed()
         .collection(&name, &UserId::admin())
         .await;
@@ -33,7 +34,7 @@ async fn test_create_already_existing(db: TdPool) {
 
     let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
         .create((), create)
-        .in_project(ProjectId::sandbox());
+        .in_project(p.id);
 
     // The `ensure_collection_name_free` pre-check rejects the duplicate up front
     // with a clean `EntityAlreadyExists` rather than the raw `UniqueViolation`

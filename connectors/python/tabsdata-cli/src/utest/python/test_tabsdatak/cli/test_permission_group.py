@@ -137,7 +137,7 @@ def test_system_permission_with_project_rejected(
 ):
     with pytest.raises(APIServerError):
         admin_client.grant_permission(
-            other_user, "manage_system", project="sandbox"
+            other_user, "manage_system", project="any_project"
         )
 
 
@@ -187,7 +187,7 @@ def test_list_by_project_forbidden_for_non_privileged_user(
     _, client = regular_user
     # listing who-can-access a project requires manage on that project
     with pytest.raises(APIServerError):
-        client.list_permissions_by_project("sandbox")
+        client.list_permissions_by_project("any_project")
 
 
 # --------------------------------------------------------------------------- #

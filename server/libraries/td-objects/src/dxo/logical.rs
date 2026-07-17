@@ -189,7 +189,7 @@ mod definitions {
         // immutable thereafter so a collection's later group reassignment
         // doesn't shift historical runs. No default: the group is
         // project-scoped, so it must be stamped explicitly from the run's
-        // collection — a global fallback would mis-tag runs in any non-sandbox
+        // collection — a global fallback would mis-tag runs in any other
         // project.
         pub group_id: GroupId,
     }

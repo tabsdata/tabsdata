@@ -2,10 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use sea_query::{
-    Alias, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, InsertStatement, JoinType, Keyword, Query, Table,
-    TableCreateStatement,
-};
+use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement};
 
 use super::users::Users;
 use crate::schema::Entity;
@@ -30,8 +27,6 @@ pub enum Groups {
     System,
 }
 
-use td_security::{ENCODED_ID_PROJECT_SANDBOX, ENCODED_ID_SYSTEM as SYSTEM_USER_ID, SYSTEM_GROUPS};
-
 pub(super) struct Defs;
 
 impl Entity for Defs {
@@ -46,7 +41,7 @@ impl Entity for Defs {
                 // Tenant tag. No base default — fail-closed on every backend: a
                 // write that omits it hits NOT NULL. On postgres the RLS phase
                 // sets the column default to read `app.project_id` (the request's
-                // project); the no-RLS single-project backends (sqlite/mysql) keep
+                // project); the no-RLS backends (sqlite/mysql) keep
                 // no default at all, so writes there must set `project_id`.
                 .col(ColumnDef::new(Groups::ProjectId).text().not_null())
                 .primary_key(Index::create().col(Groups::ProjectId).col(Groups::Id))
@@ -113,38 +108,5 @@ impl Entity for Defs {
                 )
                 .to_owned(),
         )]
-    }
-
-    fn seeds(&self) -> Vec<InsertStatement> {
-        SYSTEM_GROUPS
-            .iter()
-            .map(|(id, name, desc)| {
-                Query::insert()
-                    .into_table(Groups::Table)
-                    .columns([
-                        Groups::Id,
-                        Groups::ProjectId,
-                        Groups::Name,
-                        Groups::Description,
-                        Groups::CreatedOn,
-                        Groups::CreatedById,
-                        Groups::ModifiedOn,
-                        Groups::ModifiedById,
-                        Groups::System,
-                    ])
-                    .values_panic([
-                        (*id).into(),
-                        ENCODED_ID_PROJECT_SANDBOX.into(),
-                        (*name).into(),
-                        (*desc).into(),
-                        Keyword::CurrentTimestamp.into(),
-                        SYSTEM_USER_ID.into(),
-                        Keyword::CurrentTimestamp.into(),
-                        SYSTEM_USER_ID.into(),
-                        true.into(),
-                    ])
-                    .to_owned()
-            })
-            .collect()
     }
 }

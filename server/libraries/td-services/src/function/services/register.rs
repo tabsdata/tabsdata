@@ -191,6 +191,7 @@ mod tests {
     // collection update service, returning the applied BasePath.
     async fn set_collection_base_path(
         db: &TdPool,
+        project_id: ProjectId,
         collection_name: &CollectionName,
         base_path: &str,
     ) -> Result<BasePath, TdError> {
@@ -207,7 +208,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project_id);
         UpdateCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -352,9 +353,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_empty(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -384,7 +386,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -395,9 +397,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_empty_vec(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -427,7 +430,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -438,9 +441,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_table_output(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -470,7 +474,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -483,9 +487,10 @@ mod tests {
     async fn test_register_table_output_duplicate_output_tables_err(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let _collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -518,7 +523,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -538,9 +543,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_table_dependency(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -570,7 +576,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -603,9 +609,10 @@ mod tests {
         db: TdPool,
         test_triggers: Option<Vec<TableTriggerDto>>,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -638,7 +645,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -674,7 +681,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -685,9 +692,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_tables_dependencies_triggers(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -720,7 +728,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -760,7 +768,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -792,15 +800,16 @@ mod tests {
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let _collection_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
         let collection_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name_2, &UserId::admin())
             .await?;
@@ -833,7 +842,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -866,7 +875,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
@@ -920,7 +929,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -931,9 +940,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_same_name(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -963,7 +973,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request.clone()).await;
@@ -1002,15 +1012,16 @@ mod tests {
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let collection_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
         let collection_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name_2, &UserId::admin())
             .await?;
@@ -1036,10 +1047,7 @@ mod tests {
                 .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
                 .reuse_frozen_tables(false)
                 .build()?;
-            db.scoped(ProjectId::sandbox())
-                .seed()
-                .function(collection, &create)
-                .await?;
+            db.scoped(p.id).seed().function(collection, &create).await?;
         }
 
         // Actual test
@@ -1086,7 +1094,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1102,8 +1110,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_private_table_flag(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
@@ -1134,7 +1143,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1152,8 +1161,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_dependency_fixed_validation(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
@@ -1181,7 +1191,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1216,7 +1226,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1233,8 +1243,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_dependency_range_validation(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
@@ -1262,7 +1273,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1276,9 +1287,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_workers_created(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1306,7 +1318,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await?;
 
@@ -1329,8 +1341,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_multiple_workers_error(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection")?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1359,7 +1372,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1373,14 +1386,15 @@ mod tests {
     async fn test_register_stamps_stage_base_path_from_collection(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("prod_coll")?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
 
         // Move the collection onto a non-default base_path before registering.
-        let prod = set_collection_base_path(&db, &collection_name, "/prod").await?;
+        let prod = set_collection_base_path(&db, p.id, &collection_name, "/prod").await?;
 
         let create = FunctionRegister::builder()
             .try_name("stamped_fn")?
@@ -1401,7 +1415,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
@@ -1422,9 +1436,10 @@ mod tests {
         use ta_services::factory::ServiceFactory;
         use td_objects::dxo::function_upload::FunctionUpload;
 
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1442,7 +1457,7 @@ mod tests {
                     .build()?,
                 upload,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let bundle = UploadFunctionService::build(&context)
             .service()
             .raw_oneshot(request)
@@ -1472,7 +1487,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
@@ -1487,14 +1502,15 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_base_path_override(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("prod_coll")?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
 
         // Non-default collection base_path so we can tell override from stamping.
-        let prod = set_collection_base_path(&db, &collection_name, "/prod").await?;
+        let prod = set_collection_base_path(&db, p.id, &collection_name, "/prod").await?;
 
         let create = FunctionRegister::builder()
             .try_name("override_fn")?
@@ -1516,7 +1532,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 
@@ -1560,6 +1576,7 @@ mod tests {
 
     async fn register_in(
         db: &TdPool,
+        project_id: ProjectId,
         collection: &str,
         create: FunctionRegister,
     ) -> Result<Function, TdError> {
@@ -1570,7 +1587,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project_id);
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -1582,6 +1599,7 @@ mod tests {
     /// mandatory) rather than the default local Supervisor.
     async fn register_in_kubernetes(
         db: &TdPool,
+        project_id: ProjectId,
         collection: &str,
         create: FunctionRegister,
     ) -> Result<Function, TdError> {
@@ -1601,7 +1619,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project_id);
         RegisterFunctionService::build(&context)
             .service()
             .raw_oneshot(request)
@@ -1610,9 +1628,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_publisher_matching_connector_ok(db: TdPool) -> Result<(), TdError> {
-        create_collection(&db, "src_pub", Some(GroupName::source())).await;
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "src_pub", Some(GroupName::source())).await;
         let create = pubsub_register("pub_fn", Decorator::Publisher, Some("mysqlSrcConn"))?;
-        register_in_kubernetes(&db, "src_pub", create).await?;
+        register_in_kubernetes(&db, p.id, "src_pub", create).await?;
 
         let function = active_function(&db, &FunctionName::try_from("pub_fn")?).await?;
         assert_eq!(function.decorator, Decorator::Publisher);
@@ -1625,9 +1644,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_subscriber_matching_connector_ok(db: TdPool) -> Result<(), TdError> {
-        create_collection(&db, "dst_sub", Some(GroupName::destination())).await;
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "dst_sub", Some(GroupName::destination())).await;
         let create = pubsub_register("sub_fn", Decorator::Subscriber, Some("mysqlDestConn"))?;
-        register_in_kubernetes(&db, "dst_sub", create).await?;
+        register_in_kubernetes(&db, p.id, "dst_sub", create).await?;
 
         let function = active_function(&db, &FunctionName::try_from("sub_fn")?).await?;
         assert_eq!(function.decorator, Decorator::Subscriber);
@@ -1640,9 +1660,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_publisher_connector_mismatch_err(db: TdPool) -> Result<(), TdError> {
-        create_collection(&db, "src_mm", Some(GroupName::source())).await;
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "src_mm", Some(GroupName::source())).await;
         let create = pubsub_register("mm_fn", Decorator::Publisher, Some("postgresSrcConn"))?;
-        let err = register_in_kubernetes(&db, "src_mm", create)
+        let err = register_in_kubernetes(&db, p.id, "src_mm", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
@@ -1655,10 +1676,11 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_publisher_requires_connector_err(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         // Under Kubernetes a publisher must declare its connection kind.
-        create_collection(&db, "src_req", Some(GroupName::source())).await;
+        create_collection(&db, p.id, "src_req", Some(GroupName::source())).await;
         let create = pubsub_register("req_fn", Decorator::Publisher, None)?;
-        let err = register_in_kubernetes(&db, "src_req", create)
+        let err = register_in_kubernetes(&db, p.id, "src_req", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
@@ -1671,14 +1693,15 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_publisher_without_connection_err(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         // A plain (DataFactory) collection carries no connection.
         let collection_name = CollectionName::try_from("fac_pub")?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
         let create = pubsub_register("facpub_fn", Decorator::Publisher, Some("mysqlSrcConn"))?;
-        let err = register_in_kubernetes(&db, "fac_pub", create)
+        let err = register_in_kubernetes(&db, p.id, "fac_pub", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
@@ -1697,14 +1720,15 @@ mod tests {
     // `test_register_publisher_requires_connector_err`.
     #[td_test::test(db)]
     async fn test_register_publisher_legacy_no_connection_ok(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         // A plain (DataFactory) collection carries no connection.
         let collection_name = CollectionName::try_from("fac_legacy_pub")?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
         let create = pubsub_register("legacy_pub_fn", Decorator::Publisher, None)?;
-        register_in(&db, "fac_legacy_pub", create).await?;
+        register_in(&db, p.id, "fac_legacy_pub", create).await?;
 
         let function = active_function(&db, &FunctionName::try_from("legacy_pub_fn")?).await?;
         assert_eq!(function.decorator, Decorator::Publisher);
@@ -1714,9 +1738,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_register_transformer_with_connector_err(db: TdPool) -> Result<(), TdError> {
-        create_collection(&db, "src_tf", Some(GroupName::source())).await;
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "src_tf", Some(GroupName::source())).await;
         let create = pubsub_register("tf_fn", Decorator::Transformer, Some("mysqlSrcConn"))?;
-        let err = register_in_kubernetes(&db, "src_tf", create)
+        let err = register_in_kubernetes(&db, p.id, "src_tf", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();

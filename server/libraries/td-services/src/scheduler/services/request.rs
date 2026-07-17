@@ -399,9 +399,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_schedule_request(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -424,7 +425,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -439,7 +440,7 @@ mod tests {
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let execution = service.raw_oneshot(request).await?;
@@ -618,12 +619,14 @@ mod tests {
             TransactionKey,
         };
 
+        let p = db.seed().test_project().await?;
+
         // Seed a Committed function run by hand (mirrors a previously-
         // dispatched, committed execution). seed_physical_function_run
         // also seeds the LTDV identity rows + InitialMint Pending
         // pointer events the append-Requested layer relies on.
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c_replay")?, &UserId::admin())
             .await?;
@@ -640,22 +643,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function).await?;
         let txn = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let fr_old = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -678,7 +677,7 @@ mod tests {
             .build()?;
         let replay_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(replay_param, ())
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let replay_response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
             .raw_oneshot(replay_request)
@@ -782,8 +781,9 @@ mod tests {
     /// decorator + resolver, with no pre-resolved context. WorkerDB stays Locked.
     #[td_test::test(db)]
     async fn test_schedule_request_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c_k8s")?, &UserId::admin())
             .await?;
@@ -800,7 +800,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -815,7 +815,7 @@ mod tests {
                     .name(Some(ExecutionName::try_from("e_k8s")?))
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         ExecuteFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -897,6 +897,7 @@ mod tests {
     /// message plus the seeded worker.
     async fn schedule_trigger_kubernetes(
         db: &TdPool,
+        project_id: ProjectId,
         collection_name: &str,
         worker_type: WorkerType,
         worker_status: WorkerStatus,
@@ -909,7 +910,7 @@ mod tests {
         TdError,
     > {
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(
                 &CollectionName::try_from(collection_name)?,
@@ -929,12 +930,12 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let worker = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .worker(
                 &collection,
@@ -962,8 +963,10 @@ mod tests {
     /// from, and the POST trigger + responder callbacks.
     #[td_test::test(db)]
     async fn test_schedule_stage_trigger_start_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (payload, _id, worker) = schedule_trigger_kubernetes(
             &db,
+            p.id,
             "c_stage_start",
             WorkerType::StageTrigger,
             WorkerStatus::Scheduled,
@@ -996,8 +999,10 @@ mod tests {
     /// the worker id (so the gateway can derive the pod to delete).
     #[td_test::test(db)]
     async fn test_stop_stage_trigger_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (payload, id, worker) = schedule_trigger_kubernetes(
             &db,
+            p.id,
             "c_stage_stop",
             WorkerType::StageTrigger,
             WorkerStatus::StopScheduled,
@@ -1023,8 +1028,10 @@ mod tests {
     /// external locations).
     #[td_test::test(db)]
     async fn test_schedule_cron_trigger_start_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (payload, _id, worker) = schedule_trigger_kubernetes(
             &db,
+            p.id,
             "c_cron_start",
             WorkerType::CronTrigger,
             WorkerStatus::Scheduled,
@@ -1054,8 +1061,10 @@ mod tests {
     /// worker id.
     #[td_test::test(db)]
     async fn test_stop_cron_trigger_kubernetes(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (payload, id, worker) = schedule_trigger_kubernetes(
             &db,
+            p.id,
             "c_cron_stop",
             WorkerType::CronTrigger,
             WorkerStatus::StopScheduled,

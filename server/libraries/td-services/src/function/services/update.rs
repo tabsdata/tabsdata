@@ -165,8 +165,8 @@ mod tests {
     use td_objects::system::TD_FN_STATE_PREFIX;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, Decorator, Depth, FunctionName, FunctionRuntimeValues,
-        FunctionStatus, ProjectId, ResetStage, TableId, TableName, TableStatus, UserId,
-        WorkerMessageStatus, WorkerStatus, WorkerType,
+        FunctionStatus, ResetStage, TableId, TableName, TableStatus, UserId, WorkerMessageStatus,
+        WorkerStatus, WorkerType,
     };
     use td_objects::types::recursion::RecursionOptions;
     use td_objects::{Buildable, and};
@@ -189,6 +189,7 @@ mod tests {
         use td_queries::insert_vec;
 
         use td_database::pool::scoped::Scoped;
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         UpdateFunctionService::with_defaults(db)
@@ -299,9 +300,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_fields(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -320,7 +322,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -341,7 +343,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -361,9 +363,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_add_new_table(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -382,7 +385,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -405,7 +408,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -425,9 +428,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_remove_table(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -446,7 +450,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -468,7 +472,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -488,9 +492,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_maintain_table(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -509,7 +514,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -532,7 +537,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -566,8 +571,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_reset_state(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("reset_coll")?, &UserId::admin())
             .await?;
@@ -592,7 +598,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -615,7 +621,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -635,8 +641,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_no_reset_state_reuses_state_id(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("noreset_coll")?, &UserId::admin())
             .await?;
@@ -660,7 +667,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -681,7 +688,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -708,8 +715,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_reset_stage_keeps_stage_base_path(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("stage_coll")?, &UserId::admin())
             .await?;
@@ -733,7 +741,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -756,7 +764,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -774,8 +782,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_no_reset_stage_carries_stage_id(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("nostage_coll")?, &UserId::admin())
             .await?;
@@ -799,7 +808,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -820,7 +829,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -836,8 +845,9 @@ mod tests {
     async fn test_update_base_path_override_sets_function_base_path(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(
                 &CollectionName::try_from("override_coll")?,
@@ -864,7 +874,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register)
@@ -885,7 +895,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -908,7 +918,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;
 
@@ -923,9 +933,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_add_dependencies(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -944,7 +955,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -968,7 +979,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -988,9 +999,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_remove_dependencies(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1009,7 +1021,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1032,7 +1044,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1052,9 +1064,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_maintain_dependencies(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1073,7 +1086,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1097,7 +1110,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1117,9 +1130,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_add_trigger(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1138,7 +1152,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -1158,7 +1172,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1181,7 +1195,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1201,9 +1215,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_remove_trigger(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1222,7 +1237,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -1242,7 +1257,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1264,7 +1279,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1284,9 +1299,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_maintain_trigger(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1305,7 +1321,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -1325,7 +1341,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1348,7 +1364,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1368,9 +1384,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_change_everything(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1392,7 +1409,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -1415,7 +1432,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1446,7 +1463,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1466,9 +1483,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_freeze_unfreeze(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1487,7 +1505,7 @@ mod tests {
             .build()?;
 
         let _created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1509,7 +1527,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1537,7 +1555,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1565,7 +1583,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1587,9 +1605,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_same_name(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1612,7 +1631,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1630,7 +1649,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(update_request).await;
@@ -1643,7 +1662,7 @@ mod tests {
                     .build()?,
                 create.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let create_response = response?;
@@ -1690,15 +1709,16 @@ mod tests {
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let collection_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
         let collection_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name_2, &UserId::admin())
             .await?;
@@ -1724,10 +1744,7 @@ mod tests {
                 .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
                 .reuse_frozen_tables(false)
                 .build()?;
-            db.scoped(ProjectId::sandbox())
-                .seed()
-                .function(collection, &create)
-                .await?;
+            db.scoped(p.id).seed().function(collection, &create).await?;
         }
 
         let dependencies = Some(vec![
@@ -1753,7 +1770,7 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .function(&collection_2, &create)
             .await?;
@@ -1806,7 +1823,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1821,9 +1838,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_private_table_flag(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let collection_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
@@ -1843,7 +1861,7 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("mock runtime values")?)
             .reuse_frozen_tables(false)
             .build()?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .function(&collection_1, &create)
             .await?;
@@ -1870,7 +1888,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
@@ -1888,9 +1906,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_maintain_triggers_dependencies(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1909,7 +1928,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1928,7 +1947,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &dependant)
             .await?;
@@ -1952,7 +1971,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -2008,9 +2027,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_remove_triggers_dependencies(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -2029,7 +2049,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -2048,7 +2068,7 @@ mod tests {
             .build()?;
 
         let dependant_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &dependant)
             .await?;
@@ -2067,7 +2087,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -2109,9 +2129,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_workers_created(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -2131,7 +2152,7 @@ mod tests {
             .workers(None)
             .build()?;
         let function_db = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -2157,7 +2178,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_1 = service.raw_oneshot(request).await?;
         let workers: Vec<WorkerDB> = db
@@ -2189,7 +2210,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_2 = service.raw_oneshot(request).await?;
 
@@ -2248,7 +2269,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_3 = service.raw_oneshot(request).await?;
 
@@ -2304,7 +2325,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated_function_4 = service.raw_oneshot(request).await?;
 
@@ -2340,9 +2361,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_multiple_workers_error(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -2362,7 +2384,7 @@ mod tests {
             .workers(None)
             .build()?;
         let function_db = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -2388,7 +2410,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;
         assert!(res.is_err());
@@ -2408,7 +2430,8 @@ mod tests {
         use td_bridge::{BridgeProviderHandle, Orchestrator};
         use td_objects::types::basic::{ConnectionKind, GroupName};
 
-        create_collection(&db, "src_upd", Some(GroupName::source())).await;
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "src_upd", Some(GroupName::source())).await;
 
         // Register a valid publisher whose connector matches the connection.
         let create = FunctionRegister::builder()
@@ -2431,7 +2454,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(register_request)
@@ -2451,7 +2474,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         // Run the update under Kubernetes, where the connection-kind
         // contract is enforced (see `ensure_connection_kind_matches`).
         let mut context = crate::Context::with_defaults(db.clone());

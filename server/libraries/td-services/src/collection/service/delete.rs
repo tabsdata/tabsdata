@@ -354,7 +354,10 @@ mod tests {
             ]);
     }
 
-    fn delete_request(collection: &str) -> Scoped<DeleteRequest<CollectionParam>, ProjectId> {
+    fn delete_request(
+        project: ProjectId,
+        collection: &str,
+    ) -> Scoped<DeleteRequest<CollectionParam>, ProjectId> {
         RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete(
                 CollectionParam::builder()
@@ -362,31 +365,32 @@ mod tests {
                     .build()
                     .unwrap(),
             )
-            .in_project(ProjectId::sandbox())
+            .in_project(project)
     }
 
     #[td_test::test(db)]
     async fn test_delete_drops_the_connection_store_content(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let bridge = bridge(InMemoryConnectionStore::default());
         let authz = Arc::new(AuthzContext::default());
 
         CreateCollectionService::new(db.clone(), authz.clone(), bridge.clone())
             .service()
-            .raw_oneshot(create_request("src0", Some(GroupName::source())))
+            .raw_oneshot(create_request(p.id, "src0", Some(GroupName::source())))
             .await
             .unwrap();
-        let connection = linked_connection(&db, "src0").await.unwrap();
+        let connection = linked_connection(&db, p.id, "src0").await.unwrap();
 
         DeleteCollectionService::new(db.clone(), authz, bridge.clone())
             .service()
-            .raw_oneshot(delete_request("src0"))
+            .raw_oneshot(delete_request(p.id, "src0"))
             .await
             .unwrap();
 
         // Deterministically gone once the delete returns — no polling.
         let err = bridge
             .connection_store()
-            .fetch(&ProjectId::sandbox(), &connection.id)
+            .fetch(&p.id, &connection.id)
             .await
             .expect_err("store content must be dropped with the collection");
         assert!(err.to_string().contains("no connection configured"));
@@ -394,10 +398,11 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_collection(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         // Create 3 functions and 3 tables in the same collection
         let name = CollectionName::try_from("c")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&name, &UserId::admin())
             .await?;
@@ -416,7 +421,7 @@ mod tests {
                 .reuse_frozen_tables(false)
                 .build()?;
             let _ = db
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .function(&collection, &create)
                 .await?;
@@ -439,14 +444,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
 
         // Create workers for function_3
         let _cron_worker = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .worker(
                 &collection,
@@ -458,19 +463,15 @@ mod tests {
             .await?;
 
         // Create function runner worker
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
         let physical_function_run = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -481,7 +482,7 @@ mod tests {
             )
             .await?;
         let _function_worker = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function_runner_worker(
                 &execution,
@@ -494,7 +495,7 @@ mod tests {
         // Test delete
         DeleteCollectionService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(delete_request(&name.to_string()))
+            .raw_oneshot(delete_request(p.id, &name.to_string()))
             .await?;
 
         // Assert collection is deleted
@@ -551,9 +552,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_collection_downstream_frozen(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let name_c_0 = CollectionName::try_from("c_0")?;
         let collection_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&name_c_0, &UserId::admin())
             .await?;
@@ -570,14 +572,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection_0, &create)
             .await?;
 
         let name_c_1 = CollectionName::try_from("c_1")?;
         let collection_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&name_c_1, &UserId::admin())
             .await?;
@@ -597,14 +599,14 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection_1, &create)
             .await?;
 
         DeleteCollectionService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(delete_request(&name_c_0.to_string()))
+            .raw_oneshot(delete_request(p.id, &name_c_0.to_string()))
             .await?;
 
         // Assert only c_1 is active
@@ -634,8 +636,9 @@ mod tests {
     /// ManageProject.
     #[td_test::test(db)]
     async fn test_source_delete_requires_manage_project(db: TdPool) {
-        create_collection(&db, "dev_src_d", Some(GroupName::source())).await;
-        let dev = seed_dev_user(&db).await;
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "dev_src_d", Some(GroupName::source())).await;
+        let dev = seed_dev_user(&db, p.id).await;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .delete(
                 CollectionParam::builder()
@@ -643,7 +646,7 @@ mod tests {
                     .build()
                     .unwrap(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let err = DeleteCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)

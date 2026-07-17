@@ -49,7 +49,7 @@
 //!   the function-run it serves). A global insert that omits `project_id` hits
 //!   the NOT NULL constraint — fail-closed.
 //!
-//! There is no `sandbox` fallback on the column default: production is
+//! There is no fallback project on the column default: production is
 //! fail-closed (an unscoped write hits NOT NULL). Tests default the serving
 //! pool to `app.bypass_rls = on`, so unscoped reads/writes span projects until
 //! a `db.scoped(p)` (or this provider) sets a per-statement scope.

@@ -70,12 +70,14 @@ mod tests {
         ProjectId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_recover_transaction(db: TdPool) {
         use td_database::pool::scoped::Scoped;
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         TransactionRecoverService::with_defaults(db)
@@ -109,10 +111,11 @@ mod tests {
 
     async fn test_recover_transaction(
         db: TdPool,
+        project_id: ProjectId,
         test_executions: Vec<TestExecution>,
         recover_on: usize,
     ) -> Result<(), TdError> {
-        test_status_update(db.clone(), &test_executions, |_, _, t, _, _| {
+        test_status_update(db.clone(), project_id, &test_executions, |_, _, t, _, _| {
             let db = db.clone();
             let test_transaction = test_executions
                 .iter()
@@ -129,7 +132,7 @@ mod tests {
                             .build()?,
                         (),
                     )
-                    .in_project(ProjectId::sandbox());
+                    .in_project(project_id);
 
                 TransactionRecoverService::with_defaults(db.clone())
                     .service()
@@ -142,8 +145,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_recover_transaction_unique(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -165,8 +170,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_recover_transaction_multiple_function(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -198,8 +205,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_recover_transaction_multiple_transaction(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![
@@ -234,8 +243,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_recover_transaction_multiple_execution(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
+            p.id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Running,
@@ -273,8 +284,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_recover_transaction_downstream(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
+            p.id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Running,
@@ -312,8 +325,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_recover_transaction_different_collection(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -345,11 +360,13 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_recover_transaction_status_transitions(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let recover_transition_for =
             async move |initial: LogicalFunctionRunStatus| -> Result<(), TdError> {
                 let db = db.clone();
                 test_recover_transaction(
                     db,
+                    p.id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Running,
                         transactions: vec![TestTransaction {
@@ -410,11 +427,13 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_recover_transaction_status_transitions_no_op(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let recover_transition_for =
             async move |initial: LogicalFunctionRunStatus| -> Result<(), TdError> {
                 let db = db.clone();
                 test_recover_transaction(
                     db,
+                    p.id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Running,
                         transactions: vec![TestTransaction {

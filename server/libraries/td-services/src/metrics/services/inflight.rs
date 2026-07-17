@@ -76,8 +76,8 @@ mod tests {
     use td_objects::dxo::query_filters::DimensionFilter;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName,
-        FunctionRuntimeValues, GroupId, LogicalFunctionRunStatus, ProjectId, ProjectName,
-        TableNameDto, TransactionKey, UserId,
+        FunctionRuntimeValues, GroupId, LogicalFunctionRunStatus, ProjectName, TableNameDto,
+        TransactionKey, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -85,6 +85,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_inflight_empty_db(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let request = InflightRequest {
             collections: DimensionFilter::default(),
             groups: DimensionFilter::default(),
@@ -95,7 +96,7 @@ mod tests {
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(request)
-                    .in_project(ProjectId::sandbox()),
+                    .in_project(p.id),
             )
             .await?;
         assert!(response.rows.is_empty());
@@ -106,13 +107,15 @@ mod tests {
     /// no project predicate and leans entirely on the per-request GUC + RLS, so a
     /// request scoped to a different project must observe none of another
     /// project's in-flight runs. Postgres-only (SQLite/MySQL have no RLS).
-    /// We seed an in-flight run scoped to `sandbox` and confirm a freshly-created
-    /// empty project cannot see it.
+    /// We seed an in-flight run scoped to one project and confirm a
+    /// freshly-created empty project cannot see it.
     #[td_test::test(db)]
     async fn test_inflight_isolated_by_project(db: TdPool) -> Result<(), TdError> {
         if !matches!(db.kind(), DatabaseBackend::Postgres) {
             return Ok(());
         }
+
+        let p = db.seed().test_project().await?;
 
         // A second, empty project (its own system groups, no runs).
         let other_project = db
@@ -120,9 +123,9 @@ mod tests {
             .project(ProjectName::try_from("inflight_iso_b")?)
             .await?;
 
-        // An in-flight run in `sandbox`.
+        // An in-flight run in the first project.
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(
                 &CollectionName::try_from("inflight_iso_coll")?,
@@ -142,21 +145,17 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -167,8 +166,8 @@ mod tests {
             )
             .await?;
 
-        // Scoped to sandbox: sees its own in-flight run.
-        let sandbox = InflightService::with_defaults(db.clone())
+        // Scoped to the first project: sees its own in-flight run.
+        let in_test = InflightService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -177,15 +176,15 @@ mod tests {
                         groups: DimensionFilter::default(),
                         statuses: vec![],
                     })
-                    .in_project(ProjectId::sandbox()),
+                    .in_project(p.id),
             )
             .await?;
         assert!(
-            !sandbox.rows.is_empty(),
-            "sandbox must see its own in-flight run",
+            !in_test.rows.is_empty(),
+            "the first project must see its own in-flight run",
         );
 
-        // Scoped to the other project: RLS hides sandbox's run.
+        // Scoped to the other project: RLS hides the first project's run.
         let other = InflightService::with_defaults(db.clone())
             .service()
             .raw_oneshot(
@@ -200,7 +199,7 @@ mod tests {
             .await?;
         assert!(
             other.rows.is_empty(),
-            "a different project must not see sandbox's in-flight runs",
+            "a different project must not see the first project's in-flight runs",
         );
         Ok(())
     }
@@ -252,9 +251,10 @@ mod tests {
             return Ok(());
         }
 
-        // Project A = sandbox: an in-flight run in a sandbox collection.
+        // Project A: an in-flight run in one of its collections.
+        let p = db.seed().test_project().await?;
         let coll_a = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("g_inflight_a")?, &UserId::admin())
             .await?;
@@ -309,7 +309,7 @@ mod tests {
             .rows
             .iter()
             .find(|r| r.collection_id == coll_a.id)
-            .expect("sandbox collection's in-flight run must appear in the global view");
+            .expect("project A collection's in-flight run must appear in the global view");
         let row_b = response
             .rows
             .iter()
@@ -317,7 +317,7 @@ mod tests {
             .expect("project B collection's in-flight run must appear in the global view");
 
         // Each row is attributed to its own project.
-        assert_eq!(row_a.project_id, ProjectId::sandbox());
+        assert_eq!(row_a.project_id, p.id);
         assert_eq!(row_b.project_id, project_b.id);
         // Both `default` groups share the fixed id; the project tag disambiguates.
         assert_eq!(row_a.group_id, coll_a.group_id);
@@ -325,7 +325,7 @@ mod tests {
         assert_eq!(coll_a.group_id, GroupId::default_group());
         assert_eq!(coll_b.group_id, GroupId::default_group());
         // A groups join not matching project_id would fan out and double these.
-        assert_eq!(row_a.count, 1, "fan-out: sandbox count inflated");
+        assert_eq!(row_a.count, 1, "fan-out: project A count inflated");
         assert_eq!(row_b.count, 1, "fan-out: project B count inflated");
         Ok(())
     }

@@ -252,7 +252,9 @@ mod tests {
     // Tests in execute assert the correctness of the execution.
     #[td_test::test(db)]
     async fn test_execute_version_no_previous_execution(db: TdPool) -> Result<(), TdError> {
-        let (function, response) = test_execute_version(db, None, SkipIfRunning::FALSE).await?;
+        let p = db.seed().test_project().await?;
+        let (function, response) =
+            test_execute_version(db, p.id, None, SkipIfRunning::FALSE).await?;
         assert_eq!(response.triggered_functions, HashSet::from([function.id]));
         Ok(())
     }
@@ -261,15 +263,19 @@ mod tests {
     async fn test_execute_version_no_previous_execution_skip_if_running(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let (function, response) = test_execute_version(db, None, SkipIfRunning::TRUE).await?;
+        let p = db.seed().test_project().await?;
+        let (function, response) =
+            test_execute_version(db, p.id, None, SkipIfRunning::TRUE).await?;
         assert_eq!(response.triggered_functions, HashSet::from([function.id]));
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_execute_version_previous_execution_running(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (function, response) = test_execute_version(
             db,
+            p.id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::CronTrigger,
@@ -285,9 +291,11 @@ mod tests {
     async fn test_execute_version_previous_execution_running_skip_if_running(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         // skip_if_running + currently running -> 425 Too Early, no new execution.
         let err = test_execute_version(
             db.clone(),
+            p.id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::CronTrigger,
@@ -310,8 +318,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_version_previous_execution_committed(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (function, response) = test_execute_version(
             db,
+            p.id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Committed,
                 trigger_type: TriggerType::CronTrigger,
@@ -327,8 +337,10 @@ mod tests {
     async fn test_execute_version_previous_execution_commited_skip_if_running(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (function, response) = test_execute_version(
             db,
+            p.id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Committed,
                 trigger_type: TriggerType::CronTrigger,
@@ -344,8 +356,10 @@ mod tests {
     async fn test_execute_version_previous_version_different_type_running(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (function, response) = test_execute_version(
             db,
+            p.id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::Manual,
@@ -361,8 +375,10 @@ mod tests {
     async fn test_execute_version_previous_version_different_type_running_skip_if_running(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (function, response) = test_execute_version(
             db,
+            p.id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::Manual,
@@ -381,11 +397,12 @@ mod tests {
 
     async fn test_execute_version(
         db: TdPool,
+        project_id: ProjectId,
         previous_run: Option<PreviousRun>,
         skip_if_running: SkipIfRunning,
     ) -> Result<(FunctionDB, ExecutionResponse), TdError> {
         let collection_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
             .await?;
@@ -405,21 +422,16 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
 
         if let Some(previous_run) = previous_run {
             let execution = match previous_run.trigger_type {
-                TriggerType::Manual => {
-                    db.scoped(ProjectId::sandbox())
-                        .seed()
-                        .execution(&function)
-                        .await?
-                }
+                TriggerType::Manual => db.scoped(project_id).seed().execution(&function).await?,
                 TriggerType::CronTrigger => {
-                    db.scoped(ProjectId::sandbox())
+                    db.scoped(project_id)
                         .seed()
                         .cron_execution(&function)
                         .await?
@@ -428,13 +440,13 @@ mod tests {
             };
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = db
-                .scoped(ProjectId::sandbox())
+                .scoped(project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?;
 
             let _function_run = db
-                .scoped(ProjectId::sandbox())
+                .scoped(project_id)
                 .seed()
                 .physical_function_run(
                     &collection_0,
@@ -458,7 +470,7 @@ mod tests {
                     .trigger_type(TriggerType::CronTrigger)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project_id);
 
         let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -467,8 +479,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_version_previous_version_err(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
             .await?;
@@ -488,7 +501,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -509,7 +522,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let updated = service.raw_oneshot(request).await?;
@@ -525,7 +538,7 @@ mod tests {
                     .trigger_type(TriggerType::CronTrigger)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = ExecuteFunctionVersionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -538,9 +551,12 @@ mod tests {
         Ok(())
     }
 
-    async fn seed_dedup_function(db: &TdPool) -> Result<FunctionDB, TdError> {
+    async fn seed_dedup_function(
+        db: &TdPool,
+        project_id: ProjectId,
+    ) -> Result<FunctionDB, TdError> {
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(&CollectionName::try_from("dedup_coll")?, &UserId::admin())
             .await?;
@@ -556,7 +572,7 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(project_id)
             .seed()
             .function(&collection, &create)
             .await
@@ -564,6 +580,7 @@ mod tests {
 
     async fn trigger_with_external_uid(
         db: &TdPool,
+        project_id: ProjectId,
         function_version_id: &FunctionVersionId,
         external_uid: Option<ExternalUid>,
     ) -> Result<ExecutionResponse, TdError> {
@@ -578,7 +595,7 @@ mod tests {
                     .trigger_type(TriggerType::CronTrigger)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project_id);
         ExecuteFunctionVersionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -587,13 +604,14 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_version_external_uid_conflicts(db: TdPool) -> Result<(), TdError> {
-        let function = seed_dedup_function(&db).await?;
+        let p = db.seed().test_project().await?;
+        let function = seed_dedup_function(&db, p.id).await?;
         let uid = ExternalUid::try_from("uid-123")?;
 
-        trigger_with_external_uid(&db, &function.id, Some(uid.clone())).await?;
+        trigger_with_external_uid(&db, p.id, &function.id, Some(uid.clone())).await?;
 
         // Same external_uid on a still-live execution -> 409 Conflict, no new row.
-        let err = trigger_with_external_uid(&db, &function.id, Some(uid))
+        let err = trigger_with_external_uid(&db, p.id, &function.id, Some(uid))
             .await
             .unwrap_err();
         assert_eq!(err.api_error(), ApiError::Any(409));
@@ -608,10 +626,11 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_version_null_external_uid_not_deduped(db: TdPool) -> Result<(), TdError> {
-        let function = seed_dedup_function(&db).await?;
+        let p = db.seed().test_project().await?;
+        let function = seed_dedup_function(&db, p.id).await?;
 
-        trigger_with_external_uid(&db, &function.id, None).await?;
-        trigger_with_external_uid(&db, &function.id, None).await?;
+        trigger_with_external_uid(&db, p.id, &function.id, None).await?;
+        trigger_with_external_uid(&db, p.id, &function.id, None).await?;
 
         let executions: Vec<ExecutionDB> = db
             .live()
@@ -634,13 +653,14 @@ mod tests {
         if !matches!(db.kind(), DatabaseBackend::Postgres) {
             return Ok(());
         }
-        let function = seed_dedup_function(&db).await?;
+        let p = db.seed().test_project().await?;
+        let function = seed_dedup_function(&db, p.id).await?;
         let uid = ExternalUid::try_from("uid-concurrent")?;
 
         // Fire two identical triggers concurrently on the shared pool.
         let (a, b) = tokio::join!(
-            trigger_with_external_uid(&db, &function.id, Some(uid.clone())),
-            trigger_with_external_uid(&db, &function.id, Some(uid.clone())),
+            trigger_with_external_uid(&db, p.id, &function.id, Some(uid.clone())),
+            trigger_with_external_uid(&db, p.id, &function.id, Some(uid.clone())),
         );
 
         let executed = [&a, &b].into_iter().filter(|r| r.is_ok()).count();

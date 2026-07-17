@@ -13,22 +13,21 @@ use td_objects::dxo::collection::CollectionUpdate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::errors::SqlError;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::types::basic::{
-    AccessTokenId, CollectionIdName, CollectionName, ProjectId, UserId,
-};
+use td_objects::types::basic::{AccessTokenId, CollectionIdName, CollectionName, UserId};
 use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(db)]
 async fn test_update_already_existing(db: TdPool) {
+    let p = db.seed().test_project().await.unwrap();
     let name0 = CollectionName::try_from("ds0").unwrap();
     let _ = db
-        .scoped(ProjectId::sandbox())
+        .scoped(p.id)
         .seed()
         .collection(&name0, &UserId::admin())
         .await;
     let name1 = CollectionName::try_from("ds1").unwrap();
     let _ = db
-        .scoped(ProjectId::sandbox())
+        .scoped(p.id)
         .seed()
         .collection(&name1, &UserId::admin())
         .await;
@@ -49,7 +48,7 @@ async fn test_update_already_existing(db: TdPool) {
                 .unwrap(),
             update,
         )
-        .in_project(ProjectId::sandbox());
+        .in_project(p.id);
 
     // The `ensure_collection_name_free` pre-check rejects the rename collision
     // up front with a clean `EntityAlreadyExists` rather than the raw

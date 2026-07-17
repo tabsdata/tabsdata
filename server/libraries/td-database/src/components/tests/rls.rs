@@ -45,8 +45,8 @@ async fn test_rls_project_isolation() {
             "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA \"{schema}\" TO \"{app_user}\""
         ),
         format!("ALTER ROLE \"{app_user}\" SET search_path TO \"{schema}\""),
-        // Collections FK groups(project_id, id); the schema seeds only the sandbox
-        // project, so seed a group per test project. `su` bypasses RLS, so set
+        // Collections FK groups(project_id, id); the schema seeds no project on
+        // Postgres, so seed a group per test project. `su` bypasses RLS, so set
         // project_id explicitly.
         format!(
             "INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system) VALUES ('g', 'A', 'g', 'd', now(), 'u', now(), 'u', false)"

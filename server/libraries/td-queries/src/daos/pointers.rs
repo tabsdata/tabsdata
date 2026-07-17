@@ -329,7 +329,7 @@ mod tests {
         concrete: Option<PhysicalFunctionRunId>,
     ) -> LogicalFunctionRunPointerDB {
         LogicalFunctionRunPointerDB::builder()
-            .project_id(ProjectId::sandbox())
+            .project_id(ProjectId::default())
             .logical_function_run_id(logical_id)
             .status(status)
             .physical_function_run_id(concrete)
@@ -346,7 +346,7 @@ mod tests {
         let fr = PhysicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Bound, Some(fr.clone()));
         let result = redirect_event::<LogicalFunctionRunPointerDB>(
-            &ProjectId::sandbox(),
+            &ProjectId::default(),
             &latest,
             &id,
             &fr,
@@ -368,7 +368,7 @@ mod tests {
         let new = PhysicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Bound, Some(old));
         let result = redirect_event::<LogicalFunctionRunPointerDB>(
-            &ProjectId::sandbox(),
+            &ProjectId::default(),
             &latest,
             &id,
             &new,
@@ -389,7 +389,7 @@ mod tests {
         let new = PhysicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Pending, None);
         let result = redirect_event::<LogicalFunctionRunPointerDB>(
-            &ProjectId::sandbox(),
+            &ProjectId::default(),
             &latest,
             &id,
             &new,
@@ -407,7 +407,7 @@ mod tests {
         let new = PhysicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Voided, None);
         let result = redirect_event::<LogicalFunctionRunPointerDB>(
-            &ProjectId::sandbox(),
+            &ProjectId::default(),
             &latest,
             &id,
             &new,
@@ -424,7 +424,7 @@ mod tests {
         let id = LogicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Voided, None);
         let result = void_event::<LogicalFunctionRunPointerDB>(
-            &ProjectId::sandbox(),
+            &ProjectId::default(),
             &latest,
             &id,
             &AtTime::now(),
@@ -441,7 +441,7 @@ mod tests {
         let fr = PhysicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Bound, Some(fr));
         let result = void_event::<LogicalFunctionRunPointerDB>(
-            &ProjectId::sandbox(),
+            &ProjectId::default(),
             &latest,
             &id,
             &AtTime::now(),
@@ -460,7 +460,7 @@ mod tests {
         let id = LogicalFunctionRunId::new();
         let latest = build_pointer(id.clone(), LogicalPointerStatus::Pending, None);
         let result = void_event::<LogicalFunctionRunPointerDB>(
-            &ProjectId::sandbox(),
+            &ProjectId::default(),
             &latest,
             &id,
             &AtTime::now(),
@@ -489,8 +489,8 @@ mod tests {
         };
         use td_objects::types::basic::{
             AtTime, BundleId, CollectionName, Decorator, LogicalPointerReason,
-            LogicalPointerStatus, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId,
-            TableId, TableNameDto, TransactionKey, Trigger, UserId,
+            LogicalPointerStatus, PhysicalFunctionRunId, PhysicalTableDataVersionId, TableId,
+            TableNameDto, TransactionKey, Trigger, UserId,
         };
 
         /// `function_run_at` walks the pointer event log:
@@ -500,8 +500,9 @@ mod tests {
         /// - at or after the bind event, returns the bound concrete FR id
         #[td_test::test(db)]
         async fn test_function_run_at_walks_pointers(db: TdPool) {
+            let p = db.seed().test_project().await.unwrap();
             let collection = db
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
                 .await
@@ -524,19 +525,14 @@ mod tests {
                 .build()
                 .unwrap();
             let function = db
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .function(&collection, &create)
                 .await
                 .unwrap();
-            let execution = db
-                .scoped(ProjectId::sandbox())
-                .seed()
-                .execution(&function)
-                .await
-                .unwrap();
+            let execution = db.scoped(p.id).seed().execution(&function).await.unwrap();
             let transaction = db
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
                 .await
@@ -619,8 +615,9 @@ mod tests {
         /// at-mint None (Pending), post-bind Some(tdv_id).
         #[td_test::test(db)]
         async fn test_table_data_version_at_walks_pointers(db: TdPool) {
+            let p = db.seed().test_project().await.unwrap();
             let collection = db
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
                 .await
@@ -643,19 +640,14 @@ mod tests {
                 .build()
                 .unwrap();
             let function = db
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .function(&collection, &create)
                 .await
                 .unwrap();
-            let execution = db
-                .scoped(ProjectId::sandbox())
-                .seed()
-                .execution(&function)
-                .await
-                .unwrap();
+            let execution = db.scoped(p.id).seed().execution(&function).await.unwrap();
             let transaction = db
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
                 .await

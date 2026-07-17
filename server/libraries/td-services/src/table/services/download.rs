@@ -66,12 +66,13 @@ pub(crate) mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
+    use td_objects::dxo::project::ProjectDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::rest_urls::{AtTimeParam, TableParam, UncommittedParam};
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
-        ProjectId, StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey,
-        UncommittedStatus, UserId,
+        StorageVersion, TableIdName, TableName, TableNameDto, TransactionKey, UncommittedStatus,
+        UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::LiveEntry;
@@ -84,7 +85,9 @@ pub(crate) mod tests {
     async fn test_tower_metadata_table_download(db: TdPool) {
         use crate::table::layers::storage::resolve_table_location;
         use td_objects::dxo::table::TableDBWithNames;
-        use td_objects::types::basic::{TableId, TableIdName, TriggeredOn, UncommittedStatus};
+        use td_objects::types::basic::{
+            ProjectId, TableId, TableIdName, TriggeredOn, UncommittedStatus,
+        };
 
         use td_database::pool::scoped::Scoped;
         use td_objects::And;
@@ -127,11 +130,12 @@ pub(crate) mod tests {
 
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
     async fn test_download(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let context = Context::with_defaults(db);
 
         let collection = context
             .apiserver_pool
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -154,7 +158,7 @@ pub(crate) mod tests {
             .build()?;
         let function = context
             .apiserver_pool
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -176,7 +180,7 @@ pub(crate) mod tests {
                         .uncommitted(UncommittedStatus::TRUE)
                         .build()?,
                 ))
-                .in_project(ProjectId::sandbox());
+                .in_project(p.id);
             let service = TableDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
@@ -196,7 +200,7 @@ pub(crate) mod tests {
                         .uncommitted(UncommittedStatus::TRUE)
                         .build()?,
                 ))
-                .in_project(ProjectId::sandbox());
+                .in_project(p.id);
             let service = TableDownloadService::build(context);
             let response = service.service().raw_oneshot(request).await?;
             let mut stream = response.into_inner();
@@ -212,11 +216,12 @@ pub(crate) mod tests {
             .into_iter()
             .map(TableName::try_from)
             .collect::<Result<Vec<_>, _>>()?;
-        test_download_tables(&context, &collection, &function, &tables, get_download).await
+        test_download_tables(&context, &p, &collection, &function, &tables, get_download).await
     }
 
     pub async fn test_download_tables(
         context: &Context,
+        p: &ProjectDB,
         collection: &CollectionDB,
         function: &FunctionDB,
         tables: &[TableName],
@@ -229,14 +234,14 @@ pub(crate) mod tests {
         for i in 0..3 {
             let execution = context
                 .apiserver_pool
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .execution(function)
                 .await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = context
                 .apiserver_pool
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?;
@@ -244,7 +249,7 @@ pub(crate) mod tests {
             at_times.push(AtTime::now());
             let physical_function_run = context
                 .apiserver_pool
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .physical_function_run(
                     collection,
@@ -265,7 +270,7 @@ pub(crate) mod tests {
                 if i % 2 == 0 {
                     let physical_table_data_version = context
                         .apiserver_pool
-                        .scoped(ProjectId::sandbox())
+                        .scoped(p.id)
                         .seed()
                         .physical_table_data_version_with_data(
                             collection,
@@ -324,7 +329,7 @@ pub(crate) mod tests {
                 } else {
                     context
                         .apiserver_pool
-                        .scoped(ProjectId::sandbox())
+                        .scoped(p.id)
                         .seed()
                         .physical_table_data_version(
                             collection,

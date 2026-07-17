@@ -13,16 +13,15 @@ use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionUpdate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::rest_urls::CollectionParam;
-use td_objects::types::basic::{
-    AccessTokenId, CollectionIdName, CollectionName, ProjectId, UserId,
-};
+use td_objects::types::basic::{AccessTokenId, CollectionIdName, CollectionName, UserId};
 use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(db)]
 async fn test_update_collection_validate(db: TdPool) {
+    let p = db.seed().test_project().await.unwrap();
     let name = CollectionName::try_from("c0").unwrap();
     let _ = db
-        .scoped(ProjectId::sandbox())
+        .scoped(p.id)
         .seed()
         .collection(&name, &UserId::admin())
         .await;
@@ -41,7 +40,7 @@ async fn test_update_collection_validate(db: TdPool) {
                 .unwrap(),
             update,
         )
-        .in_project(ProjectId::sandbox());
+        .in_project(p.id);
 
     let service = UpdateCollectionService::with_defaults(db).service();
     assert_service_error(service, request, |err| {

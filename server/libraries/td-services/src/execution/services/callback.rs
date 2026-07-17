@@ -182,6 +182,7 @@ mod tests {
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::LiveEntry;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -244,12 +245,13 @@ mod tests {
 
     async fn test_callback(
         db: TdPool,
+        project_id: ProjectId,
         test_executions: Vec<TestExecution>,
         callback_function: &str,
         callback_status: WorkerCallbackStatus,
         function_output: Option<WorkerOutput>,
     ) -> Result<(), TdError> {
-        test_status_update(db.clone(), &test_executions, |_, _, _, f, w| {
+        test_status_update(db.clone(), project_id, &test_executions, |_, _, _, f, w| {
             let db = db.clone();
             let callback_status = callback_status.clone();
             let function_output = function_output.clone();
@@ -281,7 +283,7 @@ mod tests {
                         },
                         response,
                     )
-                    .in_project(ProjectId::sandbox());
+                    .in_project(project_id);
 
                 let service = ExecutionCallbackService::with_defaults(db.clone()).service();
                 service.raw_oneshot(request).await
@@ -292,8 +294,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_callback_running(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_callback(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -317,8 +321,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_callback_running_multiple_function_runs(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_callback(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -352,8 +358,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_callback_running_multiple_transactions(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_callback(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![
@@ -390,8 +398,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_callback_published(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_callback(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -425,8 +435,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_callback_published_downstream(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_callback(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![
@@ -473,8 +485,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_callback_done(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_callback(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -508,8 +522,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_callback_failed(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_callback(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Stalled,
                 transactions: vec![TestTransaction {
@@ -543,8 +559,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_callback_failed_downstream(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_callback(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Stalled,
                 transactions: vec![TestTransaction {
@@ -578,8 +596,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_callback_table_data_version_status(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_callback(
             db.clone(),
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -693,8 +713,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_callback_table_data_version_data_information(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_callback(
             db.clone(),
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -737,6 +759,7 @@ mod tests {
 
         test_callback(
             db.clone(),
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {

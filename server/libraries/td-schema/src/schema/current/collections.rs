@@ -51,7 +51,7 @@ impl Entity for Defs {
                 // Tenant tag. No base default — fail-closed on every backend: a
                 // write that omits it hits NOT NULL. On postgres the RLS phase
                 // sets the column default to read `app.project_id` (the request's
-                // project); the no-RLS single-project backends (sqlite/mysql) keep
+                // project); the no-RLS backends (sqlite/mysql) keep
                 // no default at all, so writes there must set `project_id`.
                 .col(ColumnDef::new(Collections::ProjectId).text().not_null())
                 .col(ColumnDef::new(Collections::Name).text().not_null())

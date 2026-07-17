@@ -51,9 +51,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::InProject;
     use td_error::{TdError, assert_service_error};
-    use td_objects::types::basic::{
-        AccessTokenId, ProjectId, ProjectName, UserId, WildcardProject,
-    };
+    use td_objects::types::basic::{AccessTokenId, ProjectName, UserId, WildcardProject};
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
     use td_tower::ctx_service::RawOneshot;
 
@@ -82,7 +80,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_function_run_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
-        seed_run(&db, ProjectId::sandbox()).await?;
+        let base = db.seed().test_project().await?;
+        seed_run(&db, base.id).await?;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         seed_run(&db, alpha.id).await?;
 
@@ -101,7 +100,7 @@ mod tests {
             .iter()
             .filter_map(|r| r.project.clone())
             .collect();
-        assert!(projects.contains(&ProjectName::try_from("sandbox")?));
+        assert!(projects.contains(&base.name.clone()));
         assert!(projects.contains(&ProjectName::try_from("alpha")?));
         Ok(())
     }
@@ -110,11 +109,12 @@ mod tests {
     async fn test_list_function_run_wildcard_filters_to_viewable(
         db: TdPool,
     ) -> Result<(), TdError> {
-        seed_run(&db, ProjectId::sandbox()).await?;
+        let base = db.seed().test_project().await?;
+        seed_run(&db, base.id).await?;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         seed_run(&db, alpha.id).await?;
 
-        let user = seed_project_viewer(&db, ProjectId::sandbox()).await?;
+        let user = seed_project_viewer(&db, base.id).await?;
 
         let service = FunctionRunListService::with_defaults(db.clone()).service();
         let response = service
@@ -130,14 +130,15 @@ mod tests {
             .iter()
             .filter_map(|r| r.project.clone())
             .collect();
-        assert!(projects.contains(&ProjectName::try_from("sandbox")?));
+        assert!(projects.contains(&base.name.clone()));
         assert!(!projects.contains(&ProjectName::try_from("alpha")?));
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_list_function_run_named_project_forbidden(db: TdPool) -> Result<(), TdError> {
-        seed_run(&db, ProjectId::sandbox()).await?;
+        let base = db.seed().test_project().await?;
+        seed_run(&db, base.id).await?;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         let user = seed_project_viewer(&db, alpha.id).await?;
 
@@ -145,7 +146,7 @@ mod tests {
         let service = FunctionRunListService::with_defaults(db.clone()).service();
         let request = RequestContext::with(AccessTokenId::default(), user.id)
             .list((), ListParams::default())
-            .in_project(ProjectId::sandbox());
+            .in_project(base.id);
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
         })

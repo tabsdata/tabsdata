@@ -3,8 +3,10 @@
 //
 
 use crate::LiveEntry;
+use crate::QueryExecutor;
 use ta_objects::{Buildable, TryUpdater};
-use td_database::pool::TdPool;
+use td_database::domain::{Apiserver, Domained};
+use td_database::pool::scoped::{InProject, Scoped};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
@@ -12,21 +14,23 @@ use td_objects::dxo::project::{
     ProjectCreate, ProjectCreateDBBuilder, ProjectDB, ProjectDBBuilder,
 };
 use td_objects::types::basic::{
-    AccessTokenId, Description, GroupId, GroupName, ProjectName, System, UserId,
+    AccessTokenId, Description, GroupId, GroupName, ProjectId, ProjectName, System, UserId,
 };
 use td_security::SYSTEM_GROUPS;
 
 /// Seed a project together with the system groups (`default`, `source`,
-/// `destination`) — the same set the schema bootstraps into `sandbox` and the
-/// projects CRUD seeds into a freshly-created project. A collection resolves
-/// its group within its own project, so a project without these cannot host a
-/// collection.
+/// `destination`) — the same set the projects CRUD seeds into a freshly-created
+/// project. A collection resolves its group within its own project, so a
+/// project without these cannot host a collection.
 ///
 /// The system groups belong to the *new* project, so each is seeded through
 /// `db.scoped(new_project)` — the field-less `GroupDB` defaults its `project_id`
 /// from that scope, mirroring `seed_default_groups`. The `projects` row itself
 /// is not RLS-scoped, so it is inserted directly on the pool.
-pub(crate) async fn seed_project(db: &TdPool, name: ProjectName) -> Result<ProjectDB, TdError> {
+pub(crate) async fn seed_project<E>(db: E, name: ProjectName) -> Result<ProjectDB, TdError>
+where
+    for<'s> &'s Scoped<E, ProjectId>: QueryExecutor + Domained<Domain = Apiserver>,
+{
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     let project_create = ProjectCreate::builder()
@@ -36,12 +40,14 @@ pub(crate) async fn seed_project(db: &TdPool, name: ProjectName) -> Result<Proje
     let project_db = ProjectCreateDBBuilder::try_from(&project_create)?
         .try_update_from(&request_context)?
         .build()?;
-    db.live().insert(&project_db).await?;
 
-    // Seed the system groups into the *new* project with the well-known fixed
-    // ids, mirroring `seed_default_groups`. Scope each insert to the new project
-    // so the field-less `GroupDB` defaults its `project_id` from the GUC (and
-    // RLS `WITH CHECK` enforces the match).
+    // Everything runs through the new project's scope. The `projects` row itself
+    // is not RLS-scoped, so scoping is harmless there; the field-less `GroupDB`
+    // rows default their `project_id` from the scope's GUC (and RLS `WITH CHECK`
+    // enforces the match), mirroring `seed_default_groups`.
+    let scoped = db.in_project(project_db.id);
+    scoped.live().insert(&project_db).await?;
+
     for (group_id, group_name, group_description) in SYSTEM_GROUPS {
         let group_create = GroupCreate::builder()
             .name(GroupName::try_from(group_name)?)
@@ -52,10 +58,7 @@ pub(crate) async fn seed_project(db: &TdPool, name: ProjectName) -> Result<Proje
             .id(GroupId::try_from(group_id)?)
             .system(System::TRUE)
             .build()?;
-        db.scoped(project_db.id)
-            .live()
-            .insert::<GroupDB>(&group)
-            .await?;
+        scoped.live().insert::<GroupDB>(&group).await?;
     }
 
     Ok(ProjectDBBuilder::try_from(&project_db)?.build()?)
@@ -85,8 +88,8 @@ mod tests {
         // The three system groups land in the new project, carrying the
         // well-known fixed ids (group ids are unique per project). `project_id`
         // is no longer a `GroupDB` field (RLS owns it via the column default);
-        // that the rows are tagged with the new project — not the session-default
-        // sandbox — is covered end-to-end by `test_collection_rls_scoped_by_project`.
+        // that the rows are tagged with the new project is covered end-to-end
+        // by `test_collection_rls_scoped_by_project`.
         for (id, name) in [
             (GroupId::default_group(), GroupName::default_group()),
             (GroupId::source(), GroupName::source()),

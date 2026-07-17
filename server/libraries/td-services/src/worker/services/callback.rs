@@ -60,8 +60,8 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::worker::WorkerDBWithNames;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        ProjectId, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, AtTime, BundleId, CollectionName, Decorator, FunctionRuntimeValues, UserId,
+        WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -110,8 +110,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_worker_callback(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -128,12 +129,12 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
         let worker = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .worker(
                 &collection,
@@ -162,7 +163,7 @@ mod tests {
                 },
                 response,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = WorkerCallbackService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -192,7 +193,7 @@ mod tests {
                 },
                 response,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = WorkerCallbackService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;

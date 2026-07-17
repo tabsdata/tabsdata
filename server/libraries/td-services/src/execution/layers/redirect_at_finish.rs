@@ -257,7 +257,7 @@ mod tests {
         set_on: AtTime,
     ) -> LogicalFunctionRunPointerDB {
         LogicalFunctionRunPointerDB::build_event(
-            ProjectId::sandbox(),
+            ProjectId::default(),
             &LogicalFunctionRunId::new(),
             status,
             pfr,
@@ -271,7 +271,7 @@ mod tests {
     fn mk_pfr_at(id: PhysicalFunctionRunId, triggered_on: AtTime) -> PhysicalFunctionRunDB {
         PhysicalFunctionRunDB::builder()
             .id(id)
-            .project_id(ProjectId::sandbox())
+            .project_id(ProjectId::default())
             .collection_id(CollectionId::default())
             .function_id(FunctionId::default())
             .function_version_id(FunctionVersionId::new())

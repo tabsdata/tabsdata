@@ -135,6 +135,7 @@ mod tests {
 
     /// Build a CreateRequest hitting the replay endpoint for an LFR.
     fn replay_request(
+        project_id: ProjectId,
         collection: &CollectionName,
         lfr_id: &LogicalFunctionRunId,
     ) -> Scoped<CreateRequest<LogicalFunctionRunParam, ()>, ProjectId> {
@@ -145,7 +146,7 @@ mod tests {
             .unwrap();
         RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(param, ())
-            .in_project(ProjectId::sandbox())
+            .in_project(project_id)
     }
 
     /// Seed a function with one output table, run plan-build proxy (seed
@@ -153,6 +154,7 @@ mod tests {
     /// `(LFR, FR, head_fvid)`.
     async fn seed_runnable(
         db: &TdPool,
+        project_id: ProjectId,
         coll_name: &str,
         fn_name: &str,
         status: LogicalFunctionRunStatus,
@@ -162,7 +164,7 @@ mod tests {
         FunctionVersionId,
     ) {
         let coll = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(
                 &CollectionName::try_from(coll_name).unwrap(),
@@ -187,26 +189,21 @@ mod tests {
             .build()
             .unwrap();
         let func = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&coll, &create)
             .await
             .unwrap();
-        let exec = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&func)
-            .await
-            .unwrap();
+        let exec = db.scoped(project_id).seed().execution(&func).await.unwrap();
         let txn_key = TransactionKey::try_from("ANY").unwrap();
         let txn = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .transaction(&exec, &txn_key)
             .await
             .unwrap();
         let fr = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .physical_function_run(&coll, &func, &exec, &txn, &status)
             .await
@@ -222,6 +219,7 @@ mod tests {
     /// Insert a patch of the given head fvid and return its id.
     async fn seed_patch(
         db: &TdPool,
+        project_id: ProjectId,
         head: &td_objects::dxo::function::FunctionDB,
     ) -> FunctionVersionId {
         let patch = FunctionPatchDB::builder()
@@ -237,11 +235,7 @@ mod tests {
             .status(FunctionStatus::Active)
             .build()
             .unwrap();
-        db.scoped(ProjectId::sandbox())
-            .live()
-            .insert(&patch)
-            .await
-            .unwrap();
+        db.scoped(project_id).live().insert(&patch).await.unwrap();
         patch.id
     }
 
@@ -253,13 +247,14 @@ mod tests {
     /// latest-Bound binding for downstream readers.
     #[td_test::test(db)]
     async fn test_replay_committed_mints_new_fr(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (lfr, fr_old, _head) =
-            seed_runnable(&db, "c0", "f0", LogicalFunctionRunStatus::Committed).await;
+            seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Committed).await;
 
         let coll_name = CollectionName::try_from("c0")?;
         let service = ReplayLogicalFunctionRunService::with_defaults(db.clone()).service();
         let response = service
-            .raw_oneshot(replay_request(&coll_name, &lfr.id))
+            .raw_oneshot(replay_request(p.id, &coll_name, &lfr.id))
             .await?;
 
         assert_eq!(response.logical_function_run_id, lfr.id);
@@ -306,13 +301,14 @@ mod tests {
     /// allowed; mints a new FR exactly like the Committed case.
     #[td_test::test(db)]
     async fn test_replay_done_mints_new_fr(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (lfr, fr_old, _head) =
-            seed_runnable(&db, "c0", "f0", LogicalFunctionRunStatus::Done).await;
+            seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Done).await;
 
         let coll_name = CollectionName::try_from("c0")?;
         let response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(replay_request(&coll_name, &lfr.id))
+            .raw_oneshot(replay_request(p.id, &coll_name, &lfr.id))
             .await?;
 
         assert_ne!(response.new_function_run_id, fr_old.id);
@@ -324,13 +320,14 @@ mod tests {
     /// Replay against an in-flight LFR (Running) — refused.
     #[td_test::test(db)]
     async fn test_replay_in_flight_refused(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (lfr, _fr, _head) =
-            seed_runnable(&db, "c0", "f0", LogicalFunctionRunStatus::Running).await;
+            seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Running).await;
 
         let coll_name = CollectionName::try_from("c0")?;
         let result = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(replay_request(&coll_name, &lfr.id))
+            .raw_oneshot(replay_request(p.id, &coll_name, &lfr.id))
             .await;
 
         assert!(result.is_err(), "expected refusal, got {result:?}");
@@ -344,9 +341,10 @@ mod tests {
     /// `function_version_id` advertises the effective fvid (patch).
     #[td_test::test(db)]
     async fn test_replay_picks_up_latest_patch(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         // Seed a Committed LFR for a head function.
         let coll = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -362,23 +360,15 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let head = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .function(&coll, &create)
-            .await?;
-        let exec = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&head)
-            .await?;
+        let head = db.scoped(p.id).seed().function(&coll, &create).await?;
+        let exec = db.scoped(p.id).seed().execution(&head).await?;
         let txn = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let fr_old = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &coll,
@@ -395,13 +385,13 @@ mod tests {
         let lfr_id = lfr_old.id.clone();
 
         // Register a patch of the head fvid AFTER the LFR is committed.
-        let patch_id = seed_patch(&db, &head).await;
+        let patch_id = seed_patch(&db, p.id, &head).await;
 
         // Replay: the minted FR_new must run the patch, not the head.
         let coll_name = CollectionName::try_from("c0")?;
         let response = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(replay_request(&coll_name, &lfr_id))
+            .raw_oneshot(replay_request(p.id, &coll_name, &lfr_id))
             .await?;
 
         // The response advertises the effective (patch) fvid.
@@ -436,8 +426,9 @@ mod tests {
     /// gate should reject.
     #[td_test::test(db)]
     async fn test_replay_not_bound_refused(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -453,18 +444,10 @@ mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let head = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .function(&coll, &create)
-            .await?;
-        let exec = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&head)
-            .await?;
+        let head = db.scoped(p.id).seed().function(&coll, &create).await?;
+        let exec = db.scoped(p.id).seed().execution(&head).await?;
         let txn = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
@@ -483,7 +466,7 @@ mod tests {
             .triggered_by_id(txn.triggered_by_id)
             .status(LogicalFunctionRunStatus::Committed)
             .build()?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .live()
             .insert::<LogicalFunctionRunDB>(&lfr)
             .await?;
@@ -496,7 +479,7 @@ mod tests {
             txn.triggered_by_id,
             LogicalPointerReason::InitialMint,
         )?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .live()
             .insert::<LogicalFunctionRunPointerDB>(&pending)
             .await?;
@@ -504,7 +487,7 @@ mod tests {
         let coll_name = CollectionName::try_from("c0")?;
         let result = ReplayLogicalFunctionRunService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(replay_request(&coll_name, &lfr.id))
+            .raw_oneshot(replay_request(p.id, &coll_name, &lfr.id))
             .await;
         assert!(result.is_err(), "expected NotBound, got {result:?}");
         Ok(())

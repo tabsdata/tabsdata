@@ -7,8 +7,9 @@
 //! per-DAO seed method:
 //!
 //! ```ignore
-//! let collection = db.scoped(ProjectId::sandbox()).seed().collection(&name, &user).await?;
-//! let function = db.scoped(ProjectId::sandbox()).seed().function(&collection, &create).await?;
+//! let project = db.seed().test_project().await?;
+//! let collection = db.scoped(project.id).seed().collection(&name, &user).await?;
+//! let function = db.scoped(project.id).seed().function(&collection, &create).await?;
 //! ```
 //!
 //! Only the `test-utils` feature exposes this surface — production code
@@ -33,7 +34,7 @@ use crate::test_utils::seed_user::{seed_system_user, seed_user};
 use crate::test_utils::seed_user_role::seed_user_role;
 use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
 use td_database::domain::{Apiserver, Domained};
-use td_database::pool::TdPool;
+use td_database::pool::scoped::Scoped;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
@@ -52,8 +53,9 @@ use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
     CollectionName, DependencyPos, Description, EntityId, EntityName, GroupId, GroupName,
-    LogicalFunctionRunStatus, PermissionType, ProjectName, RoleId, RoleName, TransactionKey,
-    UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus, WorkerStatus, WorkerType,
+    LogicalFunctionRunStatus, PermissionType, ProjectId, ProjectName, RoleId, RoleName,
+    TransactionKey, UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus, WorkerStatus,
+    WorkerType,
 };
 
 query_handle! {
@@ -77,6 +79,23 @@ pub struct Seed<E> {
 }
 
 impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
+    // Project seeding uses its executor only to scope into the freshly-created
+    // project, so the write bound is on the scoped view; `&TdPool` is the only
+    // executor that scopes to one.
+    pub async fn project(self, name: ProjectName) -> Result<ProjectDB, TdError>
+    where
+        for<'s> &'s Scoped<E, ProjectId>: QueryExecutor + Domained<Domain = Apiserver>,
+    {
+        seed_project(self.executor, name).await
+    }
+
+    pub async fn test_project(self) -> Result<ProjectDB, TdError>
+    where
+        for<'s> &'s Scoped<E, ProjectId>: QueryExecutor + Domained<Domain = Apiserver>,
+    {
+        seed_project(self.executor, ProjectName::try_from("test")?).await
+    }
+
     pub async fn collection(
         self,
         collection_name: &CollectionName,
@@ -285,14 +304,5 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
             status,
         )
         .await
-    }
-}
-
-// `project` seeds the global `projects` registry and scopes its own group
-// inserts to the new project, so it needs the concrete pool (not a scoped
-// executor) — hence it lives only on `db.scoped(ProjectId::sandbox()).seed()`.
-impl Seed<&TdPool> {
-    pub async fn project(self, name: ProjectName) -> Result<ProjectDB, TdError> {
-        seed_project(self.executor, name).await
     }
 }

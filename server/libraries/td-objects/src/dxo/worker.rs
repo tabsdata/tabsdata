@@ -36,7 +36,7 @@ mod definitions {
         /// mapped from `FunctionDB`, which no longer carries `project_id`): the
         /// scheduler stamps it from the physical run, the register path from the
         /// request scope. No builder default: a missing setter is a programmer
-        /// error, not a silent sandbox fallback.
+        /// error, not a silent project fallback.
         #[dxo(extractor, setter)]
         pub project_id: ProjectId,
         #[dxo(builder(include), extractor)]

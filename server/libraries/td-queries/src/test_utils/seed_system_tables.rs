@@ -94,13 +94,14 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
-    use td_objects::types::basic::{BundleId, CollectionName, Decorator, ProjectId, UserId};
+    use td_objects::types::basic::{BundleId, CollectionName, Decorator, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_system_tables(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -132,13 +133,13 @@ mod tests {
             .unwrap();
 
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
         let system_tables = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .system_tables(&function)
             .await

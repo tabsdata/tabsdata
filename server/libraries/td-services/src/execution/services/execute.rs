@@ -261,28 +261,30 @@ pub(crate) mod tests {
     // develop_project holder.
     #[td_test::test(db)]
     async fn test_execute_dependencies_different_collections(db: TdPool) -> Result<(), TdError> {
-        let _ = test_execute(db, true, false, false).await?;
+        let p = db.seed().test_project().await?;
+        let _ = test_execute(db, p.id, true, false, false).await?;
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_execute_trigger_different_collections(db: TdPool) -> Result<(), TdError> {
-        let _ = test_execute(db, false, true, false).await?;
+        let p = db.seed().test_project().await?;
+        let _ = test_execute(db, p.id, false, true, false).await?;
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_execute_single_function(db: TdPool) -> Result<(), TdError> {
-        let _ = test_execute(db, true, false, true).await?;
+        let p = db.seed().test_project().await?;
+        let _ = test_execute(db, p.id, true, false, true).await?;
         Ok(())
     }
 
-    /// Grouping is project-scoped end to end: a function in a non-sandbox
-    /// project mints its runs and transaction with that project's *own*
-    /// default group — never `sandbox`'s default group (the only one with the
-    /// fixed bootstrap id). Postgres-only: resolving the per-project
-    /// `default` group relies on RLS to disambiguate it from every other
-    /// project's identically-named group.
+    /// Grouping is project-scoped end to end: a function mints its runs and
+    /// transaction with its own project's default group — never another
+    /// project's. Postgres-only: resolving the per-project `default` group
+    /// relies on RLS to disambiguate it from every other project's
+    /// identically-named group.
     #[td_test::test(db)]
     async fn test_execute_stamps_project_scoped_group(db: TdPool) -> Result<(), TdError> {
         if !matches!(db.kind(), DatabaseBackend::Postgres) {
@@ -365,7 +367,7 @@ pub(crate) mod tests {
         // The transaction is stamped with the collection's project group at mint.
         assert_eq!(transaction.group_id, collection.group_id);
 
-        // The minted LFR carries the project's group and project — not sandbox's.
+        // The minted LFR carries the project's group and project — not another's.
         let lfrs: Vec<LogicalFunctionRunDB> = db
             .scoped(p)
             .live()
@@ -383,10 +385,10 @@ pub(crate) mod tests {
     /// the producer and its seeded executions (oldest first).
     async fn seed_producer_with_versions(
         db: &TdPool,
+        p: ProjectId,
         tables: &[&str],
         versions: usize,
     ) -> Result<(CollectionDB, FunctionDB, Vec<ExecutionDB>), TdError> {
-        let p = ProjectId::sandbox();
         let collection = db
             .scoped(p)
             .seed()
@@ -454,11 +456,11 @@ pub(crate) mod tests {
     /// optional trigger), returning the execution response.
     async fn execute_consumer(
         db: &TdPool,
+        p: ProjectId,
         collection: &CollectionDB,
         dependencies: &[&str],
         trigger: Option<&str>,
     ) -> Result<ExecutionResponse, TdError> {
-        let p = ProjectId::sandbox();
         let create = FunctionRegister::builder()
             .name(FunctionName::try_from("consumer")?)
             .try_description("consumer")?
@@ -539,12 +541,13 @@ pub(crate) mod tests {
     /// would resolve differently.
     #[td_test::test(db)]
     async fn test_execute_range_dep_input_idx(db: TdPool) -> Result<(), TdError> {
-        let p = ProjectId::sandbox();
+        let p = db.seed().test_project().await?.id;
         let (collection, producer, producer_executions) =
-            seed_producer_with_versions(&db, &["table_p"], 3).await?;
+            seed_producer_with_versions(&db, p, &["table_p"], 3).await?;
 
         let response = execute_consumer(
             &db,
+            p,
             &collection,
             &["table_p@HEAD~2..HEAD", "table_p"],
             Some("table_p"),
@@ -643,8 +646,8 @@ pub(crate) mod tests {
     /// own sequential idxs.
     #[td_test::test(db)]
     async fn test_execute_range_dep_input_idx_partial(db: TdPool) -> Result<(), TdError> {
-        let p = ProjectId::sandbox();
-        let (collection, _, _) = seed_producer_with_versions(&db, &["table_p"], 1).await?;
+        let p = db.seed().test_project().await?.id;
+        let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 1).await?;
 
         // `table_q` belongs to a publisher that never ran: no LTDV timeline.
         let create = FunctionRegister::builder()
@@ -663,8 +666,14 @@ pub(crate) mod tests {
 
         // `table_p` has one version (range over three slots resolves two
         // empty), `table_q` has none.
-        let response =
-            execute_consumer(&db, &collection, &["table_p@HEAD~2..HEAD", "table_q"], None).await?;
+        let response = execute_consumer(
+            &db,
+            p,
+            &collection,
+            &["table_p@HEAD~2..HEAD", "table_q"],
+            None,
+        )
+        .await?;
 
         let rows: Vec<LogicalFunctionRunInputDB> =
             db.scoped(p).live().fetch_all(&response.id).await?;
@@ -714,22 +723,23 @@ pub(crate) mod tests {
 
     pub(crate) async fn test_execute(
         db: TdPool,
+        project_id: ProjectId,
         deps_diff_collection: bool,
         triggers_diff_collection: bool,
         single_function: bool,
     ) -> Result<ExecutionResponse, TdError> {
         let collection_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
         let collection_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(&COLLECTION_NAMES[1], &UserId::admin())
             .await?;
         let collection_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(&COLLECTION_NAMES[2], &UserId::admin())
             .await?;
@@ -756,7 +766,7 @@ pub(crate) mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -781,7 +791,7 @@ pub(crate) mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection_1, &create)
             .await?;
@@ -807,7 +817,7 @@ pub(crate) mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection_2, &create)
             .await?;
@@ -846,7 +856,7 @@ pub(crate) mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection_2, &create)
             .await?;
@@ -862,7 +872,7 @@ pub(crate) mod tests {
                     .function_only(single_function)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project_id);
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -1016,8 +1026,10 @@ pub(crate) mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_initial_status_upstream_scheduled(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_execute_upstream_initial_status(
             db,
+            p.id,
             LogicalFunctionRunStatus::Scheduled,
             LogicalFunctionRunStatus::Scheduled,
         )
@@ -1026,8 +1038,10 @@ pub(crate) mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_initial_status_upstream_on_hold(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_execute_upstream_initial_status(
             db,
+            p.id,
             LogicalFunctionRunStatus::OnHold,
             LogicalFunctionRunStatus::OnHold,
         )
@@ -1036,8 +1050,10 @@ pub(crate) mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_initial_status_upstream_failed(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_execute_upstream_initial_status(
             db,
+            p.id,
             LogicalFunctionRunStatus::Failed,
             LogicalFunctionRunStatus::OnHold,
         )
@@ -1046,11 +1062,12 @@ pub(crate) mod tests {
 
     async fn test_execute_upstream_initial_status(
         db: TdPool,
+        project_id: ProjectId,
         upstream_status: LogicalFunctionRunStatus,
         expected_initial_status: LogicalFunctionRunStatus,
     ) -> Result<(), TdError> {
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
@@ -1069,7 +1086,7 @@ pub(crate) mod tests {
             .build()?;
 
         let function_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1088,7 +1105,7 @@ pub(crate) mod tests {
             .build()?;
 
         let function_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1113,25 +1130,21 @@ pub(crate) mod tests {
             .build()?;
 
         let _function_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection, &create)
             .await?;
 
         // seed a physical_function_run for function_0, with OnHold status
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function_0)
-            .await?;
+        let execution = db.scoped(project_id).seed().execution(&function_0).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
         let physical_function_run = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -1147,7 +1160,7 @@ pub(crate) mod tests {
             .fetch_one::<TableDB>(and!(&collection.id, &table_name))
             .await?;
         let _table_data_version = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -1159,19 +1172,15 @@ pub(crate) mod tests {
             .await?;
 
         // seed a physical_function_run for function_1, with Done status
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function_1)
-            .await?;
+        let execution = db.scoped(project_id).seed().execution(&function_1).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
         let physical_function_run = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -1187,7 +1196,7 @@ pub(crate) mod tests {
             .fetch_one::<TableDB>(and!(&collection.id, &table_name))
             .await?;
         let _table_data_version = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -1209,7 +1218,7 @@ pub(crate) mod tests {
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project_id);
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _response = service.raw_oneshot(request).await?;
@@ -1233,7 +1242,8 @@ pub(crate) mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_disabled_trigger_err(db: TdPool) -> Result<(), TdError> {
-        let res = test_execute_disabled_trigger(db, OverrideDisabledTrigger::FALSE).await?;
+        let p = db.seed().test_project().await?;
+        let res = test_execute_disabled_trigger(db, p.id, OverrideDisabledTrigger::FALSE).await?;
         let err = res.unwrap_err();
         assert_eq!(
             "Function 'function_0' must be enabled to be executed".to_string(),
@@ -1244,7 +1254,9 @@ pub(crate) mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_disabled_trigger_override(db: TdPool) -> Result<(), TdError> {
-        let response = test_execute_disabled_trigger(db, OverrideDisabledTrigger::TRUE).await?;
+        let p = db.seed().test_project().await?;
+        let response =
+            test_execute_disabled_trigger(db, p.id, OverrideDisabledTrigger::TRUE).await?;
         let response = response?;
 
         // Assert that the disabled function as executed, and downstream was OK as well.
@@ -1300,10 +1312,11 @@ pub(crate) mod tests {
 
     async fn test_execute_disabled_trigger(
         db: TdPool,
+        project_id: ProjectId,
         override_disabled_trigger: OverrideDisabledTrigger,
     ) -> Result<Result<ExecutionResponse, TdError>, TdError> {
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
@@ -1322,7 +1335,7 @@ pub(crate) mod tests {
             .enabled(Enabled::FALSE)
             .build()?;
         let _function_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1340,7 +1353,7 @@ pub(crate) mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let _function_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1356,7 +1369,7 @@ pub(crate) mod tests {
                     .override_disabled_trigger(override_disabled_trigger)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project_id);
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
 
@@ -1367,8 +1380,9 @@ pub(crate) mod tests {
     async fn test_execute_public_external_uid_conflicts(db: TdPool) -> Result<(), TdError> {
         use td_objects::types::basic::ExternalUid;
 
+        let p = db.seed().test_project().await?.id;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p)
             .seed()
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
@@ -1384,11 +1398,7 @@ pub(crate) mod tests {
             .runtime_values(FunctionRuntimeValues::try_from("rv")?)
             .reuse_frozen_tables(false)
             .build()?;
-        let _function = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .function(&collection, &create)
-            .await?;
+        let _function = db.scoped(p).seed().function(&collection, &create).await?;
 
         let trigger = |external_uid: Option<ExternalUid>| {
             RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -1406,7 +1416,7 @@ pub(crate) mod tests {
                         .build()
                         .unwrap(),
                 )
-                .in_project(ProjectId::sandbox())
+                .in_project(p)
         };
 
         let uid = ExternalUid::try_from("uid-abc")?;

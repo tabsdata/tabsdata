@@ -69,6 +69,7 @@ mod tests {
         ProjectId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -107,10 +108,11 @@ mod tests {
 
     async fn test_cancel_execution(
         db: TdPool,
+        project_id: ProjectId,
         test_executions: Vec<TestExecution>,
         cancel_on: usize,
     ) -> Result<(), TdError> {
-        test_status_update(db.clone(), &test_executions, |_, e, _, _, _| {
+        test_status_update(db.clone(), project_id, &test_executions, |_, e, _, _, _| {
             let db = db.clone();
             let execution = e[&test_executions[cancel_on]].id.to_string();
 
@@ -123,7 +125,7 @@ mod tests {
                             .build()?,
                         (),
                     )
-                    .in_project(ProjectId::sandbox());
+                    .in_project(project_id);
 
                 ExecutionCancelService::with_defaults(db.clone())
                     .service()
@@ -136,8 +138,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_cancel_execution_unique(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -159,8 +163,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_cancel_execution_multiple_function(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -192,8 +198,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_cancel_execution_multiple_transaction(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![
@@ -228,8 +236,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_cancel_execution_multiple_execution(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
+            p.id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Finished,
@@ -267,8 +277,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_cancel_execution_downstream(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
+            p.id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Finished,
@@ -306,8 +318,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_cancel_execution_different_collection(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
+            p.id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -339,11 +353,13 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_cancel_execution_status_transitions(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let cancel_transition_for =
             async move |initial: LogicalFunctionRunStatus| -> Result<(), TdError> {
                 let db = db.clone();
                 test_cancel_execution(
                     db,
+                    p.id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Finished,
                         transactions: vec![TestTransaction {

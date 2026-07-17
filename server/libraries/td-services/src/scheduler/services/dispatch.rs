@@ -55,8 +55,7 @@ mod tests {
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
-        FunctionIdName, FunctionRuntimeValues, ProjectId, TableNameDto, UserId, WorkerId,
-        WorkerMessageStatus,
+        FunctionIdName, FunctionRuntimeValues, TableNameDto, UserId, WorkerId, WorkerMessageStatus,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::LiveEntry;
@@ -78,9 +77,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_schedule_commit(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -103,7 +103,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -118,7 +118,7 @@ mod tests {
                     .name(Some(ExecutionName::try_from("test_execution")?))
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = ExecuteFunctionService::with_defaults(db.clone()).service();
         let _ = service.raw_oneshot(request).await?;

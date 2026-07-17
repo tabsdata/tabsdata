@@ -12,12 +12,13 @@ use td_objects::Buildable;
 use td_objects::dxo::collection::CollectionCreate;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::{
-    AccessTokenId, CollectionName, Description, ProjectId, RoleName, UserEnabled, UserName,
+    AccessTokenId, CollectionName, Description, RoleName, UserEnabled, UserName,
 };
 use td_queries::test_utils::SeedEntry;
 
 #[td_test::test(db)]
 async fn test_not_allowed_to_create_collection(db: TdPool) {
+    let p = db.seed().test_project().await.unwrap();
     // A user whose role carries no develop_project on the project cannot
     // create collections in it.
     let user = db
@@ -49,7 +50,7 @@ async fn test_not_allowed_to_create_collection(db: TdPool) {
 
     let request = RequestContext::with(AccessTokenId::default(), user.id)
         .create((), create)
-        .in_project(ProjectId::sandbox());
+        .in_project(p.id);
 
     let service = CreateCollectionService::with_defaults(db.clone()).service();
 

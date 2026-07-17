@@ -121,8 +121,8 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, ProjectId, UserId,
-        WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, UserId, WorkerMessageStatus,
+        WorkerStatus, WorkerType,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -132,6 +132,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_function(db: TdPool) {
         use td_database::pool::scoped::Scoped;
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         use crate::function::layers::register::{
@@ -232,9 +233,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_function(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -253,7 +255,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -265,7 +267,7 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -282,9 +284,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_function_with_tables(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -306,7 +309,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -318,7 +321,7 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -335,9 +338,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_function_with_dependencies(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -356,7 +360,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -375,7 +379,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -387,7 +391,7 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -404,9 +408,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_function_with_triggers(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -425,7 +430,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -444,7 +449,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -456,7 +461,7 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -473,9 +478,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_function_unique(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -494,7 +500,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -519,7 +525,7 @@ mod tests {
                     .build()?,
                 create_1.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -539,7 +545,7 @@ mod tests {
             .build()?;
 
         let created_function_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create_2)
             .await?;
@@ -551,7 +557,7 @@ mod tests {
                     .function(FunctionIdName::from_str("joaquin_workout_2")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -584,9 +590,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_workers(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -615,7 +622,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = RegisterFunctionService::with_defaults(db.clone()).service();
         let function = service.raw_oneshot(request).await?;
 
@@ -627,7 +634,7 @@ mod tests {
                     .function(FunctionIdName::from_str("function_1")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = DeleteFunctionService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
 

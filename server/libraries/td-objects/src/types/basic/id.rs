@@ -4,8 +4,8 @@
 
 use td_common::id::{ID_LENGTH, Id};
 use td_security::{
-    ID_ALL_ENTITIES, ID_GROUP_DEFAULT, ID_GROUP_DESTINATION, ID_GROUP_SOURCE, ID_PROJECT_SANDBOX,
-    ID_ROLE_DEFAULT, ID_ROLE_PROJECT_CREATOR, ID_ROLE_SYS_ADMIN, ID_SYSTEM, ID_USER_ADMIN,
+    ID_ALL_ENTITIES, ID_GROUP_DEFAULT, ID_GROUP_DESTINATION, ID_GROUP_SOURCE, ID_ROLE_DEFAULT,
+    ID_ROLE_PROJECT_CREATOR, ID_ROLE_SYS_ADMIN, ID_SYSTEM, ID_USER_ADMIN,
 };
 
 #[ta_objects::typed(id)]
@@ -41,19 +41,6 @@ pub struct ConnectionId;
 
 #[ta_objects::typed(id, try_from = EntityId)]
 pub struct ProjectId;
-
-impl ProjectId {
-    /// The seeded `sandbox` project — the only project the bootstrap creates;
-    /// all others come from the projects CRUD API.
-    #[cfg(feature = "td-test")]
-    pub fn sandbox() -> Self {
-        Self(Id::_new(ID_PROJECT_SANDBOX))
-    }
-
-    pub fn is_sandbox(&self) -> bool {
-        *self.0 == ID_PROJECT_SANDBOX
-    }
-}
 
 #[ta_objects::typed(id)]
 pub struct DependencyId;

@@ -39,12 +39,13 @@ pub mod tests {
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
-    use td_objects::types::basic::{Description, GroupName, ProjectId};
+    use td_objects::types::basic::{Description, GroupName};
 
     #[td_test::test(db)]
     async fn test_seed_group(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let group = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .group(
                 GroupName::try_from("test_group").unwrap(),
@@ -70,8 +71,8 @@ pub mod tests {
 
     #[td_test::test(db)]
     async fn test_default_group_present(db: TdPool) {
-        // The three seeded system groups must be in the table after schema
-        // build.
+        // Seeding a project seeds its three system groups.
+        db.seed().test_project().await.unwrap();
         let group = db
             .live()
             .fetch_one::<GroupDB>(&GroupName::default_group())

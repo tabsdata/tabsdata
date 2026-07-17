@@ -58,7 +58,7 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::errors::SqlError;
-    use td_objects::types::basic::{AccessTokenId, Description, GroupName, ProjectId, UserId};
+    use td_objects::types::basic::{AccessTokenId, Description, GroupName, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -73,6 +73,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_create_group(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let create = GroupCreate::builder()
             .try_name("analytics")?
             .try_description("Analytics tier group")?
@@ -80,7 +81,7 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create((), create)
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = CreateGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -107,9 +108,10 @@ mod tests {
     /// exact-match, matching the collections convention.)
     #[td_test::test(db)]
     async fn test_create_duplicate_name_rejected(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let name = GroupName::try_from("analytics").unwrap();
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .group(name.clone(), Description::try_from("first one").unwrap())
             .await;
@@ -122,7 +124,7 @@ mod tests {
             .unwrap();
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create((), create)
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         assert_service_error(service, request, |err| match err {
             SqlError::EntityAlreadyExists(_, _) => {}
@@ -142,6 +144,7 @@ mod tests {
             return Ok(());
         }
 
+        let p = db.seed().test_project().await?;
         let ctx = || RequestContext::with(AccessTokenId::default(), UserId::admin());
         let dup = || {
             GroupCreate::builder()
@@ -153,10 +156,10 @@ mod tests {
                 .unwrap()
         };
 
-        // `dup` in sandbox.
+        // `dup` in the first project.
         CreateGroupService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(ctx().create((), dup()).in_project(ProjectId::sandbox()))
+            .raw_oneshot(ctx().create((), dup()).in_project(p.id))
             .await?;
 
         // A second project, then the same group name within it — succeeds

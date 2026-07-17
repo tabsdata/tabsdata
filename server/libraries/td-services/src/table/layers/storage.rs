@@ -71,12 +71,13 @@ mod tests {
     use td_objects::dxo::function::{FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
+    use td_objects::dxo::project::ProjectDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::transaction::TransactionDB;
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
-        LogicalFunctionRunStatus, ProjectId, TableName, TableNameDto, TransactionKey, UserId,
+        LogicalFunctionRunStatus, TableName, TableNameDto, TransactionKey, UserId,
     };
     use td_objects::{Buildable, and};
     use td_queries::LiveEntry;
@@ -90,11 +91,12 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_resolve_table_location_existing_with_data(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
-            _setup_table(db.clone()).await?;
+            _setup_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -109,11 +111,12 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_resolve_table_location_existing_without_data(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
-            _setup_table(db.clone()).await?;
+            _setup_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -130,11 +133,12 @@ mod tests {
     async fn test_resolve_table_location_existing_previous_with_data(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
-            _setup_table(db.clone()).await?;
+            _setup_table(db.clone(), &p).await?;
 
         let previous_with_data = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -148,18 +152,14 @@ mod tests {
         // one execution a second seed rebinds the same LTDV, superseding the
         // with-data version instead of leaving it as a prior logical version.
         let function: FunctionDB = db.live().fetch_one(&table.function_version_id).await?;
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let physical_function_run = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -170,7 +170,7 @@ mod tests {
             )
             .await?;
         let current_without_data = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -191,11 +191,12 @@ mod tests {
     async fn test_resolve_table_location_existing_previous_with_data_different_table_version(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
-            _setup_table(db.clone()).await?;
+            _setup_table(db.clone(), &p).await?;
 
         let previous_with_data = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -206,9 +207,9 @@ mod tests {
             )
             .await?;
         let (execution, transaction, physical_function_run, table) =
-            _update_table_version(db.clone(), &collection).await?;
+            _update_table_version(db.clone(), &collection, &p).await?;
         let current_without_data = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -229,11 +230,12 @@ mod tests {
     async fn test_resolve_table_location_existing_previous_without_data(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
-            _setup_table(db.clone()).await?;
+            _setup_table(db.clone(), &p).await?;
 
         let _previous_with_data = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -244,7 +246,7 @@ mod tests {
             )
             .await;
         let current_without_data = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -261,11 +263,12 @@ mod tests {
     async fn test_resolve_table_location_existing_previous_without_data_different_table_version(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
-            _setup_table(db.clone()).await?;
+            _setup_table(db.clone(), &p).await?;
 
         let previous_with_data = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -276,9 +279,9 @@ mod tests {
             )
             .await?;
         let (execution, transaction, physical_function_run, table) =
-            _update_table_version(db.clone(), &collection).await?;
+            _update_table_version(db.clone(), &collection, &p).await?;
         let current_without_data = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -297,6 +300,7 @@ mod tests {
 
     async fn _setup_table(
         db: TdPool,
+        p: &ProjectDB,
     ) -> Result<
         (
             CollectionDB,
@@ -308,7 +312,7 @@ mod tests {
         TdError,
     > {
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -327,24 +331,20 @@ mod tests {
             .build()?;
 
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -368,6 +368,7 @@ mod tests {
     async fn _update_table_version(
         db: TdPool,
         collection: &CollectionDB,
+        p: &ProjectDB,
     ) -> Result<(ExecutionDB, TransactionDB, PhysicalFunctionRunDB, TableDB), TdError> {
         // Update the function to change the table version (TODO make this a seed function)
         let update = FunctionUpdate::builder()
@@ -386,26 +387,22 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
         let response = response?;
 
         let function: FunctionDB = db.live().fetch_one(&(response.id)).await?;
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 collection,
@@ -429,9 +426,6 @@ mod tests {
         table_id: TableId,
         uncommitted: bool,
     ) -> Result<Option<SPath>, TdError> {
-        // The resolver reads RLS-scoped tables. In tests the serving pool
-        // defaults the session scope to sandbox, where the seeds land, so a
-        // plain connection already reads the right rows.
         let connection = DomainConnection::ready(db.begin().await.unwrap().into_connection());
         resolve_table_location(
             MutRef::new(connection),
@@ -471,6 +465,7 @@ mod tests {
 
     async fn _setup_committed_table(
         db: TdPool,
+        p: &ProjectDB,
     ) -> Result<
         (
             CollectionDB,
@@ -482,7 +477,7 @@ mod tests {
         TdError,
     > {
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -501,24 +496,20 @@ mod tests {
             .build()?;
 
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -546,11 +537,12 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         // Committed data version with data should be found when uncommitted=true
+        let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
-            _setup_committed_table(db.clone()).await?;
+            _setup_committed_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -571,11 +563,12 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         // Committed data version with data should be found when uncommitted=false
+        let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
-            _setup_committed_table(db.clone()).await?;
+            _setup_committed_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -596,11 +589,12 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         // Non-committed data version with data should be found when uncommitted=true
+        let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
-            _setup_table(db.clone()).await?;
+            _setup_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -621,11 +615,12 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         // Non-committed data version with data should NOT be found when uncommitted=false
+        let p = db.seed().test_project().await?;
         let (collection, execution, transaction, physical_function_run, table) =
-            _setup_table(db.clone()).await?;
+            _setup_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,

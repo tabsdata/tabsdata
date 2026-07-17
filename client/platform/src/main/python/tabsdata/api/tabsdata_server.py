@@ -2210,10 +2210,9 @@ class Group:
 class Project:
     """A project on the Tabsdata server.
 
-    A project is the tenant boundary for row-level security. On PostgreSQL
-    projects are an ordinary, multi-tenant registry; on single-project
-    backends (SQLite/MySQL) the seeded ``sandbox`` project is the only one
-    and rejects create / delete.
+    A project is a tenant boundary: its collections, functions and data are
+    isolated from other projects. Not every instance supports projects; where
+    they are supported you can create and delete them freely.
     """
 
     base_path = _LazyProperty("base_path")

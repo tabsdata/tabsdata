@@ -207,7 +207,7 @@ mod tests {
     use td_database::pool::scoped::InProject;
     use td_objects::Buildable;
     use td_objects::dxo::connection::KeyValue;
-    use td_objects::types::basic::{AccessTokenId, GroupName, ProjectId, UserEnabled, UserName};
+    use td_objects::types::basic::{AccessTokenId, GroupName, UserEnabled, UserName};
     use td_queries::test_utils::SeedEntry;
 
     // The orchestrator's metadata is its resolve pipeline (the store phase
@@ -249,7 +249,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_upsert_forwards_to_store(db: TdPool) {
-        create_collection(&db, "src", Some(GroupName::source())).await;
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "src", Some(GroupName::source())).await;
         let upserts = Arc::new(Mutex::new(Vec::new()));
 
         let response = upsert_service(
@@ -259,14 +260,14 @@ mod tests {
             },
         )
         .service()
-        .raw_oneshot(upsert_request("src"))
+        .raw_oneshot(upsert_request(p.id, "src"))
         .await
         .unwrap();
 
-        let row = linked_connection(&db, "src").await.unwrap();
+        let row = linked_connection(&db, p.id, "src").await.unwrap();
         let recorded = upserts.lock().unwrap();
         assert_eq!(recorded.len(), 1);
-        assert_eq!(recorded[0].0, ProjectId::sandbox());
+        assert_eq!(recorded[0].0, p.id);
         assert_eq!(
             recorded[0].1, row.id,
             "store keyed by the row minted at create"
@@ -280,17 +281,19 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_upsert_rejects_datafactory(db: TdPool) {
-        create_collection(&db, "fac", None).await; // default group -> DataFactory
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "fac", None).await; // default group -> DataFactory
         let result = upsert_service(&db, MockStore::default())
             .service()
-            .raw_oneshot(upsert_request("fac"))
+            .raw_oneshot(upsert_request(p.id, "fac"))
             .await;
         assert!(result.is_err(), "DataFactory must be rejected");
     }
 
     #[td_test::test(db)]
     async fn test_upsert_rejects_missing_connection(db: TdPool) {
-        create_collection(&db, "src3", Some(GroupName::source())).await;
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "src3", Some(GroupName::source())).await;
         // Secrets without the dehydrated connection — rejected (no subset
         // updates until fetch-and-align lands).
         let body = ConnectionUpsert::builder()
@@ -301,14 +304,15 @@ mod tests {
             .unwrap();
         let result = upsert_service(&db, MockStore::default())
             .service()
-            .raw_oneshot(upsert_request_body("src3", body))
+            .raw_oneshot(upsert_request_body(p.id, "src3", body))
             .await;
         assert!(result.is_err(), "connection-less upsert must be rejected");
     }
 
     #[td_test::test(db)]
     async fn test_upsert_requires_project_role(db: TdPool) {
-        create_collection(&db, "src2", Some(GroupName::source())).await;
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "src2", Some(GroupName::source())).await;
         // A user with no role in the project fails the DevelopProject check.
         let outsider = db
             .seed()
@@ -326,7 +330,7 @@ mod tests {
             .unwrap();
         let request = RequestContext::with(AccessTokenId::default(), outsider.id)
             .update(collection_param("src2"), body)
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let result = upsert_service(&db, MockStore::default())
             .service()
             .raw_oneshot(request)
@@ -339,8 +343,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_upsert_requires_manage_project(db: TdPool) {
-        create_collection(&db, "srcm", Some(GroupName::source())).await;
-        let dev = seed_dev_user(&db).await;
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "srcm", Some(GroupName::source())).await;
+        let dev = seed_dev_user(&db, p.id).await;
         let body = ConnectionUpsert::builder()
             .connection(Some(document("srcm", "mysqlSrcConn")))
             .secrets(Some(secrets()))
@@ -349,7 +354,7 @@ mod tests {
             .unwrap();
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(collection_param("srcm"), body)
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let err = upsert_service(&db, MockStore::default())
             .service()
             .raw_oneshot(request)
@@ -360,11 +365,12 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_read_requires_manage_project(db: TdPool) {
-        create_collection(&db, "srcr", Some(GroupName::source())).await;
-        let dev = seed_dev_user(&db).await;
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "srcr", Some(GroupName::source())).await;
+        let dev = seed_dev_user(&db, p.id).await;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .read(collection_param("srcr"))
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let err = ConnectionReadService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -375,10 +381,11 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_upsert_rejects_kind_change(db: TdPool) {
-        create_collection(&db, "srck", Some(GroupName::source())).await; // mysqlSrcConn
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "srck", Some(GroupName::source())).await; // mysqlSrcConn
         let result = upsert_service(&db, MockStore::default())
             .service()
-            .raw_oneshot(upsert_request_kind("srck", "postgresSrcConn"))
+            .raw_oneshot(upsert_request_kind(p.id, "srck", "postgresSrcConn"))
             .await;
         let err = result.expect_err("connector kind must be immutable");
         assert!(err.to_string().contains("cannot change"), "got: {err}");
@@ -386,7 +393,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_upsert_rejects_duplicate_keys(db: TdPool) {
-        create_collection(&db, "srcd", Some(GroupName::source())).await;
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "srcd", Some(GroupName::source())).await;
         // Same key twice (here once in secrets, once in vars) — which value
         // applies would be backend-dependent.
         let body = ConnectionUpsert::builder()
@@ -400,7 +408,7 @@ mod tests {
             .unwrap();
         let err = upsert_service(&db, MockStore::default())
             .service()
-            .raw_oneshot(upsert_request_body("srcd", body))
+            .raw_oneshot(upsert_request_body(p.id, "srcd", body))
             .await
             .expect_err("duplicate keys must be rejected");
         assert!(err.to_string().contains("duplicate"), "got: {err}");
@@ -408,7 +416,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_upsert_kept_value_checked_against_store(db: TdPool) {
-        create_collection(&db, "srcv", Some(GroupName::source())).await;
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "srcv", Some(GroupName::source())).await;
         let service = upsert_service(
             &db,
             KeepStore {
@@ -428,7 +437,7 @@ mod tests {
             .unwrap();
         service
             .service()
-            .raw_oneshot(upsert_request_body("srcv", keep_stored))
+            .raw_oneshot(upsert_request_body(p.id, "srcv", keep_stored))
             .await
             .expect("keeping a stored secret must be accepted");
 
@@ -450,7 +459,7 @@ mod tests {
             .unwrap();
         let err = service
             .service()
-            .raw_oneshot(upsert_request_body("srcv", keep_missing))
+            .raw_oneshot(upsert_request_body(p.id, "srcv", keep_missing))
             .await
             .expect_err("keeping a never-stored secret must be rejected");
         assert!(err.to_string().contains("NEVER_STORED"), "got: {err}");
@@ -458,10 +467,11 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_upsert_with_unconfigured_store_fails(db: TdPool) {
-        create_collection(&db, "srcq", Some(GroupName::source())).await;
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "srcq", Some(GroupName::source())).await;
         let err = upsert_service(&db, NoopConnectionStore)
             .service()
-            .raw_oneshot(upsert_request("srcq"))
+            .raw_oneshot(upsert_request(p.id, "srcq"))
             .await
             .expect_err("unconfigured store must error");
         assert!(err.to_string().contains("not configured"));
@@ -476,6 +486,7 @@ mod tests {
         use crate::collection::service::create::CreateCollectionService;
         use td_bridge::connection::file::FileConnectionStore;
 
+        let p = db.seed().test_project().await.unwrap();
         let dir = td_common::tdtestdir!();
         let bridge = || {
             Arc::new(BridgeProviderHandle::new(Arc::new(
@@ -486,7 +497,7 @@ mod tests {
 
         CreateCollectionService::new(db.clone(), Arc::new(AuthzContext::default()), bridge())
             .service()
-            .raw_oneshot(create_request("srcw", Some(GroupName::source())))
+            .raw_oneshot(create_request(p.id, "srcw", Some(GroupName::source())))
             .await
             .expect("supervisor-mode create must work");
 
@@ -494,7 +505,7 @@ mod tests {
         // under the run's project.
         assert!(
             dir.join("connections")
-                .join(ProjectId::sandbox().to_string())
+                .join(p.id.to_string())
                 .join("srcw.json")
                 .is_file()
         );
@@ -503,7 +514,7 @@ mod tests {
         let response =
             ConnectionUpsertService::new(db.clone(), Arc::new(AuthzContext::default()), bridge())
                 .service()
-                .raw_oneshot(upsert_request("srcw"))
+                .raw_oneshot(upsert_request(p.id, "srcw"))
                 .await
                 .expect("supervisor-mode upsert must work");
         assert_eq!(response.secret_names, vec!["CREDENTIALS_PASSWORD"]);
@@ -512,7 +523,7 @@ mod tests {
         let read =
             ConnectionReadService::new(db.clone(), Arc::new(AuthzContext::default()), bridge())
                 .service()
-                .raw_oneshot(read_request("srcw"))
+                .raw_oneshot(read_request(p.id, "srcw"))
                 .await
                 .expect("supervisor-mode read must work");
         assert_eq!(read.secret_names, vec!["CREDENTIALS_PASSWORD"]);

@@ -276,14 +276,18 @@ mod tests {
             ]);
     }
 
-    fn request(create: CollectionCreate) -> Scoped<CreateRequest<(), CollectionCreate>, ProjectId> {
+    fn request(
+        project: ProjectId,
+        create: CollectionCreate,
+    ) -> Scoped<CreateRequest<(), CollectionCreate>, ProjectId> {
         RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create((), create)
-            .in_project(ProjectId::sandbox())
+            .in_project(project)
     }
 
     #[td_test::test(db)]
     async fn test_create_collection(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let name = CollectionName::try_from("ds0").unwrap();
         let description = Description::try_from("DS0").unwrap();
 
@@ -295,7 +299,7 @@ mod tests {
 
         let before = AtTime::now();
         let service = CreateCollectionService::with_defaults(db.clone()).service();
-        let response = service.raw_oneshot(request(create)).await;
+        let response = service.raw_oneshot(request(p.id, create)).await;
         assert!(response.is_ok());
         let created = response.unwrap();
 
@@ -324,8 +328,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_create_collection_resolves_group_by_name(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let group = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),
@@ -343,7 +348,7 @@ mod tests {
             .unwrap();
 
         let service = CreateCollectionService::with_defaults(db.clone()).service();
-        service.raw_oneshot(request(create)).await.unwrap();
+        service.raw_oneshot(request(p.id, create)).await.unwrap();
 
         let found = db
             .live()
@@ -356,11 +361,12 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_create_collection_type_inferred_from_group(db: TdPool) {
-        // sandbox is bootstrapped with the system groups; a user group is not a
+        // The seeded project carries the system groups; a user group is not a
         // source/destination, so it falls through to DataFactory. The
         // source/destination cases go through `create_collection`, which
         // attaches the (now mandatory) connection payload.
-        db.scoped(ProjectId::sandbox())
+        let p = db.seed().test_project().await.unwrap();
+        db.scoped(p.id)
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),
@@ -369,10 +375,11 @@ mod tests {
             .await
             .unwrap();
 
-        create_collection(&db, "c_src", Some(GroupName::source())).await;
-        create_collection(&db, "c_dst", Some(GroupName::destination())).await;
+        create_collection(&db, p.id, "c_src", Some(GroupName::source())).await;
+        create_collection(&db, p.id, "c_dst", Some(GroupName::destination())).await;
         create_collection(
             &db,
+            p.id,
             "c_fac",
             Some(GroupName::try_from("analytics").unwrap()),
         )
@@ -396,13 +403,14 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_create_duplicate_name_does_not_clobber_the_connection(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let bridge = bridge(InMemoryConnectionStore::default());
         let authz = Arc::new(AuthzContext::default());
         let create = CreateCollectionService::new(db.clone(), authz, bridge.clone());
 
         create
             .service()
-            .raw_oneshot(create_request("dup", Some(GroupName::source())))
+            .raw_oneshot(create_request(p.id, "dup", Some(GroupName::source())))
             .await
             .unwrap();
         // The store is written before the TX, so a taken name must be
@@ -411,15 +419,15 @@ mod tests {
         // rollback.
         let err = create
             .service()
-            .raw_oneshot(create_request("dup", Some(GroupName::source())))
+            .raw_oneshot(create_request(p.id, "dup", Some(GroupName::source())))
             .await
             .expect_err("duplicate name must be rejected before the store is touched");
         assert!(err.to_string().contains("already exists"), "got: {err}");
 
-        let connection = linked_connection(&db, "dup").await.unwrap();
+        let connection = linked_connection(&db, p.id, "dup").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&ProjectId::sandbox(), &connection.id)
+            .fetch(&p.id, &connection.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "dup");
@@ -431,6 +439,7 @@ mod tests {
         // 1:1 with its collection and named by it). The create flow must stamp
         // the collection name onto the document so the store can key the worker
         // artifact — mirroring the rename flow.
+        let p = db.seed().test_project().await.unwrap();
         let bridge = bridge(InMemoryConnectionStore::default());
         let authz = Arc::new(AuthzContext::default());
         let create = CreateCollectionService::new(db.clone(), authz, bridge.clone());
@@ -447,14 +456,14 @@ mod tests {
 
         create
             .service()
-            .raw_oneshot(request(payload))
+            .raw_oneshot(request(p.id, payload))
             .await
             .unwrap();
 
-        let connection = linked_connection(&db, "nameless").await.unwrap();
+        let connection = linked_connection(&db, p.id, "nameless").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&ProjectId::sandbox(), &connection.id)
+            .fetch(&p.id, &connection.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "nameless");
@@ -462,6 +471,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_create_source_requires_connection(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let create = CollectionCreate::builder()
             .name(CollectionName::try_from("bare_src").unwrap())
             .description(Description::try_from("d").unwrap())
@@ -470,7 +480,7 @@ mod tests {
             .unwrap();
         let err = CreateCollectionService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(request(create))
+            .raw_oneshot(request(p.id, create))
             .await
             .expect_err("a source collection without a connection must be rejected");
         assert!(
@@ -481,6 +491,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_create_datafactory_rejects_connection(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let create = CollectionCreate::builder()
             .name(CollectionName::try_from("fac_conn").unwrap())
             .description(Description::try_from("d").unwrap())
@@ -491,7 +502,7 @@ mod tests {
             .unwrap();
         let err = CreateCollectionService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(request(create))
+            .raw_oneshot(request(p.id, create))
             .await
             .expect_err("a DataFactory with a connection must be rejected");
         assert!(err.to_string().contains("cannot carry"), "got: {err}");
@@ -499,8 +510,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_create_source_links_connection(db: TdPool) {
-        create_collection(&db, "src_new", Some(GroupName::source())).await;
-        let row = linked_connection(&db, "src_new")
+        let p = db.seed().test_project().await.unwrap();
+        create_collection(&db, p.id, "src_new", Some(GroupName::source())).await;
+        let row = linked_connection(&db, p.id, "src_new")
             .await
             .expect("the collection must be born linked");
         assert_eq!(row.kind.to_string(), "mysqlSrcConn");
@@ -508,6 +520,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_create_with_failing_store_persists_nothing(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let create = CollectionCreate::builder()
             .name(CollectionName::try_from("src_fail").unwrap())
             .description(Description::try_from("d").unwrap())
@@ -523,7 +536,7 @@ mod tests {
         let err =
             CreateCollectionService::new(db.clone(), Arc::new(AuthzContext::default()), bridge)
                 .service()
-                .raw_oneshot(request(create))
+                .raw_oneshot(request(p.id, create))
                 .await
                 .expect_err("store failure must surface");
         assert!(err.to_string().contains("store unreachable"), "got: {err}");
@@ -547,11 +560,10 @@ mod tests {
             return;
         }
 
-        // Two distinct projects to prove isolation. `sandbox` is bootstrapped
-        // with the system groups; the second is seeded with its own. A
-        // collection resolves its default group within its own project, so both
-        // projects must carry one.
-        let project_a = ProjectId::sandbox();
+        // Two distinct projects to prove isolation, each seeded with its own
+        // system groups. A collection resolves its default group within its
+        // own project, so both projects must carry one.
+        let project_a = db.seed().test_project().await.unwrap().id;
         let project_b = db
             .seed()
             .project(ProjectName::try_from("project_b").unwrap())
@@ -599,7 +611,8 @@ mod tests {
     /// carries connection config and so requires ManageProject.
     #[td_test::test(db)]
     async fn test_source_create_requires_manage_project(db: TdPool) {
-        let dev = seed_dev_user(&db).await;
+        let p = db.seed().test_project().await.unwrap();
+        let dev = seed_dev_user(&db, p.id).await;
 
         let create = CollectionCreate::builder()
             .name(CollectionName::try_from("dev_df").unwrap())
@@ -608,7 +621,7 @@ mod tests {
             .unwrap();
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .create((), create)
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         CreateCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -626,7 +639,7 @@ mod tests {
             .unwrap();
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .create((), create)
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let err = CreateCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)

@@ -66,15 +66,16 @@ mod tests {
     use td_error::assert_service_error;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, Description, GroupName, ProjectId, UserId};
+    use td_objects::types::basic::{AccessTokenId, Description, GroupName, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
     async fn test_update_group(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -94,7 +95,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -116,8 +117,9 @@ mod tests {
     /// `UniqueViolation` from the unique index.
     #[td_test::test(db)]
     async fn test_update_rename_to_existing_name_rejected(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),
@@ -125,7 +127,7 @@ mod tests {
             )
             .await;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .group(
                 GroupName::try_from("ml").unwrap(),
@@ -147,7 +149,7 @@ mod tests {
                     .unwrap(),
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateGroupService::with_defaults(db.clone()).service();
         assert_service_error(service, request, |err| match err {
@@ -159,6 +161,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_system_group_rejected(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let update = GroupUpdate::builder()
             .name(None)
             .description(Some(Description::try_from(
@@ -173,7 +176,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateGroupService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;

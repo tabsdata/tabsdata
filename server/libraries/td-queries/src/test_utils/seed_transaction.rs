@@ -18,8 +18,7 @@ pub(crate) async fn seed_transaction(
     transaction_key: &TransactionKey,
 ) -> Result<TransactionDB, TdError> {
     // A transaction's group is a snapshot of its collection's group at mint —
-    // resolve it from the collection rather than assuming the global default,
-    // which only exists in `sandbox`.
+    // resolve it from the collection rather than assuming the global default.
     let collection: CollectionDB = executor
         .reuse()
         .live()
@@ -48,15 +47,14 @@ mod tests {
     use ta_objects::Buildable;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::types::basic::{
-        BundleId, CollectionName, Decorator, ProjectId, TransactionKey, UserId,
-    };
+    use td_objects::types::basic::{BundleId, CollectionName, Decorator, TransactionKey, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_transaction(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -88,14 +86,14 @@ mod tests {
             .unwrap();
 
         let function_version = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .execution(&function_version)
             .await
@@ -103,7 +101,7 @@ mod tests {
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await

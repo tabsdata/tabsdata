@@ -18,11 +18,9 @@ pub(crate) async fn seed_collection(
     collection_name: &CollectionName,
     created_by: &UserId,
 ) -> Result<CollectionDB, TdError> {
-    // Assign the collection to its project's own `default` group. If the caller
-    // runs this on a project-scoped executor (`db.scoped(p)`), the group
-    // resolves by name within that project — each project mints its own
-    // `default` group with a distinct id (only `sandbox`'s is the fixed
-    // bootstrap id), so a hardcoded id would belong to the wrong project.
+    // Assign the collection to its project's own `default` group. On a
+    // project-scoped executor (`db.scoped(p)`) the group resolves by name within
+    // that project, so a hardcoded id could belong to the wrong project.
     let default_group = executor
         .reuse()
         .live()
@@ -74,13 +72,14 @@ mod tests {
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::collection::CollectionDB;
-    use td_objects::types::basic::{CollectionName, ProjectId, UserId};
+    use td_objects::types::basic::{CollectionName, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
     #[td_test::test(db)]
     async fn test_seed_collection(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),

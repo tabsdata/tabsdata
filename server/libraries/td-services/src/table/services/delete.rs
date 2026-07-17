@@ -97,8 +97,8 @@ mod tests {
     use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
     use td_objects::rest_urls::FunctionParam;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionIdName, FunctionRuntimeValues, ProjectId,
-        TableName, TableNameDto, UserId,
+        AccessTokenId, BundleId, Decorator, FunctionIdName, FunctionRuntimeValues, TableName,
+        TableNameDto, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::SeedEntry;
@@ -108,6 +108,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_delete_table(db: TdPool) {
         use td_database::pool::scoped::Scoped;
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         TableDeleteService::with_defaults(db)
@@ -169,9 +170,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_table(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -194,7 +196,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -217,7 +219,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -231,7 +233,7 @@ mod tests {
                     .table(TableIdName::from_str("super_table")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = TableDeleteService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -247,9 +249,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_function_with_dependency(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -272,7 +275,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -292,7 +295,7 @@ mod tests {
             .build()?;
 
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -315,7 +318,7 @@ mod tests {
                     .build()?,
                 update.clone(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -329,7 +332,7 @@ mod tests {
                     .table(TableIdName::from_str("super_table")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = TableDeleteService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;

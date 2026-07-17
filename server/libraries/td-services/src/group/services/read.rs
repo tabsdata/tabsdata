@@ -49,15 +49,16 @@ mod tests {
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::group::GroupDB;
-    use td_objects::types::basic::{AccessTokenId, Description, GroupName, ProjectId, UserId};
+    use td_objects::types::basic::{AccessTokenId, Description, GroupName, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[td_test::test(db)]
     async fn test_read_group_by_name(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -71,7 +72,7 @@ mod tests {
                     .group(GroupIdName::from_str("analytics")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = ReadGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;
@@ -87,13 +88,14 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_read_system_group_by_name(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .read(
                 GroupParam::builder()
                     .group(GroupIdName::from_str("default")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = ReadGroupService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await?;

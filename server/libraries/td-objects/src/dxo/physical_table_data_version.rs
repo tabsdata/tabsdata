@@ -28,8 +28,8 @@ mod definitions {
         #[dxo(extractor)]
         pub id: PhysicalTableDataVersionId,
         /// The project this version belongs to. Inherited from the parent
-        /// LFR/PFR at mint; required at construction — there is no "default to
-        /// sandbox" fallback, which would mask a builder forgetting to thread
+        /// LFR/PFR at mint; required at construction — there is no default
+        /// project fallback, which would mask a builder forgetting to thread
         /// the project through the (bypass-scoped) dispatch insert.
         pub project_id: ProjectId,
         pub collection_id: CollectionId,

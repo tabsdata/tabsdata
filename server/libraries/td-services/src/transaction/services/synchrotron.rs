@@ -51,7 +51,7 @@ mod tests {
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, ProjectId, TransactionKey, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, TransactionKey, UserId,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -60,6 +60,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_synchrotron(db: TdPool) {
         use td_database::pool::scoped::Scoped;
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         SynchrotronService::with_defaults(db)
@@ -81,8 +82,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_synchrotron(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -104,34 +106,30 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function_version = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function_version)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function_version).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transactions = [
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
@@ -140,7 +138,7 @@ mod tests {
         let service = SynchrotronService::with_defaults(db.clone()).service();
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, transactions.len());

@@ -17,21 +17,12 @@
 //! resolver — not from a DB-level FK. Deletes are soft, so a tagged row's
 //! project id keeps resolving here even after the project is deleted.
 
-use sea_query::{
-    Alias, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, InsertStatement, JoinType, Keyword, Query, Table,
-    TableCreateStatement,
-};
+use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement};
 
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
 use crate::schema::sql::ViewDef;
-
-use td_security::ENCODED_ID_SYSTEM as SYSTEM_USER_ID;
-
-/// Re-export so sibling `current/*.rs` files reference
-/// `super::projects::ENCODED_ID_PROJECT_SANDBOX` (the seeded "sandbox" project).
-pub use td_security::ENCODED_ID_PROJECT_SANDBOX;
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Projects {
@@ -104,34 +95,6 @@ impl Entity for Defs {
                     .to_owned(),
             ),
             projects_with_names(b),
-        ]
-    }
-
-    fn seeds(&self) -> Vec<InsertStatement> {
-        vec![
-            Query::insert()
-                .into_table(Projects::Table)
-                .columns([
-                    Projects::Id,
-                    Projects::Name,
-                    Projects::Description,
-                    Projects::BasePath,
-                    Projects::CreatedOn,
-                    Projects::CreatedById,
-                    Projects::ModifiedOn,
-                    Projects::ModifiedById,
-                ])
-                .values_panic([
-                    ENCODED_ID_PROJECT_SANDBOX.into(),
-                    "sandbox".into(),
-                    "Sandbox project — the only project the bootstrap seeds; further projects come from the projects CRUD API.".into(),
-                    "/".into(),
-                    Keyword::CurrentTimestamp.into(),
-                    SYSTEM_USER_ID.into(),
-                    Keyword::CurrentTimestamp.into(),
-                    SYSTEM_USER_ID.into(),
-                ])
-                .to_owned(),
         ]
     }
 }

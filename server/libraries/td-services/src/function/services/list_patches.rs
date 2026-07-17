@@ -101,9 +101,9 @@ mod tests {
             ]);
     }
 
-    async fn seed_patches_fixture(db: &TdPool) -> CollectionDB {
+    async fn seed_patches_fixture(db: &TdPool, project_id: ProjectId) -> CollectionDB {
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
             .await
@@ -125,7 +125,7 @@ mod tests {
             .build()
             .unwrap();
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&collection, &register)
             .await
@@ -135,14 +135,15 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_patches_returns_empty_for_no_patches(db: TdPool) -> Result<(), TdError> {
-        let _coll = seed_patches_fixture(&db).await;
+        let p = db.seed().test_project().await?;
+        let _coll = seed_patches_fixture(&db, p.id).await;
         let param = FunctionParam::builder()
             .collection(CollectionIdName::from_str("c0")?)
             .function(FunctionIdName::from_str("f0")?)
             .build()?;
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(param, ListParams::default())
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let response = ListFunctionPatchesService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -153,7 +154,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_patches_returns_all_patches_latest_first(db: TdPool) -> Result<(), TdError> {
-        let _coll = seed_patches_fixture(&db).await;
+        let p = db.seed().test_project().await?;
+        let _coll = seed_patches_fixture(&db, p.id).await;
         let parent: FunctionDBWithNames = {
             db.current()
                 .fetch_one::<FunctionDBWithNames>(and!(
@@ -178,7 +180,7 @@ mod tests {
                         .build()?,
                     body,
                 )
-                .in_project(ProjectId::sandbox());
+                .in_project(p.id);
             let _ = CreateFunctionPatchService::with_defaults(db.clone())
                 .service()
                 .raw_oneshot(req)
@@ -193,7 +195,7 @@ mod tests {
                     .build()?,
                 ListParams::default(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let response = ListFunctionPatchesService::with_defaults(db.clone())
             .service()
             .raw_oneshot(read_request)

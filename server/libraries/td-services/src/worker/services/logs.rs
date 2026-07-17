@@ -88,7 +88,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId,
+        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
         TransactionKey, UserId, WorkerMessageStatus,
     };
     use td_queries::test_utils::SeedEntry;
@@ -155,8 +155,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_worker_logs(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -178,24 +179,20 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function_version = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function_version)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function_version).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -207,7 +204,7 @@ mod tests {
             .await?;
 
         let workers = [
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .function_runner_worker(
                     &execution,
@@ -216,7 +213,7 @@ mod tests {
                     &WorkerMessageStatus::Locked,
                 )
                 .await?,
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .function_runner_worker(
                     &execution,
@@ -253,7 +250,7 @@ mod tests {
                                 .retry(vec![])
                                 .build()?,
                         )
-                        .in_project(ProjectId::sandbox());
+                        .in_project(p.id);
 
                     let response = service.raw_oneshot(request).await?;
                     Ok::<_, TdError>(response)

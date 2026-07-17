@@ -55,8 +55,8 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectId,
-        TableNameDto, TransactionKey, UserId, VersionPos,
+        AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, TableNameDto,
+        TransactionKey, UserId, VersionPos,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -93,8 +93,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_executions_by_function_version(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -113,7 +114,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function_version_a = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -121,17 +122,17 @@ mod tests {
 
         // Create an execution with a function run for function_version_a.
         let execution_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .execution(&function_version_a)
             .await?;
         let transaction_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution_1, &transaction_key)
             .await?;
         let function_run_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -151,7 +152,7 @@ mod tests {
             .await?;
 
         let tdv = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -163,7 +164,7 @@ mod tests {
             .await?;
 
         // Seed a function requirement for function_run_1 (belongs to function_version_a).
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .logical_input(
                 &collection,
@@ -192,23 +193,23 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function_version_b = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create_b)
             .await?;
 
         let execution_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .execution(&function_version_b)
             .await?;
         let transaction_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution_2, &transaction_key)
             .await?;
         let function_run_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -219,7 +220,7 @@ mod tests {
             )
             .await?;
 
-        db.scoped(ProjectId::sandbox())
+        db.scoped(p.id)
             .seed()
             .logical_input(
                 &collection,
@@ -243,7 +244,7 @@ mod tests {
                     .build()?,
                 ListParams::default(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.len, 1);
@@ -254,8 +255,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_executions_by_function_version_empty(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -273,7 +275,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function_version = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -287,7 +289,7 @@ mod tests {
                     .build()?,
                 ListParams::default(),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let response = service.raw_oneshot(request).await?;
 
         assert_eq!(response.len, 0);

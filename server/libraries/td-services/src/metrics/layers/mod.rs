@@ -524,11 +524,17 @@ mod tests {
         GroupId::try_from("00000000000000000000000208").unwrap()
     }
 
+    /// Stable project id for the synthetic rows (same rationale as
+    /// [`fixed_collection_id`]) — `project_id` is part of the fold key.
+    fn fixed_project_id() -> ProjectId {
+        ProjectId::try_from("00000000000000000000000700").unwrap()
+    }
+
     fn node(bucket_ms: i64, status: LogicalFunctionRunStatus, fn_runs: i64) -> NodeRow {
         NodeRow {
             bucket: EpochMs::try_from(bucket_ms).unwrap(),
-            project_id: Some(ProjectId::sandbox()),
-            project_name: Some(ProjectName::try_from("sandbox").unwrap()),
+            project_id: Some(fixed_project_id()),
+            project_name: Some(ProjectName::try_from("test").unwrap()),
             kind: NodeKind::Dim,
             collection_id: Some(fixed_collection_id()),
             collection_name: Some(CollectionName::try_from("test_coll").unwrap()),
@@ -575,8 +581,8 @@ mod tests {
     fn edge(bucket_ms: i64, status: LogicalFunctionRunStatus, fn_runs: i64) -> EdgeRow {
         EdgeRow {
             bucket: EpochMs::try_from(bucket_ms).unwrap(),
-            project_id: Some(ProjectId::sandbox()),
-            project_name: Some(ProjectName::try_from("sandbox").unwrap()),
+            project_id: Some(fixed_project_id()),
+            project_name: Some(ProjectName::try_from("test").unwrap()),
             source_kind: NodeKind::ExternalSource,
             source: None,
             source_name: None,

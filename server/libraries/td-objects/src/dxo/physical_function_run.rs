@@ -24,9 +24,9 @@ mod definitions {
         #[builder(default = "PhysicalFunctionRunId::new()")]
         pub id: PhysicalFunctionRunId,
         /// The project this run belongs to. Inherited from the parent LFR
-        /// at mint; required at construction — there is no "default to
-        /// sandbox" fallback because that would mask a builder forgetting to
-        /// thread the project from upstream.
+        /// at mint; required at construction — there is no default project
+        /// fallback because that would mask a builder forgetting to thread the
+        /// project from upstream.
         #[dxo(extractor)]
         pub project_id: ProjectId,
         pub collection_id: CollectionId,

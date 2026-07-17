@@ -29,8 +29,7 @@ pub enum ConnectionError {
     #[error(
         "Project scope could not be resolved for the request: the request type \
          carries no project scope. A tenant-scoped service must run with a \
-         resolvable scope; refusing to run unscoped (which would bypass \
-         row-level security)."
+         resolvable scope; refusing to run unscoped."
     )]
     ProjectScopeUnresolved = 5005,
 }

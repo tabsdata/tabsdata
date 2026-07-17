@@ -163,6 +163,7 @@ mod tests {
     //noinspection DuplicatedCode
     #[td_test::test(db, flavor = "multi_thread", worker_threads = 1)]
     async fn test_sample(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let test_dir = td_common::tdtestdir!();
         let url = Url::from_directory_path(test_dir).unwrap();
         let storage = Storage::from(vec![
@@ -171,7 +172,7 @@ mod tests {
         let storage = Arc::new(storage);
 
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -193,7 +194,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function_version = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -203,21 +204,17 @@ mod tests {
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = db
-                .scoped(ProjectId::sandbox())
-                .seed()
-                .execution(&function_version)
-                .await?;
+            let execution = db.scoped(p.id).seed().execution(&function_version).await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = db
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?;
 
             at_times.push(AtTime::now());
             let physical_function_run = db
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .physical_function_run(
                     &collection,
@@ -235,7 +232,7 @@ mod tests {
 
                 if i % 2 == 0 {
                     let physical_table_data_version = db
-                        .scoped(ProjectId::sandbox())
+                        .scoped(p.id)
                         .seed()
                         .physical_table_data_version_with_data(
                             &collection,
@@ -292,7 +289,7 @@ mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    db.scoped(ProjectId::sandbox())
+                    db.scoped(p.id)
                         .seed()
                         .physical_table_data_version(
                             &collection,
@@ -308,6 +305,7 @@ mod tests {
 
         async fn get_sample(
             db: TdPool,
+            project_id: ProjectId,
             storage: Arc<Storage>,
             collection: &str,
             table: &str,
@@ -337,7 +335,7 @@ mod tests {
                         .build()?,
                     SqlParam::builder().sql(None).build()?,
                 ))
-                .in_project(ProjectId::sandbox());
+                .in_project(project_id);
             let response = service.raw_oneshot(request).await;
             match response {
                 Ok(response) => {
@@ -353,6 +351,7 @@ mod tests {
         // With IDs
         let bytes_with_ids = get_sample(
             db.clone(),
+            p.id,
             storage.clone(),
             format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
@@ -365,6 +364,7 @@ mod tests {
         // With names
         let bytes_with_names = get_sample(
             db.clone(),
+            p.id,
             storage.clone(),
             &collection.name,
             created_tables[0].as_str(),
@@ -385,6 +385,7 @@ mod tests {
         // With IDs
         let bytes_with_ids = get_sample(
             db.clone(),
+            p.id,
             storage.clone(),
             format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
@@ -397,6 +398,7 @@ mod tests {
         // With names
         let bytes_with_names = get_sample(
             db.clone(),
+            p.id,
             storage.clone(),
             &collection.name,
             created_tables[0].as_str(),
@@ -421,6 +423,7 @@ mod tests {
         // With IDs
         let bytes_with_ids = get_sample(
             db.clone(),
+            p.id,
             storage.clone(),
             format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
@@ -433,6 +436,7 @@ mod tests {
         // With names
         let bytes_with_names = get_sample(
             db.clone(),
+            p.id,
             storage.clone(),
             &collection.name,
             created_tables[0].as_str(),
@@ -457,6 +461,7 @@ mod tests {
         // With IDs
         let bytes_with_ids = get_sample(
             db.clone(),
+            p.id,
             storage.clone(),
             format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
@@ -469,6 +474,7 @@ mod tests {
         // With names
         let bytes_with_names = get_sample(
             db.clone(),
+            p.id,
             storage.clone(),
             &collection.name,
             created_tables[0].as_str(),
@@ -492,6 +498,7 @@ mod tests {
         // With another offset
         let bytes = get_sample(
             db.clone(),
+            p.id,
             storage.clone(),
             format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),
@@ -511,6 +518,7 @@ mod tests {
         // With another length
         let bytes = get_sample(
             db.clone(),
+            p.id,
             storage.clone(),
             format!("~{}", collection.id).as_str(),
             created_tables[0].as_str(),

@@ -4,8 +4,7 @@
 
 //! Smoke tests for the projects CRUDL — one end-to-end pass through every
 //! service (create -> read -> list -> update -> delete) so the scaffold is
-//! exercised on real Postgres (and proves the bootstrap-seeded sandbox project
-//! shows up in list).
+//! exercised on real Postgres.
 
 use crate::project::service::create::CreateProjectService;
 use crate::project::service::delete::DeleteProjectService;
@@ -93,14 +92,12 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
         .raw_oneshot(admin_ctx().delete(project_param("payments_v2")))
         .await?;
 
-    // After delete the row is gone from the active view: list shows only
-    // sandbox (the bootstrap seed).
+    // After delete the row is gone from the active view.
     let list = ListProjectsService::with_defaults(db.clone())
         .service()
         .raw_oneshot(admin_ctx().list((), ListParams::default()))
         .await?;
-    assert_eq!(list.len, 1, "only sandbox remains after delete");
-    assert_eq!(list.data[0].name, ProjectName::try_from("sandbox")?);
+    assert_eq!(list.len, 0, "no project remains after delete");
 
     Ok(())
 }
@@ -110,8 +107,8 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
 /// on `__all__`) sees every project.
 #[td_test::test(db)]
 async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError> {
-    // Two extra projects beside the bootstrap `sandbox` (seeded directly: the
-    // create service is Postgres-only, but listing is backend-agnostic).
+    // Two projects (seeded directly: the create service is Postgres-only, but
+    // listing is backend-agnostic).
     let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
     let _beta = db.seed().project(ProjectName::try_from("beta")?).await?;
 
@@ -156,12 +153,12 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
         "bob should see only alpha"
     );
 
-    // The admin (sys_admin) sees all three (sandbox, alpha, beta).
+    // The admin (sys_admin) sees both.
     let admin_list = ListProjectsService::with_defaults(db.clone())
         .service()
         .raw_oneshot(admin_ctx().list((), ListParams::default()))
         .await?;
-    assert_eq!(admin_list.len, 3, "admin should see every project");
+    assert_eq!(admin_list.len, 2, "admin should see every project");
 
     Ok(())
 }
@@ -221,7 +218,7 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
 /// unique-constraint violation from the update write.
 #[td_test::test(db)]
 async fn test_rename_to_existing_name_rejected(db: TdPool) -> Result<(), TdError> {
-    // A second project alongside the seeded `sandbox`.
+    db.seed().test_project().await?;
     CreateProjectService::with_defaults(db.clone())
         .service()
         .raw_oneshot(
@@ -235,14 +232,14 @@ async fn test_rename_to_existing_name_rejected(db: TdPool) -> Result<(), TdError
         )
         .await?;
 
-    // Renaming `sandbox` to the taken name `billing` collides.
+    // Renaming `test` to the taken name `billing` collides.
     let upd = ProjectUpdate::builder()
         .name(Some(ProjectName::try_from("billing")?))
         .description(None)
         .build()?;
     let res = UpdateProjectService::with_defaults(db.clone())
         .service()
-        .raw_oneshot(admin_ctx().update(project_param("sandbox"), upd))
+        .raw_oneshot(admin_ctx().update(project_param("test"), upd))
         .await;
     let err = res.expect_err("rename to an existing name must be rejected");
     assert!(
@@ -252,24 +249,6 @@ async fn test_rename_to_existing_name_rejected(db: TdPool) -> Result<(), TdError
         ),
         "expected EntityAlreadyExists, got {err:?}"
     );
-    Ok(())
-}
-
-/// Sandbox can be renamed via update (any backend) — deleting sandbox is
-/// blocked on every backend, and creating additional projects is blocked on
-/// single-project backends.
-#[td_test::test(db)]
-async fn test_sandbox_can_be_renamed(db: TdPool) -> Result<(), TdError> {
-    let new_name = ProjectName::try_from("primary")?;
-    let upd = ProjectUpdate::builder()
-        .name(Some(new_name.clone()))
-        .description(None)
-        .build()?;
-    let updated = UpdateProjectService::with_defaults(db.clone())
-        .service()
-        .raw_oneshot(admin_ctx().update(project_param("sandbox"), upd))
-        .await?;
-    assert_eq!(updated.name, new_name);
     Ok(())
 }
 
@@ -545,7 +524,7 @@ mod sqlite_single_project {
     use crate::project::ProjectError;
     use td_error::TdDomainError;
 
-    /// SQLite is single-project: creating new projects is rejected.
+    /// SQLite does not support projects: create is rejected.
     #[tokio::test]
     async fn test_create_rejected_on_sqlite() {
         let db = td_database::test_utils::sqlite::pool().await;
@@ -567,45 +546,10 @@ mod sqlite_single_project {
             err.code()
         );
     }
-
-    /// SQLite: sandbox is the only project and cannot be deleted.
-    #[tokio::test]
-    async fn test_delete_sandbox_rejected_on_sqlite() {
-        let db = td_database::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
-        let err = DeleteProjectService::with_defaults(db.serving.clone())
-            .service()
-            .raw_oneshot(admin_ctx().delete(project_param("sandbox")))
-            .await
-            .unwrap_err();
-        assert_eq!(
-            err.code(),
-            ProjectError::CannotDeleteSandboxOnSingleProjectBackend.code(),
-            "got {}",
-            err.code()
-        );
-    }
-
-    /// SQLite: sandbox can still be renamed via update.
-    #[tokio::test]
-    async fn test_update_sandbox_allowed_on_sqlite() {
-        let db = td_database::test_utils::sqlite::pool().await;
-        db.upgrade().await.unwrap();
-        let upd = ProjectUpdate::builder()
-            .name(Some(ProjectName::try_from("primary").unwrap()))
-            .description(None)
-            .build()
-            .unwrap();
-        UpdateProjectService::with_defaults(db.serving.clone())
-            .service()
-            .raw_oneshot(admin_ctx().update(project_param("sandbox"), upd))
-            .await
-            .unwrap();
-    }
 }
 
-/// PostgreSQL-only delete guards: sandbox is protected on every backend, and a
-/// project that still owns collections cannot be deleted (additional projects
+/// PostgreSQL-only delete guards: a seeded project is deletable once empty, and
+/// a project that still owns collections cannot be deleted (additional projects
 /// only exist on Postgres, so these can only be exercised there).
 #[cfg(postgres)]
 mod postgres_delete_guards {
@@ -620,17 +564,17 @@ mod postgres_delete_guards {
     use td_objects::dxo::collection::CollectionCreate;
     use td_objects::types::basic::CollectionName;
 
-    /// On Postgres sandbox is an ordinary project: deletable once empty (a
-    /// fresh DB seeds it with no collections). Nothing in the schema requires
-    /// it to keep existing.
+    /// On Postgres a seeded project is ordinary: deletable once empty. Nothing
+    /// in the schema requires it to keep existing.
     #[td_test::test(db)]
-    async fn test_delete_sandbox_allowed_on_postgres(db: TdPool) -> Result<(), TdError> {
+    async fn test_delete_seeded_project_allowed_on_postgres(db: TdPool) -> Result<(), TdError> {
         if !matches!(db.kind(), DatabaseBackend::Postgres) {
             return Ok(());
         }
+        db.seed().test_project().await?;
         DeleteProjectService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(admin_ctx().delete(project_param("sandbox")))
+            .raw_oneshot(admin_ctx().delete(project_param("test")))
             .await?;
         // It's gone from the active registry.
         let list = ListProjectsService::with_defaults(db)
@@ -641,8 +585,8 @@ mod postgres_delete_guards {
             !list
                 .data
                 .iter()
-                .any(|p| p.name == ProjectName::try_from("sandbox").unwrap()),
-            "sandbox should be gone after delete on postgres"
+                .any(|p| p.name == ProjectName::try_from("test").unwrap()),
+            "the test project should be gone after delete on postgres"
         );
         Ok(())
     }

@@ -57,8 +57,7 @@ def create(ctx: click.Context, name: str, description: str):
 )
 @click.pass_context
 def delete(ctx: click.Context, name: str, confirm: str):
-    """Delete a project by name. The sandbox project cannot be deleted on
-    single-project backends."""
+    """Delete a project by name."""
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the project to delete")
     click.echo(f"Deleting project: {name}")

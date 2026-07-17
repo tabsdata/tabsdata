@@ -111,23 +111,8 @@ pub const ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS: &str = "000000000000000000000
 pub const ID_ALL_ENTITIES: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1];
 pub const ENCODED_ID_ALL_ENTITIES: &str = "00000000000000000000000204";
 
-/// Id of the `sandbox` project — the one project the bootstrap seeds. Further
-/// projects are created through the projects CRUD API. On PostgreSQL the
-/// per-table `project_id` default reads the `app.project_id` session GUC
-/// (`NULLIF(current_setting('app.project_id', true), '')`), which is NULL when
-/// the GUC is unset and so fails the NOT NULL constraint — fail-closed, with NO
-/// sandbox fallback. `sandbox` is an ordinary, deletable project: the system
-/// stamps it explicitly only where it has no request GUC (e.g. bootstrap
-/// seeds), and it is the single project the app operates in on SQLite/MySQL
-/// (which have no row-level security).
-///
-/// Bytes 22..=24 are taken by the seeded groups (default/source/destination),
-/// so this is byte 25.
-pub const ID_PROJECT_SANDBOX: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 5];
-pub const ENCODED_ID_PROJECT_SANDBOX: &str = "0000000000000000000000020k";
-
 ///- project_creator role: confers exactly `create_projects` on system.
-///  Byte 0x26 (sandbox is byte 0x25 = "...20k", so 0x26 = "...20o").
+///  Byte 0x26 (0x25 is unused; bytes 22..=24 are the seeded groups).
 pub const ID_ROLE_PROJECT_CREATOR: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 6];
 pub const ENCODED_ID_ROLE_PROJECT_CREATOR: &str = "0000000000000000000000020o";
 ///- project_creator / create_projects on system permission row: byte 0x27 = "...20s".
@@ -135,7 +120,7 @@ pub const ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS: [u8; 16] =
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 7];
 pub const ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS: &str = "0000000000000000000000020s";
 
-pub const DEFAULT_IDS: [[u8; 16]; 15] = [
+pub const DEFAULT_IDS: [[u8; 16]; 14] = [
     ID_SYSTEM,
     ID_USER_ADMIN,
     ID_ROLE_SYS_ADMIN,
@@ -148,12 +133,11 @@ pub const DEFAULT_IDS: [[u8; 16]; 15] = [
     ID_PERM_SYS_ADMIN_MANAGE_PROJECT,
     ID_PERM_DEFAULT_CREATE_PROJECTS,
     ID_ALL_ENTITIES,
-    ID_PROJECT_SANDBOX,
     ID_ROLE_PROJECT_CREATOR,
     ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
 ];
 
-pub const DEFAULT_ENCODED_IDS: [&str; 15] = [
+pub const DEFAULT_ENCODED_IDS: [&str; 14] = [
     ENCODED_ID_SYSTEM,
     ENCODED_ID_USER_ADMIN,
     ENCODED_ID_ROLE_SYS_ADMIN,
@@ -166,7 +150,6 @@ pub const DEFAULT_ENCODED_IDS: [&str; 15] = [
     ENCODED_ID_PERM_SYS_ADMIN_MANAGE_PROJECT,
     ENCODED_ID_PERM_DEFAULT_CREATE_PROJECTS,
     ENCODED_ID_ALL_ENTITIES,
-    ENCODED_ID_PROJECT_SANDBOX,
     ENCODED_ID_ROLE_PROJECT_CREATOR,
     ENCODED_ID_PERM_PROJECT_CREATOR_CREATE_PROJECTS,
 ];

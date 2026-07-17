@@ -11,10 +11,7 @@ pub enum ProjectError {
     // 0-999: InputError — surfaces as 400.
     #[error("The project update request has nothing to update")]
     UpdateRequestHasNothingToUpdate = 0,
-    #[error(
-        "This database backend supports only the seeded `sandbox` project; \
-         creating additional projects requires PostgreSQL (row-level security)."
-    )]
+    #[error("This instance does not support creating projects.")]
     SingleProjectBackend = 1,
     #[error("The `*` wildcard project marker is not valid on this endpoint")]
     WildcardProjectNotAllowed = 2,
@@ -26,13 +23,6 @@ pub enum ProjectError {
     MissingProjectSegment = 1001,
 
     // 2000-2999: NotAllowed — surfaces as 4xx (conflict-style).
-    #[error(
-        "The `sandbox` project cannot be deleted on this database backend — \
-         it is the only project available (no row-level security). Rename it \
-         via update if needed. On PostgreSQL sandbox is an ordinary project \
-         and can be deleted once empty."
-    )]
-    CannotDeleteSandboxOnSingleProjectBackend = 2000,
     #[error(
         "Project `{0}` still has collections and cannot be deleted; delete its \
          collections first. (Deleting a non-empty project would strand its data: \

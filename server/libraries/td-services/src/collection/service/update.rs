@@ -301,6 +301,7 @@ mod tests {
     }
 
     fn update_request(
+        project: ProjectId,
         collection: &str,
         update: CollectionUpdate,
     ) -> Scoped<UpdateRequest<CollectionParam, CollectionUpdate>, ProjectId> {
@@ -312,7 +313,7 @@ mod tests {
                     .unwrap(),
                 update,
             )
-            .in_project(ProjectId::sandbox())
+            .in_project(project)
     }
 
     fn rename_to(name: &str) -> CollectionUpdate {
@@ -325,9 +326,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_collection(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let create_name = CollectionName::try_from("ds0").unwrap();
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&create_name, &UserId::admin())
             .await;
@@ -345,7 +347,7 @@ mod tests {
 
         let service = UpdateCollectionService::with_defaults(db).service();
         let response = service
-            .raw_oneshot(update_request(&create_name.to_string(), update))
+            .raw_oneshot(update_request(p.id, &create_name.to_string(), update))
             .await;
         assert!(response.is_ok());
         let updated = response.unwrap();
@@ -364,6 +366,7 @@ mod tests {
     /// changing name/description/base_path. Returns the service result.
     async fn update_collection(
         db: &TdPool,
+        project: ProjectId,
         collection_name: &CollectionName,
         name: Option<CollectionName>,
         description: Option<Description>,
@@ -381,7 +384,7 @@ mod tests {
                     .build()?,
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project);
         UpdateCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -403,9 +406,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_collection_base_path(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("bp_coll")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -414,14 +418,22 @@ mod tests {
         assert_eq!(collection.base_path, None);
 
         let data = BasePath::try_from("/data")?;
-        update_collection(&db, &collection_name, None, None, Some(Some(data.clone()))).await?;
+        update_collection(
+            &db,
+            p.id,
+            &collection_name,
+            None,
+            None,
+            Some(Some(data.clone())),
+        )
+        .await?;
 
         // Read back the persisted CollectionDB and confirm the new base_path.
         let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
         assert_eq!(reloaded.base_path, Some(data.clone()));
 
         // Clearing it (base_path = null) reverts to inheriting the project.
-        update_collection(&db, &collection_name, None, None, Some(None)).await?;
+        update_collection(&db, p.id, &collection_name, None, None, Some(None)).await?;
         let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
         assert_eq!(reloaded.base_path, None, "cleared back to inherit");
         Ok(())
@@ -448,9 +460,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_update_collection_nothing_to_update_errors(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let collection_name = CollectionName::try_from("noop_coll").unwrap();
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await;
@@ -469,7 +482,7 @@ mod tests {
                     .unwrap(),
                 update,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = UpdateCollectionService::with_defaults(db).service();
         assert_service_error(service, request, |err| {
@@ -490,9 +503,10 @@ mod tests {
     async fn test_collection_base_path_update_does_not_relocate_existing_function_artifacts(
         db: TdPool,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("move_coll")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -500,7 +514,15 @@ mod tests {
 
         // Put the collection on base_path "/a" before any artifacts exist.
         let a = BasePath::try_from("/a")?;
-        update_collection(&db, &collection_name, None, None, Some(Some(a.clone()))).await?;
+        update_collection(
+            &db,
+            p.id,
+            &collection_name,
+            None,
+            None,
+            Some(Some(a.clone())),
+        )
+        .await?;
 
         // Upload a real bundle so a Pending BundleDB row + storage object exist.
         let payload = b"BUNDLE-PAYLOAD".to_vec();
@@ -515,7 +537,7 @@ mod tests {
                     .build()?,
                 upload,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let bundle = UploadFunctionService::build(&context)
             .service()
             .raw_oneshot(request)
@@ -541,7 +563,7 @@ mod tests {
                     .build()?,
                 create,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         RegisterFunctionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
@@ -558,7 +580,15 @@ mod tests {
 
         // Move the collection to "/b".
         let b = BasePath::try_from("/b")?;
-        update_collection(&db, &collection_name, None, None, Some(Some(b.clone()))).await?;
+        update_collection(
+            &db,
+            p.id,
+            &collection_name,
+            None,
+            None,
+            Some(Some(b.clone())),
+        )
+        .await?;
         let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
         assert_eq!(reloaded.base_path, Some(b));
 
@@ -597,7 +627,7 @@ mod tests {
                 function_param,
                 OptionalAtTimeParam { at: None },
             ))
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let response = DownloadBundleService::build(&context)
             .service()
             .raw_oneshot(download_request)
@@ -619,27 +649,28 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_rename_connected_collection_renames_the_connection(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let bridge = bridge(InMemoryConnectionStore::default());
         let authz = Arc::new(AuthzContext::default());
 
         CreateCollectionService::new(db.clone(), authz.clone(), bridge.clone())
             .service()
-            .raw_oneshot(create_request("src0", Some(GroupName::source())))
+            .raw_oneshot(create_request(p.id, "src0", Some(GroupName::source())))
             .await
             .unwrap();
 
         let renamed = UpdateCollectionService::new(db.clone(), authz, bridge.clone())
             .service()
-            .raw_oneshot(update_request("src0", rename_to("src1")))
+            .raw_oneshot(update_request(p.id, "src0", rename_to("src1")))
             .await
             .unwrap();
         assert_eq!(renamed.name.to_string(), "src1");
 
         // The stored document followed the rename, values intact.
-        let connection = linked_connection(&db, "src1").await.unwrap();
+        let connection = linked_connection(&db, p.id, "src1").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&ProjectId::sandbox(), &connection.id)
+            .fetch(&p.id, &connection.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "src1");
@@ -648,17 +679,18 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_failed_rename_puts_the_store_back(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
         let bridge = bridge(InMemoryConnectionStore::default());
         let authz = Arc::new(AuthzContext::default());
 
         CreateCollectionService::new(db.clone(), authz.clone(), bridge.clone())
             .service()
-            .raw_oneshot(create_request("src0", Some(GroupName::source())))
+            .raw_oneshot(create_request(p.id, "src0", Some(GroupName::source())))
             .await
             .unwrap();
         let taken = CollectionName::try_from("taken").unwrap();
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&taken, &UserId::admin())
             .await;
@@ -668,14 +700,14 @@ mod tests {
         // for the create/rename race the pre-check cannot see).
         UpdateCollectionService::new(db.clone(), authz, bridge.clone())
             .service()
-            .raw_oneshot(update_request("src0", rename_to("taken")))
+            .raw_oneshot(update_request(p.id, "src0", rename_to("taken")))
             .await
             .expect_err("renaming onto an existing collection must fail");
 
-        let connection = linked_connection(&db, "src0").await.unwrap();
+        let connection = linked_connection(&db, p.id, "src0").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&ProjectId::sandbox(), &connection.id)
+            .fetch(&p.id, &connection.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "src0");
@@ -684,12 +716,13 @@ mod tests {
     /// requires ManageProject; plain collections need only DevelopProject.
     #[td_test::test(db)]
     async fn test_source_update_requires_manage_project(db: TdPool) -> Result<(), TdError> {
-        let dev = seed_dev_user(&db).await;
+        let p = db.seed().test_project().await?;
+        let dev = seed_dev_user(&db, p.id).await;
 
         // DataFactory rename with develop_project: fine.
         CreateCollectionService::with_defaults(db.clone())
             .service()
-            .raw_oneshot(create_request("dev_df_u", None))
+            .raw_oneshot(create_request(p.id, "dev_df_u", None))
             .await?;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(
@@ -698,14 +731,14 @@ mod tests {
                     .build()?,
                 rename_to("dev_df_u2"),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         UpdateCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)
             .await?;
 
         // Source rename with develop_project: forbidden.
-        create_collection(&db, "dev_src_u", Some(GroupName::source())).await;
+        create_collection(&db, p.id, "dev_src_u", Some(GroupName::source())).await;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(
                 CollectionParam::builder()
@@ -713,7 +746,7 @@ mod tests {
                     .build()?,
                 rename_to("dev_src_u2"),
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let err = UpdateCollectionService::with_defaults(db.clone())
             .service()
             .raw_oneshot(request)

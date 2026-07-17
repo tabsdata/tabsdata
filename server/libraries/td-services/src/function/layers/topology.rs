@@ -170,11 +170,12 @@ mod tests {
 
     async fn seed_head(
         db: &TdPool,
+        project_id: ProjectId,
         coll_name: &str,
         fn_name: &str,
     ) -> Result<(CollectionDB, FunctionDB), TdError> {
         let coll = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .collection(&CollectionName::try_from(coll_name)?, &UserId::admin())
             .await?;
@@ -191,7 +192,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let head = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .function(&coll, &create)
             .await?;
@@ -200,6 +201,7 @@ mod tests {
 
     async fn insert_patch(
         db: &TdPool,
+        project_id: ProjectId,
         head: &FunctionDB,
         defined_on: AtTime,
         snippet: &str,
@@ -216,10 +218,7 @@ mod tests {
             .defined_by_id(UserId::admin())
             .status(FunctionStatus::Active)
             .build()?;
-        db.scoped(ProjectId::sandbox())
-            .live()
-            .insert(&patch)
-            .await?;
+        db.scoped(project_id).live().insert(&patch).await?;
         Ok(patch.id)
     }
 
@@ -229,7 +228,8 @@ mod tests {
     /// patch wall-clock-now instead of pinning to the request `AtTime`.
     #[td_test::test(db)]
     async fn test_latest_patch_or_head_time_pinning(db: TdPool) -> Result<(), TdError> {
-        let (_coll, head) = seed_head(&db, "c0", "f0").await?;
+        let p = db.seed().test_project().await?;
+        let (_coll, head) = seed_head(&db, p.id, "c0", "f0").await?;
 
         // Three deterministic points: `before` (epoch — no patches), `t1`
         // (p1 alive), `t2 = t1 + 1ms` (p2 alive).
@@ -238,8 +238,8 @@ mod tests {
         let t2 = AtTime::try_from(td_common::datetime::Timestamp::from(
             **t1 + chrono::Duration::milliseconds(1),
         ))?;
-        let p1 = insert_patch(&db, &head, t1, "p1").await?;
-        let p2 = insert_patch(&db, &head, t2, "p2").await?;
+        let p1 = insert_patch(&db, p.id, &head, t1, "p1").await?;
+        let p2 = insert_patch(&db, p.id, &head, t2, "p2").await?;
 
         let mut conn =
             DomainConnection::<Apiserver>::ready(db.begin().await.unwrap().into_connection());
@@ -268,12 +268,13 @@ mod tests {
     async fn test_latest_patch_or_head_batch_partition_isolation(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let (_coll_a, head_a) = seed_head(&db, "c0", "fa").await?;
-        let (_coll_b, head_b) = seed_head(&db, "c1", "fb").await?;
+        let p = db.seed().test_project().await?;
+        let (_coll_a, head_a) = seed_head(&db, p.id, "c0", "fa").await?;
+        let (_coll_b, head_b) = seed_head(&db, p.id, "c1", "fb").await?;
 
         let now = AtTime::now();
-        let p_a = insert_patch(&db, &head_a, now, "p-a").await?;
-        let p_b = insert_patch(&db, &head_b, now, "p-b").await?;
+        let p_a = insert_patch(&db, p.id, &head_a, now, "p-a").await?;
+        let p_b = insert_patch(&db, p.id, &head_b, now, "p-b").await?;
 
         let mut conn =
             DomainConnection::<Apiserver>::ready(db.begin().await.unwrap().into_connection());

@@ -83,7 +83,7 @@ mod tests {
     use td_objects::dxo::graph::GraphEdge;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
-        ProjectId, TableName, TableNameDto, UserId,
+        TableName, TableNameDto, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::{Buildable, and};
@@ -96,6 +96,7 @@ mod tests {
     async fn test_tower_metadata_table_flow_graph(db: TdPool) {
         use crate::graph::layers::build::GraphBuilder;
         use td_database::pool::scoped::Scoped;
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         TableFlowGraphService::with_defaults(db)
@@ -156,9 +157,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_table_graph_no_deps(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -180,7 +182,7 @@ mod tests {
             .build()?;
 
         let function_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -194,7 +196,7 @@ mod tests {
                     .table(TableIdName::from_str("table_0")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let response = service.raw_oneshot(request).await?;
 
@@ -250,9 +252,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_table_graph_downstream(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -271,7 +274,7 @@ mod tests {
             .build()?;
 
         let function_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -293,7 +296,7 @@ mod tests {
             .build()?;
 
         let function_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -312,7 +315,7 @@ mod tests {
             .build()?;
 
         let function_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -326,7 +329,7 @@ mod tests {
                     .table(TableIdName::from_str("table_0")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let response = service.raw_oneshot(request).await?;
 
@@ -405,9 +408,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_table_graph_upstream(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -426,7 +430,7 @@ mod tests {
             .build()?;
 
         let function_0 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -448,7 +452,7 @@ mod tests {
             .build()?;
 
         let _function_1 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -467,7 +471,7 @@ mod tests {
             .build()?;
 
         let function_2 = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -481,7 +485,7 @@ mod tests {
                     .table(TableIdName::from_str("table_3")?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let response = service.raw_oneshot(request).await?;
 

@@ -146,9 +146,10 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_upload(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -166,7 +167,7 @@ mod tests {
                     .build()?,
                 function_upload,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let context = Context::with_defaults(db.clone());
         let service = UploadFunctionService::build(&context).service();
@@ -185,7 +186,7 @@ mod tests {
         assert_eq!(bundle.created_by_id, UserId::admin());
 
         // Bundle is stamped with the effective base_path and starts Pending. The
-        // seeded collection inherits (NULL base_path), so it resolves to the sandbox
+        // seeded collection inherits (NULL base_path), so it resolves to the
         // project's `/` (BasePath::default()).
         assert_eq!(collection.base_path, None);
         assert_eq!(bundle.base_path, BasePath::default());
@@ -211,6 +212,7 @@ mod tests {
     /// Drives the upload service once against `collection`, returning the response.
     async fn upload_once(
         context: &Context,
+        project_id: ProjectId,
         collection_name: &CollectionName,
         payload: &str,
     ) -> Result<Bundle, TdError> {
@@ -225,7 +227,7 @@ mod tests {
                     .build()?,
                 function_upload,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(project_id);
         let service = UploadFunctionService::build(context).service();
         service.raw_oneshot(request).await
     }
@@ -236,9 +238,10 @@ mod tests {
     async fn test_upload_bundle_base_path_non_default(db: TdPool) -> Result<(), TdError> {
         use td_objects::dxo::collection::{CollectionUpdateDB, CollectionUpdateDBBuilder};
 
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("prod_coll")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -261,7 +264,7 @@ mod tests {
 
         // Upload: the bundle must inherit the collection's non-default base_path.
         let payload = "TEXT";
-        upload_once(&context, &collection_name, payload).await?;
+        upload_once(&context, p.id, &collection_name, payload).await?;
 
         let bundle_db: Vec<BundleDB> = db.live().fetch_all::<BundleDB>(()).await?;
         assert_eq!(bundle_db.len(), 1);

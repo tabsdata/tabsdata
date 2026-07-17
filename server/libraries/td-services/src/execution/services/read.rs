@@ -115,7 +115,8 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, ProjectId, UserId};
+    use td_objects::types::basic::{AccessTokenId, UserId};
+    use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
@@ -184,7 +185,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_read_execution(db: TdPool) -> Result<(), TdError> {
-        let execution = test_execute(db.clone(), false, false, false).await?;
+        let p = db.seed().test_project().await?;
+        let execution = test_execute(db.clone(), p.id, false, false, false).await?;
 
         let service =
             ExecutionReadService::<{ FunctionDB::Executable }>::with_defaults(db.clone()).service();
@@ -194,7 +196,7 @@ mod tests {
                     .execution(ExecutionIdName::from_str(&execution.id.to_string())?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(execution.id, response.id);

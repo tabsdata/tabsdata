@@ -69,6 +69,7 @@ impl<P: DbBackendProvider + Send + Sync> TestSetup<Vec<TdPool>> for DbTestSetup<
         // (postgres: per-test schemas on the shared server; sqlite: a temp-file
         // connection) are released by the guard's async teardown after the test body.
         let MultiTestDb { serving, cleanup } = P::provision(self.components).await;
+
         TestSetupExecution::Run(serving, teardown(async move { cleanup.run().await }))
     }
 }

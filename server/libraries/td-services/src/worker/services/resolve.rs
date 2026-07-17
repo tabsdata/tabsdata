@@ -128,8 +128,7 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        LogicalFunctionRunStatus, ProjectId, TableNameDto, TransactionKey, UserId,
-        WorkerMessageStatus,
+        LogicalFunctionRunStatus, TableNameDto, TransactionKey, UserId, WorkerMessageStatus,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -140,8 +139,9 @@ mod tests {
     /// for the FR and flips the worker status Locked -> Unlocked.
     #[td_test::test(db)]
     async fn test_resolve_worker_message(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c_resolve")?, &UserId::admin())
             .await?;
@@ -158,22 +158,18 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -184,7 +180,7 @@ mod tests {
             )
             .await?;
         let worker = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function_runner_worker(&execution, &transaction, &pfr, &WorkerMessageStatus::Locked)
             .await?;
@@ -195,7 +191,7 @@ mod tests {
         };
         let read = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .read(param)
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
         let response = ResolveWorkerMessageService::with_defaults(db.clone())
             .service()
             .raw_oneshot(read)

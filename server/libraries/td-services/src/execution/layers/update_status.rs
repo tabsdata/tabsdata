@@ -450,6 +450,7 @@ pub(crate) mod tests {
     // are the same, they are not recreated, but reused.
     pub(crate) async fn test_status_update<F, Fut>(
         db: TdPool,
+        project_id: ProjectId,
         test_executions: &Vec<TestExecution>,
         test_run: F,
     ) -> Result<(), TdError>
@@ -482,7 +483,7 @@ pub(crate) mod tests {
                     } else {
                         (
                             c,
-                            db.scoped(ProjectId::sandbox())
+                            db.scoped(project_id)
                                 .seed()
                                 .collection(c, &UserId::admin())
                                 .await
@@ -537,7 +538,7 @@ pub(crate) mod tests {
                     .build()?;
 
                 let function_version = db
-                    .scoped(ProjectId::sandbox())
+                    .scoped(project_id)
                     .seed()
                     .function(collection, &create)
                     .await?;
@@ -559,7 +560,7 @@ pub(crate) mod tests {
                         (
                             e,
                             value
-                                .scoped(ProjectId::sandbox())
+                                .scoped(project_id)
                                 .seed()
                                 .execution(function)
                                 .await
@@ -589,7 +590,7 @@ pub(crate) mod tests {
                     async move {
                         (
                             *t,
-                            db.scoped(ProjectId::sandbox())
+                            db.scoped(project_id)
                                 .seed()
                                 .transaction(
                                     executions.get(e).unwrap(),
@@ -624,7 +625,7 @@ pub(crate) mod tests {
                 let transactions = transactions.clone();
                 async move {
                     let physical_function_run = db
-                        .scoped(ProjectId::sandbox())
+                        .scoped(project_id)
                         .seed()
                         .physical_function_run(
                             collections.get(&f.collection).unwrap(),
@@ -644,7 +645,7 @@ pub(crate) mod tests {
 
                     for table in &tables {
                         let _ = db
-                            .scoped(ProjectId::sandbox())
+                            .scoped(project_id)
                             .seed()
                             .physical_table_data_version(
                                 collections.get(&f.collection).unwrap(),
@@ -658,7 +659,7 @@ pub(crate) mod tests {
                     }
 
                     let _ = db
-                        .scoped(ProjectId::sandbox())
+                        .scoped(project_id)
                         .seed()
                         .logical_input(
                             collections.get(&f.collection).unwrap(),
@@ -737,7 +738,7 @@ pub(crate) mod tests {
                         .collect::<HashMap<_, _>>();
 
                     let req = db
-                        .scoped(ProjectId::sandbox())
+                        .scoped(project_id)
                         .seed()
                         .logical_input(
                             collections.get(&f.collection).unwrap(),
@@ -779,7 +780,7 @@ pub(crate) mod tests {
                 let physical_function_runs = physical_function_runs.clone();
                 async move {
                     let req = db
-                        .scoped(ProjectId::sandbox())
+                        .scoped(project_id)
                         .seed()
                         .function_runner_worker(
                             executions.get(e).unwrap(),

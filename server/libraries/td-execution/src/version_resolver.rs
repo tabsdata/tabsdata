@@ -455,12 +455,12 @@ mod tests {
     use td_objects::dxo::logical::LogicalTableDataVersionDB;
     use td_objects::dxo::logical::LogicalTableDataVersionPointerDB;
     use td_objects::dxo::table::TableDB;
+    use td_objects::types::basic::LogicalFunctionRunStatus;
     use td_objects::types::basic::Trigger;
     use td_objects::types::basic::{
         AtTime, BundleId, CollectionName, Decorator, LogicalPointerReason, LogicalPointerStatus,
         PhysicalTableDataVersionId, TableName, TableNameDto, TransactionKey, UserId,
     };
-    use td_objects::types::basic::{LogicalFunctionRunStatus, ProjectId};
     use td_queries::test_utils::SeedEntry;
     use td_queries::{CurrentEntry, LtdvEntry};
 
@@ -507,8 +507,9 @@ mod tests {
         TableId,
         Vec<LogicalTableDataVersionDB>,
     ) {
+        let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
             .await
@@ -533,7 +534,7 @@ mod tests {
             .build()
             .unwrap();
         let function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await
@@ -548,14 +549,9 @@ mod tests {
 
         let mut ltdvs = Vec::with_capacity(n);
         for _ in 0..n {
-            let execution = db
-                .scoped(ProjectId::sandbox())
-                .seed()
-                .execution(&function)
-                .await
-                .unwrap();
+            let execution = db.scoped(p.id).seed().execution(&function).await.unwrap();
             let transaction = db
-                .scoped(ProjectId::sandbox())
+                .scoped(p.id)
                 .seed()
                 .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
                 .await
@@ -831,7 +827,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let consumer = db
-            .scoped(ProjectId::sandbox())
+            .scoped(collection.project_id)
             .seed()
             .function(&collection, &consumer_create)
             .await?;
@@ -898,7 +894,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function_b = db
-            .scoped(ProjectId::sandbox())
+            .scoped(collection.project_id)
             .seed()
             .function(&collection, &table_b_create)
             .await?;
@@ -909,12 +905,12 @@ mod tests {
             .await?;
         for _ in 0..2 {
             let execution = db
-                .scoped(ProjectId::sandbox())
+                .scoped(collection.project_id)
                 .seed()
                 .execution(&function_b)
                 .await?;
             let transaction = db
-                .scoped(ProjectId::sandbox())
+                .scoped(collection.project_id)
                 .seed()
                 .transaction(&execution, &TransactionKey::try_from("ANY")?)
                 .await?;
@@ -1017,13 +1013,13 @@ mod tests {
         table_id: TableId,
     ) -> LogicalTableDataVersionDB {
         let execution = db
-            .scoped(ProjectId::sandbox())
+            .scoped(collection.project_id)
             .seed()
             .execution(function)
             .await
             .unwrap();
         let transaction = db
-            .scoped(ProjectId::sandbox())
+            .scoped(collection.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
             .await

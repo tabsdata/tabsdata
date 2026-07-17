@@ -160,6 +160,7 @@ mod tests {
         LIST_COLLECTIONS, UPDATE_COLLECTION, UPSERT_COLLECTION_CONNECTION,
     };
     use td_objects::types::basic::{AccessTokenId, UserId};
+    use td_queries::test_utils::SeedEntry;
     use td_security::{DESTINATION_GROUP, SOURCE_GROUP};
     use td_services::Context;
     use td_services::collection::service::CollectionServices;
@@ -179,9 +180,9 @@ mod tests {
             .layer(Extension(context))
     }
 
-    /// Substitute the `{project}` segment with the bootstrap-seeded sandbox.
+    /// Substitute the `{project}` segment with the per-test seeded `test` project.
     fn url(template: &str) -> String {
-        template.replace("{project}", "sandbox")
+        template.replace("{project}", "test")
     }
 
     /// 404 the request if the `{project}` segment doesn't resolve. The
@@ -206,11 +207,11 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    /// The `{project}` segment is resolved in middleware (read as
-    /// `Extension<ProjectId>`, never a `Path<_>`), so the `#[apiserver_path]`
-    /// macro injects it into the OpenAPI `params`. Assert every collections
-    /// operation documents `project` as a path parameter — and that the
-    /// per-route params (e.g. `collection`) still come through alongside it.
+    /// The `{project}` segment is resolved in middleware (read via the `Project`
+    /// extractor, never a `Path<_>`), so the `#[apiserver_path]` macro injects
+    /// it into the OpenAPI `params`. Assert every collections operation
+    /// documents `project` as a path parameter — and that the per-route params
+    /// (e.g. `collection`) still come through alongside it.
     #[td_test::test(db)]
     async fn test_openapi_documents_project_path_param(db: TdPool) {
         let api = CollectionsRouter::router(Arc::new(CollectionServices::build(
@@ -261,6 +262,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_collections_lifecycle(db: TdPool) {
+        db.seed().test_project().await.unwrap();
         let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
             &Context::with_defaults(db.clone()),
         )));
@@ -445,6 +447,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_collection_connection_endpoints(db: TdPool) {
+        db.seed().test_project().await.unwrap();
         let router = CollectionsRouter::router(Arc::new(CollectionServices::build(
             &Context::with_defaults(db.clone()),
         )));

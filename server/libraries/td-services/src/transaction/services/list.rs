@@ -46,8 +46,8 @@ mod tests {
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, ProjectId, ProjectName, TransactionKey,
-        UserId, WildcardProject,
+        AccessTokenId, BundleId, CollectionName, Decorator, ProjectName, TransactionKey, UserId,
+        WildcardProject,
     };
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
     use td_tower::ctx_service::RawOneshot;
@@ -77,8 +77,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_transaction(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -100,34 +101,30 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let function_version = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&function_version)
-            .await?;
+        let execution = db.scoped(p.id).seed().execution(&function_version).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transactions = [
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
@@ -136,7 +133,7 @@ mod tests {
         let service = TransactionListService::with_defaults(db.clone()).service();
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let response = service.raw_oneshot(request).await?;
         assert_eq!(response.len, transactions.len());
@@ -159,7 +156,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_transaction_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
-        let sandbox_txn = seed_run(&db, ProjectId::sandbox()).await?.transaction;
+        let base = db.seed().test_project().await?;
+        let base_txn = seed_run(&db, base.id).await?.transaction;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         let alpha_txn = seed_run(&db, alpha.id).await?.transaction;
 
@@ -174,35 +172,36 @@ mod tests {
                     .in_project(WildcardProject::Wildcard),
             )
             .await?;
-        assert!(wildcard.data.iter().any(|t| t.id == sandbox_txn));
+        assert!(wildcard.data.iter().any(|t| t.id == base_txn));
         assert!(wildcard.data.iter().any(|t| t.id == alpha_txn));
 
         // The project name resolves through the view join.
         let alpha_row = wildcard.data.iter().find(|t| t.id == alpha_txn).unwrap();
         assert_eq!(alpha_row.project, Some(ProjectName::try_from("alpha")?));
-        let sandbox_row = wildcard.data.iter().find(|t| t.id == sandbox_txn).unwrap();
-        assert!(sandbox_row.project.is_some());
+        let base_row = wildcard.data.iter().find(|t| t.id == base_txn).unwrap();
+        assert!(base_row.project.is_some());
 
         // A named project narrows to that project alone.
-        let sandbox_only = service
+        let base_only = service
             .raw_oneshot(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .list((), ListParams::default())
-                    .in_project(ProjectId::sandbox()),
+                    .in_project(base.id),
             )
             .await?;
-        assert!(sandbox_only.data.iter().any(|t| t.id == sandbox_txn));
-        assert!(!sandbox_only.data.iter().any(|t| t.id == alpha_txn));
+        assert!(base_only.data.iter().any(|t| t.id == base_txn));
+        assert!(!base_only.data.iter().any(|t| t.id == alpha_txn));
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_list_transaction_wildcard_filters_to_viewable(db: TdPool) -> Result<(), TdError> {
-        let sandbox_txn = seed_run(&db, ProjectId::sandbox()).await?.transaction;
+        let base = db.seed().test_project().await?;
+        let base_txn = seed_run(&db, base.id).await?.transaction;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         let alpha_txn = seed_run(&db, alpha.id).await?.transaction;
 
-        let user = seed_project_viewer(&db, ProjectId::sandbox()).await?;
+        let user = seed_project_viewer(&db, base.id).await?;
 
         let service = TransactionListService::with_defaults(db.clone()).service();
         let response = service
@@ -213,14 +212,15 @@ mod tests {
             )
             .await?;
 
-        assert!(response.data.iter().any(|t| t.id == sandbox_txn));
+        assert!(response.data.iter().any(|t| t.id == base_txn));
         assert!(!response.data.iter().any(|t| t.id == alpha_txn));
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_list_transaction_named_project_forbidden(db: TdPool) -> Result<(), TdError> {
-        seed_run(&db, ProjectId::sandbox()).await?;
+        let base = db.seed().test_project().await?;
+        seed_run(&db, base.id).await?;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
         let user = seed_project_viewer(&db, alpha.id).await?;
 
@@ -228,7 +228,7 @@ mod tests {
         let service = TransactionListService::with_defaults(db.clone()).service();
         let request = RequestContext::with(AccessTokenId::default(), user.id)
             .list((), ListParams::default())
-            .in_project(ProjectId::sandbox());
+            .in_project(base.id);
         assert_service_error(service, request, |err| match err {
             RbacError::Forbidden(_, _) => {}
         })

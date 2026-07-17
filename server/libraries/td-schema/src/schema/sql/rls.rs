@@ -31,17 +31,16 @@ const PREDICATE: &str = "current_setting('app.bypass_rls', true) = 'on' \
 pub(crate) fn policy_statements(table: &str) -> Vec<String> {
     let pred = PREDICATE;
     vec![
-        // New rows inherit the request's project from the GUC. There is NO
-        // `sandbox` fallback: `sandbox` is an ordinary, deletable project on
-        // PostgreSQL, so defaulting to it would silently tag rows for a project
-        // that may not exist. An unset `app.project_id` yields NULL, which fails
-        // the NOT NULL constraint — fail-closed. The per-request provider always
-        // sets the GUC for tenant work; system/bypass writes set `project_id`
-        // explicitly. (Test builds default the serving pool to `app.bypass_rls =
-        // on` via the `td-test` feature, so unscoped reads/writes span projects;
-        // a field-less insert there must still be scoped so the GUC resolves.)
-        // The base column carries no default, so this PostgreSQL-only DEFAULT is
-        // the column's sole default; no-RLS backends keep `project_id` defaultless.
+        // New rows inherit the request's project from the GUC. There is no
+        // fallback project: PostgreSQL boots with none, so an unset
+        // `app.project_id` yields NULL, which fails the NOT NULL constraint —
+        // fail-closed. The per-request provider always sets the GUC for tenant
+        // work; system/bypass writes set `project_id` explicitly. (Test builds
+        // default the serving pool to `app.bypass_rls = on` via the `td-test`
+        // feature, so unscoped reads/writes span projects; a field-less insert
+        // there must still be scoped so the GUC resolves.) The base column
+        // carries no default, so this PostgreSQL-only DEFAULT is the column's
+        // sole default; no-RLS backends keep `project_id` defaultless.
         format!(
             "ALTER TABLE {table} ALTER COLUMN project_id SET DEFAULT \
              NULLIF(current_setting('app.project_id', true), '')"

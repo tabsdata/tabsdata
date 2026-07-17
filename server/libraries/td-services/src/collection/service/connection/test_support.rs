@@ -148,6 +148,7 @@ pub fn upsert_service(
 /// A creation request; source/destination groups get the (mandatory)
 /// connection payload attached, named after the collection.
 pub fn create_request(
+    project: ProjectId,
     name: &str,
     group: Option<GroupName>,
 ) -> Scoped<CreateRequest<(), CollectionCreate>, ProjectId> {
@@ -171,27 +172,36 @@ pub fn create_request(
     }
     RequestContext::with(AccessTokenId::default(), UserId::admin())
         .create((), builder.build().unwrap())
-        .in_project(ProjectId::sandbox())
+        .in_project(project)
 }
 
-pub async fn create_collection(db: &TdPool, name: &str, group: Option<GroupName>) {
+pub async fn create_collection(
+    db: &TdPool,
+    project: ProjectId,
+    name: &str,
+    group: Option<GroupName>,
+) {
     CreateCollectionService::with_defaults(db.clone())
         .service()
-        .raw_oneshot(create_request(name, group))
+        .raw_oneshot(create_request(project, name, group))
         .await
         .unwrap();
 }
 
-pub async fn linked_connection(db: &TdPool, collection: &str) -> Option<ConnectionDB> {
+pub async fn linked_connection(
+    db: &TdPool,
+    project: ProjectId,
+    collection: &str,
+) -> Option<ConnectionDB> {
     let collection: CollectionDB = db
-        .scoped(ProjectId::sandbox())
+        .scoped(project)
         .live()
         .fetch_one::<CollectionDB>(&CollectionName::try_from(collection).unwrap())
         .await
         .unwrap();
     match collection.connection_id {
         Some(id) => Some(
-            db.scoped(ProjectId::sandbox())
+            db.scoped(project)
                 .live()
                 .fetch_one::<ConnectionDB>(&id)
                 .await
@@ -212,15 +222,15 @@ fn context() -> RequestContext {
     RequestContext::with(AccessTokenId::default(), UserId::admin())
 }
 
-/// A user holding only `develop_project` on sandbox: passes the
+/// A user holding only `develop_project` on the given project: passes the
 /// DevelopProject floor but fails the ManageProject bar that
 /// connection-carrying (source/destination) operations require.
-pub async fn seed_dev_user(db: &TdPool) -> UserId {
+pub async fn seed_dev_user(db: &TdPool, project: ProjectId) -> UserId {
     let role = db
         .seed()
         .role(
-            RoleName::try_from("sandbox_dev_t").unwrap(),
-            Description::try_from("develop_project on sandbox").unwrap(),
+            RoleName::try_from("test_dev_t").unwrap(),
+            Description::try_from("develop_project on one project").unwrap(),
         )
         .await
         .unwrap();
@@ -228,7 +238,7 @@ pub async fn seed_dev_user(db: &TdPool) -> UserId {
         .permission(
             PermissionType::try_from("develop_project").unwrap(),
             None,
-            Some(EntityId::try_from(ProjectId::sandbox()).unwrap()),
+            Some(EntityId::try_from(project).unwrap()),
             &role,
         )
         .await
@@ -236,7 +246,7 @@ pub async fn seed_dev_user(db: &TdPool) -> UserId {
     let user = db
         .seed()
         .user(
-            &UserName::try_from("sandbox_dev_t").unwrap(),
+            &UserName::try_from("test_dev_t").unwrap(),
             &UserEnabled::from(true),
         )
         .await
@@ -264,15 +274,17 @@ pub fn secrets() -> Vec<KeyValue> {
 }
 
 pub fn upsert_request_body(
+    project: ProjectId,
     collection: &str,
     body: ConnectionUpsert,
 ) -> Scoped<UpdateRequest<CollectionParam, ConnectionUpsert>, ProjectId> {
     context()
         .update(collection_param(collection), body)
-        .in_project(ProjectId::sandbox())
+        .in_project(project)
 }
 
 pub fn upsert_request_kind(
+    project: ProjectId,
     collection: &str,
     kind: &str,
 ) -> Scoped<UpdateRequest<CollectionParam, ConnectionUpsert>, ProjectId> {
@@ -282,17 +294,21 @@ pub fn upsert_request_kind(
         .vars(Some(vec![]))
         .build()
         .unwrap();
-    upsert_request_body(collection, body)
+    upsert_request_body(project, collection, body)
 }
 
 pub fn upsert_request(
+    project: ProjectId,
     collection: &str,
 ) -> Scoped<UpdateRequest<CollectionParam, ConnectionUpsert>, ProjectId> {
-    upsert_request_kind(collection, "mysqlSrcConn")
+    upsert_request_kind(project, collection, "mysqlSrcConn")
 }
 
-pub fn read_request(collection: &str) -> Scoped<ReadRequest<CollectionParam>, ProjectId> {
+pub fn read_request(
+    project: ProjectId,
+    collection: &str,
+) -> Scoped<ReadRequest<CollectionParam>, ProjectId> {
     context()
         .read(collection_param(collection))
-        .in_project(ProjectId::sandbox())
+        .in_project(project)
 }

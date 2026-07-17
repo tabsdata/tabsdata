@@ -1673,7 +1673,7 @@ mod tests {
             .try_runtime_values("rv")?
             .reuse_frozen_tables(false)
             .build()?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(collection.project_id)
             .seed()
             .function(collection, &create)
             .await
@@ -1707,7 +1707,7 @@ mod tests {
             .metric_rows(Some(RowCount::try_from(rows)?))
             .metric_data_bytes(Some(ByteCount::try_from(bytes)?))
             .build()?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(pfr.project_id)
             .live()
             .update::<_, PhysicalFunctionRunDB>(&update, &pfr.id)
             .await?;
@@ -1747,7 +1747,7 @@ mod tests {
             )
             .triggered_on(pfr.triggered_on)
             .build()?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(pfr.project_id)
             .live()
             .insert::<PhysicalTableDataVersionDB>(&ptdv)
             .await?;
@@ -1760,15 +1760,19 @@ mod tests {
             ltdv.triggered_by_id,
             LogicalPointerReason::InitialDispatch,
         )?;
-        db.scoped(ProjectId::sandbox())
+        db.scoped(ltdv.project_id)
             .live()
             .insert::<LogicalTableDataVersionPointerDB>(&pointer)
             .await?;
         Ok(ptdv)
     }
 
-    async fn seed_collection(db: &TdPool, name: &str) -> Result<CollectionDB, TdError> {
-        db.scoped(ProjectId::sandbox())
+    async fn seed_collection(
+        db: &TdPool,
+        project_id: ProjectId,
+        name: &str,
+    ) -> Result<CollectionDB, TdError> {
+        db.scoped(project_id)
             .seed()
             .collection(
                 &CollectionName::try_from(name)?,
@@ -1782,6 +1786,7 @@ mod tests {
     /// LTDV's view-resolved magnitudes will reflect the PTDV.
     async fn seed_publisher_with_ltdv(
         db: &TdPool,
+        project_id: ProjectId,
         coll_name: &str,
         fn_name: &str,
     ) -> Result<
@@ -1792,20 +1797,16 @@ mod tests {
         ),
         TdError,
     > {
-        let coll = seed_collection(db, coll_name).await?;
+        let coll = seed_collection(db, project_id, coll_name).await?;
         let func = make_publisher_function(db, &coll, fn_name).await?;
-        let exec = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&func)
-            .await?;
+        let exec = db.scoped(project_id).seed().execution(&func).await?;
         let trx = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(ProjectId::sandbox())
+            .scoped(project_id)
             .seed()
             .physical_function_run(&coll, &func, &exec, &trx, &LogicalFunctionRunStatus::Done)
             .await?;
@@ -1841,18 +1842,14 @@ mod tests {
         coll: &CollectionDB,
         func: &FunctionDB,
     ) -> Result<(LogicalFunctionRunDB, PhysicalFunctionRunDB), TdError> {
-        let exec = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(func)
-            .await?;
+        let exec = db.scoped(coll.project_id).seed().execution(func).await?;
         let trx = db
-            .scoped(ProjectId::sandbox())
+            .scoped(coll.project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(ProjectId::sandbox())
+            .scoped(coll.project_id)
             .seed()
             .physical_function_run(coll, func, &exec, &trx, &LogicalFunctionRunStatus::Done)
             .await?;
@@ -1910,7 +1907,8 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_nodes_publisher_out_magnitudes(db: TdPool) -> Result<(), TdError> {
-        let (coll, _lfr, _ltdv) = seed_publisher_with_ltdv(&db, "pub_coll", "pub_fn").await?;
+        let p = db.seed().test_project().await?;
+        let (coll, _lfr, _ltdv) = seed_publisher_with_ltdv(&db, p.id, "pub_coll", "pub_fn").await?;
 
         let req = empty_request(Dim::Collection);
         let nodes = db.metrics().metrics_nodes(&req).await?;
@@ -1951,7 +1949,9 @@ mod tests {
         // (ExternalSource → coll) carrying the LTDV's magnitudes, and
         // an unused (coll → Unused) carrying the same magnitudes — the
         // bytes arrived and then hit a dead end.
-        let (coll, _, _ltdv) = seed_publisher_with_ltdv(&db, "pub_synth", "pub_synth_fn").await?;
+        let p = db.seed().test_project().await?;
+        let (coll, _, _ltdv) =
+            seed_publisher_with_ltdv(&db, p.id, "pub_synth", "pub_synth_fn").await?;
 
         let req = empty_request(Dim::Collection);
         let edges = db.metrics().metrics_edges(&req).await?;
@@ -1993,11 +1993,12 @@ mod tests {
         // magnitudes come from the SOURCE LTDV (producer's PTDV.row_count),
         // not from the consumer's own output.
 
+        let p = db.seed().test_project().await?;
         let (producer_coll, _, producer_ltdv) =
-            seed_publisher_with_ltdv(&db, "real_prod", "real_prod_fn").await?;
+            seed_publisher_with_ltdv(&db, p.id, "real_prod", "real_prod_fn").await?;
 
         let consumer_coll = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(
                 &CollectionName::try_from("real_cons")?,
@@ -2005,18 +2006,14 @@ mod tests {
             )
             .await?;
         let consumer_fn = make_publisher_function(&db, &consumer_coll, "real_cons_fn").await?;
-        let consumer_exec = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&consumer_fn)
-            .await?;
+        let consumer_exec = db.scoped(p.id).seed().execution(&consumer_fn).await?;
         let consumer_trx = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&consumer_exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let consumer_pfr = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &consumer_coll,
@@ -2042,10 +2039,7 @@ mod tests {
             .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
             .requirement_version_pos(VersionPos::try_from(0)?)
             .build()?;
-        db.scoped(ProjectId::sandbox())
-            .live()
-            .insert(&input)
-            .await?;
+        db.scoped(p.id).live().insert(&input).await?;
 
         let req = empty_request(Dim::Collection);
         let edges = db.metrics().metrics_edges(&req).await?;
@@ -2076,11 +2070,12 @@ mod tests {
         // and produces NO output LTDVs of its own. Should emit an
         // egress edge (consumer_coll → ExternalDestination) with
         // source-LTDV-attributed magnitudes.
+        let p = db.seed().test_project().await?;
         let (producer_coll, _, producer_ltdv) =
-            seed_publisher_with_ltdv(&db, "egress_prod", "egress_prod_fn").await?;
+            seed_publisher_with_ltdv(&db, p.id, "egress_prod", "egress_prod_fn").await?;
 
         let consumer_coll = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(
                 &CollectionName::try_from("egress_cons")?,
@@ -2102,23 +2097,19 @@ mod tests {
                 .try_runtime_values("rv")?
                 .reuse_frozen_tables(false)
                 .build()?;
-            db.scoped(ProjectId::sandbox())
+            db.scoped(p.id)
                 .seed()
                 .function(&consumer_coll, &create)
                 .await?
         };
-        let consumer_exec = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .execution(&consumer_fn)
-            .await?;
+        let consumer_exec = db.scoped(p.id).seed().execution(&consumer_fn).await?;
         let consumer_trx = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .transaction(&consumer_exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let consumer_pfr = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .physical_function_run(
                 &consumer_coll,
@@ -2144,10 +2135,7 @@ mod tests {
             .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
             .requirement_version_pos(VersionPos::try_from(0)?)
             .build()?;
-        db.scoped(ProjectId::sandbox())
-            .live()
-            .insert(&input)
-            .await?;
+        db.scoped(p.id).live().insert(&input).await?;
 
         let req = empty_request(Dim::Collection);
         let edges = db.metrics().metrics_edges(&req).await?;
@@ -2191,7 +2179,8 @@ mod tests {
         // Publisher with a regular and a private output. The PFR metric
         // columns store the full worker totals (private included); the
         // /metrics response must only reflect the regular table.
-        let coll = seed_collection(&db, "priv_out").await?;
+        let p = db.seed().test_project().await?;
+        let coll = seed_collection(&db, p.id, "priv_out").await?;
         let func =
             make_publisher_function_with_tables(&db, &coll, "priv_out_fn", &["out", "_priv"])
                 .await?;
@@ -2240,7 +2229,8 @@ mod tests {
         // collection references it via LFRI. The private LTDV must not
         // surface anywhere: no IN magnitudes, no real edge, no ingress
         // for the producer, no unused edge for the private output.
-        let prod_coll = seed_collection(&db, "priv_in_prod").await?;
+        let p = db.seed().test_project().await?;
+        let prod_coll = seed_collection(&db, p.id, "priv_in_prod").await?;
         let prod_fn =
             make_publisher_function_with_tables(&db, &prod_coll, "priv_in_prod_fn", &["_priv"])
                 .await?;
@@ -2251,7 +2241,7 @@ mod tests {
             db.live().fetch_all(&prod_lfr.execution_id).await?;
         let private_ltdv = &prod_ltdvs[0];
 
-        let cons_coll = seed_collection(&db, "priv_in_cons").await?;
+        let cons_coll = seed_collection(&db, p.id, "priv_in_cons").await?;
         let cons_fn = make_publisher_function(&db, &cons_coll, "priv_in_cons_fn").await?;
         let (cons_lfr, cons_pfr) = seed_done_run(&db, &cons_coll, &cons_fn).await?;
         stamp_buckets_on_pfr(&db, &cons_pfr).await?;
@@ -2266,10 +2256,7 @@ mod tests {
             .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
             .requirement_version_pos(VersionPos::try_from(0)?)
             .build()?;
-        db.scoped(ProjectId::sandbox())
-            .live()
-            .insert(&input)
-            .await?;
+        db.scoped(p.id).live().insert(&input).await?;
 
         let nodes = db
             .metrics()
@@ -2318,10 +2305,11 @@ mod tests {
         // A consumer whose only outputs are private has no visible
         // outputs: /metrics classifies it as a topological subscriber
         // and reports its consumed input as an egress edge.
+        let p = db.seed().test_project().await?;
         let (_prod_coll, _, prod_ltdv) =
-            seed_publisher_with_ltdv(&db, "priv_egr_prod", "priv_egr_prod_fn").await?;
+            seed_publisher_with_ltdv(&db, p.id, "priv_egr_prod", "priv_egr_prod_fn").await?;
 
-        let cons_coll = seed_collection(&db, "priv_egr_cons").await?;
+        let cons_coll = seed_collection(&db, p.id, "priv_egr_cons").await?;
         let cons_fn =
             make_publisher_function_with_tables(&db, &cons_coll, "priv_egr_cons_fn", &["_state"])
                 .await?;
@@ -2338,10 +2326,7 @@ mod tests {
             .requirement_dependency_pos(Some(DependencyPos::try_from(0)?))
             .requirement_version_pos(VersionPos::try_from(0)?)
             .build()?;
-        db.scoped(ProjectId::sandbox())
-            .live()
-            .insert(&input)
-            .await?;
+        db.scoped(p.id).live().insert(&input).await?;
 
         let edges = db
             .metrics()

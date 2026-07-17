@@ -49,8 +49,8 @@ mod tests {
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName, ProjectId,
-        RoleName, UserEnabled, UserId, UserName,
+        AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName, RoleName,
+        UserEnabled, UserId, UserName,
     };
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
@@ -59,6 +59,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_tower_metadata_list_function_versions(db: TdPool) {
         use td_database::pool::scoped::Scoped;
+        use td_objects::types::basic::ProjectId;
         use td_tower::metadata::type_of_val;
 
         FunctionListService::with_defaults(db)
@@ -85,8 +86,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_current_functions(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -105,7 +107,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -124,7 +126,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -132,7 +134,7 @@ mod tests {
         // List current functions
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = FunctionListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -147,6 +149,7 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_list_function_versions_without_permissions(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         // Create new role without permissions
         let user = db
             .seed()
@@ -163,7 +166,7 @@ mod tests {
 
         // Create collection
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -182,7 +185,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -201,7 +204,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
         let _ = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -209,7 +212,7 @@ mod tests {
         // All functions should be listed for authorized user
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = FunctionListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
@@ -225,7 +228,7 @@ mod tests {
         // list as the old visibility-filtered service did).
         let request = RequestContext::with(AccessTokenId::default(), user.id)
             .list((), ListParams::default())
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = FunctionListService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;

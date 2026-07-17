@@ -31,7 +31,7 @@ from tabsdata.api.apiserver import APIServerError
 from tabsdata.api.tabsdata_server import TabsdataServer
 
 # noinspection PyUnresolvedReferences
-from test_tabsdata.conftest import APISERVER_URL
+from test_tabsdata.conftest import APISERVER_URL, TESTING_PROJECT
 
 # noinspection PyUnresolvedReferences
 from . import pytestmark as _package_pytestmark  # noqa: F401
@@ -134,7 +134,7 @@ def test_grant_list_revoke_system_permission(admin_client, other_user):
 def test_system_permission_with_project_rejected(admin_client, other_user):
     with pytest.raises(APIServerError):
         admin_client.grant_permission(
-            other_user, "manage_system", project="sandbox"
+            other_user, "manage_system", project=TESTING_PROJECT
         )
 
 
@@ -180,7 +180,7 @@ def test_list_by_project_forbidden_for_non_privileged_user(regular_user):
     _, client = regular_user
     # listing who-can-access a project requires manage on that project
     with pytest.raises(APIServerError):
-        client.list_permissions_by_project("sandbox")
+        client.list_permissions_by_project(TESTING_PROJECT)
 
 
 # --------------------------------------------------------------------------- #

@@ -77,9 +77,9 @@ def atomic_login():
     result = runner.invoke(cli, ["--no-prompt", "pin", "unset", "--coll"])
     logger.debug(result.output)
     assert result.exit_code == 0
-    # Pin the bootstrap-seeded `sandbox` project so project-scoped commands have
-    # an active tenant; the CLI carries it into every tenant path. Without it
-    # they fail with NoProjectSelectedError.
+    # Pin the suite's `test` project (created by `ensure_testing_project`) so
+    # project-scoped commands have an active tenant; the CLI carries it into
+    # every tenant path. Without it they fail with NoProjectSelectedError.
     result = runner.invoke(
         cli, ["--no-prompt", "pin", "set", "--proj", TESTING_PROJECT]
     )

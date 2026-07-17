@@ -52,7 +52,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, Description, GroupName, ProjectId, UserId};
+    use td_objects::types::basic::{AccessTokenId, Description, GroupName, UserId};
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_security::SOURCE_GROUP;
@@ -60,8 +60,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_group(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let group = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -75,7 +76,7 @@ mod tests {
                     .group(GroupIdName::from_str(&format!("~{}", group.id))?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = DeleteGroupService::with_defaults(db.clone()).service();
         service.raw_oneshot(request).await?;
@@ -93,13 +94,14 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_delete_system_group_rejected(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete(
                 GroupParam::builder()
                     .group(GroupIdName::from_str(SOURCE_GROUP)?)
                     .build()?,
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = DeleteGroupService::with_defaults(db.clone()).service();
         let res = service.raw_oneshot(request).await;

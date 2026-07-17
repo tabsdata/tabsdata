@@ -109,7 +109,7 @@ mod tests {
     use td_objects::types::basic::BundleId;
     use td_objects::types::basic::CollectionName;
     use td_objects::types::basic::{
-        AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, ProjectId, TableNameDto, UserId,
+        AccessTokenId, Decorator, Enabled, FunctionRuntimeValues, TableNameDto, UserId,
     };
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
@@ -123,6 +123,7 @@ mod tests {
         use td_database::pool::scoped::Scoped;
         use td_objects::dxo::table::TableDBBuilder;
         use td_objects::dxo::worker::{WorkerDB, WorkerDBBuilder};
+        use td_objects::types::basic::ProjectId;
         use td_queries::insert_vec;
         use td_tower::metadata::type_of_val;
 
@@ -261,9 +262,10 @@ mod tests {
         enabled: Enabled,
         enabled_update: Enabled,
     ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -285,11 +287,7 @@ mod tests {
             .reuse_frozen_tables(false)
             .build()?;
 
-        let _dummy_function = db
-            .scoped(ProjectId::sandbox())
-            .seed()
-            .function(&collection, &dummy)
-            .await?;
+        let _dummy_function = db.scoped(p.id).seed().function(&collection, &dummy).await?;
 
         let create = FunctionRegister::builder()
             .try_name("foo")?
@@ -307,7 +305,7 @@ mod tests {
             .build()?;
 
         let created_function = db
-            .scoped(ProjectId::sandbox())
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -322,7 +320,7 @@ mod tests {
                     enabled: enabled_update,
                 },
             )
-            .in_project(ProjectId::sandbox());
+            .in_project(p.id);
 
         let service = EnableFunctionService::with_defaults(db.clone()).service();
         let response = service.raw_oneshot(request).await;
