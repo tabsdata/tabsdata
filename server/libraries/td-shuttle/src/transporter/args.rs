@@ -1006,7 +1006,10 @@ mod tests {
             file_info: None,
         };
 
-        let config = HashMap::from([("x".to_string(), "X".to_string())]);
+        let config = HashMap::from([
+            ("x".to_string(), "X".to_string()),
+            ("region".to_string(), "us-east-2".to_string()),
+        ]);
         // Setting env vars is not thread-safe; use with care.
         unsafe {
             std::env::set_var("FOO_C", "C");
