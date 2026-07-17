@@ -14,7 +14,7 @@ use crate::base::constants::{
     POD_PHASE_FAILED, POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, TIER_LABEL,
 };
 use crate::base::error::launcher::LauncherError;
-use crate::client::tdkserver::widgets::{phase_spinner_in, spinner};
+use crate::client::tdkserver::widgets::phase_spinner_in;
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
 use crate::kube::api::{cronjob as cronjob_api, job as job_api, pod as pod_api};
@@ -44,17 +44,8 @@ pub async fn start_workload(
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult {
-    match assess_non_ephemeral_workload(context, profile, multi).await? {
-        WorkloadState::Complete => {
-            let bar = spinner("Checking tabsdata workload");
-            bar.finish("Tabsdata workload already complete — nothing to start");
-            return Ok(());
-        }
-        WorkloadState::Empty => {}
-        WorkloadState::Partial => {
-            delete_non_ephemeral_workload(context, multi).await?;
-        }
-    }
+    delete_ephemeral_workload(context, multi).await?;
+    delete_non_ephemeral_workload(context, multi).await?;
     create_non_ephemeral_workload(context, cluster_provider, system, profile, multi).await
 }
 
@@ -94,7 +85,10 @@ async fn create_non_ephemeral_workload(
 }
 
 pub async fn stop_workload(context: &KubeContext, multi: &MultiProgress) -> CommandResult<bool> {
-    report_workload(context, multi).await
+    let present = !present_non_ephemeral_names(context).await?.is_empty();
+    delete_ephemeral_workload(context, multi).await?;
+    delete_non_ephemeral_workload(context, multi).await?;
+    Ok(present)
 }
 
 pub async fn apply_init_phase(
@@ -705,66 +699,6 @@ fn has_failed_phase(pod: &Pod) -> bool {
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WorkloadState {
-    Empty,
-    Partial,
-    Complete,
-}
-
-async fn assess_non_ephemeral_workload(
-    context: &KubeContext,
-    profile: &Profile,
-    multi: &MultiProgress,
-) -> CommandResult<WorkloadState> {
-    let phase = phase_spinner_in(multi, "Checking tabsdata workload");
-    let bar = phase.add_resource("state");
-    let expected = expected_non_ephemeral_names(profile)?;
-    let present = present_non_ephemeral_names(context).await?;
-    let missing = expected
-        .iter()
-        .filter(|name| !present.contains(*name))
-        .count();
-    let state = if missing == expected.len() {
-        WorkloadState::Empty
-    } else if missing == 0 {
-        WorkloadState::Complete
-    } else {
-        WorkloadState::Partial
-    };
-    bar.finish_with_message(match state {
-        WorkloadState::Empty => "state (empty — will create)".to_owned(),
-        WorkloadState::Complete => "state (complete)".to_owned(),
-        WorkloadState::Partial => format!(
-            "state (partial — {missing}/{} missing, recreating)",
-            expected.len()
-        ),
-    });
-    drop(phase);
-    Ok(state)
-}
-
-fn expected_non_ephemeral_names(profile: &Profile) -> Result<BTreeSet<String>, LauncherError> {
-    let mut names = BTreeSet::new();
-    for tier in [Tier::Service, Tier::Regular] {
-        for (key, yaml) in pods_for_tier(profile, tier)? {
-            let value: serde_yaml::Value =
-                serde_yaml::from_str(yaml).map_err(|error| LauncherError::PodYamlParseFailed {
-                    key: key.to_owned(),
-                    cause: error.to_string(),
-                })?;
-            if let Some(name) = value
-                .get("metadata")
-                .and_then(|metadata| metadata.get("name"))
-                .and_then(serde_yaml::Value::as_str)
-            {
-                names.insert(name.to_owned());
-            }
-        }
-    }
-    Ok(names)
-}
-
 async fn present_non_ephemeral_names(context: &KubeContext) -> CommandResult<BTreeSet<String>> {
     let pods_list = async { pod_api::list_pods_non_ephemeral(context).await };
     let jobs_list = async { job_api::list_jobs_non_ephemeral(context).await };
@@ -780,6 +714,23 @@ async fn present_non_ephemeral_names(context: &KubeContext) -> CommandResult<BTr
             .filter_map(|cronjob| cronjob.metadata.name),
     );
     Ok(names)
+}
+
+async fn delete_ephemeral_workload(context: &KubeContext, multi: &MultiProgress) -> CommandResult {
+    let phase = phase_spinner_in(multi, "Deleting tabsdata ephemeral workload");
+    let pods_bar = phase.add_resource("Pods");
+    let result = match pod_api::delete_pods_ephemeral(context).await {
+        Ok(()) => {
+            pods_bar.finish_with_message("Pods (deleted)");
+            Ok(())
+        }
+        Err(error) => {
+            pods_bar.finish_with_message("Pods (failed)");
+            Err(CommandError::from(error))
+        }
+    };
+    drop(phase);
+    result
 }
 
 async fn delete_non_ephemeral_workload(
@@ -830,23 +781,4 @@ async fn delete_non_ephemeral_workload(
     drop(phase);
     result?;
     Ok(())
-}
-
-async fn report_workload(context: &KubeContext, multi: &MultiProgress) -> CommandResult<bool> {
-    let phase = phase_spinner_in(multi, "Tabsdata workload left running");
-    let bar = phase.add_resource("summary");
-    let pods_list = async { pod_api::list_pods(context).await };
-    let jobs_list = async { job_api::list_jobs(context).await };
-    let cronjobs_list = async { cronjob_api::list_cronjobs(context).await };
-    let (pods, jobs, cronjobs) =
-        futures::future::try_join3(pods_list, jobs_list, cronjobs_list).await?;
-    let total = pods.len() + jobs.len() + cronjobs.len();
-    bar.finish_with_message(format!(
-        "summary ({} pod(s), {} job(s), {} cronjob(s) will resume on next start)",
-        pods.len(),
-        jobs.len(),
-        cronjobs.len()
-    ));
-    drop(phase);
-    Ok(total > 0)
 }

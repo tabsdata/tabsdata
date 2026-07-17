@@ -14,8 +14,8 @@ use crate::base::constants::{DELETE_POD_POLL_INTERVAL, DELETE_POD_WAIT_TIMEOUT};
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::kube::api::companions::attach_companions;
 use crate::kube::api::{
-    LabelFilter, label_tabsdata, owner_ref_for_pod, tabsdata_non_ephemeral_selector,
-    tabsdata_selector,
+    LabelFilter, label_tabsdata, owner_ref_for_pod, tabsdata_ephemeral_selector,
+    tabsdata_non_ephemeral_selector, tabsdata_selector,
 };
 use crate::kube::context::KubeContext;
 use kube::core::Selector;
@@ -72,6 +72,10 @@ pub async fn delete_pods(context: &KubeContext) -> Result<(), KubernetesError> {
 
 pub async fn delete_pods_non_ephemeral(context: &KubeContext) -> Result<(), KubernetesError> {
     delete_pods_matching(context, tabsdata_non_ephemeral_selector()).await
+}
+
+pub async fn delete_pods_ephemeral(context: &KubeContext) -> Result<(), KubernetesError> {
+    delete_pods_matching(context, tabsdata_ephemeral_selector()).await
 }
 
 async fn delete_pods_matching(

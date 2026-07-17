@@ -326,40 +326,6 @@ spec:
 }
 
 #[test]
-fn expected_non_ephemeral_names_covers_service_and_regular_only() {
-    let profile = profile_with_pods(&[
-        ("database.yaml", &pod_yaml("td-database", "service")),
-        ("apiserver.yaml", &pod_yaml("td-apiserver", "regular")),
-        ("heartbeat.yaml", &cronjob_yaml("td-heartbeat", "regular")),
-        ("inspector.yaml", &job_yaml("td-inspector", "init")),
-        ("function.yaml", &job_yaml("td-function", "ephemeral")),
-        (
-            "cron-pub.yaml",
-            &cronjob_yaml("td-cron-publisher", "ephemeral"),
-        ),
-    ]);
-    let expected = expected_non_ephemeral_names(&profile).expect("names");
-    let expected: Vec<&str> = expected.iter().map(String::as_str).collect();
-    assert_eq!(
-        expected,
-        vec!["td-apiserver", "td-database", "td-heartbeat"]
-    );
-}
-
-#[test]
-fn expected_non_ephemeral_names_empty_when_only_workers() {
-    let profile = profile_with_pods(&[
-        ("function.yaml", &job_yaml("td-function", "ephemeral")),
-        ("inspector.yaml", &job_yaml("td-inspector", "init")),
-    ]);
-    assert!(
-        expected_non_ephemeral_names(&profile)
-            .expect("names")
-            .is_empty()
-    );
-}
-
-#[test]
 fn pods_for_tier_returns_ephemeral_entries() {
     let profile = profile_with_pods(&[
         ("inspector.yaml", &job_yaml("inspector", "init")),

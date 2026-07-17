@@ -106,6 +106,15 @@ pub fn tabsdata_non_ephemeral_selector() -> Selector {
     selector
 }
 
+pub fn tabsdata_ephemeral_selector() -> Selector {
+    let mut selector = tabsdata_selector(None);
+    selector.extend([Expression::In(
+        TIER_LABEL.to_owned(),
+        [Tier::Ephemeral.as_str().to_owned()].into_iter().collect(),
+    )]);
+    selector
+}
+
 pub fn owner_ref_for_pod(pod: &Pod) -> Result<OwnerReference, NamingError> {
     let name = pod
         .metadata

@@ -14,11 +14,7 @@ struct PythonVersions {
 impl PythonVersions {
     fn supported() -> Self {
         Self {
-            versions: vec![
-                "3.12.11".to_owned(),
-                "3.12.12".to_owned(),
-                "3.12.13".to_owned(),
-            ],
+            versions: vec!["3.12.13".to_owned()],
         }
     }
 }
