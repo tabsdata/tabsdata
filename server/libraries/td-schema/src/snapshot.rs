@@ -27,7 +27,8 @@ pub fn assert_snapshot(dir: &Path, build: impl Fn(Backend) -> Vec<String>) {
             continue;
         }
         let expected = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("missing DDL snapshot for {b:?} at {}: {e}\n{REFRESH}", path.display()));
+            .unwrap_or_else(|e| panic!("missing DDL snapshot for {b:?} at {}: {e}\n{REFRESH}", path.display()))
+            .replace("\r\n", "\n");
         if actual != expected {
             panic!(
                 "\n\nSchema DDL for {b:?} changed (snapshot out of date).\n\
