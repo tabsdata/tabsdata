@@ -39,6 +39,25 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+      - name: td-probe
+        image: /dev/null
+        imagePullPolicy: IfNotPresent
+        command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/python${{system:tdk_exe_suffix}}"]
+        args:
+          - -c
+          - "import os,sys\ndef show(lbl,p):\n    try: print('[td-probe]',lbl,repr(p),'->',sorted(os.listdir(p)))\n    except Exception as e: print('[td-probe]',lbl,repr(p),'ERR',type(e).__name__,e)\nr=os.environ.get('CONTAINER_ROOT','')\nprint('[td-probe] CONTAINER_ROOT',repr(r))\nprint('[td-probe] sys.executable',repr(sys.executable))\nprint('[td-probe] sys.prefix',repr(sys.prefix))\nprint('[td-probe] os.name',os.name,'sep',repr(os.sep))\np=os.path.join(r,'tabsdata','pyenv')\nshow('pyenv',p)\nfor s in ('Scripts','bin'): show(s,os.path.join(p,s))\nprint('[td-probe] PATH',os.environ.get('PATH',''))\n"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+          - name: CONTAINER_ROOT
+            value: "$(KM_CONTAINER_ROOT)"
+        volumeMounts:
+          - name: pyenv
+            mountPath: /tabsdata/pyenv
+            readOnly: true
       containers:
       - name: dbcreate
         image: /dev/null

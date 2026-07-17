@@ -3,12 +3,21 @@
 //
 
 use std::net::{Ipv4Addr, TcpListener};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
 
 use crate::runtime::gateway::resolver::SystemValues;
 
 pub const DEFAULT_BASE_PORT: u16 = 2457;
+
+const PORT_RELEASE_POLL_INTERVAL: Duration = Duration::from_millis(250);
+#[cfg(not(windows))]
+const PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(windows)]
+const PORT_RELEASE_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PortRole {
@@ -78,6 +87,48 @@ pub fn port_available(port: u16) -> bool {
 
 pub fn first_unavailable_port(assigned: &[AssignedPort]) -> Option<&AssignedPort> {
     assigned.iter().find(|entry| !port_available(entry.port))
+}
+
+pub fn wait_for_ports_released(assigned: &[AssignedPort]) -> Option<&AssignedPort> {
+    let start = Instant::now();
+    let deadline = start + PORT_RELEASE_TIMEOUT;
+    let mut attempt: u32 = 0;
+    loop {
+        attempt += 1;
+        let busy: Vec<u16> = assigned
+            .iter()
+            .filter(|entry| !port_available(entry.port))
+            .map(|entry| entry.port)
+            .collect();
+
+        if busy.is_empty() {
+            info!(
+                attempt,
+                elapsed_ms = start.elapsed().as_millis() as u64,
+                "Ports release wait succeeded; all ports free"
+            );
+            return None;
+        }
+
+        info!(
+            attempt,
+            elapsed_ms = start.elapsed().as_millis() as u64,
+            busy_ports = ?busy,
+            "Ports release wait: ports still in use"
+        );
+
+        if Instant::now() + PORT_RELEASE_POLL_INTERVAL >= deadline {
+            let entry = first_unavailable_port(assigned);
+            warn!(
+                attempts = attempt,
+                elapsed_ms = start.elapsed().as_millis() as u64,
+                busy_ports = ?busy,
+                "Ports release wait timed out"
+            );
+            return entry;
+        }
+        sleep(PORT_RELEASE_POLL_INTERVAL);
+    }
 }
 
 pub fn kminus_api_port(assigned: &[AssignedPort]) -> Option<u16> {

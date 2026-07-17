@@ -46,7 +46,7 @@ use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::launcher::{provision_database, start_database, stop_database};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
-use crate::runtime::instance::ports::{apply_ports, first_unavailable_port};
+use crate::runtime::instance::ports::{apply_ports, wait_for_ports_released};
 use crate::runtime::instance::profile::{
     Profile, load_profile, parse_from_configmaps, read_family_configmaps, render_for_configmaps,
     resolve_kprofile_path,
@@ -231,7 +231,7 @@ impl KminusProvider {
 
     fn ensure_ports_available(&self) -> CommandResult {
         let settings = InstanceSettings::load(&self.name)?;
-        if let Some(entry) = first_unavailable_port(&settings.ports) {
+        if let Some(entry) = wait_for_ports_released(&settings.ports) {
             return Err(ProviderError::PortInUse {
                 port: entry.port,
                 caption: entry.caption.clone(),
@@ -501,6 +501,16 @@ impl Provider for KminusProvider {
         if !stopped {
             step.fail();
             return Ok(ClusterStopOutcome::AlreadyStopped);
+        }
+        if let Ok(settings) = InstanceSettings::load(&self.name) {
+            if let Some(entry) = wait_for_ports_released(&settings.ports) {
+                step.fail();
+                return Err(ProviderError::PortReleaseTimeout {
+                    port: entry.port,
+                    caption: entry.caption.clone(),
+                }
+                .into());
+            }
         }
         step.done("Kminus cluster stopped");
         Ok(ClusterStopOutcome::Stopped)

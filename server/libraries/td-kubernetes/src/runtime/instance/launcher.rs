@@ -44,6 +44,7 @@ pub async fn start_workload(
     profile: &Profile,
     multi: &MultiProgress,
 ) -> CommandResult {
+    delete_workload_controllers(context, multi).await?;
     delete_ephemeral_workload(context, multi).await?;
     delete_non_ephemeral_workload(context, multi).await?;
     create_non_ephemeral_workload(context, cluster_provider, system, profile, multi).await
@@ -86,6 +87,7 @@ async fn create_non_ephemeral_workload(
 
 pub async fn stop_workload(context: &KubeContext, multi: &MultiProgress) -> CommandResult<bool> {
     let present = !present_non_ephemeral_names(context).await?.is_empty();
+    delete_workload_controllers(context, multi).await?;
     delete_ephemeral_workload(context, multi).await?;
     delete_non_ephemeral_workload(context, multi).await?;
     Ok(present)
@@ -714,6 +716,33 @@ async fn present_non_ephemeral_names(context: &KubeContext) -> CommandResult<BTr
             .filter_map(|cronjob| cronjob.metadata.name),
     );
     Ok(names)
+}
+
+async fn delete_workload_controllers(
+    context: &KubeContext,
+    multi: &MultiProgress,
+) -> CommandResult {
+    let phase = phase_spinner_in(multi, "Deleting tabsdata workload controllers");
+    let cronjobs_bar = phase.add_resource("CronJobs");
+    match cronjob_api::delete_cronjobs(context).await {
+        Ok(()) => cronjobs_bar.finish_with_message("CronJobs (deleted)"),
+        Err(error) => {
+            cronjobs_bar.finish_with_message("CronJobs (failed)");
+            drop(phase);
+            return Err(CommandError::from(error));
+        }
+    }
+    let jobs_bar = phase.add_resource("Jobs");
+    match job_api::delete_jobs(context).await {
+        Ok(()) => jobs_bar.finish_with_message("Jobs (deleted)"),
+        Err(error) => {
+            jobs_bar.finish_with_message("Jobs (failed)");
+            drop(phase);
+            return Err(CommandError::from(error));
+        }
+    }
+    drop(phase);
+    Ok(())
 }
 
 async fn delete_ephemeral_workload(context: &KubeContext, multi: &MultiProgress) -> CommandResult {

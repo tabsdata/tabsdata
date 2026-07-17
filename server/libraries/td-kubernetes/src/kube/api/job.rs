@@ -77,7 +77,7 @@ async fn delete_jobs_matching(
     let api: Api<Job> = Api::namespaced(context.client().clone(), context.namespace());
     let list_params = ListParams::default().labels_from(&selector);
     let delete_params = DeleteParams {
-        propagation_policy: Some(PropagationPolicy::Background),
+        propagation_policy: Some(PropagationPolicy::Foreground),
         ..DeleteParams::default()
     };
     api.delete_collection(&delete_params, &list_params)

@@ -49,6 +49,11 @@ pub enum ProviderError {
          configure the instance with different ports."
     )]
     PortInUse { port: u16, caption: String } = 5111,
+    #[error(
+        "Port {port} ({caption}) was still in use after stopping the instance; it did not release \
+         in time."
+    )]
+    PortReleaseTimeout { port: u16, caption: String } = 5114,
     #[error("Could not render the report table: {0}.")]
     TableRenderFailed(String) = 5112,
     #[error("Could not render the document: {0}.")]

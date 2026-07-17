@@ -21,6 +21,8 @@ from typing import (
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
+
+from tabsdatak.api import TableFramesSpec, TableFrameSpec
 from tabsdatak.tableframe.expr import Expr
 from tabsdatak.tableframe._typing import (
     ConcatMethod,
@@ -42,13 +44,10 @@ def col(
     """ """
 
 def concat(
-    items: Iterable[PolarsType],
+        items: TableFramesSpec,
     *,
     how: ConcatMethod = "vertical",
-    rechunk: bool = False,
-    parallel: bool = True,
-    strict: bool = False,
-) -> PolarsType:
+) -> TableFrameSpec:
     """ """
 
 def lit(
