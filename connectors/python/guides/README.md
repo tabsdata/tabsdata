@@ -100,7 +100,7 @@ resolution — but the layering is:
 `api` → `conn-common` / `conn-common-sql` / `conn-common-file` → connectors.
 
 ```bash
-conda create -n tabsdatak python=3.12 -y
+conda create -n tabsdatak python=3.12.13 -y
 conda activate tabsdatak
 pip install --upgrade pip
 
