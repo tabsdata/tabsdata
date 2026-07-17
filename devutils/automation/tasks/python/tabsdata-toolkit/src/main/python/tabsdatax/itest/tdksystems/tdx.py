@@ -332,11 +332,18 @@ def _summary(text: str, ok: bool) -> None:
 
 
 def _report_created_batch(
-    kind: str, results: list[tuple[str, str, bool, str]], *, quiet: bool = False
+    kind: str,
+    results: list[tuple[str, str, bool, str]],
+    *,
+    quiet: bool = False,
+    total: int | None = None,
 ) -> int:
-    """Summary (and, unless `quiet`, per-item) report for an `--auto` create. Each
-    result is (name, type, ok, detail). `quiet` skips the per-item lines when the
-    caller has already streamed them live via `_progress`."""
+    """Summary (and, unless `quiet`, per-item) report for an `--auto` / manifest
+    create. Each result is (name, type, ok, detail). `quiet` skips the per-item
+    lines when the caller has already streamed them live via `_progress`. `total`
+    is how many creates were *requested*: batch create fails fast, so when fewer
+    than `total` ran (`results` is short) the batch stopped after a failure and
+    the rest were not attempted — the summary says so and the command fails."""
     if not results:
         console.out()
         console.out(f">>> no {kind}s to create")
@@ -350,10 +357,19 @@ def _report_created_batch(
             if detail:
                 line += f": {detail}"
             (console.good if ok else console.bad)(line)
+    requested = total if total is not None else len(results)
+    not_attempted = requested - len(results)
     console.out()
-    _summary(f">>> created {ok_n}/{len(results)} {kind}s", ok_n == len(results))
+    if not_attempted > 0:
+        _summary(
+            f">>> created {ok_n}/{requested} {kind}s — stopped after a failed "
+            f"create ({not_attempted} not attempted)",
+            False,
+        )
+    else:
+        _summary(f">>> created {ok_n}/{requested} {kind}s", ok_n == requested)
     console.out()
-    return 0 if ok_n == len(results) else 1
+    return 0 if (not_attempted == 0 and ok_n == requested) else 1
 
 
 def _emit_captured(outcome: dispatch.Outcome) -> None:
@@ -401,9 +417,10 @@ def _batch_create(
     """Fan ``entry_worker(entry) -> (name, type, ok, detail)`` out across forked
     processes (each entry's create isolated in its own ``os.environ``), streaming
     each entry's captured log + a live `_progress` line as it finishes, and return
-    the per-entry result tuples for `_report_created_batch`. `entry_worker`
-    captures its own failures, so a worker whose *process* dies is the only path
-    that synthesizes a FAIL tuple here."""
+    the per-entry result tuples for `_report_created_batch`. Fails fast: an entry
+    whose worker raises (or whose process dies) becomes a FAIL tuple here and no
+    further entries are launched (see `dispatch.run`), so the returned list holds
+    only the entries that actually ran."""
     _batch_banner("creating", len(entries), kind)
     results: list[tuple[str, str, bool, str]] = []
 
@@ -413,7 +430,7 @@ def _batch_create(
             name, typ, ok, detail = outcome.value
         else:
             name = str(entry.get("name") or entry.get("sys") or "?")
-            typ = str(entry.get("type") or "?")
+            typ = str(entry.get("type") or entry.get("sys") or "?")
             ok, detail = False, outcome.error or "worker process died"
         results.append((name, typ, ok, detail))
         _progress(
@@ -426,8 +443,21 @@ def _batch_create(
             detail,
         )
 
-    dispatch.run(entries, entry_worker, on_done=on_done)
+    dispatch.run(entries, entry_worker, on_done=on_done, stop_on_error=True)
     return results
+
+
+def _create_entry_tolerant(
+    entry_worker, entry: dict, name: str, typ: str
+) -> tuple[str, str, bool, str]:
+    """Run a fail-fast create-entry worker but catch its failure into a FAIL
+    result tuple. The `--sync` reconciliation tolerates a per-entry failure and
+    keeps going (reported at the end), unlike the fail-fast batch-create verbs;
+    `name`/`typ` label the failed entry when the raise gives no tuple."""
+    try:
+        return entry_worker(entry)
+    except Exception as exc:  # noqa: BLE001 - sync reports and continues
+        return (name or "?", typ or "?", False, str(exc))
 
 
 def _multi_status(names: list[str], kind: str, per_name) -> int:
@@ -1241,32 +1271,32 @@ def _entry_sys_name(entry: dict) -> str:
 
 def _sys_create_entry(entry: dict, common: list[str]) -> tuple[str, str, bool, str]:
     """Create one system from a manifest entry via the single-create path (full
-    validation), returning a (name, type, ok, detail) result — a failure is
-    captured, not raised, so a batch keeps going."""
+    validation), returning a (name, type, ok, detail) result on success. A
+    failure RAISES (batch create fails fast — `_batch_create` turns the raise
+    into a FAIL result and stops launching more); the reconciling `--sync` path
+    catches it to keep going."""
     e = dict(entry)
     typ = str(e.pop("type", "?"))
     # identity is `name` (the system file name); accept legacy `sys` too. It
     # maps to the `--sys` create flag; the rest of the keys are settings.
     name = str(e.pop("name", None) or e.pop("sys", None) or "?")
-    try:
-        argv = [*common, "--type", typ, "--sys", name, *manifest.entry_to_argv(e)]
-        _sys_create(argv)
-        return (name, typ, True, "")
-    except Exception as exc:  # noqa: BLE001 - one bad entry must not stop the rest
-        return (name, typ, False, str(exc))
+    argv = [*common, "--type", typ, "--sys", name, *manifest.entry_to_argv(e)]
+    _sys_create(argv)
+    return (name, typ, True, "")
 
 
 def _sys_create_from_manifest(args) -> int:
     """`--sys-manifest FILE|-`: create every system entry in the manifest, reusing
     the single-create path per entry (full validation), run concurrently (each in
-    its own forked process). One failed entry is reported and the rest still run."""
+    its own forked process). Fails fast: the first failed entry stops the batch
+    (in-flight entries finish) and the command exits non-zero."""
     common = _sys_common_argv(args)
     entries = list(manifest.read(args.sys_manifest))
     _prefetch_images([
         t for t in (str(e.get("type", "")) for e in entries) if t in systems.all_slugs()
     ])
     results = _batch_create(entries, lambda e: _sys_create_entry(e, common), "system")
-    return _report_created_batch("system", results, quiet=True)
+    return _report_created_batch("system", results, quiet=True, total=len(entries))
 
 
 def _sys_sync_from_manifest(args) -> int:
@@ -1292,7 +1322,14 @@ def _sys_sync_from_manifest(args) -> int:
         if name in store_names:
             unchanged.append(name)
         else:
-            created.append(_sys_create_entry(entry, common))
+            created.append(
+                _create_entry_tolerant(
+                    lambda e: _sys_create_entry(e, common),
+                    entry,
+                    name,
+                    str(entry.get("type") or "?"),
+                )
+            )
     destroyed: list[tuple[str, bool, str]] = []
     for name in sorted(store_names - manifest_names):
         try:
@@ -1453,8 +1490,9 @@ def _sys_create_auto(args) -> int:
     (``s3``, ``mysql``, …), reading every connection setting from its
     ``$<PREFIX>__<OPT>`` env vars (no per-type flags — containers need none,
     cloud/saas read the vars `tdx-system secrets` populates). Systems are created
-    independently and concurrently (each in its own forked process): a per-type
-    failure is reported and the rest run."""
+    concurrently (each in its own forked process) but the batch fails fast: on
+    the first failure no more systems are launched (those already in flight
+    finish), and the command exits non-zero."""
     slugs = _expand_types(args.auto)
     _prefetch_images(slugs)
     _batch_banner("creating", len(slugs), "system")
@@ -1478,8 +1516,9 @@ def _sys_create_auto(args) -> int:
         slugs,
         lambda slug: _provision_system_auto(slug, slug, args.sys_dir, args.force),
         on_done=on_done,
+        stop_on_error=True,
     )
-    return _report_created_batch("system", results, quiet=True)
+    return _report_created_batch("system", results, quiet=True, total=len(slugs))
 
 
 def _provision_system_auto(
@@ -2136,8 +2175,9 @@ def _domain_create_auto(args) -> int:
     each named after its system, seeding --model/--data where the system supports
     it. A system that can't take the model/data gets an empty domain and a warning
     (to stderr) that it was left unseeded. Reuses the single-create path per
-    system, run concurrently (each in its own forked process); a per-system
-    failure is reported, the rest run."""
+    system, run concurrently (each in its own forked process); the batch fails
+    fast — on the first failure no more domains are launched (those already in
+    flight finish), and the command exits non-zero."""
     if args.data and not args.model:
         raise DatagenError("--data requires --model")
     common = _domain_common_argv(args)
@@ -2193,45 +2233,45 @@ def _domain_create_auto(args) -> int:
             detail,
         )
 
-    dispatch.run(names, _create_one, on_done=on_done)
-    return _report_created_batch("domain", results, quiet=True)
+    dispatch.run(names, _create_one, on_done=on_done, stop_on_error=True)
+    return _report_created_batch("domain", results, quiet=True, total=len(names))
 
 
 def _domain_create_entry(entry: dict, common: list[str]) -> tuple[str, str, bool, str]:
-    """Create one domain from a manifest entry via the single-create path, returning
-    a (name, sys, ok, detail) result — a failure is captured, not raised, so a batch
-    keeps going. Each entry's `name` maps to `--domain` and `sys` to `--sys` (the
-    rest mirror the create flags)."""
+    """Create one domain from a manifest entry via the single-create path,
+    returning a (name, sys, ok, detail) result on success. A failure RAISES
+    (batch create fails fast — `_batch_create` turns the raise into a FAIL result
+    and stops launching more); the reconciling `--sync` path catches it to keep
+    going. Each entry's `name` maps to `--domain` and `sys` to `--sys` (the rest
+    mirror the create flags)."""
     e = dict(entry)
     name = str(e.pop("name", None) or "")
     sys_name = str(e.pop("sys", None) or "")
-    try:
-        if not name:
-            raise DatagenError("manifest entry has no `name` (domain name)")
-        argv = [
-            *common,
-            "--sys",
-            sys_name,
-            "--domain",
-            name,
-            *manifest.entry_to_argv(e),
-        ]
-        _domain_create(argv)
-        return (name, sys_name, True, "")
-    except Exception as exc:  # noqa: BLE001 - one bad entry must not stop the rest
-        return (name or "?", sys_name or "?", False, str(exc))
+    if not name:
+        raise DatagenError("manifest entry has no `name` (domain name)")
+    argv = [
+        *common,
+        "--sys",
+        sys_name,
+        "--domain",
+        name,
+        *manifest.entry_to_argv(e),
+    ]
+    _domain_create(argv)
+    return (name, sys_name, True, "")
 
 
 def _domain_create_from_manifest(args) -> int:
     """`--domain-manifest FILE|-`: create every domain entry in a `tdx-domain`
     manifest, reusing the single-create path per entry, run concurrently (each in
-    its own forked process). One failed entry is reported and the rest still run."""
+    its own forked process). Fails fast: the first failed entry stops the batch
+    (in-flight entries finish) and the command exits non-zero."""
     common = _domain_common_argv(args)
     entries = list(manifest.read(args.domain_manifest))
     results = _batch_create(
         entries, lambda e: _domain_create_entry(e, common), "domain"
     )
-    return _report_created_batch("domain", results, quiet=True)
+    return _report_created_batch("domain", results, quiet=True, total=len(entries))
 
 
 def _domain_sync_from_manifest(args) -> int:
@@ -2256,7 +2296,14 @@ def _domain_sync_from_manifest(args) -> int:
         if name in store_names:
             unchanged.append(name)
         else:
-            created.append(_domain_create_entry(entry, common))
+            created.append(
+                _create_entry_tolerant(
+                    lambda e: _domain_create_entry(e, common),
+                    entry,
+                    name,
+                    str(entry.get("sys") or "?"),
+                )
+            )
     destroyed: list[tuple[str, bool, str]] = []
     for name in sorted(store_names - manifest_names):
         try:

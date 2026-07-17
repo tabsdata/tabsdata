@@ -124,14 +124,19 @@ def _read_outcome(exitcode: int | None, paths: tuple[str, str, str]) -> Outcome:
 
 
 def _run_inline[I](
-    items: list[I], worker: Callable[[I], object], on_done: OnDone | None
+    items: list[I],
+    worker: Callable[[I], object],
+    on_done: OnDone | None,
+    *,
+    stop_on_error: bool = False,
 ) -> list[Outcome]:
     """Sequential, in-process fallback: no fork, so a worker's ``os.environ``
     writes hit *this* process — safe only because nothing runs concurrently (it
     is exactly the old one-at-a-time behavior). Used when the concurrency limit
     collapses to 1 (a single target, or ``$TDX_PARALLELISM=1``); the latter lets
     a test / fork-hostile host opt out of forking entirely. The worker's own
-    prints go straight to this process's streams, so `Outcome` carries none."""
+    prints go straight to this process's streams, so `Outcome` carries none.
+    With `stop_on_error` the loop breaks after the first failed target."""
     outcomes: list[Outcome] = []
     total = len(items)
     for i, item in enumerate(items):
@@ -145,6 +150,8 @@ def _run_inline[I](
         outcomes.append(outcome)
         if on_done is not None:
             on_done(i + 1, total, item, outcome)
+        if stop_on_error and not outcome.ok:
+            break
     return outcomes
 
 
@@ -154,33 +161,41 @@ def run[I](
     *,
     workers: int | None = None,
     on_done: OnDone | None = None,
+    stop_on_error: bool = False,
 ) -> list[Outcome]:
     """Run ``worker(item)`` for each item, each in its own forked process, at
-    most `workers` (see `max_workers`) at a time. Returns one `Outcome` per item
-    in input order; a worker raising, or its process dying, becomes a failed
-    `Outcome`, never stops the rest. With an effective limit of 1 the work runs
-    inline (see `_run_inline`) — forking would buy no concurrency.
+    most `workers` (see `max_workers`) at a time. Returns one `Outcome` per
+    *completed* item; a worker raising, or its process dying, becomes a failed
+    `Outcome`. With an effective limit of 1 the work runs inline (see
+    `_run_inline`) — forking would buy no concurrency.
 
     `on_done(done, total, item, outcome)` is called in the parent as each target
     finishes — in *completion* order (fork) or input order (inline) — for live
-    progress; `done` counts up to `total`."""
+    progress; `done` counts up to `total`.
+
+    By default every target runs (a failure never stops the rest). With
+    `stop_on_error` the batch fails fast: once a target completes with a failed
+    `Outcome`, no *new* targets are launched — but targets already in flight are
+    left to finish (never killed mid-provision, which could orphan half-created
+    resources), so the result list holds only the targets that actually ran."""
     items = list(items)
     if not items:
         return []
     total = len(items)
     limit = max_workers(total, workers)
     if limit <= 1:
-        return _run_inline(items, worker, on_done)
+        return _run_inline(items, worker, on_done, stop_on_error=stop_on_error)
     ctx = mp.get_context("fork")
     outcomes: list[Outcome | None] = [None] * total
     done = 0
+    stop = False
     with tempfile.TemporaryDirectory(prefix="tdx-dispatch-") as tmp:
         pending = list(enumerate(items))
         Paths = tuple[str, str, str]
         running: dict[int, tuple[int, mp.process.BaseProcess, Paths, float]] = {}
 
         def fill() -> None:
-            while pending and len(running) < limit:
+            while pending and len(running) < limit and not stop:
                 idx, item = pending.pop(0)
                 paths = (
                     str(Path(tmp) / f"{idx}.out"),
@@ -205,5 +220,8 @@ def run[I](
                 done += 1
                 if on_done is not None:
                     on_done(done, total, items[idx], outcome)
+                if stop_on_error and not outcome.ok:
+                    stop = True
+                    pending.clear()
             fill()
     return [o for o in outcomes if o is not None]

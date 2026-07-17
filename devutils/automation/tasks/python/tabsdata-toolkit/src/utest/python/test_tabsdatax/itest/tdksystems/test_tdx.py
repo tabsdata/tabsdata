@@ -463,15 +463,40 @@ def test_sys_create_auto_fs(stores, tmp_path, monkeypatch, capsys):
     assert "created 1/1 systems" in capsys.readouterr().out
 
 
-def test_sys_create_auto_continues_on_failure(stores, tmp_path, monkeypatch, capsys):
+def test_sys_create_auto_failed_item_returns_nonzero(
+    stores, tmp_path, monkeypatch, capsys
+):
     monkeypatch.chdir(tmp_path)
     assert tdx._sys_create(["--auto", "fs", "-f"]) == 0
     capsys.readouterr()
-    # Re-run without --force: fs already exists -> that item FAILs, but the
-    # batch keeps going and the non-zero rc reflects the failure.
+    # Re-run without --force: fs already exists -> that item FAILs and the
+    # non-zero rc reflects the failure.
     assert tdx._sys_create(["--auto", "fs"]) == 1
     out = capsys.readouterr().out
     assert "FAIL" in out and "fs" in out and "already exists" in out
+
+
+def test_sys_create_auto_fails_fast_skips_rest(stores, monkeypatch, capsys):
+    # Batch create stops at the first failed system and does not attempt the
+    # rest (fail fast). Stub provisioning so a chosen slug fails; run inline for
+    # a deterministic order.
+    monkeypatch.setenv("TDX_PARALLELISM", "1")
+    monkeypatch.setattr(tdx, "_prefetch_images", lambda slugs: None)
+    monkeypatch.setattr(tdx, "_expand_types", lambda auto: ["fs", "s3", "gcs"])
+    provisioned = []
+
+    def fake_provision(slug, name, sys_dir, force):
+        provisioned.append(slug)
+        if slug == "s3":
+            raise DatagenError("boom")
+
+    monkeypatch.setattr(tdx, "_provision_system_auto", fake_provision)
+    assert tdx._sys_create(["--auto", "ALL", "-f"]) == 1
+    # fs ran (ok), s3 ran (fail); gcs was NOT attempted.
+    assert provisioned == ["fs", "s3"]
+    out = capsys.readouterr().out
+    assert "created 1/3 systems" in out
+    assert "not attempted" in out and "FAIL" in out
 
 
 def test_sys_create_auto_unknown_type_rejected(stores):
@@ -1266,7 +1291,9 @@ def test_domain_create_single_defaults_name_to_system(stores, fs_root):
 
 
 def test_manifest_batch_reports_per_entry_failure(stores, fs_root, tmp_path, capsys):
-    # A bad entry (unknown type) is reported; the good one still runs.
+    # Both entries fit in one concurrency wave, so both are launched before
+    # either finishes — fail-fast skips nothing here; the batch just reports the
+    # bad entry and the non-zero rc reflects it.
     m = tmp_path / "mixed.yaml"
     m.write_text(
         f"- type: fs\n  sys: good\n  sys-path: {fs_root}/good\n  force: true\n"
@@ -1278,6 +1305,27 @@ def test_manifest_batch_reports_per_entry_failure(stores, fs_root, tmp_path, cap
     assert rc == 1                       # one entry failed
     assert "created 1/2 systems" in out
     assert "good" in out and "bad" in out
+
+
+def test_manifest_batch_fails_fast_skips_rest(
+    stores, fs_root, tmp_path, monkeypatch, capsys
+):
+    # A bad entry ahead of good ones stops the batch: run inline for a
+    # deterministic order, put the failure first, and confirm later entries are
+    # not attempted (no descriptor written for them).
+    monkeypatch.setenv("TDX_PARALLELISM", "1")
+    m = tmp_path / "ff.yaml"
+    m.write_text(
+        "- type: nope\n  sys: bad\n"
+        f"- type: fs\n  sys: later1\n  sys-path: {fs_root}/later1\n  force: true\n"
+        f"- type: fs\n  sys: later2\n  sys-path: {fs_root}/later2\n  force: true\n"
+    )
+    capsys.readouterr()
+    assert tdx._sys_create(["--sys-manifest", str(m)]) == 1
+    out = capsys.readouterr().out
+    assert "created 0/3 systems" in out and "not attempted" in out
+    assert not store.system_path("later1").exists()
+    assert not store.system_path("later2").exists()
 
 
 # ---- fs: --sys-path is a local option (no env), default target/<name> ------
