@@ -7,8 +7,9 @@
 //! Every internal `HttpRequest` the scheduler embeds in a worker message
 //! carries an `Authorization: Bearer` internal-endpoint token bound to its
 //! `(method, scope, bindings)`. This layer verifies the token's signature and
-//! validates it against the actual request, then injects the system
-//! `RequestContext` the internal handlers expect.
+//! validates it against the actual request, then injects the internal
+//! `RequestContext` (system user, internal-token provenance — the provenance
+//! is what grants the RBAC bypass).
 
 use axum::RequestExt;
 use axum::extract::{MatchedPath, RawPathParams, Request, State};
@@ -21,7 +22,6 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use td_common::jwt::{InternalTokenClaims, JwtConfig, decode_internal_token};
 use td_error::{TdError, td_error};
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::types::basic::{AccessTokenId, UserId};
 use tracing::{Instrument, Level, error, span, warn};
 
 #[td_error]
@@ -81,12 +81,9 @@ pub async fn internal_token_layer(
         return Err(TdError::from(InternalTokenError::Mismatch).into());
     }
 
-    // Same system identity the loopback filter injected, so handler behavior
-    // is unchanged.
-    request.extensions_mut().insert(RequestContext::with(
-        AccessTokenId::default(),
-        UserId::system(),
-    ));
+    // The internal provenance is what grants the RBAC bypass — identity
+    // alone (the system user) does not.
+    request.extensions_mut().insert(RequestContext::internal());
 
     let log_span = span!(Level::INFO, "internal_token_request", scope = %claims.scope);
     Ok(next.run(request).instrument(log_span).await)

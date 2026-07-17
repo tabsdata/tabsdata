@@ -9,6 +9,17 @@ use std::fmt::Debug;
 use td_error::td_error;
 use td_tower::error::{ConnectionError, FromHandlerError};
 
+/// How the requester was authenticated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Provenance {
+    /// A user session (access token) — subject to RBAC.
+    #[default]
+    Session,
+    /// A validated internal-endpoint token: the token itself binds
+    /// `(method, scope, bindings)`, so RBAC does not apply.
+    InternalToken,
+}
+
 /// Identity of the caller making a request: who and when. Carries no project —
 /// project scope is a separate, explicit value attached to the request via
 /// [`CreateRequest::in_project`] and friends. Carries no role either:
@@ -25,6 +36,9 @@ pub struct RequestContext {
     /// The time the request was made.
     #[dxo(extractor)]
     pub time: AtTime,
+    /// How the requester was authenticated.
+    #[builder(default)]
+    pub provenance: Provenance,
 }
 
 impl RequestContext {
@@ -34,6 +48,18 @@ impl RequestContext {
             access_token_id: access_token_id.into(),
             user_id: user_id.into(),
             time: AtTime::default(),
+            provenance: Provenance::Session,
+        }
+    }
+
+    /// The system context injected by the apiserver's internal-token layer
+    /// once it has validated an internal-endpoint token against the request.
+    pub fn internal() -> Self {
+        Self {
+            access_token_id: AccessTokenId::default(),
+            user_id: UserId::system(),
+            time: AtTime::default(),
+            provenance: Provenance::InternalToken,
         }
     }
 }

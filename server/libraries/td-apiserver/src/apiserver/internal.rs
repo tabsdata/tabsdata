@@ -45,8 +45,8 @@ impl InternalServer {
         let inner = {
             // Internal router. Layer order (outermost first): internal-token
             // gate → project_resolver_layer → handler. The token gate validates
-            // the per-request internal-endpoint token and injects a system
-            // `RequestContext` (system user / sys-admin role). The resolver then
+            // the per-request internal-endpoint token and injects the internal
+            // `RequestContext` (system user, internal provenance). The resolver then
             // resolves the URL's `{project}` segment and inserts it as a
             // `ProjectId` request extension, which handlers pair with their
             // request via `.in_project(..)`, so worker callbacks update
@@ -65,7 +65,7 @@ impl InternalServer {
                     ))
                     // Internal authorization gate: validate the per-request
                     // internal-endpoint token (replaces the loopback-IP gate)
-                    // and inject the system RequestContext. Outermost so it runs
+                    // and inject the internal RequestContext. Outermost so it runs
                     // before the resolver, which reads the context it injects.
                     // `route_layer` so routing runs first and the gate can read
                     // the matched route + path params it validates against.

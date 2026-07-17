@@ -51,8 +51,8 @@ use std::any::type_name;
 use std::marker::PhantomData;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::crudl::RequestContext;
-use td_objects::types::basic::{UserId, WildcardProject};
+use td_objects::dxo::crudl::{Provenance, RequestContext};
+use td_objects::types::basic::WildcardProject;
 use td_objects::types::visible_projects::VisibleProjects;
 use td_tower::extractors::{MutRef, Ref};
 
@@ -253,10 +253,12 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
         request: Ref<RequestContext>,
         scope: Ref<Scope<E>>,
     ) -> Result<(), TdError> {
-        // Internal-token callers (`UserId::system()`) bypass RBAC: the token
-        // itself binds `(method, scope, bindings)` and the system user holds
-        // no role grants, so RBAC on top would 403 every internal call.
-        if request.user_id == UserId::system() {
+        // Internal-token callers bypass RBAC: the token itself binds
+        // `(method, scope, bindings)` and the system user holds no role
+        // grants, so RBAC on top would 403 every internal call. The bypass
+        // keys on the validated-token provenance, never on identity — a
+        // context merely carrying the system user gets no special treatment.
+        if request.provenance == Provenance::InternalToken {
             return Ok(());
         }
         let user_grants = source.user_grants(&mut slot, &request.user_id).await?;
@@ -304,7 +306,7 @@ impl<S: RbacSource> VisibleProjectsResolver<S> {
         scope: Ref<WildcardProject>,
         visible: Ref<VisibleProjects>,
     ) -> Result<(), TdError> {
-        if request.user_id == UserId::system() {
+        if request.provenance == Provenance::InternalToken {
             return Ok(());
         }
         if let WildcardProject::Project(id) = *scope
@@ -510,9 +512,9 @@ mod tests {
         let p = ProjectId::default();
         let user_id = UserId::default();
 
-        let gate = |scope: WildcardProject, visible: VisibleProjects, user: UserId| {
+        let gate = |scope: WildcardProject, visible: VisibleProjects, ctx: RequestContext| {
             VisibleProjectsResolver::<FixedRbacSource>::enforce(
-                Ref::from_arc(Arc::new(request(user))),
+                Ref::from_arc(Arc::new(ctx)),
                 Ref::from_arc(Arc::new(scope)),
                 Ref::from_arc(Arc::new(visible)),
             )
@@ -522,27 +524,43 @@ mod tests {
         let empty = VisibleProjects::Only(Default::default());
 
         // a named project inside the visible set passes; outside is Forbidden
-        gate(WildcardProject::Project(p), only_p, user_id)
+        gate(WildcardProject::Project(p), only_p, request(user_id))
             .await
             .unwrap();
-        gate(WildcardProject::Project(p), VisibleProjects::All, user_id)
-            .await
-            .unwrap();
-        let err = gate(WildcardProject::Project(p), empty.clone(), user_id)
+        gate(
+            WildcardProject::Project(p),
+            VisibleProjects::All,
+            request(user_id),
+        )
+        .await
+        .unwrap();
+        let err = gate(WildcardProject::Project(p), empty.clone(), request(user_id))
             .await
             .unwrap_err();
         let RbacError::Forbidden(_, scope_str) = err.domain_err();
         assert_eq!(scope_str, &format!("project:{p}"));
 
         // the wildcard names no project — it passes even with nothing visible
-        gate(WildcardProject::Wildcard, empty.clone(), user_id)
+        gate(WildcardProject::Wildcard, empty.clone(), request(user_id))
             .await
             .unwrap();
 
-        // internal-token callers bypass the gate
-        gate(WildcardProject::Project(p), empty, UserId::system())
-            .await
-            .unwrap();
+        // internal-token callers bypass the gate; a session merely carrying
+        // the system user does not
+        gate(
+            WildcardProject::Project(p),
+            empty.clone(),
+            RequestContext::internal(),
+        )
+        .await
+        .unwrap();
+        gate(
+            WildcardProject::Project(p),
+            empty,
+            request(UserId::system()),
+        )
+        .await
+        .unwrap_err();
     }
 
     #[td_test::test(db)]
@@ -647,22 +665,19 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_enforce_layer_bypasses_for_system_user(db: td_database::pool::TdPool) {
+    async fn test_enforce_layer_bypasses_for_internal_token(db: td_database::pool::TdPool) {
         use std::sync::Arc;
 
-        // `UserId::system()` is the identity the apiserver's
-        // `internal_token_layer` injects on internal-token-authenticated
-        // requests. The token already binds (method, scope, bindings)
-        // to the exact request -- the system user therefore bypasses
-        // RBAC. This is what lets the streamer pod's manifest-trigger
-        // sidecar POST `function_version_execute` (which carries
+        // `RequestContext::internal()` is the context the apiserver's
+        // `internal_token_layer` injects once it has validated an
+        // internal-endpoint token, which already binds (method, scope,
+        // bindings) to the exact request -- so it bypasses RBAC. This is
+        // what lets the streamer pod's manifest-trigger sidecar POST
+        // `function_version_execute` (which carries
         // `Rbac::<Project, DevelopProject>::check`) without holding
         // a DevelopProject grant the system user could not have.
         let p = ProjectId::default();
-        let system_request = Arc::new(RequestContext::with(
-            AccessTokenId::default(),
-            UserId::system(),
-        ));
+        let internal_request = Arc::new(RequestContext::internal());
         let source = Arc::new(FixedRbacSource::new()); // empty: system has no grants
         let scope = Arc::new(Scope::<Project>(On::Entity(p)));
 
@@ -670,21 +685,50 @@ mod tests {
         Enforce::<FixedRbacSource, Project, DevelopProject>::check(
             Ref::from_arc(source.clone()),
             conn,
-            Ref::from_arc(system_request.clone()),
+            Ref::from_arc(internal_request.clone()),
             Ref::from_arc(scope.clone()),
         )
         .await
         .unwrap();
 
-        // Even the strictest requirement passes for the system user.
+        // Even the strictest requirement passes for an internal call.
         let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
         Enforce::<FixedRbacSource, Project, ManageProject>::check(
             Ref::from_arc(source.clone()),
             conn,
-            Ref::from_arc(system_request),
+            Ref::from_arc(internal_request),
             Ref::from_arc(scope),
         )
         .await
         .unwrap();
+    }
+
+    #[td_test::test(db)]
+    async fn test_enforce_layer_no_bypass_for_system_identity(db: td_database::pool::TdPool) {
+        use std::sync::Arc;
+
+        // The bypass keys on internal-token provenance, not on identity: a
+        // session context that merely carries `UserId::system()` (a hijacked
+        // or mis-seeded session, a context built from an id found in data)
+        // is enforced like any other user -- and the system user holds no
+        // grants, so it is forbidden.
+        let p = ProjectId::default();
+        let system_session = Arc::new(request(UserId::system()));
+        let source = Arc::new(FixedRbacSource::new());
+        let scope = Arc::new(Scope::<Project>(On::Entity(p)));
+
+        let conn = MutRef::new(DomainConnection::ready(db.acquire().await.unwrap()));
+        let err = Enforce::<FixedRbacSource, Project, ViewProject>::check(
+            Ref::from_arc(source.clone()),
+            conn,
+            Ref::from_arc(system_session),
+            Ref::from_arc(scope),
+        )
+        .await
+        .unwrap_err();
+        let rbac_err: &RbacError = err.domain_err();
+        let RbacError::Forbidden(requirement, scope_str) = rbac_err;
+        assert!(requirement.contains("ViewProject"));
+        assert_eq!(scope_str, &format!("project:{p}"));
     }
 }
