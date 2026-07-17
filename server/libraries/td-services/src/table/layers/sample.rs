@@ -7,8 +7,8 @@ use bytes::Bytes;
 use futures_util::FutureExt;
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
-    CsvWriter, DataFrame, IdxSize, JsonWriter, LazyFrame, ParquetWriter, PlPath, PolarsError,
-    ScanArgsParquet, SerWriter,
+    AnyValue, CsvWriter, DataFrame, IdxSize, IntoColumn, JsonWriter, LazyFrame, NewChunkedArray,
+    ParquetWriter, PlPath, PolarsError, ScanArgsParquet, SerWriter, StringChunked,
 };
 use polars::sql::SQLContext;
 use std::io::Cursor;
@@ -35,6 +35,32 @@ enum SampleError {
     JsonFile(#[source] PolarsError) = 5004,
 }
 
+/// CSV cannot serialize nested columns — Polars' `CsvWriter` errors with
+/// "CSV format does not support nested data" on any `List` / `Struct` column.
+/// Replace each nested column with its per-row string representation so a CSV sample of
+// such a table degrades gracefully instead of failing. Non-nested columns and null
+// values are left untouched. Parquet / JSON keep the original nested types.
+fn stringify_nested_columns(dataframe: DataFrame) -> Result<DataFrame, PolarsError> {
+    if !dataframe.dtypes().iter().any(|dtype| dtype.is_nested()) {
+        return Ok(dataframe);
+    }
+    let columns = dataframe
+        .get_columns()
+        .iter()
+        .map(|column| {
+            if !column.dtype().is_nested() {
+                return column.clone();
+            }
+            let values = (0..column.len()).map(|i| match column.get(i) {
+                Ok(AnyValue::Null) | Err(_) => None,
+                Ok(value) => Some(value.str_value().into_owned()),
+            });
+            StringChunked::from_iter_options(column.name().clone(), values).into_column()
+        })
+        .collect::<Vec<_>>();
+    DataFrame::new(columns)
+}
+
 pub async fn get_table_sample(
     storage: Ref<Storage>,
     offset: Ref<SampleOffset>,
@@ -49,6 +75,8 @@ pub async fn get_table_sample(
         let mut cursor = Cursor::new(&mut buffer);
         match format {
             FileFormat::Csv => {
+                let mut dataframe =
+                    stringify_nested_columns(dataframe).map_err(SampleError::CsvFile)?;
                 CsvWriter::new(&mut cursor)
                     .finish(&mut dataframe)
                     .map_err(SampleError::CsvFile)?;
@@ -116,12 +144,12 @@ pub async fn get_table_sample(
 
 #[cfg(test)]
 mod tests {
-    use crate::table::layers::sample::{SampleError, get_table_sample};
+    use crate::table::layers::sample::{SampleError, get_table_sample, stringify_nested_columns};
     use futures_util::TryStreamExt;
     use polars::df;
     use polars::prelude::*;
     use std::fs::File;
-    use std::io::Write;
+    use std::io::{Cursor, Write};
     use std::path::{Path, PathBuf};
 
     use td_error::TdError;
@@ -356,6 +384,53 @@ mod tests {
             .collect();
         assert_eq!(names, vec!["f", "g"]);
         Ok(())
+    }
+
+    #[test]
+    fn test_stringify_nested_columns_makes_csv_writable() {
+        // A List(String) column like the medallion `$m.pk` metadata, which CSV
+        // cannot serialize natively. Second row is a null list.
+        let mut pk = ListChunked::from_iter([
+            Some(Series::new("".into(), &["tenant_id", "entity_id"])),
+            None,
+        ]);
+        pk.rename("$m.pk".into());
+        let df = DataFrame::new(vec![
+            StringChunked::new("tenant".into(), &["t1", "t2"]).into_column(),
+            pk.into_column(),
+        ])
+        .unwrap();
+
+        // Writing the frame as CSV fails before stringifying the list column.
+        let mut before = df.clone();
+        let mut sink = Vec::new();
+        assert!(
+            CsvWriter::new(Cursor::new(&mut sink))
+                .finish(&mut before)
+                .is_err()
+        );
+
+        // After stringifying, the list column is String and CSV writing works.
+        let mut flat = stringify_nested_columns(df).unwrap();
+        assert_eq!(flat.column("$m.pk").unwrap().dtype(), &DataType::String);
+        let rendered: Vec<Option<String>> = flat
+            .column("$m.pk")
+            .unwrap()
+            .as_series()
+            .unwrap()
+            .str()
+            .unwrap()
+            .into_iter()
+            .map(|v| v.map(str::to_string))
+            .collect();
+        let first = rendered[0].as_ref().unwrap();
+        assert!(first.contains("tenant_id") && first.contains("entity_id"));
+        assert_eq!(rendered[1], None); // null list stays null
+
+        let mut sink = Vec::new();
+        CsvWriter::new(Cursor::new(&mut sink))
+            .finish(&mut flat)
+            .expect("CSV write succeeds after stringifying nested columns");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
