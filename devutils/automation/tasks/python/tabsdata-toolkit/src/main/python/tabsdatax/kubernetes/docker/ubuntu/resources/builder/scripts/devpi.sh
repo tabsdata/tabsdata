@@ -13,7 +13,7 @@ mkdir -p /root/.uv/envs \
          "$(dirname "${DEVPI_VENV}")" \
          "$(dirname "${DEVPI_DATA}")"
 
-uv venv --seed --python 3.12 "${DEVPI_VENV}"
+uv venv --seed --python 3.12.13 "${DEVPI_VENV}"
 "${DEVPI_VENV}/bin/pip" install --no-cache-dir \
     devpi-server \
     devpi-client \

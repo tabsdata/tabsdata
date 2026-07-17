@@ -43,7 +43,7 @@ done
 rm -rf "${EXTRACT_FOLDER}"
 
 echo "Installing tabsdata from devpi into staging environment..."
-uv venv --seed --python 3.12 "${STAGE_VENV}"
+uv venv --seed --python 3.12.13 "${STAGE_VENV}"
 PIP_INDEX_URL="${DEVPI_URL}" UV_INDEX_URL="${DEVPI_URL}" UV_DEFAULT_INDEX="${DEVPI_URL}" \
     uv pip install --python "${STAGE_VENV}/bin/python" "tabsdata[all]"
 
