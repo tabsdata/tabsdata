@@ -87,6 +87,7 @@ regex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
+syn = { workspace = true }
 utoipa = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]

@@ -9962,6 +9962,7 @@ dependencies = [
  "serde_json",
  "sqlx 0.8.6",
  "strum 0.28.0",
+ "syn 2.0.119",
  "ta-objects",
  "td-build",
  "td-common",

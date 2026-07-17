@@ -2,27 +2,27 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Query load-test suite.
-//!
-//! Goal: every public query in `td-queries` has a load case that seeds a
-//! large, *specialized* dataset (only the tables the query reads, sized on
-//! the axis that query scales with) and times one cold execution against
-//! each backend.
-//!
-//! This commit lands the harness: the [`cases::LOAD_CASES`] registry
-//! enumerates every query and the [`audit`] test fails if the registry ever
-//! drifts from the crate's public query surface; [`profile`] is the size dial,
-//! [`dataset`]/[`bulk`] the seeders, [`harness`] the shared scaffolding, and
-//! [`metric`]/[`report`] the JSONL capture and post-run analysis. The timed
-//! per-query invocations land with the case families.
-//!
-//! See `tests/load/README` for the size profiles and metric-output format.
+//! Query load-test suite: every public query in `td-queries` has a case that
+//! seeds a sized dataset and times one cold execution. [`cases::LOAD_CASES`]
+//! enumerates every query, [`audit`] fails on drift from the query surface,
+//! [`scaling`] guards growth at two sizes, [`report`] checks runtime coverage
+//! and regression. See `tests/load/README.md`.
 
 mod audit;
 mod bulk;
 mod cases;
+mod chain_cases;
+mod current_live_cases;
 mod dataset;
+mod dataversion_cases;
 mod harness;
+mod list_cases;
+mod live_write_cases;
 mod metric;
+mod metrics_cases;
+mod pointer_cases;
 mod profile;
+mod recursive_cases;
 mod report;
+mod scaling;
+mod versioned_cases;

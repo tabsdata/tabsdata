@@ -337,6 +337,7 @@ env_scripts = [
     end
     skip_test_tower = set false
     skip_test_logging = set false
+    skip_test_scaling = set false
     if ${on_ga_true}
         skip_test_tower = set true
         skip_test_logging = set true
@@ -350,14 +351,21 @@ env_scripts = [
         if eq ${argument} "--notest-logging"
             skip_test_logging = set true
         end
+        if eq ${argument} "--notest-scaling"
+            skip_test_scaling = set true
+        end
     end
     set_env TD_SKIP_TEST_TOWER ${skip_test_tower}
     set_env TD_SKIP_TEST_LOGGING ${skip_test_logging}
+    set_env TD_SKIP_TEST_SCALING ${skip_test_scaling}
     if ${skip_test_tower}
         debug "🚫 Skipping the tower metadata test task"
     end
     if ${skip_test_logging}
         debug "🚫 Skipping the logging test task"
+    end
+    if ${skip_test_scaling}
+        debug "🚫 Skipping the query scaling-guards test task"
     end
 
     if not is_empty ${modules-features}

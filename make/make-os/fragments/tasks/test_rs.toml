@@ -256,3 +256,39 @@ script = [
         end
     end
     ''']
+
+[tasks.__os__test_rs_query_scaling]
+plugin = "td-task-tracker"
+category = "04 - Test"
+private = true
+dependencies = ["__os__set_mode_test_rs"]
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    skip_test_scaling = get_env TD_SKIP_TEST_SCALING
+    if eq ${skip_test_scaling} "true"
+        info "🚫 Skipping the query scaling-guards test task"
+        code = exit 0
+    end
+
+    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} test %{td-rust-quiet} --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load -- --ignored --test-threads=1 report_scaling"
+    exit_code = exec --get-exit-code cargo %{td-toolchain-token}%{td-toolchain} test %{td-rust-quiet} --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load -- --ignored --test-threads=1 report_scaling
+
+    is_zero = eq ${exit_code} "0"
+    if ${is_zero}
+        info "⌛️ Tests finished with zero exit code: '${exit_code}'"
+    else
+        info "⌛️ Tests finished with non-zero exit code: '${exit_code}'"
+        TD_FAIL_FAST_RS = get_env TD_FAIL_FAST_RS
+        if not ${TD_FAIL_FAST_RS}
+            info "⌛️ Setting TD_TESTS_CODE_RS to ${exit_code}..."
+            set_env TD_TESTS_CODE_RS ${exit_code}
+        else
+            info "⌛️ Failing fast..."
+            code = exit ${exit_code}
+        end
+    end
+    ''']

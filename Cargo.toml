@@ -647,6 +647,10 @@ version = "0.28.0"
 [workspace.dependencies.supports-color]
 version = "3.0.2"
 
+[workspace.dependencies.syn]
+version = "2.0.117"
+features = ["full"]
+
 [workspace.dependencies.sync_wrapper]
 version = "1.0.2"
 

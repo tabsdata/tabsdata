@@ -538,11 +538,13 @@ run_task = [
     { name = [
         "__os__setup_test_rs",
         "test_parallel_rs",
+        "__os__test_rs_query_scaling",
         "__os__cleanup_test_rs"
     ], condition = { env = { "TD_TEST_RS_PARALLEL" = "true" } } },
     { name = [
         "__os__setup_test_rs",
         "test_serial_rs",
+        "__os__test_rs_query_scaling",
         "__os__cleanup_test_rs"
     ] }
 ]

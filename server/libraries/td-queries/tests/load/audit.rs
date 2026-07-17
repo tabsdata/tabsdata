@@ -2,81 +2,114 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Coverage audit: the [`LOAD_CASES`] registry must name every public query
-//! in the crate, and no more. This scans `src/{daos,generic}` for the
-//! `pub async fn`s declared on query handles and diffs the resulting
-//! `Struct::method` set against the union of every case's `covers`.
-//!
-//! Adding a query without a load case (or removing/renaming one without
-//! updating the registry) fails this test with an explicit diff.
+//! Coverage audit: scans all of `src/` for the `pub async fn` query surface
+//! and diffs it against the union of every case's `covers` minus [`EXEMPT`],
+//! so the [`LOAD_CASES`] registry cannot drift from the crate.
 
 use crate::cases::{Family, LOAD_CASES, Status};
-use regex::Regex;
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use syn::{Attribute, ImplItem, Item, Type, Visibility};
 
-/// Directories whose `*.rs` files declare query handles. `mod.rs` files only
-/// re-export, so they're skipped.
-const QUERY_DIRS: &[&str] = &["src/daos", "src/generic"];
+/// Test-only subdirs of `src/`; everything else is scanned recursively.
+const SKIP_DIRS: &[&str] = &["test_utils", "fixtures"];
 
-/// Walk the query-handle source and collect `Struct::method` for every
-/// `pub async fn`. Typestate-split handles (the `Unbound`/`Bound` impls of
-/// `Current` / `Historic` / `Versioned`) declare the same method name twice;
-/// the `BTreeSet` dedups them into one logical query, matching the registry.
+/// Queries with no load case, each with a reason (`Type::*` matches every
+/// method on the type; stale entries fail the audit):
+/// - `By::*`, `insert`, `insert_vec`: delegate to the generic
+///   `Live`/`Current`/`Historic` handles — no distinct SQL of their own.
+/// - `initialize_logical_ids`: one-shot startup bootstrap, not request-path.
+const EXEMPT: &[&str] = &["By::*", "insert", "insert_vec", "initialize_logical_ids"];
+
+fn is_exempt(key: &str) -> bool {
+    EXEMPT.iter().any(|e| match e.strip_suffix("::*") {
+        Some(ty) => key
+            .strip_prefix(ty)
+            .is_some_and(|rest| rest.starts_with("::")),
+        None => key == *e,
+    })
+}
+
+/// Collect `Struct::method` for every `pub async fn`, keyed by the impl
+/// block's self type (free fns get a bare name). Typestate-split handles
+/// declare the same method twice; the `BTreeSet` dedups them into one logical
+/// query, matching the registry. Trait-impl methods have inherited
+/// visibility, so they never contribute.
 fn scan_surface() -> BTreeSet<String> {
-    // `impl<..generics..> Type<..>` or `impl<..> Trait for Type` — capture the
-    // first type identifier after the (flat) impl generic list. Trait impls
-    // capture the trait name, but those carry no `pub async fn`, so they never
-    // contribute a method.
-    let impl_re = Regex::new(r"^\s*impl\b\s*(?:<[^>]*>)?\s*([A-Za-z_][A-Za-z0-9_]*)").unwrap();
-    let fn_re = Regex::new(r"\bpub\s+async\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
-
-    let crate_dir = env!("CARGO_MANIFEST_DIR");
-    let mut surface = BTreeSet::new();
-
-    for sub in QUERY_DIRS {
-        let dir = Path::new(crate_dir).join(sub);
-        let mut files: Vec<_> = fs::read_dir(&dir)
-            .unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
-            .map(|e| e.unwrap().path())
-            .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("rs"))
-            .filter(|p| p.file_name().and_then(|n| n.to_str()) != Some("mod.rs"))
-            .collect();
-        files.sort();
-        for path in files {
-            scan_file(&path, &impl_re, &fn_re, &mut surface);
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut stack = vec![src];
+    while let Some(dir) = stack.pop() {
+        for entry in
+            fs::read_dir(&dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
+        {
+            let path = entry.unwrap().path();
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if path.is_dir() {
+                if !SKIP_DIRS.contains(&name) {
+                    stack.push(path);
+                }
+            } else if name.ends_with(".rs") && name != "mod.rs" {
+                files.push(path);
+            }
         }
+    }
+    files.sort();
+
+    let mut surface = BTreeSet::new();
+    for path in &files {
+        let src =
+            fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let file =
+            syn::parse_file(&src).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
+        collect_items(&file.items, &mut surface);
     }
     surface
 }
 
-fn scan_file(path: &Path, impl_re: &Regex, fn_re: &Regex, surface: &mut BTreeSet<String>) {
-    let src = fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-
-    // Drop the `#[cfg(test)] mod tests { ... }` tail so test-helper fns and
-    // inline `pub async fn` examples can't leak into the surface.
-    let body = match src.find("#[cfg(test)]") {
-        Some(idx) => &src[..idx],
-        None => &src[..],
-    };
-
-    let mut current_struct: Option<String> = None;
-    for line in body.lines() {
-        if let Some(c) = impl_re.captures(line) {
-            current_struct = Some(c[1].to_string());
-        }
-        if let Some(c) = fn_re.captures(line) {
-            let method = &c[1];
-            let st = current_struct.as_deref().unwrap_or_else(|| {
-                panic!(
-                    "{}: `pub async fn {method}` found outside an impl block",
-                    path.display()
-                )
-            });
-            surface.insert(format!("{st}::{method}"));
+fn collect_items(items: &[Item], surface: &mut BTreeSet<String>) {
+    for item in items {
+        match item {
+            Item::Fn(f) if !is_cfg_test(&f.attrs) => {
+                if is_pub_async(&f.vis, f.sig.asyncness) {
+                    surface.insert(f.sig.ident.to_string());
+                }
+            }
+            Item::Impl(imp) if !is_cfg_test(&imp.attrs) => {
+                let Type::Path(ty) = imp.self_ty.as_ref() else {
+                    continue;
+                };
+                let ty = ty.path.segments.last().unwrap().ident.to_string();
+                for ii in &imp.items {
+                    if let ImplItem::Fn(m) = ii
+                        && !is_cfg_test(&m.attrs)
+                        && is_pub_async(&m.vis, m.sig.asyncness)
+                    {
+                        surface.insert(format!("{ty}::{}", m.sig.ident));
+                    }
+                }
+            }
+            Item::Mod(m) if !is_cfg_test(&m.attrs) => {
+                if let Some((_, items)) = &m.content {
+                    collect_items(items, surface);
+                }
+            }
+            _ => {}
         }
     }
+}
+
+fn is_pub_async(vis: &Visibility, asyncness: Option<syn::token::Async>) -> bool {
+    matches!(vis, Visibility::Public(_)) && asyncness.is_some()
+}
+
+fn is_cfg_test(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|a| {
+        a.path().is_ident("cfg")
+            && a.parse_args::<syn::Ident>()
+                .is_ok_and(|ident| ident == "test")
+    })
 }
 
 #[test]
@@ -87,16 +120,31 @@ fn every_query_has_a_load_case() {
         .flat_map(|c| c.covers.iter().map(|s| s.to_string()))
         .collect();
 
-    let missing: Vec<_> = surface.difference(&covered).cloned().collect();
+    let stale: Vec<&str> = EXEMPT
+        .iter()
+        .copied()
+        .filter(|e| {
+            let probe = e.strip_suffix("::*").unwrap_or(e);
+            !surface.iter().any(|k| is_exempt(k) && k.starts_with(probe))
+        })
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "EXEMPT names a query not present in src (stale waiver): {stale:#?}",
+    );
+
+    let effective: BTreeSet<String> = surface.iter().filter(|k| !is_exempt(k)).cloned().collect();
+    let missing: Vec<_> = effective.difference(&covered).cloned().collect();
     let extra: Vec<_> = covered.difference(&surface).cloned().collect();
 
     assert!(
         missing.is_empty() && extra.is_empty(),
         "load-case registry drifted from the query surface.\n\
-         MISSING — query exists but no LoadCase.covers names it: {missing:#?}\n\
+         MISSING — query exists (and isn't EXEMPT) but no LoadCase.covers names it: {missing:#?}\n\
          EXTRA   — LoadCase.covers names a method not found in src: {extra:#?}\n\
-         (surface has {} methods; registry covers {})",
+         (surface has {} methods, {} exempt; registry covers {})",
         surface.len(),
+        surface.iter().filter(|k| is_exempt(k)).count(),
         covered.len(),
     );
 }
@@ -120,10 +168,7 @@ fn every_case_covers_something() {
     }
 }
 
-/// Prints the per-family implemented/total tally (visible under
-/// `cargo test -- --nocapture`). `status` is set per case when its
-/// `#[td_test::test(db)]` lands; a broken wiring fails its own case loudly,
-/// so this test only reports progress rather than re-deriving it.
+/// Prints the per-family implemented/total tally under `--nocapture`.
 #[test]
 fn cases_tally() {
     use std::collections::BTreeMap;
