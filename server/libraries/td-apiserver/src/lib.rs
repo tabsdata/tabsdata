@@ -23,6 +23,7 @@ use tracing::{error, info};
 mod apiserver;
 mod bridge;
 pub mod config;
+mod extractors;
 mod layers;
 mod router;
 mod scheduler;

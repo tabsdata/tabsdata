@@ -6,6 +6,7 @@ use td_apiforge::router_ext;
 
 #[router_ext(ExecutionsRouter)]
 mod routes {
+    use crate::extractors::{Project, WildcardProject};
     use axum::Extension;
     use axum::extract::{Path, State};
     use axum_extra::extract::Query;
@@ -28,7 +29,6 @@ mod routes {
         EXECUTION_RECOVER, ExecutionParam, FUNCTION_EXECUTE, FunctionParam, FunctionVersionIdParam,
         PhysicalTableDataVersionParam,
     };
-    use td_objects::types::basic::ProjectId;
     use td_services::execution::services::ExecutionServices;
     use tower::ServiceExt;
 
@@ -39,7 +39,7 @@ mod routes {
     pub async fn cancel(
         State(executions): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<ExecutionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ()).in_project(project_id);
@@ -52,7 +52,7 @@ mod routes {
     pub async fn details(
         State(executions): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<ExecutionParam>,
     ) -> Result<GetStatus<ExecutionDetails>, ErrorStatus> {
         let request = context.read(param).in_project(project_id);
@@ -65,7 +65,7 @@ mod routes {
     pub async fn execute(
         State(executions): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<ExecutionRequest>,
     ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
@@ -81,10 +81,10 @@ mod routes {
     pub async fn lists(
         State(executions): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        WildcardProject(selector): WildcardProject,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Execution>, ErrorStatus> {
-        let request = context.list((), query_params).in_project(project_id);
+        let request = context.list((), query_params).in_project(selector);
         let response = executions.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -94,7 +94,7 @@ mod routes {
     pub async fn list_by_function_version(
         State(executions): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<FunctionVersionIdParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Execution>, ErrorStatus> {
@@ -112,7 +112,7 @@ mod routes {
     pub async fn list_by_physical_table_data_version(
         State(executions): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<PhysicalTableDataVersionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Execution>, ErrorStatus> {
@@ -130,7 +130,7 @@ mod routes {
     pub async fn read(
         State(executions): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<ExecutionParam>,
         Query(allow_disabled): Query<AllowDisabledParam>,
     ) -> Result<GetStatus<ExecutionResponse>, ErrorStatus> {
@@ -149,7 +149,7 @@ mod routes {
     pub async fn recover(
         State(executions): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<ExecutionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ()).in_project(project_id);

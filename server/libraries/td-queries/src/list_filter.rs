@@ -1,28 +1,24 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
-//! `ListFilter` that restricts a project-keyed list to the projects the
-//! requester may view.
+//! `ListFilter`s applied to `By::list` — query fragments narrowing a listing.
 //!
-//! Projects are silos: a user sees a project only if they hold a project
-//! permission on it (or `project:__all__`, i.e. a sys_admin). The viewable set
-//! is computed from the requester's grants by `td_authz::rbac::Visible::projects`
-//! (which places a [`VisibleProjects`] in the service context); this filter
-//! reads it and turns it into the SQL predicate:
+//! [`VisibleProjectsFilter`] restricts a project-keyed list to the projects the
+//! requester may view. The viewable set ([`VisibleProjects`]) is derived from
+//! the requester's grants by `td_authz::rbac::Visible::projects` (which places
+//! it in the service context); this filter reads it and turns it into the SQL
+//! predicate:
 //!
 //! - [`VisibleProjects::All`] → no restriction (`Condition::all()`);
-//! - [`VisibleProjects::Only`] with ids → `id IN (..)`;
+//! - [`VisibleProjects::Only`] with ids → `project_id IN (..)`;
 //! - [`VisibleProjects::Only`] empty → matches nothing.
-//!
-//! Used both for listing the projects visible to a user and (via the same
-//! [`VisibleProjects`]) for narrowing the global metrics aggregation.
 
 use sea_query::{Condition, Expr, ExprTrait, IntoTableRef};
 use std::any::TypeId;
-use td_authz::rbac::VisibleProjects;
 use td_objects::errors::SqlError;
 use td_objects::types::basic::ProjectId;
+use td_objects::types::visible_projects::VisibleProjects;
 use td_objects::{DaoCore, ListFilter, ListFilterExtract, SeaValue};
 use td_tower::error::FromHandlerError;
 use td_tower::extractors::{FromHandler, Ref};

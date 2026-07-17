@@ -15,6 +15,7 @@ from rich.table import Table
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
+    all_projects_option,
     beautify_time,
     get_currently_pinned_object,
     hint_common_solutions,
@@ -24,6 +25,7 @@ from tabsdatak.cli.cli_utils import (
     output_option,
     proj_option,
     render,
+    resolve_all_projects,
     show_hint,
     verify_login_or_prompt,
 )
@@ -155,6 +157,7 @@ def cancel(ctx: click.Context, plan: str, trx: str):
     help="ID of the transaction to which the function runs belong.",
     mutually_exclusive=["plan", "fn"],
 )
+@all_projects_option
 @output_option
 @click.pass_context
 def list_fn_run(
@@ -165,6 +168,7 @@ def list_fn_run(
     fn: str,
     coll: str,
     trx: str,
+    all_projects: bool,
 ):
     """
     List all function runs of a specific plan, function or transaction.
@@ -177,6 +181,7 @@ def list_fn_run(
         )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
+        spanning = resolve_all_projects(ctx, all_projects)
         request_filter = obtain_list_fn_run_filters(
             status=status,
             exe_name=plan_name,
@@ -208,6 +213,8 @@ def list_fn_run(
 
         table = Table(title="Function Runs")
         table.add_column("Function Run ID", style="cyan", no_wrap=True)
+        if spanning:
+            table.add_column("Project")
         table.add_column("Collection")
         table.add_column("Function")
         table.add_column("Plan name")
@@ -218,8 +225,10 @@ def list_fn_run(
         table.add_column("Status")
 
         for fn_run in list_of_function_runs:
-            table.add_row(
-                fn_run.id,
+            row = [fn_run.id]
+            if spanning:
+                row.append(fn_run.project or "-")
+            row.extend([
                 fn_run.collection.name,
                 fn_run.function.name,
                 fn_run.execution.name,
@@ -228,7 +237,8 @@ def list_fn_run(
                 beautify_time(fn_run.started_on_str),
                 beautify_time(fn_run.ended_on_str),
                 fn_run.status,
-            )
+            ])
+            table.add_row(*row)
 
         click.echo()
         console = make_console()
@@ -321,6 +331,7 @@ def obtain_list_fn_run_filters(
         "a final state."
     ),
 )
+@all_projects_option
 @output_option
 @click.pass_context
 def list_plan(
@@ -332,6 +343,7 @@ def list_plan(
     last: bool,
     at: str,
     monitor: bool,
+    all_projects: bool,
 ):
     """List all plans"""
     verify_login_or_prompt(ctx)
@@ -345,6 +357,7 @@ def list_plan(
     )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
+        spanning = resolve_all_projects(ctx, all_projects)
         list_of_executions = obtain_execution_list(server, request_filter, last)
 
         if output_format(ctx) != "table":
@@ -361,6 +374,8 @@ def list_plan(
             table = Table(title=f"Plans: {len(list_of_executions)}")
             table.add_column("ID", style="cyan", no_wrap=True)
             table.add_column("Name")
+            if spanning:
+                table.add_column("Project")
             table.add_column("Collection")
             table.add_column("Function")
             table.add_column("Triggered on")
@@ -368,15 +383,17 @@ def list_plan(
             table.add_column("Status", no_wrap=True)
 
             for execution in list_of_executions:
-                table.add_row(
-                    execution.id,
-                    execution.name,
+                row = [execution.id, execution.name]
+                if spanning:
+                    row.append(execution.project or "-")
+                row.extend([
                     execution.collection.name,
                     execution.function.name,
                     beautify_time(execution.triggered_on_str),
                     execution.trigger_type,
                     execution.status,
-                )
+                ])
+                table.add_row(*row)
 
             return table
 
@@ -530,6 +547,7 @@ def obtain_list_exec_filters(
         "a final state."
     ),
 )
+@all_projects_option
 @output_option
 @click.pass_context
 def list_trx(
@@ -541,6 +559,7 @@ def list_trx(
     last: bool,
     at: str,
     monitor: bool,
+    all_projects: bool,
 ):
     """List all transactions"""
     verify_login_or_prompt(ctx)
@@ -554,6 +573,7 @@ def list_trx(
             at=at,
         )
         server: TabsdataServer = ctx.obj["tabsdataserver"]
+        spanning = resolve_all_projects(ctx, all_projects)
         list_of_transactions = obtain_transaction_list(server, request_filter, last)
 
         if output_format(ctx) != "table":
@@ -570,20 +590,24 @@ def list_trx(
             table = Table(title=f"Transactions: {len(list_of_transactions)}")
             table.add_column("ID", style="cyan", no_wrap=True)
             table.add_column("Plan ID")
+            if spanning:
+                table.add_column("Project")
             table.add_column("Collection")
             table.add_column("Triggered on")
             table.add_column("Triggered by")
             table.add_column("Status", no_wrap=True)
 
             for transaction in list_of_transactions:
-                table.add_row(
-                    transaction.id,
-                    transaction.execution.id,
+                row = [transaction.id, transaction.execution.id]
+                if spanning:
+                    row.append(transaction.project or "-")
+                row.extend([
                     transaction.collection.name,
                     beautify_time(transaction.triggered_on_str),
                     transaction.triggered_by,
                     transaction.status,
-                )
+                ])
+                table.add_row(*row)
 
             return table
 
@@ -733,6 +757,7 @@ def obtain_list_trx_filters(
     help="ID of the transaction to which the workers belong.",
     mutually_exclusive=["fn-run", "plan", "fn"],
 )
+@all_projects_option
 @output_option
 @click.pass_context
 def list_worker(
@@ -744,6 +769,7 @@ def list_worker(
     fn_run: str,
     coll: str,
     trx: str,
+    all_projects: bool,
 ):
     """
     List all workers of a specific plan, function or transaction.
@@ -756,6 +782,7 @@ def list_worker(
         )
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
+        spanning = resolve_all_projects(ctx, all_projects)
         request_filter = obtain_list_worker_filters(
             status=status,
             exe_name=plan_name,
@@ -794,6 +821,8 @@ def list_worker(
 
         table = Table(title="Workers")
         table.add_column("Worker ID", style="cyan", no_wrap=True)
+        if spanning:
+            table.add_column("Project")
         table.add_column("Collection")
         table.add_column("Function")
         table.add_column("Plan name")
@@ -803,8 +832,10 @@ def list_worker(
         table.add_column("Status")
 
         for worker in list_of_workers:
-            table.add_row(
-                worker.id,
+            row = [worker.id]
+            if spanning:
+                row.append(worker.project or "-")
+            row.extend([
                 worker.collection.name,
                 worker.function.name,
                 worker.execution.name,
@@ -812,7 +843,8 @@ def list_worker(
                 worker.transaction.id,
                 worker_patch(worker),
                 worker.status,
-            )
+            ])
+            table.add_row(*row)
 
         click.echo()
         console = make_console()

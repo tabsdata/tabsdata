@@ -6,6 +6,7 @@ use td_apiforge::router_ext;
 
 #[router_ext(GroupsRouter)]
 mod routes {
+    use crate::extractors::Project;
     use axum::Extension;
     use axum::extract::{Path, State};
     use axum_extra::extract::Query;
@@ -23,7 +24,6 @@ mod routes {
     use td_objects::rest_urls::{
         CREATE_GROUP, DELETE_GROUP, GET_GROUP, GroupParam, LIST_GROUPS, UPDATE_GROUP,
     };
-    use td_objects::types::basic::ProjectId;
     use td_services::group::services::GroupServices;
     use tower::ServiceExt;
 
@@ -34,7 +34,7 @@ mod routes {
     pub async fn create_group(
         State(state): State<Arc<GroupServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Json(request): Json<GroupCreate>,
     ) -> Result<CreateStatus<Group>, ErrorStatus> {
         let request = context.create((), request).in_project(project_id);
@@ -47,7 +47,7 @@ mod routes {
     pub async fn delete_group(
         State(state): State<Arc<GroupServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(group_path): Path<GroupParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(group_path).in_project(project_id);
@@ -60,7 +60,7 @@ mod routes {
     pub async fn list_group(
         State(state): State<Arc<GroupServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Group>, ErrorStatus> {
         let request = context.list((), query_params).in_project(project_id);
@@ -73,7 +73,7 @@ mod routes {
     pub async fn read_group(
         State(state): State<Arc<GroupServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(group_param): Path<GroupParam>,
     ) -> Result<GetStatus<Group>, ErrorStatus> {
         let request = context.read(group_param).in_project(project_id);
@@ -86,7 +86,7 @@ mod routes {
     pub async fn update_group(
         State(state): State<Arc<GroupServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(group_param): Path<GroupParam>,
         Json(request): Json<GroupUpdate>,
     ) -> Result<UpdateStatus<Group>, ErrorStatus> {

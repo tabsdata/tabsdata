@@ -4,13 +4,13 @@
 
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
-use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
-use td_objects::NoFilter;
+use td_authz::rbac::Visible;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::execution::Execution;
 use td_objects::list::params::ListQueryParams;
 use td_objects::tower_service::with::With;
 use td_queries::By;
+use td_queries::list_filter::VisibleProjectsFilter;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;
@@ -20,19 +20,17 @@ use td_tower::layers;
     request = ListRequest<()>,
     response = ListResponse<Execution>,
     connection = ConnectionProvider,
-    scope = "Project",
+    scope = "WildcardProject",
     context = AuthzContext,
 )]
 fn service() {
     layers!(
-        // Authorize: the requester must be able to view the project in scope.
         from_fn(With::<ListRequest<()>>::extract::<RequestContext>),
-        from_fn(Scope::<Project>::set),
-        from_fn(Rbac::<Project, ViewProject>::check),
-        // List all executions in the project.
+        from_fn(Visible::projects),
+        from_fn(Visible::enforce),
         from_fn(With::<ListRequest<()>>::extract::<ListParams>),
         from_fn(With::<ListParams>::try_convert_to::<ListQueryParams<Execution>, _>),
-        from_fn(By::<()>::list::<NoFilter, Execution>),
+        from_fn(By::<()>::list::<VisibleProjectsFilter, Execution>),
     )
 }
 
@@ -40,38 +38,42 @@ fn service() {
 mod tests {
     use super::*;
     use ta_services::service::TdService;
+    use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::InProject;
-    use td_error::TdError;
+    use td_error::{TdError, assert_service_error};
     use td_objects::Buildable;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, ProjectId, UserId,
+        AccessTokenId, BundleId, CollectionName, Decorator, ProjectId, ProjectName, UserId,
+        WildcardProject,
     };
-    use td_queries::test_utils::SeedEntry;
+    use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
     use td_tower::ctx_service::RawOneshot;
 
     #[cfg(feature = "test_tower_metadata")]
     #[td_test::test(db)]
     async fn test_tower_metadata_list_execution(db: TdPool) {
         use td_database::pool::scoped::Scoped;
-        use td_objects::types::basic::ProjectId;
+        use td_objects::types::basic::WildcardProject;
         use td_tower::metadata::type_of_val;
 
         ExecutionListService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ListRequest<()>, ProjectId>, ListResponse<Execution>>(&[
-                // Authorize: the requester must be able to view the project in scope.
-                type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
-                type_of_val(&Scope::<Project>::set),
-                type_of_val(&Rbac::<Project, ViewProject>::check),
-                // List all executions in the project.
-                type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
-                type_of_val(&With::<ListParams>::try_convert_to::<ListQueryParams<Execution>, _>),
-                type_of_val(&By::<()>::list::<NoFilter, Execution>),
-            ]);
+            .assert_service::<Scoped<ListRequest<()>, WildcardProject>, ListResponse<Execution>>(
+                &[
+                    type_of_val(&With::<ListRequest<()>>::extract::<RequestContext>),
+                    type_of_val(&Visible::projects),
+                    type_of_val(&Visible::enforce),
+                    type_of_val(&With::<ListRequest<()>>::extract::<ListParams>),
+                    type_of_val(
+                        &With::<ListParams>::try_convert_to::<ListQueryParams<Execution>, _>,
+                    ),
+                    type_of_val(&By::<()>::list::<VisibleProjectsFilter, Execution>),
+                ],
+            );
     }
 
     #[td_test::test(db)]
@@ -143,6 +145,88 @@ mod tests {
         assert_eq!(response.data[3].triggered_on, executions[3].triggered_on);
         assert_eq!(response.data[4].id, executions[4].id);
         assert_eq!(response.data[4].triggered_on, executions[4].triggered_on);
+        let sandbox = Some(ProjectName::try_from("sandbox")?);
+        assert!(response.data.iter().all(|e| e.project == sandbox));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_list_execution_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
+        let sandbox_exec = seed_run(&db, ProjectId::sandbox()).await?.execution;
+        let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
+        let alpha_exec = seed_run(&db, alpha.id).await?.execution;
+
+        let service = ExecutionListService::with_defaults(db.clone()).service();
+        let wildcard = service
+            .raw_oneshot(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .list((), ListParams::default())
+                    .in_project(WildcardProject::Wildcard),
+            )
+            .await?;
+
+        // The wildcard spans both projects and each row resolves to its own.
+        let sandbox_row = wildcard.data.iter().find(|e| e.id == sandbox_exec).unwrap();
+        assert_eq!(sandbox_row.project, Some(ProjectName::try_from("sandbox")?));
+        let alpha_row = wildcard.data.iter().find(|e| e.id == alpha_exec).unwrap();
+        assert_eq!(alpha_row.project, Some(ProjectName::try_from("alpha")?));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_list_execution_wildcard_filters_to_viewable(db: TdPool) -> Result<(), TdError> {
+        let sandbox_exec = seed_run(&db, ProjectId::sandbox()).await?.execution;
+        let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
+        let alpha_exec = seed_run(&db, alpha.id).await?.execution;
+
+        let user = seed_project_viewer(&db, ProjectId::sandbox()).await?;
+
+        let service = ExecutionListService::with_defaults(db.clone()).service();
+        let response = service
+            .raw_oneshot(
+                RequestContext::with(AccessTokenId::default(), user.id)
+                    .list((), ListParams::default())
+                    .in_project(WildcardProject::Wildcard),
+            )
+            .await?;
+
+        assert!(response.data.iter().any(|e| e.id == sandbox_exec));
+        assert!(!response.data.iter().any(|e| e.id == alpha_exec));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_list_execution_named_project_forbidden(db: TdPool) -> Result<(), TdError> {
+        seed_run(&db, ProjectId::sandbox()).await?;
+        let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
+        let user = seed_project_viewer(&db, alpha.id).await?;
+
+        // A named project the requester cannot view is denied, not emptied.
+        let service = ExecutionListService::with_defaults(db.clone()).service();
+        let request = RequestContext::with(AccessTokenId::default(), user.id)
+            .list((), ListParams::default())
+            .in_project(ProjectId::sandbox());
+        assert_service_error(service, request, |err| match err {
+            RbacError::Forbidden(_, _) => {}
+        })
+        .await;
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_list_execution_named_project_viewer_allowed(db: TdPool) -> Result<(), TdError> {
+        let sandbox_exec = seed_run(&db, ProjectId::sandbox()).await?.execution;
+        let user = seed_project_viewer(&db, ProjectId::sandbox()).await?;
+
+        let service = ExecutionListService::with_defaults(db.clone()).service();
+        let response = service
+            .raw_oneshot(
+                RequestContext::with(AccessTokenId::default(), user.id)
+                    .list((), ListParams::default())
+                    .in_project(ProjectId::sandbox()),
+            )
+            .await?;
+        assert!(response.data.iter().any(|e| e.id == sandbox_exec));
         Ok(())
     }
 }

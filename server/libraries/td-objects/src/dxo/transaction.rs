@@ -7,8 +7,8 @@ mod definitions {
     use crate::dxo::execution::ExecutionDB;
     use crate::types::basic::{
         AtTime, CollectionId, CollectionName, ExecutionId, ExecutionName, GroupId, GroupName,
-        LogicalFunctionRunStatus, StatusCount, TransactionByStr, TransactionId, TransactionKey,
-        TransactionStatus, TriggeredOn, UserId, UserName,
+        LogicalFunctionRunStatus, ProjectId, ProjectName, StatusCount, TransactionByStr,
+        TransactionId, TransactionKey, TransactionStatus, TriggeredOn, UserId, UserName,
     };
     use crate::types::json::Json;
     use crate::types::status_count::FunctionRunStatusCount;
@@ -53,6 +53,7 @@ mod definitions {
     #[dao(sql_table = "transactions__with_status")]
     #[inherits(TransactionDB)]
     pub struct TransactionDBWithStatus {
+        pub project_id: ProjectId,
         pub started_on: Option<AtTime>,
         pub ended_on: Option<AtTime>,
         pub status: TransactionStatus,
@@ -60,6 +61,7 @@ mod definitions {
         pub execution: Option<ExecutionName>,
         pub triggered_by: UserName,
         pub group: Option<GroupName>,
+        pub project: Option<ProjectName>,
 
         pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
     }
@@ -70,6 +72,8 @@ mod definitions {
     pub struct Transaction {
         #[dto(list(filter, filter_like, order_by))]
         pub id: TransactionId,
+        #[dto(list(filter))]
+        pub project_id: ProjectId,
         #[dto(list(filter))]
         pub collection_id: CollectionId,
         #[dto(list(filter, filter_like))]
@@ -94,6 +98,8 @@ mod definitions {
         pub group_id: GroupId,
         #[dto(list(filter, filter_like))]
         pub group: Option<GroupName>,
+        #[dto(list(filter, filter_like, order_by))]
+        pub project: Option<ProjectName>,
 
         pub function_run_status_count: FunctionRunStatusCount,
     }

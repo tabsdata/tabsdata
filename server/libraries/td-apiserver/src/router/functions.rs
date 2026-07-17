@@ -6,6 +6,7 @@ use td_apiforge::router_ext;
 
 #[router_ext(FunctionsRouter)]
 mod routes {
+    use crate::extractors::Project;
     use axum::Extension;
     use axum::extract::{Path, Request, State};
     use axum_extra::TypedHeader;
@@ -35,7 +36,6 @@ mod routes {
         FUNCTION_PATCH, FUNCTION_PATCHES, FUNCTION_UPDATE, FUNCTION_UPLOAD, FunctionParam,
         OptionalAtTimeParam,
     };
-    use td_objects::types::basic::ProjectId;
     use td_services::function::services::FunctionServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -46,7 +46,7 @@ mod routes {
     pub async fn delete(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(function_param): Path<FunctionParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(function_param).in_project(project_id);
@@ -58,7 +58,7 @@ mod routes {
     pub async fn history(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(function_param): Path<FunctionParam>,
         Query(query_params): Query<ListParams>,
         Query(at_param): Query<AtTimeParam>,
@@ -74,7 +74,7 @@ mod routes {
     pub async fn list(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Function>, ErrorStatus> {
         let request = context.list((), query_params).in_project(project_id);
@@ -87,7 +87,7 @@ mod routes {
     pub async fn list_by_collection(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(collection_param): Path<CollectionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Function>, ErrorStatus> {
@@ -103,7 +103,7 @@ mod routes {
     pub async fn read(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<FunctionParam>,
     ) -> Result<GetStatus<FunctionWithTables>, ErrorStatus> {
         let request = context.read(param).in_project(project_id);
@@ -116,7 +116,7 @@ mod routes {
     pub async fn register(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(collection_param): Path<CollectionParam>,
         Json(request): Json<FunctionRegister>,
     ) -> Result<CreateStatus<Function>, ErrorStatus> {
@@ -132,7 +132,7 @@ mod routes {
     pub async fn update(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<FunctionUpdate>,
     ) -> Result<UpdateStatus<Function>, ErrorStatus> {
@@ -148,7 +148,7 @@ mod routes {
     pub async fn enable(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<FunctionEnable>,
     ) -> Result<UpdateStatus<Function>, ErrorStatus> {
@@ -164,7 +164,7 @@ mod routes {
     pub async fn patch(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(function_param): Path<FunctionParam>,
         Json(request): Json<FunctionPatch>,
     ) -> Result<CreateStatus<FunctionPatchRecord>, ErrorStatus> {
@@ -180,7 +180,7 @@ mod routes {
     pub async fn list_patches(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(function_param): Path<FunctionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<FunctionPatchRecord>, ErrorStatus> {
@@ -202,7 +202,7 @@ mod routes {
     pub async fn upload(
         State(state): State<Arc<FunctionServices>>,
         Extension(request_context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<CollectionParam>,
         request: Request,
     ) -> Result<CreateStatus<Bundle>, ErrorStatus> {
@@ -226,7 +226,7 @@ mod routes {
     pub async fn download_bundle(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(function_param): Path<FunctionParam>,
         Query(at_param): Query<OptionalAtTimeParam>,
         if_none_match: Option<TypedHeader<IfNoneMatch>>,

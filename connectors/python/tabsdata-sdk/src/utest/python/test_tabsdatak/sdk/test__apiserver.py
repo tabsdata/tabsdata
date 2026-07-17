@@ -208,6 +208,35 @@ def test_tenant_path_is_prefixed_when_project_set():
     assert s._resolve_path("/projects") == "/projects"
 
 
+def test_all_projects_targets_wildcard_when_no_project():
+    s = a.APIServer("host")
+    assert s.project is None
+    assert (
+        s._resolve_path("/transactions", allow_all_projects=True)
+        == f"/projects/{a.WILDCARD_PROJECT_MARKER}/transactions"
+    )
+
+
+def test_all_projects_still_uses_the_selected_project():
+    s = a.APIServer("host")
+    s.project = "acme"
+    assert (
+        s._resolve_path("/transactions", allow_all_projects=True)
+        == "/projects/acme/transactions"
+    )
+
+
+def test_all_projects_leaves_global_paths_untouched():
+    s = a.APIServer("host")
+    assert s._resolve_path("/projects", allow_all_projects=True) == "/projects"
+
+
+def test_tenant_path_without_all_projects_still_requires_a_project():
+    s = a.APIServer("host")
+    with pytest.raises(a.NoProjectSelectedError):
+        s._resolve_path("/transactions", allow_all_projects=False)
+
+
 # ---------------------------------------------------------------------------
 # Factory helpers + small static methods
 # ---------------------------------------------------------------------------

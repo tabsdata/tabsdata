@@ -2,7 +2,6 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use crate::project::service::layer::visible_projects_filter::VisibleProjectsFilter;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{CreateProjects, Rbac, Scope, System, Visible};
@@ -11,6 +10,7 @@ use td_objects::dxo::project::ProjectRead;
 use td_objects::list::params::ListQueryParams;
 use td_objects::tower_service::with::With;
 use td_queries::By;
+use td_queries::list_filter::VisibleProjectsFilter;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
 use td_tower::layers;

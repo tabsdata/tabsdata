@@ -43,8 +43,8 @@
 //!   unit tests need no database, pool or tower context.
 
 use crate::rbac::model::{
-    EffectiveGrants, EntityKind, Grants, IdentityClaim, On, Project, ProjectPermission, Requires,
-    System, SystemEntity, SystemPermission, User, VisibleProjects,
+    EffectiveGrants, EntityKind, FromGrants, Grants, IdentityClaim, On, Project, ProjectPermission,
+    Requires, System, SystemEntity, SystemPermission, User,
 };
 use crate::rbac::source::{RbacSource, identity_grants};
 use std::any::type_name;
@@ -52,7 +52,8 @@ use std::marker::PhantomData;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::types::basic::UserId;
+use td_objects::types::basic::{UserId, WildcardProject};
+use td_objects::types::visible_projects::VisibleProjects;
 use td_tower::extractors::{MutRef, Ref};
 
 /// Errors raised by the enforcement layer.
@@ -275,7 +276,8 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
 /// counterpart of [`Enforce`]. A cross-project (global) read gates on no
 /// single project — instead it narrows its result set to the projects the
 /// requester may view. This layer puts that set in the service context for a
-/// downstream layer to filter against.
+/// downstream layer to filter against. Wildcard-capable reads additionally
+/// gate a named project against the same set ([`Self::enforce`]).
 pub struct VisibleProjectsResolver<S: RbacSource> {
     _p: PhantomData<S>,
 }
@@ -290,6 +292,30 @@ impl<S: RbacSource> VisibleProjectsResolver<S> {
     ) -> Result<VisibleProjects, TdError> {
         let user_grants = source.user_grants(&mut slot, &request.user_id).await?;
         Ok(VisibleProjects::from_grants(&user_grants))
+    }
+
+    /// Layer fn: gate a wildcard-capable scope against the resolved
+    /// [`VisibleProjects`] — a named project outside the requester's visible
+    /// set is Forbidden. The wildcard names no project: its result set is the
+    /// visible set itself, narrowed by the downstream filter over the same
+    /// value.
+    pub async fn enforce(
+        request: Ref<RequestContext>,
+        scope: Ref<WildcardProject>,
+        visible: Ref<VisibleProjects>,
+    ) -> Result<(), TdError> {
+        if request.user_id == UserId::system() {
+            return Ok(());
+        }
+        if let WildcardProject::Project(id) = *scope
+            && !visible.contains(&id)
+        {
+            Err(RbacError::Forbidden(
+                type_name::<ViewProject>().to_string(),
+                format!("{}:{}", Project::NAME, On::<Project>::Entity(id)),
+            ))?
+        }
+        Ok(())
     }
 }
 
@@ -475,6 +501,48 @@ mod tests {
         // the system scope takes nothing from the context
         let scope = Scope::<System>::system().await.unwrap();
         assert_eq!(scope.0, On::Entity(SystemEntity));
+    }
+
+    #[tokio::test]
+    async fn test_visible_enforce_layer() {
+        use std::sync::Arc;
+
+        let p = ProjectId::default();
+        let user_id = UserId::default();
+
+        let gate = |scope: WildcardProject, visible: VisibleProjects, user: UserId| {
+            VisibleProjectsResolver::<FixedRbacSource>::enforce(
+                Ref::from_arc(Arc::new(request(user))),
+                Ref::from_arc(Arc::new(scope)),
+                Ref::from_arc(Arc::new(visible)),
+            )
+        };
+
+        let only_p = VisibleProjects::Only([p].into());
+        let empty = VisibleProjects::Only(Default::default());
+
+        // a named project inside the visible set passes; outside is Forbidden
+        gate(WildcardProject::Project(p), only_p, user_id)
+            .await
+            .unwrap();
+        gate(WildcardProject::Project(p), VisibleProjects::All, user_id)
+            .await
+            .unwrap();
+        let err = gate(WildcardProject::Project(p), empty.clone(), user_id)
+            .await
+            .unwrap_err();
+        let RbacError::Forbidden(_, scope_str) = err.domain_err();
+        assert_eq!(scope_str, &format!("project:{p}"));
+
+        // the wildcard names no project — it passes even with nothing visible
+        gate(WildcardProject::Wildcard, empty.clone(), user_id)
+            .await
+            .unwrap();
+
+        // internal-token callers bypass the gate
+        gate(WildcardProject::Project(p), empty, UserId::system())
+            .await
+            .unwrap();
     }
 
     #[td_test::test(db)]

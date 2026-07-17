@@ -6,6 +6,7 @@ use td_apiforge::router_ext;
 
 #[router_ext(TablesRouter)]
 mod routes {
+    use crate::extractors::Project;
     use axum::Extension;
     use axum::extract::{Path, State};
     use axum_extra::extract::Query;
@@ -27,7 +28,6 @@ mod routes {
         LIST_TABLES, LIST_TABLES_BY_COLL, SAMPLE_TABLE, SCHEMA_TABLE, SampleOffsetLenParam,
         SqlParam, TABLE_DELETE, TABLE_FLOW_GRAPH, TableParam, UncommittedParam,
     };
-    use td_objects::types::basic::ProjectId;
     use td_services::table::services::TableServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -39,7 +39,7 @@ mod routes {
     pub async fn delete(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(table_path): Path<TableParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         let request = context.delete(table_path).in_project(project_id);
@@ -57,7 +57,7 @@ mod routes {
     pub async fn download(
         State(tables): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(table_param): Path<TableParam>,
         Query(at_param): Query<AtTimeParam>,
         Query(uncommitted_status): Query<UncommittedParam>,
@@ -73,7 +73,7 @@ mod routes {
     pub async fn list(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Table>, ErrorStatus> {
         let request = context.list((), query_params).in_project(project_id);
@@ -86,7 +86,7 @@ mod routes {
     pub async fn list_by_collection(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(collection_param): Path<CollectionParam>,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Table>, ErrorStatus> {
@@ -107,7 +107,7 @@ mod routes {
     pub async fn list_data_versions(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(table_param): Path<TableParam>,
         Query(query_params): Query<ListParams>,
         Query(at_param): Query<AtTimeParam>,
@@ -129,7 +129,7 @@ mod routes {
     pub async fn sample(
         State(tables): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(table_param): Path<TableParam>,
         Query(at_param): Query<AtTimeParam>,
         Query(offset_len_param): Query<SampleOffsetLenParam>,
@@ -155,7 +155,7 @@ mod routes {
     pub async fn schema(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(table_param): Path<TableParam>,
         Query(at_param): Query<AtTimeParam>,
         Query(uncommitted_status): Query<UncommittedParam>,
@@ -171,7 +171,7 @@ mod routes {
     pub async fn graph(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(table_path): Path<TableParam>,
     ) -> Result<GetStatus<TableFlowGraphResponse>, ErrorStatus> {
         let request = context.read(table_path).in_project(project_id);

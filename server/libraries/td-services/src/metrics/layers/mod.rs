@@ -8,7 +8,6 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-use td_authz::rbac::VisibleProjects;
 use td_common::bucket::{WindowUnit as BucketUnit, floor_unit_ms};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -24,6 +23,7 @@ use td_objects::types::basic::{
     ByteCount, CollectionId, CollectionName, EpochMs, GroupId, GroupName, LogicalFunctionRunStatus,
     ProjectId, ProjectName, RowCount, TableVersionCount,
 };
+use td_objects::types::visible_projects::VisibleProjects;
 use td_queries::MetricsEntry;
 use td_tower::extractors::{MutRef, Ref};
 

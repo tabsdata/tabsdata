@@ -310,6 +310,37 @@ def proj_option(fn):
     )(fn)
 
 
+def all_projects_option(fn):
+    """Decorator adding ``--all-projects`` to a cross-project list command."""
+    return click.option(
+        "--all-projects",
+        "all_projects",
+        is_flag=True,
+        default=False,
+        help=(
+            "List across every project you can view, ignoring any pinned or "
+            "--proj project."
+        ),
+    )(fn)
+
+
+def resolve_all_projects(ctx: click.Context, all_projects: bool) -> bool:
+    """Apply ``--all-projects`` for this command and report whether the listing
+    spans projects.
+
+    ``--all-projects`` points the connection at the wildcard, overriding any
+    pinned or ``--proj`` project. Even without the flag a listing still spans
+    projects when no project is selected at all (the implicit fallback)."""
+    from tabsdatak.sdk._apiserver import WILDCARD_PROJECT_MARKER
+
+    server = ctx.obj.get("tabsdataserver")
+    if server is None:
+        return False
+    if all_projects:
+        server.connection.project = WILDCARD_PROJECT_MARKER
+    return server.connection.project in (None, WILDCARD_PROJECT_MARKER)
+
+
 # ---------------------------------------------------------------------------
 # Output rendering: -o/--output {table,json,yaml}.
 # ---------------------------------------------------------------------------

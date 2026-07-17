@@ -24,9 +24,16 @@
 //! * **`scope = Global`** services span all projects: [`GlobalScopeProvider`]
 //!   runs `SET LOCAL app.bypass_rls = on` and touches nothing else. They are the
 //!   audit list of cross-project escape hatches.
+//! * **`scope = WildcardProject`** services take a [`WildcardScope`] selector:
+//!   [`WildcardProjectScopeProvider`] scopes to a named project (RLS as usual)
+//!   or, for the wildcard, bypasses RLS so the service filters across projects
+//!   itself. It sets scope mechanically — no grant resolution — and republishes
+//!   the selector on the handler so the service's authorization layers can gate
+//!   a named project (and tolerate the wildcard) explicitly.
 //!
 //! td-tower stays free of any concrete id type: [`Scoped`] is generic over the
-//! project type `P` (only `Display`, to format the GUC).
+//! project type `P` (`Display` to format the GUC, or [`WildcardScope`] to map a
+//! selector to project-or-bypass).
 //!
 //! # Writing project-scoped rows — the invariant
 //!
@@ -290,6 +297,135 @@ where
 
         Box::pin(async move {
             enter_global_scope::<Err, D>(&mut handler).await?;
+            inner.call(handler).await
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// WildcardProjectScopeProvider — scope = WildcardProject
+// ---------------------------------------------------------------------------
+
+/// A wildcard-capable scope selector: either a single named project or the
+/// wildcard spanning every project. [`project_id`](Self::project_id) returns
+/// `Some(id)` to scope RLS to that project, or `None` to bypass RLS and leave
+/// project filtering to the service. td-tower stays free of concrete id types —
+/// the selector is defined and implemented in the caller's crate.
+pub trait WildcardScope {
+    fn project_id(&self) -> Option<String>;
+}
+
+/// Layer for `scope = WildcardProject` services. Unwraps the [`Scoped`] input
+/// and scopes the connection mechanically from its [`WildcardScope`] selector:
+/// a named project runs `SET LOCAL app.project_id`; the wildcard bypasses RLS
+/// so the service can filter across projects itself. The selector is
+/// republished on the handler for the service's authorization layers.
+pub struct WildcardProjectScopeProvider<R, P, D> {
+    _marker: PhantomData<(R, P, D)>,
+}
+
+impl<R, P, D> WildcardProjectScopeProvider<R, P, D> {
+    pub fn new() -> Self {
+        Self {
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<R, P, D> Default for WildcardProjectScopeProvider<R, P, D> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<R, P, D> Clone for WildcardProjectScopeProvider<R, P, D> {
+    fn clone(&self) -> Self {
+        Self::new()
+    }
+}
+
+impl<S, R, P, D> Layer<S> for WildcardProjectScopeProvider<R, P, D> {
+    type Service = WildcardProjectScopeProviderService<S, R, P, D>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        WildcardProjectScopeProviderService {
+            inner,
+            _marker: PhantomData,
+        }
+    }
+}
+
+pub struct WildcardProjectScopeProviderService<S, R, P, D> {
+    inner: S,
+    _marker: PhantomData<(R, P, D)>,
+}
+
+impl<S: Clone, R, P, D> Clone for WildcardProjectScopeProviderService<S, R, P, D> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<S, R, P, D, Err> Service<Handler> for WildcardProjectScopeProviderService<S, R, P, D>
+where
+    S: Service<Handler, Response = Handler, Error = Err> + Clone + Send + 'static,
+    S::Future: Send,
+    R: Send + Sync + 'static,
+    P: WildcardScope + Send + Sync + 'static,
+    D: DbDomain,
+    Err: From<TdError>,
+{
+    type Response = Handler;
+    type Error = Err;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut handler: Handler) -> Self::Future {
+        let clone = self.inner.clone();
+        let mut inner = std::mem::replace(&mut self.inner, clone);
+
+        Box::pin(async move {
+            #[cfg(feature = "test_tower_metadata")]
+            if let Some(m) = crate::metadata::Metadata::extract(&mut handler) {
+                use crate::metadata::type_of;
+                m.used_type(
+                    "WildcardProjectScopeProviderService",
+                    type_of::<Scoped<R, P>>(),
+                );
+                m.created_type("WildcardProjectScopeProviderService", type_of::<R>());
+                // The selector is deliberately kept in the accounting: every
+                // wildcard-capable service must consume it (its named-project
+                // authorization gate), so forgetting the gate fails the
+                // service's metadata test.
+                m.created_type("WildcardProjectScopeProviderService", type_of::<P>());
+                return inner.call(handler).await;
+            }
+
+            let scoped = handler
+                .take::<Scoped<R, P>>()
+                .ok_or_else(|| Err::from(TdError::from(ConnectionError::ProjectScopeUnresolved)))?;
+            match scoped.project.project_id() {
+                Some(project) => {
+                    let conn = primary_conn::<D>(&mut handler)
+                        .ok_or_else(|| Err::from(TdError::from(ConnectionError::ConnectionLost)))?;
+                    conn.set_project_scope(&project).await.map_err(|e| {
+                        Err::from(TdError::from(ConnectionError::CannotSetProjectScope(e)))
+                    })?;
+                }
+                None => enter_global_scope::<Err, D>(&mut handler).await?,
+            }
+            handler.set(scoped.inner);
+            handler.set(scoped.project);
+
             inner.call(handler).await
         })
     }

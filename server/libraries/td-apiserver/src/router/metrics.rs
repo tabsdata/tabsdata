@@ -6,6 +6,7 @@ use td_apiforge::router_ext;
 
 #[router_ext(MetricsRouter)]
 mod routes {
+    use crate::extractors::Project;
     use axum::Extension;
     use axum::extract::State;
     use axum_extra::extract::Query;
@@ -26,7 +27,7 @@ mod routes {
         DimensionFilter, TimeWindow, WindowAlign, WindowSpec, WindowUnit,
     };
     use td_objects::rest_urls::{INFLIGHT, METRICS, SNAPSHOT};
-    use td_objects::types::basic::{EpochMs, LogicalFunctionRunStatus, ProjectId};
+    use td_objects::types::basic::{EpochMs, LogicalFunctionRunStatus};
     use td_services::metrics::services::OperationalMetricsServices;
     use tower::ServiceExt;
 
@@ -127,7 +128,7 @@ mod routes {
     pub async fn get_metrics(
         State(state): State<Arc<OperationalMetricsServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Query(query): Query<MetricsQuery>,
     ) -> Result<GetStatus<MetricsResponse>, ErrorStatus> {
         let request = context
@@ -142,7 +143,7 @@ mod routes {
     pub async fn get_inflight(
         State(state): State<Arc<OperationalMetricsServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Query(query): Query<InflightQuery>,
     ) -> Result<GetStatus<InflightResponse>, ErrorStatus> {
         let request = context
@@ -157,7 +158,7 @@ mod routes {
     pub async fn get_snapshot(
         State(state): State<Arc<OperationalMetricsServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Query(metrics): Query<MetricsQuery>,
         Query(inflight): Query<InflightStatusQuery>,
     ) -> Result<GetStatus<SnapshotResponse>, ErrorStatus> {
@@ -416,7 +417,7 @@ mod routes {
 /// segment) and backed by the `*Global` services, which bypass RLS to aggregate
 /// across every project. The query→request conversion is shared with the scoped
 /// router; the only differences are the absence of a `{project}` (so no
-/// `Extension<ProjectId>` / `.in_project`) and the `*_global` service handle.
+/// `Project` extractor / `.in_project`) and the `*_global` service handle.
 #[router_ext(GlobalMetricsRouter)]
 mod global_routes {
     use axum::Extension;

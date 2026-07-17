@@ -6,6 +6,7 @@ use td_apiforge::router_ext;
 
 #[router_ext(InternalRouter)]
 mod routes {
+    use crate::extractors::Project;
     use axum::Extension;
     use axum::extract::{Path, State};
     use axum_extra::extract::Query;
@@ -29,7 +30,6 @@ mod routes {
         RESOLVE_WORKER, UPDATE_FUNCTION_RUN_WORKER, UPDATE_WORKER, WorkerIdParam,
     };
     use td_objects::rest_urls::{ExecutionParam, FunctionVersionIdParam};
-    use td_objects::types::basic::ProjectId;
     use td_services::execution::services::ExecutionServices;
     use td_services::function_run::services::FunctionRunServices;
     use td_services::table::services::TableServices;
@@ -44,7 +44,7 @@ mod routes {
     pub async fn function_run_callback(
         State(state): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<PhysicalFunctionRunWorkerIdParam>,
         Json(request): Json<CallbackRequest>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
@@ -58,7 +58,7 @@ mod routes {
     pub async fn worker_callback(
         State(state): State<Arc<WorkerServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<WorkerIdParam>,
         Json(request): Json<CallbackRequest>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
@@ -72,7 +72,7 @@ mod routes {
     pub async fn worker_message(
         State(state): State<Arc<WorkerServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<WorkerIdParam>,
     ) -> Result<GetStatus<WorkerInput>, ErrorStatus> {
         let request = context.read(param).in_project(project_id);
@@ -85,7 +85,7 @@ mod routes {
     pub async fn function_version_execute(
         State(state): State<Arc<ExecutionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(function_param): Path<FunctionVersionIdParam>,
         Json(request): Json<ExecutionRequestInternal>,
     ) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
@@ -101,7 +101,7 @@ mod routes {
     pub async fn function_version_execution_status(
         State(state): State<Arc<FunctionRunServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<FunctionVersionIdParam>,
         Json(request): Json<ExecutionParam>,
     ) -> Result<GetStatus<PhysicalFunctionRun>, ErrorStatus> {
@@ -128,7 +128,7 @@ mod routes {
     pub async fn download_state(
         State(state): State<Arc<TableServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(function_param): Path<FunctionVersionIdParam>,
         Query(at_param): Query<AtTimeParam>,
     ) -> Result<DownloadResponse, ErrorStatus> {

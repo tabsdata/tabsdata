@@ -6,6 +6,7 @@ use td_apiforge::router_ext;
 
 #[router_ext(CollectionsRouter)]
 mod routes {
+    use crate::extractors::Project;
     use axum::Extension;
     use axum::extract::{Path, State};
     use axum_extra::extract::Query;
@@ -26,7 +27,6 @@ mod routes {
         GET_COLLECTION_CONNECTION, LIST_COLLECTIONS, UPDATE_COLLECTION,
         UPSERT_COLLECTION_CONNECTION,
     };
-    use td_objects::types::basic::ProjectId;
     use td_services::collection::service::CollectionServices;
     use tower::ServiceExt;
 
@@ -37,7 +37,7 @@ mod routes {
     pub async fn list_collections(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
         let request = context.list((), query_params).in_project(project_id);
@@ -50,7 +50,7 @@ mod routes {
     pub async fn get_collection(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(collection_param): Path<CollectionParam>,
     ) -> Result<GetStatus<CollectionRead>, ErrorStatus> {
         let request = context.read(collection_param).in_project(project_id);
@@ -63,7 +63,7 @@ mod routes {
     pub async fn create_collection(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Json(request): Json<CollectionCreate>,
     ) -> Result<CreateStatus<CollectionRead>, ErrorStatus> {
         let request = context.create((), request).in_project(project_id);
@@ -76,7 +76,7 @@ mod routes {
     pub async fn update_collection(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(collection_param): Path<CollectionParam>,
         Json(request): Json<CollectionUpdate>,
     ) -> Result<UpdateStatus<CollectionRead>, ErrorStatus> {
@@ -92,7 +92,7 @@ mod routes {
     pub async fn delete_collection(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(collection_param): Path<CollectionParam>,
     ) -> Result<DeleteStatus<NoContent>, ErrorStatus> {
         // The delete service also drops the connection from the store (its
@@ -107,7 +107,7 @@ mod routes {
     pub async fn upsert_collection_connection(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(collection_param): Path<CollectionParam>,
         Json(request): Json<ConnectionUpsert>,
     ) -> Result<CreateStatus<ConnectionRead>, ErrorStatus> {
@@ -127,7 +127,7 @@ mod routes {
     pub async fn get_collection_connection(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(collection_param): Path<CollectionParam>,
     ) -> Result<GetStatus<ConnectionRead>, ErrorStatus> {
         let request = context.read(collection_param).in_project(project_id);

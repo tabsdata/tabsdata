@@ -44,6 +44,8 @@ MIN_CONNECTIONS = 2
 MAX_CONNECTIONS = 8
 REFRESH_BUFFER_IN_SECONDS = 300  # 5 minutes
 
+WILDCARD_PROJECT_MARKER = "*"
+
 DEFAULT_LIST_ENDPOINT_PARAMETERS = [
     "len",
     "filter",
@@ -160,7 +162,7 @@ class NoProjectSelectedError(Exception):
 
     def __init__(self):
         super().__init__(
-            "No project selected. Run 'td pin set --proj <name>' or pass "
+            "No project selected. Run 'tdk pin set --proj <name>' or pass "
             "'--proj <name>' to the command."
         )
 
@@ -215,21 +217,25 @@ class APIServer:
         # carries it into every tenant path, so callers never thread it.
         self.project = None
 
-    def _resolve_path(self, path: str) -> str:
+    def _resolve_path(self, path: str, allow_all_projects: bool = False) -> str:
         """Inject the active project into tenant-scoped endpoints.
 
         Tenant resources live under ``/projects/{project}/...``; the active
         project rides on the connection, so individual callers never thread
         it. Global endpoints (auth, users, roles, projects, status)
         are left untouched. With no project selected a tenant call fails fast
-        rather than guessing a default -- defaulting, if any, is the server's
-        job.
+        rather than guessing a default -- unless ``allow_all_projects`` is set
+        (the cross-project list endpoints), where it targets the wildcard
+        marker: every project the requester can view.
         """
         if any(path == p or path.startswith(p + "/") for p in self._GLOBAL_PREFIXES):
             return path
-        if not self.project:
-            raise NoProjectSelectedError()
-        return f"/projects/{self.project}{path}"
+        project = self.project
+        if not project:
+            if not allow_all_projects:
+                raise NoProjectSelectedError()
+            project = WILDCARD_PROJECT_MARKER
+        return f"/projects/{project}{path}"
 
     @property
     def certificate_file(self) -> str | None:
@@ -262,7 +268,7 @@ class APIServer:
             else {}
         )
 
-    def get(self, path, params=None, refresh_if_needed=True):
+    def get(self, path, params=None, refresh_if_needed=True, allow_all_projects=False):
         headers = {}
 
         if refresh_if_needed:
@@ -270,9 +276,10 @@ class APIServer:
 
         headers.update(self.authentication_header)
 
+        resolved = self.url + self._resolve_path(path, allow_all_projects)
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
             return requests.get(
-                self.url + self._resolve_path(path),
+                resolved,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 params=params,
@@ -280,7 +287,7 @@ class APIServer:
             )
         else:
             return GET_HTTP_SESSION.get(
-                self.url + self._resolve_path(path),
+                resolved,
                 headers=headers,
                 timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
                 params=params,
@@ -625,7 +632,7 @@ class APIServer:
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
-        response = self.get(endpoint, params)
+        response = self.get(endpoint, params, allow_all_projects=True)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def execution_read(
@@ -803,7 +810,7 @@ class APIServer:
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
-        response = self.get(endpoint, params)
+        response = self.get(endpoint, params, allow_all_projects=True)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def function_update(
@@ -1364,7 +1371,7 @@ class APIServer:
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
-        response = self.get(endpoint, params)
+        response = self.get(endpoint, params, allow_all_projects=True)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def transaction_recover(self, transaction_id: str, raise_for_status: bool = True):
@@ -1456,7 +1463,7 @@ class APIServer:
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
-        response = self.get(endpoint, params)
+        response = self.get(endpoint, params, allow_all_projects=True)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     @staticmethod

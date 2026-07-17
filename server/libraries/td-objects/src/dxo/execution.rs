@@ -12,8 +12,8 @@ mod definitions {
         AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
         ExecutionStatus, ExternalUid, FunctionId, FunctionName, FunctionOnly, FunctionVersionId,
         InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, PhysicalTableDataVersionId,
-        SkipIfRunning, StatusCount, System, TableName, TableVersionId, TransactionId, TriggerType,
-        TriggeredOn, UserId, UserName,
+        ProjectId, ProjectName, SkipIfRunning, StatusCount, System, TableName, TableVersionId,
+        TransactionId, TriggerType, TriggeredOn, UserId, UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::json::Json;
@@ -135,6 +135,7 @@ mod definitions {
         pub collection: CollectionName,
         pub function: FunctionName,
         pub triggered_by: UserName,
+        pub project: Option<ProjectName>,
     }
 
     #[ta_objects::Dao]
@@ -144,6 +145,7 @@ mod definitions {
         #[dxo(extractor)]
         pub id: ExecutionId,
 
+        pub project_id: ProjectId,
         pub started_on: Option<AtTime>,
         pub ended_on: Option<AtTime>,
         pub status: ExecutionStatus,
@@ -159,6 +161,8 @@ mod definitions {
 
         #[dto(list(filter, filter_like, order_by))]
         pub id: ExecutionId,
+        #[dto(list(filter))]
+        pub project_id: ProjectId,
         #[dto(list(filter, filter_like))]
         pub name: Option<ExecutionName>,
         #[dto(list(filter, order_by))]
@@ -183,6 +187,8 @@ mod definitions {
         pub ended_on: Option<AtTime>,
         #[dto(list(filter, order_by))]
         pub status: ExecutionStatus,
+        #[dto(list(filter, filter_like, order_by))]
+        pub project: Option<ProjectName>,
         pub function_run_status_count: FunctionRunStatusCount,
     }
 

@@ -110,9 +110,9 @@ pub use layers::{
     enforce,
 };
 pub use model::{
-    EffectiveGrants, EntityKind, Grant, GrantedPermission, Grants, IdentityClaim, On, Project,
-    ProjectId, ProjectPermission, ProjectRole, Requires, System, SystemEntity, SystemPermission,
-    SystemRole, User, VisibleProjects,
+    EffectiveGrants, EntityKind, FromGrants, Grant, GrantedPermission, Grants, IdentityClaim, On,
+    Project, ProjectId, ProjectPermission, ProjectRole, Requires, System, SystemEntity,
+    SystemPermission, SystemRole, User,
 };
 pub use registry::{AuthzRegistry, DecodeEntityId};
 pub use source::{FixedRbacSource, RbacSource, identity_grants};
@@ -141,4 +141,6 @@ pub type Rbac<E, R> = Enforce<SqlRbacSource, E, R>;
 /// source fixed in: a cross-project (global) read wires a
 /// `Visible::projects` layer to put the requester's viewable-project set in the
 /// service context, then a downstream layer filters its result set against it.
+/// Wildcard-capable reads add a `Visible::enforce` layer in between: a named
+/// project outside the set is Forbidden, the wildcard spans the set itself.
 pub type Visible = VisibleProjectsResolver<SqlRbacSource>;

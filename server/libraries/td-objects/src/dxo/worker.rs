@@ -11,7 +11,7 @@ mod definitions {
     use crate::types::basic::{
         AtTime, ByteCount, CollectionId, CollectionName, ConnectionId, CronMask, Enabled, EpochMs,
         ExecutionId, ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId,
-        PhysicalFunctionRunId, ProjectId, RowCount, SizeThreshold, TableVersionCount,
+        PhysicalFunctionRunId, ProjectId, ProjectName, RowCount, SizeThreshold, TableVersionCount,
         TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerId, WorkerMessageStatus,
         WorkerStatus, WorkerType,
     };
@@ -91,6 +91,7 @@ mod definitions {
         pub worker_type: WorkerType,
         // Patch the attempt's PFR ran (NULL = head), from physical_function_runs.
         pub function_version_patch_id: Option<FunctionVersionId>,
+        pub project: Option<ProjectName>,
     }
 
     #[ta_objects::Dto]
@@ -98,6 +99,8 @@ mod definitions {
     pub struct Worker {
         #[dto(list(pagination_by = "+", filter))]
         pub id: WorkerId,
+        #[dto(list(filter))]
+        pub project_id: ProjectId,
         #[dto(list(filter, order_by))]
         pub collection_id: CollectionId,
         #[dto(list(filter, filter_like, order_by))]
@@ -130,6 +133,8 @@ mod definitions {
         pub worker_type: WorkerType,
         #[dto(list(filter, order_by))]
         pub function_version_patch_id: Option<FunctionVersionId>,
+        #[dto(list(filter, filter_like, order_by))]
+        pub project: Option<ProjectName>,
     }
 
     pub type CallbackRequest = ResponseMessagePayload<WorkerOutput>;

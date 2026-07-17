@@ -986,6 +986,7 @@ class Execution:
         self.triggered_on_str = None
         self.trigger_type = kwargs.get("trigger_type")
         self.status = kwargs.get("status")
+        self.project = kwargs.get("project")
 
         self.triggered_by = kwargs.get("triggered_by")
         self.ended_on = kwargs.get("ended_on")
@@ -1675,6 +1676,7 @@ class FunctionRun:
         self.transaction = kwargs.get("transaction_id")
         self.execution = kwargs.get("execution_id")
         self.status = kwargs.get("status")
+        self.project = kwargs.get("project")
         self.ended_on = kwargs.get("ended_on")
         self.ended_on_str = None
         self.started_on = kwargs.get("started_on")
@@ -2945,6 +2947,7 @@ class Transaction:
         self.collection = kwargs.get("collection")
         self.execution = kwargs.get("execution_id")
         self.status = kwargs.get("status")
+        self.project = kwargs.get("project")
         self.triggered_by = kwargs.get("triggered_by")
         self.triggered_on = kwargs.get("triggered_on")
         self.triggered_on_str = None
@@ -3340,6 +3343,7 @@ class Worker:
         self.execution = kwargs.get("execution_id")
         self.status = kwargs.get("status")
         self.type = kwargs.get("worker_type")
+        self.project = kwargs.get("project")
         self.started_on = kwargs.get("started_on")
         self.started_on_str = None
         self.ended_on = kwargs.get("ended_on")

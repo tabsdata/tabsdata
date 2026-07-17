@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use td_objects::types::basic::UserId;
+use td_objects::types::visible_projects::VisibleProjects;
 
 /// An entity type permissions can target (the `entity_type` of the
 /// `(entity_type, entity_id)` pair).
@@ -590,26 +591,15 @@ impl ProjectRole {
 // VisibleProjects: the set of projects a user may view
 // ---------------------------------------------------------------------------
 
-/// The projects a user can view, derived from their effective grants: every
-/// project the user holds `view_project` (or a dominating permission) on.
-///
-/// This is the data-filter counterpart of the [`ViewProject`](super::ViewProject)
-/// *gate*: a project-scoped read gates on the one project in scope, while a
-/// cross-project (global) read must instead narrow its result set to the
-/// projects in scope here. A `project:__all__` grant collapses to
-/// [`VisibleProjects::All`] (no filtering); otherwise it is the explicit set
-/// (possibly empty — the user then sees nothing globally).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VisibleProjects {
-    /// The user can view every project (holds `view_project`+ on `__all__`).
-    All,
-    /// The user can view exactly these projects.
-    Only(std::collections::HashSet<ProjectId>),
+pub trait FromGrants {
+    /// Every project the user holds `view_project` (or a dominating permission)
+    /// on, or [`VisibleProjects::All`] for a `project:__all__` grant. The
+    /// data-filter counterpart of the [`ViewProject`](super::ViewProject) gate.
+    fn from_grants(grants: &Grants) -> Self;
 }
 
-impl VisibleProjects {
-    /// Derive the viewable-project set from a user's effective grants.
-    pub fn from_grants(grants: &Grants) -> Self {
+impl FromGrants for VisibleProjects {
+    fn from_grants(grants: &Grants) -> Self {
         let mut ids = std::collections::HashSet::new();
         for grant in grants.of::<Project>() {
             if !grant.permission.satisfies(ProjectPermission::ViewProject) {
@@ -623,14 +613,6 @@ impl VisibleProjects {
             }
         }
         VisibleProjects::Only(ids)
-    }
-
-    /// Whether `project` is viewable.
-    pub fn contains(&self, project: &ProjectId) -> bool {
-        match self {
-            VisibleProjects::All => true,
-            VisibleProjects::Only(ids) => ids.contains(project),
-        }
     }
 }
 

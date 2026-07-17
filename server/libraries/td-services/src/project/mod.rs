@@ -16,6 +16,8 @@ pub enum ProjectError {
          creating additional projects requires PostgreSQL (row-level security)."
     )]
     SingleProjectBackend = 1,
+    #[error("The `*` wildcard project marker is not valid on this endpoint")]
+    WildcardProjectNotAllowed = 2,
 
     // 1000-1999: NotFound — surfaces as 404.
     #[error("Project `{0}` not found")]

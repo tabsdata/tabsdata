@@ -9,6 +9,7 @@ use sea_query::{
 
 use super::collections::Collections;
 use super::functions::Functions;
+use super::projects::Projects;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -110,6 +111,7 @@ impl Entity for Defs {
                     b.name_or_id((Users::Table, Users::Name), (Executions::Table, Executions::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
+                .expr_as(Expr::col((Projects::Table, Projects::Name)), Alias::new("project"))
                 .from(Executions::Table)
                 .join(
                     JoinType::LeftJoin,
@@ -125,6 +127,11 @@ impl Entity for Defs {
                     JoinType::LeftJoin,
                     Users::Table,
                     Expr::col((Executions::Table, Executions::TriggeredById)).equals((Users::Table, Users::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Projects::Table,
+                    Expr::col((Executions::Table, Executions::ProjectId)).equals((Projects::Table, Projects::Id)),
                 )
                 .to_owned(),
         )]

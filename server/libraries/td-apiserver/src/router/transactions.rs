@@ -6,6 +6,7 @@ use td_apiforge::router_ext;
 
 #[router_ext(TransactionsRouter)]
 mod routes {
+    use crate::extractors::{Project, WildcardProject};
     use axum::Extension;
     use axum::extract::{Path, State};
     use axum_extra::extract::Query;
@@ -22,7 +23,6 @@ mod routes {
         SYNCHROTRON_READ, TRANSACTION_CANCEL, TRANSACTION_RECOVER, TRANSACTIONS_LIST,
         TransactionParam,
     };
-    use td_objects::types::basic::ProjectId;
     use td_services::transaction::services::TransactionServices;
     use tower::ServiceExt;
 
@@ -33,7 +33,7 @@ mod routes {
     pub async fn cancel(
         State(transaction): State<Arc<TransactionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<TransactionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ()).in_project(project_id);
@@ -46,10 +46,10 @@ mod routes {
     pub async fn list(
         State(transaction): State<Arc<TransactionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        WildcardProject(selector): WildcardProject,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Transaction>, ErrorStatus> {
-        let request = context.list((), query_params).in_project(project_id);
+        let request = context.list((), query_params).in_project(selector);
         let response = transaction.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -59,7 +59,7 @@ mod routes {
     pub async fn recover(
         State(transaction): State<Arc<TransactionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(param): Path<TransactionParam>,
     ) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
         let request = context.update(param, ()).in_project(project_id);
@@ -72,7 +72,7 @@ mod routes {
     pub async fn synchrotron(
         State(transaction): State<Arc<TransactionServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<SynchrotronResponse>, ErrorStatus> {
         let request = context.list((), query_params).in_project(project_id);

@@ -2,15 +2,12 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Resolves the `{project}` URL path segment to a `ProjectId` and inserts it
-//! as a request extension before the service stack runs.
-//!
-//! Tenant handlers read that `ProjectId` extension and attach it to their
-//! request (e.g. `RequestContext::create(..).in_project(project_id)`), which
-//! the `ProjectScopeProvider` later turns into `SET LOCAL app.project_id =
-//! <id>` for row-level security. Resolving here ensures the GUC carries a real
-//! registry id, never a raw user-supplied string — and that an unknown project
-//! is rejected with 404 long before any project-scoped table is touched.
+//! Resolves the `{project}` URL path segment to a [`WildcardProject`] request
+//! extension: `*` → [`WildcardProject::Wildcard`]; any other segment → a real
+//! registry id as [`WildcardProject::Project`] (unknown → 404 here, before any
+//! project-scoped table is touched). The `Project` / `WildcardProject`
+//! extractors read it downstream. The resolver keeps no list of which routes
+//! accept the wildcard.
 //!
 //! The lookup hits `projects_active` (the soft-delete-filtering view), which
 //! is NOT under RLS — so no GUC manipulation is needed to read it.
@@ -25,7 +22,9 @@ use td_database::domain::{Apiserver, DomainPool};
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::project::ProjectDB;
-use td_objects::types::basic::{ProjectId, ProjectIdName};
+use td_objects::types::basic::{
+    ProjectId, ProjectIdName, WILDCARD_PROJECT_MARKER, WildcardProject,
+};
 use td_queries::LiveEntry;
 use td_services::project::ProjectError;
 
@@ -44,16 +43,19 @@ pub async fn project_resolver_layer(
         .cloned()
         .ok_or_else(|| TdError::from(ProjectError::MissingProjectSegment))?;
 
-    let id_name = ProjectIdName::from_str(&raw)
-        .map_err(|_| TdError::from(ProjectError::ProjectNotFound(raw.clone())))?;
-
-    let resolved_id = resolve(&db, &id_name)
-        .await?
-        .ok_or_else(|| TdError::from(ProjectError::ProjectNotFound(raw.clone())))?;
+    let scope = if raw == WILDCARD_PROJECT_MARKER {
+        WildcardProject::Wildcard
+    } else {
+        let id_name = ProjectIdName::from_str(&raw)
+            .map_err(|_| TdError::from(ProjectError::ProjectNotFound(raw.clone())))?;
+        let resolved_id = resolve(&db, &id_name)
+            .await?
+            .ok_or_else(|| TdError::from(ProjectError::ProjectNotFound(raw.clone())))?;
+        WildcardProject::Project(resolved_id)
+    };
 
     let mut request = request;
-    request.extensions_mut().insert(resolved_id);
-
+    request.extensions_mut().insert(scope);
     Ok(next.run(request).await)
 }
 

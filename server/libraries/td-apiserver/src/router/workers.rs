@@ -6,6 +6,7 @@ use td_apiforge::router_ext;
 
 #[router_ext(WorkersRouter)]
 mod routes {
+    use crate::extractors::{Project, WildcardProject};
     use axum::Extension;
     use axum::extract::{Path, State};
     use axum_extra::extract::Query;
@@ -22,7 +23,6 @@ mod routes {
         WORKER_LOGS, WORKER_LOGS_TAIL, WORKERS_LIST, WorkerLogsParams, WorkerLogsQueryParams,
         WorkerParam,
     };
-    use td_objects::types::basic::ProjectId;
     use td_services::worker::services::WorkerServices;
     use td_tower::ctx_service::RawOneshot;
     use tower::ServiceExt;
@@ -34,10 +34,10 @@ mod routes {
     pub async fn list(
         State(messages): State<Arc<WorkerServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        WildcardProject(selector): WildcardProject,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<Worker>, ErrorStatus> {
-        let request = context.list((), query_params).in_project(project_id);
+        let request = context.list((), query_params).in_project(selector);
         let response = messages.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
@@ -52,7 +52,7 @@ mod routes {
     pub async fn logs(
         State(messages): State<Arc<WorkerServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(path_params): Path<WorkerParam>,
         Query(query_params): Query<WorkerLogsQueryParams>,
     ) -> Result<DownloadResponse, ErrorStatus> {
@@ -72,7 +72,7 @@ mod routes {
     pub async fn logs_tail(
         State(messages): State<Arc<WorkerServices>>,
         Extension(context): Extension<RequestContext>,
-        Extension(project_id): Extension<ProjectId>,
+        Project(project_id): Project,
         Path(path_params): Path<WorkerParam>,
         Query(query_params): Query<WorkerLogsQueryParams>,
     ) -> Result<DownloadResponse, ErrorStatus> {

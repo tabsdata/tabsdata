@@ -244,6 +244,8 @@ mod definitions {
     pub struct FunctionRun {
         #[dto(list(filter, order_by))]
         pub id: LogicalFunctionRunId,
+        #[dto(list(filter))]
+        pub project_id: ProjectId,
         #[dto(list(filter, order_by))]
         pub collection_id: CollectionId,
         #[dto(list(filter, filter_like, order_by))]
@@ -268,6 +270,8 @@ mod definitions {
         pub collection: CollectionName,
         #[dto(list(filter, filter_like))]
         pub execution: Option<ExecutionName>,
+        #[dto(list(filter, filter_like, order_by))]
+        pub project: Option<ProjectName>,
         pub triggered_by: UserName,
         // Resolved per-attempt fields from the currently-bound PFR.
         // `physical_function_run_id` is the PFR id; NULL while

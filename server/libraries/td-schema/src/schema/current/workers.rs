@@ -9,6 +9,7 @@ use super::executions::Executions;
 use super::functions::Functions;
 use super::logical_function_runs::LogicalFunctionRuns;
 use super::physical_function_runs::PhysicalFunctionRuns;
+use super::projects::Projects;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
 use crate::schema::sql::ViewDef;
@@ -76,6 +77,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .expr_as(Expr::col((Functions::Table, Functions::Enabled)), Alias::new("enabled"))
+                .expr_as(Expr::col((Projects::Table, Projects::Name)), Alias::new("project"))
                 // Patch id from the attempt's PFR (NULL = head). Distinguishes
                 // which code each attempt ran; the worker row itself lacks it.
                 .expr_as(
@@ -117,6 +119,11 @@ impl Entity for Defs {
                     PhysicalFunctionRuns::Table,
                     Expr::col((Workers::Table, Workers::PhysicalFunctionRunId))
                         .equals((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Projects::Table,
+                    Expr::col((Workers::Table, Workers::ProjectId)).equals((Projects::Table, Projects::Id)),
                 )
                 .and_where(Expr::col((Workers::Table, Workers::WorkerEnabled)).eq(true))
                 .to_owned(),
