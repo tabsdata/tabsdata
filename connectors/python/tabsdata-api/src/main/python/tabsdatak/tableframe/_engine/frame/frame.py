@@ -368,3 +368,11 @@ class EngineFrame(BaseFrame):
         from tabsdatak.tableframe._engine.event.error import TableFrameErrorCode
 
         raise TableFrameErrorCode.TF8.exception(op=op)
+
+    # Data Quality as a TableFrame namespace is in hibernation: the `_dq`
+    # accessor is intentionally disabled until the namespace is revived.
+    # @property
+    # def _dq(self):
+    #     from tabsdatak.common._actions.dataquality.engine import DataQualityEngine
+    #
+    #     return DataQualityEngine(self)
