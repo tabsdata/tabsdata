@@ -810,29 +810,33 @@ def _dynamic_import_function_from_path(
                 f"Function '{function_name}' not found in module {file_path}."
             )
 
-        # Strip the synthetic ``td_usr_pkg_<sha>.`` prefix off every
-        # stamped ``__module__`` so ``info.to_json`` serialises ``func``
-        # (via ``callable_to_str``) and user-defined classes (via
-        # ``qualified_class``) under the bundle-relative name --
-        # importable from ``user_code/`` at runtime, not the
-        # CLI-process-local synthetic package. This covers the entry
-        # module itself and any sibling module a serialised ``func`` /
-        # ``Conn`` / ``Src`` was imported from, at any nesting depth.
+        # Strip the synthetic ``td_usr_pkg_<sha>.`` prefix off the stamped
+        # ``__module__`` so ``info.to_json`` serialises ``func`` (via
+        # ``callable_to_str``) and user-defined classes (via
+        # ``qualified_class``) under the bundle-relative name -- importable
+        # from ``user_code/`` at runtime, not the CLI-process-local
+        # synthetic package. This covers the entry module itself and any
+        # sibling module a serialised ``func`` / ``Conn`` / ``Src`` was
+        # imported from, at any nesting depth.
+        #
+        # Only objects carrying the synthetic prefix are rewritten: those
+        # are the bundle's own modules. Imported builtins / installed types
+        # (e.g. ``datetime`` pulled in with ``from datetime import
+        # datetime``) never carry the prefix, so they are skipped -- which
+        # also avoids ``__module__`` assignment on immutable C types.
         prefix = f"{root_package}."
 
-        def unprefix(name: str | None) -> str | None:
-            if name and name.startswith(prefix):
-                return name[len(prefix) :]
-            return name
+        def strip_synthetic_module(obj: Any) -> None:
+            name = getattr(obj, "__module__", None)
+            if isinstance(name, str) and name.startswith(prefix):
+                obj.__module__ = name[len(prefix) :]
 
         underlying = getattr(symbol, "func", None)
-        rewrite_target = underlying if underlying is not None else symbol
-        if hasattr(rewrite_target, "__module__"):
-            rewrite_target.__module__ = unprefix(rewrite_target.__module__)
+        strip_synthetic_module(underlying if underlying is not None else symbol)
 
         for value in vars(module).values():
             if isinstance(value, type):
-                value.__module__ = unprefix(value.__module__)
+                strip_synthetic_module(value)
         return symbol
     finally:
         for name in synthetic_names:

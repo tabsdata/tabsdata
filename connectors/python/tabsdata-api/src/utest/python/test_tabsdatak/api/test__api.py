@@ -402,6 +402,83 @@ def test_import_user_module_dotted_name_imports_plainly(tmp_path, monkeypatch):
     assert _api._import_user_module("collections.abc") is collections_abc
 
 
+def test_import_user_module_prefers_user_code_file_over_installed(
+    tmp_path, monkeypatch
+):
+    """A user file named after an installed package (``json.py``) sitting in
+    a bundle ``user_code/`` folder is preferred over the installed package,
+    so its recorded ``func`` resolves. Register records such a file bare
+    (its synthetic prefix protects it there); the runtime must resolve it
+    to the user file, not the shadowing stdlib module."""
+    user_code = tmp_path / "user_code"
+    user_code.mkdir()
+    (user_code / "json.py").write_text(
+        "def publish():\n    return 'USER-JSON'\n", encoding="utf-8"
+    )
+    monkeypatch.syspath_prepend(str(user_code))
+
+    assert _api.callable_from_str("json:publish")() == "USER-JSON"
+    # The real stdlib json is untouched for everyone else.
+    import json as stdlib_json
+
+    assert stdlib_json.dumps({"ok": 1}) == '{"ok": 1}'
+
+
+def test_import_user_module_does_not_hijack_installed_from_non_user_code(
+    tmp_path, monkeypatch
+):
+    """A same-named file in a NON-``user_code`` folder must not divert an
+    installed package to a re-imported synthetic copy -- the user-file
+    preference is scoped to ``user_code/`` folders only."""
+    (tmp_path / "collections.py").write_text("SENTINEL = 1\n", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    import collections as stdlib_collections
+
+    assert _api._import_user_module("collections") is stdlib_collections
+
+
+def test_callable_from_str_resolves_transitive_sibling_chain(tmp_path, monkeypatch):
+    """The entry imports a sibling that imports a third sibling (a -> b);
+    the whole chain must resolve at runtime from the bundle folder."""
+    (tmp_path / "b.py").write_text("bv = 'CHAIN'\n", encoding="utf-8")
+    (tmp_path / "a.py").write_text("from b import bv\n\nav = bv\n", encoding="utf-8")
+    (tmp_path / "m.py").write_text(
+        "from a import av\n\ndef x():\n    return av\n", encoding="utf-8"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    assert _api.callable_from_str("m:x")() == "CHAIN"
+
+
+def test_callable_from_str_resolves_common_name_sibling(tmp_path, monkeypatch):
+    """A sibling with a common non-installed name (``data.py``) resolves."""
+    (tmp_path / "data.py").write_text("d = 'DATA'\n", encoding="utf-8")
+    (tmp_path / "m.py").write_text(
+        "from data import d\n\ndef x():\n    return d\n", encoding="utf-8"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    assert _api.callable_from_str("m:x")() == "DATA"
+
+
+def test_callable_from_str_resolves_nested_entry_absolute_from_root(
+    tmp_path, monkeypatch
+):
+    """A nested entry (``pkg/sub/m.py`` recorded ``pkg.sub.m``) importing a
+    top-level bundle module absolutely resolves at runtime from the bundle
+    folder on ``sys.path``."""
+    (tmp_path / "helper.py").write_text("hv = 'H'\n", encoding="utf-8")
+    sub = tmp_path / "pkg" / "sub"
+    sub.mkdir(parents=True)
+    (sub / "m.py").write_text(
+        "from helper import hv\n\ndef x():\n    return hv\n", encoding="utf-8"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    assert _api.callable_from_str("pkg.sub.m:x")() == "H"
+
+
 # ---------------------------------------------------------------------------
 # Plain _api.JsonSerde subclass round-trips
 # ---------------------------------------------------------------------------

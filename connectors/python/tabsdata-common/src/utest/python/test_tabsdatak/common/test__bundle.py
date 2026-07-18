@@ -1,4 +1,4 @@
-		#
+#
 # Copyright 2026 Tabs Data Inc.
 #
 
@@ -302,6 +302,55 @@ def test_build_bundle_does_not_include_source_snippet(tmp_path):
 
 def test_build_bundle_ignores_pycache_in_project_tree(tmp_path):
     project = _make_project(tmp_path)
+    out = tmp_path / "bundle.tar.zst"
+    build_bundle(_info(), project, out)
+    members = _tar_members(out)
+    assert not any("__pycache__" in m for m in members)
+
+
+def test_build_bundle_excludes_loose_compiled_files_in_subdir(tmp_path):
+    """Compiled artifacts (``*.pyc`` / ``*.pyo`` / ``*.pyd``) sitting loose
+    beside source inside a subfolder -- not only inside ``__pycache__`` --
+    are excluded from the bundle."""
+    project = _make_project(tmp_path)
+    pkg = project / "my_pkg"
+    (pkg / "module.pyc").write_bytes(b"\x00")
+    (pkg / "module.pyo").write_bytes(b"\x00")
+    (pkg / "native.pyd").write_bytes(b"\x00")
+
+    out = tmp_path / "bundle.tar.zst"
+    build_bundle(_info(), project, out)
+    members = _tar_members(out)
+    assert not any(m.endswith((".pyc", ".pyo", ".pyd")) for m in members)
+    # Real source is still bundled.
+    assert f"{BUNDLE_USER_CODE_DIRNAME}/my_pkg/module.py" in members
+
+
+def test_build_bundle_excludes_compiled_files_at_project_root(tmp_path):
+    """Compiled artifacts at the *top level* of the project tree are
+    excluded too. These are copied as individual entries (not via a
+    recursive ``copytree`` of a subfolder), so they exercise the
+    top-level entry filter specifically."""
+    project = _make_project(tmp_path)
+    (project / "stray.pyc").write_bytes(b"\x00")
+    (project / "legacy.pyo").write_bytes(b"\x00")
+    (project / "root__pycache__placeholder.pyd").write_bytes(b"\x00")
+
+    out = tmp_path / "bundle.tar.zst"
+    build_bundle(_info(), project, out)
+    members = _tar_members(out)
+    assert not any(m.endswith((".pyc", ".pyo", ".pyd")) for m in members)
+    assert f"{BUNDLE_USER_CODE_DIRNAME}/README.md" in members
+
+
+def test_build_bundle_excludes_pycache_dir_at_project_root(tmp_path):
+    """A ``__pycache__`` directory at the top level of the project tree is
+    excluded (the top-level entry filter drops the directory itself, not
+    just its contents)."""
+    project = _make_project(tmp_path)
+    (project / "__pycache__").mkdir()
+    (project / "__pycache__" / "top.cpython-312.pyc").write_bytes(b"\x00")
+
     out = tmp_path / "bundle.tar.zst"
     build_bundle(_info(), project, out)
     members = _tar_members(out)

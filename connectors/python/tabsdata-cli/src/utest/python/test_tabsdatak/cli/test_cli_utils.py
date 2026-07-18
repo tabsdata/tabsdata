@@ -465,9 +465,7 @@ def test_dynamic_import_unprefixes_class_from_sibling_module(tmp_path):
     a runtime-importable ref into ``function_def.json``."""
     sub = tmp_path / "a" / "b"
     sub.mkdir(parents=True)
-    (sub / "mod.py").write_text(
-        "class Thing:\n    tag = 'NESTED'\n", encoding="utf-8"
-    )
+    (sub / "mod.py").write_text("class Thing:\n    tag = 'NESTED'\n", encoding="utf-8")
     (sub / "pub.py").write_text(
         "from .mod import Thing\n"
         "\n"
@@ -483,6 +481,150 @@ def test_dynamic_import_unprefixes_class_from_sibling_module(tmp_path):
     )
     assert fn() == "a.b.mod"
     assert "td_usr_pkg_" not in fn()
+
+
+def test_dynamic_import_leaves_imported_builtin_types_untouched(tmp_path):
+    """A user file importing an immutable builtin type (``from datetime
+    import datetime``) must not fail: the ``__module__`` rewrite only
+    touches the bundle's own synthetic-prefixed classes, never imported
+    builtins whose ``__module__`` cannot be set (would raise 'cannot set
+    __module__ attribute of immutable type')."""
+    (tmp_path / "periodic_snapshot.py").write_text(
+        "from datetime import datetime, timedelta\n"
+        "from collections import OrderedDict\n"
+        "\n"
+        "class MyConn:\n"
+        "    pass\n"
+        "\n"
+        "def pub_period_snapshot():\n"
+        "    return datetime, OrderedDict, MyConn\n",
+        encoding="utf-8",
+    )
+
+    fn = cli_utils._dynamic_import_function_from_path(
+        f"{tmp_path / 'periodic_snapshot.py'}::pub_period_snapshot",
+        bundle_root=str(tmp_path),
+    )
+    datetime_cls, ordered_dict_cls, my_conn_cls = fn()
+    # Imported builtins keep their real module; the user's own class is
+    # stripped to the bundle-relative name.
+    assert datetime_cls.__module__ == "datetime"
+    assert ordered_dict_cls.__module__ == "collections"
+    assert my_conn_cls.__module__ == "periodic_snapshot"
+    assert fn.__module__ == "periodic_snapshot"
+
+
+# ---------------------------------------------------------------------------
+# _dynamic_import_function_from_path: odd-but-legal user-file shapes.
+#
+# These all worked when first swept; the tests pin the behavior so a future
+# change to the ``__module__`` rewrite / synthetic-import algorithm cannot
+# silently regress them. Each registers a user file exercising one shape and
+# asserts it loads without error.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name, body",
+    [
+        (
+            "imports_module_objects",
+            "import os\nimport json\n\ndef x():\n    return os, json\n",
+        ),
+        (
+            "local_enum",
+            "from enum import Enum\n\n"
+            "class E(Enum):\n    A = 1\n\n"
+            "def x():\n    return E.A\n",
+        ),
+        (
+            "local_dataclass",
+            "from dataclasses import dataclass\n\n"
+            "@dataclass\nclass C:\n    a: int = 1\n\n"
+            "def x():\n    return C()\n",
+        ),
+        (
+            "namedtuple",
+            "from collections import namedtuple\n\n"
+            "Point = namedtuple('Point', ['a'])\n\n"
+            "def x():\n    return Point(1)\n",
+        ),
+        (
+            "metaclass",
+            "class Meta(type):\n    pass\n\n"
+            "class C(metaclass=Meta):\n    pass\n\n"
+            "def x():\n    return C\n",
+        ),
+        (
+            "local_exception",
+            "class MyErr(Exception):\n    pass\n\ndef x():\n    return MyErr\n",
+        ),
+        (
+            "aliased_builtin",
+            "from collections import OrderedDict as OD\n\ndef x():\n    return OD\n",
+        ),
+        (
+            "star_import_stdlib",
+            "from os.path import *\n\ndef x():\n    return join('a', 'b')\n",
+        ),
+        (
+            "type_checking_guard",
+            "from typing import TYPE_CHECKING\n\n"
+            "if TYPE_CHECKING:\n    from datetime import datetime\n\n"
+            "def x():\n    return 1\n",
+        ),
+        (
+            "uses_dunder_name",
+            "NAME = __name__\n\ndef x():\n    return NAME\n",
+        ),
+        (
+            "main_guard",
+            "def x():\n    return 1\n\n\n"
+            "if __name__ == '__main__':\n    raise SystemExit\n",
+        ),
+    ],
+)
+def test_dynamic_import_odd_but_legal_user_files_load(tmp_path, name, body):
+    (tmp_path / f"{name}.py").write_text(body, encoding="utf-8")
+    fn = cli_utils._dynamic_import_function_from_path(f"{tmp_path / f'{name}.py'}::x")
+    # Loads and is callable; the file leaf is the recorded module.
+    assert callable(fn)
+    assert fn.__module__ == name
+
+
+def test_dynamic_import_class_with_manually_faked_module(tmp_path):
+    """A user class whose ``__module__`` was manually set to an unrelated
+    string is not our synthetic prefix, so the rewrite leaves it alone."""
+    (tmp_path / "faked.py").write_text(
+        "class C:\n    pass\n\n"
+        "C.__module__ = 'totally.unrelated'\n\n"
+        "def x():\n    return C\n",
+        encoding="utf-8",
+    )
+    fn = cli_utils._dynamic_import_function_from_path(f"{tmp_path / 'faked.py'}::x")
+    assert fn().__module__ == "totally.unrelated"
+
+
+def test_dynamic_import_symbol_is_a_builtin_callable(tmp_path):
+    """The registered symbol can itself be a builtin (``x = len``); the
+    rewrite must not attempt to set ``__module__`` on it."""
+    (tmp_path / "aliases_builtin.py").write_text("x = len\n", encoding="utf-8")
+    fn = cli_utils._dynamic_import_function_from_path(
+        f"{tmp_path / 'aliases_builtin.py'}::x"
+    )
+    assert fn is len
+
+
+def test_dynamic_import_wrapper_whose_func_is_a_builtin(tmp_path):
+    """An info-shaped wrapper whose ``.func`` is a builtin must not fail
+    the ``__module__`` rewrite of the underlying callable."""
+    (tmp_path / "wraps_builtin.py").write_text(
+        "class W:\n    func = len\n\nx = W()\n", encoding="utf-8"
+    )
+    info = cli_utils._dynamic_import_function_from_path(
+        f"{tmp_path / 'wraps_builtin.py'}::x"
+    )
+    assert info.func is len
 
 
 # ---------------------------------------------------------------------------
