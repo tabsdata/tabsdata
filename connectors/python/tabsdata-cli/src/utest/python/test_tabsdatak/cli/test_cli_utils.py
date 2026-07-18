@@ -16,6 +16,8 @@ CLI integration suite; here we test what's purely functional:
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from tabsdatak.cli import cli_utils
@@ -239,6 +241,248 @@ def test_dynamic_import_rewrites_module_on_user_defined_classes(tmp_path):
     assert type(info.source).__module__ == "stream_publisher"
     # And of course the function rewrite still works.
     assert info.func.__module__ == "stream_publisher"
+
+
+# ---------------------------------------------------------------------------
+# _dynamic_import_function_from_path: absolute sibling imports
+#
+# The loader resolves bare sibling names (``import supporter``) to
+# ``<folder>/supporter.py`` INSIDE the synthetic package, installed-first
+# so a user file named after an installed package cannot shadow it, and
+# without ever mutating ``sys.path``.
+# ---------------------------------------------------------------------------
+
+
+def test_dynamic_import_resolves_absolute_sibling(tmp_path):
+    (tmp_path / "supporter.py").write_text(
+        "def support():\n    return 'SUPPORT-OK'\n", encoding="utf-8"
+    )
+    (tmp_path / "publisher.py").write_text(
+        "from supporter import support\n\ndef publish():\n    return support()\n",
+        encoding="utf-8",
+    )
+
+    fn = cli_utils._dynamic_import_function_from_path(
+        f"{tmp_path / 'publisher.py'}::publish"
+    )
+    assert fn() == "SUPPORT-OK"
+    assert fn.__module__ == "publisher"
+    assert "supporter" not in sys.modules
+
+
+def test_dynamic_import_resolves_chained_absolute_siblings(tmp_path):
+    (tmp_path / "b.py").write_text("VALUE = 'B'\n", encoding="utf-8")
+    (tmp_path / "a.py").write_text(
+        "import b\n\ndef from_a():\n    return b.VALUE\n", encoding="utf-8"
+    )
+    (tmp_path / "main.py").write_text(
+        "import a\n\ndef run():\n    return a.from_a()\n", encoding="utf-8"
+    )
+
+    fn = cli_utils._dynamic_import_function_from_path(f"{tmp_path / 'main.py'}::run")
+    assert fn() == "B"
+    assert "a" not in sys.modules
+    assert "b" not in sys.modules
+
+
+def test_dynamic_import_does_not_shadow_installed_package(tmp_path):
+    (tmp_path / "json.py").write_text("POISON = True\n", encoding="utf-8")
+    (tmp_path / "user.py").write_text(
+        "import json\n\ndef check():\n    return json.dumps({'ok': 1})\n",
+        encoding="utf-8",
+    )
+
+    fn = cli_utils._dynamic_import_function_from_path(f"{tmp_path / 'user.py'}::check")
+    assert fn() == '{"ok": 1}'
+    import json as stdlib_json
+
+    assert not hasattr(stdlib_json, "POISON")
+
+
+def test_dynamic_import_resolves_sibling_package_dir(tmp_path):
+    """A sibling that is a package directory (``<name>/__init__.py``), not
+    just a ``.py`` file, resolves too."""
+    pkg = tmp_path / "pkgmod"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("Y = 2\n", encoding="utf-8")
+    (tmp_path / "user.py").write_text(
+        "import pkgmod\n\ndef go():\n    return pkgmod.Y\n", encoding="utf-8"
+    )
+
+    fn = cli_utils._dynamic_import_function_from_path(f"{tmp_path / 'user.py'}::go")
+    assert fn() == 2
+    assert "pkgmod" not in sys.modules
+
+
+def test_dynamic_import_dotted_installed_import_with_named_sibling(tmp_path):
+    """A same-named sibling must not break a dotted import of the installed
+    package (``import collections.abc`` with a sibling ``collections.py``)."""
+    (tmp_path / "collections.py").write_text("X = 1\n", encoding="utf-8")
+    (tmp_path / "user.py").write_text(
+        "import collections.abc\n"
+        "\n"
+        "def go():\n"
+        "    return collections.abc.Mapping is not None\n",
+        encoding="utf-8",
+    )
+
+    fn = cli_utils._dynamic_import_function_from_path(f"{tmp_path / 'user.py'}::go")
+    assert fn() is True
+
+
+def test_dynamic_import_colliding_sibling_defers_to_installed(tmp_path):
+    """A sibling whose name collides with an installed package is NOT
+    reached by absolute import (installed-first): the installed package
+    wins, so importing a sibling-only symbol from it fails."""
+    (tmp_path / "json.py").write_text("SPECIAL = 'sibling'\n", encoding="utf-8")
+    (tmp_path / "user.py").write_text(
+        "from json import SPECIAL\n\ndef go():\n    return SPECIAL\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ImportError) as ei:
+        cli_utils._dynamic_import_function_from_path(f"{tmp_path / 'user.py'}::go")
+    assert "SPECIAL" in str(ei.value)
+
+
+def test_dynamic_import_two_functions_same_sibling_name_isolated(tmp_path):
+    """Two functions in different folders, each with a sibling of the
+    same basename but different contents, loaded back-to-back in one
+    process must not bleed into each other."""
+    dir_one = tmp_path / "one"
+    dir_one.mkdir()
+    (dir_one / "helper.py").write_text(
+        "def tag():\n    return 'ONE'\n", encoding="utf-8"
+    )
+    (dir_one / "pub.py").write_text(
+        "from helper import tag\n\ndef publish():\n    return tag()\n",
+        encoding="utf-8",
+    )
+
+    dir_two = tmp_path / "two"
+    dir_two.mkdir()
+    (dir_two / "helper.py").write_text(
+        "def tag():\n    return 'TWO'\n", encoding="utf-8"
+    )
+    (dir_two / "pub.py").write_text(
+        "from helper import tag\n\ndef publish():\n    return tag()\n",
+        encoding="utf-8",
+    )
+
+    first = cli_utils._dynamic_import_function_from_path(
+        f"{dir_one / 'pub.py'}::publish"
+    )
+    second = cli_utils._dynamic_import_function_from_path(
+        f"{dir_two / 'pub.py'}::publish"
+    )
+    assert first() == "ONE"
+    assert second() == "TWO"
+    # And re-invoking the first still sees its own helper, not the second's.
+    assert first() == "ONE"
+    assert "helper" not in sys.modules
+
+
+def test_dynamic_import_relative_sibling_still_works(tmp_path):
+    (tmp_path / "supporter.py").write_text(
+        "def support():\n    return 'REL-OK'\n", encoding="utf-8"
+    )
+    (tmp_path / "pub.py").write_text(
+        "from .supporter import support\n\ndef publish():\n    return support()\n",
+        encoding="utf-8",
+    )
+
+    fn = cli_utils._dynamic_import_function_from_path(f"{tmp_path / 'pub.py'}::publish")
+    assert fn() == "REL-OK"
+
+
+# ---------------------------------------------------------------------------
+# _dynamic_import_function_from_path: nested entry modules
+#
+# When the registered function lives in a subpackage of the bundle root
+# (``a/b/c/d.py`` under ``dir_to_bundle``), the recorded ``__module__``
+# is the dotted path relative to the bundle root (``a.b.c.d``) -- what the
+# runner re-imports from ``user_code/a/b/c/d.py`` -- and relative imports
+# at every level (``.sibling``, ``..cousin``) plus absolutes rooted at a
+# bundle top-level package (``from a.top import ...``) all resolve.
+# ---------------------------------------------------------------------------
+
+
+def test_dynamic_import_nested_entry_records_dotted_module(tmp_path):
+    sub = tmp_path / "a" / "b" / "c"
+    sub.mkdir(parents=True)
+    (sub / "d.py").write_text("def x():\n    return 1\n", encoding="utf-8")
+
+    fn = cli_utils._dynamic_import_function_from_path(
+        f"{sub / 'd.py'}::x", bundle_root=str(tmp_path)
+    )
+    assert fn() == 1
+    assert fn.__module__ == "a.b.c.d"
+
+
+def test_dynamic_import_nested_entry_resolves_all_relative_levels(tmp_path):
+    sub = tmp_path / "a" / "b" / "c"
+    sub.mkdir(parents=True)
+    (sub / "sibling.py").write_text("S = 'SIB'\n", encoding="utf-8")
+    (tmp_path / "a" / "b" / "cousin.py").write_text("C = 'COU'\n", encoding="utf-8")
+    (tmp_path / "a" / "top.py").write_text("T = 'TOP'\n", encoding="utf-8")
+    (sub / "d.py").write_text(
+        "from .sibling import S\n"
+        "from ..cousin import C\n"
+        "from a.top import T\n"
+        "\n"
+        "def x():\n"
+        "    return f'{S}/{C}/{T}'\n",
+        encoding="utf-8",
+    )
+
+    fn = cli_utils._dynamic_import_function_from_path(
+        f"{sub / 'd.py'}::x", bundle_root=str(tmp_path)
+    )
+    assert fn() == "SIB/COU/TOP"
+    assert fn.__module__ == "a.b.c.d"
+
+
+def test_dynamic_import_bundle_root_defaults_to_file_folder(tmp_path):
+    (tmp_path / "supporter.py").write_text(
+        "def s():\n    return 'FLAT'\n", encoding="utf-8"
+    )
+    (tmp_path / "publisher.py").write_text(
+        "from .supporter import s\n\ndef publish():\n    return s()\n",
+        encoding="utf-8",
+    )
+    # No bundle_root -> the file's own folder is the root; module stays bare.
+    fn = cli_utils._dynamic_import_function_from_path(
+        f"{tmp_path / 'publisher.py'}::publish"
+    )
+    assert fn() == "FLAT"
+    assert fn.__module__ == "publisher"
+
+
+def test_dynamic_import_unprefixes_class_from_sibling_module(tmp_path):
+    """A user class imported into the entry from a sibling module has its
+    ``__module__`` stamped as the bundle-relative dotted name (not the
+    synthetic ``td_usr_pkg_<sha>.`` prefix), so ``qualified_class`` writes
+    a runtime-importable ref into ``function_def.json``."""
+    sub = tmp_path / "a" / "b"
+    sub.mkdir(parents=True)
+    (sub / "mod.py").write_text(
+        "class Thing:\n    tag = 'NESTED'\n", encoding="utf-8"
+    )
+    (sub / "pub.py").write_text(
+        "from .mod import Thing\n"
+        "\n"
+        "obj = Thing()\n"
+        "\n"
+        "def x():\n"
+        "    return type(obj).__module__\n",
+        encoding="utf-8",
+    )
+
+    fn = cli_utils._dynamic_import_function_from_path(
+        f"{sub / 'pub.py'}::x", bundle_root=str(tmp_path)
+    )
+    assert fn() == "a.b.mod"
+    assert "td_usr_pkg_" not in fn()
 
 
 # ---------------------------------------------------------------------------

@@ -123,6 +123,7 @@ def test_already_instance_via_pydantic_validator(monkeypatch):
     # pydantic dispatch (not just direct construction).
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
     inner = Secret()
+
     # Round-trip: building a Src that holds the secret, then accessing
     # ``.e`` on a nested Secret-typed field is the standard path; here we
     # just confirm the instance path through the schema's wrap-validator.
@@ -133,11 +134,15 @@ def test_already_instance_via_pydantic_validator(monkeypatch):
     src = _SrcWithSecretField(s=inner)
     assert src.s is inner
 
+
 # ===========================================================================
 # _api.JsonSerde / Info round-trips (was test_serde.py)
 # ===========================================================================
 
+
 class _SerdeSrcPlugin(spi.SrcPlugin): ...
+
+
 class _SerdeDestPlugin(spi.DestPlugin): ...
 
 
@@ -146,18 +151,20 @@ class _SerdeSrc(m.Src):
     name: str = "default"
 
 
-_connectors.register_src(spi.SrcDef(
+_connectors.register_src(
+    spi.SrcDef(
         conn=spi.Conn,
-    type_="serde_test_src",
-    system="Test",
-    src_version="v1",
-    src=_SerdeSrc,
-    table_mode=spi.TableMode.SINGLE,
-    cardinality=lambda src: 1,
-    plugin=_SerdeSrcPlugin,
-    explorer=None,
-    icon=None,
-))
+        type_="serde_test_src",
+        system="Test",
+        src_version="v1",
+        src=_SerdeSrc,
+        table_mode=spi.TableMode.SINGLE,
+        cardinality=lambda src: 1,
+        plugin=_SerdeSrcPlugin,
+        explorer=None,
+        icon=None,
+    )
+)
 
 
 @_api.dataclass(ApiErrorCode.API_14)
@@ -165,17 +172,19 @@ class _SerdeDest(m.Dest):
     name: str = "default"
 
 
-_connectors.register_dest(spi.DestDef(
+_connectors.register_dest(
+    spi.DestDef(
         conn=spi.Conn,
-    type_="serde_test_dest",
-    system="Test",
-    dest_version="v1",
-    dest=_SerdeDest,
-    cardinality=lambda dest: 1,
-    plugin=_SerdeDestPlugin,
-    explorer=None,
-    icon=None,
-))
+        type_="serde_test_dest",
+        system="Test",
+        dest_version="v1",
+        dest=_SerdeDest,
+        cardinality=lambda dest: 1,
+        plugin=_SerdeDestPlugin,
+        explorer=None,
+        icon=None,
+    )
+)
 
 
 def serde_pub_func(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
@@ -192,6 +201,7 @@ def serde_xform_func(t1: tableframe.TableFrame | None) -> tableframe.TableFrame 
 
 # Migration-chain fixtures must be at module top level so the type
 # string ("module:qualname") resolves on load.
+
 
 @_api.dataclass(ApiErrorCode.API_14)
 class _MigratingSrc(m.Src):
@@ -256,6 +266,7 @@ def _build_publisher() -> _info.PublisherInfo:
     )
     def p(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
         return t1
+
     # Replace the local closure with a module-level function so the
     # serialization round-trip can resolve it. Decorators don't compose
     # neatly with module-level functions in test files, so we mutate
@@ -275,7 +286,9 @@ def test_qualified_class_round_trips():
 
 
 def test_qualified_class_rejects_local_class():
-    class Local: pass
+    class Local:
+        pass
+
     with pytest.raises(ValueError, match="locally-defined"):
         _api.qualified_class(Local)
 
@@ -312,9 +325,81 @@ def test_callable_round_trips():
 
 
 def test_callable_to_str_rejects_closure():
-    def local_fn(): pass
+    def local_fn():
+        pass
+
     with pytest.raises(ValueError, match="locally-defined"):
         _api.callable_to_str(local_fn)
+
+
+# ---------------------------------------------------------------------------
+# _api._import_user_module: bundled-user-code import with relative imports
+#
+# The runner records ``func`` bare (``"publisher:publish"``) and puts the
+# bundle's flat ``user_code/`` folder on ``sys.path``. A plain top-level
+# import of ``publisher`` gives it no parent package, so a
+# ``from .sibling import ...`` inside it fails. The resolver retries such
+# a bare module as a submodule of a synthetic package rooted at the
+# folder so the relative import resolves -- while installed packages and
+# dotted names keep importing plainly.
+# ---------------------------------------------------------------------------
+
+
+def test_callable_from_str_resolves_relative_sibling_import(tmp_path, monkeypatch):
+    (tmp_path / "supporter.py").write_text(
+        "def support():\n    return 'SUPPORT-OK'\n", encoding="utf-8"
+    )
+    (tmp_path / "publisher.py").write_text(
+        "from .supporter import support\n\ndef publish():\n    return support()\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    fn = _api.callable_from_str("publisher:publish")
+    assert fn() == "SUPPORT-OK"
+
+
+def test_callable_from_str_resolves_absolute_sibling_import(tmp_path, monkeypatch):
+    (tmp_path / "supporter.py").write_text(
+        "def support():\n    return 'ABS-OK'\n", encoding="utf-8"
+    )
+    (tmp_path / "publisher_abs.py").write_text(
+        "from supporter import support\n\ndef publish():\n    return support()\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    fn = _api.callable_from_str("publisher_abs:publish")
+    assert fn() == "ABS-OK"
+
+
+def test_resolve_class_resolves_relative_sibling_import(tmp_path, monkeypatch):
+    (tmp_path / "base.py").write_text("TAG = 'BASE'\n", encoding="utf-8")
+    (tmp_path / "srcmod.py").write_text(
+        "from .base import TAG\n\nclass MySrc:\n    tag = TAG\n", encoding="utf-8"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    cls = _api.resolve_class("srcmod:MySrc")
+    assert cls.tag == "BASE"
+
+
+def test_import_user_module_leaves_installed_package_untouched(tmp_path, monkeypatch):
+    # A folder on sys.path with an unrelated file must not divert a plain
+    # ``import json`` to a synthetic package.
+    (tmp_path / "unrelated.py").write_text("x = 1\n", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    import json as stdlib_json
+
+    assert _api._import_user_module("json") is stdlib_json
+
+
+def test_import_user_module_dotted_name_imports_plainly(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(tmp_path))
+    import collections.abc as collections_abc
+
+    assert _api._import_user_module("collections.abc") is collections_abc
 
 
 # ---------------------------------------------------------------------------
@@ -391,8 +476,10 @@ def test_secret_rejects_envelope_dict():
 
 def test_publisher_rejects_closure_func():
     p = _build_publisher()
+
     # Replace func with a closure post-construction to force the dump path.
     def closure(): ...
+
     object.__setattr__(p, "func", closure)
     with pytest.raises(Exception, match="locally-defined"):
         p.to_dict()
@@ -480,7 +567,7 @@ class _CycleSrc(m.Src):
     a: int
 
 
-_CycleSrc.__api_version__ = "9.9"   # never reachable
+_CycleSrc.__api_version__ = "9.9"  # never reachable
 _CycleSrc.__migrations__ = {
     "1.0": ("1.1", lambda s: s),
     "1.1": ("1.0", lambda s: s),
@@ -670,8 +757,9 @@ def testvalidate_hook_runs_on_from_json_reload():
     # `from_json` uses internally.
     c = _PortRequiresHostConn(host="localhost", port=5432)
     envelope = c.to_dict()
-    envelope["spec"]["host"] = None       # tamper -> invariant broken
+    envelope["spec"]["host"] = None  # tamper -> invariant broken
     import json
+
     with pytest.raises(Exception, match="port set without host"):
         _PortRequiresHostConn.from_json(json.dumps(envelope))
 
@@ -689,8 +777,9 @@ def test_naive_datetime_rejected_on_load_from_json():
     # at construction time, not on `TypeAdapter.validate_json`).
     s = _SrcWithDt(when=_dt(2026, 1, 1, tzinfo=_tz.utc))
     envelope = s.to_dict()
-    envelope["spec"]["when"] = "2026-01-01T00:00:00"   # strip the offset
+    envelope["spec"]["when"] = "2026-01-01T00:00:00"  # strip the offset
     import json
+
     with pytest.raises(Exception, match="timezone-aware"):
         _SrcWithDt.from_json(json.dumps(envelope))
 

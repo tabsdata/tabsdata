@@ -287,7 +287,15 @@ def list_functions(ctx: click.Context, coll: str):
     "--local-pkg",
     type=str,
     multiple=True,
-    help="Path to a local package to include in the bundle.",
+    help=(
+        "Path to a local package directory to include in the bundle. Local "
+        "packages are pip-installed into the function's runtime environment, "
+        "separately from the '--dir-to-bundle' source tree. Import them "
+        "absolutely (`import mypkg`); use relative imports (`from .mod import "
+        "x`) for modules inside the bundled source tree. If a local package "
+        "shares a name with a module in that tree, the installed package wins "
+        "at runtime and shadows the source module."
+    ),
 )
 @click.option(
     "--reuse-tables",
@@ -706,7 +714,15 @@ def _monitor_execution_or_transaction(
 @click.option(
     "--local-pkg",
     multiple=True,
-    help="Path to a local package to include in the bundle.",
+    help=(
+        "Path to a local package directory to include in the bundle. Local "
+        "packages are pip-installed into the function's runtime environment, "
+        "separately from the '--dir-to-bundle' source tree. Import them "
+        "absolutely (`import mypkg`); use relative imports (`from .mod import "
+        "x`) for modules inside the bundled source tree. If a local package "
+        "shares a name with a module in that tree, the installed package wins "
+        "at runtime and shadows the source module."
+    ),
 )
 @click.option(
     "--reuse-tables",
@@ -943,7 +959,15 @@ def disable(
     "--local-pkg",
     type=str,
     multiple=True,
-    help="Path to a local package to include in the bundle.",
+    help=(
+        "Path to a local package directory to include in the bundle. Local "
+        "packages are pip-installed into the function's runtime environment, "
+        "separately from the '--dir-to-bundle' source tree. Import them "
+        "absolutely (`import mypkg`); use relative imports (`from .mod import "
+        "x`) for modules inside the bundled source tree. If a local package "
+        "shares a name with a module in that tree, the installed package wins "
+        "at runtime and shadows the source module."
+    ),
 )
 @click.pass_context
 def patch(

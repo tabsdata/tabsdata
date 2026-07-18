@@ -28,10 +28,15 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import hashlib
 import importlib
+import importlib.machinery
+import importlib.util
 import inspect
 import json
+import os
 import re
+import sys
 import typing
 from datetime import datetime
 from typing import Any, Callable, ClassVar, TypeVar, Union, dataclass_transform
@@ -1080,6 +1085,65 @@ class DescriptorBase(JsonSerde):
 # ---------------------------------------------------------------------------
 
 
+def _import_user_module(mod_name: str) -> Any:
+    """Import ``mod_name`` for callable / class resolution.
+
+    A bundled user module is recorded bare (``"publisher"``, no package)
+    and its siblings sit flat next to it in ``user_code/``, which the
+    runner has prepended to ``sys.path``. Importing it plainly makes it a
+    top-level module with no parent package, so a ``from .supporter
+    import ...`` inside it raises "attempted relative import with no known
+    parent package".
+
+    The plain import is attempted first, so installed packages and dotted
+    names behave exactly as before. Only when it fails with that specific
+    relative-import error -- and the module is a bare file (or package) on
+    a ``sys.path`` folder -- is it retried as a submodule of a synthetic
+    package rooted at that folder (the same scheme the CLI register step
+    uses), which gives the relative import a parent to resolve against.
+    """
+    try:
+        return importlib.import_module(mod_name)
+    except ImportError as exc:
+        if "." in mod_name or "relative import" not in str(exc):
+            raise
+    for entry in sys.path:
+        folder = entry or os.getcwd()
+        file_path = os.path.join(folder, f"{mod_name}.py")
+        package_init = os.path.join(folder, mod_name, "__init__.py")
+        is_package = os.path.isfile(package_init)
+        if not (os.path.isfile(file_path) or is_package):
+            continue
+        folder_path = os.path.abspath(folder)
+        folder_digest = hashlib.sha1(folder_path.encode("utf-8")).hexdigest()[:12]
+        package_name = f"td_usr_pkg_{folder_digest}"
+        synthetic_name = f"{package_name}.{mod_name}"
+        if synthetic_name in sys.modules:
+            return sys.modules[synthetic_name]
+        sys.modules.pop(mod_name, None)
+        if package_name not in sys.modules:
+            package_spec = importlib.machinery.ModuleSpec(
+                package_name, loader=None, is_package=True
+            )
+            package_spec.submodule_search_locations = [folder_path]
+            sys.modules[package_name] = importlib.util.module_from_spec(package_spec)
+        location = package_init if is_package else file_path
+        spec = importlib.util.spec_from_file_location(
+            synthetic_name,
+            location,
+            submodule_search_locations=(
+                [os.path.join(folder_path, mod_name)] if is_package else [folder_path]
+            ),
+        )
+        if spec is None or spec.loader is None:
+            break
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[synthetic_name] = module
+        spec.loader.exec_module(module)
+        return module
+    return importlib.import_module(mod_name)
+
+
 def qualified_class(cls: type) -> str:
     """Render ``cls`` as ``"module:qualname"`` for JSON envelope
     serialisation. Rejects locally-defined classes (qualname
@@ -1104,7 +1168,7 @@ def resolve_class(spec: str) -> type:
     if "<locals>" in qualname:
         raise ValueError(f"type {spec!r}: cannot resolve locally-defined class")
     try:
-        mod = importlib.import_module(mod_name)
+        mod = _import_user_module(mod_name)
     except ImportError as e:
         raise ValueError(
             f"type {spec!r}: module {mod_name!r} could not be imported: {e}"
@@ -1168,7 +1232,7 @@ def callable_from_str(spec: str) -> Callable[..., Any]:
     if "<locals>" in qualname:
         raise ValueError(f"callable {spec!r}: cannot resolve locally-defined callable")
     try:
-        mod = importlib.import_module(mod_name)
+        mod = _import_user_module(mod_name)
     except ImportError as e:
         raise ValueError(
             f"callable {spec!r}: module {mod_name!r} could not be imported: {e}"

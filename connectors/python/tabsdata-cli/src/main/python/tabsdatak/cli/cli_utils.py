@@ -14,6 +14,7 @@ legacy ``tabsdatak.common._information.about.dabout`` surface so the
 from __future__ import annotations
 
 import hashlib
+import importlib.abc
 import importlib.machinery
 import importlib.util
 import io
@@ -22,8 +23,10 @@ import os
 import platform
 import re
 import sys
+from contextlib import contextmanager
 from importlib.metadata import PackageNotFoundError, version
-from typing import TYPE_CHECKING, Any
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, Iterator, Sequence
 
 import rich_click as click
 from rich_click import Option, UsageError
@@ -594,24 +597,144 @@ def _split_python_function_path(path: str) -> tuple[str, str]:
     return file_path, function_name
 
 
-def _dynamic_import_function_from_path(path: str) -> Any:  # noqa: C901
+class _SiblingFinder(importlib.abc.MetaPathFinder):
+    """Resolves a bare top-level name to a module or package in one of
+    ``folders`` (a ``<name>.py`` file or a ``<name>/`` package), so an
+    absolute ``import <name>`` inside a bundled user file finds either a
+    flat sibling (the entry file's own folder) or a top-level bundle
+    package (the bundle root).
+
+    Appended to the *end* of ``sys.meta_path``, so every real finder
+    (builtin, frozen, ``PathFinder`` over ``sys.path``) gets first
+    refusal: installed packages always win, and a user file named after
+    an installed package cannot shadow it. A bundle name is reachable by
+    absolute import only when it does not collide with an installed
+    package; a colliding name stays importable via the relative form
+    (``from .<name> import ...``).
+
+    Resolution is delegated to ``PathFinder`` restricted to ``folders``
+    so ``.py`` files, package directories, and parent/submodule binding
+    all behave exactly as a normal on-``sys.path`` import would --
+    matching what the runtime runner does when it puts the extracted
+    bundle folder on ``sys.path``.
+    """
+
+    def __init__(self, folders: Sequence[str]) -> None:
+        self.folders = list(dict.fromkeys(folders))
+        self.claimed: set[str] = set()
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: Sequence[str] | None = None,
+        target: ModuleType | None = None,
+    ) -> importlib.machinery.ModuleSpec | None:
+        if "." in fullname:
+            return None
+        spec = importlib.machinery.PathFinder.find_spec(
+            fullname, list(self.folders), target
+        )
+        if spec is None:
+            return None
+        self.claimed.add(fullname)
+        return spec
+
+
+@contextmanager
+def _sibling_imports(folders: Sequence[str]) -> Iterator[None]:
+    """Activate sibling-fallback resolution while a user file executes,
+    then restore ``sys.meta_path`` and drop every name the finder
+    resolved from ``sys.modules`` so nothing outlives the register call
+    (no cross-function leakage into a shared CLI process, where a later
+    function may have a same-named sibling with different contents)."""
+    finder = _SiblingFinder(folders)
+    prefixes = tuple(os.path.abspath(folder) + os.sep for folder in finder.folders)
+    sys.meta_path.append(finder)
+    try:
+        yield
+    finally:
+        try:
+            sys.meta_path.remove(finder)
+        except ValueError:
+            pass
+        for bare in finder.claimed:
+            module = sys.modules.get(bare)
+            spec = getattr(module, "__spec__", None)
+            locations = [
+                os.path.abspath(location)
+                for location in (
+                    ([spec.origin] if spec and spec.origin else [])
+                    + list(getattr(spec, "submodule_search_locations", None) or [])
+                )
+            ]
+            if locations and all(
+                location.startswith(prefixes) for location in locations
+            ):
+                sys.modules.pop(bare, None)
+
+
+def _bundle_relative_dotted_name(file_path: str, bundle_root: str) -> str:
+    """Dotted module path of ``file_path`` relative to ``bundle_root``.
+
+    ``<root>/a/b/c/d.py`` under ``<root>`` -> ``"a.b.c.d"``; a file
+    directly at the root -> its bare leaf. This is the name the module
+    will be importable under at runtime, where the runner puts the
+    bundle's ``user_code/`` (a verbatim copy of the tree rooted at
+    ``bundle_root``) on ``sys.path`` -- so the recorded ``func`` /
+    class ref must match the on-disk nesting. Falls back to the bare
+    leaf if the file is not under ``bundle_root``.
+    """
+    leaf = os.path.splitext(os.path.basename(file_path))[0]
+    try:
+        relative = os.path.relpath(file_path, bundle_root)
+    except ValueError:
+        return leaf
+    if relative.startswith(os.pardir + os.sep) or relative == os.pardir:
+        return leaf
+    parts = os.path.splitext(relative)[0].split(os.sep)
+    return ".".join(parts)
+
+
+def _dynamic_import_function_from_path(
+    path: str, bundle_root: str | None = None
+) -> Any:  # noqa: C901
     """Import the symbol named by ``path`` (``"/path/to/file.py::name"``).
 
     Loads the user's file as a submodule of a synthetic package whose
-    ``__path__`` points at the file's directory. The synthetic package
-    name is derived from a sha1 of the directory, so:
+    ``__path__`` chain mirrors the file's nesting under ``bundle_root``
+    (the folder that becomes the bundle's ``user_code/``). The synthetic
+    root package name is derived from a sha1 of ``bundle_root``, so:
 
     * a user file named after an installed package
       (``databricks.py``, ``snowflake.py``, ...) does NOT shadow the
       installed package -- ``sys.modules["databricks"]`` is left alone.
-    * two user files with the same basename loaded from different
-      directories don't collide.
-    * relative imports (``from . import helpers``) work because the
-      synthetic package's ``__path__`` lists the file's directory.
+    * two user files with the same relative path loaded from different
+      roots don't collide.
+    * relative imports (``from . import helpers``, ``from ..cousin
+      import X``) work at every nesting level because the synthetic
+      package chain reproduces the on-disk package structure -- exactly
+      what the runtime runner reconstructs from ``user_code/`` (PEP 420
+      namespace packages, no ``__init__.py`` required).
+    * absolute imports of siblings (``import helpers`` /
+      ``from helpers import X``) work when the sibling name does not
+      collide with an installed package: a ``_SiblingFinder`` appended to
+      ``sys.meta_path`` resolves the bare name to the sibling file INSIDE
+      the synthetic package (installed-first, so no shadowing). A sibling
+      whose name collides with an installed package stays reachable via
+      the relative form only.
 
-    Absolute imports of siblings (``from helpers import X`` in a user
-    file) do NOT work, because we deliberately do not mutate
-    ``sys.path``. Users must use relative imports for sibling files.
+    The stamped ``__module__`` (used to serialise ``func`` / user
+    classes into ``function_def.json``) is the file's dotted path
+    relative to ``bundle_root`` (e.g. ``a.b.c.d``), so the runner can
+    re-import it from ``user_code/a/b/c/d.py``. ``sys.path`` is never
+    mutated; sibling resolution runs entirely through the synthetic
+    package.
+
+    Not reentrant: it mutates process-global ``sys.modules`` /
+    ``sys.meta_path`` for the duration of the import and tears the
+    entries down before returning. Sequential calls in one process are
+    safe (each fully cleans up first); concurrent calls in the same
+    interpreter would race and must be serialised by the caller.
     """
     file_path, function_name = _split_python_function_path(path)
     file_path = os.path.abspath(file_path)
@@ -623,23 +746,43 @@ def _dynamic_import_function_from_path(path: str) -> Any:  # noqa: C901
         raise FileNotFoundError(f"File not found: {file_path}")
 
     folder_path = os.path.dirname(file_path)
-    folder_name = os.path.splitext(os.path.basename(file_path))[0]
+    if bundle_root is None:
+        bundle_root = folder_path
+    bundle_root = os.path.abspath(bundle_root)
+    user_module_name = _bundle_relative_dotted_name(file_path, bundle_root)
 
-    folder_digest = hashlib.sha1(folder_path.encode("utf-8")).hexdigest()[:12]
-    package_name = f"td_usr_pkg_{folder_digest}"
-    if package_name not in sys.modules:
-        package_spec = importlib.machinery.ModuleSpec(
-            package_name, loader=None, is_package=True
+    root_digest = hashlib.sha1(bundle_root.encode("utf-8")).hexdigest()[:12]
+    root_package = f"td_usr_pkg_{root_digest}"
+    module_name = f"{root_package}.{user_module_name}"
+
+    # Materialise the synthetic package chain root -> ... -> parent of the
+    # entry module, each ``__path__`` pointing at the matching on-disk
+    # folder, so relative imports at every level resolve on-disk. Every
+    # entry we add is removed in the ``finally`` so back-to-back
+    # registrations in one CLI process don't see each other's stale tree.
+    synthetic_names: list[str] = []
+    relative_parts = user_module_name.split(".")
+    accumulated = root_package
+    current_folder = bundle_root
+    for part in relative_parts[:-1]:
+        current_folder = os.path.join(current_folder, part)
+        accumulated = f"{accumulated}.{part}"
+        if accumulated not in sys.modules:
+            pkg_spec = importlib.machinery.ModuleSpec(
+                accumulated, loader=None, is_package=True
+            )
+            pkg_spec.submodule_search_locations = [current_folder]
+            sys.modules[accumulated] = importlib.util.module_from_spec(pkg_spec)
+            synthetic_names.append(accumulated)
+    if root_package not in sys.modules:
+        root_spec = importlib.machinery.ModuleSpec(
+            root_package, loader=None, is_package=True
         )
-        package_spec.submodule_search_locations = [folder_path]
-        sys.modules[package_name] = importlib.util.module_from_spec(package_spec)
+        root_spec.submodule_search_locations = [bundle_root]
+        sys.modules[root_package] = importlib.util.module_from_spec(root_spec)
+        synthetic_names.append(root_package)
 
-    module_name = f"{package_name}.{folder_name}"
-    module_spec = importlib.util.spec_from_file_location(
-        module_name,
-        file_path,
-        submodule_search_locations=[folder_path],
-    )
+    module_spec = importlib.util.spec_from_file_location(module_name, file_path)
     if module_spec is None or module_spec.loader is None:
         raise ImportError(
             f"Failed to load module spec from {file_path}. "
@@ -652,53 +795,48 @@ def _dynamic_import_function_from_path(path: str) -> Any:  # noqa: C901
             "The file may not be a valid Python module."
         )
     sys.modules[module_name] = module
+    synthetic_names.append(module_name)
     try:
-        module_spec.loader.exec_module(module)
-    except BaseException as e:
-        # Don't leave a half-initialized module behind to poison later imports.
-        sys.modules.pop(module_name, None)
-        raise ImportError(f"Failed to execute module {file_path}: {str(e)}")
-    try:
-        symbol = getattr(module, function_name)
-    except AttributeError:
-        raise AttributeError(
-            f"Function '{function_name}' not found in module {file_path}."
-        )
+        try:
+            with _sibling_imports([folder_path, bundle_root]):
+                module_spec.loader.exec_module(module)
+        except BaseException as e:
+            raise ImportError(f"Failed to execute module {file_path}: {str(e)}")
 
-    # Rewrite the underlying callable's ``__module__`` from the synthetic
-    # ``td_usr_pkg_<sha>.<file>`` package back to the bare ``<file>`` leaf
-    # name. The synthetic prefix is a CLI-process-local trick to avoid
-    # shadowing installed packages (see docstring above); it must NOT leak
-    # into the bundled ``function_def.json``, which is what
-    # ``info.to_json`` serialises via ``callable_to_str`` (uses
-    # ``func.__module__``). At runtime the runner extracts the bundle
-    # under ``user_code/`` and puts that dir on ``sys.path``, so the
-    # stored callable ref needs to be ``<file>:<func>`` -- importable
-    # from ``user_code/<file>.py`` -- not ``td_usr_pkg_<sha>.<file>``,
-    # which only exists in the CLI's process at register time.
-    underlying = getattr(symbol, "func", None)
-    if underlying is not None and hasattr(underlying, "__module__"):
-        underlying.__module__ = folder_name
-    elif hasattr(symbol, "__module__"):
-        symbol.__module__ = folder_name
+        try:
+            symbol = getattr(module, function_name)
+        except AttributeError:
+            raise AttributeError(
+                f"Function '{function_name}' not found in module {file_path}."
+            )
 
-    # Same rewrite for every top-level class the user file defines.
-    # ``info.to_json`` serialises ``conn`` / ``source`` / etc. via
-    # ``qualified_class(type(obj))`` (= ``f"{cls.__module__}:{cls.__qualname__}"``),
-    # so a user-defined ``Conn`` / ``Src`` subclass inline in the user
-    # file would otherwise be stamped as
-    # ``td_usr_pkg_<sha>.<file>:RandomStreamSrcConn`` and the runner's
-    # ``_load_function_def`` would fail to import the synthetic
-    # package. Rewriting ``cls.__module__`` to the bare ``<file>``
-    # leaf lets the runner resolve those classes from
-    # ``user_code/<file>.py`` the same way it resolves ``func``.
-    for value in vars(module).values():
-        if (
-            isinstance(value, type)
-            and getattr(value, "__module__", None) == module_name
-        ):
-            value.__module__ = folder_name
-    return symbol
+        # Strip the synthetic ``td_usr_pkg_<sha>.`` prefix off every
+        # stamped ``__module__`` so ``info.to_json`` serialises ``func``
+        # (via ``callable_to_str``) and user-defined classes (via
+        # ``qualified_class``) under the bundle-relative name --
+        # importable from ``user_code/`` at runtime, not the
+        # CLI-process-local synthetic package. This covers the entry
+        # module itself and any sibling module a serialised ``func`` /
+        # ``Conn`` / ``Src`` was imported from, at any nesting depth.
+        prefix = f"{root_package}."
+
+        def unprefix(name: str | None) -> str | None:
+            if name and name.startswith(prefix):
+                return name[len(prefix) :]
+            return name
+
+        underlying = getattr(symbol, "func", None)
+        rewrite_target = underlying if underlying is not None else symbol
+        if hasattr(rewrite_target, "__module__"):
+            rewrite_target.__module__ = unprefix(rewrite_target.__module__)
+
+        for value in vars(module).values():
+            if isinstance(value, type):
+                value.__module__ = unprefix(value.__module__)
+        return symbol
+    finally:
+        for name in synthetic_names:
+            sys.modules.pop(name, None)
 
 
 def load_info_and_project_root(
@@ -715,5 +853,5 @@ def load_info_and_project_root(
     """
     file_path = path.split("::", 1)[0]
     project_root = dir_to_bundle or os.path.dirname(os.path.abspath(file_path))
-    info = _dynamic_import_function_from_path(path)
+    info = _dynamic_import_function_from_path(path, bundle_root=project_root)
     return info, project_root
