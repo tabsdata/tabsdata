@@ -348,7 +348,7 @@ def test_create_archive_calls_build_bundle_and_returns_path(
 ):
     info = _publisher_info()
     with tempfile.TemporaryDirectory() as tmp:
-        archive = ts._create_archive(info, project_root, tmp)
+        archive = ts._create_archive("coll", info, project_root, tmp)
         assert Path(archive.context_location).exists()
         # The bundle was written under the supplied tmp dir.
         assert Path(archive.context_location).parent == Path(tmp)
@@ -364,7 +364,7 @@ def test_create_archive_publisher_cron_extracts_metadata(project_root, _no_op_bu
         trigger_by=CronTrigger(mask="*/5 * * * *"),
     )
     with tempfile.TemporaryDirectory() as tmp:
-        archive = ts._create_archive(info, project_root, tmp)
+        archive = ts._create_archive("coll", info, project_root, tmp)
 
     assert archive.function_name == "pub_fn"
     assert archive.function_type == "P"
@@ -386,7 +386,7 @@ def test_create_archive_transformer_tables_trigger(project_root, _no_op_bundle):
         trigger_by=TablesTrigger(tables=["coll/trig"]),
     )
     with tempfile.TemporaryDirectory() as tmp:
-        archive = ts._create_archive(info, project_root, tmp)
+        archive = ts._create_archive("coll", info, project_root, tmp)
     assert archive.function_type == "T"
     assert archive.string_dependencies == ["coll/a", "coll/b"]
     assert archive.tables == ["out"]
@@ -399,7 +399,7 @@ def test_create_archive_transformer_tables_trigger(project_root, _no_op_bundle):
 def test_create_archive_subscriber_no_outputs(project_root, _no_op_bundle):
     info = _subscriber_info(input_tables=["coll/x", "coll/y"])
     with tempfile.TemporaryDirectory() as tmp:
-        archive = ts._create_archive(info, project_root, tmp)
+        archive = ts._create_archive("coll", info, project_root, tmp)
     assert archive.function_type == "S"
     assert archive.tables == []
     assert archive.string_dependencies == ["coll/x", "coll/y"]
@@ -414,7 +414,7 @@ def test_create_archive_accepts_temporary_directory_object(project_root, _no_op_
     info = _publisher_info()
     td = tempfile.TemporaryDirectory()
     try:
-        archive = ts._create_archive(info, project_root, td)
+        archive = ts._create_archive("coll", info, project_root, td)
         assert Path(archive.context_location).exists()
     finally:
         td.cleanup()
@@ -426,6 +426,7 @@ def test_create_archive_forwards_local_packages_and_python_versions(
     info = _publisher_info()
     with tempfile.TemporaryDirectory() as tmp:
         ts._create_archive(
+            "coll",
             info,
             project_root,
             tmp,
@@ -449,6 +450,7 @@ def test_create_archive_forwards_requirements_to_build_bundle(
     info = _publisher_info()
     with tempfile.TemporaryDirectory() as tmp:
         ts._create_archive(
+            "coll",
             info,
             project_root,
             tmp,
@@ -463,7 +465,7 @@ def test_create_archive_passes_none_requirements_yaml_when_not_set(
 ):
     info = _publisher_info()
     with tempfile.TemporaryDirectory() as tmp:
-        ts._create_archive(info, project_root, tmp)
+        ts._create_archive("coll", info, project_root, tmp)
     assert _no_op_bundle["kw"]["requirements_yaml"] is None
 
 
