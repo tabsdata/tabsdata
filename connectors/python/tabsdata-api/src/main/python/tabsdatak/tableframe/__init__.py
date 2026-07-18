@@ -25,14 +25,14 @@ class TableFrame(EngineFrame):
     def width(self):
         return wrap(self._lf.width)
 
-    def __getitem__(self, *args, **kwargs):
-        u_args = unwrap(args)
-        u_kwargs = unwrap(kwargs)
+    def __getitem__(self, item):
+        u_item = unwrap(item)
+        if isinstance(u_item, str):
+            return self.select(u_item)
+        if isinstance(u_item, list) and all(isinstance(name, str) for name in u_item):
+            return self.select(*u_item)
         return compute(
-            "__getitem__",
-            (self,),
-            {},
-            call=lambda lf: lf.__getitem__(*u_args, **u_kwargs),
+            "__getitem__", (self,), {}, call=lambda lf: lf.__getitem__(u_item)
         )
 
     def explain(self, *args, **kwargs):
@@ -51,6 +51,7 @@ class TableFrame(EngineFrame):
     def sort(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        u_kwargs.setdefault("multithreaded", False)
         return compute(
             "sort", (self,), {}, call=lambda lf: lf.sort(*u_args, **u_kwargs)
         )
@@ -123,6 +124,9 @@ class TableFrame(EngineFrame):
                 left_on=u_left_on,
                 right_on=u_right_on,
                 suffix=suffix,
+                validate="m:m",
+                allow_parallel=True,
+                force_parallel=False,
             ),
         )
 
@@ -148,6 +152,8 @@ class TableFrame(EngineFrame):
 
     def rename(self, mapping, *args, **kwargs):
         u_mapping = unwrap(mapping)
+        if callable(u_mapping):
+            u_mapping = {name: u_mapping(name) for name in self._user_columns()}
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
         return compute(
@@ -213,11 +219,13 @@ class TableFrame(EngineFrame):
             "fill_nan", (self,), {}, call=lambda lf: lf.fill_nan(*u_args, **u_kwargs)
         )
 
-    def unique(self, *args, **kwargs):
-        u_args = unwrap(args)
+    def unique(self, subset=None, **kwargs):
+        u_subset = unwrap(subset)
+        if u_subset is None:
+            u_subset = self._user_columns()
         u_kwargs = unwrap(kwargs)
         return compute(
-            "unique", (self,), {}, call=lambda lf: lf.unique(*u_args, **u_kwargs)
+            "unique", (self,), {}, call=lambda lf: lf.unique(u_subset, **u_kwargs)
         )
 
     def drop_nans(self, *args, **kwargs):

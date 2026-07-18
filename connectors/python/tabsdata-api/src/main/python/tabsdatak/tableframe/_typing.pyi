@@ -64,7 +64,6 @@ NumericLiteral: TypeAlias = int | float | Decimal
 PlanStage: TypeAlias = Literal["ir", "physical"]
 PolarsDataType: TypeAlias = DataType
 PolarsIntegerType: TypeAlias = type[Any]
-PolarsType: TypeAlias = Any
 PythonDataType: TypeAlias = (
     type[int]
     | type[float]

@@ -4,23 +4,9 @@
 from __future__ import annotations
 
 from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Collection,
-    ContextManager,
     Iterable,
-    Iterator,
-    Literal,
-    Mapping,
-    MutableMapping,
-    Optional,
-    Sequence,
-    Union,
 )
-from datetime import date, datetime, time, timedelta
-from decimal import Decimal
-from pathlib import Path
+
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._typing import IntoExpr
 

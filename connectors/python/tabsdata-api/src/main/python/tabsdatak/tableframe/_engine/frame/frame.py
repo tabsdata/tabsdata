@@ -182,6 +182,17 @@ class EngineFrame(BaseFrame):
         )
         return self._lf.select(keep)
 
+    def _user_columns(self):
+        from tabsdatak.extensions.tableframe._engine.column.registry import registry
+        from tabsdatak.tableframe._engine.taxonomy.column import ColumnKind
+
+        reg = registry()
+        return [
+            name
+            for name in self._lf.collect_schema().names()
+            if reg.kind_of(name) is ColumnKind.USER
+        ]
+
     def _persisted(self):
         from tabsdatak.tableframe._engine.constant.column.prefixes import (
             TD_NAMESPACED_VIRTUAL_SYSTEM_COLUMN_PREFIXES,

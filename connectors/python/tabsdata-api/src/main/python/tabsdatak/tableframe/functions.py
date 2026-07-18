@@ -12,8 +12,27 @@ def col(*args, **kwargs):
     return wrap(pl.col(*unwrap(args), **unwrap(kwargs)))
 
 
-def concat(*args, **kwargs):
-    return wrap(pl.concat(*unwrap(args), **unwrap(kwargs)))
+_CONCAT_METHODS = (
+    "vertical",
+    "vertical_relaxed",
+    "diagonal",
+    "diagonal_relaxed",
+)
+
+
+def concat(items=None, how="vertical"):
+    if items is None:
+        return None
+    if how not in _CONCAT_METHODS:
+        raise ValueError(
+            f"Invalid concatenation method: {how!r}. Expected one of {_CONCAT_METHODS}."
+        )
+    kept = [unwrap(item) for item in items if item is not None]
+    if not kept:
+        return None
+    empties = [pl.DataFrame(schema=lf.collect_schema()) for lf in kept]
+    pl.concat(empties, how=how, rechunk=False, parallel=True)
+    return wrap(pl.concat(kept, how=how, rechunk=False, parallel=True))
 
 
 def lit(*args, **kwargs):

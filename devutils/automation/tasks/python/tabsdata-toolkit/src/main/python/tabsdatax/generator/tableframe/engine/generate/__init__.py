@@ -121,6 +121,26 @@ class GenResult:
     tests: list[str] = field(default_factory=list)
 
 
+def _build_type_registry(
+    whitelisted: list, datatypes: list[str], module: str
+) -> tuple[set[str], dict[str, str]]:
+    """Map every name kept verbatim in .pyi annotations to the module it is
+    imported from: wrapper classes, TableFrame, the datatype aliases, and the
+    public table specs used by hand-typed stubs (see _SIGNATURE_OVERRIDES)."""
+    class_module: dict[str, str] = {}
+    for symbol in whitelisted:
+        if symbol.target_class is not None:
+            class_module[symbol.target_class] = symbol.target_module
+    our_types = set(class_module) | {"TableFrame"} | set(datatypes)
+    class_module["TableFrame"] = module
+    for datatype in datatypes:
+        class_module[datatype] = f"{module}.datatypes"
+    for spec in _API_SPEC_TYPES:
+        our_types.add(spec)
+        class_module[spec] = _API_MODULE
+    return our_types, class_module
+
+
 def perform(
     report: Report, module: str, main_root: str, test_root: str | None = None
 ) -> GenResult:
@@ -159,15 +179,7 @@ def perform(
     # No polars/numpy type names leak into the .pyi stubs: rewrite annotations and
     # redefine the polars type aliases we use into <root>._typing. The datatype
     # names are ours too (aliased in datatypes.py), so keep + import them from there.
-    class_module: dict[str, str] = {}
-    for symbol in whitelisted:
-        target_class = symbol.target_class
-        if target_class is not None:
-            class_module[target_class] = symbol.target_module
-    our_types = set(class_module) | {"TableFrame"} | set(datatypes)
-    class_module["TableFrame"] = module
-    for datatype in datatypes:
-        class_module[datatype] = f"{module}.datatypes"
+    our_types, class_module = _build_type_registry(whitelisted, datatypes, module)
     annotation_rewriter = AnnotationRewriter(our_types, class_module, module)
     all_aliases: set[str] = set()
 
@@ -678,12 +690,67 @@ def _render_functions_py(symbols: list[Symbol], root: str) -> str:
     ]
     for symbol in symbols:
         name = _member(symbol)
+        if name == "concat":
+            lines += _concat_function_lines()
+            continue
         lines += [
             "",
             f"def {name}(*args, **kwargs):",
             f"    return wrap(pl.{name}(*unwrap(args), **unwrap(kwargs)))",
         ]
     return "\n".join(lines) + "\n"
+
+
+_CONCAT_METHODS = (
+    "vertical",
+    "vertical_relaxed",
+    "diagonal",
+    "diagonal_relaxed",
+)
+
+# Public table specs used in hand-typed stubs (kept verbatim by the annotation
+# rewriter and imported from tabsdatak.api).
+_API_MODULE = "tabsdatak.api"
+_API_SPEC_TYPES = ("TableFrameSpec", "TableFramesSpec")
+
+# .pyi signature overrides keyed by symbol id, for stubs whose public type is
+# ours rather than the polars signature the manifest records. concat takes the
+# TableFrame None/empty contract, so it is typed with our table specs.
+_SIGNATURE_OVERRIDES = {
+    "functions.concat": (
+        "(items: TableFramesSpec, *, how: ConcatMethod = 'vertical') -> TableFrameSpec"
+    ),
+}
+
+
+def _concat_function_lines() -> list[str]:
+    # concat follows the TableFrame None/empty contract, which pl.concat does not:
+    # concat(None) and concat of an all-None/empty iterable return None, None
+    # entries within the iterable are skipped, and `how` is validated up front. A
+    # throwaway concat of empty frames first surfaces schema mismatches clearly.
+    methods = ", ".join(repr(method) for method in _CONCAT_METHODS)
+    return [
+        "",
+        f"_CONCAT_METHODS = ({methods},)",
+        "",
+        "",
+        'def concat(items=None, how="vertical"):',
+        "    if items is None:",
+        "        return None",
+        "    if how not in _CONCAT_METHODS:",
+        "        raise ValueError(",
+        '            f"Invalid concatenation method: {how!r}. "',
+        '            f"Expected one of {_CONCAT_METHODS}."',
+        "        )",
+        "    kept = [unwrap(item) for item in items if item is not None]",
+        "    if not kept:",
+        "        return None",
+        "    empties = [",
+        "        pl.DataFrame(schema=lf.collect_schema()) for lf in kept",
+        "    ]",
+        "    pl.concat(empties, how=how, rechunk=False, parallel=True)",
+        "    return wrap(pl.concat(kept, how=how, rechunk=False, parallel=True))",
+    ]
 
 
 def _render_value_class_py(symbols: list[Symbol], root: str) -> str:
@@ -785,15 +852,56 @@ def _render_tableframe_py(
     return "\n".join(lines) + "\n"
 
 
+# Group-by reductions that reduce column VALUES: they must run over user columns
+# only, excluding system columns (a string $td.* would break a numeric reducer,
+# and $td.id is per-row so it corrupts the grouping). len/count are excluded --
+# they count rows, not values.
+_GROUPBY_REDUCTIONS = frozenset(
+    {"sum", "min", "max", "mean", "median", "first", "last", "n_unique", "quantile"}
+)
+
+
+def _groupby_reduction_body(name: str) -> list[str]:
+    return [
+        f"    def {name}(self, *args, **kwargs):",
+        "        u_args = unwrap(args)",
+        "        u_kwargs = unwrap(kwargs)",
+        "        excluded = _system_columns(self._parent)",
+        f'        return compute("{name}", (self._parent,), {{}},',
+        "            call=lambda *_: self._lgb.agg("
+        f"pl.all().exclude(excluded).{name}(*u_args, **u_kwargs)))",
+        "",
+    ]
+
+
+def _system_columns_helper(root: str) -> list[str]:
+    return [
+        "def _system_columns(frame):",
+        "    from tabsdatak.extensions.tableframe._engine.column.registry import (",
+        "        registry,",
+        "    )",
+        f"    from {root}._engine.taxonomy.column import ColumnKind",
+        "",
+        "    names = frame._lf.collect_schema().names()",
+        "    reg = registry()",
+        "    return [n for n in names if reg.kind_of(n) is not ColumnKind.USER]",
+        "",
+        "",
+    ]
+
+
 def _render_lazygroupby_py(symbols: list[Symbol], root: str) -> str:
     lines = [
         _py_header(),
         "from __future__ import annotations",
         "",
+        "import polars as pl",
+        "",
         f"from {root}._core.hooks import compute",
         f"from {root}._core.translate import unwrap, wrap",
         "",
         "",
+        *_system_columns_helper(root),
         "class LazyGroupBy:",
         "    # agg-family ops carry lineage / provenance via after / state hooks",
         "    # over the parent; the grouper already captured the plan, so a before",
@@ -808,6 +916,8 @@ def _render_lazygroupby_py(symbols: list[Symbol], root: str) -> str:
         name = _member(symbol)
         if symbol.hook_name == "agg":
             lines += _agg_body()
+        elif name in _GROUPBY_REDUCTIONS:
+            lines += _groupby_reduction_body(name)
         elif _body_kind(symbol) == "compute":
             # An aggregation over the group (len/count/max/...) terminates into a
             # frame; route it through compute over the parent, like agg.
@@ -890,6 +1000,16 @@ _HOOKED_BODIES = {
     "rename": lambda name, root: _rename_body(),
 }
 
+# Frame methods with a custom generated body (keyed by member name, not
+# hook_name, so they need no manifest hook; each still routes through compute()).
+# sort forces a perf default (signature preserved); unique / __getitem__ are
+# system-column-aware so their user-visible result matches polars.
+_CUSTOM_BODIES = {
+    "sort": lambda name, root: _sort_body(),
+    "unique": lambda name, root: _unique_body(),
+    "__getitem__": lambda name, root: _getitem_body(),
+}
+
 
 def _tableframe_member(symbol: Symbol, root: str) -> list[str]:
     name = _member(symbol)
@@ -903,6 +1023,9 @@ def _tableframe_member(symbol: Symbol, root: str) -> list[str]:
     hooked = _HOOKED_BODIES.get(symbol.hook_name)
     if hooked is not None:
         return hooked(name, root)
+    custom = _CUSTOM_BODIES.get(name)
+    if custom is not None:
+        return custom(name, root)
     return _classified_body(_body_kind(symbol), name, root)
 
 
@@ -951,6 +1074,8 @@ def _project_body(name: str) -> list[str]:
 
 
 def _join_body() -> list[str]:
+    # Forced kwargs (validate/allow_parallel/force_parallel) match the legacy
+    # TableFrame join contract; they are not user-tunable.
     return [
         '    def join(self, other, on=None, how="inner", *, '
         'left_on=None, right_on=None, suffix="_right"):',
@@ -961,7 +1086,8 @@ def _join_body() -> list[str]:
         '{"on": u_on, "how": how, "left_on": u_left_on, '
         '"right_on": u_right_on, "suffix": suffix},',
         "            call=lambda left, right: left.join(right, on=u_on, how=how, "
-        "left_on=u_left_on, right_on=u_right_on, suffix=suffix))",
+        "left_on=u_left_on, right_on=u_right_on, suffix=suffix, "
+        'validate="m:m", allow_parallel=True, force_parallel=False))',
         "",
     ]
 
@@ -990,13 +1116,65 @@ def _drop_body() -> list[str]:
 
 
 def _rename_body() -> list[str]:
+    # A callable mapping applies to USER columns only, so system columns are never
+    # renamed; it is expanded to a dict before the op (which also lets the
+    # system-column guard see the concrete targets).
     return [
         "    def rename(self, mapping, *args, **kwargs):",
         "        u_mapping = unwrap(mapping)",
+        "        if callable(u_mapping):",
+        "            u_mapping = {name: u_mapping(name) "
+        "for name in self._user_columns()}",
         "        u_args = unwrap(args)",
         "        u_kwargs = unwrap(kwargs)",
         '        return compute("rename", (self,), {"mapping": u_mapping},',
         "            call=lambda lf: lf.rename(u_mapping, *u_args, **u_kwargs))",
+        "",
+    ]
+
+
+def _sort_body() -> list[str]:
+    # multithreaded defaults to False for deterministic ordering, but the polars
+    # signature is preserved: a caller may override it.
+    return [
+        "    def sort(self, *args, **kwargs):",
+        "        u_args = unwrap(args)",
+        "        u_kwargs = unwrap(kwargs)",
+        '        u_kwargs.setdefault("multithreaded", False)',
+        '        return compute("sort", (self,), {},',
+        "            call=lambda lf: lf.sort(*u_args, **u_kwargs))",
+        "",
+    ]
+
+
+def _unique_body() -> list[str]:
+    # With no subset, dedup over USER columns only: system columns ($td.id is
+    # per-row unique) would otherwise defeat the dedup entirely.
+    return [
+        "    def unique(self, subset=None, **kwargs):",
+        "        u_subset = unwrap(subset)",
+        "        if u_subset is None:",
+        "            u_subset = self._user_columns()",
+        "        u_kwargs = unwrap(kwargs)",
+        '        return compute("unique", (self,), {},',
+        "            call=lambda lf: lf.unique(u_subset, **u_kwargs))",
+        "",
+    ]
+
+
+def _getitem_body() -> list[str]:
+    # A list/str of column names selects columns (routed through select(), which
+    # reassembles system columns); int/range/slice is row indexing.
+    return [
+        "    def __getitem__(self, item):",
+        "        u_item = unwrap(item)",
+        "        if isinstance(u_item, str):",
+        "            return self.select(u_item)",
+        "        if isinstance(u_item, list) and all("
+        "isinstance(name, str) for name in u_item):",
+        "            return self.select(*u_item)",
+        "        return compute("
+        '"__getitem__", (self,), {}, call=lambda lf: lf.__getitem__(u_item))',
         "",
     ]
 
@@ -1096,8 +1274,9 @@ def _pyi_entry(
     class_name: str | None,
 ) -> tuple[list[str], set[str], set[str]]:
     name = _member(symbol)
+    source_signature = _SIGNATURE_OVERRIDES.get(symbol.id, symbol.signature)
     signature, used_our, used_aliases = annotation_rewriter.rewrite_signature(
-        symbol.signature
+        source_signature
     )
     lines = _pyi_def(
         name,

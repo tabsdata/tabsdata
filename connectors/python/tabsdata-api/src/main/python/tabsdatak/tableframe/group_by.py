@@ -3,8 +3,21 @@
 
 from __future__ import annotations
 
+import polars as pl
+
 from tabsdatak.tableframe._core.hooks import compute
 from tabsdatak.tableframe._core.translate import unwrap
+
+
+def _system_columns(frame):
+    from tabsdatak.extensions.tableframe._engine.column.registry import (
+        registry,
+    )
+    from tabsdatak.tableframe._engine.taxonomy.column import ColumnKind
+
+    names = frame._lf.collect_schema().names()
+    reg = registry()
+    return [n for n in names if reg.kind_of(n) is not ColumnKind.USER]
 
 
 class LazyGroupBy:
@@ -50,59 +63,77 @@ class LazyGroupBy:
     def max(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        excluded = _system_columns(self._parent)
         return compute(
             "max",
             (self._parent,),
             {},
-            call=lambda *_: self._lgb.max(*u_args, **u_kwargs),
+            call=lambda *_: self._lgb.agg(
+                pl.all().exclude(excluded).max(*u_args, **u_kwargs)
+            ),
         )
 
     def mean(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        excluded = _system_columns(self._parent)
         return compute(
             "mean",
             (self._parent,),
             {},
-            call=lambda *_: self._lgb.mean(*u_args, **u_kwargs),
+            call=lambda *_: self._lgb.agg(
+                pl.all().exclude(excluded).mean(*u_args, **u_kwargs)
+            ),
         )
 
     def median(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        excluded = _system_columns(self._parent)
         return compute(
             "median",
             (self._parent,),
             {},
-            call=lambda *_: self._lgb.median(*u_args, **u_kwargs),
+            call=lambda *_: self._lgb.agg(
+                pl.all().exclude(excluded).median(*u_args, **u_kwargs)
+            ),
         )
 
     def min(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        excluded = _system_columns(self._parent)
         return compute(
             "min",
             (self._parent,),
             {},
-            call=lambda *_: self._lgb.min(*u_args, **u_kwargs),
+            call=lambda *_: self._lgb.agg(
+                pl.all().exclude(excluded).min(*u_args, **u_kwargs)
+            ),
         )
 
     def n_unique(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        excluded = _system_columns(self._parent)
         return compute(
             "n_unique",
             (self._parent,),
             {},
-            call=lambda *_: self._lgb.n_unique(*u_args, **u_kwargs),
+            call=lambda *_: self._lgb.agg(
+                pl.all().exclude(excluded).n_unique(*u_args, **u_kwargs)
+            ),
         )
 
     def sum(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
+        excluded = _system_columns(self._parent)
         return compute(
             "sum",
             (self._parent,),
             {},
-            call=lambda *_: self._lgb.sum(*u_args, **u_kwargs),
+            call=lambda *_: self._lgb.agg(
+                pl.all().exclude(excluded).sum(*u_args, **u_kwargs)
+            ),
         )
