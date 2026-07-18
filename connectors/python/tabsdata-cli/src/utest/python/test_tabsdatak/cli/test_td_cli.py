@@ -87,7 +87,7 @@ def test_subcommand_help_loads_without_error(subcommand):
 
 
 # ---------------------------------------------------------------------------
-# `td fn register` v2 surface (--path / --dir-to-bundle / --local-pkg /
+# `tdk fn register` v2 surface (--path / --dir-to-bundle / --local-pkg /
 # --requirements / --update)
 # ---------------------------------------------------------------------------
 
@@ -127,7 +127,7 @@ def test_pin_group_exposes_expected_subcommands():
 
 
 def test_project_group_has_crud_only():
-    # pin/unpin/pinned moved to the unified `td pin` group.
+    # pin/unpin/pinned moved to the unified `tdk pin` group.
     project = cli.commands.get("project")
     assert project is not None
     assert sorted(project.commands) == [
@@ -155,9 +155,9 @@ def test_project_scoped_command_exposes_proj():
 
 
 class TestPinSurface:
-    """`td pin set/unset/show` over the persisted pinned-objects store. A
+    """`tdk pin set/unset/show` over the persisted pinned-objects store. A
     collection pin requires a pinned project; unpinning or switching the
-    project clears the collection. ``td pin unset`` (or ``--proj``) clears
+    project clears the collection. ``tdk pin unset`` (or ``--proj``) clears
     both; ``--coll`` clears only the collection."""
 
     def _runner(self, tmp_path):

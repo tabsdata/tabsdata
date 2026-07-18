@@ -94,7 +94,7 @@ def test_td_resource_raises_filenotfound_for_missing_resource():
 
 
 # ---------------------------------------------------------------------------
-# load_info_and_project_root: thin wrapper used by td fn register/update/patch
+# load_info_and_project_root: thin wrapper used by tdk fn register/update/patch
 # ---------------------------------------------------------------------------
 
 

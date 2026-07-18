@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! List everyone with authority on a project (`td permission list
+//! List everyone with authority on a project (`tdk permission list
 //! --project P`), with a source label:
 //!
 //! - `source = project (<rolename>)` — members of `<P>_admin|_dev|_view`;

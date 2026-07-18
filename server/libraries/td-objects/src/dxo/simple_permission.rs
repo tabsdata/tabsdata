@@ -40,7 +40,7 @@ mod definitions {
     }
 
     /// One row of a user's effective flat permission set
-    /// (`td permission list --user X`). `project` is set for project-scoped
+    /// (`tdk permission list --user X`). `project` is set for project-scoped
     /// permissions, `None` for system-scoped ones.
     #[ta_objects::Dto]
     #[derive(Eq, PartialEq, Hash)]
@@ -49,7 +49,7 @@ mod definitions {
         pub project: Option<ProjectName>,
     }
 
-    /// One row of "who has access to a project" (`td permission list
+    /// One row of "who has access to a project" (`tdk permission list
     /// --project P`), with the source that conferred it: `project (<rolename>)` for per-project role
     /// memberships, `system (manage_system)` for system admins.
     #[ta_objects::Dto]

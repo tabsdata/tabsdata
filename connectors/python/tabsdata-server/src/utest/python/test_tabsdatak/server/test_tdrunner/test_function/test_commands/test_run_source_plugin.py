@@ -697,7 +697,7 @@ def test_write_inputs_manifest_negative_cardinality_pads_to_param_count(
     """``cardinality=-1`` (dynamic slot count -- e.g. a stream-stage
     manifest source) pads the manifest up to the function-declared
     input-slot count with empty entries when the plugin returned
-    fewer slots. This is what makes a ``td fn trigger`` against a
+    fewer slots. This is what makes a ``tdk fn trigger`` against a
     ``@stream_publisher`` work when no manifest has been staged: the
     user function is invoked with ``t=[]`` (one empty slot per
     declared parameter) instead of bailing on the input-count

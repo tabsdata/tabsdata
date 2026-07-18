@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! List a user's effective flat permissions (`td permission list
+//! List a user's effective flat permissions (`tdk permission list
 //! --user X`).
 //!
 //! Joins the user's `user_role` rows with `role_permission` and maps each row

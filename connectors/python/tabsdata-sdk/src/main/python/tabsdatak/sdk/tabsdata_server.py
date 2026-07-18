@@ -2376,7 +2376,7 @@ PERMISSION_TYPES_WITH_ENTITY = [
 
 class SimplePermission:
     """One row of a user's effective flat permission set
-    (`td permission list --user X`).
+    (`tdk permission list --user X`).
 
     `project` is set for project-scoped permissions and ``None`` for
     system-scoped ones.
@@ -2396,7 +2396,7 @@ class SimplePermission:
 
 class SimpleProjectAccess:
     """One row of "who has access to a project"
-    (`td permission list --proj P`).
+    (`tdk permission list --proj P`).
 
     `source` records what conferred the access: ``project (<rolename>)`` for
     per-project role memberships, ``system (manage_system)`` for system admins.

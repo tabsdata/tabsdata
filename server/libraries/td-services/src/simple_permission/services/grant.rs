@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-//! Grant a flat Simple permission to a user (`td permission grant`).
+//! Grant a flat Simple permission to a user (`tdk permission grant`).
 //!
 //! Translation:
 //!
