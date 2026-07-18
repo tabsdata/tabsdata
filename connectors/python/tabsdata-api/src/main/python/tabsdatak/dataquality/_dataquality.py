@@ -8,23 +8,25 @@ of data quality rules on a table. It combines classifiers and operators to perfo
 comprehensive data quality checks and actions.
 """
 
-from typing import Union
+from typing import Annotated, TypeAlias
 
-from typing_extensions import TypeAlias
-
+# noinspection PyProtectedMember
+from tabsdatak import _api
 from tabsdatak.api import OnTablesAction, TableNameSpec
 from tabsdatak.dataquality._classifier import Classifier
 from tabsdatak.dataquality._error import DataQualityErrorCode
 from tabsdatak.dataquality._operator import Operator
-from tabsdatak.dataquality._validation import _normalize_to_list, _td_validate_call
 
-ClassifiersSpec: TypeAlias = Union[Classifier, list[Classifier]]
-"""A type alias for one or more `Classifier` instances."""
+ClassifiersSpec: TypeAlias = Annotated[
+    list[Classifier], _api.NON_EMPTY_LIST_CONSTRAINTS
+]
+"""A non-empty list of `Classifier` instances."""
 
-OperatorsSpec: TypeAlias = Union[Operator, list[Operator]]
-"""A type alias for one or more `Operator` instances."""
+OperatorsSpec: TypeAlias = Annotated[list[Operator], _api.NON_EMPTY_LIST_CONSTRAINTS]
+"""A non-empty list of `Operator` instances."""
 
 
+@_api.dataclass(DataQualityErrorCode.DQC_201)
 class DataQuality(OnTablesAction):
     """
     :categories: dq-action
@@ -34,63 +36,14 @@ class DataQuality(OnTablesAction):
     This class encapsulates a set of data quality rules, defined by classifiers
     and operators, that are applied to a specified table. It serves as a container
     for a complete data quality workflow.
+
+    :param table: The name of the table to which the data quality rules will be
+        applied.
+    :param classifiers: The classifiers to evaluate the data in the table.
+    :param operators: The operators that define the actions to take based on the
+        classifier results.
     """
 
-    @_td_validate_call(DataQualityErrorCode.DQC_201)
-    def __init__(
-        self,
-        table: TableNameSpec,
-        classifiers: ClassifiersSpec,
-        operators: OperatorsSpec,
-    ):
-        """
-        Initializes a `DataQuality` action.
-
-        Args:
-            table: The name of the table to which the data quality rules will be
-                   applied.
-            classifiers: A single classifier or a list of classifiers to evaluate
-                         the data in the table.
-            operators: A single operator or a list of operators that define the
-                       actions to take based on the classifier results.
-        """
-        self.table = table
-        self.classifiers = classifiers
-        self.operators = operators
-
-    @property
-    def table(self) -> TableNameSpec:
-        """
-        Returns the name of the table targeted by this data quality action.
-        """
-        return self._table
-
-    @table.setter
-    @_td_validate_call(DataQualityErrorCode.DQC_202)
-    def table(self, table: TableNameSpec):
-        self._table = table
-
-    @property
-    def classifiers(self) -> list[Classifier]:
-        """
-        Returns the list of classifiers used in this data quality action.
-        """
-        return self._classifiers
-
-    @classifiers.setter
-    @_td_validate_call(DataQualityErrorCode.DQC_203)
-    def classifiers(self, classifiers: ClassifiersSpec):
-        self._classifiers = _normalize_to_list(classifiers)
-
-    @property
-    def operators(self) -> list[Operator]:
-        """
-        Returns the list of operators that will be executed based on the
-        classifier results.
-        """
-        return self._operators
-
-    @operators.setter
-    @_td_validate_call(DataQualityErrorCode.DQC_204)
-    def operators(self, operators: OperatorsSpec):
-        self._operators = _normalize_to_list(operators)
+    table: TableNameSpec
+    classifiers: ClassifiersSpec
+    operators: OperatorsSpec

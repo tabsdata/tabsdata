@@ -20,9 +20,6 @@ class DataQualityProcessingError(DataQualityException): ...
 class ParameterValidationError(DataQualityException): ...
 
 
-class ParameterValueError(DataQualityException): ...
-
-
 class TableURIConfigurationError(DataQualityException): ...
 
 
@@ -30,564 +27,148 @@ class DataQualityErrorCode(ErrorCode):
     # Testing
     DQC_0 = ErrorDef(ParameterValidationError, "{message}")
 
-    # _operator.py
-    DQC_1 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_2 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_3 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_4 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_5 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_6 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_7 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_8 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_9 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_10 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_11 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_12 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_13 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_14 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_15 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_16 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_17 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_18 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_19 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_20 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_21 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_22 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_23 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_24 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_25 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_26 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_27 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_28 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_29 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_30 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_31 = ErrorDef(ParameterValidationError, "{message}")
+    # --- Construction validation (per class). The pydantic ValidationError
+    # --- is chained as the cause and carries the field-level detail.
+    #
+    # Operators, criteria and thresholds (_operator.py)
+    DQC_1 = ErrorDef(
+        ParameterValidationError,
+        "Invalid parameters for a tag-scoped data quality operator.",
+    )
+    DQC_3 = ErrorDef(
+        ParameterValidationError,
+        "Invalid parameters for a boolean data quality criteria.",
+    )
+    DQC_7 = ErrorDef(
+        ParameterValidationError,
+        "Invalid parameters for a category data quality criteria.",
+    )
+    DQC_10 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'AllOk' criteria."
+    )
+    DQC_11 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'AnyFailed' criteria."
+    )
+    DQC_12 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'InBins' criteria."
+    )
+    DQC_13 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'NotInBins' criteria."
+    )
+    DQC_14 = ErrorDef(
+        ParameterValidationError,
+        "Invalid parameters for the 'RowCountThreshold' threshold.",
+    )
+    DQC_16 = ErrorDef(
+        ParameterValidationError,
+        "Invalid parameters for the 'PercentThreshold' threshold.",
+    )
+    DQC_18 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'Enrich' operator."
+    )
+    DQC_20 = ErrorDef(
+        ParameterValidationError,
+        "Invalid parameters for a criteria-based data quality operator.",
+    )
+    DQC_23 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'Fail' operator."
+    )
+    DQC_25 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'Filter' operator."
+    )
+    DQC_28 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'Select' operator."
+    )
+    DQC_31 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'Summary' operator."
+    )
 
-    # _classifier.py
+    # Scales and classifiers (_classifier.py)
     DQC_101 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_102 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_103 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_104 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_105 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_106 = ErrorDef(ParameterValidationError, "{message}")
+    DQC_106 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IdentityScale'."
+    )
     DQC_107 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_108 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_109 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_110 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_111 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_112 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_113 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_114 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_115 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_116 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_117 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_118 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_119 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_120 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_121 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_122 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_123 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_124 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_125 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_126 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_127 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_128 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_129 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_130 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_131 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_132 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_133 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_134 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_135 = ErrorDef(ParameterValidationError, "{message}")
+    DQC_110 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'LinearScale'."
+    )
+    DQC_111 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'MonomialScale'."
+    )
+    DQC_113 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'LogarithmicScale'."
+    )
+    DQC_115 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'ExponentialScale'."
+    )
+    DQC_121 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'ScaleCategorizer'."
+    )
+    DQC_123 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsNull' classifier."
+    )
+    DQC_124 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsNotNull' classifier."
+    )
+    DQC_125 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsNan' classifier."
+    )
+    DQC_126 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsNotNan' classifier."
+    )
+    DQC_127 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsNullOrNan' classifier."
+    )
+    DQC_128 = ErrorDef(
+        ParameterValidationError,
+        "Invalid parameters for the 'IsNotNullNorNan' classifier.",
+    )
+    DQC_129 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsZero' classifier."
+    )
+    DQC_130 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsNotZero' classifier."
+    )
+    DQC_131 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsPositive' classifier."
+    )
+    DQC_132 = ErrorDef(
+        ParameterValidationError,
+        "Invalid parameters for the 'IsPositiveOrZero' classifier.",
+    )
+    DQC_133 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsNegative' classifier."
+    )
+    DQC_134 = ErrorDef(
+        ParameterValidationError,
+        "Invalid parameters for the 'IsNegativeOrZero' classifier.",
+    )
+    DQC_135 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for a between data quality classifier."
+    )
     DQC_136 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_137 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_138 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_139 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_140 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_141 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_142 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_143 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_144 = ErrorDef(ParameterValidationError, "{message}")
+    DQC_142 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for an in-set data quality classifier."
+    )
+    DQC_144 = ErrorDef(
+        ParameterValidationError,
+        "Invalid parameters for a regex-match data quality classifier.",
+    )
     DQC_145 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_146 = ErrorDef(ParameterValidationError, "{message}")
+    DQC_146 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'HasLength' classifier."
+    )
     DQC_147 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_148 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_149 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_150 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_151 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_152 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_153 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_154 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_155 = ErrorDef(ParameterValidationError, "{message}")
+    DQC_154 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsTrue' classifier."
+    )
+    DQC_155 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'IsFalse' classifier."
+    )
 
-    # _dataquality.py
-    DQC_201 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_202 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_203 = ErrorDef(ParameterValidationError, "{message}")
-    DQC_204 = ErrorDef(ParameterValidationError, "{message}")
-
-    # DQCE codes (ParameterValueError)
-    DQCE_1 = ErrorDef(
-        ParameterValueError,
-        "The 'tags' parameter of a Classifier object must be a 'str', a 'list' of "
-        "'str', or None; got a list containing the object '{}' of type '{}' instead. "
-        "Please ensure that all objects in the list are of type 'str'.",
-    )
-    DQCE_2 = ErrorDef(
-        ParameterValueError,
-        "The 'tags' parameter of a Classifier object must be a 'str', a 'list' of "
-        "'str', or None; got object '{}' of type '{}' instead.",
-    )
-    DQCE_3 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a Classifier action must be a 'str', a 'list' of "
-        "'str', a 'tuple' with two 'str', a 'list' of 'tuple' of two 'str' or None. "
-        "Got the tuple '{}' that has {} elements instead of 2. Please ensure that the "
-        "tuple has exactly 2 elements of type 'str', the first representing the column "
-        "to apply the classifier to, and the second the column to store the result in.",
-    )
-    DQCE_4 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a Classifier action must be a 'str', a 'list' of "
-        "'str', a 'tuple' with two 'str', a 'list' of 'tuple' of two 'str' or None. "
-        "Got the tuple '{}' that has an element that is not a 'str'. Please ensure "
-        "that the tuple has exactly 2 elements of type 'str', the first representing "
-        "the column to apply the classifier to, and the second the column to store the "
-        "result in.",
-    )
-    DQCE_5 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a Classifier action must be a 'str', a 'list' of "
-        "'str', a 'tuple' with two 'str', a 'list' of 'tuple' of two 'str' or None. "
-        "Got a list with the tuple '{}' that has {} elements instead of 2. Please "
-        "ensure that the tuple has exactly 2 elements of type 'str', the first "
-        "representing the column to apply the classifier to, and the second the column "
-        "to store the result in.",
-    )
-    DQCE_6 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a Classifier action must be a 'str', a 'list' of "
-        "'str', a 'tuple' with two 'str', a 'list' of 'tuple' of two 'str' or None. "
-        "Got a list with the tuple '{}' that has an element that is not a 'str'. "
-        "Please ensure that the tuple has exactly 2 elements of type 'str', the first "
-        "representing the column to apply the classifier to, and the second the column "
-        "to store the result in.",
-    )
-    DQCE_7 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a Classifier action must be a 'str', a 'list' of "
-        "'str', a 'tuple' with two 'str', a 'list' of 'tuple' of two 'str' or None. "
-        "Got a list with the element '{}' of type '{}'. Please ensure that all "
-        "elements in the list are of type 'str' or all elements in the list are of "
-        "type 'tuple' of two 'str'.",
-    )
-    DQCE_8 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a Classifier action must be a 'str', a 'list' of "
-        "'str', a 'tuple' with two 'str', a 'list' of 'tuple' of two 'str' or None. "
-        "Got a list with an element of type '{}' and another of type '{}'. Please make "
-        "sure that all elements in the list have the same type.",
-    )
-    DQCE_9 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a Classifier action must be a 'str', a 'list' of "
-        "'str', a 'tuple' with two 'str', a 'list' of 'tuple' of two 'str' or None. "
-        "Got value '{}' of type '{}' instead.",
-    )
-    DQCE_10 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsNan classifier must be a boolean. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_11 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsNotNan classifier must be a boolean. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_12 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsZero classifier must be a boolean. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_13 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsNotZero classifier must be a boolean. "
-        "Got value '{}' of type '{}' instead.",
-    )
-    DQCE_14 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsPositive classifier must be a boolean. "
-        "Got value '{}' of type '{}' instead.",
-    )
-    DQCE_15 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsPositiveOrZero classifier must be a "
-        "boolean. Got value '{}' of type '{}' instead.",
-    )
-    DQCE_16 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsNegative classifier must be a boolean. "
-        "Got value '{}' of type '{}' instead.",
-    )
-    DQCE_17 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsNegativeOrZero classifier must be a "
-        "boolean. Got value '{}' of type '{}' instead.",
-    )
-    DQCE_18 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of a Matches classifier must be a boolean. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_19 = ErrorDef(
-        ParameterValueError,
-        "The 'regex' parameter of a Matches classifier must be a string. Got value "
-        "'{}' of type '{}' instead.",
-    )
-    DQCE_20 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of a DoesNotMatch classifier must be a boolean. "
-        "Got value '{}' of type '{}' instead.",
-    )
-    DQCE_21 = ErrorDef(
-        ParameterValueError,
-        "The 'regex' parameter of a DoesNotMatch classifier must be a string. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_22 = ErrorDef(
-        ParameterValueError,
-        "The 'min' parameter of a HasLen classifier must be an 'int' or a 'float'. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_23 = ErrorDef(
-        ParameterValueError,
-        "The 'max' parameter of a HasLen classifier must be an 'int' or a 'float'. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_24 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsInRange classifier must be a boolean. "
-        "Got value '{}' of type '{}' instead.",
-    )
-    DQCE_25 = ErrorDef(
-        ParameterValueError,
-        "The 'min' parameter of an IsInRange classifier must be an 'int' or a 'float'. "
-        "Got value '{}' of type '{}' instead.",
-    )
-    DQCE_26 = ErrorDef(
-        ParameterValueError,
-        "The 'max' parameter of an IsInRange classifier must be an 'int' or a 'float'. "
-        "Got value '{}' of type '{}' instead.",
-    )
-    DQCE_27 = ErrorDef(
-        ParameterValueError,
-        "The 'closed' parameter of an IsInRange classifier must be one these values: "
-        "{}. Got value '{}' instead.",
-    )
-    DQCE_28 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of a HasLen classifier must be a boolean. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_29 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsIn classifier must be a boolean. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_30 = ErrorDef(
-        ParameterValueError,
-        "The 'set' parameter of an IsIn classifier must be a collection, meaning an "
-        "object of a class that implements the 'in' operator. Got value '{}' of type "
-        "'{}' instead.",
-    )
-    DQCE_31 = ErrorDef(
-        ParameterValueError,
-        "The 'ignore_nulls' parameter of an IsNotIn classifier must be a boolean. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_32 = ErrorDef(
-        ParameterValueError,
-        "The 'set' parameter of an IsNotIn classifier must be a collection, meaning an "
-        "object of a class that implements the 'in' operator. Got value '{}' of type "
-        "'{}' instead.",
-    )
-    DQCE_33 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a HasColumns classifier must be a 'str' or a list of "
-        "'str'. Got a list containing value '{}' of type '{}' instead.",
-    )
-    DQCE_34 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a HasColumns classifier must be a 'str' or a list of "
-        "'str'. Got object '{}' of type '{}' instead.",
-    )
-    DQCE_35 = ErrorDef(
-        ParameterValueError,
-        "The 'mode' parameter of a HasColumns classifier must one of the following "
-        "'str': {}. Got object '{}' instead.",
-    )
-    DQCE_36 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a HasColumnTypes classifier must be a tuple of 'str' "
-        "and 'DataType' or a list of tuples of 'str' and 'DataType'. Got a single "
-        "tuple, but the first element is '{}' of type '{}'. Please ensure that the "
-        "first element of the tuple is of type 'str' and it represents the name of the "
-        "column to check the type against.",
-    )
-    DQCE_37 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a HasColumnTypes classifier must be a tuple of 'str' "
-        "and 'DataType' or a list of tuples of 'str' and 'DataType'. Got a single "
-        "tuple, but the second element is '{}' of type '{}'. Please ensure that the "
-        "second element of the tuple is of type 'DataType' and it represents the type "
-        "to check the column against.",
-    )
-    DQCE_38 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a HasColumnTypes classifier must be a tuple of 'str' "
-        "and 'DataType' or a list of tuples of 'str' and 'DataType'. Got a list "
-        "containing the object '{}' of type '{}' instead.",
-    )
-    DQCE_39 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a HasColumnTypes classifier must be a tuple of 'str' "
-        "and 'DataType' or a list of tuples of 'str' and 'DataType'. Got a list "
-        "containing a tuple '{}' of length {} instead. Please ensure that each tuple "
-        "has exactly two elements, the first one representing the name of the column "
-        "to check and the second one being the type to check against.",
-    )
-    DQCE_40 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a HasColumnTypes classifier must be a tuple of 'str' "
-        "and 'DataType' or a list of tuples of 'str' and 'DataType'. Got a list of "
-        "tuples containing tuple '{}', where the first element is '{}' of type '{}'. "
-        "Please ensure that the first element of the tuple is of type 'str' and it "
-        "represents the name of the column to check the type against.",
-    )
-    DQCE_41 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a HasColumnTypes classifier must be a tuple of 'str' "
-        "and 'DataType' or a list of tuples of 'str' and 'DataType'. Got a list of "
-        "tuples containing tuple '{}', where the second element is '{}' of type '{}'. "
-        "Please ensure that the second element of the tuple is of type 'DataType' and "
-        "it represents the type to check the column against.",
-    )
-    DQCE_42 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a HasColumnTypes classifier must be a tuple of 'str' "
-        "and 'DataType' or a list of tuples of 'str' and 'DataType'. Got object '{}' "
-        "of type '{}' instead.",
-    )
-    DQCE_43 = ErrorDef(
-        ParameterValueError,
-        "The 'cols' parameter of a HasColumnTypes classifier must be a tuple of 'str' "
-        "and 'DataType' or a list of tuples of 'str' and 'DataType'. Got tuple '{}' of "
-        "length {} instead. Please ensure that each tuple has exactly two elements, "
-        "the first one representing the name of the column to check and the second one "
-        "being the type to check against.",
-    )
-    DQCE_44 = ErrorDef(
-        ParameterValueError,
-        "The 'tags' parameter of an Operation object must be a 'str', a 'list' of "
-        "'str', or None; got a list containing the object '{}' of type '{}' instead. "
-        "Please ensure that all objects in the list are of type 'str'.",
-    )
-    DQCE_45 = ErrorDef(
-        ParameterValueError,
-        "The 'tags' parameter of an Operation object must be a 'str', a 'list' of "
-        "'str', or None; got object '{}' of type '{}' instead.",
-    )
-    DQCE_46 = ErrorDef(
-        ParameterValueError,
-        "The 'table' parameter of a Summary object must be a 'str', or None; got "
-        "object '{}' of type '{}' instead.",
-    )
-    DQCE_47 = ErrorDef(
-        ParameterValueError,
-        "The 'scale_type' of a Scale object must be one of the following: {}. Got "
-        "object '{}' instead.",
-    )
-    DQCE_48 = ErrorDef(
-        ParameterValueError,
-        "The 'scale_range' parameter of a Scale object must be a tuple with exactly "
-        "two elements of type 'int' or 'float'; got object '{}' of type '{}' instead.",
-    )
-    DQCE_49 = ErrorDef(
-        ParameterValueError,
-        "The 'scale_range' parameter of a Scale object must be a tuple with exactly "
-        "two elements of type 'int' or 'float'; got the tuple '{}' with a length of "
-        "'{}' instead.",
-    )
-    DQCE_50 = ErrorDef(
-        ParameterValueError,
-        "The 'scale_range' parameter of a Scale object must be a tuple with exactly "
-        "two elements of type 'int' or 'float'; got the tuple '{}' which has exactly "
-        "two elements, but at least one of them has the wrong type.",
-    )
-    DQCE_51 = ErrorDef(
-        ParameterValueError,
-        "The 'scale_tick' parameter of a Scale object must be a an 'int', a 'float', "
-        "or None; got '{}' of type '{}' instead.",
-    )
-    DQCE_52 = ErrorDef(
-        ParameterValueError,
-        "The 'buckets' parameter of a Scale object must be a an 'int' between 2 and "
-        "100; got '{}' of type '{}' instead.",
-    )
-    DQCE_53 = ErrorDef(
-        ParameterValueError,
-        "When a Scale object has been provided both a 'buckets' parameter and a "
-        "'bucket_names' parameter, the length of the 'bucket_names' parameter must "
-        "equal the 'buckets' parameter. Got value {} for 'buckets', and value '{}' of "
-        "length {} for 'bucket_names' instead.",
-    )
-    DQCE_54 = ErrorDef(
-        ParameterValueError,
-        "The 'bucket_names' parameter of a Scale object must be a list of 'str' or "
-        "None. Got the list {} containing the object '{}' of type '{}' instead.",
-    )
-    DQCE_55 = ErrorDef(
-        ParameterValueError,
-        "The 'bucket_names' parameter of a Scale object must be a list of 'str' or "
-        "None; got object '{}' of type '{}' instead.",
-    )
-    DQCE_56 = ErrorDef(
-        ParameterValueError,
-        "The 'scale' parameter of a Categorizer object must be a Scale object ; got "
-        "object '{}' of type '{}' instead.",
-    )
-    DQCE_57 = ErrorDef(
-        ParameterValueError,
-        "Direct instantiation of the class '{}' is not allowed. Use "
-        "ScaleType.linear(), ScaleType.quadratic(), ScaleType.exponential() or "
-        "ScaleType.log() to obtain an instance of this class",
-    )
-    DQCE_58 = ErrorDef(
-        ParameterValueError,
-        "Direct instantiation of the class '{}' is not allowed. Use Criteria.all_ok(), "
-        "Criteria.any_failed(), or Criteria.by_bucket() to obtain an instance of this "
-        "class",
-    )
-    DQCE_59 = ErrorDef(
-        ParameterValueError,
-        "The 'criteria_type' of a Criteria object must be one of the following: {}. "
-        "Got object '{}' instead.",
-    )
-    DQCE_60 = ErrorDef(
-        ParameterValueError,
-        "The 'buckets' parameter of a Criteria object must be a collection, meaning an "
-        "object of a class that implements the 'in' operator; or None. Got value '{}' "
-        "of type '{}' instead.",
-    )
-    DQCE_61 = ErrorDef(
-        ParameterValueError,
-        "The 'buckets' parameter of a Criteria.by_buckets() object must be a "
-        "collection, meaning an object of a class that implements the 'in' operator. "
-        "Got value '{}' of type '{}' instead.",
-    )
-    DQCE_62 = ErrorDef(
-        ParameterValueError,
-        "The 'to_table' parameter of a FilterOut object must be a 'str', or None. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_63 = ErrorDef(
-        ParameterValueError,
-        "The 'criteria' parameter of a FilterOut object must be a Criteria object. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_64 = ErrorDef(
-        ParameterValueError,
-        "The 'to_table' parameter of a Select object must be a 'str'; got value '{}' "
-        "of type '{}' instead.",
-    )
-    DQCE_65 = ErrorDef(
-        ParameterValueError,
-        "The 'criteria' parameter of a Select object must be a Criteria object. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_66 = ErrorDef(
-        ParameterValueError,
-        "The 'criteria' parameter of a Fail object must be a Criteria object. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_67 = ErrorDef(
-        ParameterValueError,
-        "Direct instantiation of the class '{}' is not allowed. Use Threshold.count(), "
-        "Threshold.percent(), or Threshold.one() to obtain an instance of this class",
-    )
-    DQCE_68 = ErrorDef(
-        ParameterValueError,
-        "The 'count' parameter of a Threshold object must be an 'int' greater than "
-        "zero or None; got value '{}' of type '{}' instead.",
-    )
-    DQCE_69 = ErrorDef(
-        ParameterValueError,
-        "The 'count' parameter of a Threshold object must be an 'int' greater than "
-        "zero or None; got the 'int' '{}' that is not greater than zero.",
-    )
-    DQCE_70 = ErrorDef(
-        ParameterValueError,
-        "The 'count' parameter of a Threshold.count() object must be an 'int' greater "
-        "than zero; got a None instead.",
-    )
-    DQCE_71 = ErrorDef(
-        ParameterValueError,
-        "The 'percent' parameter of a Threshold.percent() object must be a 'float' or "
-        "'int' greater than zero and less than 100; got a None instead.",
-    )
-    DQCE_72 = ErrorDef(
-        ParameterValueError,
-        "The 'percent' parameter of a Threshold object must be a 'float' or 'int' "
-        "greater than zero and less than 100, or None. Got value {} instead, that is "
-        "not in the (0, 100) range.",
-    )
-    DQCE_73 = ErrorDef(
-        ParameterValueError,
-        "The 'percent' parameter of a Threshold object must be a 'float' or 'int' "
-        "greater than zero and less than 100, or None. Got value '{}' of type '{}' "
-        "instead.",
-    )
-    DQCE_74 = ErrorDef(
-        ParameterValueError,
-        "The 'threshold' parameter of a Fail object must be a Threshold object. Got "
-        "value '{}' of type '{}' instead.",
-    )
-    DQCE_75 = ErrorDef(
-        ParameterValueError,
-        "The 'table' parameter of a DataQuality object must be a 'str'. Got value '{}' "
-        "of type '{}' instead.",
-    )
-    DQCE_76 = ErrorDef(
-        ParameterValueError,
-        "The 'classify' parameter of a DataQuality object must be a Classifier object "
-        "or a list of Classifier objects. Got value '{}' of type '{}' instead.",
-    )
-    DQCE_77 = ErrorDef(
-        ParameterValueError,
-        "The 'classify' parameter of a DataQuality object must be a Classifier object "
-        "or a list of Classifier objects. Got a list containing value '{}' of type "
-        "'{}' instead.",
-    )
-    DQCE_78 = ErrorDef(
-        ParameterValueError,
-        "The 'operations' parameter of a DataQuality object must be an Operation "
-        "object or a list of Operation objects. Got value '{}' of type '{}' instead.",
-    )
-    DQCE_79 = ErrorDef(
-        ParameterValueError,
-        "The 'operations' parameter of a DataQuality object must be an Operation "
-        "object or a list of Operation objects. Got a list containing value '{}' of "
-        "type '{}' instead.",
-    )
-    DQCE_80 = ErrorDef(
-        ParameterValueError,
-        "The 'buckets' parameter of a Scale object must be a an 'int' between 2 and "
-        "100; got the 'int' {} that is outside of that range instead.",
-    )
-    DQCE_81 = ErrorDef(
-        ParameterValueError,
-        "The 'column_names' parameter of the 'Criteria.in_buckets' must be a string or "
-        "a list of strings; got '{}' instead.",
+    # DataQuality action (_dataquality.py)
+    DQC_201 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'DataQuality' action."
     )
 
     # DQPE codes (DataQualityProcessingError)

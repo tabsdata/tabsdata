@@ -8,44 +8,39 @@ feature.
 
 These types are used for type hinting and validation to ensure that data
 quality operations are performed with the correct data structures and values.
+Collection-valued fields are declared as plain ``list`` / ``frozenset`` types:
+there is no single-value convenience coercion (consistent with the rest of the
+``tabsdatak`` API), so a field that can hold several values always takes a
+collection in the constructor.
 """
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal, TypeAlias, Union
 
-from pydantic import Field, Strict, StrictFloat, StrictInt
+from pydantic import Field, StrictFloat, StrictInt
+
+# noinspection PyProtectedMember
+from tabsdatak import _api
 
 # --- Column Specifications ---
 
 ColumnNameSpec: TypeAlias = str
 """A type alias for a single column name, represented as a string."""
 
-ColumnNamesSpec: TypeAlias = Union[
-    ColumnNameSpec, Annotated[list[ColumnNameSpec], Strict]
+ColumnNameWithAltSpec: TypeAlias = Union[
+    ColumnNameSpec, tuple[ColumnNameSpec, Union[ColumnNameSpec, None]]
 ]
 """
-A type alias for one or more column names, which can be a single string or a
-list.
+A single column reference: either the source column name, or a
+``(source, destination)`` tuple naming the column to store the result in
+(``destination`` may be ``None`` to auto-generate it).
 """
 
-ColumnNameWithAltSpec: TypeAlias = tuple[ColumnNameSpec, Union[ColumnNameSpec, None]]
+ColumnNamesWithAltSpec: TypeAlias = list[ColumnNameWithAltSpec]
 """
-A type alias for a tuple representing a column name and an optional alternative
-name.
-
-This is useful for operations that involve renaming or aliasing columns.
-"""
-
-ColumNamesWithAltSpec: TypeAlias = Union[
-    ColumnNameSpec,
-    ColumnNameWithAltSpec,
-    Annotated[list[ColumnNameSpec], Strict],
-    Annotated[list[ColumnNameWithAltSpec], Strict],
-]
-"""
-A flexible type alias for specifying column names, which can be a single column
-name, a tuple with an alternative, or a list of either.
+A list of column references. Each element is a source column name or a
+``(source, destination)`` tuple; the two forms may be mixed.
 """
 
 # --- Tag Specifications ---
@@ -53,11 +48,8 @@ name, a tuple with an alternative, or a list of either.
 TagSpec: TypeAlias = str
 """A type alias for a single tag, represented as a string."""
 
-TagsSpec: TypeAlias = Union[TagSpec, list[TagSpec]]
-"""
-A type alias for one or more tags, which can be a single string or a list of
-strings.
-"""
+TagsSpec: TypeAlias = list[TagSpec]
+"""A list of tags."""
 
 # --- Invalid Column Specifications ---
 
@@ -104,13 +96,15 @@ A type alias that specifies which side of a range is closed (inclusive).
 - 'both': The range is closed on both sides.
 """
 
-CriteriaTypeSpec = Literal["all_ok", "any_failed", "in_bins", "not_in_bins"]
+# --- Value Set Specifications ---
+
+ValuesSpec: TypeAlias = Annotated[
+    frozenset[Union[PythonDataTypeSpec, None]], _api.NON_EMPTY_LIST_CONSTRAINTS
+]
 """
-A type alias for the type of criteria used in a data quality check.
-- 'all_ok': All conditions must be met.
-- 'any_failed': At least one condition must fail.
-- 'in_bins': The value must fall into specified bins.
-- 'not_in_bins': The value must not fall into specified bins.
+A non-empty set of values to check membership against (``None`` is allowed, to
+test for null membership). A list passed to the constructor is coerced to a
+``frozenset`` (deduplicated) by pydantic.
 """
 
 # --- Bin and Bucket Specifications ---
@@ -130,8 +124,10 @@ A type alias for the bin, either an index [0..100] or a special one
 [none, nan, underflow, overflow]
 """
 
-BinsCriteriaSpec: TypeAlias = Union[BinSpec, Annotated[list[BinSpec], Strict]]
-"""A type alias for a list of bin indices used in criteria."""
+BinsCriteriaSpec: TypeAlias = Annotated[
+    frozenset[BinSpec], _api.NON_EMPTY_LIST_CONSTRAINTS
+]
+"""A non-empty set of bins used in criteria."""
 
 BinCountSpec: TypeAlias = Annotated[StrictInt, Field(ge=1, le=MAX_BINS)]
 """
