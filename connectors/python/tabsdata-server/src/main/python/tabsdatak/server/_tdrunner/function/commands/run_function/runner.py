@@ -34,6 +34,7 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
+from tabsdatak.server._tdrunner import dataquality
 from tabsdatak.server._tdrunner.function._lib import (
     inputs_manifest,
     outputs_manifest,
@@ -469,6 +470,29 @@ def run(args: argparse.Namespace) -> int:
             ctx, request, state_dir, error_code=RunFunctionErrorCode.RF_19
         )
         logger.debug("Drained ctx scratch to %s", state_dir)
+
+    # Apply the function's data-quality actions over its output tables. In-place
+    # actions rewrite an output frame; producing actions yield extra derived
+    # tables. Both sink as normal outputs; their catalog type is set at
+    # registration. Skipped entirely when no data-quality action is declared, so
+    # ordinary runs are unaffected. Derived tables register under their kind's
+    # TableType at registration time, not here.
+    if dataquality.driver.has_data_quality(getattr(info, "on_tables", None)):
+        dq_result = dataquality.driver.run_data_quality(
+            collection=request.info.collection,
+            output_tables=output_tables,
+            output_frames=list(result),
+            on_tables=info.on_tables,
+        )
+        result = list(dq_result.output_frames)
+        for derived in dq_result.derived:
+            output_tables.append(derived.name)
+            result.append(derived.frame)
+        logger.info(
+            "Data quality produced %d derived table(s): %s",
+            len(dq_result.derived),
+            [derived.name for derived in dq_result.derived],
+        )
 
     entries_out = _sink_outputs(
         result,
