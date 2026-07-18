@@ -164,6 +164,23 @@ impl<'c> DynamicConnection<'c> {
         Ok(())
     }
 
+    /// `EXPLAIN` a statement and return the plan lines. Test-only plumbing for
+    /// plan-shape guards (e.g. asserting a query stays window-driven through
+    /// the expected index). PostgreSQL only — other backends return no lines.
+    #[cfg(feature = "td-test")]
+    pub async fn explain(&mut self, sql: &str) -> Result<Vec<String>, Error> {
+        match self {
+            #[cfg(postgres)]
+            Self::Postgres(h) => {
+                sqlx::query_scalar::<_, String>(&format!("EXPLAIN {sql}"))
+                    .fetch_all(&mut **h)
+                    .await
+            }
+            #[allow(unreachable_patterns)]
+            _ => Ok(Vec::new()),
+        }
+    }
+
     /// Bind this connection's transaction to a project: set `app.project_id`
     /// **and clear `app.bypass_rls`**, so row-level security enforces exactly
     /// this project. The connection already runs as the non-bypass

@@ -17,7 +17,7 @@
 //! resolver — not from a DB-level FK. Deletes are soft, so a tagged row's
 //! project id keeps resolving here even after the project is deleted.
 
-use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement};
+use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Iden, JoinType, Query, Table, TableCreateStatement};
 
 use super::users::Users;
 use crate::schema::Entity;
@@ -68,10 +68,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Projects::NameWhenDeleted).text().null())
                 .to_owned(),
         ]
-    }
-
-    fn create_indices(&self) -> Vec<IndexCreateStatement> {
-        vec![Index::create().name("projects___name___idx").table(Projects::Table).col(Projects::Name).unique().to_owned()]
     }
 
     fn create_views(&self, b: &Backend) -> Vec<ViewDef> {

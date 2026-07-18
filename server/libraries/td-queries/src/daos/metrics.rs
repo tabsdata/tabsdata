@@ -49,6 +49,9 @@ use sea_query::{
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
+#[cfg(postgres)]
+use td_database::sea_query::kind::DatabaseBackend;
+use td_database::sea_query::kind::DatabaseKind;
 use td_objects::dxo::collection::CollectionDBIden;
 use td_objects::dxo::group::GroupDBIden;
 use td_objects::dxo::logical::{
@@ -59,6 +62,7 @@ use td_objects::dxo::logical::{
 use td_objects::dxo::metrics::{
     Dim, EdgeRow, InflightRequest, InflightRow, MetricsRequest, NodeKind, NodeRow,
 };
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
 use td_objects::dxo::project::ProjectDBIden;
 use td_objects::dxo::query_filters::{DimensionFilter, WindowUnit};
 use td_objects::types::basic::{HasData, LogicalFunctionRunStatus, Private};
@@ -99,7 +103,8 @@ where
     /// the LFRI subquery joined to source-LTDV via the LTDV view.
     /// System/private tables excluded on both sides.
     pub async fn metrics_nodes(self, req: &MetricsRequest) -> Result<Vec<NodeRow>, SqlError> {
-        let rows = node_aggregates_query(req)
+        let lateral = lateral_shape(&self.executor);
+        let rows = node_aggregates_query(req, lateral)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -114,12 +119,192 @@ where
     /// publisher-output-LTDV-attributed on synthetic edges (same
     /// "data flowing on this edge" semantic).
     pub async fn metrics_edges(self, req: &MetricsRequest) -> Result<Vec<EdgeRow>, SqlError> {
-        let rows = edge_aggregates_query(req)
+        let lateral = lateral_shape(&self.executor);
+        let rows = edge_aggregates_query(req, lateral)
             .build_query_as()
             .fetch_all(self.executor)
             .await
             .map_err(SqlError::on_read::<FunctionRunDBWithNames>)?;
         Ok(rows)
+    }
+}
+
+/// PostgreSQL only: its RLS qual is planner-unestimable, so join order must
+/// be forced with fenced laterals. Other backends have no RLS (and no
+/// `OFFSET 0` fence: MySQL rejects OFFSET without LIMIT, SQLite has no
+/// LATERAL); their planners handle the plain window-join shape fine.
+fn lateral_shape<E: DatabaseKind>(executor: &E) -> bool {
+    match executor.kind() {
+        #[cfg(postgres)]
+        DatabaseBackend::Postgres => true,
+        #[allow(unreachable_patterns)]
+        _ => false,
+    }
+}
+
+/// The metrics aggregation SQL, for plan inspection in the load suite.
+#[cfg(all(postgres, feature = "td-test"))]
+pub fn metrics_plan_sql(req: &MetricsRequest) -> (String, String) {
+    use sea_query::PostgresQueryBuilder;
+    (
+        node_aggregates_query(req, true).to_string(PostgresQueryBuilder),
+        edge_aggregates_query(req, true).to_string(PostgresQueryBuilder),
+    )
+}
+
+/// FROM the windowed attempts (`physical_function_runs (ended_on)` index),
+/// each resolved to its bound run through the pointer-current reverse index —
+/// Θ(window), independent of total history. [`fr_probe`] is aliased back to
+/// the view's own name so everything downstream is shape-agnostic.
+fn from_windowed_runs(stmt: &mut SelectStatement, req: &MetricsRequest, lateral: bool) {
+    if lateral {
+        let ended_on = (
+            PhysicalFunctionRunDBIden::Table,
+            PhysicalFunctionRunDBIden::EndedOn,
+        );
+        stmt.from(PhysicalFunctionRunDBIden::Table)
+            .and_where(Expr::col(ended_on).gte(ms_to_dt(req.window.start_ms)))
+            .and_where(Expr::col(ended_on).lt(ms_to_dt(req.window.end_ms)))
+            .join_lateral(
+                JoinType::InnerJoin,
+                fr_probe(),
+                FunctionRunDBWithNamesIden::Table,
+                Expr::val(true),
+            );
+        apply_ended_status_filter(stmt);
+    } else {
+        stmt.from(FunctionRunDBWithNamesIden::Table);
+        join_window_ids(stmt, req.window.start_ms, req.window.end_ms);
+    }
+}
+
+/// The per-attempt probe: the LFR view keyed by the bound-attempt id.
+///
+/// The `OFFSET 0` fence is load-bearing: without it the planner flattens the
+/// lateral and reorders the join tree on the ~1-row estimates the RLS qual
+/// produces, so the window stops driving (measured 100–1000× worse). The
+/// explicit column list is too: a fenced subquery's target list is never
+/// pruned, so select only what the outer query reads.
+fn fr_probe() -> SelectStatement {
+    let p = Alias::new("p").into_iden();
+    let mut stmt = Query::select();
+    for col in [
+        FunctionRunDBWithNamesIden::Id,
+        FunctionRunDBWithNamesIden::CollectionId,
+        FunctionRunDBWithNamesIden::Collection,
+        FunctionRunDBWithNamesIden::GroupId,
+        FunctionRunDBWithNamesIden::Group,
+        FunctionRunDBWithNamesIden::ProjectId,
+        FunctionRunDBWithNamesIden::Project,
+        FunctionRunDBWithNamesIden::Status,
+        FunctionRunDBWithNamesIden::TransactionId,
+        FunctionRunDBWithNamesIden::EndedOnHourMs,
+        FunctionRunDBWithNamesIden::EndedOnDayMs,
+        FunctionRunDBWithNamesIden::EndedOnWeekMs,
+        FunctionRunDBWithNamesIden::EndedOnMonthMs,
+    ] {
+        stmt.column((p.clone(), col));
+    }
+    stmt.from_as(FunctionRunDBWithNamesIden::Table, p.clone())
+        .and_where(
+            Expr::col((p, FunctionRunDBWithNamesIden::PhysicalFunctionRunId)).equals((
+                PhysicalFunctionRunDBIden::Table,
+                PhysicalFunctionRunDBIden::Id,
+            )),
+        )
+        .offset(0)
+        .take()
+}
+
+/// Fenced probe of the LTDV view keyed by `inner_col = outer`; same
+/// rationale as [`fr_probe`].
+fn tdv_probe<I, O>(inner_col: I, outer: O) -> SelectStatement
+where
+    I: IntoIden + Copy,
+    O: sea_query::IntoColumnRef,
+{
+    let p = Alias::new("p").into_iden();
+    let mut stmt = Query::select();
+    for col in [
+        LogicalTableDataVersionDBIden::Id.into_iden(),
+        LogicalTableDataVersionDBIden::CollectionId.into_iden(),
+        LogicalTableDataVersionDBIden::GroupId.into_iden(),
+        LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId.into_iden(),
+        LogicalTableDataVersionDBIden::FunctionParamPos.into_iden(),
+        LogicalTableDataVersionDBIden::Private.into_iden(),
+        TableDataVersionDBWithNamesIden::Collection.into_iden(),
+        TableDataVersionDBWithNamesIden::Group.into_iden(),
+        TableDataVersionDBWithNamesIden::RowCount.into_iden(),
+        TableDataVersionDBWithNamesIden::DataBytes.into_iden(),
+        TableDataVersionDBWithNamesIden::HasData.into_iden(),
+    ] {
+        stmt.column((p.clone(), col));
+    }
+    stmt.from_as(TableDataVersionDBWithNamesIden::Table, p.clone())
+        .and_where(Expr::col((p, inner_col)).equals(outer))
+        .offset(0)
+        .take()
+}
+
+/// Join the consumed source LTDV, keyed by the input row's requirement id.
+fn join_source_tdv(stmt: &mut SelectStatement, lateral: bool) {
+    if lateral {
+        stmt.join_lateral(
+            JoinType::InnerJoin,
+            tdv_probe(
+                LogicalTableDataVersionDBIden::Id,
+                (
+                    LogicalFunctionRunInputDBIden::Table,
+                    LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+                ),
+            ),
+            TableDataVersionDBWithNamesIden::Table,
+            Expr::val(true),
+        );
+    } else {
+        stmt.join(
+            JoinType::InnerJoin,
+            TableDataVersionDBWithNamesIden::Table,
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
+                LogicalTableDataVersionDBIden::Id,
+            ))
+            .equals((
+                LogicalFunctionRunInputDBIden::Table,
+                LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+            )),
+        );
+    }
+}
+
+/// Join the run's own output LTDVs, keyed by producer id.
+fn join_produced_tdv(stmt: &mut SelectStatement, lateral: bool) {
+    if lateral {
+        stmt.join_lateral(
+            JoinType::InnerJoin,
+            tdv_probe(
+                LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
+                (
+                    FunctionRunDBWithNamesIden::Table,
+                    FunctionRunDBWithNamesIden::Id,
+                ),
+            ),
+            TableDataVersionDBWithNamesIden::Table,
+            Expr::val(true),
+        );
+    } else {
+        stmt.join(
+            JoinType::InnerJoin,
+            TableDataVersionDBWithNamesIden::Table,
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
+                LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
+            ))
+            .equals((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Id,
+            )),
+        );
     }
 }
 
@@ -130,7 +315,7 @@ where
 /// Per-`(bucket, dim_id, group_id, status)` node aggregator. IN
 /// magnitudes come from a LEFT JOIN'd subquery that aggregates LFRI
 /// rows per LFR; the outer aggregator sums them into per-node totals.
-fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
+fn node_aggregates_query(req: &MetricsRequest, lateral: bool) -> SelectStatement {
     let bucket_iden = bucket_column(req.unit);
     let in_alias = Alias::new("ins").into_iden();
     let out_alias = Alias::new("outs").into_iden();
@@ -254,8 +439,23 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
         Alias::new("data_bytes_in"),
     );
 
-    stmt.from(FunctionRunDBWithNamesIden::Table)
-        .join_subquery(
+    from_windowed_runs(&mut stmt, req, lateral);
+    if lateral {
+        // The whole-select aggregates keep these subqueries unflattenable.
+        stmt.join_lateral(
+            JoinType::LeftJoin,
+            per_lfr_input_aggregates_lateral(),
+            in_alias.clone(),
+            Expr::val(true),
+        )
+        .join_lateral(
+            JoinType::LeftJoin,
+            per_lfr_output_aggregates_lateral(),
+            out_alias.clone(),
+            Expr::val(true),
+        );
+    } else {
+        stmt.join_subquery(
             JoinType::LeftJoin,
             per_lfr_input_aggregates_subquery(req),
             in_alias.clone(),
@@ -273,8 +473,8 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
                 FunctionRunDBWithNamesIden::Id,
             )),
         );
+    }
 
-    apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     apply_status_filter(
         &mut stmt,
         &req.statuses,
@@ -347,10 +547,120 @@ fn node_aggregates_query(req: &MetricsRequest) -> SelectStatement {
     stmt
 }
 
+/// Lateral variant of [`per_lfr_input_aggregates_subquery`], correlated on
+/// the outer run. Whole-select aggregate: always exactly one row, NULLs
+/// absorbed by the outer COALESCE.
+fn per_lfr_input_aggregates_lateral() -> SelectStatement {
+    let mut stmt = Query::select();
+    stmt.expr_as(
+        Func::count_distinct(Expr::col((
+            LogicalFunctionRunInputDBIden::Table,
+            LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+        ))),
+        Alias::new("tables_in"),
+    )
+    .expr_as(
+        coalesce_sum((
+            TableDataVersionDBWithNamesIden::Table,
+            TableDataVersionDBWithNamesIden::RowCount,
+        )),
+        Alias::new("rows_in"),
+    )
+    .expr_as(
+        coalesce_sum((
+            TableDataVersionDBWithNamesIden::Table,
+            TableDataVersionDBWithNamesIden::DataBytes,
+        )),
+        Alias::new("bytes_in"),
+    )
+    .from(LogicalFunctionRunInputDBIden::Table)
+    .join_lateral(
+        JoinType::InnerJoin,
+        tdv_probe(
+            LogicalTableDataVersionDBIden::Id,
+            (
+                LogicalFunctionRunInputDBIden::Table,
+                LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+            ),
+        ),
+        TableDataVersionDBWithNamesIden::Table,
+        Expr::val(true),
+    )
+    .and_where(
+        Expr::col((
+            LogicalFunctionRunInputDBIden::Table,
+            LogicalFunctionRunInputDBIden::LogicalFunctionRunId,
+        ))
+        .equals((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Id,
+        )),
+    )
+    .and_where(
+        Expr::col((
+            LogicalFunctionRunInputDBIden::Table,
+            LogicalFunctionRunInputDBIden::RequirementDependencyPos,
+        ))
+        .gte(0),
+    )
+    .and_where(
+        Expr::col((
+            LogicalFunctionRunInputDBIden::Table,
+            LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+        ))
+        .is_not_null(),
+    );
+    apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
+    stmt
+}
+
+/// Lateral variant of [`per_lfr_output_aggregates_subquery`], correlated on
+/// the outer run; single view entry through the producer index, so no inner
+/// fence is needed.
+fn per_lfr_output_aggregates_lateral() -> SelectStatement {
+    let mut stmt = Query::select();
+    stmt.expr_as(Func::count(Expr::val(1)), Alias::new("tables_out"))
+        .expr_as(
+            coalesce_sum((
+                TableDataVersionDBWithNamesIden::Table,
+                TableDataVersionDBWithNamesIden::RowCount,
+            )),
+            Alias::new("rows_out"),
+        )
+        .expr_as(
+            coalesce_sum((
+                TableDataVersionDBWithNamesIden::Table,
+                TableDataVersionDBWithNamesIden::DataBytes,
+            )),
+            Alias::new("bytes_out"),
+        )
+        .from(TableDataVersionDBWithNamesIden::Table)
+        .and_where(
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
+                LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
+            ))
+            .equals((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Id,
+            )),
+        )
+        .and_where(
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
+                TableDataVersionDBWithNamesIden::HasData,
+            ))
+            .eq(HasData::TRUE.as_sea_value()),
+        );
+    apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
+    stmt
+}
+
 /// Subquery: per-LFR aggregates over qualifying LFRI inputs. Each
 /// output row carries `(lfr_id, tables_in, rows_in, bytes_in)`. Joined
 /// LEFT-side from the outer node query — LFRs with no inputs (pure
-/// publishers) get zeros via the outer COALESCE.
+/// publishers) get zeros via the outer COALESCE. Non-lateral (SQLite)
+/// shape only.
 ///
 /// Scoped to the request's window via an INNER JOIN to the LFR view,
 /// so the GROUP BY only aggregates LFRIs whose LFR ended inside the
@@ -435,7 +745,7 @@ fn per_lfr_input_aggregates_subquery(req: &MetricsRequest) -> SelectStatement {
 
     // System/private-table exclusion (defensive alongside `dep_pos >= 0`).
     apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
-    apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
+    join_window_ids(&mut stmt, req.window.start_ms, req.window.end_ms);
     stmt
 }
 
@@ -496,7 +806,7 @@ fn per_lfr_output_aggregates_subquery(req: &MetricsRequest) -> SelectStatement {
     ));
 
     apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
-    apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
+    join_window_ids(&mut stmt, req.window.start_ms, req.window.end_ms);
     stmt
 }
 
@@ -504,13 +814,13 @@ fn per_lfr_output_aggregates_subquery(req: &MetricsRequest) -> SelectStatement {
 // /metrics — edges (UNION ALL of real + synthetic branches)
 // ---------------------------------------------------------------------------
 
-fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
+fn edge_aggregates_query(req: &MetricsRequest, lateral: bool) -> SelectStatement {
     let inner_alias = Alias::new("e").into_iden();
 
-    let mut inner = edge_real_branch(req);
-    inner.union(UnionType::All, edge_synth_branch(req));
-    inner.union(UnionType::All, edge_egress_branch(req));
-    inner.union(UnionType::All, edge_unused_branch(req));
+    let mut inner = edge_real_branch(req, lateral);
+    inner.union(UnionType::All, edge_synth_branch(req, lateral));
+    inner.union(UnionType::All, edge_egress_branch(req, lateral));
+    inner.union(UnionType::All, edge_unused_branch(req, lateral));
 
     let mut outer = Query::select();
     outer
@@ -581,7 +891,7 @@ fn edge_aggregates_query(req: &MetricsRequest) -> SelectStatement {
 /// projected with the source dim id, target dim id, status, plus the
 /// LTDV's bound-PTDV magnitudes. The outer aggregator dedupes by
 /// `lfr_id` for fn_runs and by `source_ltdv_id` for tables.
-fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
+fn edge_real_branch(req: &MetricsRequest, lateral: bool) -> SelectStatement {
     let bucket_iden = bucket_column(req.unit);
     let source_dim_iden = source_dim_iden(req.dim);
     let target_dim_iden = target_dim_iden(req.dim);
@@ -589,6 +899,7 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
     let target_dim_name_iden = target_dim_name_iden(req.dim);
 
     let mut stmt = Query::select();
+    from_windowed_runs(&mut stmt, req, lateral);
     stmt.distinct()
         .expr_as(
             Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
@@ -661,7 +972,6 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
             )),
             Alias::new("project_name"),
         )
-        .from(FunctionRunDBWithNamesIden::Table)
         .join(
             JoinType::InnerJoin,
             LogicalFunctionRunInputDBIden::Table,
@@ -673,19 +983,9 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
                 FunctionRunDBWithNamesIden::Table,
                 FunctionRunDBWithNamesIden::Id,
             )),
-        )
-        .join(
-            JoinType::InnerJoin,
-            TableDataVersionDBWithNamesIden::Table,
-            Expr::col((
-                TableDataVersionDBWithNamesIden::Table,
-                LogicalTableDataVersionDBIden::Id,
-            ))
-            .equals((
-                LogicalFunctionRunInputDBIden::Table,
-                LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
-            )),
-        )
+        );
+    join_source_tdv(&mut stmt, lateral);
+    stmt
         // Qualifications.
         .and_where(
             Expr::col((
@@ -704,7 +1004,6 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
 
     // System/private-table exclusion (defense-in-depth alongside dep_pos).
     apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
-    apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     apply_status_filter(
         &mut stmt,
         &req.statuses,
@@ -747,7 +1046,7 @@ fn edge_real_branch(req: &MetricsRequest) -> SelectStatement {
 /// upstream user-dep input) projected against their OWN output LTDVs.
 /// `source` is NULL; magnitudes describe data the publisher pushed
 /// into its target dim from outside Tabsdata.
-fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
+fn edge_synth_branch(req: &MetricsRequest, lateral: bool) -> SelectStatement {
     let bucket_iden = bucket_column(req.unit);
     let target_dim_iden = target_dim_iden(req.dim);
     let target_dim_name_iden = target_dim_name_iden(req.dim);
@@ -759,6 +1058,9 @@ fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
     // No DISTINCT: anti-join on LFRI + unique LTDV.producer_lfr_id means
     // each (LFR, output-LTDV) pair appears at most once.
     let mut stmt = Query::select();
+    from_windowed_runs(&mut stmt, req, lateral);
+    // Publisher's OWN output LTDVs (LTDV.producer_lfr_id = fr.id).
+    join_produced_tdv(&mut stmt, lateral);
     stmt.expr_as(
         Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
         Alias::new("bucket"),
@@ -827,20 +1129,6 @@ fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
         )),
         Alias::new("project_name"),
     )
-    .from(FunctionRunDBWithNamesIden::Table)
-    // Publisher's OWN output LTDVs (LTDV.producer_lfr_id = fr.id).
-    .join(
-        JoinType::InnerJoin,
-        TableDataVersionDBWithNamesIden::Table,
-        Expr::col((
-            TableDataVersionDBWithNamesIden::Table,
-            LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
-        ))
-        .equals((
-            FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::Id,
-        )),
-    )
     // Anti-join: no qualifying upstream LFRI (= publisher condition).
     .join(
         JoinType::LeftJoin,
@@ -878,7 +1166,6 @@ fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
 
     // System/private-table exclusion on the publisher's output LTDVs.
     apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
-    apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     apply_status_filter(
         &mut stmt,
         &req.statuses,
@@ -919,7 +1206,7 @@ fn edge_synth_branch(req: &MetricsRequest) -> SelectStatement {
 /// Sankey flow: producer → subscriber-coll (real) → ExternalDestination
 /// (egress). Magnitudes are source-LTDV-attributed (same as real edges:
 /// "the data flowing on this edge is the source LTDV's").
-fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
+fn edge_egress_branch(req: &MetricsRequest, lateral: bool) -> SelectStatement {
     let bucket_iden = bucket_column(req.unit);
     // The egress edge's `source` is the subscriber LFR's own dim
     // (where the egress departs). In real edges the consumer LFR's
@@ -932,6 +1219,7 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
     let null_target_name: SimpleExpr = Expr::value(Value::String(None));
 
     let mut stmt = Query::select();
+    from_windowed_runs(&mut stmt, req, lateral);
     // DISTINCT (as in `edge_real_branch`): a subscriber that consumes the
     // same source LTDV at more than one input position (distinct
     // input_idx/version_pos, neither projected here) joins to several LFRI
@@ -1008,7 +1296,6 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
             )),
             Alias::new("project_name"),
         )
-        .from(FunctionRunDBWithNamesIden::Table)
         .join(
             JoinType::InnerJoin,
             LogicalFunctionRunInputDBIden::Table,
@@ -1020,19 +1307,9 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
                 FunctionRunDBWithNamesIden::Table,
                 FunctionRunDBWithNamesIden::Id,
             )),
-        )
-        .join(
-            JoinType::InnerJoin,
-            TableDataVersionDBWithNamesIden::Table,
-            Expr::col((
-                TableDataVersionDBWithNamesIden::Table,
-                LogicalTableDataVersionDBIden::Id,
-            ))
-            .equals((
-                LogicalFunctionRunInputDBIden::Table,
-                LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
-            )),
-        )
+        );
+    join_source_tdv(&mut stmt, lateral);
+    stmt
         // Qualifying LFRI: dep_pos >= 0 and ltdv id not null.
         .and_where(
             Expr::col((
@@ -1075,7 +1352,6 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
 
     // System/private-table exclusion on source LTDV.
     apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
-    apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     apply_status_filter(
         &mut stmt,
         &req.statuses,
@@ -1119,7 +1395,7 @@ fn edge_egress_branch(req: &MetricsRequest) -> SelectStatement {
 /// top of this file)**: an LTDV reported as unused at query time may
 /// be consumed later, retroactively flipping its bucket's
 /// classification. Past-window results are not stable.
-fn edge_unused_branch(req: &MetricsRequest) -> SelectStatement {
+fn edge_unused_branch(req: &MetricsRequest, lateral: bool) -> SelectStatement {
     let bucket_iden = bucket_column(req.unit);
     let source_dim_iden = source_dim_iden(req.dim);
     let source_dim_name_iden = source_dim_name_iden(req.dim);
@@ -1128,6 +1404,9 @@ fn edge_unused_branch(req: &MetricsRequest) -> SelectStatement {
     let null_target_name: SimpleExpr = Expr::value(Value::String(None));
 
     let mut stmt = Query::select();
+    from_windowed_runs(&mut stmt, req, lateral);
+    // Producer's OWN output LTDVs (LTDV.producer_lfr_id = fr.id).
+    join_produced_tdv(&mut stmt, lateral);
     stmt.expr_as(
         Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
         Alias::new("bucket"),
@@ -1193,20 +1472,6 @@ fn edge_unused_branch(req: &MetricsRequest) -> SelectStatement {
         )),
         Alias::new("project_name"),
     )
-    .from(FunctionRunDBWithNamesIden::Table)
-    // Producer's OWN output LTDVs (LTDV.producer_lfr_id = fr.id).
-    .join(
-        JoinType::InnerJoin,
-        TableDataVersionDBWithNamesIden::Table,
-        Expr::col((
-            TableDataVersionDBWithNamesIden::Table,
-            LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
-        ))
-        .equals((
-            FunctionRunDBWithNamesIden::Table,
-            FunctionRunDBWithNamesIden::Id,
-        )),
-    )
     // Anti-join across full LFRI: LTDV has never been consumed by a
     // user-dep LFRI. Correlated NOT EXISTS lets the planner use the
     // LFRI (requirement_ltdv_id) index and short-circuit on first
@@ -1242,7 +1507,6 @@ fn edge_unused_branch(req: &MetricsRequest) -> SelectStatement {
 
     // System/private-table exclusion on the producer's output LTDVs.
     apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
-    apply_ended_on_window(&mut stmt, req.window.start_ms, req.window.end_ms);
     apply_status_filter(
         &mut stmt,
         &req.statuses,
@@ -1471,30 +1735,53 @@ fn ms_to_dt(ms: i64) -> DateTime<Utc> {
     DateTime::<Utc>::from_timestamp_millis(ms).expect("window bound must be a valid UTC timestamp")
 }
 
-/// `WHERE status IN ENDED AND ended_on >= start AND ended_on < end`.
-///
-/// The status predicate is *logically* redundant in steady state —
-/// the schema contract is `status ∈ ENDED ↔ ended_on IS NOT NULL on
-/// the bound PFR` — but stating it makes the "exclude in-flight"
-/// intent self-documenting and closes the Voided/Pending pointer
-/// corner case where the bound PFR (and thus `ended_on`) is gone
-/// while the LFR's sticky status may still be in ENDED.
-fn apply_ended_on_window(stmt: &mut SelectStatement, start_ms: i64, end_ms: i64) {
+/// Ids of the attempts that ended inside the window — the Θ(window)
+/// driving set.
+fn window_pfr_ids(start_ms: i64, end_ms: i64) -> SelectStatement {
+    let ended_on = (
+        PhysicalFunctionRunDBIden::Table,
+        PhysicalFunctionRunDBIden::EndedOn,
+    );
+    Query::select()
+        .column((
+            PhysicalFunctionRunDBIden::Table,
+            PhysicalFunctionRunDBIden::Id,
+        ))
+        .from(PhysicalFunctionRunDBIden::Table)
+        .and_where(Expr::col(ended_on).gte(ms_to_dt(start_ms)))
+        .and_where(Expr::col(ended_on).lt(ms_to_dt(end_ms)))
+        .take()
+}
+
+/// `status IN ENDED` on the view. Redundant with the window in steady
+/// state, but closes the corner case where the bound PFR (and its
+/// `ended_on`) is gone while the LFR's sticky status is still ENDED.
+fn apply_ended_status_filter(stmt: &mut SelectStatement) {
     let status = (
         FunctionRunDBWithNamesIden::Table,
         FunctionRunDBWithNamesIden::Status,
-    );
-    let ended_on = (
-        FunctionRunDBWithNamesIden::Table,
-        FunctionRunDBWithNamesIden::EndedOn,
     );
     let ended_vals: Vec<_> = LogicalFunctionRunStatus::ENDED
         .iter()
         .map(SeaValue::as_sea_value)
         .collect();
-    stmt.and_where(Expr::col(status).is_in(ended_vals))
-        .and_where(Expr::col(ended_on).gte(ms_to_dt(start_ms)))
-        .and_where(Expr::col(ended_on).lt(ms_to_dt(end_ms)));
+    stmt.and_where(Expr::col(status).is_in(ended_vals));
+}
+
+/// Non-lateral window scoping: INNER JOIN [`window_pfr_ids`] on the view's
+/// bound-PFR id, plus [`apply_ended_status_filter`].
+fn join_window_ids(stmt: &mut SelectStatement, start_ms: i64, end_ms: i64) {
+    let win = Alias::new("win").into_iden();
+    stmt.join_subquery(
+        JoinType::InnerJoin,
+        window_pfr_ids(start_ms, end_ms),
+        win.clone(),
+        Expr::col((win, Alias::new("id"))).equals((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::PhysicalFunctionRunId,
+        )),
+    );
+    apply_ended_status_filter(stmt);
 }
 
 /// Project a `NodeKind` as a string literal so the FromRow decoder

@@ -129,12 +129,14 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            // LTDV: hot path — `Head(0)` resolution scans by table_id ordered by triggered_on.
+            // LTDV: hot path — `Head(0)` resolution scans by table_id ordered
+            // by `(triggered_on DESC, id DESC)`.
             Index::create()
-                .name("logical_table_data_versions___table_id__triggered_on___idx")
+                .name("logical_table_data_versions___table_id__triggered_on__id___idx")
                 .table(LogicalTableDataVersions::Table)
                 .col(LogicalTableDataVersions::TableId)
                 .col(LogicalTableDataVersions::TriggeredOn)
+                .col(LogicalTableDataVersions::Id)
                 .to_owned(),
             // LTDV: lookup by execution / transaction (read-execution and cancel paths).
             Index::create()

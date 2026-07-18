@@ -121,14 +121,6 @@ mod definitions {
     }
 
     #[ta_objects::Dao]
-    #[dao(
-        sql_table = "executions__with_names",
-        versioned(pk = "id", version_by = "triggered_on", partition_by = "function_id")
-    )]
-    #[inherits(ExecutionDB)]
-    pub struct VersionedExecutionDB {}
-
-    #[ta_objects::Dao]
     #[dao(sql_table = "executions__with_names")]
     #[inherits(ExecutionDB)]
     pub struct ExecutionDBWithNames {

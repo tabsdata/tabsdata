@@ -58,8 +58,15 @@ const BIG: usize = 320;
 /// Timings below this (µs) are noise-dominated and not judged.
 const NOISE_FLOOR_US: f64 = 3_000.0;
 
-/// Estimates the exponent `k` in `t ∝ n^k` and requires `k ≤ 1.6`; a genuine
-/// regression to O(n²) blows far past the threshold.
+/// Ceiling on any single timed query, at either seed size (µs). Growth alone
+/// is not enough of a guard: a plan-level regression can be born slow at
+/// every size — uniform slowness yields a harmless-looking exponent (the RLS
+/// nested-loop metrics plans measured k≈-2 while taking seconds).
+const BUDGET_US: f64 = 500_000.0;
+
+/// Two teeth per timed query: an absolute budget at both seed sizes
+/// ([`BUDGET_US`]), and the exponent `k` in `t ∝ n^k` required `≤ 1.6` — a
+/// genuine regression to O(n²) blows far past the threshold.
 pub(crate) fn assert_subquadratic(
     case: &str,
     n_small: f64,
@@ -67,6 +74,14 @@ pub(crate) fn assert_subquadratic(
     n_big: f64,
     t_big_us: f64,
 ) {
+    for (n, t_us) in [(n_small, t_small_us), (n_big, t_big_us)] {
+        assert!(
+            t_us <= BUDGET_US,
+            "{case} took {t_us:.0}us at n {n} — over the {BUDGET_US:.0}us budget. \
+             A blown budget with an unremarkable exponent usually means a \
+             degraded query plan (e.g. RLS-driven nested loops), not growth."
+        );
+    }
     // Either endpoint under the noise floor makes the exponent meaningless
     // (a noise-low `t_small` would fail a fast, flat query spuriously).
     if t_big_us < NOISE_FLOOR_US || t_small_us < NOISE_FLOOR_US {
@@ -530,7 +545,9 @@ async fn time_metrics_queries(db: &TdPool) -> Result<Vec<(&'static str, f64)>, T
         groups: DimensionFilter::default(),
         statuses: vec![],
     };
-    let mut conn = db.acquire().await.unwrap();
+    // The metrics service's read context: the read-only transaction from
+    // `acquire_for_read`.
+    let mut conn = db.acquire_for_read().await.unwrap();
     let mut out = Vec::new();
     let _ = timed!(
         out,
@@ -578,6 +595,86 @@ async fn report_scaling_metrics(db: TdPool) -> Result<(), TdError> {
     for ((name, a), (name2, b)) in t1.iter().zip(&t2) {
         assert_eq!(name, name2, "the two passes drifted out of order");
         assert_subquadratic(name, n_small, *a, n_big, *b);
+    }
+    Ok(())
+}
+
+/// Θ(window) guard: `/metrics` cost must track the window, not total history.
+/// Both passes keep the same 40 attempts in-window and push the rest 30 days
+/// back, so only out-of-window history grows — a history-driven plan fails
+/// the ratio. The plan assertion pins the mechanism: the window is reached
+/// through the pointer-current reverse index.
+#[cfg(postgres)]
+#[ignore = "expensive: seeds the metrics dataset at two history sizes"]
+#[td_test::test(db)]
+async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
+    const HISTORIC_MS: i64 = WINDOW_START_MS - 30 * 86_400_000;
+
+    async fn push_history(db: &TdPool) {
+        let sql = format!(
+            "UPDATE physical_function_runs SET \
+               ended_on = to_timestamp({HISTORIC_MS}::double precision / 1000), \
+               ended_on_hour_ms = {HISTORIC_MS}, ended_on_day_ms = {HISTORIC_MS}, \
+               ended_on_week_ms = {HISTORIC_MS}, ended_on_month_ms = {HISTORIC_MS} \
+             WHERE ended_on IS NOT NULL AND id NOT IN (\
+               SELECT id FROM physical_function_runs WHERE ended_on IS NOT NULL \
+               ORDER BY id LIMIT 40)"
+        );
+        db.execute_batch(&[sql])
+            .await
+            .expect("push history out of window");
+    }
+
+    let mut passes = Vec::new();
+    for knobs in [
+        MetricsKnobs {
+            publishers: SMALL,
+            consumers: SMALL / 2,
+        },
+        MetricsKnobs {
+            publishers: BIG,
+            consumers: BIG / 2,
+        },
+    ] {
+        dataset::metrics_dataset(&db, knobs).await?;
+        push_history(&db).await;
+        db.execute_batch(&["ANALYZE".to_string()])
+            .await
+            .expect("analyze after history push");
+        passes.push(time_metrics_queries(&db).await?);
+    }
+    // Mechanism first (deterministic), at the big size: window-driven through
+    // the reverse index.
+    let (node_sql, edge_sql) = td_queries::metrics_plan_sql(&metrics_request());
+    let mut conn = db.acquire_for_read().await.unwrap();
+    for (name, sql) in [("nodes", &node_sql), ("edges", &edge_sql)] {
+        let plan = conn.explain(sql).await.expect("explain").join("\n");
+        eprintln!("[query-load] window plan {name}:\n{plan}\n");
+        assert!(
+            plan.contains("lfr_pointers_current___physical_function_run_id___idx"),
+            "{name} plan is not window-driven through the pointer-current reverse index:\n{plan}"
+        );
+    }
+    drop(conn);
+
+    let (h_small, h_big) = (
+        SMALL + SMALL / 2 - 40,
+        SMALL + SMALL / 2 + BIG + BIG / 2 - 40,
+    );
+    for ((name, a), (name2, b)) in passes[0].iter().zip(&passes[1]) {
+        assert_eq!(name, name2, "the two passes drifted out of order");
+        // No window semantics on /inflight; the regular scaling pass covers it.
+        if *name == "metrics::inflight" {
+            continue;
+        }
+        eprintln!(
+            "[query-load] window  {name:<42} hist {h_small:>6}->{h_big:<6} t {a:>9.0}us->{b:<9.0}us"
+        );
+        assert!(
+            *b <= a * 1.5 + 1_500.0,
+            "{name}: window-fixed cost grew with history ({a:.0}us -> {b:.0}us) — \
+             the query is history-driven, not window-driven."
+        );
     }
     Ok(())
 }

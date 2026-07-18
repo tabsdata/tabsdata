@@ -274,8 +274,8 @@ script = [
         code = exit 0
     end
 
-    debug "🚀 cargo %{td-toolchain-token}%{td-toolchain} test %{td-rust-quiet} --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load -- --ignored --test-threads=1 report_scaling"
-    exit_code = exec --get-exit-code cargo %{td-toolchain-token}%{td-toolchain} test %{td-rust-quiet} --locked --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load -- --ignored --test-threads=1 report_scaling
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 1 --cargo-profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --run-ignored ignored-only report_scaling"
+    exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 1 --cargo-profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --run-ignored ignored-only report_scaling
 
     is_zero = eq ${exit_code} "0"
     if ${is_zero}

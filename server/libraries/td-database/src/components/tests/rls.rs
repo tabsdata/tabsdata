@@ -164,6 +164,18 @@ async fn test_rls_project_isolation() {
     assert_eq!(n, 2, "bypass should see every project's rows");
     t.rollback().await.unwrap();
 
+    // Scope GUCs are transaction-local: on an autocommit connection they do
+    // not outlive their own statement, and the next read runs fail-closed.
+    sqlx::query("SELECT set_config('app.bypass_rls', 'on', true)")
+        .execute(&app)
+        .await
+        .unwrap();
+    let n: i64 = sqlx::query_scalar(COUNT).fetch_one(&app).await.unwrap();
+    assert_eq!(
+        n, 0,
+        "an autocommit-set bypass must not outlive its statement (fail-closed)"
+    );
+
     // Drop the per-test login role. Its privileges depend on the schema's tables,
     // so `DROP OWNED BY` clears those first; the schema + per-test app role are
     // dropped by `TestDb::drop`.

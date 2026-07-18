@@ -19,6 +19,8 @@ mod tower;
 pub use daos::dependency::{Dependencies, DependenciesEntry};
 pub use daos::execution::{Executions, ExecutionsEntry};
 pub use daos::function_runs::{Lfr, LfrEntry, Pfr, PfrEntry};
+#[cfg(all(postgres, feature = "td-test"))]
+pub use daos::metrics::metrics_plan_sql;
 pub use daos::metrics::{Metrics, MetricsEntry};
 pub use daos::pointers::{Bind, LogicalPointers, OutputRedirect, ReplayRedirect};
 pub use daos::session::{Sessions, SessionsEntry};

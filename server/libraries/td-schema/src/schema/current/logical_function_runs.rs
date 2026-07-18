@@ -129,18 +129,6 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            // LFR: lookup by execution_id (read-execution path).
-            Index::create()
-                .name("logical_function_runs___execution_id___idx")
-                .table(LogicalFunctionRuns::Table)
-                .col(LogicalFunctionRuns::ExecutionId)
-                .to_owned(),
-            // LFR: lookup by transaction_id (cancel cascade scans the transaction's LFRs).
-            Index::create()
-                .name("logical_function_runs___transaction_id___idx")
-                .table(LogicalFunctionRuns::Table)
-                .col(LogicalFunctionRuns::TransactionId)
-                .to_owned(),
             // FR → LFR derivation (status cascade, callback, redirect, replay).
             // Unique by construction: at most one LFR per `(execution_id,
             // function_id)`. The `.unique()` lifts that invariant from

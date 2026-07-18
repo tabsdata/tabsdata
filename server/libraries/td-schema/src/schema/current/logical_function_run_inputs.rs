@@ -105,6 +105,12 @@ impl Entity for Defs {
                 .table(LogicalFunctionRunInputs::Table)
                 .col(LogicalFunctionRunInputs::ExecutionId)
                 .to_owned(),
+            // LFR inputs: consumers of an LTDV (downstream cascade, unused-output anti-join).
+            Index::create()
+                .name("logical_function_run_inputs___requirement_logical_table_data_version_id___idx")
+                .table(LogicalFunctionRunInputs::Table)
+                .col(LogicalFunctionRunInputs::RequirementLogicalTableDataVersionId)
+                .to_owned(),
         ]
     }
 }

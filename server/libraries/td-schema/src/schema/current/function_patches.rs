@@ -66,17 +66,22 @@ impl Entity for Defs {
     }
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
-        // The "latest patch of head fvid" hot path now reads
-        // `function_patches_current` (one row per parent_function_version_id,
-        // with the partition column declared `unique_key()` → indexed). The
-        // historic `function_patches` base table is only scanned by
-        // list-patches, which orders by `(function_id, defined_on DESC)`.
         vec![
+            // List-patches scans by `(function_id, defined_on DESC)`.
             Index::create()
                 .name("function_patches___function_id__defined_on___idx")
                 .table(FunctionPatches::Table)
                 .col(FunctionPatches::FunctionId)
                 .col(FunctionPatches::DefinedOn)
+                .to_owned(),
+            // Mint (plan build / replay) ranks at-time within
+            // `parent_function_version_id` partitions.
+            Index::create()
+                .name("function_patches___parent_function_version_id__defined_on__id___idx")
+                .table(FunctionPatches::Table)
+                .col(FunctionPatches::ParentFunctionVersionId)
+                .col(FunctionPatches::DefinedOn)
+                .col(FunctionPatches::Id)
                 .to_owned(),
         ]
     }

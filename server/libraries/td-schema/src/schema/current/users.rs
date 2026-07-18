@@ -59,7 +59,6 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            Index::create().name("users___name___idx").table(Users::Table).col(Users::Name).to_owned(),
             Index::create().name("users___enabled___idx").table(Users::Table).col(Users::Enabled).to_owned(),
             Index::create().name("users___system___idx").table(Users::Table).col(Users::System).to_owned(),
         ]

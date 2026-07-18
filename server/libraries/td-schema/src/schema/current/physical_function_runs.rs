@@ -157,25 +157,11 @@ impl Entity for Defs {
                 .table(PhysicalFunctionRuns::Table)
                 .col(PhysicalFunctionRuns::Status)
                 .to_owned(),
-            // Metrics / Sankey time-window composites. WHERE filters
-            // on raw `ended_on`; GROUP BY uses the precomputed bucket-
-            // floor columns but doesn't need an index for that.
+            // Metrics / Sankey time-window: the LFR-canonical view resolves
+            // only `ended_on` to this table (status/dimensions are the LFR's).
             Index::create()
-                .name("function_runs___collection_id__ended_on___idx")
+                .name("function_runs___ended_on___idx")
                 .table(PhysicalFunctionRuns::Table)
-                .col(PhysicalFunctionRuns::CollectionId)
-                .col(PhysicalFunctionRuns::EndedOn)
-                .to_owned(),
-            Index::create()
-                .name("function_runs___status__ended_on___idx")
-                .table(PhysicalFunctionRuns::Table)
-                .col(PhysicalFunctionRuns::Status)
-                .col(PhysicalFunctionRuns::EndedOn)
-                .to_owned(),
-            Index::create()
-                .name("function_runs___function_version_id__ended_on___idx")
-                .table(PhysicalFunctionRuns::Table)
-                .col(PhysicalFunctionRuns::FunctionVersionId)
                 .col(PhysicalFunctionRuns::EndedOn)
                 .to_owned(),
         ]

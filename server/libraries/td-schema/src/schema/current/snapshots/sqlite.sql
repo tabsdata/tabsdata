@@ -229,21 +229,15 @@ CREATE VIEW executions__with_status AS SELECT "executions__with_names".*, "pfr_a
 
 CREATE VIEW transactions__with_status AS SELECT "transactions__with_names".*, "pfr_agg"."started_on" AS "started_on", (CASE WHEN ("transaction_status_summary"."finished") THEN "pfr_agg"."ended_on" END) AS "ended_on", "transaction_status_summary"."status" AS "status", "transaction_status_summary"."function_run_status_count" AS "function_run_status_count" FROM "transactions__with_names" LEFT JOIN (SELECT "physical_function_runs"."transaction_id" AS "transaction_id", MIN("physical_function_runs"."started_on") AS "started_on", MAX("physical_function_runs"."ended_on") AS "ended_on" FROM "physical_function_runs" GROUP BY "physical_function_runs"."transaction_id") AS "pfr_agg" ON "pfr_agg"."transaction_id" = "transactions__with_names"."id" LEFT JOIN "transaction_status_summary" AS "transaction_status_summary" ON "transaction_status_summary"."transaction_id" = "transactions__with_names"."id"
 
-CREATE INDEX "users___name___idx" ON "users" ("name")
-
 CREATE INDEX "users___enabled___idx" ON "users" ("enabled")
 
 CREATE INDEX "users___system___idx" ON "users" ("system")
 
 CREATE UNIQUE INDEX "groups___project_id__name___idx" ON "groups" ("project_id", "name")
 
-CREATE UNIQUE INDEX "projects___name___idx" ON "projects" ("name")
-
 CREATE UNIQUE INDEX "collections___project_id__name___idx" ON "collections" ("project_id", "name")
 
 CREATE INDEX "collections___group_id___idx" ON "collections" ("group_id")
-
-CREATE UNIQUE INDEX "roles___name___idx" ON "roles" ("name")
 
 CREATE INDEX "roles___project_id___idx" ON "roles" ("project_id")
 
@@ -268,6 +262,8 @@ CREATE INDEX "functions_current___collection_id___idx" ON "functions_current" ("
 CREATE INDEX "functions_current___status___idx" ON "functions_current" ("status")
 
 CREATE INDEX "function_patches___function_id__defined_on___idx" ON "function_patches" ("function_id", "defined_on")
+
+CREATE INDEX "function_patches___parent_function_version_id__defined_on__id___idx" ON "function_patches" ("parent_function_version_id", "defined_on", "id")
 
 CREATE INDEX "tables___function_id__status___idx" ON "tables" ("function_id", "status")
 
@@ -331,11 +327,7 @@ CREATE INDEX "function_runs___transaction_id__status___idx" ON "physical_functio
 
 CREATE INDEX "function_runs___status___idx" ON "physical_function_runs" ("status")
 
-CREATE INDEX "function_runs___collection_id__ended_on___idx" ON "physical_function_runs" ("collection_id", "ended_on")
-
-CREATE INDEX "function_runs___status__ended_on___idx" ON "physical_function_runs" ("status", "ended_on")
-
-CREATE INDEX "function_runs___function_version_id__ended_on___idx" ON "physical_function_runs" ("function_version_id", "ended_on")
+CREATE INDEX "function_runs___ended_on___idx" ON "physical_function_runs" ("ended_on")
 
 CREATE INDEX "physical_table_data_versions___collection_id___idx" ON "physical_table_data_versions" ("collection_id")
 
@@ -347,9 +339,7 @@ CREATE INDEX "physical_table_data_versions___table_id___has_data___idx" ON "phys
 
 CREATE INDEX "physical_table_data_versions___table_id__triggered_on__id___idx" ON "physical_table_data_versions" ("table_id", "triggered_on", "id")
 
-CREATE INDEX "logical_function_runs___execution_id___idx" ON "logical_function_runs" ("execution_id")
-
-CREATE INDEX "logical_function_runs___transaction_id___idx" ON "logical_function_runs" ("transaction_id")
+CREATE INDEX "workers___physical_function_run_id___idx" ON "workers" ("physical_function_run_id")
 
 CREATE UNIQUE INDEX "logical_function_runs___execution_id__function_id___idx" ON "logical_function_runs" ("execution_id", "function_id")
 
@@ -367,7 +357,9 @@ CREATE INDEX "logical_function_run_pointers___logical_function_run_id__set_on__i
 
 CREATE INDEX "logical_function_run_pointers___function_run_id___idx" ON "logical_function_run_pointers" ("physical_function_run_id")
 
-CREATE INDEX "logical_table_data_versions___table_id__triggered_on___idx" ON "logical_table_data_versions" ("table_id", "triggered_on")
+CREATE INDEX "lfr_pointers_current___physical_function_run_id___idx" ON "logical_function_run_pointers_current" ("physical_function_run_id")
+
+CREATE INDEX "logical_table_data_versions___table_id__triggered_on__id___idx" ON "logical_table_data_versions" ("table_id", "triggered_on", "id")
 
 CREATE INDEX "logical_table_data_versions___execution_id___idx" ON "logical_table_data_versions" ("execution_id")
 
@@ -384,6 +376,8 @@ CREATE INDEX "logical_table_data_version_pointers___table_data_version_id___idx"
 CREATE INDEX "logical_function_run_inputs___logical_function_run_id___idx" ON "logical_function_run_inputs" ("logical_function_run_id")
 
 CREATE INDEX "logical_function_run_inputs___execution_id___idx" ON "logical_function_run_inputs" ("execution_id")
+
+CREATE INDEX "logical_function_run_inputs___requirement_logical_table_data_version_id___idx" ON "logical_function_run_inputs" ("requirement_logical_table_data_version_id")
 
 INSERT INTO "tabsdata_system" ("name", "value") VALUES ('tabsdata_version', '2')
 

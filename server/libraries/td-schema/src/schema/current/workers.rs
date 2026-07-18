@@ -3,7 +3,8 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, JoinType, Query, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
+    TableCreateStatement,
 };
 
 use super::collections::Collections;
@@ -100,6 +101,18 @@ impl Entity for Defs {
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
+                .to_owned(),
+        ]
+    }
+
+    fn create_indices(&self) -> Vec<IndexCreateStatement> {
+        vec![
+            // Dispatch poll anti-joins workers on this column to find PFRs
+            // without a worker yet; callbacks fetch the worker the same way.
+            Index::create()
+                .name("workers___physical_function_run_id___idx")
+                .table(Workers::Table)
+                .col(Workers::PhysicalFunctionRunId)
                 .to_owned(),
         ]
     }

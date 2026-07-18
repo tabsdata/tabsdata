@@ -2,7 +2,7 @@
 // Copyright 2026 Tabs Data Inc.
 //
 
-use sea_query::{ColumnDef, Iden, Table, TableCreateStatement};
+use sea_query::{ColumnDef, Iden, Index, IndexCreateStatement, Table, TableCreateStatement};
 
 use crate::schema::Entity;
 
@@ -36,6 +36,20 @@ impl Entity for Defs {
                 .col(ColumnDef::new(LogicalFunctionRunPointersCurrent::SetOn).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(LogicalFunctionRunPointersCurrent::SetById).text().not_null())
                 .col(ColumnDef::new(LogicalFunctionRunPointersCurrent::Reason).text().not_null())
+                .to_owned(),
+        ]
+    }
+
+    fn create_indices(&self) -> Vec<IndexCreateStatement> {
+        // Reverse hop for window-driven reads: /metrics selects the window on
+        // physical_function_runs.ended_on (indexed) and resolves "which LFR is
+        // currently bound to this attempt" through this index instead of
+        // scanning the table. (Name kept short of PostgreSQL's 63-char cap.)
+        vec![
+            Index::create()
+                .name("lfr_pointers_current___physical_function_run_id___idx")
+                .table(LogicalFunctionRunPointersCurrent::Table)
+                .col(LogicalFunctionRunPointersCurrent::PhysicalFunctionRunId)
                 .to_owned(),
         ]
     }

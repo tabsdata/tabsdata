@@ -12,7 +12,6 @@ use std::fmt::Debug;
 use ta_objects::DaoCore;
 use td_common::logic_id::KeyId;
 use td_database::dynamic::{DynamicDecode, DynamicType};
-use td_database::error::DbError;
 use td_database::pool::TdPool;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_database::sea_query::executor::SeaExecutor;
@@ -83,11 +82,16 @@ where
 /// are properly seeded with the last used IDs from the database. This prevents ID collisions
 /// and maintains the integrity of the logical ID system.
 pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
-    // Logical IDs are global high-water marks, not per-project: the last-used id
-    // must span every project. The serving role enforces RLS, so all reads share
-    // a single bypass-scoped transaction (the audited system/maintenance escape
-    // hatch) — never scoped.
-    let mut conn = db.acquire().await.map_err(DbError::SqlError)?;
+    // Logical IDs are global high-water marks spanning every project, so all
+    // reads share one bypass-scoped transaction. The transaction is
+    // load-bearing: the bypass GUC is `SET LOCAL`-scoped and would not
+    // outlive its own statement on an autocommit connection (fail-closed,
+    // empty reads).
+    let mut conn = db
+        .begin()
+        .await
+        .map_err(ConnectionError::CannotBeginTransaction)?
+        .into_connection();
     conn.bypass_project_scope()
         .await
         .map_err(ConnectionError::CannotBypassProjectScope)?;
