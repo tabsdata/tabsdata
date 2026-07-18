@@ -257,14 +257,13 @@ impl KminusProvider {
         if !pid_file.is_file() {
             return;
         }
-        if let Ok(settings) = InstanceSettings::load(&self.name) {
-            if let Some(port) = database_port(&settings.ports) {
+        if let Ok(settings) = InstanceSettings::load(&self.name)
+            && let Some(port) = database_port(&settings.ports) {
                 let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
                 if TcpStream::connect_timeout(&address, DATABASE_PROBE_TIMEOUT).is_ok() {
                     return;
                 }
             }
-        }
         match fs::remove_file(&pid_file) {
             Ok(()) => warn!("Removed stale database pid file at {}.", pid_file.display()),
             Err(error) => warn!(
@@ -535,8 +534,8 @@ impl Provider for KminusProvider {
             step.fail();
             return Ok(ClusterStopOutcome::AlreadyStopped);
         }
-        if let Ok(settings) = InstanceSettings::load(&self.name) {
-            if wait_for_ports_released(&settings.ports).is_some() {
+        if let Ok(settings) = InstanceSettings::load(&self.name)
+            && wait_for_ports_released(&settings.ports).is_some() {
                 kill_port_holders(&settings.ports);
                 if let Some(entry) =
                     wait_for_ports_released_within(&settings.ports, PORT_RELEASE_AFTER_KILL_TIMEOUT)
@@ -549,7 +548,6 @@ impl Provider for KminusProvider {
                     .into());
                 }
             }
-        }
         self.clear_stale_database_pid();
         step.done("Kminus cluster stopped");
         Ok(ClusterStopOutcome::Stopped)

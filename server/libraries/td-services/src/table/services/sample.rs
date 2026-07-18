@@ -303,6 +303,7 @@ mod tests {
             }
         }
 
+        #[allow(clippy::too_many_arguments)]
         async fn get_sample(
             db: TdPool,
             project_id: ProjectId,

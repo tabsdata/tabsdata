@@ -575,6 +575,9 @@ mod tests {
         };
         // The failing hop must name source.field -> target.field, not just
         // the bare validation message.
-        assert!(msg.contains("SrcDao.value -> DstDao.value"), "conversion error lacks field/type context: {msg}");
+        assert!(
+            msg.contains("SrcDao.value -> DstDao.value"),
+            "conversion error lacks field/type context: {msg}"
+        );
     }
 }
