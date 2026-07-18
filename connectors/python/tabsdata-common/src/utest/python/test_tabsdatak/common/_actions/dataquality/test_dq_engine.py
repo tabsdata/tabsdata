@@ -351,7 +351,7 @@ def test_categorizer_with_negative_values(scale, dtype):
     tf = td.TableFrame.from_polars(df)
 
     categorizer = ScaleCategorizer(
-        column_names=("value", "value_category"),
+        column_names=[("value", "value_category")],
         scale=scale,
     )
 

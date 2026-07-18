@@ -1732,11 +1732,11 @@ def _is_null_action(
 ) -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=IsNull(
-            column_names=("value", "value_is_null"),
-            tags="null",
-        ),
-        operators=Summary(),
+        classifiers=[IsNull(
+            column_names=[("value", "value_is_null")],
+            tags=["null"],
+        )],
+        operators=[Summary()],
     )
 
 
@@ -1746,11 +1746,11 @@ def _is_not_null_action(
 ) -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=IsNotNull(
-            column_names=("value", "value_is_not_null"),
-            tags="not_null",
-        ),
-        operators=Summary(),
+        classifiers=[IsNotNull(
+            column_names=[("value", "value_is_not_null")],
+            tags=["not_null"],
+        )],
+        operators=[Summary()],
     )
 
 
@@ -1760,11 +1760,11 @@ def _is_true_action(
 ) -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=IsTrue(
-            column_names=("value", "value_is_true"),
-            tags="true",
-        ),
-        operators=Summary(),
+        classifiers=[IsTrue(
+            column_names=[("value", "value_is_true")],
+            tags=["true"],
+        )],
+        operators=[Summary()],
     )
 
 
@@ -1774,11 +1774,11 @@ def _is_false_action(
 ) -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=IsFalse(
-            column_names=("value", "value_is_false"),
-            tags="false",
-        ),
-        operators=Summary(),
+        classifiers=[IsFalse(
+            column_names=[("value", "value_is_false")],
+            tags=["false"],
+        )],
+        operators=[Summary()],
     )
 
 
@@ -1790,11 +1790,11 @@ def _is_nan_action(
         table=table,
         classifiers=[
             IsNan(
-                column_names=("value", "value_is_nan"),
-                tags="nan",
+                column_names=[("value", "value_is_nan")],
+                tags=["nan"],
             ),
         ],
-        operators=Summary(),
+        operators=[Summary()],
     )
 
 
@@ -1806,11 +1806,11 @@ def _is_not_nan_action(
         table=table,
         classifiers=[
             IsNotNan(
-                column_names=("value", "value_is_not_nan"),
-                tags="not_nan",
+                column_names=[("value", "value_is_not_nan")],
+                tags=["not_nan"],
             ),
         ],
-        operators=Summary(),
+        operators=[Summary()],
     )
 
 
@@ -1822,11 +1822,11 @@ def _is_null_or_nan_action(
         table=table,
         classifiers=[
             IsNullOrNan(
-                column_names=("value", "value_is_null_or_nan"),
-                tags="null_or_nan",
+                column_names=[("value", "value_is_null_or_nan")],
+                tags=["null_or_nan"],
             ),
         ],
-        operators=Summary(),
+        operators=[Summary()],
     )
 
 
@@ -1838,11 +1838,11 @@ def _is_not_null_nor_nan_action(
         table=table,
         classifiers=[
             IsNotNullNorNan(
-                column_names=("value", "value_is_not_null_nor_nan"),
-                tags="not_null_nor_nan",
+                column_names=[("value", "value_is_not_null_nor_nan")],
+                tags=["not_null_nor_nan"],
             ),
         ],
-        operators=Summary(),
+        operators=[Summary()],
     )
 
 
@@ -1852,11 +1852,11 @@ def _is_zero_action(
 ) -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=IsZero(
-            column_names=("value", "value_is_zero"),
-            tags="zero",
-        ),
-        operators=Summary(),
+        classifiers=[IsZero(
+            column_names=[("value", "value_is_zero")],
+            tags=["zero"],
+        )],
+        operators=[Summary()],
     )
 
 
@@ -1866,11 +1866,11 @@ def _is_not_zero_action(
 ) -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=IsNotZero(
-            column_names=("value", "value_is_not_zero"),
-            tags="not_zero",
-        ),
-        operators=Summary(),
+        classifiers=[IsNotZero(
+            column_names=[("value", "value_is_not_zero")],
+            tags=["not_zero"],
+        )],
+        operators=[Summary()],
     )
 
 
@@ -1880,11 +1880,11 @@ def _is_positive_action(
 ) -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=IsPositive(
-            column_names=("value", "value_is_positive"),
-            tags="positive",
-        ),
-        operators=Summary(),
+        classifiers=[IsPositive(
+            column_names=[("value", "value_is_positive")],
+            tags=["positive"],
+        )],
+        operators=[Summary()],
     )
 
 
@@ -1894,11 +1894,11 @@ def _is_positive_or_zero_action(
 ) -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=IsPositiveOrZero(
-            column_names=("value", "value_is_positive_or_zero"),
-            tags="positive_or_zero",
-        ),
-        operators=Summary(),
+        classifiers=[IsPositiveOrZero(
+            column_names=[("value", "value_is_positive_or_zero")],
+            tags=["positive_or_zero"],
+        )],
+        operators=[Summary()],
     )
 
 
@@ -1908,11 +1908,11 @@ def _is_negative_action(
 ) -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=IsNegative(
-            column_names=("value", "value_is_negative"),
-            tags="negative",
-        ),
-        operators=Summary(),
+        classifiers=[IsNegative(
+            column_names=[("value", "value_is_negative")],
+            tags=["negative"],
+        )],
+        operators=[Summary()],
     )
 
 
@@ -1922,11 +1922,11 @@ def _is_negative_or_zero_action(
 ) -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=IsNegativeOrZero(
-            column_names=("value", "value_is_negative_or_zero"),
-            tags="negative_or_zero",
-        ),
-        operators=Summary(),
+        classifiers=[IsNegativeOrZero(
+            column_names=[("value", "value_is_negative_or_zero")],
+            tags=["negative_or_zero"],
+        )],
+        operators=[Summary()],
     )
 
 
@@ -1978,14 +1978,14 @@ def _make_is_between_action(
             table=table,
             classifiers=[
                 IsBetween(
-                    column_names=("value", "value_is_between"),
-                    tags="is_between",
+                    column_names=[("value", "value_is_between")],
+                    tags=["is_between"],
                     min_val=converted_min,
                     max_val=converted_max,
                     closed_on=closed_on,
                 ),
             ],
-            operators=Summary(),
+            operators=[Summary()],
         )
 
     return _is_between_action
@@ -2039,14 +2039,14 @@ def _make_is_not_between_action(
             table=table,
             classifiers=[
                 IsNotBetween(
-                    column_names=("value", "value_is_not_between"),
-                    tags="is_not_between",
+                    column_names=[("value", "value_is_not_between")],
+                    tags=["is_not_between"],
                     min_val=converted_min,
                     max_val=converted_max,
                     closed_on=closed_on,
                 ),
             ],
-            operators=Summary(),
+            operators=[Summary()],
         )
 
     return _is_not_between_action
@@ -2087,12 +2087,12 @@ def _make_is_in_action(values_set: set):
             table=table,
             classifiers=[
                 IsIn(
-                    column_names=("value", "value_is_in"),
-                    tags="is_in",
+                    column_names=[("value", "value_is_in")],
+                    tags=["is_in"],
                     values=converted_values,
                 ),
             ],
-            operators=Summary(),
+            operators=[Summary()],
         )
 
     return _is_in_action
@@ -2133,12 +2133,12 @@ def _make_is_not_in_action(values_set: set):
             table=table,
             classifiers=[
                 IsNotIn(
-                    column_names=("value", "value_is_not_in"),
-                    tags="is_not_in",
+                    column_names=[("value", "value_is_not_in")],
+                    tags=["is_not_in"],
                     values=converted_values,
                 ),
             ],
-            operators=Summary(),
+            operators=[Summary()],
         )
 
     return _is_not_in_action
@@ -2153,12 +2153,12 @@ def _make_matches_action(pattern: str):
             table=table,
             classifiers=[
                 Matches(
-                    column_names=("value", "value_matches"),
-                    tags="matches",
+                    column_names=[("value", "value_matches")],
+                    tags=["matches"],
                     pattern=pattern,
                 ),
             ],
-            operators=Summary(),
+            operators=[Summary()],
         )
 
     return _matches_action
@@ -2173,12 +2173,12 @@ def _make_does_not_match_action(pattern: str):
             table=table,
             classifiers=[
                 DoesNotMatch(
-                    column_names=("value", "value_does_not_match"),
-                    tags="does_not_match",
+                    column_names=[("value", "value_does_not_match")],
+                    tags=["does_not_match"],
                     pattern=pattern,
                 ),
             ],
-            operators=Summary(),
+            operators=[Summary()],
         )
 
     return _does_not_match_action
@@ -2193,13 +2193,13 @@ def _make_has_length_action(min_length: int, max_length: int):
             table=table,
             classifiers=[
                 HasLength(
-                    column_names=("value", "value_has_length"),
-                    tags="has_length",
+                    column_names=[("value", "value_has_length")],
+                    tags=["has_length"],
                     min_len=min_length,
                     max_len=max_length,
                 ),
             ],
-            operators=Summary(),
+            operators=[Summary()],
         )
 
     return _has_length_action
@@ -2223,12 +2223,12 @@ def _make_categorizer_action(scale):
             table=table,
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=scale,
                     tags=tag,
                 )
             ],
-            operators=Summary(),
+            operators=[Summary()],
         )
 
     return _categorizer_action
@@ -2417,8 +2417,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNull(
-                    column_names="value",
-                    tags="null",
+                    column_names=["value"],
+                    tags=["null"],
                 )
             ],
             method=DataQualityEngine.is_null,
@@ -2431,8 +2431,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotNull(
-                    column_names="value",
-                    tags="not_null",
+                    column_names=["value"],
+                    tags=["not_null"],
                 )
             ],
             method=DataQualityEngine.is_not_null,
@@ -2445,8 +2445,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsTrue(
-                    column_names=("value", "value_is_true"),
-                    tags="true",
+                    column_names=[("value", "value_is_true")],
+                    tags=["true"],
                 )
             ],
             method=DataQualityEngine.is_true,
@@ -2459,8 +2459,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsFalse(
-                    column_names=("value", "value_is_false"),
-                    tags="false",
+                    column_names=[("value", "value_is_false")],
+                    tags=["false"],
                 )
             ],
             method=DataQualityEngine.is_false,
@@ -2473,8 +2473,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNan(
-                    column_names=("value", "value_is_nan"),
-                    tags="nan",
+                    column_names=[("value", "value_is_nan")],
+                    tags=["nan"],
                 ),
             ],
             method=DataQualityEngine.is_nan,
@@ -2487,8 +2487,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotNan(
-                    column_names=("value", "value_is_not_nan"),
-                    tags="not_nan",
+                    column_names=[("value", "value_is_not_nan")],
+                    tags=["not_nan"],
                 ),
             ],
             method=DataQualityEngine.is_not_nan,
@@ -2501,8 +2501,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNullOrNan(
-                    column_names=("value", "value_is_null_or_nan"),
-                    tags="null_or_nan",
+                    column_names=[("value", "value_is_null_or_nan")],
+                    tags=["null_or_nan"],
                 ),
             ],
             method=DataQualityEngine.is_null_or_nan,
@@ -2515,8 +2515,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotNullNorNan(
-                    column_names=("value", "value_is_not_null_nor_nan"),
-                    tags="not_null_nor_nan",
+                    column_names=[("value", "value_is_not_null_nor_nan")],
+                    tags=["not_null_nor_nan"],
                 ),
             ],
             method=DataQualityEngine.is_not_null_nor_nan,
@@ -2529,8 +2529,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsZero(
-                    column_names=("value", "value_is_zero"),
-                    tags="zero",
+                    column_names=[("value", "value_is_zero")],
+                    tags=["zero"],
                 ),
             ],
             method=DataQualityEngine.is_zero,
@@ -2543,8 +2543,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotZero(
-                    column_names=("value", "value_is_not_zero"),
-                    tags="not_zero",
+                    column_names=[("value", "value_is_not_zero")],
+                    tags=["not_zero"],
                 ),
             ],
             method=DataQualityEngine.is_not_zero,
@@ -2557,8 +2557,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsPositive(
-                    column_names=("value", "value_is_positive"),
-                    tags="positive",
+                    column_names=[("value", "value_is_positive")],
+                    tags=["positive"],
                 ),
             ],
             method=DataQualityEngine.is_positive,
@@ -2571,8 +2571,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsPositiveOrZero(
-                    column_names=("value", "value_is_positive_or_zero"),
-                    tags="positive_or_zero",
+                    column_names=[("value", "value_is_positive_or_zero")],
+                    tags=["positive_or_zero"],
                 ),
             ],
             method=DataQualityEngine.is_positive_or_zero,
@@ -2585,8 +2585,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNegative(
-                    column_names=("value", "value_is_negative"),
-                    tags="negative",
+                    column_names=[("value", "value_is_negative")],
+                    tags=["negative"],
                 ),
             ],
             method=DataQualityEngine.is_negative,
@@ -2599,8 +2599,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNegativeOrZero(
-                    column_names=("value", "value_is_negative_or_zero"),
-                    tags="negative_or_zero",
+                    column_names=[("value", "value_is_negative_or_zero")],
+                    tags=["negative_or_zero"],
                 ),
             ],
             method=DataQualityEngine.is_negative_or_zero,
@@ -2613,8 +2613,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsBetween(
-                    column_names=("value", "value_is_between"),
-                    tags="is_between",
+                    column_names=[("value", "value_is_between")],
+                    tags=["is_between"],
                     min_val=-100,
                     max_val=100,
                     closed_on="both",
@@ -2629,8 +2629,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsBetween(
-                    column_names=("value", "value_is_between"),
-                    tags="is_between",
+                    column_names=[("value", "value_is_between")],
+                    tags=["is_between"],
                     min_val=0,
                     max_val=1000,
                     closed_on="lower",
@@ -2645,8 +2645,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsBetween(
-                    column_names=("value", "value_is_between"),
-                    tags="is_between",
+                    column_names=[("value", "value_is_between")],
+                    tags=["is_between"],
                     min_val=None,
                     max_val=0,
                     closed_on="both",
@@ -2661,8 +2661,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsBetween(
-                    column_names=("value", "value_is_between"),
-                    tags="is_between",
+                    column_names=[("value", "value_is_between")],
+                    tags=["is_between"],
                     min_val=0,
                     max_val=None,
                     closed_on="both",
@@ -2677,8 +2677,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsBetween(
-                    column_names=("value", "value_is_between"),
-                    tags="is_between",
+                    column_names=[("value", "value_is_between")],
+                    tags=["is_between"],
                     min_val=-1000,
                     max_val=0,
                     closed_on="upper",
@@ -2695,8 +2695,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotBetween(
-                    column_names=("value", "value_is_not_between"),
-                    tags="is_not_between",
+                    column_names=[("value", "value_is_not_between")],
+                    tags=["is_not_between"],
                     min_val=-100,
                     max_val=100,
                     closed_on="both",
@@ -2711,8 +2711,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotBetween(
-                    column_names=("value", "value_is_not_between"),
-                    tags="is_not_between",
+                    column_names=[("value", "value_is_not_between")],
+                    tags=["is_not_between"],
                     min_val=0,
                     max_val=1000,
                     closed_on="lower",
@@ -2727,8 +2727,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotBetween(
-                    column_names=("value", "value_is_not_between"),
-                    tags="is_not_between",
+                    column_names=[("value", "value_is_not_between")],
+                    tags=["is_not_between"],
                     min_val=None,
                     max_val=0,
                     closed_on="both",
@@ -2743,8 +2743,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotBetween(
-                    column_names=("value", "value_is_not_between"),
-                    tags="is_not_between",
+                    column_names=[("value", "value_is_not_between")],
+                    tags=["is_not_between"],
                     min_val=0,
                     max_val=None,
                     closed_on="both",
@@ -2759,8 +2759,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotBetween(
-                    column_names=("value", "value_is_not_between"),
-                    tags="is_not_between",
+                    column_names=[("value", "value_is_not_between")],
+                    tags=["is_not_between"],
                     min_val=-1000,
                     max_val=0,
                     closed_on="upper",
@@ -2777,8 +2777,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsIn(
-                    column_names=("value", "value_is_in"),
-                    tags="is_in",
+                    column_names=[("value", "value_is_in")],
+                    tags=["is_in"],
                     values=frozenset({0, 1000}),
                 ),
             ],
@@ -2791,8 +2791,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsIn(
-                    column_names=("value", "value_is_in"),
-                    tags="is_in",
+                    column_names=[("value", "value_is_in")],
+                    tags=["is_in"],
                     values=frozenset({None, 0}),
                 ),
             ],
@@ -2805,8 +2805,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsIn(
-                    column_names=("value", "value_is_in"),
-                    tags="is_in",
+                    column_names=[("value", "value_is_in")],
+                    tags=["is_in"],
                     values=frozenset({-1000}),
                 ),
             ],
@@ -2819,8 +2819,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsIn(
-                    column_names=("value", "value_is_in"),
-                    tags="is_in",
+                    column_names=[("value", "value_is_in")],
+                    tags=["is_in"],
                     values=frozenset({None, 1000}),
                 ),
             ],
@@ -2833,8 +2833,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsIn(
-                    column_names=("value", "value_is_in"),
-                    tags="is_in",
+                    column_names=[("value", "value_is_in")],
+                    tags=["is_in"],
                     values=frozenset({NaN, 1000}),
                 ),
             ],
@@ -2847,8 +2847,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsIn(
-                    column_names=("value", "value_is_in"),
-                    tags="is_in",
+                    column_names=[("value", "value_is_in")],
+                    tags=["is_in"],
                     values=frozenset({None, NaN, 0}),
                 ),
             ],
@@ -2863,8 +2863,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotIn(
-                    column_names=("value", "value_is_not_in"),
-                    tags="is_not_in",
+                    column_names=[("value", "value_is_not_in")],
+                    tags=["is_not_in"],
                     values=frozenset({0, 1000}),
                 ),
             ],
@@ -2877,8 +2877,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotIn(
-                    column_names=("value", "value_is_not_in"),
-                    tags="is_not_in",
+                    column_names=[("value", "value_is_not_in")],
+                    tags=["is_not_in"],
                     values=frozenset({None, 0}),
                 ),
             ],
@@ -2891,8 +2891,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotIn(
-                    column_names=("value", "value_is_not_in"),
-                    tags="is_not_in",
+                    column_names=[("value", "value_is_not_in")],
+                    tags=["is_not_in"],
                     values=frozenset({-1000}),
                 ),
             ],
@@ -2905,8 +2905,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotIn(
-                    column_names=("value", "value_is_not_in"),
-                    tags="is_not_in",
+                    column_names=[("value", "value_is_not_in")],
+                    tags=["is_not_in"],
                     values=frozenset({None, 1000}),
                 ),
             ],
@@ -2919,8 +2919,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotIn(
-                    column_names=("value", "value_is_not_in"),
-                    tags="is_not_in",
+                    column_names=[("value", "value_is_not_in")],
+                    tags=["is_not_in"],
                     values=frozenset({NaN, 1000}),
                 ),
             ],
@@ -2933,8 +2933,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 IsNotIn(
-                    column_names=("value", "value_is_not_in"),
-                    tags="is_not_in",
+                    column_names=[("value", "value_is_not_in")],
+                    tags=["is_not_in"],
                     values=frozenset({None, NaN, 0}),
                 ),
             ],
@@ -2949,8 +2949,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 Matches(
-                    column_names=("value", "value_matches"),
-                    tags="matches",
+                    column_names=[("value", "value_matches")],
+                    tags=["matches"],
                     pattern=".*",
                 ),
             ],
@@ -2963,8 +2963,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 Matches(
-                    column_names=("value", "value_matches"),
-                    tags="matches",
+                    column_names=[("value", "value_matches")],
+                    tags=["matches"],
                     pattern="^10",
                 ),
             ],
@@ -2977,8 +2977,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 Matches(
-                    column_names=("value", "value_matches"),
-                    tags="matches",
+                    column_names=[("value", "value_matches")],
+                    tags=["matches"],
                     pattern="^-10",
                 ),
             ],
@@ -2991,8 +2991,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 Matches(
-                    column_names=("value", "value_matches"),
-                    tags="matches",
+                    column_names=[("value", "value_matches")],
+                    tags=["matches"],
                     pattern="^0$",
                 ),
             ],
@@ -3007,8 +3007,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 DoesNotMatch(
-                    column_names=("value", "value_does_not_match"),
-                    tags="does_not_match",
+                    column_names=[("value", "value_does_not_match")],
+                    tags=["does_not_match"],
                     pattern=".*",
                 ),
             ],
@@ -3021,8 +3021,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 DoesNotMatch(
-                    column_names=("value", "value_does_not_match"),
-                    tags="does_not_match",
+                    column_names=[("value", "value_does_not_match")],
+                    tags=["does_not_match"],
                     pattern="^10",
                 ),
             ],
@@ -3035,8 +3035,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 DoesNotMatch(
-                    column_names=("value", "value_does_not_match"),
-                    tags="does_not_match",
+                    column_names=[("value", "value_does_not_match")],
+                    tags=["does_not_match"],
                     pattern="^-10",
                 ),
             ],
@@ -3049,8 +3049,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 DoesNotMatch(
-                    column_names=("value", "value_does_not_match"),
-                    tags="does_not_match",
+                    column_names=[("value", "value_does_not_match")],
+                    tags=["does_not_match"],
                     pattern="^0$",
                 ),
             ],
@@ -3065,8 +3065,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 HasLength(
-                    column_names=("value", "value_has_length"),
-                    tags="has_length",
+                    column_names=[("value", "value_has_length")],
+                    tags=["has_length"],
                     min_len=0,
                     max_len=1,
                 ),
@@ -3080,8 +3080,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 HasLength(
-                    column_names=("value", "value_has_length"),
-                    tags="has_length",
+                    column_names=[("value", "value_has_length")],
+                    tags=["has_length"],
                     min_len=5,
                     max_len=5,
                 ),
@@ -3095,8 +3095,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 HasLength(
-                    column_names=("value", "value_has_length"),
-                    tags="has_length",
+                    column_names=[("value", "value_has_length")],
+                    tags=["has_length"],
                     min_len=5,
                     max_len=6,
                 ),
@@ -3110,8 +3110,8 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 HasLength(
-                    column_names=("value", "value_has_length"),
-                    tags="has_length",
+                    column_names=[("value", "value_has_length")],
+                    tags=["has_length"],
                     min_len=0,
                     max_len=5,
                 ),
@@ -3127,14 +3127,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LinearScale(
                         min_val=0,
                         max_val=100,
                         bins=10,
                         use_bin_zero=False,
                     ),
-                    tags="linear",
+                    tags=["linear"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3168,14 +3168,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LinearScale(
                         min_val=0,
                         max_val=100,
                         bins=10,
                         use_bin_zero=True,
                     ),
-                    tags="linear",
+                    tags=["linear"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3209,14 +3209,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LinearScale(
                         min_val=0,
                         max_val=10,
                         bins=5,
                         use_bin_zero=False,
                     ),
-                    tags="linear",
+                    tags=["linear"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3250,14 +3250,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LinearScale(
                         min_val=0,
                         max_val=10,
                         bins=5,
                         use_bin_zero=True,
                     ),
-                    tags="linear",
+                    tags=["linear"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3291,14 +3291,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LinearScale(
                         min_val=-50,
                         max_val=50,
                         bins=20,
                         use_bin_zero=False,
                     ),
-                    tags="linear",
+                    tags=["linear"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3332,14 +3332,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LinearScale(
                         min_val=-50,
                         max_val=50,
                         bins=20,
                         use_bin_zero=True,
                     ),
-                    tags="linear",
+                    tags=["linear"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3373,14 +3373,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LinearScale(
                         min_val=0,
                         max_val=1,
                         bins=100,
                         use_bin_zero=False,
                     ),
-                    tags="linear",
+                    tags=["linear"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3414,14 +3414,14 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LinearScale(
                         min_val=0,
                         max_val=1,
                         bins=100,
                         use_bin_zero=True,
                     ),
-                    tags="linear",
+                    tags=["linear"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3455,13 +3455,13 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=IdentityScale(
                         min_val=0,
                         max_val=10,
                         use_bin_zero=False,
                     ),
-                    tags="identity",
+                    tags=["identity"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3492,13 +3492,13 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=IdentityScale(
                         min_val=0,
                         max_val=10,
                         use_bin_zero=True,
                     ),
-                    tags="identity",
+                    tags=["identity"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3529,13 +3529,13 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=IdentityScale(
                         min_val=1,
                         max_val=20,
                         use_bin_zero=False,
                     ),
-                    tags="identity",
+                    tags=["identity"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3566,13 +3566,13 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=IdentityScale(
                         min_val=1,
                         max_val=20,
                         use_bin_zero=True,
                     ),
-                    tags="identity",
+                    tags=["identity"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3603,13 +3603,13 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=IdentityScale(
                         min_val=0,
                         max_val=100,
                         use_bin_zero=False,
                     ),
-                    tags="identity",
+                    tags=["identity"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3640,13 +3640,13 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=IdentityScale(
                         min_val=0,
                         max_val=100,
                         use_bin_zero=True,
                     ),
-                    tags="identity",
+                    tags=["identity"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3677,7 +3677,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=MonomialScale(
                         min_val=1,
                         max_val=100,
@@ -3685,7 +3685,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=10,
                         use_bin_zero=False,
                     ),
-                    tags="monomial",
+                    tags=["monomial"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3722,7 +3722,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=MonomialScale(
                         min_val=1,
                         max_val=100,
@@ -3730,7 +3730,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=10,
                         use_bin_zero=True,
                     ),
-                    tags="monomial",
+                    tags=["monomial"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3767,7 +3767,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=MonomialScale(
                         min_val=0,
                         max_val=27,
@@ -3775,7 +3775,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=9,
                         use_bin_zero=False,
                     ),
-                    tags="monomial",
+                    tags=["monomial"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3812,7 +3812,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=MonomialScale(
                         min_val=0,
                         max_val=27,
@@ -3820,7 +3820,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=9,
                         use_bin_zero=True,
                     ),
-                    tags="monomial",
+                    tags=["monomial"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3857,7 +3857,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=MonomialScale(
                         min_val=1,
                         max_val=1000,
@@ -3865,7 +3865,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=30,
                         use_bin_zero=False,
                     ),
-                    tags="monomial",
+                    tags=["monomial"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3902,7 +3902,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=MonomialScale(
                         min_val=1,
                         max_val=1000,
@@ -3910,7 +3910,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=30,
                         use_bin_zero=True,
                     ),
-                    tags="monomial",
+                    tags=["monomial"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3947,7 +3947,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LogarithmicScale(
                         min_val=0,
                         max_val=6,
@@ -3955,7 +3955,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=6,
                         use_bin_zero=False,
                     ),
-                    tags="logarithmic",
+                    tags=["logarithmic"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -3992,7 +3992,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LogarithmicScale(
                         min_val=0,
                         max_val=6,
@@ -4000,7 +4000,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=6,
                         use_bin_zero=True,
                     ),
-                    tags="logarithmic",
+                    tags=["logarithmic"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4037,7 +4037,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LogarithmicScale(
                         min_val=1,
                         max_val=4,
@@ -4045,7 +4045,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=4,
                         use_bin_zero=False,
                     ),
-                    tags="logarithmic",
+                    tags=["logarithmic"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4082,7 +4082,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LogarithmicScale(
                         min_val=1,
                         max_val=4,
@@ -4090,7 +4090,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=4,
                         use_bin_zero=True,
                     ),
-                    tags="logarithmic",
+                    tags=["logarithmic"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4127,7 +4127,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LogarithmicScale(
                         min_val=0,
                         max_val=3,
@@ -4135,7 +4135,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=10,
                         use_bin_zero=False,
                     ),
-                    tags="logarithmic",
+                    tags=["logarithmic"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4172,7 +4172,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=LogarithmicScale(
                         min_val=0,
                         max_val=3,
@@ -4180,7 +4180,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=10,
                         use_bin_zero=True,
                     ),
-                    tags="logarithmic",
+                    tags=["logarithmic"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4217,7 +4217,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=ExponentialScale(
                         min_val=1,
                         max_val=1000000,
@@ -4225,7 +4225,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=6,
                         use_bin_zero=False,
                     ),
-                    tags="exponential",
+                    tags=["exponential"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4262,7 +4262,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=ExponentialScale(
                         min_val=1,
                         max_val=1000000,
@@ -4270,7 +4270,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=6,
                         use_bin_zero=True,
                     ),
-                    tags="exponential",
+                    tags=["exponential"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4307,7 +4307,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=ExponentialScale(
                         min_val=1,
                         max_val=1000,
@@ -4315,7 +4315,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=3,
                         use_bin_zero=False,
                     ),
-                    tags="exponential",
+                    tags=["exponential"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4352,7 +4352,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=ExponentialScale(
                         min_val=1,
                         max_val=1000,
@@ -4360,7 +4360,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=3,
                         use_bin_zero=True,
                     ),
-                    tags="exponential",
+                    tags=["exponential"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4397,7 +4397,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=ExponentialScale(
                         min_val=2,
                         max_val=256,
@@ -4405,7 +4405,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=8,
                         use_bin_zero=False,
                     ),
-                    tags="exponential",
+                    tags=["exponential"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4442,7 +4442,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=ExponentialScale(
                         min_val=2,
                         max_val=256,
@@ -4450,7 +4450,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=8,
                         use_bin_zero=True,
                     ),
-                    tags="exponential",
+                    tags=["exponential"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4487,7 +4487,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=ExponentialScale(
                         min_val=1,
                         max_val=1000,
@@ -4495,7 +4495,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=10,
                         use_bin_zero=False,
                     ),
-                    tags="exponential",
+                    tags=["exponential"],
                 ),
             ],
             method=DataQualityEngine.categorizer,
@@ -4532,7 +4532,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
         ClassifierConfiguration(
             classifiers=[
                 ScaleCategorizer(
-                    column_names=("value", "value_category"),
+                    column_names=[("value", "value_category")],
                     scale=ExponentialScale(
                         min_val=1,
                         max_val=1000,
@@ -4540,7 +4540,7 @@ CLASSIFIERS: dict[type[Classifier], list[ClassifierConfiguration]] = {
                         bins=10,
                         use_bin_zero=True,
                     ),
-                    tags="exponential",
+                    tags=["exponential"],
                 ),
             ],
             method=DataQualityEngine.categorizer,

@@ -17,7 +17,7 @@ pytestmark = pytest.mark.dq
 def _summary_action(table: str = "out") -> DataQuality:
     return DataQuality(
         table=table,
-        classifiers=[IsPositive("a")],
+        classifiers=[IsPositive(["a"])],
         operators=[Summary()],
     )
 

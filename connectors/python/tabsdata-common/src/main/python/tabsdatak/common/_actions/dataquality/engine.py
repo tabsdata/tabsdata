@@ -524,7 +524,7 @@ class PolarsClassifierProvider:
     ) -> pl.Expr:
         try:
             c_min = TypeHandler.convert_value(
-                classifier.min,
+                classifier.min_val,
                 dtype,
                 allow_null=True,
             )
@@ -534,13 +534,13 @@ class PolarsClassifierProvider:
                     classifier,
                     "min_val",
                     dtype,
-                    classifier.min,
+                    classifier.min_val,
                 )
             raise
 
         try:
             c_max = TypeHandler.convert_value(
-                classifier.max,
+                classifier.max_val,
                 dtype,
                 allow_null=True,
             )
@@ -550,7 +550,7 @@ class PolarsClassifierProvider:
                     classifier,
                     "max_val",
                     dtype,
-                    classifier.max,
+                    classifier.max_val,
                 )
             raise
 
@@ -800,7 +800,7 @@ class PolarsClassifierProvider:
             .then(ByteSentinel.NAN)
         )
         core_expression = PolarsClassifierProvider._has_length(
-            column, classifier.min, classifier.max
+            column, classifier.min_len, classifier.max_len
         )
         return base_expression.otherwise(core_expression).cast(pl.UInt8)
 
@@ -813,7 +813,7 @@ class PolarsClassifierProvider:
         match classifier:
             case ScaleCategorizer():
                 scale = classifier.scale
-                minimum, maximum = scale._scale_range
+                minimum, maximum = scale.min_val, scale.max_val
 
                 cuts = []
 
@@ -1814,9 +1814,9 @@ class DataQualityEngine:
                                     ClassifierFamily.CATEGORICAL.value
                                 ),
                                 DQColumns.DQ_BINS.value: (
-                                    categorizer.scale._bins + 1
+                                    categorizer.scale.bins + 1
                                     if categorizer.scale.use_bin_zero
-                                    else categorizer.scale._bins
+                                    else categorizer.scale.bins
                                 ),
                                 DQColumns.DQ_FALSE.value: None,
                                 DQColumns.DQ_TRUE.value: None,
@@ -1835,7 +1835,7 @@ class DataQualityEngine:
                                     .item()
                                 )
                                 summary_row[DQColumns.column(0)] = count
-                            for i in range(1, categorizer.scale._bins + 1):
+                            for i in range(1, categorizer.scale.bins + 1):
                                 count = (
                                     lf
                                     .select((pl.col(column) == i).sum())
@@ -1843,7 +1843,7 @@ class DataQualityEngine:
                                     .item()
                                 )
                                 summary_row[DQColumns.column(i)] = count
-                            for i in range(categorizer.scale._bins + 1, MAX_BINS + 1):
+                            for i in range(categorizer.scale.bins + 1, MAX_BINS + 1):
                                 summary_row[DQColumns.column(i)] = None
                         case _:
                             raise ValueError(
@@ -1854,7 +1854,7 @@ class DataQualityEngine:
                         f"Unsupported classifier family: {type(column_info.classifier)}"
                     )
 
-            summary_row[DQColumns.DQ_PARAMETERS.value] = str(column_info.classifier)
+            summary_row[DQColumns.DQ_PARAMETERS.value] = column_info.classifier.to_json()
             summary_data.append(summary_row)
 
         # Parquet format doesn't natively support 128-bit integer types.
