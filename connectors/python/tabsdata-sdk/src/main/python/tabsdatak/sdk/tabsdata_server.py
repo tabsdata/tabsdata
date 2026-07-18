@@ -416,6 +416,7 @@ class Collection:
                 .get("python_versions")
             )
             archive = _create_archive(
+                self.name,
                 info,
                 project_root,
                 temporary_directory,
@@ -5505,7 +5506,39 @@ def _output_tables(info: FunctionInfo) -> list[str]:
     return list(getattr(info, "output_tables", []) or [])
 
 
+def _dq_tables(collection: str, info: FunctionInfo) -> tuple[list[str], dict[str, str]]:
+    """Derive the data-quality output tables a function declares.
+
+    Returns the derived table names and their catalog type codes, so
+    registration records each derived table under its ``TableType``. Empty when
+    the function declares no data-quality action.
+    """
+    from tabsdatak.common._actions.dataquality.processor import (
+        DataQualityProcessor,
+    )
+    from tabsdatak.dataquality import DataQuality
+
+    on_tables = getattr(info, "on_tables", None) or []
+    actions = [action for action in on_tables if isinstance(action, DataQuality)]
+    if not actions:
+        return [], {}
+
+    processor = DataQualityProcessor.from_actions(
+        collection=collection,
+        output_tables=_output_tables(info),
+        actions=actions,
+    )
+    _, output_table_infos = processor.table_names()
+    names = [table_info.table for table_info in output_table_infos]
+    types = {
+        table_info.table: table_info.kind.type.value
+        for table_info in output_table_infos
+    }
+    return names, types
+
+
 def _create_archive(
+    collection: str,
     info: FunctionInfo,
     project_root: str | Path,
     temporary_directory: tempfile.TemporaryDirectory | str,
@@ -5519,11 +5552,15 @@ def _create_archive(
     ``.tar.zst`` and assembles the metadata fields the legacy
     ``function_register`` API still expects from the SDK side.
 
+    Data-quality actions declared in ``info.on_tables`` contribute their
+    derived tables to ``tables`` and their catalog kinds to ``table_types``
+    (see :func:`_dq_tables`), so a data-quality function's derived outputs are
+    registered under the right :class:`TableType`.
+
     .. note::
 
-       Two pieces of legacy ``_create_archive`` behaviour are
-       currently NOT carried over from the v1 SDK and remain as
-       deferred work:
+       One piece of legacy ``_create_archive`` behaviour is currently NOT
+       carried over from the v1 SDK and remains as deferred work:
 
        * **StageTrigger workers payload.** The legacy code inspected
          ``function.trigger_by`` for a :class:`StageTrigger`
@@ -5535,15 +5572,6 @@ def _create_archive(
          yet. Functions whose v2 ``Info`` carries a stage trigger
          will register with ``workers=None`` until the v2 stage
          trigger story is designed. TODO(tabsdatak-migration).
-
-       * **DataQualityProcessor table_types.** The legacy code
-         walked ``function.output_actions`` through
-         ``DataQualityProcessor`` and emitted per-table DQ kinds in
-         ``table_types``. The processor depends on
-         ``tabsdata.tableframe._actions.dataquality``, which is in
-         the excluded tableframe subtree. The v2 register payload
-         currently always emits ``table_types={}``. DQ outputs are
-         silently lost. TODO(tabsdatak-migration).
     """
     save_location = (
         temporary_directory.name
@@ -5565,12 +5593,11 @@ def _create_archive(
     function_type = _KIND_TO_API_TYPE.get(info.__kind__, "U")
     function_snippet = capture_source_snippet(info)
 
+    dq_names, dq_types = _dq_tables(collection, info)
+
     return _FunctionArchive(
-        tables=_output_tables(info),
-        # TODO(tabsdatak-migration): always empty in v2. The legacy
-        # SDK populated this from DataQualityProcessor outputs.
-        # Restore once the data-quality subtree is ported.
-        table_types={},
+        tables=_output_tables(info) + dq_names,
+        table_types=dq_types,
         string_dependencies=_input_tables(info),
         trigger_string_list=_trigger_string_list(info),
         function_snippet=function_snippet,
