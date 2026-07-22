@@ -181,6 +181,7 @@ class Secret(_api._Secret):
     `":secret:"`, so the value never lands in the serialized form and
     `str(secret)` is always redacted.
     """
+
     # devguide-ref: secret hydration & serialization
 
     def __init__(self, value: str | None = None):
@@ -503,6 +504,7 @@ class TrxCtx(ABC):
     (`get_attr` / `set_attr`), and a metadata sink
     (`add_metadata`).
     """
+
     # devguide-ref: TrxCtx state semantics
 
     @property

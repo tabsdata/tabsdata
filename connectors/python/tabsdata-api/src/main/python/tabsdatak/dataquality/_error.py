@@ -144,11 +144,13 @@ class DataQualityErrorCode(ErrorCode):
         "Invalid parameters for the 'IsNegativeOrZero' classifier.",
     )
     DQC_135 = ErrorDef(
-        ParameterValidationError, "Invalid parameters for a between data quality classifier."
+        ParameterValidationError,
+        "Invalid parameters for a between data quality classifier.",
     )
     DQC_136 = ErrorDef(ParameterValidationError, "{message}")
     DQC_142 = ErrorDef(
-        ParameterValidationError, "Invalid parameters for an in-set data quality classifier."
+        ParameterValidationError,
+        "Invalid parameters for an in-set data quality classifier.",
     )
     DQC_144 = ErrorDef(
         ParameterValidationError,

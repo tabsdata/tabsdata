@@ -1854,7 +1854,9 @@ class DataQualityEngine:
                         f"Unsupported classifier family: {type(column_info.classifier)}"
                     )
 
-            summary_row[DQColumns.DQ_PARAMETERS.value] = column_info.classifier.to_json()
+            summary_row[DQColumns.DQ_PARAMETERS.value] = (
+                column_info.classifier.to_json()
+            )
             summary_data.append(summary_row)
 
         # Parquet format doesn't natively support 128-bit integer types.

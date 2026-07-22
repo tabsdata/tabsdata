@@ -199,10 +199,11 @@ fn listener_pids(port: u16) -> Vec<u32> {
         if !fields[3].eq_ignore_ascii_case("LISTENING") {
             continue;
         }
-        if let Ok(pid) = fields[4].parse::<u32>() {
-            if pid != 0 && !pids.contains(&pid) {
-                pids.push(pid);
-            }
+        if let Ok(pid) = fields[4].parse::<u32>()
+            && pid != 0
+            && !pids.contains(&pid)
+        {
+            pids.push(pid);
         }
     }
     pids

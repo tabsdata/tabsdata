@@ -856,9 +856,17 @@ def _render_tableframe_py(
 # only, excluding system columns (a string $td.* would break a numeric reducer,
 # and $td.id is per-row so it corrupts the grouping). len/count are excluded --
 # they count rows, not values.
-_GROUPBY_REDUCTIONS = frozenset(
-    {"sum", "min", "max", "mean", "median", "first", "last", "n_unique", "quantile"}
-)
+_GROUPBY_REDUCTIONS = frozenset({
+    "sum",
+    "min",
+    "max",
+    "mean",
+    "median",
+    "first",
+    "last",
+    "n_unique",
+    "quantile",
+})
 
 
 def _groupby_reduction_body(name: str) -> list[str]:

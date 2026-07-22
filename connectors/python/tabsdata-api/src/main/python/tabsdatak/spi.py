@@ -69,6 +69,7 @@ class Conn(_api.DescriptorBase, ABC):
     time. Subclasses share the `"connectionDef"` `__kind__` and must
     not redefine it (they are told apart by their envelope `type`).
     """
+
     # devguide-ref: connector connection resolution
 
     __kind__ = "connectionDef"
@@ -359,6 +360,7 @@ class StreamStageSrcPlugin(SrcPlugin[_StreamStageSrcConn, StreamStageSrc]):
     `SrcDef` whose `cardinality` returns `-1` (disables the
     slot-count check) and whose `explorer` is `None`.
     """
+
     # devguide-ref: stream-stage source customization
 
     def read_in(

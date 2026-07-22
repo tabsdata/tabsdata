@@ -141,9 +141,7 @@ def _check_range(
             )
 
 
-def _check_regex(
-    pattern: str, fn_name: str, error_code: DataQualityErrorCode
-) -> None:
+def _check_regex(pattern: str, fn_name: str, error_code: DataQualityErrorCode) -> None:
     """Validates that `pattern` compiles as a regular expression."""
     try:
         re.compile(pattern)
@@ -199,7 +197,10 @@ class IdentityScale(Scale):
     @model_validator(mode="after")
     def _validate(self) -> "IdentityScale":
         _check_identity_min_max(
-            self.min_val, self.max_val, type(self).__name__, DataQualityErrorCode.DQC_107
+            self.min_val,
+            self.max_val,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_107,
         )
         return self
 
@@ -231,10 +232,16 @@ class LinearScale(Scale):
     @model_validator(mode="after")
     def _validate(self) -> "LinearScale":
         _check_min_max(
-            self.min_val, self.max_val, type(self).__name__, DataQualityErrorCode.DQC_107
+            self.min_val,
+            self.max_val,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_107,
         )
         _check_bins(
-            self.bins, self.use_bin_zero, type(self).__name__, DataQualityErrorCode.DQC_101
+            self.bins,
+            self.use_bin_zero,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_101,
         )
         return self
 
@@ -267,10 +274,16 @@ class MonomialScale(Scale):
     @model_validator(mode="after")
     def _validate(self) -> "MonomialScale":
         _check_min_max(
-            self.min_val, self.max_val, type(self).__name__, DataQualityErrorCode.DQC_107
+            self.min_val,
+            self.max_val,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_107,
         )
         _check_bins(
-            self.bins, self.use_bin_zero, type(self).__name__, DataQualityErrorCode.DQC_101
+            self.bins,
+            self.use_bin_zero,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_101,
         )
         return self
 
@@ -304,10 +317,16 @@ class LogarithmicScale(Scale):
     @model_validator(mode="after")
     def _validate(self) -> "LogarithmicScale":
         _check_min_max(
-            self.min_val, self.max_val, type(self).__name__, DataQualityErrorCode.DQC_107
+            self.min_val,
+            self.max_val,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_107,
         )
         _check_bins(
-            self.bins, self.use_bin_zero, type(self).__name__, DataQualityErrorCode.DQC_101
+            self.bins,
+            self.use_bin_zero,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_101,
         )
         return self
 
@@ -341,10 +360,16 @@ class ExponentialScale(Scale):
     @model_validator(mode="after")
     def _validate(self) -> "ExponentialScale":
         _check_min_max(
-            self.min_val, self.max_val, type(self).__name__, DataQualityErrorCode.DQC_107
+            self.min_val,
+            self.max_val,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_107,
         )
         _check_bins(
-            self.bins, self.use_bin_zero, type(self).__name__, DataQualityErrorCode.DQC_101
+            self.bins,
+            self.use_bin_zero,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_101,
         )
         return self
 
@@ -742,7 +767,10 @@ class BetweenClassifier(BoolClassifier, ABC):
     @model_validator(mode="after")
     def _validate(self) -> "BetweenClassifier":
         _check_range(
-            self.min_val, self.max_val, type(self).__name__, DataQualityErrorCode.DQC_136
+            self.min_val,
+            self.max_val,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_136,
         )
         return self
 
@@ -940,7 +968,10 @@ class HasLength(BoolClassifier):
     @model_validator(mode="after")
     def _validate(self) -> "HasLength":
         _check_range(
-            self.min_len, self.max_len, type(self).__name__, DataQualityErrorCode.DQC_147
+            self.min_len,
+            self.max_len,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_147,
         )
         return self
 
