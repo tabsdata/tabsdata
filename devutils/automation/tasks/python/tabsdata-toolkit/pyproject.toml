@@ -41,6 +41,7 @@ dependencies = [
     "colorama==0.4.6",
     "distlib==0.4.0",
     "filelock==3.25.2",
+    "griffe==2.1.0",
     "mypy==2.1.0",
     "mypy-extensions==1.1.0",
     "packaging==26.0",
@@ -104,6 +105,7 @@ tdx-gtableframe = "tabsdatax.generator.tableframe.cli:main"
 tdx-itest = "tabsdatax.itest.tdkinstance.cli:main"
 tdx-system = "tabsdatax.itest.tdksystems.tdx_system:main"
 tdx-domain = "tabsdatax.itest.tdksystems.tdx_domain:main"
+tdx-apidocgen = "tabsdatax.itest.tdksystems.tdx_apidocgen:main"
 tdx-json = "tabsdatax.render.json:main"
 tdx-table = "tabsdatax.render.table:main"
 tdx-pyoutdated = "tabsdatax.cmake.pyoutdated:main"
