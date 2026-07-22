@@ -13,6 +13,7 @@ from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    all_projects_option,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
@@ -20,6 +21,7 @@ from tabsdatak.cli.cli_utils import (
     output_option,
     proj_option,
     render,
+    resolve_all_projects,
     verify_login_or_prompt,
 )
 
@@ -130,11 +132,6 @@ def _group_for_conn(conn_cls) -> str:
     )
 
 
-def _kv_list(kvs) -> list:
-    """The ``[{key, value}]`` payload the server expects from a `KeyValue` list."""
-    return [{"key": kv.key, "value": kv.value} for kv in kvs]
-
-
 def _load_connection_document(conn_file, group):
     """Read the connection YAML, validate it as a `Conn`, and dehydrate it.
 
@@ -150,7 +147,6 @@ def _load_connection_document(conn_file, group):
     from tabsdatak.cli import template
     from tabsdatak.common._error import CommonException
     from tabsdatak.common._json_serde import (
-        dehydrate,
         env_secret_ref_vars,
         resolve_env_secret_refs,
     )
@@ -178,24 +174,16 @@ def _load_connection_document(conn_file, group):
             + ", ".join(env_vars)
         )
     try:
-        template.validate(document)
+        dehydrated, secrets = template.dehydrate_document(document)
     except template.TemplateError as e:
         raise click.ClickException(str(e))
-    conn_cls = template.resolve_class(document["type"])
-    implied = _group_for_conn(conn_cls)
+    implied = _group_for_conn(template.resolve_class(document["type"]))
     if group is not None and group != implied:
         raise click.ClickException(
             f"connection type {document['type']!r} makes this a {implied} "
             f"collection, but --group says '{group}'"
         )
-    # Dehydrate type-awarely: a Secret field serializes to ":secret:" in the
-    # validated model, so its value is harvested into the secret payload and
-    # never leaks into the stored document. A bare (unprefixed) value in a
-    # Secret field is rejected by validation above -- secret values must be
-    # spelled "secret:<value>".
-    model = conn_cls.from_dict(document)
-    dehydrated, secrets = dehydrate(document, model.to_dict())
-    return template.to_yaml(dehydrated), implied, _kv_list(secrets)
+    return template.to_yaml(dehydrated), implied, secrets
 
 
 @collection.command()
@@ -317,28 +305,35 @@ def connection(ctx: click.Context, name: str):
 
 @collection.command()
 @proj_option
+@all_projects_option
 @output_option
 @click.pass_context
-def list(ctx: click.Context):
+def list(ctx: click.Context, all_projects: bool):
     """List all collections"""
     verify_login_or_prompt(ctx)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
+        spanning = resolve_all_projects(ctx, all_projects)
         list_of_collections = server.collections
 
         def _table():
             table = Table(title="Collections")
             table.add_column("Name", style="cyan", no_wrap=True)
+            if spanning:
+                table.add_column("Project")
             table.add_column("Description")
             table.add_column("Created on")
             table.add_column("Created by")
             for collection in list_of_collections:
-                table.add_row(
-                    collection.name,
+                row = [collection.name]
+                if spanning:
+                    row.append(collection.project or "-")
+                row.extend([
                     collection.description,
                     collection.created_on_str,
                     collection.created_by,
-                )
+                ])
+                table.add_row(*row)
             click.echo()
             make_console().print(table)
             click.echo(f"Number of collections: {len(list_of_collections)}")

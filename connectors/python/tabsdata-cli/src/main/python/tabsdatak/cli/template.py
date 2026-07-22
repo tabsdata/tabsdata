@@ -763,3 +763,19 @@ def validate(document: Any) -> str:
     except Exception as e:  # noqa: BLE001 -- surface any construction failure
         raise TemplateError(f"invalid {kind} connection: {e}")
     return kind
+
+
+def dehydrate_document(document: Any) -> tuple[dict, list[dict]]:
+    """Validate a filled connection document and dehydrate it for storage.
+
+    Secret values are harvested into the returned ``[{"key", "value"}]`` payload
+    and the document keeps only the ``:secret:`` marker, so no secret lands in
+    the stored connection. ``$secret:<ENV>`` references must be resolved first.
+    Raises :class:`TemplateError` if the document is invalid."""
+    from tabsdatak.common._json_serde import dehydrate
+
+    validate(document)
+    conn_cls = resolve_class(document["type"])
+    model = conn_cls.from_dict(document)
+    dehydrated, secrets = dehydrate(document, model.to_dict())
+    return dehydrated, [{"key": kv.key, "value": kv.value} for kv in secrets]
