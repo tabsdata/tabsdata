@@ -7,7 +7,7 @@ use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::dxo::bundle::{Bundle, BundleBuilder, BundleDB, BundleDBBuilder};
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::function_upload::FunctionUpload;
 use td_objects::rest_urls::CollectionParam;
@@ -42,14 +42,14 @@ fn service() {
         ),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         // Extract collection
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
         // check requester can manage or develop the current project
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
         // The bundle's storage prefix: the collection's effective base_path (resolved
         // by the view), stamped onto the bundle row so it self-locates after moves.
-        from_fn(With::<CollectionDB>::extract::<BasePath>),
+        from_fn(With::<ActiveCollectionDB>::extract::<BasePath>),
         // Get storage version.
         from_fn(With::<StorageVersion>::default),
         // Write to storage with new bundle id.
@@ -118,12 +118,12 @@ mod tests {
                 ),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 // Extract collection
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionId>),
                 // check requester can manage or develop the current project
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
-                type_of_val(&With::<CollectionDB>::extract::<BasePath>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<BasePath>),
                 // Get storage version.
                 type_of_val(&With::<StorageVersion>::default),
                 // Write to storage with new bundle id.
@@ -257,9 +257,12 @@ mod tests {
             .base_path(Some(Some(prod.clone())))
             .build()?;
         db.live()
-            .update::<CollectionUpdateDB, CollectionDB>(&update, &collection.id)
+            .update::<CollectionUpdateDB, ActiveCollectionDB>(&update, &collection.id)
             .await?;
-        let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
+        let reloaded: ActiveCollectionDB = db
+            .live()
+            .fetch_one::<ActiveCollectionDB>(&collection.id)
+            .await?;
         assert_eq!(reloaded.base_path, Some(prod.clone()));
 
         // Upload: the bundle must inherit the collection's non-default base_path.

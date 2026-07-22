@@ -6,7 +6,7 @@ use sea_query::{
     Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -84,13 +84,14 @@ impl Entity for Defs {
             TriggersCurrentWithNames,
             Query::select()
                 .expr(Expr::col((TriggersCurrent::Table, Asterisk)))
-                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((trigger_by_collection.clone(), Collections::Name)), Alias::new("trigger_by_collection"))
                 .from(TriggersCurrent::Table)
                 .join(
                     JoinType::LeftJoin,
-                    Collections::Table,
-                    Expr::col((TriggersCurrent::Table, TriggersCurrent::CollectionId)).equals((Collections::Table, Collections::Id)),
+                    CollectionsResolved,
+                    Expr::col((TriggersCurrent::Table, TriggersCurrent::CollectionId)).equals((CollectionsResolved, Collections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,
@@ -99,7 +100,7 @@ impl Entity for Defs {
                 )
                 .join_as(
                     JoinType::LeftJoin,
-                    Collections::Table,
+                    CollectionsResolved,
                     trigger_by_collection.clone(),
                     Expr::col((TriggersCurrent::Table, TriggersCurrent::TriggerByCollectionId))
                         .equals((trigger_by_collection, Collections::Id)),

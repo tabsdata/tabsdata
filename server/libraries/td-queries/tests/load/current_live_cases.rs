@@ -3,13 +3,13 @@
 //
 
 //! Current- and Live-family read cases, plus Sessions::purge, over the chain
-//! dataset. Current reads target `TableDB`; Live reads target `CollectionDB`.
+//! dataset. Current reads target `TableDB`; Live reads target `ActiveCollectionDB`.
 
 use std::time::Instant;
 
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::table::TableDB;
 use td_queries::{CurrentEntry, LiveEntry, SessionsEntry};
@@ -83,9 +83,9 @@ async fn load_current_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
 async fn load_live_fetch_one(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let _row: CollectionDB = (&db)
+    let _row: ActiveCollectionDB = (&db)
         .live()
-        .fetch_one::<CollectionDB>(&h.collection_id)
+        .fetch_one::<ActiveCollectionDB>(&h.collection_id)
         .await?;
     record("live::fetch_one", &db, profile, t, 1, seeded);
     Ok(())
@@ -97,7 +97,7 @@ async fn load_live_fetch_optional(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     let row = (&db)
         .live()
-        .fetch_optional::<CollectionDB>(&h.collection_id)
+        .fetch_optional::<ActiveCollectionDB>(&h.collection_id)
         .await?;
     record(
         "live::fetch_optional",
@@ -115,7 +115,7 @@ async fn load_live_fetch_optional(db: TdPool) -> Result<(), TdError> {
 async fn load_live_fetch_all(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let rows = (&db).live().fetch_all::<CollectionDB>(()).await?;
+    let rows = (&db).live().fetch_all::<ActiveCollectionDB>(()).await?;
     record("live::fetch_all", &db, profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -127,7 +127,7 @@ async fn load_live_fetch_last(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     let row = db
         .live()
-        .fetch_last::<CollectionDB>(&h.collection_id)
+        .fetch_last::<ActiveCollectionDB>(&h.collection_id)
         .await?;
     record(
         "live::fetch_last",

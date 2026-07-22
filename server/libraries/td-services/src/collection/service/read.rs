@@ -5,7 +5,9 @@
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
-use td_objects::dxo::collection::{CollectionDBWithNames, CollectionRead, CollectionReadBuilder};
+use td_objects::dxo::collection::{
+    ActiveCollectionDBWithNames, CollectionRead, CollectionReadBuilder,
+};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::tower_service::with::With;
@@ -30,8 +32,8 @@ fn service() {
         from_fn(Rbac::<Project, ViewProject>::check),
         from_fn(With::<ReadRequest<CollectionParam>>::extract_name::<CollectionParam>),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDBWithNames>),
-        from_fn(With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDBWithNames>),
+        from_fn(With::<ActiveCollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>),
         from_fn(With::<CollectionReadBuilder>::build::<CollectionRead>),
     )
 }
@@ -68,9 +70,9 @@ mod tests {
                 type_of_val(&Rbac::<Project, ViewProject>::check),
                 type_of_val(&With::<ReadRequest<CollectionParam>>::extract_name::<CollectionParam>),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDBWithNames>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDBWithNames>),
                 type_of_val(
-                    &With::<CollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>,
+                    &With::<ActiveCollectionDBWithNames>::try_convert_to::<CollectionReadBuilder, _>,
                 ),
                 type_of_val(&With::<CollectionReadBuilder>::build::<CollectionRead>),
             ]);

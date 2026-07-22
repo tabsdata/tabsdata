@@ -7,7 +7,7 @@ use sea_query::{
     Query, Table, TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::dependencies_current::DependenciesCurrent;
 use super::users::Users;
 use crate::schema::Entity;
@@ -98,13 +98,14 @@ impl Entity for Defs {
             DependenciesWithNames,
             Query::select()
                 .expr(Expr::col((Dependencies::Table, Asterisk)))
-                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((table_collection.clone(), Collections::Name)), Alias::new("table_collection"))
                 .from(Dependencies::Table)
                 .join(
                     JoinType::LeftJoin,
-                    Collections::Table,
-                    Expr::col((Dependencies::Table, Dependencies::CollectionId)).equals((Collections::Table, Collections::Id)),
+                    CollectionsResolved,
+                    Expr::col((Dependencies::Table, Dependencies::CollectionId)).equals((CollectionsResolved, Collections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,
@@ -113,7 +114,7 @@ impl Entity for Defs {
                 )
                 .join_as(
                     JoinType::LeftJoin,
-                    Collections::Table,
+                    CollectionsResolved,
                     table_collection.clone(),
                     Expr::col((Dependencies::Table, Dependencies::TableCollectionId)).equals((table_collection, Collections::Id)),
                 )

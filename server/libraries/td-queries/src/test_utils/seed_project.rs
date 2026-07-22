@@ -11,7 +11,7 @@ use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupDBBuilder};
 use td_objects::dxo::project::{
-    ProjectCreate, ProjectCreateDBBuilder, ProjectDB, ProjectDBBuilder,
+    ActiveProjectDB, ActiveProjectDBBuilder, ProjectCreate, ProjectCreateDBBuilder,
 };
 use td_objects::types::basic::{
     AccessTokenId, Description, GroupId, GroupName, ProjectId, ProjectName, System, UserId,
@@ -27,7 +27,7 @@ use td_security::SYSTEM_GROUPS;
 /// `db.scoped(new_project)` — the field-less `GroupDB` defaults its `project_id`
 /// from that scope, mirroring `seed_default_groups`. The `projects` row itself
 /// is not RLS-scoped, so it is inserted directly on the pool.
-pub(crate) async fn seed_project<E>(db: E, name: ProjectName) -> Result<ProjectDB, TdError>
+pub(crate) async fn seed_project<E>(db: E, name: ProjectName) -> Result<ActiveProjectDB, TdError>
 where
     for<'s> &'s Scoped<E, ProjectId>: QueryExecutor + Domained<Domain = Apiserver>,
 {
@@ -61,7 +61,7 @@ where
         scoped.live().insert::<GroupDB>(&group).await?;
     }
 
-    Ok(ProjectDBBuilder::try_from(&project_db)?.build()?)
+    Ok(ActiveProjectDBBuilder::try_from(&project_db)?.build()?)
 }
 
 #[cfg(test)]
@@ -70,7 +70,7 @@ mod tests {
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
-    use td_objects::dxo::project::ProjectDB;
+    use td_objects::dxo::project::ActiveProjectDB;
     use td_objects::types::basic::{GroupId, GroupName, ProjectName};
 
     #[td_test::test(db)]
@@ -81,7 +81,11 @@ mod tests {
             .await
             .unwrap();
 
-        let found = db.live().fetch_one::<ProjectDB>(&project.id).await.unwrap();
+        let found = db
+            .live()
+            .fetch_one::<ActiveProjectDB>(&project.id)
+            .await
+            .unwrap();
         assert_eq!(found.id, project.id);
         assert_eq!(found.name, project.name);
 

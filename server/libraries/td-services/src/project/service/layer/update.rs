@@ -7,7 +7,7 @@ use std::ops::Deref;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::DaoCore;
-use td_objects::dxo::project::{ProjectDB, ProjectUpdate, ProjectUpdateDBBuilder};
+use td_objects::dxo::project::{ActiveProjectDB, ProjectUpdate, ProjectUpdateDBBuilder};
 use td_objects::errors::SqlError;
 use td_objects::tower_service::with::With;
 use td_queries::LiveEntry;
@@ -29,18 +29,18 @@ pub async fn update_project_validate(update: Ref<ProjectUpdate>) -> Result<(), T
 pub async fn assert_project_rename_available(
     mut conn: MutRef<DomainConnection<Apiserver>>,
     update: Ref<ProjectUpdate>,
-    current: Ref<ProjectDB>,
+    current: Ref<ActiveProjectDB>,
 ) -> Result<(), TdError> {
     if let Some(new_name) = &update.name
         && new_name != &current.name
         && conn
             .live()
-            .fetch_optional::<ProjectDB>(new_name)
+            .fetch_optional::<ActiveProjectDB>(new_name)
             .await?
             .is_some()
     {
         Err(SqlError::EntityAlreadyExists(
-            ProjectDB::display_name().to_string(),
+            ActiveProjectDB::display_name().to_string(),
             format!(" for 'name' = '{new_name}'"),
         ))?;
     }

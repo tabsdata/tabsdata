@@ -7,7 +7,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::And;
 use td_objects::NoFilter;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::logical::{TableDataVersion, TableDataVersionDBWithNames};
 use td_objects::dxo::table::TableDBWithNames;
@@ -38,8 +38,8 @@ fn service() {
         ),
         // find collection ID
         from_fn(With::<TableDataVersionAtIdName>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
         // check requester has project permissions
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, ViewProject>::check),

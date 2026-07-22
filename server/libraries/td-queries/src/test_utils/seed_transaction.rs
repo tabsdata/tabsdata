@@ -7,7 +7,7 @@ use crate::QueryExecutor;
 use ta_objects::Buildable;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{TransactionId, TransactionKey};
@@ -19,10 +19,10 @@ pub(crate) async fn seed_transaction(
 ) -> Result<TransactionDB, TdError> {
     // A transaction's group is a snapshot of its collection's group at mint —
     // resolve it from the collection rather than assuming the global default.
-    let collection: CollectionDB = executor
+    let collection: ActiveCollectionDB = executor
         .reuse()
         .live()
-        .fetch_one::<CollectionDB>(&execution.collection_id)
+        .fetch_one::<ActiveCollectionDB>(&execution.collection_id)
         .await?;
     let transaction_db = TransactionDB::builder()
         .id(TransactionId::new())

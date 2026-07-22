@@ -11,7 +11,7 @@ use td_error::DisplayVec;
 use td_error::{ApiError, TdError, api_error, td_error};
 use td_execution::VersionResolver;
 use td_objects::dxo::bundle::BundleRegisteredDB;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::connection::ConnectionDB;
 use td_objects::dxo::dependency::{DependencyDB, DependencyDBBuilder};
 use td_objects::dxo::function::FunctionDB;
@@ -85,7 +85,7 @@ pub async fn ensure_connection_kind_matches(
     mut conn: MutRef<DomainConnection<Apiserver>>,
     bridge: Ref<BridgeProviderHandle>,
     function: Ref<FunctionDB>,
-    collection: Ref<CollectionDB>,
+    collection: Ref<ActiveCollectionDB>,
 ) -> Result<(), TdError> {
     // TODO FOR 2.0: drop this guard (see fn doc) -- enforce on every orchestrator.
     if !matches!(bridge.orchestrator(), Orchestrator::Kubernetes) {

@@ -8,7 +8,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::bundle::BundleDB;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::types::basic::{
     AtTime, BundleId, CollectionIdName, FunctionIdName, FunctionName, FunctionVersionId,
@@ -72,9 +72,9 @@ pub async fn build_bundle_download(
     let base_path = match bundle {
         Some(bundle) => bundle.base_path,
         None => {
-            let collection: CollectionDB = conn
+            let collection: ActiveCollectionDB = conn
                 .live()
-                .fetch_one::<CollectionDB>(&function.collection_id)
+                .fetch_one::<ActiveCollectionDB>(&function.collection_id)
                 .await?;
             collection.effective_base_path
         }

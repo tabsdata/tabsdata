@@ -15,7 +15,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListParams, ListResponse, ListResponseBuilder};
 use td_objects::dxo::permission::PermissionDB;
-use td_objects::dxo::project::ProjectDB;
+use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::simple_permission::{
     SimplePermission, SimplePermissionGrant, SimpleProjectAccess,
@@ -103,7 +103,10 @@ pub async fn resolve_grant(
                 .project
                 .clone()
                 .expect("project-scoped permission carries a project (validated)");
-            let project = conn.live().fetch_one::<ProjectDB>(&project_id_name).await?;
+            let project = conn
+                .live()
+                .fetch_one::<ActiveProjectDB>(&project_id_name)
+                .await?;
             let role_name = per_project_role_name(&project.name, suffix)?;
             let role = conn
                 .live()
@@ -185,7 +188,7 @@ pub fn project_role_permission(role: &RoleDB) -> Option<SimplePermissionType> {
 async fn project_names(
     conn: &mut DomainConnection<Apiserver>,
 ) -> Result<HashMap<ProjectId, ProjectName>, TdError> {
-    let projects = conn.live().fetch_all::<ProjectDB>(()).await?;
+    let projects = conn.live().fetch_all::<ActiveProjectDB>(()).await?;
     Ok(projects.into_iter().map(|p| (p.id, p.name)).collect())
 }
 
@@ -298,7 +301,7 @@ pub async fn list_project_access(
 ) -> Result<ListResponse<SimpleProjectAccess>, TdError> {
     let project = conn
         .live()
-        .fetch_one::<ProjectDB>(project_id_name.deref())
+        .fetch_one::<ActiveProjectDB>(project_id_name.deref())
         .await?;
 
     let roles = conn.live().fetch_all::<RoleDB>(()).await?;

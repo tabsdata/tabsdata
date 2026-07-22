@@ -7,7 +7,7 @@ use sea_query::{
     TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::function_patches::FunctionPatches;
 use super::functions::Functions;
@@ -206,7 +206,8 @@ impl Entity for Defs {
                 PtdvWithNames,
                 Query::select()
                     .expr(Expr::col((PtdvWithFunction, Asterisk)))
-                    .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                    .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                    .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                     .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                     .expr_as(
                         b.name_or_id((Users::Table, Users::Name), (PtdvWithFunction, Alias::new("triggered_by_id"))),
@@ -215,9 +216,9 @@ impl Entity for Defs {
                     .from(PtdvWithFunction)
                     .join(
                         JoinType::LeftJoin,
-                        Collections::Table,
+                        CollectionsResolved,
                         Expr::col((PtdvWithFunction, PhysicalTableDataVersions::CollectionId))
-                            .equals((Collections::Table, Collections::Id)),
+                            .equals((CollectionsResolved, Collections::Id)),
                     )
                     .join(
                         JoinType::LeftJoin,

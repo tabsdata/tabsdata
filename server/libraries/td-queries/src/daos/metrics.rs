@@ -63,7 +63,7 @@ use td_objects::dxo::metrics::{
     Dim, EdgeRow, InflightRequest, InflightRow, MetricsRequest, NodeKind, NodeRow,
 };
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
-use td_objects::dxo::project::ProjectDBIden;
+use td_objects::dxo::project::ActiveProjectDBIden;
 use td_objects::dxo::query_filters::{DimensionFilter, WindowUnit};
 use td_objects::types::basic::{HasData, LogicalFunctionRunStatus, Private};
 
@@ -1582,7 +1582,7 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
         LogicalFunctionRunDBIden::CollectionId,
     ))
     // Resolve the name against the base `collections` table, not the
-    // `collections_active` view `CollectionDB` maps to: a collection
+    // `collections_active` view `ActiveCollectionDB` maps to: a collection
     // soft-deleted while one of its runs is still in flight is hidden from
     // the view, so the LEFT JOIN would miss and decode NULL into the
     // non-nullable name. `name_when_deleted` holds the pre-deletion name.
@@ -1609,7 +1609,7 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
         LogicalFunctionRunDBIden::ProjectId,
     ))
     .expr_as(
-        Expr::col((ProjectDBIden::Table, ProjectDBIden::Name)),
+        Expr::col((ActiveProjectDBIden::Table, ActiveProjectDBIden::Name)),
         Alias::new("project_name"),
     )
     .column((
@@ -1651,12 +1651,12 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
     )
     .join(
         JoinType::LeftJoin,
-        ProjectDBIden::Table,
+        ActiveProjectDBIden::Table,
         Expr::col((
             LogicalFunctionRunDBIden::Table,
             LogicalFunctionRunDBIden::ProjectId,
         ))
-        .equals((ProjectDBIden::Table, ProjectDBIden::Id)),
+        .equals((ActiveProjectDBIden::Table, ActiveProjectDBIden::Id)),
     )
     .and_where(
         Expr::col((
@@ -1687,7 +1687,7 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
         LogicalFunctionRunDBIden::Table,
         LogicalFunctionRunDBIden::ProjectId,
     ))
-    .group_by_col((ProjectDBIden::Table, ProjectDBIden::Name))
+    .group_by_col((ActiveProjectDBIden::Table, ActiveProjectDBIden::Name))
     .group_by_col((
         LogicalFunctionRunDBIden::Table,
         LogicalFunctionRunDBIden::Status,
@@ -1931,7 +1931,7 @@ mod tests {
     use td_common::datetime::Timestamp;
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::logical::{
         LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalPointerDao,
@@ -1977,7 +1977,7 @@ mod tests {
 
     async fn make_publisher_function(
         db: &TdPool,
-        collection: &td_objects::dxo::collection::CollectionDB,
+        collection: &td_objects::dxo::collection::ActiveCollectionDB,
         name: &str,
     ) -> Result<FunctionDB, TdError> {
         make_publisher_function_with_tables(db, collection, name, &["out"]).await
@@ -1985,7 +1985,7 @@ mod tests {
 
     async fn make_publisher_function_with_tables(
         db: &TdPool,
-        collection: &td_objects::dxo::collection::CollectionDB,
+        collection: &td_objects::dxo::collection::ActiveCollectionDB,
         name: &str,
         tables: &[&str],
     ) -> Result<FunctionDB, TdError> {
@@ -2103,7 +2103,7 @@ mod tests {
         db: &TdPool,
         project_id: ProjectId,
         name: &str,
-    ) -> Result<CollectionDB, TdError> {
+    ) -> Result<ActiveCollectionDB, TdError> {
         db.scoped(project_id)
             .seed()
             .collection(
@@ -2123,7 +2123,7 @@ mod tests {
         fn_name: &str,
     ) -> Result<
         (
-            CollectionDB,
+            ActiveCollectionDB,
             LogicalFunctionRunDB,
             LogicalTableDataVersionDB,
         ),
@@ -2171,7 +2171,7 @@ mod tests {
     /// pick the stamp helper.
     async fn seed_done_run(
         db: &TdPool,
-        coll: &CollectionDB,
+        coll: &ActiveCollectionDB,
         func: &FunctionDB,
     ) -> Result<(LogicalFunctionRunDB, PhysicalFunctionRunDB), TdError> {
         let exec = db.scoped(coll.project_id).seed().execution(func).await?;

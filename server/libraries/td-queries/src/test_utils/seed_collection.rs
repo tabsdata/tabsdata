@@ -7,7 +7,7 @@ use crate::QueryExecutor;
 use ta_objects::Buildable;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
-use td_objects::dxo::collection::{CollectionCreateDB, CollectionDB};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreateDB};
 use td_objects::dxo::group::GroupDB;
 use td_objects::types::basic::{
     AtTime, CollectionName, CollectionType, Description, GroupId, GroupName, UserId,
@@ -17,7 +17,7 @@ pub(crate) async fn seed_collection(
     mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
     collection_name: &CollectionName,
     created_by: &UserId,
-) -> Result<CollectionDB, TdError> {
+) -> Result<ActiveCollectionDB, TdError> {
     // Assign the collection to its project's own `default` group. On a
     // project-scoped executor (`db.scoped(p)`) the group resolves by name within
     // that project, so a hardcoded id could belong to the wrong project.
@@ -38,7 +38,7 @@ pub(crate) async fn seed_collection_in_group(
     collection_name: &CollectionName,
     created_by: &UserId,
     group_id: GroupId,
-) -> Result<CollectionDB, TdError> {
+) -> Result<ActiveCollectionDB, TdError> {
     // Infer the flavour from the group id, mirroring the create service, so
     // seeded source/destination collections carry the right type.
     let collection_type = CollectionType::from_group_id(&group_id);
@@ -62,7 +62,7 @@ pub(crate) async fn seed_collection_in_group(
     // converts `SqlError` into `TdError`.
     Ok(executor
         .live()
-        .fetch_one::<CollectionDB>(&collection.id)
+        .fetch_one::<ActiveCollectionDB>(&collection.id)
         .await?)
 }
 
@@ -71,7 +71,7 @@ mod tests {
     use crate::LiveEntry;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
-    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::types::basic::{CollectionName, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -92,7 +92,7 @@ mod tests {
         // run as `td_app` under RLS, so an unscoped `db.live()` would see nothing.
         let found = db
             .live()
-            .fetch_one::<CollectionDB>(&collection.id)
+            .fetch_one::<ActiveCollectionDB>(&collection.id)
             .await
             .unwrap();
         assert_eq!(found.id, collection.id);

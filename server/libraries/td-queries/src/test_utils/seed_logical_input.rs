@@ -8,7 +8,7 @@ use ta_objects::Buildable;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
 use td_objects::and;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalPointerDao, LogicalTableDataVersionDB,
@@ -32,7 +32,7 @@ use td_objects::types::basic::{
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn seed_logical_input(
     mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
-    collection: &CollectionDB,
+    collection: &ActiveCollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     physical_function_run: &PhysicalFunctionRunDB,

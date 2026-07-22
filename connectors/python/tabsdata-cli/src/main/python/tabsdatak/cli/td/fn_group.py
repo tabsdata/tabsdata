@@ -15,6 +15,7 @@ from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     beautify_list,
     beautify_time,
+    collection_label,
     get_currently_pinned_object,
     hint_common_solutions,
     load_info_and_project_root,
@@ -617,7 +618,7 @@ def _monitor_execution_or_transaction(
         for function_run in list_of_runs:
             table.add_row(
                 function_run.id,
-                function_run.collection.name,
+                collection_label(function_run),
                 function_run.function.name,
                 function_run.transaction.id if execution else function_run.execution.id,
                 beautify_time(function_run.started_on_str),

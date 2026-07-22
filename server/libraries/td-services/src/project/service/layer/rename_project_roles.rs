@@ -11,7 +11,7 @@ use std::ops::Deref;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::project::{ProjectDB, ProjectUpdate};
+use td_objects::dxo::project::{ActiveProjectDB, ProjectUpdate};
 use td_objects::dxo::role::{RoleDB, RoleDBUpdate, RoleDBUpdateBuilder, RoleUpdate};
 use td_objects::errors::SqlError;
 use td_objects::types::basic::{Description, ProjectId, ProjectName, RoleName};
@@ -31,7 +31,7 @@ fn new_role_names(new_name: &ProjectName) -> Result<Vec<RoleName>, TdError> {
 pub async fn assert_project_roles_rename_available(
     mut conn: MutRef<DomainConnection<Apiserver>>,
     update: Ref<ProjectUpdate>,
-    current: Ref<ProjectDB>,
+    current: Ref<ActiveProjectDB>,
 ) -> Result<(), TdError> {
     let Some(new_name) = &update.name else {
         return Ok(());
@@ -60,7 +60,7 @@ pub async fn rename_project_roles(
     context: Ref<RequestContext>,
     project_id: Ref<ProjectId>,
     update: Ref<ProjectUpdate>,
-    current: Ref<ProjectDB>,
+    current: Ref<ActiveProjectDB>,
 ) -> Result<(), TdError> {
     let Some(new_name) = &update.name else {
         return Ok(());

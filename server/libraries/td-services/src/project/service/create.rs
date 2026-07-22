@@ -11,8 +11,8 @@ use td_authz::rbac::{CreateProjects, Rbac, Scope, System};
 use td_authz::{AuthzContext, refresh_authz_context};
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::project::{
-    ProjectCreate, ProjectCreateDB, ProjectCreateDBBuilder, ProjectDB, ProjectDBWithNames,
-    ProjectRead, ProjectReadBuilder,
+    ActiveProjectDB, ActiveProjectDBWithNames, ProjectCreate, ProjectCreateDB,
+    ProjectCreateDBBuilder, ProjectRead, ProjectReadBuilder,
 };
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{ProjectId, ProjectName};
@@ -42,7 +42,7 @@ fn service() {
         // A duplicate project name reports a clean "already exists" error
         // instead of the raw unique-constraint violation from the insert.
         from_fn(With::<ProjectCreateDB>::extract::<ProjectName>),
-        from_fn(By::<ProjectName>::assert_not_exists::<ProjectDB>),
+        from_fn(By::<ProjectName>::assert_not_exists::<ActiveProjectDB>),
         from_fn(insert::<ProjectCreateDB>),
         from_fn(With::<ProjectCreateDB>::extract::<ProjectId>),
         // Scope the connection to the new project so the group seeds default
@@ -54,8 +54,8 @@ fn service() {
         // Mint the three per-project roles (`<name>_admin/_dev/_view`) and add
         // the creating user to `<name>_admin`.
         from_fn(seed_project_roles),
-        from_fn(By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
-        from_fn(With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
+        from_fn(By::<ProjectId>::fetch_one::<ActiveProjectDBWithNames>),
+        from_fn(With::<ActiveProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
         from_fn(With::<ProjectReadBuilder>::build::<ProjectRead>),
         // `seed_project_roles` inserted the new per-project roles, their
         // permissions, and the creator's `<name>_admin` membership directly
@@ -89,14 +89,16 @@ mod tests {
                 type_of_val(&With::<RequestContext>::update::<ProjectCreateDBBuilder, _>),
                 type_of_val(&With::<ProjectCreateDBBuilder>::build::<ProjectCreateDB>),
                 type_of_val(&With::<ProjectCreateDB>::extract::<ProjectName>),
-                type_of_val(&By::<ProjectName>::assert_not_exists::<ProjectDB>),
+                type_of_val(&By::<ProjectName>::assert_not_exists::<ActiveProjectDB>),
                 type_of_val(&insert::<ProjectCreateDB>),
                 type_of_val(&With::<ProjectCreateDB>::extract::<ProjectId>),
                 type_of_val(&scope_to_created_project),
                 type_of_val(&seed_default_groups),
                 type_of_val(&seed_project_roles),
-                type_of_val(&By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
-                type_of_val(&With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
+                type_of_val(&By::<ProjectId>::fetch_one::<ActiveProjectDBWithNames>),
+                type_of_val(
+                    &With::<ActiveProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>,
+                ),
                 type_of_val(&With::<ProjectReadBuilder>::build::<ProjectRead>),
                 type_of_val(&refresh_authz_context),
             ]);

@@ -35,7 +35,8 @@ use td_database::pool::TdPool;
 use td_database::pool::scoped::{InProject, Scoped};
 use td_error::TdError;
 use td_objects::dxo::collection::{
-    CollectionDB, CollectionRead, CollectionUpdate, CollectionUpdateDB, CollectionUpdateDBBuilder,
+    ActiveCollectionDB, CollectionRead, CollectionUpdate, CollectionUpdateDB,
+    CollectionUpdateDBBuilder,
 };
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::rest_urls::CollectionParam;
@@ -70,9 +71,9 @@ fn resolve() {
             With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract_name::<CollectionParam>
         ),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
         // source/destination collections carry connection config: manage_project
-        from_fn(With::<CollectionDB>::extract::<CollectionType>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionType>),
         from_fn(escalate_for_connected),
         from_fn(
             With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract_data::<
@@ -80,7 +81,7 @@ fn resolve() {
             >
         ),
         from_fn(update_collection_validate),
-        from_fn(With::<CollectionDB>::try_convert_to::<CollectionUpdateDBBuilder, _>),
+        from_fn(With::<ActiveCollectionDB>::try_convert_to::<CollectionUpdateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionUpdateDBBuilder, _>),
         from_fn(With::<CollectionUpdate>::update_collection_update_db_builder),
         from_fn(With::<CollectionUpdateDBBuilder>::build::<CollectionUpdateDB>),
@@ -243,7 +244,7 @@ mod tests {
     use td_error::{TdError, assert_service_error};
     use td_objects::Buildable;
     use td_objects::dxo::bundle::BundleDB;
-    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::function_upload::FunctionUpload;
@@ -283,8 +284,8 @@ mod tests {
                     >,
                 ),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionType>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionType>),
                 type_of_val(&escalate_for_connected),
                 type_of_val(
                     &With::<UpdateRequest<CollectionParam, CollectionUpdate>>::extract_data::<
@@ -292,7 +293,7 @@ mod tests {
                     >,
                 ),
                 type_of_val(&update_collection_validate),
-                type_of_val(&With::<CollectionDB>::try_convert_to::<CollectionUpdateDBBuilder, _>),
+                type_of_val(&With::<ActiveCollectionDB>::try_convert_to::<CollectionUpdateDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<CollectionUpdateDBBuilder, _>),
                 type_of_val(&With::<CollectionUpdate>::update_collection_update_db_builder),
                 type_of_val(&With::<CollectionUpdateDBBuilder>::build::<CollectionUpdateDB>),
@@ -428,13 +429,19 @@ mod tests {
         )
         .await?;
 
-        // Read back the persisted CollectionDB and confirm the new base_path.
-        let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
+        // Read back the persisted ActiveCollectionDB and confirm the new base_path.
+        let reloaded: ActiveCollectionDB = db
+            .live()
+            .fetch_one::<ActiveCollectionDB>(&collection.id)
+            .await?;
         assert_eq!(reloaded.base_path, Some(data.clone()));
 
         // Clearing it (base_path = null) reverts to inheriting the project.
         update_collection(&db, p.id, &collection_name, None, None, Some(None)).await?;
-        let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
+        let reloaded: ActiveCollectionDB = db
+            .live()
+            .fetch_one::<ActiveCollectionDB>(&collection.id)
+            .await?;
         assert_eq!(reloaded.base_path, None, "cleared back to inherit");
         Ok(())
     }
@@ -589,7 +596,10 @@ mod tests {
             Some(Some(b.clone())),
         )
         .await?;
-        let reloaded: CollectionDB = db.live().fetch_one::<CollectionDB>(&collection.id).await?;
+        let reloaded: ActiveCollectionDB = db
+            .live()
+            .fetch_one::<ActiveCollectionDB>(&collection.id)
+            .await?;
         assert_eq!(reloaded.base_path, Some(b));
 
         // The previously-generated artifacts still carry "/a": the move did not

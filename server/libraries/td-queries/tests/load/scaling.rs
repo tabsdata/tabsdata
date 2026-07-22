@@ -13,7 +13,7 @@ use ta_objects::list_condition::NoFilter;
 use ta_objects::{Buildable, StateFilter};
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::collection::{CollectionDB, CollectionRead};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionRead};
 use td_objects::dxo::crudl::ListParams;
 use td_objects::dxo::dependency::{DependencyDB, DependencyDBWithNames};
 use td_objects::dxo::execution::Execution;
@@ -335,26 +335,26 @@ async fn time_chain_queries(
         out,
         "live::fetch_one",
         (db).live()
-            .fetch_one::<CollectionDB>(&h.collection_id)
+            .fetch_one::<ActiveCollectionDB>(&h.collection_id)
             .await?
     );
     let _ = timed!(
         out,
         "live::fetch_optional",
         (db).live()
-            .fetch_optional::<CollectionDB>(&h.collection_id)
+            .fetch_optional::<ActiveCollectionDB>(&h.collection_id)
             .await?
     );
     let _ = timed!(
         out,
         "live::fetch_all",
-        (db).live().fetch_all::<CollectionDB>(()).await?
+        (db).live().fetch_all::<ActiveCollectionDB>(()).await?
     );
     let _ = timed!(
         out,
         "live::fetch_last",
         (db).live()
-            .fetch_last::<CollectionDB>(&h.collection_id)
+            .fetch_last::<ActiveCollectionDB>(&h.collection_id)
             .await?
     );
     {
@@ -426,15 +426,18 @@ async fn time_chain_queries(
         out,
         "live::fetch_all_in",
         (db).live()
-            .fetch_all_in::<CollectionDB>(StateFilter::<CollectionDB>::new(Condition::all()), ())
+            .fetch_all_in::<ActiveCollectionDB>(
+                StateFilter::<ActiveCollectionDB>::new(Condition::all()),
+                ()
+            )
             .await?
     );
     let _ = timed!(
         out,
         "live::fetch_latest_before",
         (db).live()
-            .fetch_latest_before::<CollectionDB>(
-                StateFilter::<CollectionDB>::new(Condition::all()),
+            .fetch_latest_before::<ActiveCollectionDB>(
+                StateFilter::<ActiveCollectionDB>::new(Condition::all()),
                 (),
                 0
             )

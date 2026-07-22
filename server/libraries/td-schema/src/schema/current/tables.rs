@@ -7,7 +7,7 @@ use sea_query::{
     Query, Table, TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::functions::Functions;
 use super::tables_current::TablesCurrent;
 use super::users::Users;
@@ -105,13 +105,14 @@ impl Entity for Defs {
                 .expr(Expr::col((Tables::Table, Asterisk)))
                 .expr_as(Expr::col((Tables::Table, Tables::FunctionParamPos)).lt(0), Alias::new("system"))
                 .expr_as(b.name_or_id((Users::Table, Users::Name), (Tables::Table, Tables::DefinedById)), Alias::new("defined_by"))
-                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .from(Tables::Table)
                 .join(
                     JoinType::LeftJoin,
-                    Collections::Table,
-                    Expr::col((Tables::Table, Tables::CollectionId)).equals((Collections::Table, Collections::Id)),
+                    CollectionsResolved,
+                    Expr::col((Tables::Table, Tables::CollectionId)).equals((CollectionsResolved, Collections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,

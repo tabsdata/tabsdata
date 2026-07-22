@@ -302,7 +302,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::permission::PermissionDBBuilder;
-    use td_objects::dxo::project::ProjectDB;
+    use td_objects::dxo::project::ActiveProjectDB;
     use td_objects::dxo::role::{RoleCreate, RoleDBBuilder};
     use td_objects::types::basic::{
         AccessTokenId, Description, EntityId, Fixed, ProjectName, RoleName, UserId,
@@ -327,7 +327,7 @@ mod tests {
     /// exactly its one fixed permission on the project. `db.seed().project()`
     /// only creates the project + system groups, so the per-project roles —
     /// the subject of condition 5 — must be seeded explicitly here.
-    async fn seed_per_project_roles(db: &TdPool, project: &ProjectDB) -> Result<(), TdError> {
+    async fn seed_per_project_roles(db: &TdPool, project: &ActiveProjectDB) -> Result<(), TdError> {
         let context = admin_context();
         let entity_id = EntityId::try_from(project.id)?;
         let specs = [

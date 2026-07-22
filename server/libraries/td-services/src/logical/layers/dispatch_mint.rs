@@ -260,7 +260,7 @@ mod tests {
     use td_objects::TryUpdater;
     use td_objects::and;
     use td_objects::dxo::collection::{
-        CollectionDB, CollectionUpdateDB, CollectionUpdateDBBuilder,
+        ActiveCollectionDB, CollectionUpdateDB, CollectionUpdateDBBuilder,
     };
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
@@ -275,13 +275,13 @@ mod tests {
     use td_tower::extractors::{MutRef, Ref};
 
     /// Set a collection's `base_path` via the live-update seam (no
-    /// service oneshot): seed the updater from the current `CollectionDB`,
+    /// service oneshot): seed the updater from the current `ActiveCollectionDB`,
     /// stamp modified_on/by from a RequestContext, override base_path,
     /// then `live().update`.
     async fn set_collection_base_path(
         db: &TdPool,
         project_id: ProjectId,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         base_path: &BasePath,
     ) -> Result<(), TdError> {
         let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -295,7 +295,7 @@ mod tests {
             .build()?;
         db.scoped(project_id)
             .live()
-            .update::<CollectionUpdateDB, CollectionDB>(&update, &collection.id)
+            .update::<CollectionUpdateDB, ActiveCollectionDB>(&update, &collection.id)
             .await?;
         Ok(())
     }
@@ -307,7 +307,7 @@ mod tests {
     async fn seed_dispatch_lfr(
         db: &TdPool,
         project_id: ProjectId,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         name: &str,
         base_path: Option<BasePath>,
     ) -> Result<LogicalFunctionRunDB, TdError> {
@@ -386,7 +386,7 @@ mod tests {
             .await?;
         let coll_base = BasePath::try_from("/coll")?;
         set_collection_base_path(&db, p.id, &coll, &coll_base).await?;
-        let coll: CollectionDB = db.live().fetch_one::<CollectionDB>(&coll.id).await?;
+        let coll: ActiveCollectionDB = db.live().fetch_one::<ActiveCollectionDB>(&coll.id).await?;
         assert_eq!(coll.base_path, Some(coll_base.clone()));
 
         let override_base = BasePath::try_from("/a")?;
@@ -437,7 +437,7 @@ mod tests {
     async fn seed_bound_lfr(
         db: &TdPool,
         project_id: ProjectId,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         name: &str,
     ) -> Result<(LogicalFunctionRunDB, PhysicalFunctionRunId), TdError> {
         let create = FunctionRegister::builder()

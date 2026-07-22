@@ -15,7 +15,7 @@ use sea_query::{
 };
 
 use super::POINTER_STATUS_BOUND;
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::functions::Functions;
 use super::groups::Groups;
@@ -177,7 +177,8 @@ impl Entity for Defs {
                 TableDataVersionsWithNames,
                 Query::select()
                     .expr(Expr::col((LogicalTableDataVersions::Table, Asterisk)))
-                    .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                    .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                    .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                     .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                     .expr_as(
                         b.name_or_id(
@@ -241,9 +242,9 @@ impl Entity for Defs {
                     .from(LogicalTableDataVersions::Table)
                     .join(
                         JoinType::LeftJoin,
-                        Collections::Table,
+                        CollectionsResolved,
                         Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::CollectionId))
-                            .equals((Collections::Table, Collections::Id)),
+                            .equals((CollectionsResolved, Collections::Id)),
                     )
                     .join(
                         JoinType::LeftJoin,

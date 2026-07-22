@@ -7,7 +7,7 @@ use sea_query::{
     Query, Table, TableCreateStatement,
 };
 
-use super::projects::Projects;
+use super::projects::{Projects, ProjectsResolved};
 use super::roles::Roles;
 use super::users::Users;
 use crate::schema::Entity;
@@ -110,7 +110,7 @@ impl Entity for Defs {
                         Alias::new("entity_id"),
                     )
                     .expr_as(Expr::col((Roles::Table, Roles::Name)), Alias::new("role"))
-                    .expr_as(Expr::col((Projects::Table, Projects::Name)), Alias::new("entity"))
+                    .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("entity"))
                     .from(Permissions::Table)
                     .join(
                         JoinType::LeftJoin,
@@ -124,8 +124,8 @@ impl Entity for Defs {
                     )
                     .join(
                         JoinType::LeftJoin,
-                        Projects::Table,
-                        Expr::col((Permissions::Table, Permissions::EntityId)).equals((Projects::Table, Projects::Id)),
+                        ProjectsResolved,
+                        Expr::col((Permissions::Table, Permissions::EntityId)).equals((ProjectsResolved, Projects::Id)),
                     )
                     .to_owned(),
             ),

@@ -59,7 +59,7 @@ pub(crate) mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::and;
-    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::dependency::DependencyDBWithNames;
     use td_objects::dxo::function::{Function, FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
@@ -77,7 +77,7 @@ pub(crate) mod tests {
     pub async fn assert_register(
         db: &TdPool,
         user_id: &UserId,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         create: &FunctionRegister,
         response: &Function,
     ) -> Result<(), TdError> {
@@ -227,7 +227,7 @@ pub(crate) mod tests {
     pub async fn assert_update(
         db: &TdPool,
         user_id: &UserId,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         create: &FunctionRegister,
         created_function: &FunctionDB,
         update: &FunctionUpdate,
@@ -400,7 +400,7 @@ pub(crate) mod tests {
     pub async fn assert_delete(
         db: &TdPool,
         _user_id: &UserId,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         create: &FunctionRegister,
         created_function: &FunctionDB,
     ) -> Result<(), TdError> {

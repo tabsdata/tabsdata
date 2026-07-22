@@ -8,7 +8,7 @@ use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 #[cfg(test)]
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::params::TableAtIdName;
 use td_objects::tower_service::with::With;
@@ -66,7 +66,7 @@ pub(crate) mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
-    use td_objects::dxo::project::ProjectDB;
+    use td_objects::dxo::project::ActiveProjectDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::rest_urls::{AtTimeParam, TableParam, UncommittedParam};
     use td_objects::types::basic::{
@@ -221,8 +221,8 @@ pub(crate) mod tests {
 
     pub async fn test_download_tables(
         context: &Context,
-        p: &ProjectDB,
-        collection: &CollectionDB,
+        p: &ActiveProjectDB,
+        collection: &ActiveCollectionDB,
         function: &FunctionDB,
         tables: &[TableName],
         get_download: impl AsyncFn(&Context, &str, &AtTime) -> Result<Bytes, TdError>,

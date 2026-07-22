@@ -15,7 +15,7 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::{
     PermissionCreate, PermissionDB, PermissionDBBuilder, PermissionDBWithNames,
 };
-use td_objects::dxo::project::ProjectDB;
+use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{
@@ -54,7 +54,10 @@ impl PermissionBuildService for With<PermissionDBBuilder> {
 
         let entity_id = if let Some(entity_name) = entity_name {
             let project_name = ProjectName::try_from(entity_name.to_string())?;
-            let project = conn.live().fetch_one::<ProjectDB>(&project_name).await?;
+            let project = conn
+                .live()
+                .fetch_one::<ActiveProjectDB>(&project_name)
+                .await?;
 
             EntityId::try_from(project.id)?
         } else {

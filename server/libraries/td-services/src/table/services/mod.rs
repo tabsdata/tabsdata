@@ -46,7 +46,7 @@ pub struct TableServices {
 pub(crate) mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::dependency::DependencyDB;
     use td_objects::dxo::function::FunctionDB;
     use td_objects::dxo::table::TableDB;
@@ -55,7 +55,7 @@ pub(crate) mod tests {
     pub async fn assert_delete(
         db: &TdPool,
         user_id: &UserId,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         table_name: &TableName,
     ) -> Result<(), TdError> {
         // Assert current table version is deleted
@@ -117,7 +117,7 @@ pub(crate) mod tests {
     pub async fn assert_not_deleted(
         db: &TdPool,
         user_id: &UserId,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         table_name: &TableName,
     ) -> Result<(), TdError> {
         // Assert table does exist

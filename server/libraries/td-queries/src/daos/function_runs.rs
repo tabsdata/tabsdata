@@ -173,7 +173,7 @@ where
     /// Effective output base_path per function version: the
     /// function-version override (`functions.base_path`) if set, else the
     /// owning collection's `base_path`, resolved in a single
-    /// `functions ⋈ collections_active` COALESCE query. Chunked internally
+    /// `functions ⋈ collections_resolved` COALESCE query. Chunked internally
     /// (like [`fetch_all_chunked`]) so callers pass the full fvid set. The
     /// `(id, base_path)` pair is a throwaway projection — decoded straight
     /// into the result map via tuple `FromRow`, no named Dlo.
@@ -649,7 +649,7 @@ fn function_run_to_execute_select() -> sea_query::SelectStatement {
         // Base paths the worker-yaml builder needs, joined here so dispatch avoids
         // per-run fetches. stage_id / stage_base_path are head-side (the function
         // version's, stable across patches). collection_base_path is the collection's
-        // effective live prefix (function-run content dir) — the collections_active
+        // effective live prefix (function-run content dir) — the collections_resolved
         // view already folds in the project fallback. bundle_base_path is the stamped
         // prefix of the *effective* bundle (patch's if patched, else head's).
         .expr_as(
@@ -790,8 +790,8 @@ pub(crate) fn fetch_runs_for_dispatch_query(
 }
 
 /// Effective output base_path per function version, resolved in one
-/// `functions ⋈ collections_active` join:
-/// `COALESCE(functions.base_path, collections_active.effective_base_path)` keyed
+/// `functions ⋈ collections_resolved` join:
+/// `COALESCE(functions.base_path, collections_resolved.effective_base_path)` keyed
 /// by function version id. The collection's `effective_base_path` already folds
 /// in the project fallback (and is NOT NULL), so the COALESCE always resolves.
 /// SELECT order (id, then base_path) maps positionally onto the
@@ -1139,17 +1139,19 @@ mod tests {
             sql.contains(r#""functions"."stage_base_path""#),
             "must project the function stage_base_path: {sql}"
         );
-        // Collection's effective prefix (the collections_active view already folds
+        // Collection's effective prefix (the collections_resolved view already folds
         // in the project fallback), read directly.
         assert!(
-            sql.contains(r#""collections_active"."effective_base_path" AS "collection_base_path""#),
+            sql.contains(
+                r#""collections_resolved"."effective_base_path" AS "collection_base_path""#
+            ),
             "collection_base_path must read the view's effective_base_path: {sql}"
         );
         // bundle_base_path = stamped bundle prefix, falling back to the collection's
         // effective prefix via COALESCE when the bundle row is absent (never NULL).
         assert!(
             sql.contains(
-                r#"COALESCE("bundles"."base_path", "collections_active"."effective_base_path")"#
+                r#"COALESCE("bundles"."base_path", "collections_resolved"."effective_base_path")"#
             ),
             "bundle_base_path must coalesce bundle then the collection effective prefix: {sql}"
         );
@@ -1162,6 +1164,14 @@ mod tests {
         assert!(
             !sql.contains(r#""projects_active""#),
             "dispatch query must not join projects (the view resolves it): {sql}"
+        );
+        // Regression: a run can outlive a soft-deleted collection, so the dispatch
+        // query must resolve the collection through the always-present
+        // `collections_resolved` view, never `collections_active` (which would miss
+        // and decode NULL into the non-nullable collection name / base_path).
+        assert!(
+            !sql.contains(r#""collections_active""#),
+            "dispatch query must resolve via collections_resolved, not collections_active: {sql}"
         );
     }
 

@@ -14,7 +14,7 @@ use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageAccess, ManageProject, Project, Rbac, Scope};
 use td_objects::dxo::crudl::{ListResponse, RequestContext};
-use td_objects::dxo::project::ProjectDB;
+use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::simple_permission::{ListByProjectRequest, SimpleProjectAccess};
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{ProjectId, ProjectIdName};
@@ -37,8 +37,8 @@ fn service() {
         // resolve the project and authorize against it: manage_access (system)
         // OR manage_project on the project (a project admin can see the roster).
         from_fn(With::<ListByProjectRequest>::extract::<ProjectIdName>),
-        from_fn(By::<ProjectIdName>::fetch_one::<ProjectDB>),
-        from_fn(With::<ProjectDB>::extract::<ProjectId>),
+        from_fn(By::<ProjectIdName>::fetch_one::<ActiveProjectDB>),
+        from_fn(With::<ActiveProjectDB>::extract::<ProjectId>),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, (ManageAccess, ManageProject)>::check),
         from_fn(list_project_access),

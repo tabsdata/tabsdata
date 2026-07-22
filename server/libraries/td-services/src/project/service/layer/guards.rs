@@ -7,7 +7,7 @@
 
 use crate::project::ProjectError;
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::types::basic::ProjectId;
 use td_tower::extractors::Ref;
 
@@ -23,7 +23,7 @@ use td_tower::extractors::Ref;
 /// the request's own scope.
 pub async fn reject_delete_non_empty_project(
     project_id: Ref<ProjectId>,
-    collections: Ref<Vec<CollectionDB>>,
+    collections: Ref<Vec<ActiveCollectionDB>>,
 ) -> Result<(), TdError> {
     if !collections.is_empty() {
         Err(ProjectError::ProjectNotEmpty(project_id.to_string()))?;

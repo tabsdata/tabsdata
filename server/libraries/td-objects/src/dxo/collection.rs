@@ -7,8 +7,8 @@ mod definitions {
     use crate::dxo::connection::KeyValue;
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
-        AtTime, BasePath, CollectionId, CollectionName, CollectionType, ConnectionId, Description,
-        GroupId, GroupName, ProjectId, UserId, UserName,
+        AtTime, BasePath, CollectionId, CollectionName, CollectionType, CollectionWhenDeleted,
+        ConnectionId, Description, GroupId, GroupName, ProjectId, UserId, UserName,
     };
     use td_common::id::Id;
 
@@ -56,7 +56,7 @@ mod definitions {
     #[ta_objects::Dao]
     #[dao(sql_table = "collections_active")]
     #[dxo(builder(try_from = CollectionCreateDB))]
-    pub struct CollectionDB {
+    pub struct ActiveCollectionDB {
         #[dxo(extractor)]
         pub id: CollectionId,
         /// The project that owns this collection. Read from the DB column when
@@ -87,10 +87,21 @@ mod definitions {
         pub connection_id: Option<ConnectionId>,
     }
 
+    // Canonical read/join surface: the `collections_resolved` view — every row,
+    // including soft-deleted, with the real name resolved. Same columns as
+    // `ActiveCollectionDB` plus the `deleted` flag; resolve a collection
+    // referenced by an entity that can outlive it through this type.
+    #[ta_objects::Dao]
+    #[dao(sql_table = "collections_resolved")]
+    #[inherits(ActiveCollectionDB)]
+    pub struct CollectionDB {
+        pub deleted: CollectionWhenDeleted,
+    }
+
     #[ta_objects::Dao]
     #[dao(sql_table = "collections")]
     #[dxo(
-        builder(try_from = CollectionDB, skip_all),
+        builder(try_from = ActiveCollectionDB, skip_all),
         updater(try_from = RequestContext, skip_all),
     )]
     pub struct CollectionDeleteDB {
@@ -112,8 +123,8 @@ mod definitions {
 
     #[ta_objects::Dao]
     #[dao(sql_table = "collections__with_names")]
-    #[inherits(CollectionDB)]
-    pub struct CollectionDBWithNames {
+    #[inherits(ActiveCollectionDB)]
+    pub struct ActiveCollectionDBWithNames {
         pub created_by: UserName,
         pub modified_by: UserName,
         // Resolved group display name from the joined groups row.
@@ -168,7 +179,7 @@ mod definitions {
     #[ta_objects::Dao]
     #[dao(update, sql_table = "collections")]
     #[dxo(
-        builder(try_from = CollectionDB),
+        builder(try_from = ActiveCollectionDB),
         updater(try_from = RequestContext, skip_all)
     )]
     pub struct CollectionUpdateDB {
@@ -179,14 +190,14 @@ mod definitions {
         #[dxo(updater(include, field = "user_id"))]
         pub modified_by_id: UserId,
         // DAO side of `CollectionUpdate::base_path`'s tri-state (here the outer
-        // `None` skips the column). Seeded from the current `CollectionDB`,
+        // `None` skips the column). Seeded from the current `ActiveCollectionDB`,
         // overridden by the update layer.
         pub base_path: Option<Option<BasePath>>,
     }
 
     #[ta_objects::Dto]
-    #[dto(list(on = CollectionDBWithNames))]
-    #[inherits(CollectionDBWithNames)]
+    #[dto(list(on = ActiveCollectionDBWithNames))]
+    #[inherits(ActiveCollectionDBWithNames)]
     pub struct CollectionRead {
         #[dto(list(pagination_by = "+"))]
         pub id: CollectionId,

@@ -17,6 +17,7 @@ from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
     all_projects_option,
     beautify_time,
+    collection_label,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
@@ -229,7 +230,7 @@ def list_fn_run(
             if spanning:
                 row.append(fn_run.project or "-")
             row.extend([
-                fn_run.collection.name,
+                collection_label(fn_run),
                 fn_run.function.name,
                 fn_run.execution.name,
                 fn_run.execution.id,
@@ -387,7 +388,7 @@ def list_plan(
                 if spanning:
                     row.append(execution.project or "-")
                 row.extend([
-                    execution.collection.name,
+                    collection_label(execution),
                     execution.function.name,
                     beautify_time(execution.triggered_on_str),
                     execution.trigger_type,
@@ -602,7 +603,7 @@ def list_trx(
                 if spanning:
                     row.append(transaction.project or "-")
                 row.extend([
-                    transaction.collection.name,
+                    collection_label(transaction),
                     beautify_time(transaction.triggered_on_str),
                     transaction.triggered_by,
                     transaction.status,
@@ -836,7 +837,7 @@ def list_worker(
             if spanning:
                 row.append(worker.project or "-")
             row.extend([
-                worker.collection.name,
+                collection_label(worker),
                 worker.function.name,
                 worker.execution.name,
                 worker.execution.id,
@@ -924,7 +925,7 @@ def info(ctx: click.Context, plan: str):
 
         table.add_row(
             execution.name,
-            execution.collection.name,
+            collection_label(execution),
             execution.function.name,
             beautify_time(execution.triggered_on_str),
             execution.status,

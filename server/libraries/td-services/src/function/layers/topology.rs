@@ -160,7 +160,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::Buildable;
-    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionPatchDB, FunctionRegister};
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, Description, FunctionRuntimeValues, FunctionStatus,
@@ -173,7 +173,7 @@ mod tests {
         project_id: ProjectId,
         coll_name: &str,
         fn_name: &str,
-    ) -> Result<(CollectionDB, FunctionDB), TdError> {
+    ) -> Result<(ActiveCollectionDB, FunctionDB), TdError> {
         let coll = db
             .scoped(project_id)
             .seed()

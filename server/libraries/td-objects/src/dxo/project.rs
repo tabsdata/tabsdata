@@ -10,7 +10,7 @@
 mod definitions {
     use crate::dxo::crudl::RequestContext;
     use crate::types::basic::{
-        AtTime, BasePath, Description, ProjectId, ProjectName, UserId, UserName,
+        AtTime, BasePath, Description, ProjectId, ProjectName, ProjectWhenDeleted, UserId, UserName,
     };
     use td_common::id::Id;
 
@@ -47,7 +47,7 @@ mod definitions {
     #[ta_objects::Dao]
     #[dao(sql_table = "projects_active")]
     #[dxo(builder(try_from = ProjectCreateDB))]
-    pub struct ProjectDB {
+    pub struct ActiveProjectDB {
         #[dxo(extractor)]
         pub id: ProjectId,
         #[dxo(extractor)]
@@ -61,10 +61,19 @@ mod definitions {
         pub modified_by_id: UserId,
     }
 
+    // Canonical read/join surface: the `projects_resolved` view — every row, real
+    // name resolved. Same columns as `ActiveProjectDB` plus the `deleted` flag.
+    #[ta_objects::Dao]
+    #[dao(sql_table = "projects_resolved")]
+    #[inherits(ActiveProjectDB)]
+    pub struct ProjectDB {
+        pub deleted: ProjectWhenDeleted,
+    }
+
     #[ta_objects::Dao]
     #[dao(sql_table = "projects")]
     #[dxo(
-        builder(try_from = ProjectDB, skip_all),
+        builder(try_from = ActiveProjectDB, skip_all),
         updater(try_from = RequestContext, skip_all),
     )]
     pub struct ProjectDeleteDB {
@@ -86,8 +95,8 @@ mod definitions {
 
     #[ta_objects::Dao]
     #[dao(sql_table = "projects__with_names")]
-    #[inherits(ProjectDB)]
-    pub struct ProjectDBWithNames {
+    #[inherits(ActiveProjectDB)]
+    pub struct ActiveProjectDBWithNames {
         #[dxo(extractor)]
         pub id: ProjectId,
         pub created_by: UserName,
@@ -114,7 +123,7 @@ mod definitions {
     #[ta_objects::Dao]
     #[dao(update, sql_table = "projects")]
     #[dxo(
-        builder(try_from = ProjectDB),
+        builder(try_from = ActiveProjectDB),
         updater(try_from = RequestContext, skip_all)
     )]
     pub struct ProjectUpdateDB {
@@ -127,8 +136,8 @@ mod definitions {
     }
 
     #[ta_objects::Dto]
-    #[dto(list(on = ProjectDBWithNames))]
-    #[inherits(ProjectDBWithNames)]
+    #[dto(list(on = ActiveProjectDBWithNames))]
+    #[inherits(ActiveProjectDBWithNames)]
     pub struct ProjectRead {
         #[dto(list(pagination_by = "+"))]
         pub id: ProjectId,

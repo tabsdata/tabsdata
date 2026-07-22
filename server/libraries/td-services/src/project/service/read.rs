@@ -6,7 +6,7 @@ use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::dxo::project::{ProjectDBWithNames, ProjectRead, ProjectReadBuilder};
+use td_objects::dxo::project::{ActiveProjectDBWithNames, ProjectRead, ProjectReadBuilder};
 use td_objects::rest_urls::ProjectParam;
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{ProjectId, ProjectIdName};
@@ -28,12 +28,12 @@ fn service() {
         from_fn(With::<ReadRequest<ProjectParam>>::extract::<RequestContext>),
         from_fn(With::<ReadRequest<ProjectParam>>::extract_name::<ProjectParam>),
         from_fn(With::<ProjectParam>::extract::<ProjectIdName>),
-        from_fn(By::<ProjectIdName>::fetch_one::<ProjectDBWithNames>),
+        from_fn(By::<ProjectIdName>::fetch_one::<ActiveProjectDBWithNames>),
         // Reading a project's metadata requires `view_project` on that project.
-        from_fn(With::<ProjectDBWithNames>::extract::<ProjectId>),
+        from_fn(With::<ActiveProjectDBWithNames>::extract::<ProjectId>),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, ViewProject>::check),
-        from_fn(With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
+        from_fn(With::<ActiveProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
         from_fn(With::<ProjectReadBuilder>::build::<ProjectRead>),
     )
 }
@@ -54,11 +54,13 @@ mod tests {
                 type_of_val(&With::<ReadRequest<ProjectParam>>::extract::<RequestContext>),
                 type_of_val(&With::<ReadRequest<ProjectParam>>::extract_name::<ProjectParam>),
                 type_of_val(&With::<ProjectParam>::extract::<ProjectIdName>),
-                type_of_val(&By::<ProjectIdName>::fetch_one::<ProjectDBWithNames>),
-                type_of_val(&With::<ProjectDBWithNames>::extract::<ProjectId>),
+                type_of_val(&By::<ProjectIdName>::fetch_one::<ActiveProjectDBWithNames>),
+                type_of_val(&With::<ActiveProjectDBWithNames>::extract::<ProjectId>),
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, ViewProject>::check),
-                type_of_val(&With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
+                type_of_val(
+                    &With::<ActiveProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>,
+                ),
                 type_of_val(&With::<ProjectReadBuilder>::build::<ProjectRead>),
             ]);
     }

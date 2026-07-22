@@ -334,7 +334,7 @@ mod tests {
         create_project(&db, "p0").await?;
         let p0 = db
             .live()
-            .fetch_one::<td_objects::dxo::project::ProjectDB>(&ProjectName::try_from("p0")?)
+            .fetch_one::<td_objects::dxo::project::ActiveProjectDB>(&ProjectName::try_from("p0")?)
             .await?;
         // requester only develops p0 (via a custom role), so cannot manage access.
         let dev_only = db

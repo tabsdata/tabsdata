@@ -111,15 +111,16 @@ pub trait LogicalPointerDao:
 mod definitions {
     use crate::dxo::worker::UpdateWorkerExecution;
     use crate::types::basic::{
-        AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged, DependencyPos,
-        EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, GroupId,
-        GroupName, HasData, InputIdx, LogicalFunctionRunId, LogicalFunctionRunInputId,
-        LogicalFunctionRunPointerId, LogicalFunctionRunStatus, LogicalPointerReason,
-        LogicalPointerStatus, LogicalTableDataVersionId, LogicalTableDataVersionPointerId,
-        PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private,
-        ProjectId, ProjectName, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash,
-        StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionCount,
-        TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName, VersionPos,
+        AtTime, ByteCount, CollectionId, CollectionName, CollectionWhenDeleted, ColumnCount,
+        DataChanged, DependencyPos, EpochMs, ExecutionId, ExecutionName, FunctionId, FunctionName,
+        FunctionVersionId, GroupId, GroupName, HasData, InputIdx, LogicalFunctionRunId,
+        LogicalFunctionRunInputId, LogicalFunctionRunPointerId, LogicalFunctionRunStatus,
+        LogicalPointerReason, LogicalPointerStatus, LogicalTableDataVersionId,
+        LogicalTableDataVersionPointerId, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
+        PhysicalTableDataVersionId, Private, ProjectId, ProjectName, RowCount, SchemaChanged,
+        SchemaDataChanged, SchemaHash, StorageVersion, TableFunctionParamPos, TableId, TableName,
+        TableVersionCount, TableVersionId, TransactionId, Trigger, TriggeredOn, UserId, UserName,
+        VersionPos,
     };
     use td_error::TdError;
 
@@ -210,6 +211,9 @@ mod definitions {
     pub struct FunctionRunDBWithNames {
         pub name: FunctionName,
         pub collection: CollectionName,
+        // True when the owning collection is soft-deleted; `collection` still
+        // carries the real pre-deletion name (resolved view).
+        pub collection_deleted: CollectionWhenDeleted,
         pub execution: Option<ExecutionName>,
         pub triggered_by: UserName,
         pub group: Option<GroupName>,
@@ -271,6 +275,8 @@ mod definitions {
         pub name: FunctionName,
         #[dto(list(filter, filter_like, order_by))]
         pub collection: CollectionName,
+        #[builder(default)]
+        pub collection_deleted: CollectionWhenDeleted,
         #[dto(list(filter, filter_like))]
         pub execution: Option<ExecutionName>,
         #[dto(list(filter, filter_like, order_by))]

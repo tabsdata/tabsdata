@@ -24,7 +24,7 @@ use td_bridge::connection::ConnectionStore;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::Scoped;
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
 use td_objects::dxo::crudl::{IntoData, RequestContext, UpdateRequest};
 use td_objects::rest_urls::CollectionParam;
@@ -58,7 +58,7 @@ fn resolve() {
             With::<UpdateRequest<CollectionParam, ConnectionUpsert>>::extract_name::<CollectionParam>
         ),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
         from_fn(ensure_connectable),
         from_fn(
             With::<UpdateRequest<CollectionParam, ConnectionUpsert>>::extract_data::<
@@ -234,7 +234,7 @@ mod tests {
                     >,
                 ),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
                 type_of_val(&ensure_connectable),
                 type_of_val(
                     &With::<UpdateRequest<CollectionParam, ConnectionUpsert>>::extract_data::<

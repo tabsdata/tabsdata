@@ -9,11 +9,11 @@ mod definitions {
     use crate::dxo::graph::{FunctionNode, GraphEdge, TableNode};
     use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
     use crate::types::basic::{
-        AtTime, CollectionId, CollectionName, Dot, Enabled, ExecutionId, ExecutionName,
-        ExecutionStatus, ExternalUid, FunctionId, FunctionName, FunctionOnly, FunctionVersionId,
-        InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, PhysicalTableDataVersionId,
-        ProjectId, ProjectName, SkipIfRunning, StatusCount, System, TableName, TableVersionId,
-        TransactionId, TriggerType, TriggeredOn, UserId, UserName,
+        AtTime, CollectionId, CollectionName, CollectionWhenDeleted, Dot, Enabled, ExecutionId,
+        ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName, FunctionOnly,
+        FunctionVersionId, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger,
+        PhysicalTableDataVersionId, ProjectId, ProjectName, SkipIfRunning, StatusCount, System,
+        TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserName,
     };
     use crate::types::composed::TableVersions;
     use crate::types::json::Json;
@@ -125,6 +125,9 @@ mod definitions {
     #[inherits(ExecutionDB)]
     pub struct ExecutionDBWithNames {
         pub collection: CollectionName,
+        // True when the owning collection is soft-deleted; `collection` still
+        // carries the real pre-deletion name (resolved view).
+        pub collection_deleted: CollectionWhenDeleted,
         pub function: FunctionName,
         pub triggered_by: UserName,
         pub project: Option<ProjectName>,
@@ -164,6 +167,8 @@ mod definitions {
 
         #[dto(list(filter, filter_like, order_by))]
         pub collection: CollectionName,
+        #[builder(default)]
+        pub collection_deleted: CollectionWhenDeleted,
         #[dto(list(filter, filter_like, order_by))]
         pub function: FunctionName,
         #[dto(list(filter))]

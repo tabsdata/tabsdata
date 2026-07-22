@@ -12,7 +12,7 @@ use sea_query::{
     Query, Table, TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::triggers_current::TriggersCurrent;
 use super::users::Users;
 use crate::schema::Entity;
@@ -139,18 +139,19 @@ fn triggers_with_names() -> ViewDef {
         TriggersWithNames,
         Query::select()
             .expr(Expr::col((Triggers::Table, Asterisk)))
-            .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+            .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+            .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
             .expr_as(Expr::col((trigger_by_collection.clone(), Collections::Name)), Alias::new("trigger_by_collection"))
             .from(Triggers::Table)
             .join(
                 JoinType::LeftJoin,
-                Collections::Table,
-                Expr::col((Triggers::Table, Triggers::CollectionId)).equals((Collections::Table, Collections::Id)),
+                CollectionsResolved,
+                Expr::col((Triggers::Table, Triggers::CollectionId)).equals((CollectionsResolved, Collections::Id)),
             )
             .join(JoinType::LeftJoin, Users::Table, Expr::col((Triggers::Table, Triggers::DefinedById)).equals((Users::Table, Users::Id)))
             .join_as(
                 JoinType::LeftJoin,
-                Collections::Table,
+                CollectionsResolved,
                 trigger_by_collection.clone(),
                 Expr::col((Triggers::Table, Triggers::TriggerByCollectionId)).equals((trigger_by_collection, Collections::Id)),
             )

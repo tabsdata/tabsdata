@@ -7,9 +7,9 @@ use sea_query::{
     TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::functions::Functions;
-use super::projects::Projects;
+use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -105,18 +105,19 @@ impl Entity for Defs {
             ExecutionsWithNames,
             Query::select()
                 .expr(Expr::col((Executions::Table, Asterisk)))
-                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .expr_as(
                     b.name_or_id((Users::Table, Users::Name), (Executions::Table, Executions::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
-                .expr_as(Expr::col((Projects::Table, Projects::Name)), Alias::new("project"))
+                .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
                 .from(Executions::Table)
                 .join(
                     JoinType::LeftJoin,
-                    Collections::Table,
-                    Expr::col((Executions::Table, Executions::CollectionId)).equals((Collections::Table, Collections::Id)),
+                    CollectionsResolved,
+                    Expr::col((Executions::Table, Executions::CollectionId)).equals((CollectionsResolved, Collections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,
@@ -130,8 +131,8 @@ impl Entity for Defs {
                 )
                 .join(
                     JoinType::LeftJoin,
-                    Projects::Table,
-                    Expr::col((Executions::Table, Executions::ProjectId)).equals((Projects::Table, Projects::Id)),
+                    ProjectsResolved,
+                    Expr::col((Executions::Table, Executions::ProjectId)).equals((ProjectsResolved, Projects::Id)),
                 )
                 .to_owned(),
         )]

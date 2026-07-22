@@ -9,7 +9,7 @@ use sea_query::{
 
 use super::connections::Connections;
 use super::groups::Groups;
-use super::projects::{Projects, ProjectsActive};
+use super::projects::Projects;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -32,6 +32,9 @@ pub enum Collections {
     CollectionType,
     ConnectionId,
 }
+
+#[derive(Iden, Clone, Copy)]
+pub struct CollectionsResolved;
 
 #[derive(Iden, Clone, Copy)]
 pub struct CollectionsActive;
@@ -119,40 +122,69 @@ impl Entity for Defs {
 
     fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
         vec![
-            // Columns are table-qualified because the `projects_active` join below
-            // shares many column names (id, name, base_path, audit columns).
+            // Every row, including soft-deleted, with the real name resolved via
+            // COALESCE(name_when_deleted, name) and a `deleted` flag. The canonical
+            // join surface: the base row is always present, so a foreign-key
+            // resolution never misses. `effective_base_path` joins the base
+            // `projects` table (not `projects_active`) so a deleted collection
+            // under a deleted project still resolves a prefix.
             ViewDef::new(
-                CollectionsActive,
+                CollectionsResolved,
                 Query::select()
                     .column((Collections::Table, Collections::Id))
                     .column((Collections::Table, Collections::ProjectId))
-                    .column((Collections::Table, Collections::Name))
+                    .expr_as(
+                        Func::coalesce([
+                            Expr::col((Collections::Table, Collections::NameWhenDeleted)),
+                            Expr::col((Collections::Table, Collections::Name)),
+                        ]),
+                        Alias::new("name"),
+                    )
                     .column((Collections::Table, Collections::Description))
                     .column((Collections::Table, Collections::CreatedOn))
                     .column((Collections::Table, Collections::CreatedById))
                     .column((Collections::Table, Collections::ModifiedOn))
                     .column((Collections::Table, Collections::ModifiedById))
+                    .column((Collections::Table, Collections::NameWhenDeleted))
                     .column((Collections::Table, Collections::GroupId))
                     .column((Collections::Table, Collections::BasePath))
                     .column((Collections::Table, Collections::CollectionType))
                     .column((Collections::Table, Collections::ConnectionId))
-                    // Resolved storage prefix: own base_path, else the project's
-                    // (NOT NULL). Resolved once here so every reader gets a concrete
-                    // prefix without repeating the COALESCE + projects join.
                     .expr_as(
                         Func::coalesce([
                             Expr::col((Collections::Table, Collections::BasePath)),
-                            Expr::col((ProjectsActive, Projects::BasePath)),
+                            Expr::col((Projects::Table, Projects::BasePath)),
                         ]),
                         Alias::new("effective_base_path"),
                     )
+                    .expr_as(Expr::col((Collections::Table, Collections::NameWhenDeleted)).is_not_null(), Alias::new("deleted"))
                     .from(Collections::Table)
                     .join(
                         JoinType::LeftJoin,
-                        ProjectsActive,
-                        Expr::col((Collections::Table, Collections::ProjectId)).equals((ProjectsActive, Projects::Id)),
+                        Projects::Table,
+                        Expr::col((Collections::Table, Collections::ProjectId)).equals((Projects::Table, Projects::Id)),
                     )
-                    .and_where(Expr::col((Collections::Table, Collections::NameWhenDeleted)).is_null())
+                    .to_owned(),
+            ),
+            // Non-soft-deleted subset of the resolved view.
+            ViewDef::new(
+                CollectionsActive,
+                Query::select()
+                    .column((CollectionsResolved, Collections::Id))
+                    .column((CollectionsResolved, Collections::ProjectId))
+                    .column((CollectionsResolved, Collections::Name))
+                    .column((CollectionsResolved, Collections::Description))
+                    .column((CollectionsResolved, Collections::CreatedOn))
+                    .column((CollectionsResolved, Collections::CreatedById))
+                    .column((CollectionsResolved, Collections::ModifiedOn))
+                    .column((CollectionsResolved, Collections::ModifiedById))
+                    .column((CollectionsResolved, Collections::GroupId))
+                    .column((CollectionsResolved, Collections::BasePath))
+                    .column((CollectionsResolved, Collections::CollectionType))
+                    .column((CollectionsResolved, Collections::ConnectionId))
+                    .expr(Expr::col((CollectionsResolved, Alias::new("effective_base_path"))))
+                    .from(CollectionsResolved)
+                    .and_where(Expr::col((CollectionsResolved, Collections::NameWhenDeleted)).is_null())
                     .to_owned(),
             ),
             collections_with_names(b),

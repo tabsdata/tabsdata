@@ -17,7 +17,7 @@ use td_authz::rbac::{ManageProject, Project, Rbac, Scope, SqlRbacSource};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::collection::{
-    CollectionCreate, CollectionCreateDBBuilder, CollectionDB, CollectionDBWithNames,
+    ActiveCollectionDB, ActiveCollectionDBWithNames, CollectionCreate, CollectionCreateDBBuilder,
     CollectionRead, CollectionReadBuilder,
 };
 use td_objects::dxo::connection::{ConnectionDB, ConnectionUpsert, KeyValue};
@@ -51,7 +51,7 @@ pub(crate) async fn escalate_for_connected(
 
 /// Only `Source`/`Destination` collections carry connection info; reject a
 /// `DataFactory`.
-pub async fn ensure_connectable(collection: Ref<CollectionDB>) -> Result<(), TdError> {
+pub async fn ensure_connectable(collection: Ref<ActiveCollectionDB>) -> Result<(), TdError> {
     match &collection.collection_type {
         CollectionType::Source | CollectionType::Destination => Ok(()),
         CollectionType::DataFactory => Err(api_error!(
@@ -186,7 +186,7 @@ pub struct ConnectionResolution {
 /// is immutable — content was stored under it.
 pub async fn resolve_connection(
     mut conn: MutRef<DomainConnection<Apiserver>>,
-    collection: Ref<CollectionDB>,
+    collection: Ref<ActiveCollectionDB>,
     document: Ref<ConnectionDocument>,
 ) -> Result<ConnectionResolution, TdError> {
     let connection_id = collection.connection_id.ok_or_else(|| {
@@ -219,7 +219,9 @@ fn ensure_same_kind(existing: &ConnectionDB, kind: &ConnectionKind) -> Result<()
 }
 
 /// The collection's connection id, or 404 — without a store round-trip.
-pub async fn require_connection_id(collection: Ref<CollectionDB>) -> Result<ConnectionId, TdError> {
+pub async fn require_connection_id(
+    collection: Ref<ActiveCollectionDB>,
+) -> Result<ConnectionId, TdError> {
     collection.connection_id.ok_or_else(|| {
         api_error!(
             ApiError::NotFound,
@@ -302,14 +304,14 @@ pub(crate) async fn ensure_collection_name_free(
     conn: &mut DomainConnection<Apiserver>,
     name: &CollectionName,
 ) -> Result<(), TdError> {
-    let existing: Vec<CollectionDB> = conn.live().fetch_all(name).await?;
+    let existing: Vec<ActiveCollectionDB> = conn.live().fetch_all(name).await?;
     if existing.is_empty() {
         Ok(())
     } else {
         // Clean "already exists" (input-error/400), matching the
         // `By::<Name>::assert_not_exists` errors used for the other entities.
         Err(SqlError::EntityAlreadyExists(
-            CollectionDB::display_name().to_string(),
+            ActiveCollectionDB::display_name().to_string(),
             format!(" for 'name' = '{name}'"),
         ))?
     }
@@ -346,6 +348,6 @@ pub async fn insert_collection_with_connection(
         .connection_id(plan.connection_row.as_ref().map(|row| row.id))
         .build()?;
     conn.live().insert(&collection).await?;
-    let with_names: CollectionDBWithNames = conn.live().fetch_one(collection.id).await?;
+    let with_names: ActiveCollectionDBWithNames = conn.live().fetch_one(collection.id).await?;
     Ok(CollectionReadBuilder::try_from(&with_names)?.build()?)
 }

@@ -7,7 +7,7 @@ use sea_query::{
     TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::function_patches::FunctionPatches;
 use super::functions::Functions;
@@ -173,7 +173,8 @@ impl Entity for Defs {
             Query::select()
                 .expr(Expr::col((PhysicalFunctionRuns::Table, Asterisk)))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("name"))
-                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Executions::Table, Executions::FunctionVersionId)), Alias::new("execution_function_version_id"))
                 .expr_as(
@@ -183,9 +184,9 @@ impl Entity for Defs {
                 .from(PhysicalFunctionRuns::Table)
                 .join(
                     JoinType::LeftJoin,
-                    Collections::Table,
+                    CollectionsResolved,
                     Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::CollectionId))
-                        .equals((Collections::Table, Collections::Id)),
+                        .equals((CollectionsResolved, Collections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,

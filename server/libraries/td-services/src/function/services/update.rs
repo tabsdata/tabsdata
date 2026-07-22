@@ -21,7 +21,7 @@ use td_bridge::BridgeProviderHandle;
 use td_execution::SchedulerNotify;
 use td_objects::And;
 use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::{
@@ -66,12 +66,12 @@ fn service() {
         from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
         // Get collection. Extract collection id and name.
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
         // check requester can manage or develop the current project
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
-        from_fn(With::<CollectionDB>::extract::<CollectionName>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionName>),
         // Get function. Extract function id and name.
         from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(
@@ -204,13 +204,13 @@ mod tests {
                 type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
                 type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
                 // Get collection. Extract collection id and name.
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionId>),
                 // check requester can manage or develop the current project
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
 
-                type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionName>),
                 // Get function. Extract function id and name.
                 type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(&By::<And![CollectionIdName, FunctionIdName]>::historic_fetch_one::<

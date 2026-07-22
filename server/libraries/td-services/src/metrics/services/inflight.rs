@@ -70,7 +70,7 @@ mod tests {
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_error::TdError;
     use td_objects::Buildable;
-    use td_objects::dxo::collection::{CollectionCreate, CollectionDB};
+    use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::query_filters::DimensionFilter;
@@ -206,7 +206,10 @@ mod tests {
 
     /// Seed one Running (in-flight) function run in the given collection — the
     /// run inherits the collection's project and group through the seed chain.
-    async fn seed_inflight_run(db: &TdPool, collection: &CollectionDB) -> Result<(), TdError> {
+    async fn seed_inflight_run(
+        db: &TdPool,
+        collection: &ActiveCollectionDB,
+    ) -> Result<(), TdError> {
         let create = FunctionRegister::builder()
             .name(FunctionName::try_from("g_inflight_fn")?)
             .try_description("d")?
@@ -283,10 +286,10 @@ mod tests {
                     .in_project(project_b.id),
             )
             .await?;
-        let coll_b: CollectionDB = db
+        let coll_b: ActiveCollectionDB = db
             .scoped(&project_b_id)
             .live()
-            .fetch_one::<CollectionDB>(&coll_b_name)
+            .fetch_one::<ActiveCollectionDB>(&coll_b_name)
             .await?;
         seed_inflight_run(&db, &coll_b).await?;
 

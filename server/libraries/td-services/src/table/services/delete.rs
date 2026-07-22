@@ -9,7 +9,7 @@ use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::And;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext};
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
@@ -42,8 +42,8 @@ fn service() {
         from_fn(With::<TableParam>::extract::<CollectionIdName>),
         from_fn(With::<TableParam>::extract::<TableIdName>),
         // Get collection. Extract collection id and name.
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionName>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionName>),
         // check requester has project permissions
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
@@ -121,8 +121,8 @@ mod tests {
                 type_of_val(&With::<TableParam>::extract::<CollectionIdName>),
                 type_of_val(&With::<TableParam>::extract::<TableIdName>),
                 // Get collection. Extract collection id and name.
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionName>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionName>),
                 // check requester has project permissions
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),

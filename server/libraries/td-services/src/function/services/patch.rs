@@ -8,7 +8,7 @@ use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::dxo::bundle::{BundleDB, BundleRegisteredDB};
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::{CreateRequest, RequestContext};
 use td_objects::dxo::function::{
     FunctionDB, FunctionPatch, FunctionPatchDB, FunctionPatchRecord, FunctionPatchRecordBuilder,
@@ -38,8 +38,8 @@ fn service() {
         from_fn(With::<CreateRequest<FunctionParam, FunctionPatch>>::extract_name::<FunctionParam>),
         from_fn(With::<CreateRequest<FunctionParam, FunctionPatch>>::extract_data::<FunctionPatch>),
         from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
@@ -101,8 +101,8 @@ mod tests {
                     >,
                 ),
                 type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionId>),
                 type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
@@ -127,7 +127,7 @@ mod tests {
         db: &TdPool,
         project_id: ProjectId,
         name: &str,
-    ) -> CollectionDB {
+    ) -> ActiveCollectionDB {
         db.scoped(project_id)
             .seed()
             .collection(&CollectionName::try_from(name).unwrap(), &UserId::admin())
@@ -138,7 +138,7 @@ mod tests {
     async fn seed_function_in(
         db: &TdPool,
         project_id: ProjectId,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         function_name: &str,
     ) -> FunctionDB {
         let register = FunctionRegister::builder()

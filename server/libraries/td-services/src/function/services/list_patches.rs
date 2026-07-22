@@ -7,7 +7,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::And;
 use td_objects::NoFilter;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionPatchRecord};
 use td_objects::list::params::ListQueryParams;
@@ -36,8 +36,8 @@ fn service() {
         from_fn(With::<FunctionParam>::extract::<CollectionIdName>),
         from_fn(With::<FunctionParam>::extract::<FunctionIdName>),
         // Resolve collection + authz.
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, ViewProject>::check),
         // Resolve function id from the URL.
@@ -58,7 +58,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::InProject;
     use td_error::TdError;
-    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::function::{FunctionPatch, FunctionRegister};
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
@@ -84,8 +84,8 @@ mod tests {
                 type_of_val(&With::<FunctionParam>::extract::<CollectionIdName>),
                 type_of_val(&With::<FunctionParam>::extract::<FunctionIdName>),
                 // Resolve collection + authz.
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionId>),
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, ViewProject>::check),
                 // Resolve function id from the URL.
@@ -101,7 +101,7 @@ mod tests {
             ]);
     }
 
-    async fn seed_patches_fixture(db: &TdPool, project_id: ProjectId) -> CollectionDB {
+    async fn seed_patches_fixture(db: &TdPool, project_id: ProjectId) -> ActiveCollectionDB {
         let collection = db
             .scoped(project_id)
             .seed()

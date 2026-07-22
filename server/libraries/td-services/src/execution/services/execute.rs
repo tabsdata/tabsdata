@@ -78,7 +78,7 @@ pub(crate) mod tests {
     use td_database::sea_query::kind::{DatabaseBackend, DatabaseKind};
     use td_error::{ApiError, TdError};
     use td_execution::EXECUTION_GRAPH_OPTIONS;
-    use td_objects::dxo::collection::{CollectionCreate, CollectionDB};
+    use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
     use td_objects::dxo::execution::{
         ExecutionDB, ExecutionDBWithStatus, ExecutionResponse, ResolvedVersionResponse,
     };
@@ -316,10 +316,10 @@ pub(crate) mod tests {
             )
             .await?;
 
-        let collection: CollectionDB = db
+        let collection: ActiveCollectionDB = db
             .scoped(project.id)
             .live()
-            .fetch_one::<CollectionDB>(&collection_name)
+            .fetch_one::<ActiveCollectionDB>(&collection_name)
             .await?;
         assert_eq!(collection.project_id, project.id);
         assert_eq!(
@@ -388,7 +388,7 @@ pub(crate) mod tests {
         p: ProjectId,
         tables: &[&str],
         versions: usize,
-    ) -> Result<(CollectionDB, FunctionDB, Vec<ExecutionDB>), TdError> {
+    ) -> Result<(ActiveCollectionDB, FunctionDB, Vec<ExecutionDB>), TdError> {
         let collection = db
             .scoped(p)
             .seed()
@@ -457,7 +457,7 @@ pub(crate) mod tests {
     async fn execute_consumer(
         db: &TdPool,
         p: ProjectId,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         dependencies: &[&str],
         trigger: Option<&str>,
     ) -> Result<ExecutionResponse, TdError> {

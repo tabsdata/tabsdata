@@ -17,7 +17,7 @@
 //! resolver — not from a DB-level FK. Deletes are soft, so a tagged row's
 //! project id keeps resolving here even after the project is deleted.
 
-use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Iden, JoinType, Query, Table, TableCreateStatement};
+use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Func, Iden, JoinType, Query, Table, TableCreateStatement};
 
 use super::users::Users;
 use crate::schema::Entity;
@@ -37,6 +37,9 @@ pub enum Projects {
     ModifiedById,
     NameWhenDeleted,
 }
+
+#[derive(Iden, Clone, Copy)]
+pub struct ProjectsResolved;
 
 #[derive(Iden, Clone, Copy)]
 pub struct ProjectsActive;
@@ -72,22 +75,39 @@ impl Entity for Defs {
 
     fn create_views(&self, b: &Backend) -> Vec<ViewDef> {
         vec![
-            // Active projects: non-soft-deleted rows. `ProjectDB` reads from
-            // this view; soft-deletes set `name_when_deleted` and rename the
-            // row out of the active set.
+            // Every row, including soft-deleted, with the real name resolved via
+            // COALESCE(name_when_deleted, name) and a `deleted` flag. The canonical
+            // join surface; mirrors `collections_resolved`.
             ViewDef::new(
-                ProjectsActive,
+                ProjectsResolved,
                 Query::select()
                     .column(Projects::Id)
-                    .column(Projects::Name)
+                    .expr_as(Func::coalesce([Expr::col(Projects::NameWhenDeleted), Expr::col(Projects::Name)]), Alias::new("name"))
                     .column(Projects::Description)
                     .column(Projects::BasePath)
                     .column(Projects::CreatedOn)
                     .column(Projects::CreatedById)
                     .column(Projects::ModifiedOn)
                     .column(Projects::ModifiedById)
+                    .column(Projects::NameWhenDeleted)
+                    .expr_as(Expr::col(Projects::NameWhenDeleted).is_not_null(), Alias::new("deleted"))
                     .from(Projects::Table)
-                    .and_where(Expr::col(Projects::NameWhenDeleted).is_null())
+                    .to_owned(),
+            ),
+            // Non-soft-deleted subset of the resolved view.
+            ViewDef::new(
+                ProjectsActive,
+                Query::select()
+                    .column((ProjectsResolved, Projects::Id))
+                    .column((ProjectsResolved, Projects::Name))
+                    .column((ProjectsResolved, Projects::Description))
+                    .column((ProjectsResolved, Projects::BasePath))
+                    .column((ProjectsResolved, Projects::CreatedOn))
+                    .column((ProjectsResolved, Projects::CreatedById))
+                    .column((ProjectsResolved, Projects::ModifiedOn))
+                    .column((ProjectsResolved, Projects::ModifiedById))
+                    .from(ProjectsResolved)
+                    .and_where(Expr::col((ProjectsResolved, Projects::NameWhenDeleted)).is_null())
                     .to_owned(),
             ),
             projects_with_names(b),

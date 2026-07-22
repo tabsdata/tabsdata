@@ -11,7 +11,7 @@ use sea_query::Condition;
 use ta_objects::{Buildable, StateFilter};
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::logical::LogicalFunctionRunInputDB;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::types::basic::{DependencyPos, InputIdx, PhysicalFunctionRunStatus, VersionPos};
@@ -101,9 +101,12 @@ async fn load_live_delete(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_live_fetch_all_in(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
-    let state = StateFilter::<CollectionDB>::new(Condition::all());
+    let state = StateFilter::<ActiveCollectionDB>::new(Condition::all());
     let t = Instant::now();
-    let rows = (&db).live().fetch_all_in::<CollectionDB>(state, ()).await?;
+    let rows = (&db)
+        .live()
+        .fetch_all_in::<ActiveCollectionDB>(state, ())
+        .await?;
     record("live::fetch_all_in", &db, profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -112,11 +115,11 @@ async fn load_live_fetch_all_in(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_live_fetch_latest_before(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
-    let state = StateFilter::<CollectionDB>::new(Condition::all());
+    let state = StateFilter::<ActiveCollectionDB>::new(Condition::all());
     let t = Instant::now();
     let row = (&db)
         .live()
-        .fetch_latest_before::<CollectionDB>(state, (), 0)
+        .fetch_latest_before::<ActiveCollectionDB>(state, (), 0)
         .await?;
     record(
         "live::fetch_latest_before",

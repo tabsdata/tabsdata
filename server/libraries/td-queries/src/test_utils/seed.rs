@@ -36,7 +36,7 @@ use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
 use td_database::domain::{Apiserver, Domained};
 use td_database::pool::scoped::Scoped;
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
 use td_objects::dxo::group::GroupDB;
@@ -44,7 +44,7 @@ use td_objects::dxo::logical::LogicalFunctionRunInputDB;
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::dxo::project::ProjectDB;
+use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::transaction::TransactionDB;
@@ -82,14 +82,14 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
     // Project seeding uses its executor only to scope into the freshly-created
     // project, so the write bound is on the scoped view; `&TdPool` is the only
     // executor that scopes to one.
-    pub async fn project(self, name: ProjectName) -> Result<ProjectDB, TdError>
+    pub async fn project(self, name: ProjectName) -> Result<ActiveProjectDB, TdError>
     where
         for<'s> &'s Scoped<E, ProjectId>: QueryExecutor + Domained<Domain = Apiserver>,
     {
         seed_project(self.executor, name).await
     }
 
-    pub async fn test_project(self) -> Result<ProjectDB, TdError>
+    pub async fn test_project(self) -> Result<ActiveProjectDB, TdError>
     where
         for<'s> &'s Scoped<E, ProjectId>: QueryExecutor + Domained<Domain = Apiserver>,
     {
@@ -100,7 +100,7 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         self,
         collection_name: &CollectionName,
         created_by: &UserId,
-    ) -> Result<CollectionDB, TdError> {
+    ) -> Result<ActiveCollectionDB, TdError> {
         seed_collection(self.executor, collection_name, created_by).await
     }
 
@@ -109,7 +109,7 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
         collection_name: &CollectionName,
         created_by: &UserId,
         group_id: GroupId,
-    ) -> Result<CollectionDB, TdError> {
+    ) -> Result<ActiveCollectionDB, TdError> {
         seed_collection_in_group(self.executor, collection_name, created_by, group_id).await
     }
 
@@ -126,7 +126,7 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
 
     pub async fn function(
         self,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         function_create: &FunctionRegister,
     ) -> Result<FunctionDB, TdError> {
         seed_function(self.executor, collection, function_create).await
@@ -135,7 +135,7 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
     #[allow(clippy::too_many_arguments)]
     pub async fn logical_input(
         self,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
@@ -162,7 +162,7 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
 
     pub async fn physical_function_run(
         self,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         function_version: &FunctionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
@@ -214,7 +214,7 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
 
     pub async fn physical_table_data_version(
         self,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
@@ -233,7 +233,7 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
 
     pub async fn physical_table_data_version_with_data(
         self,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
@@ -272,7 +272,7 @@ impl<E: QueryExecutor + Domained<Domain = Apiserver>> Seed<E> {
 
     pub async fn worker(
         self,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         function: &FunctionDB,
         worker_type: &WorkerType,
         worker_status: &WorkerStatus,

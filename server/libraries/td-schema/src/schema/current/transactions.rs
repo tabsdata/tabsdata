@@ -7,10 +7,10 @@ use sea_query::{
     TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::groups::Groups;
-use super::projects::Projects;
+use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -102,19 +102,20 @@ impl Entity for Defs {
             TransactionsWithNames,
             Query::select()
                 .expr(Expr::col((Transactions::Table, Asterisk)))
-                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(
                     b.name_or_id((Users::Table, Users::Name), (Transactions::Table, Transactions::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
                 .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
-                .expr_as(Expr::col((Projects::Table, Projects::Name)), Alias::new("project"))
+                .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
                 .from(Transactions::Table)
                 .join(
                     JoinType::LeftJoin,
-                    Collections::Table,
-                    Expr::col((Transactions::Table, Transactions::CollectionId)).equals((Collections::Table, Collections::Id)),
+                    CollectionsResolved,
+                    Expr::col((Transactions::Table, Transactions::CollectionId)).equals((CollectionsResolved, Collections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,
@@ -128,8 +129,8 @@ impl Entity for Defs {
                 )
                 .join(
                     JoinType::LeftJoin,
-                    Projects::Table,
-                    Expr::col((Transactions::Table, Transactions::ProjectId)).equals((Projects::Table, Projects::Id)),
+                    ProjectsResolved,
+                    Expr::col((Transactions::Table, Transactions::ProjectId)).equals((ProjectsResolved, Projects::Id)),
                 )
                 .join_as(
                     JoinType::LeftJoin,

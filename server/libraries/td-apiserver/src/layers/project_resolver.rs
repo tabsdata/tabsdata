@@ -21,7 +21,7 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use td_database::domain::{Apiserver, DomainPool};
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::project::ProjectDB;
+use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::types::basic::{
     ProjectId, ProjectIdName, WILDCARD_PROJECT_MARKER, WildcardProject,
 };
@@ -60,9 +60,9 @@ pub async fn project_resolver_layer(
 }
 
 async fn resolve(db: &TdPool, id_name: &ProjectIdName) -> Result<Option<ProjectId>, TdError> {
-    let proj: Option<ProjectDB> = DomainPool::<Apiserver>::over(db)
+    let proj: Option<ActiveProjectDB> = DomainPool::<Apiserver>::over(db)
         .live()
-        .fetch_optional::<ProjectDB>(id_name)
+        .fetch_optional::<ActiveProjectDB>(id_name)
         .await?;
     Ok(proj.map(|p| p.id))
 }

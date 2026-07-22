@@ -100,6 +100,7 @@ fn expected_views() -> Vec<&'static str> {
     vec![
         "collections__with_names",
         "collections_active",
+        "collections_resolved",
         "dependencies__with_names",
         "dependencies_current__with_names",
         "execution_status_summary",
@@ -117,6 +118,7 @@ fn expected_views() -> Vec<&'static str> {
         "physical_table_data_versions__with_names",
         "projects__with_names",
         "projects_active",
+        "projects_resolved",
         "roles__with_names",
         "sessions__with_names",
         "table_data_versions__with_names",

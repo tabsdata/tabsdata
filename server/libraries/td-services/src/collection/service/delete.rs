@@ -31,7 +31,9 @@ use td_bridge::BridgeProviderHandle;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::{InProject, Scoped};
 use td_error::TdError;
-use td_objects::dxo::collection::{CollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder};
+use td_objects::dxo::collection::{
+    ActiveCollectionDB, CollectionDeleteDB, CollectionDeleteDBBuilder,
+};
 use td_objects::dxo::crudl::{DeleteRequest, RequestContext, UpdateRequest};
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
@@ -55,7 +57,7 @@ use tower::util::BoxCloneSyncService;
 #[service_factory(
     name = CollectionDeleteResolveService,
     request = DeleteRequest<CollectionParam>,
-    response = CollectionDB,
+    response = ActiveCollectionDB,
     connection = ConnectionProvider,
     scope = "Project",
     context = AuthzContext,
@@ -67,9 +69,9 @@ fn resolve() {
         from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<DeleteRequest<CollectionParam>>::extract_name::<CollectionParam>),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
         // source/destination collections carry connection config: manage_project
-        from_fn(With::<CollectionDB>::extract::<CollectionType>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionType>),
         from_fn(escalate_for_connected),
     )
 }
@@ -78,22 +80,22 @@ fn resolve() {
 // so no authz layers — the resolve already gated the request.
 #[service_factory(
     name = CollectionDeleteTxService,
-    request = UpdateRequest<(), CollectionDB>,
+    request = UpdateRequest<(), ActiveCollectionDB>,
     response = (),
     connection = TransactionProvider,
     scope = "Project",
 )]
 fn delete() {
     layers!(
-        from_fn(With::<UpdateRequest<(), CollectionDB>>::extract::<RequestContext>),
-        from_fn(With::<UpdateRequest<(), CollectionDB>>::extract_data::<CollectionDB>),
+        from_fn(With::<UpdateRequest<(), ActiveCollectionDB>>::extract::<RequestContext>),
+        from_fn(With::<UpdateRequest<(), ActiveCollectionDB>>::extract_data::<ActiveCollectionDB>),
         // Build deleted collection
-        from_fn(With::<CollectionDB>::try_convert_to::<CollectionDeleteDBBuilder, _>),
+        from_fn(With::<ActiveCollectionDB>::try_convert_to::<CollectionDeleteDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<CollectionDeleteDBBuilder, _>),
         from_fn(With::<CollectionDeleteDBBuilder>::build::<CollectionDeleteDB>),
         // Update collection
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
-        from_fn(By::<CollectionId>::update::<CollectionDeleteDB, CollectionDB>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
+        from_fn(By::<CollectionId>::update::<CollectionDeleteDB, ActiveCollectionDB>),
         // Find tables in the collection
         from_fn(By::<CollectionId>::fetch_all_current::<{ TableDB::Available }, TableDB>),
         from_fn(With::<Vec<TableDB>>::extract::<Vec<TableId>>),
@@ -235,7 +237,7 @@ mod tests {
     use td_error::ApiError;
     use td_error::TdError;
     use td_objects::Buildable;
-    use td_objects::dxo::collection::CollectionCreateDB;
+    use td_objects::dxo::collection::{CollectionCreateDB, CollectionDB};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::dependency::DependencyDBWithNames;
     use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
@@ -265,7 +267,7 @@ mod tests {
         DeleteCollectionService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<DeleteRequest<CollectionParam>, ProjectId>, CollectionDB>(&[
+            .assert_service::<Scoped<DeleteRequest<CollectionParam>, ProjectId>, ActiveCollectionDB>(&[
                 type_of_val(&With::<DeleteRequest<CollectionParam>>::extract::<RequestContext>),
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
@@ -273,8 +275,8 @@ mod tests {
                     &With::<DeleteRequest<CollectionParam>>::extract_name::<CollectionParam>,
                 ),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionType>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionType>),
                 type_of_val(&escalate_for_connected),
             ]);
     }
@@ -288,16 +290,24 @@ mod tests {
         CollectionDeleteTxService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<UpdateRequest<(), CollectionDB>, ProjectId>, ()>(&[
-                type_of_val(&With::<UpdateRequest<(), CollectionDB>>::extract::<RequestContext>),
-                type_of_val(&With::<UpdateRequest<(), CollectionDB>>::extract_data::<CollectionDB>),
+            .assert_service::<Scoped<UpdateRequest<(), ActiveCollectionDB>, ProjectId>, ()>(&[
+                type_of_val(
+                    &With::<UpdateRequest<(), ActiveCollectionDB>>::extract::<RequestContext>,
+                ),
+                type_of_val(
+                    &With::<UpdateRequest<(), ActiveCollectionDB>>::extract_data::<
+                        ActiveCollectionDB,
+                    >,
+                ),
                 // Build deleted collection
-                type_of_val(&With::<CollectionDB>::try_convert_to::<CollectionDeleteDBBuilder, _>),
+                type_of_val(
+                    &With::<ActiveCollectionDB>::try_convert_to::<CollectionDeleteDBBuilder, _>,
+                ),
                 type_of_val(&With::<RequestContext>::update::<CollectionDeleteDBBuilder, _>),
                 type_of_val(&With::<CollectionDeleteDBBuilder>::build::<CollectionDeleteDB>),
                 // Update collection
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
-                type_of_val(&By::<CollectionId>::update::<CollectionDeleteDB, CollectionDB>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionId>::update::<CollectionDeleteDB, ActiveCollectionDB>),
                 // Find tables in the collection
                 type_of_val(
                     &By::<CollectionId>::fetch_all_current::<{ TableDB::Available }, TableDB>,
@@ -499,14 +509,22 @@ mod tests {
             .await?;
 
         // Assert collection is deleted
-        let found = db.live().fetch_all::<CollectionDB>(()).await?;
+        let found = db.live().fetch_all::<ActiveCollectionDB>(()).await?;
         assert_eq!(found.len(), 0);
 
         let res = db
             .live()
             .fetch_one::<CollectionCreateDB>(&collection.id)
             .await?;
-        assert_eq!(res.name_when_deleted, Some(collection.name));
+        assert_eq!(res.name_when_deleted, Some(collection.name.clone()));
+
+        // The resolved surface still returns the soft-deleted collection (its
+        // scheduled run outlives it), carrying the real pre-deletion name and the
+        // `deleted` flag — this is what dispatch/enrichment resolves against.
+        let resolved = db.live().fetch_all::<CollectionDB>(()).await?;
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].name, collection.name);
+        assert!(*resolved[0].deleted);
 
         // Assert functions are deleted
         let found = db.current().fetch_all::<FunctionDBWithNames>(()).await?;
@@ -610,7 +628,7 @@ mod tests {
             .await?;
 
         // Assert only c_1 is active
-        let found = db.live().fetch_all::<CollectionDB>(()).await?;
+        let found = db.live().fetch_all::<ActiveCollectionDB>(()).await?;
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].name, name_c_1);
 

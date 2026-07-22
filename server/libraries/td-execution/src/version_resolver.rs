@@ -448,7 +448,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::Buildable;
     use td_objects::and;
-    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::logical::LogicalFunctionRunDB;
     use td_objects::dxo::logical::LogicalPointerDao;
@@ -502,7 +502,7 @@ mod tests {
         db: &TdPool,
         n: usize,
     ) -> (
-        CollectionDB,
+        ActiveCollectionDB,
         FunctionDB,
         TableId,
         Vec<LogicalTableDataVersionDB>,
@@ -1008,7 +1008,7 @@ mod tests {
     /// being Canceled is what makes the active view hide the returned LTDV.
     async fn seed_canceled_ltdv(
         db: &TdPool,
-        collection: &CollectionDB,
+        collection: &ActiveCollectionDB,
         function: &FunctionDB,
         table_id: TableId,
     ) -> LogicalTableDataVersionDB {

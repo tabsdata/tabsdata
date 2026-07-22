@@ -6,7 +6,7 @@ use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Project, Rbac, Scope, ViewProject};
 use td_objects::NoFilter;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::{ListParams, ListRequest, ListResponse, RequestContext};
 use td_objects::dxo::function::{Function, FunctionDBWithNames};
 use td_objects::list::params::ListQueryParams;
@@ -32,8 +32,8 @@ fn service() {
         from_fn(With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
         // find collection ID
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
-        from_fn(With::<CollectionDB>::extract::<CollectionId>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+        from_fn(With::<ActiveCollectionDB>::extract::<CollectionId>),
         // check requester can view the current project
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, ViewProject>::check),
@@ -82,8 +82,8 @@ mod tests {
                 type_of_val(&With::<ListRequest<CollectionParam>>::extract_name::<CollectionParam>),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
                 // find collection ID
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
-                type_of_val(&With::<CollectionDB>::extract::<CollectionId>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
+                type_of_val(&With::<ActiveCollectionDB>::extract::<CollectionId>),
                 // check requester can view the current project
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, ViewProject>::check),

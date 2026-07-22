@@ -7,12 +7,12 @@ use sea_query::{
     TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::functions::Functions;
 use super::logical_function_runs::LogicalFunctionRuns;
 use super::physical_function_runs::PhysicalFunctionRuns;
-use super::projects::Projects;
+use super::projects::{Projects, ProjectsResolved};
 use super::transactions::Transactions;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -123,12 +123,13 @@ impl Entity for Defs {
             Query::select()
                 .expr(Expr::col((Workers::Table, Asterisk)))
                 .expr_as(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)), Alias::new("logical_function_run_id"))
-                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
-                .expr_as(Expr::col((Collections::Table, Collections::ConnectionId)), Alias::new("connection_id"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::ConnectionId)), Alias::new("connection_id"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .expr_as(Expr::col((Functions::Table, Functions::Enabled)), Alias::new("enabled"))
-                .expr_as(Expr::col((Projects::Table, Projects::Name)), Alias::new("project"))
+                .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
                 // Patch id from the attempt's PFR (NULL = head). Distinguishes
                 // which code each attempt ran; the worker row itself lacks it.
                 .expr_as(
@@ -138,8 +139,8 @@ impl Entity for Defs {
                 .from(Workers::Table)
                 .join(
                     JoinType::LeftJoin,
-                    Collections::Table,
-                    Expr::col((Workers::Table, Workers::CollectionId)).equals((Collections::Table, Collections::Id)),
+                    CollectionsResolved,
+                    Expr::col((Workers::Table, Workers::CollectionId)).equals((CollectionsResolved, Collections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,
@@ -173,8 +174,8 @@ impl Entity for Defs {
                 )
                 .join(
                     JoinType::LeftJoin,
-                    Projects::Table,
-                    Expr::col((Workers::Table, Workers::ProjectId)).equals((Projects::Table, Projects::Id)),
+                    ProjectsResolved,
+                    Expr::col((Workers::Table, Workers::ProjectId)).equals((ProjectsResolved, Projects::Id)),
                 )
                 .and_where(Expr::col((Workers::Table, Workers::WorkerEnabled)).eq(true))
                 .to_owned(),

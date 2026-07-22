@@ -7,7 +7,7 @@ use crate::QueryExecutor;
 use ta_objects::Buildable;
 use td_database::domain::{Apiserver, Domained};
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
@@ -19,7 +19,7 @@ use td_objects::types::basic::{
 
 pub(crate) async fn seed_worker(
     mut executor: impl QueryExecutor + Domained<Domain = Apiserver>,
-    collection: &CollectionDB,
+    collection: &ActiveCollectionDB,
     function: &FunctionDB,
     worker_type: &WorkerType,
     worker_status: &WorkerStatus,

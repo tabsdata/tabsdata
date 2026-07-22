@@ -7,7 +7,7 @@ use sea_query::{
     Query, Table, TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::functions_current::FunctionsCurrent;
 use super::users::Users;
 use crate::schema::Entity;
@@ -107,16 +107,17 @@ impl Entity for Defs {
             FunctionsWithNames,
             Query::select()
                 .expr(Expr::col((Functions::Table, Asterisk)))
-                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
                 // Group snapshot from the function's collection. Used at LFR/LTDV
                 // mint time to stamp `group_id` onto each minted row.
-                .expr_as(Expr::col((Collections::Table, Collections::GroupId)), Alias::new("group_id"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::GroupId)), Alias::new("group_id"))
                 .expr_as(b.name_or_id((Users::Table, Users::Name), (Functions::Table, Functions::DefinedById)), Alias::new("defined_by"))
                 .from(Functions::Table)
                 .join(
                     JoinType::LeftJoin,
-                    Collections::Table,
-                    Expr::col((Functions::Table, Functions::CollectionId)).equals((Collections::Table, Collections::Id)),
+                    CollectionsResolved,
+                    Expr::col((Functions::Table, Functions::CollectionId)).equals((CollectionsResolved, Collections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,

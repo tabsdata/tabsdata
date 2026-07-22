@@ -8,8 +8,8 @@ use std::ops::Deref;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::{
-    CollectionDB, CollectionDBWithNames, CollectionRead, CollectionReadBuilder, CollectionUpdate,
-    CollectionUpdateDB, CollectionUpdateDBBuilder,
+    ActiveCollectionDB, ActiveCollectionDBWithNames, CollectionRead, CollectionReadBuilder,
+    CollectionUpdate, CollectionUpdateDB, CollectionUpdateDBBuilder,
 };
 use td_objects::tower_service::with::With;
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId};
@@ -76,7 +76,7 @@ pub struct ConnectionRename {
 
 pub async fn plan_collection_update(
     mut conn: MutRef<DomainConnection<Apiserver>>,
-    collection: Ref<CollectionDB>,
+    collection: Ref<ActiveCollectionDB>,
     update: Ref<CollectionUpdate>,
     update_db: Ref<CollectionUpdateDB>,
 ) -> Result<CollectionUpdatePlan, TdError> {
@@ -114,8 +114,8 @@ pub async fn apply_collection_update(
     plan: Ref<CollectionUpdatePlan>,
 ) -> Result<CollectionRead, TdError> {
     conn.live()
-        .update::<CollectionUpdateDB, CollectionDB>(&plan.update, plan.collection_id)
+        .update::<CollectionUpdateDB, ActiveCollectionDB>(&plan.update, plan.collection_id)
         .await?;
-    let with_names: CollectionDBWithNames = conn.live().fetch_one(plan.collection_id).await?;
+    let with_names: ActiveCollectionDBWithNames = conn.live().fetch_one(plan.collection_id).await?;
     Ok(CollectionReadBuilder::try_from(&with_names)?.build()?)
 }

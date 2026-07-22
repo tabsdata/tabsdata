@@ -6,7 +6,7 @@ use sea_query::{
     Alias, Asterisk, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement,
 };
 
-use super::collections::Collections;
+use super::collections::{Collections, CollectionsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -94,8 +94,9 @@ impl Entity for Defs {
             FunctionsCurrentWithNames,
             Query::select()
                 .expr(Expr::col((FunctionsCurrent::Table, Asterisk)))
-                .expr_as(Expr::col((Collections::Table, Collections::Name)), Alias::new("collection"))
-                .expr_as(Expr::col((Collections::Table, Collections::GroupId)), Alias::new("group_id"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
+                .expr_as(Expr::col((CollectionsResolved, Collections::GroupId)), Alias::new("group_id"))
                 .expr_as(
                     b.name_or_id((Users::Table, Users::Name), (FunctionsCurrent::Table, FunctionsCurrent::DefinedById)),
                     Alias::new("defined_by"),
@@ -103,8 +104,8 @@ impl Entity for Defs {
                 .from(FunctionsCurrent::Table)
                 .join(
                     JoinType::LeftJoin,
-                    Collections::Table,
-                    Expr::col((FunctionsCurrent::Table, FunctionsCurrent::CollectionId)).equals((Collections::Table, Collections::Id)),
+                    CollectionsResolved,
+                    Expr::col((FunctionsCurrent::Table, FunctionsCurrent::CollectionId)).equals((CollectionsResolved, Collections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,

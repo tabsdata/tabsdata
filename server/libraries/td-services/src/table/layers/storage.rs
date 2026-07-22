@@ -65,13 +65,13 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::InProject;
-    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-    use td_objects::dxo::project::ProjectDB;
+    use td_objects::dxo::project::ActiveProjectDB;
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::transaction::TransactionDB;
     use td_objects::rest_urls::FunctionParam;
@@ -300,10 +300,10 @@ mod tests {
 
     async fn _setup_table(
         db: TdPool,
-        p: &ProjectDB,
+        p: &ActiveProjectDB,
     ) -> Result<
         (
-            CollectionDB,
+            ActiveCollectionDB,
             ExecutionDB,
             TransactionDB,
             PhysicalFunctionRunDB,
@@ -367,8 +367,8 @@ mod tests {
 
     async fn _update_table_version(
         db: TdPool,
-        collection: &CollectionDB,
-        p: &ProjectDB,
+        collection: &ActiveCollectionDB,
+        p: &ActiveProjectDB,
     ) -> Result<(ExecutionDB, TransactionDB, PhysicalFunctionRunDB, TableDB), TdError> {
         // Update the function to change the table version (TODO make this a seed function)
         let update = FunctionUpdate::builder()
@@ -465,10 +465,10 @@ mod tests {
 
     async fn _setup_committed_table(
         db: TdPool,
-        p: &ProjectDB,
+        p: &ActiveProjectDB,
     ) -> Result<
         (
-            CollectionDB,
+            ActiveCollectionDB,
             ExecutionDB,
             TransactionDB,
             PhysicalFunctionRunDB,

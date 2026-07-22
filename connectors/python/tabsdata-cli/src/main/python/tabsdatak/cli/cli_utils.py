@@ -114,6 +114,17 @@ def beautify_time(time: str) -> str:
     return time
 
 
+def collection_label(obj) -> str:
+    """Collection name for display, suffixed with ' (deleted)' when the owning
+    collection has been soft-deleted. The name itself is the real pre-deletion
+    name (resolved server-side); the suffix only flags that it no longer exists.
+    Degrades to the plain name when the response carries no `collection_deleted`.
+    """
+    name = obj.collection.name
+    data = getattr(obj, "_data", None) or {}
+    return f"{name} (deleted)" if data.get("collection_deleted") else name
+
+
 def prompt_with_escape(message, default=None, hide_input=False):
     """Prompt using prompt_toolkit so that both Ctrl+C and ESC abort."""
     from prompt_toolkit import PromptSession

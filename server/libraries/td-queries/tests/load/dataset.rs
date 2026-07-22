@@ -10,7 +10,7 @@
 use ta_objects::Buildable;
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunPointerDB,
@@ -18,7 +18,7 @@ use td_objects::dxo::logical::{
 };
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::dxo::project::ProjectDB;
+use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
     AtTime, BundleId, ByteCount, CollectionName, Decorator, DependencyPos, EpochMs, FunctionId,
@@ -43,8 +43,8 @@ const IN_WINDOW_MS: i64 = WINDOW_START_MS + 3_600_000;
 
 /// Get-or-create `n` projects (min 1). Get-or-create because the two-size
 /// scaling passes build a dataset more than once against the same pool.
-async fn test_projects(db: &TdPool, n: usize) -> Result<Vec<ProjectDB>, TdError> {
-    let existing: Vec<ProjectDB> = db.live().fetch_all::<ProjectDB>(()).await?;
+async fn test_projects(db: &TdPool, n: usize) -> Result<Vec<ActiveProjectDB>, TdError> {
+    let existing: Vec<ActiveProjectDB> = db.live().fetch_all::<ActiveProjectDB>(()).await?;
     let mut out = Vec::with_capacity(n.max(1));
     for i in 0..n.max(1) {
         let name = ProjectName::try_from(format!("test_p{i}").as_str())?;
@@ -168,7 +168,7 @@ fn metrics_stamp() -> Result<MetricsStamp, TdError> {
 /// referenced tables must already exist (seed the producer first).
 async fn make_function(
     db: &TdPool,
-    collection: &CollectionDB,
+    collection: &ActiveCollectionDB,
     name: &str,
     out_table: &str,
     dep_refs: &[&str],
@@ -214,7 +214,7 @@ pub struct ChainHandle {
     pub ltdv_ids: Vec<LogicalTableDataVersionId>,
     /// A producer output-table id (for `latest_bound_tdv_with_data_for_table`).
     pub table_id: TableId,
-    /// A seeded collection id (for live reads over `CollectionDB`).
+    /// A seeded collection id (for live reads over `ActiveCollectionDB`).
     pub collection_id: td_objects::types::basic::CollectionId,
     /// First producer's transaction id, for building a fresh LFRI in the
     /// Live write cases.
@@ -372,7 +372,7 @@ impl RunGraph {
 /// `graph` for deferred bulk insert.
 async fn build_unit(
     db: &TdPool,
-    collection: &CollectionDB,
+    collection: &ActiveCollectionDB,
     fn_name: &str,
     out_table: &str,
     dep_refs: &[&str],
@@ -524,7 +524,7 @@ async fn build_unit(
 
 /// Build (don't insert) the LFRI linking `consumer`'s LFR to `producer_ltdv`.
 fn build_lfri(
-    collection: &CollectionDB,
+    collection: &ActiveCollectionDB,
     consumer: &Unit,
     producer_ltdv: &LogicalTableDataVersionDB,
 ) -> Result<LogicalFunctionRunInputDB, TdError> {

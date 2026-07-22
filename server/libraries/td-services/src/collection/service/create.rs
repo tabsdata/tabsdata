@@ -352,7 +352,7 @@ mod tests {
 
         let found = db
             .live()
-            .fetch_one::<td_objects::dxo::collection::CollectionDBWithNames>(&name)
+            .fetch_one::<td_objects::dxo::collection::ActiveCollectionDBWithNames>(&name)
             .await
             .unwrap();
         assert_eq!(found.group_id, group.id);
@@ -392,7 +392,7 @@ mod tests {
         ] {
             let found = db
                 .live()
-                .fetch_one::<td_objects::dxo::collection::CollectionDBWithNames>(
+                .fetch_one::<td_objects::dxo::collection::ActiveCollectionDBWithNames>(
                     &CollectionName::try_from(name).unwrap(),
                 )
                 .await

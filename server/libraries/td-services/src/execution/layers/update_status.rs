@@ -404,7 +404,7 @@ pub(crate) mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::and;
-    use td_objects::dxo::collection::CollectionDB;
+    use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::execution::{ExecutionDB, ExecutionDBWithStatus};
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::logical::LogicalFunctionRunDB;
@@ -456,7 +456,7 @@ pub(crate) mod tests {
     ) -> Result<(), TdError>
     where
         F: Fn(
-            &HashMap<&CollectionName, CollectionDB>,
+            &HashMap<&CollectionName, ActiveCollectionDB>,
             &HashMap<&TestExecution, ExecutionDB>,
             &HashMap<&TestTransaction, TransactionDB>,
             &HashMap<&TestFunction, PhysicalFunctionRunDB>,
@@ -476,7 +476,11 @@ pub(crate) mod tests {
             .map(|c| {
                 let db = db.clone();
                 async move {
-                    let existing = db.live().fetch_optional::<CollectionDB>(c).await.unwrap();
+                    let existing = db
+                        .live()
+                        .fetch_optional::<ActiveCollectionDB>(c)
+                        .await
+                        .unwrap();
 
                     if let Some(existing) = existing {
                         (c, existing)

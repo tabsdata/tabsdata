@@ -21,7 +21,7 @@ use td_database::pool::TdPool;
 use td_database::pool::scoped::{InProject, Scoped};
 use td_error::{TdError, api_error};
 use td_objects::Buildable;
-use td_objects::dxo::collection::{CollectionCreate, CollectionDB};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
 use td_objects::dxo::connection::{ConnectionDB, ConnectionRead, ConnectionUpsert, KeyValue};
 use td_objects::dxo::crudl::{CreateRequest, ReadRequest, RequestContext, UpdateRequest};
 use td_objects::rest_urls::CollectionParam;
@@ -193,10 +193,10 @@ pub async fn linked_connection(
     project: ProjectId,
     collection: &str,
 ) -> Option<ConnectionDB> {
-    let collection: CollectionDB = db
+    let collection: ActiveCollectionDB = db
         .scoped(project)
         .live()
-        .fetch_one::<CollectionDB>(&CollectionName::try_from(collection).unwrap())
+        .fetch_one::<ActiveCollectionDB>(&CollectionName::try_from(collection).unwrap())
         .await
         .unwrap();
     match collection.connection_id {

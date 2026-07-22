@@ -13,8 +13,8 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project, Rbac, Scope};
 use td_objects::dxo::crudl::{RequestContext, UpdateRequest};
 use td_objects::dxo::project::{
-    ProjectDB, ProjectDBWithNames, ProjectRead, ProjectReadBuilder, ProjectUpdate, ProjectUpdateDB,
-    ProjectUpdateDBBuilder,
+    ActiveProjectDB, ActiveProjectDBWithNames, ProjectRead, ProjectReadBuilder, ProjectUpdate,
+    ProjectUpdateDB, ProjectUpdateDBBuilder,
 };
 use td_objects::rest_urls::ProjectParam;
 use td_objects::tower_service::with::With;
@@ -37,8 +37,8 @@ fn service() {
         from_fn(With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract::<RequestContext>),
         from_fn(With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract_name::<ProjectParam>),
         from_fn(With::<ProjectParam>::extract::<ProjectIdName>),
-        from_fn(By::<ProjectIdName>::fetch_one::<ProjectDB>),
-        from_fn(With::<ProjectDB>::extract::<ProjectId>),
+        from_fn(By::<ProjectIdName>::fetch_one::<ActiveProjectDB>),
+        from_fn(With::<ActiveProjectDB>::extract::<ProjectId>),
         // Renaming a project requires `manage_project` on that project.
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, ManageProject>::check),
@@ -51,13 +51,13 @@ fn service() {
         // Keep the derived per-project roles in step with the rename.
         from_fn(assert_project_roles_rename_available),
         from_fn(rename_project_roles),
-        from_fn(With::<ProjectDB>::try_convert_to::<ProjectUpdateDBBuilder, _>),
+        from_fn(With::<ActiveProjectDB>::try_convert_to::<ProjectUpdateDBBuilder, _>),
         from_fn(With::<RequestContext>::update::<ProjectUpdateDBBuilder, _>),
         from_fn(With::<ProjectUpdate>::update_project_update_db_builder),
         from_fn(With::<ProjectUpdateDBBuilder>::build::<ProjectUpdateDB>),
-        from_fn(By::<ProjectId>::update::<ProjectUpdateDB, ProjectDB>),
-        from_fn(By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
-        from_fn(With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
+        from_fn(By::<ProjectId>::update::<ProjectUpdateDB, ActiveProjectDB>),
+        from_fn(By::<ProjectId>::fetch_one::<ActiveProjectDBWithNames>),
+        from_fn(With::<ActiveProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
         from_fn(With::<ProjectReadBuilder>::build::<ProjectRead>),
     )
 }
@@ -82,8 +82,8 @@ mod tests {
                     &With::<UpdateRequest<ProjectParam, ProjectUpdate>>::extract_name::<ProjectParam>,
                 ),
                 type_of_val(&With::<ProjectParam>::extract::<ProjectIdName>),
-                type_of_val(&By::<ProjectIdName>::fetch_one::<ProjectDB>),
-                type_of_val(&With::<ProjectDB>::extract::<ProjectId>),
+                type_of_val(&By::<ProjectIdName>::fetch_one::<ActiveProjectDB>),
+                type_of_val(&With::<ActiveProjectDB>::extract::<ProjectId>),
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, ManageProject>::check),
                 type_of_val(
@@ -93,13 +93,13 @@ mod tests {
                 type_of_val(&assert_project_rename_available),
                 type_of_val(&assert_project_roles_rename_available),
                 type_of_val(&rename_project_roles),
-                type_of_val(&With::<ProjectDB>::try_convert_to::<ProjectUpdateDBBuilder, _>),
+                type_of_val(&With::<ActiveProjectDB>::try_convert_to::<ProjectUpdateDBBuilder, _>),
                 type_of_val(&With::<RequestContext>::update::<ProjectUpdateDBBuilder, _>),
                 type_of_val(&With::<ProjectUpdate>::update_project_update_db_builder),
                 type_of_val(&With::<ProjectUpdateDBBuilder>::build::<ProjectUpdateDB>),
-                type_of_val(&By::<ProjectId>::update::<ProjectUpdateDB, ProjectDB>),
-                type_of_val(&By::<ProjectId>::fetch_one::<ProjectDBWithNames>),
-                type_of_val(&With::<ProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
+                type_of_val(&By::<ProjectId>::update::<ProjectUpdateDB, ActiveProjectDB>),
+                type_of_val(&By::<ProjectId>::fetch_one::<ActiveProjectDBWithNames>),
+                type_of_val(&With::<ActiveProjectDBWithNames>::try_convert_to::<ProjectReadBuilder, _>),
                 type_of_val(&With::<ProjectReadBuilder>::build::<ProjectRead>),
             ]);
     }

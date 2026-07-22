@@ -21,7 +21,7 @@ use td_bridge::BridgeProviderHandle;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::Scoped;
 use td_error::TdError;
-use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::connection::ConnectionRead;
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
 use td_objects::rest_urls::CollectionParam;
@@ -51,7 +51,7 @@ fn fetch() {
         from_fn(Rbac::<Project, ManageProject>::check),
         from_fn(With::<ReadRequest<CollectionParam>>::extract_name::<CollectionParam>),
         from_fn(With::<CollectionParam>::extract::<CollectionIdName>),
-        from_fn(By::<CollectionIdName>::fetch_one::<CollectionDB>),
+        from_fn(By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
         from_fn(ensure_connectable),
         from_fn(require_connection_id),
     )
@@ -153,7 +153,7 @@ mod tests {
                 type_of_val(&Rbac::<Project, ManageProject>::check),
                 type_of_val(&With::<ReadRequest<CollectionParam>>::extract_name::<CollectionParam>),
                 type_of_val(&With::<CollectionParam>::extract::<CollectionIdName>),
-                type_of_val(&By::<CollectionIdName>::fetch_one::<CollectionDB>),
+                type_of_val(&By::<CollectionIdName>::fetch_one::<ActiveCollectionDB>),
                 type_of_val(&ensure_connectable),
                 type_of_val(&require_connection_id),
             ]);

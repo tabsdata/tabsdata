@@ -18,6 +18,14 @@ impl From<Option<HasData>> for DataChanged {
     }
 }
 
+#[ta_objects::typed(bool(default = false))]
+#[derive(Eq, PartialEq)]
+pub struct CollectionWhenDeleted;
+
+#[ta_objects::typed(bool(default = false))]
+#[derive(Eq, PartialEq)]
+pub struct ProjectWhenDeleted;
+
 #[ta_objects::typed(bool(default = true))]
 #[derive(Eq, PartialEq, Hash)]
 pub struct Enabled;
