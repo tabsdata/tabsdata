@@ -58,3 +58,12 @@ class PostgresConnectionExplorer(SqlAlchemyConnectionExplorer):
             database=(parsed.path or "").lstrip("/"),
             query=dict(parse_qsl(parsed.query)),
         )
+
+
+class PostgresCdcConnectionExplorer(PostgresConnectionExplorer):
+    """Metadata/preview for a Postgres CDC stream source.
+
+    :class:`PostgresCdcStreamSrcConn` is attribute-identical to the batch
+    connection (same ``uri`` / ``credentials`` / ``conn_cfg``), so the batch
+    SQLAlchemy introspection surface applies unchanged.
+    """

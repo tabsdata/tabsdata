@@ -52,3 +52,12 @@ class MySQLConnectionExplorer(SqlAlchemyConnectionExplorer):
             database=(parsed.path or "").lstrip("/"),
             query=dict(parse_qsl(parsed.query)),
         )
+
+
+class MySQLCdcConnectionExplorer(MySQLConnectionExplorer):
+    """Metadata/preview for a MySQL CDC stream source.
+
+    :class:`MySQLCdcStreamSrcConn` is attribute-identical to the batch
+    connection (same ``uri`` / ``credentials`` / ``conn_cfg``), so the batch
+    SQLAlchemy introspection surface applies unchanged.
+    """

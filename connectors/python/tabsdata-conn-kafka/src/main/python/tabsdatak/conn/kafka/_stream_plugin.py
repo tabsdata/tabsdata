@@ -25,13 +25,15 @@ import logging
 import signal
 import time
 from pathlib import Path
-from typing import Any
 
 from tabsdatak.conn.kafka import (
     KafkaStreamSrc,
     KafkaStreamSrcConn,
     SrcCfgKey,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.kafka._explorer import KafkaConnectionExplorer
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._serdes import (
@@ -50,7 +52,6 @@ from tabsdatak.conn.kafka._stream_impl import (
 )
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.spi import (
-    Explorer,
     StreamSrcDef,
     StreamSrcPlugin,
     StreamSrcPluginCtx,
@@ -323,16 +324,6 @@ class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrcConn, KafkaStreamSrc]):
         return time.time()
 
 
-class KafkaExplorer(Explorer[KafkaStreamSrcConn]):
-    def metadata(self, conn: KafkaStreamSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: KafkaStreamSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 KAFKA_STREAM_SRC = StreamSrcDef(
     conn=KafkaStreamSrcConn,
     type_="kafka-topic-in",
@@ -345,6 +336,6 @@ KAFKA_STREAM_SRC = StreamSrcDef(
     # Like the CDC sources, the new port ingests its staged batches
     # through the default stream-stage manifest source.
     publisher_src=StreamStageSrc,
-    explorer=KafkaExplorer,
+    explorer=KafkaConnectionExplorer,
     icon="conn/kafka/resources/kafka.svg",
 )

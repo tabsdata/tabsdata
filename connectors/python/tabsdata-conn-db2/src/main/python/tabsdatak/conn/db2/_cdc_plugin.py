@@ -23,7 +23,6 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
@@ -51,10 +50,10 @@ from tabsdatak.conn.db2 import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2._cdc_impl import DEFAULT_FETCH_SIZE, SqlReplicaIngester
-from tabsdatak.spi import (
-    Explorer,
-    StreamSrcDef,
-)
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.db2._explorer import Db2CdcConnectionExplorer
+from tabsdatak.spi import StreamSrcDef
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
 # schema-construction time. ``_build_cdc_run_config`` reads from
@@ -140,16 +139,6 @@ class Db2CdcStreamSrcPlugin(CdcPlugin[Db2CdcStreamSrcConn, Db2CdcStreamSrc]):
         )
 
 
-class Db2CdcExplorer(Explorer[Db2CdcStreamSrcConn]):
-    def metadata(self, conn: Db2CdcStreamSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: Db2CdcStreamSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 DB2_CDC_STREAM_SRC = StreamSrcDef(
     conn=Db2CdcStreamSrcConn,
     type_="db2-cdc",
@@ -159,6 +148,6 @@ DB2_CDC_STREAM_SRC = StreamSrcDef(
     cardinality=lambda src: len(src.tables),
     plugin=Db2CdcStreamSrcPlugin,
     publisher_src=CdcStageSrc,
-    explorer=Db2CdcExplorer,
+    explorer=Db2CdcConnectionExplorer,
     icon="conn/db2/resources/db2-cdc.svg",
 )

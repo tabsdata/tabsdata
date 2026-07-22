@@ -24,7 +24,6 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
@@ -53,10 +52,10 @@ from tabsdatak.conn.postgres._cdc_impl import (
     DEFAULT_WAL2JSON_FORMAT_VERSION,
     Wal2JsonIngester,
 )
-from tabsdatak.spi import (
-    Explorer,
-    StreamSrcDef,
-)
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.postgres._explorer import PostgresCdcConnectionExplorer
+from tabsdatak.spi import StreamSrcDef
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
 # schema-construction time. ``_build_cdc_run_config`` reads from
@@ -149,16 +148,6 @@ class PostgresCdcStreamSrcPlugin(
         )
 
 
-class PostgresCdcExplorer(Explorer[PostgresCdcStreamSrcConn]):
-    def metadata(self, conn: PostgresCdcStreamSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: PostgresCdcStreamSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 POSTGRES_CDC_STREAM_SRC = StreamSrcDef(
     conn=PostgresCdcStreamSrcConn,
     type_="postgres-cdc",
@@ -168,6 +157,6 @@ POSTGRES_CDC_STREAM_SRC = StreamSrcDef(
     cardinality=lambda src: len(src.tables),
     plugin=PostgresCdcStreamSrcPlugin,
     publisher_src=CdcStageSrc,
-    explorer=PostgresCdcExplorer,
+    explorer=PostgresCdcConnectionExplorer,
     icon="conn/postgres/resources/postgresql-cdc.svg",
 )

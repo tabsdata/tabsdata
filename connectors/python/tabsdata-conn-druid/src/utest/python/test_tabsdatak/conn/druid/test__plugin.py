@@ -150,7 +150,10 @@ def test_dest_plugin_raises_druid_6_on_tables_slots_mismatch(work_dir):
     parquet = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir), _conn(), dest, [parquet],
+            _dest_ctx(work_dir),
+            _conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_6
 
@@ -161,7 +164,8 @@ def test_dest_plugin_raises_druid_6_on_tables_slots_mismatch(work_dir):
 
 
 def test_dest_plugin_wraps_transporter_run_error_as_druid_7(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     def boom(*args, **kwargs):
         raise transporter1.TransporterRunError(1, "", "upload failed")
@@ -171,13 +175,17 @@ def test_dest_plugin_wraps_transporter_run_error_as_druid_7(
     dest = DruidDest(tables=["events"])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir), _conn(), dest, [parquet],
+            _dest_ctx(work_dir),
+            _conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_7
 
 
 def test_dest_plugin_wraps_transporter_binary_not_found_as_druid_7(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     def boom(*args, **kwargs):
         raise transporter1.TransporterBinaryNotFoundError("missing binary")
@@ -187,7 +195,10 @@ def test_dest_plugin_wraps_transporter_binary_not_found_as_druid_7(
     dest = DruidDest(tables=["events"])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir), _conn(), dest, [parquet],
+            _dest_ctx(work_dir),
+            _conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_7
 
@@ -198,7 +209,8 @@ def test_dest_plugin_wraps_transporter_binary_not_found_as_druid_7(
 
 
 def test_dest_plugin_wraps_submit_failure_as_druid_8(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     monkeypatch.setattr(
         impl,
@@ -217,7 +229,10 @@ def test_dest_plugin_wraps_submit_failure_as_druid_8(
     dest = DruidDest(tables=["events"])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir), _conn(), dest, [parquet],
+            _dest_ctx(work_dir),
+            _conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_8
     # The URL embedded in the error is the safe-sanitized form.
@@ -257,7 +272,10 @@ def test_dest_plugin_wraps_task_failure_as_druid_9(monkeypatch, work_dir):
     dest = DruidDest(tables=["events"])
     with pytest.raises(DruidRuntimeException) as ei:
         plugin.DruidDestPlugin().write_out(
-            _dest_ctx(work_dir), _conn(), dest, [parquet],
+            _dest_ctx(work_dir),
+            _conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is DruidErrorCode.DRUID_9
     # The datasource is hydrated from the dest's tables -- the
@@ -305,21 +323,25 @@ def test_dest_plugin_submits_one_task_per_table(monkeypatch, work_dir):
         max_concurrent_subtasks=4,
     )
     plugin.DruidDestPlugin().write_out(
-        _dest_ctx(work_dir), _conn(), dest, [parquet_a, parquet_b],
+        _dest_ctx(work_dir),
+        _conn(),
+        dest,
+        [parquet_a, parquet_b],
     )
 
     # One ingestion task per target datasource.
     assert [s["spec"]["dataSchema"]["dataSource"] for s in captured["specs"]] == [
-        "events", "metrics",
+        "events",
+        "metrics",
     ]
     # All specs honour replace semantics + tuning knobs.
     for s in captured["specs"]:
         assert s["spec"]["ioConfig"]["dropExisting"] is True
         assert s["spec"]["ioConfig"]["appendToExisting"] is False
         assert s["spec"]["dataSchema"]["timestampSpec"]["column"] == "ts"
-        assert s["spec"]["dataSchema"]["granularitySpec"][
-            "segmentGranularity"
-        ] == "HOUR"
+        assert (
+            s["spec"]["dataSchema"]["granularitySpec"]["segmentGranularity"] == "HOUR"
+        )
         assert s["spec"]["tuningConfig"]["maxNumConcurrentSubTasks"] == 4
     # Both upload calls used the same staging subdir root (per
     # transaction).
@@ -400,9 +422,7 @@ def test_build_input_source_azure():
         ["azureStorage://acct/td-stage/staging/part-0.parquet"],
     )
     assert src["type"] == "azureStorage"
-    assert src["uris"] == [
-        "azureStorage://acct/td-stage/staging/part-0.parquet"
-    ]
+    assert src["uris"] == ["azureStorage://acct/td-stage/staging/part-0.parquet"]
     assert src["properties"]["key"] == "key"
 
 
@@ -455,9 +475,7 @@ def test_sanitize_url_strips_credentials():
         "http://***:***@host:8081/path"
     )
     # noinspection PyProtectedMember
-    assert impl._sanitize_url("http://host:8081/path") == (
-        "http://host:8081/path"
-    )
+    assert impl._sanitize_url("http://host:8081/path") == ("http://host:8081/path")
 
 
 # ---------------------------------------------------------------------------
@@ -559,21 +577,15 @@ def test_overlord_wait_for_completion_failed_raises_druid_9(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs + DestDef wiring
+# DestDef wiring
 # ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    exp = plugin.DruidExplorer()
-    assert exp.metadata(_conn()) is None
-    assert exp.data(_conn(), "SELECT 1") is None
 
 
 def test_druid_dest_def_wires_plugin_and_explorer():
     assert plugin.DRUID_DEST.conn is DruidDestConn
     assert plugin.DRUID_DEST.dest is DruidDest
     assert plugin.DRUID_DEST.plugin is plugin.DruidDestPlugin
-    assert plugin.DRUID_DEST.explorer is plugin.DruidExplorer
+    assert plugin.DRUID_DEST.explorer is plugin.DruidConnectionExplorer
     assert plugin.DRUID_DEST.type_ == "druid-bulk-out"
 
 
@@ -589,6 +601,7 @@ def test_druid_dest_cardinality_uses_tables_length():
 
 def test_resolve_dest_cfg_returns_defaults_when_empty():
     import logging as _logging
+
     cfg = plugin._resolve_dest_cfg(None)
     assert cfg.logging_level == _logging.ERROR
     assert cfg.poll_interval_seconds is None
@@ -597,14 +610,12 @@ def test_resolve_dest_cfg_returns_defaults_when_empty():
 
 
 def test_resolve_dest_cfg_applies_overrides():
-    cfg = plugin._resolve_dest_cfg(
-        {
-            "druid.logging_level": 20,
-            "druid.poll_interval_seconds": 5.0,
-            "druid.retry_attempts": 4,
-            "druid.retry_backoff_seconds": 1.5,
-        }
-    )
+    cfg = plugin._resolve_dest_cfg({
+        "druid.logging_level": 20,
+        "druid.poll_interval_seconds": 5.0,
+        "druid.retry_attempts": 4,
+        "druid.retry_backoff_seconds": 1.5,
+    })
     assert cfg.logging_level == 20
     assert cfg.poll_interval_seconds == 5.0
     assert cfg.retry_attempts == 4

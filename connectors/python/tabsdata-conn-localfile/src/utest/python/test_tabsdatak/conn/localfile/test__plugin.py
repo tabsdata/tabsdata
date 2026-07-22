@@ -11,14 +11,21 @@ import pytest
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.file import _plugin as _file_plugin
+
 # noinspection PyProtectedMember
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.common._transporter.invoker import transporter1
-from tabsdatak.conn.localfile import LocalFileDest, LocalFileDestConn, LocalFileSrc, LocalFileSrcConn
+from tabsdatak.conn.localfile import (
+    LocalFileDest,
+    LocalFileDestConn,
+    LocalFileSrc,
+    LocalFileSrcConn,
+)
+from tabsdatak.conn.localfile._explorer import LocalFileExplorer
 from tabsdatak.spi import TableFileInput
+
 # noinspection PyProtectedMember
 import tabsdatak.conn.localfile._plugin as plugin
-
 
 
 pytestmark = pytest.mark.localfile
@@ -76,8 +83,11 @@ def test_src_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
 
     def fake(*, ctx, cfg, build_location, errors, run_env=None):
         captured.update(
-            ctx=ctx, cfg=cfg, build_location=build_location,
-            errors=errors, run_env=run_env,
+            ctx=ctx,
+            cfg=cfg,
+            build_location=build_location,
+            errors=errors,
+            run_env=run_env,
         )
         return [[Path(tmp_path / "ok.parquet")]]
 
@@ -101,8 +111,12 @@ def test_dest_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
 
     def fake(*, ctx, cfg, tables, build_location, errors, run_env=None):
         captured.update(
-            ctx=ctx, cfg=cfg, tables=tables, build_location=build_location,
-            errors=errors, run_env=run_env,
+            ctx=ctx,
+            cfg=cfg,
+            tables=tables,
+            build_location=build_location,
+            errors=errors,
+            run_env=run_env,
         )
 
     monkeypatch.setattr(_file_plugin, "copy_out", fake)
@@ -121,18 +135,6 @@ def test_dest_plugin_passes_build_location_and_errors(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Explorer stubs
-# ---------------------------------------------------------------------------
-
-
-def test_explorer_methods_are_stubs():
-    exp = plugin.LocalFileSrcExplorer()
-    conn = LocalFileSrcConn()
-    assert exp.metadata(conn) is None
-    assert exp.data(conn, "SELECT 1") is None
-
-
-# ---------------------------------------------------------------------------
 # SrcDef / DestDef wiring
 # ---------------------------------------------------------------------------
 
@@ -141,7 +143,7 @@ def test_localfile_src_def_wires_plugin_and_explorer():
     assert plugin.LOCALFILE_SRC.conn is LocalFileSrcConn
     assert plugin.LOCALFILE_SRC.src is LocalFileSrc
     assert plugin.LOCALFILE_SRC.plugin is plugin.LocalFileSrcPlugin
-    assert plugin.LOCALFILE_SRC.explorer is plugin.LocalFileSrcExplorer
+    assert plugin.LOCALFILE_SRC.explorer is LocalFileExplorer
     assert plugin.LOCALFILE_SRC.type_ == "local-file-in"
 
 
@@ -149,7 +151,7 @@ def test_localfile_dest_def_wires_plugin_and_explorer():
     assert plugin.LOCALFILE_DEST.conn is LocalFileDestConn
     assert plugin.LOCALFILE_DEST.dest is LocalFileDest
     assert plugin.LOCALFILE_DEST.plugin is plugin.LocalFileDestPlugin
-    assert plugin.LOCALFILE_DEST.explorer is plugin.LocalFileDestExplorer
+    assert plugin.LOCALFILE_DEST.explorer is LocalFileExplorer
     assert plugin.LOCALFILE_DEST.type_ == "local-file-out"
 
 

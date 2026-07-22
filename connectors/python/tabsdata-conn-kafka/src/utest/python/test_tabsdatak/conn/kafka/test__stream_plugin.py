@@ -37,7 +37,9 @@ def _creds() -> UserPassword:
 
 def _conn() -> KafkaStreamSrcConn:
     return KafkaStreamSrcConn(
-        servers="broker:9092", credentials=_creds(), group_id="g1",
+        servers="broker:9092",
+        credentials=_creds(),
+        group_id="g1",
     )
 
 
@@ -55,14 +57,14 @@ def _src(**overrides) -> KafkaStreamSrc:
 
 
 def test_kafka_stream_src_def_shape():
-    from tabsdatak.conn.kafka._stream_plugin import KafkaExplorer
+    from tabsdatak.conn.kafka._explorer import KafkaConnectionExplorer
 
     assert KAFKA_STREAM_SRC.type_ == "kafka-topic-in"
     assert KAFKA_STREAM_SRC.src_version == "v1"
     assert KAFKA_STREAM_SRC.conn is KafkaStreamSrcConn
     assert KAFKA_STREAM_SRC.src is KafkaStreamSrc
     assert KAFKA_STREAM_SRC.plugin is KafkaStreamSrcPlugin
-    assert KAFKA_STREAM_SRC.explorer is KafkaExplorer
+    assert KAFKA_STREAM_SRC.explorer is KafkaConnectionExplorer
     assert KAFKA_STREAM_SRC.publisher_src is StreamStageSrc
 
 
@@ -84,14 +86,16 @@ def test_resolve_rollover_cfg_defaults():
 
 
 def test_resolve_rollover_cfg_overrides():
-    src = _src(src_cfg={
-        "kafka.consume_timeout_seconds": 5,
-        "kafka.connection_timeout_seconds": 30,
-        "kafka.time_rollover_seconds": 120,
-        "kafka.size_rollover_mb": 64,
-        "kafka.messages_rollover": 1000,
-        "kafka.logging_level": logging.DEBUG,
-    })
+    src = _src(
+        src_cfg={
+            "kafka.consume_timeout_seconds": 5,
+            "kafka.connection_timeout_seconds": 30,
+            "kafka.time_rollover_seconds": 120,
+            "kafka.size_rollover_mb": 64,
+            "kafka.messages_rollover": 1000,
+            "kafka.logging_level": logging.DEBUG,
+        }
+    )
     cfg = _resolve_rollover_cfg(src)
     assert cfg["consume_timeout_secs"] == 5
     assert cfg["connection_timeout_secs"] == 30
@@ -123,7 +127,9 @@ def test_plugin_run_subscribes_to_topic(consumer_cls, _sigterm, tmp_path):
 @patch("tabsdatak.conn.kafka._stream_plugin._setup_sigterm_handler")
 @patch("confluent_kafka.Consumer")
 def test_plugin_run_kafka_connection_failure_raises_kafka_6(
-    consumer_cls, _sigterm, tmp_path,
+    consumer_cls,
+    _sigterm,
+    tmp_path,
 ):
     consumer = MagicMock()
     consumer.list_topics.side_effect = RuntimeError("broker down")
@@ -140,7 +146,10 @@ def test_plugin_run_kafka_connection_failure_raises_kafka_6(
 @patch("confluent_kafka.Producer")
 @patch("confluent_kafka.Consumer")
 def test_plugin_run_builds_dlq_producer_when_dlq_topic_set(
-    consumer_cls, producer_cls, _sigterm, tmp_path,
+    consumer_cls,
+    producer_cls,
+    _sigterm,
+    tmp_path,
 ):
     consumer = MagicMock()
     consumer.poll.return_value = None
@@ -160,7 +169,9 @@ def test_plugin_run_builds_dlq_producer_when_dlq_topic_set(
 @patch("tabsdatak.conn.kafka._stream_plugin._setup_sigterm_handler")
 @patch("confluent_kafka.Consumer")
 def test_plugin_run_no_dlq_topic_skips_producer(
-    consumer_cls, _sigterm, tmp_path,
+    consumer_cls,
+    _sigterm,
+    tmp_path,
 ):
     consumer = MagicMock()
     consumer.poll.return_value = None
@@ -179,7 +190,9 @@ def test_plugin_run_no_dlq_topic_skips_producer(
 @patch("tabsdatak.conn.kafka._stream_plugin._setup_sigterm_handler")
 @patch("confluent_kafka.Consumer")
 def test_plugin_run_applies_logging_level_to_connector_namespace(
-    consumer_cls, _sigterm, tmp_path,
+    consumer_cls,
+    _sigterm,
+    tmp_path,
 ):
     """``kafka.logging_level`` must apply to the whole
     ``tabsdatak.conn.kafka`` namespace, not just the plugin

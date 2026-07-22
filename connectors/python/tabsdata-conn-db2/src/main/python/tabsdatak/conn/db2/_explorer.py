@@ -63,3 +63,12 @@ class Db2ConnectionExplorer(SqlAlchemyConnectionExplorer):
             database=src.database or "",
             query=src.query,
         )
+
+
+class Db2CdcConnectionExplorer(Db2ConnectionExplorer):
+    """Metadata/preview for a Db2 CDC stream source.
+
+    :class:`Db2CdcStreamSrcConn` is attribute-identical to the batch
+    connection (same ``uri`` / ``credentials`` / ``conn_cfg``), so the batch
+    SQLAlchemy introspection surface applies unchanged.
+    """

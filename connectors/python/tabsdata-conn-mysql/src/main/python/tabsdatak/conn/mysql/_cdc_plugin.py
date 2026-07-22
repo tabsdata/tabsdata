@@ -25,7 +25,6 @@ sits one layer below in ``_cdc_impl.py``.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
@@ -53,10 +52,10 @@ from tabsdatak.conn.mysql import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
-from tabsdatak.spi import (
-    Explorer,
-    StreamSrcDef,
-)
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.mysql._explorer import MySQLCdcConnectionExplorer
+from tabsdatak.spi import StreamSrcDef
 
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
 # schema-construction time. ``_resolve_*`` reads from src_cfg and
@@ -137,16 +136,6 @@ class MySQLCdcStreamSrcPlugin(CdcPlugin[MySQLCdcStreamSrcConn, MySQLCdcStreamSrc
         )
 
 
-class MySQLCdcExplorer(Explorer[MySQLCdcStreamSrcConn]):
-    def metadata(self, conn: MySQLCdcStreamSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: MySQLCdcStreamSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 MYSQL_CDC_STREAM_SRC = StreamSrcDef(
     conn=MySQLCdcStreamSrcConn,
     type_="mysql-cdc",
@@ -156,6 +145,6 @@ MYSQL_CDC_STREAM_SRC = StreamSrcDef(
     cardinality=lambda src: len(src.tables),
     plugin=MySQLCdcStreamSrcPlugin,
     publisher_src=CdcStageSrc,
-    explorer=MySQLCdcExplorer,
+    explorer=MySQLCdcConnectionExplorer,
     icon="conn/mysql/resources/mysql-cdc.svg",
 )

@@ -15,12 +15,16 @@ from tabsdatak.conn.localfile import (
     LocalFileSrc,
     LocalFileSrcConn,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.localfile._explorer import (
+    LocalFileExplorer
+)
 from tabsdatak.conn.localfile.error import LocalFileErrorCode
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     SrcDef,
     SrcPlugin,
     SrcPluginCtx,
@@ -103,37 +107,6 @@ class LocalFileDestPlugin(DestPlugin[LocalFileDestConn, LocalFileDest]):
         )
 
 
-# --- Explorer placeholder ----------------------------------------
-
-
-class LocalFileSrcExplorer(Explorer[LocalFileSrcConn]):
-    def check_connect(self, conn: LocalFileSrcConn) -> Any:
-        # TODO
-        pass
-
-    def metadata(self, conn: LocalFileSrcConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: LocalFileSrcConn, query: str) -> Any:
-        # TODO
-        pass
-
-
-class LocalFileDestExplorer(Explorer[LocalFileDestConn]):
-    def check_connect(self, conn: LocalFileDestConn) -> Any:
-        # TODO
-        pass
-
-    def metadata(self, conn: LocalFileDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: LocalFileDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 # --- Bindings ----------------------------------------------------
 
 
@@ -146,7 +119,7 @@ LOCALFILE_SRC = SrcDef(
     table_mode=TableMode.ARRAY,
     cardinality=lambda src: len(src.paths),
     plugin=LocalFileSrcPlugin,
-    explorer=LocalFileSrcExplorer,
+    explorer=LocalFileExplorer,
     icon="conn/localfile/resources/local-file.svg",
 )
 
@@ -159,6 +132,6 @@ LOCALFILE_DEST = DestDef(
     dest=LocalFileDest,
     cardinality=lambda dest: len(dest.paths),
     plugin=LocalFileDestPlugin,
-    explorer=LocalFileDestExplorer,
+    explorer=LocalFileExplorer,
     icon="conn/localfile/resources/local-file.svg",
 )

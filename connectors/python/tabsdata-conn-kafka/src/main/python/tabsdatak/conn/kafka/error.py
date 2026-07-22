@@ -121,3 +121,14 @@ class KafkaErrorCode(ErrorCode):
         "AWS Glue schema registry: cannot resolve schema "
         "(registry={registry_name!r}, schema={schema_name!r})",
     )  # AwsGlueDeserializer: get_schema_version failed
+
+    # --- Explorer ---------------------------------------------------
+
+    KAFKA_19 = ErrorDef(
+        ConnInitException,
+        "KafkaTopicEntity validation failed",
+    )  # KafkaTopicEntity
+    KAFKA_20 = ErrorDef(
+        ConnInitException,
+        "KafkaConnMetaModel validation failed",
+    )  # KafkaConnMetaModel

@@ -19,13 +19,15 @@ from tabsdatak.conn.druid import (
     DruidDest,
     DruidDestConn,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.druid._explorer import DruidConnectionExplorer
 from tabsdatak.conn.druid.error import DruidErrorCode
 from tabsdatak.error import TabsdataException
 from tabsdatak.spi import (
     DestContext,
     DestDef,
     DestPlugin,
-    Explorer,
     TableFileSpec,
 )
 
@@ -215,20 +217,6 @@ class DruidDestPlugin(DestPlugin[DruidDestConn, DruidDest]):
                     raise
 
 
-class DruidExplorer(Explorer[DruidDestConn]):
-    def check_connect(self, conn: DruidDestConn) -> Any:
-        # TODO
-        pass
-
-    def metadata(self, conn: DruidDestConn) -> Any:
-        # TODO
-        pass
-
-    def data(self, conn: DruidDestConn, query: str) -> Any:
-        # TODO
-        pass
-
-
 DRUID_DEST = DestDef(
     conn=DruidDestConn,
     type_="druid-bulk-out",
@@ -237,6 +225,6 @@ DRUID_DEST = DestDef(
     dest=DruidDest,
     cardinality=lambda dest: len(dest.tables),
     plugin=DruidDestPlugin,
-    explorer=DruidExplorer,
+    explorer=DruidConnectionExplorer,
     icon="conn/druid/resources/druid.svg",
 )
