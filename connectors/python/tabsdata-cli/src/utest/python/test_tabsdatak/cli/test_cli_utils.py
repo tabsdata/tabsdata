@@ -22,6 +22,29 @@ import pytest
 
 from tabsdatak.cli import cli_utils
 
+
+@pytest.fixture(autouse=True)
+def _restore_sys_modules():
+    """``_dynamic_import_function_from_path`` loads user files under bare
+    top-level names (``a``, ``helper``, ``supporter``, ...) and resolves
+    bare siblings through a ``_SiblingFinder``. It unregisters what it
+    resolves, but a bare name served from a pre-existing ``sys.modules``
+    entry is never claimed (so never cleaned), and its own cleanup is
+    path-prefix based (fragile across separators / case-insensitive
+    filesystems). ``sys.modules`` is shared across tests on an xdist
+    worker, so snapshot and restore it around every test -- mirroring the
+    ``_api`` suite -- so no bare user-module name leaks between the two
+    suites in either direction."""
+    saved = dict(sys.modules)
+    try:
+        yield
+    finally:
+        for name in list(sys.modules):
+            if name not in saved:
+                del sys.modules[name]
+        sys.modules.update(saved)
+
+
 # ---------------------------------------------------------------------------
 # Pure helpers
 # ---------------------------------------------------------------------------

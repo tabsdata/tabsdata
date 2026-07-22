@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import FrozenInstanceError
 
 import pytest
@@ -21,6 +22,25 @@ from tabsdatak.error import (
     ApiException,
     ApiInitException,
 )
+
+
+@pytest.fixture(autouse=True)
+def _restore_sys_modules():
+    """`_import_user_module` imports bundled user files under bare
+    top-level names (``a``, ``helper``, ``supporter``, ...) and does not
+    unregister them -- the runner uses a fresh process per function. In
+    tests ``sys.modules`` is shared, so snapshot and restore it around
+    every test to keep those names from leaking into unrelated tests on
+    the same worker."""
+    saved = dict(sys.modules)
+    try:
+        yield
+    finally:
+        for name in list(sys.modules):
+            if name not in saved:
+                del sys.modules[name]
+        sys.modules.update(saved)
+
 
 # ---------------------------------------------------------------------------
 # 1. ``_api.dataclass`` frozen-by-default invariant + opt-out
