@@ -194,6 +194,7 @@ class APIServer:
     # are exactly the routes declared without it. Keep this in sync whenever the
     # server adds a top-level (non-`SCOPED`) resource.
     _GLOBAL_PREFIXES = (
+        "/ai-agent",
         "/auth",
         "/permission-grants",
         "/projects",
@@ -550,6 +551,13 @@ class APIServer:
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def collection_connection_refresh(
+        self, collection_name: str, raise_for_status: bool = True
+    ):
+        endpoint = f"/ai-agent/store/connections/{collection_name}/refresh"
+        response = self.post(endpoint, json={})
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def collection_get_by_name(
         self, collection_name: str, raise_for_status: bool = True
     ):
@@ -572,7 +580,7 @@ class APIServer:
             DEFAULT_LIST_ENDPOINT_PARAMETERS,
             [request_len, request_filter, order_by, pagination_id, next_step],
         )
-        response = self.get(endpoint, params)
+        response = self.get(endpoint, params, allow_all_projects=True)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def collection_update(
