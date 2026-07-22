@@ -62,7 +62,7 @@ mod definitions {
     }
 
     #[ta_objects::typed_enum]
-    #[derive(Eq, PartialEq, Hash, Copy)]
+    #[derive(Eq, PartialEq, Ord, PartialOrd, Hash, Copy)]
     pub enum NodeKind {
         /// Real collection/group node
         Dim,

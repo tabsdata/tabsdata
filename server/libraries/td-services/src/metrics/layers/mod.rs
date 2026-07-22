@@ -96,6 +96,7 @@ async fn inflight_response(
     // Cross-project (global) reads span every tenant; drop rows for projects
     // the requester cannot view. Scoped reads pass `All` (RLS already filtered).
     rows.retain(|r| visible.contains(&r.project_id));
+    rows.sort_by_key(|r| (r.project_id, r.collection_id, r.group_id, r.status));
     Ok(InflightResponse::builder().rows(rows).build()?)
 }
 
@@ -317,7 +318,7 @@ impl FoldRow for EdgeRow {
 /// can be minted from `(dim_key, status)` carrying zero magnitudes —
 /// the Rust analogue of `LEFT JOIN calendar_dim CROSS JOIN observed`.
 trait GapFillRow: Sized {
-    type DimKey: Eq + std::hash::Hash + Clone;
+    type DimKey: Eq + std::hash::Hash + Clone + Ord;
     fn bucket(&self) -> EpochMs;
     fn dim_key(&self) -> Self::DimKey;
     fn status(&self) -> LogicalFunctionRunStatus;
@@ -341,7 +342,14 @@ fn gap_fill<R: GapFillRow>(
     buckets: &[i64],
     statuses: &[LogicalFunctionRunStatus],
 ) -> Result<Vec<R>, TdError> {
-    let dim_keys: HashSet<R::DimKey> = rows.iter().map(|r| r.dim_key()).collect();
+    // Sorted so the emitted order is deterministic (HashSet order is not).
+    let mut dim_keys: Vec<R::DimKey> = rows
+        .iter()
+        .map(|r| r.dim_key())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    dim_keys.sort();
     if dim_keys.is_empty() || statuses.is_empty() {
         return Ok(rows);
     }
@@ -363,8 +371,6 @@ fn gap_fill<R: GapFillRow>(
         by_key.insert((*r.bucket(), r.dim_key(), r.status()), r);
     }
 
-    // Inner order is HashSet iteration order; chart consumers
-    // group-by-bucket and don't depend on it.
     let mut out: Vec<R> = Vec::with_capacity(n);
     for &b in buckets.iter().rev() {
         let bucket = EpochMs::try_from(b)?;

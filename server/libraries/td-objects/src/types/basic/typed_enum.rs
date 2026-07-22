@@ -120,7 +120,7 @@ pub enum ExecutionStatus {
 ///     Committed --> Yanked
 /// ```
 #[ta_objects::typed_enum]
-#[derive(Eq, PartialEq, Hash, Copy)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash, Copy)]
 pub enum LogicalFunctionRunStatus {
     #[typed_enum(rename = "S")]
     Scheduled,

@@ -24,11 +24,11 @@ pub struct BuildManifest;
 pub struct BundleHash;
 
 #[ta_objects::typed(string(parser = parse_collection), try_from = ToCollectionName)]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct CollectionName;
 
 #[ta_objects::typed(string(parser = parse_project))]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct ProjectName;
 
 #[ta_objects::typed(string)]
@@ -185,7 +185,7 @@ impl RoleName {
 }
 
 #[ta_objects::typed(string(parser = parse_group))]
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct GroupName;
 
 impl GroupName {
