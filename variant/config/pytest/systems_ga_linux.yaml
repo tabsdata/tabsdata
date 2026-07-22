@@ -43,6 +43,8 @@
     env: DATABRICKS__VOLUME
 - name: db2
   type: db2
+- name: db2cdc
+  type: db2cdc
 - name: dev
   type: dev
 - name: druid
@@ -68,6 +70,8 @@
   type: mssqlserver
 - name: mysql
   type: mysql
+- name: mysqlcdc
+  type: mysqlcdc
 - name: openai
   type: openai
   api-key:
@@ -76,6 +80,8 @@
   type: oracle
 - name: postgres
   type: postgres
+- name: postgrescdc
+  type: postgrescdc
 - name: redpanda
   type: redpanda
 - name: s3

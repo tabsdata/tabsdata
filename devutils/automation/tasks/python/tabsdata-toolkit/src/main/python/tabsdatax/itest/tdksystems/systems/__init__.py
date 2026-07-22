@@ -16,10 +16,13 @@ from ..errors import DatagenError
 _SLUGS = {
     # container
     "mysql": ("mysql.system", "MysqlSystem"),
+    "mysqlcdc": ("mysqlcdc.system", "MysqlCdcSystem"),
     "postgres": ("postgres.system", "PostgresSystem"),
+    "postgrescdc": ("postgrescdc.system", "PostgresCdcSystem"),
     "mssqlserver": ("mssqlserver.system", "MssqlSystem"),
     "oracle": ("oracle.system", "OracleSystem"),
     "db2": ("db2.system", "Db2System"),
+    "db2cdc": ("db2cdc.system", "Db2CdcSystem"),
     "clickhouse": ("clickhouse.system", "ClickhouseSystem"),
     "mongodb": ("mongodb.system", "MongodbSystem"),
     "starrocks": ("starrocks.system", "StarrocksSystem"),

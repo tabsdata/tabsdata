@@ -59,9 +59,10 @@ def fake_sf(monkeypatch):
 
 
 def test_registry_serves_every_system():
-    # All 21 systems are now on the unified registry.
+    # Every system is on the unified registry (incl. the CDC variants).
     assert set(tdx.systems.all_slugs()) == {
-        "mysql", "postgres", "mssqlserver", "oracle", "db2", "clickhouse",
+        "mysql", "mysqlcdc", "postgres", "postgrescdc",
+        "mssqlserver", "oracle", "db2", "db2cdc", "clickhouse",
         "mongodb", "starrocks", "redpanda",
         "druid",
         "s3", "gcs", "azureblob", "fs",
@@ -70,6 +71,21 @@ def test_registry_serves_every_system():
         "dev",
     }
     assert tdx._unified("s3") and tdx._unified("postgres")
+
+
+def test_cdc_systems_reuse_base_ddl_and_declare_capture():
+    # A CDC system is a thin variant of its plain sibling: same data-plane kind,
+    # but it reads the base system's model DDL (ddl_slug) so no duplicate .ddl is
+    # needed, and it overrides configure_cdc.
+    from tabsdatax.itest.tdksystems.systems.base import System
+
+    for cdc, base in (("mysqlcdc", "mysql"), ("postgrescdc", "postgres"),
+                      ("db2cdc", "db2")):
+        sysobj = systems.get(cdc)
+        assert sysobj.ddl_slug == base
+        assert sysobj.kind == "sql" and sysobj.supports_sql
+        # configure_cdc is specialised (not the base no-op) on every CDC system.
+        assert type(sysobj).configure_cdc is not System.configure_cdc
 
 
 @pytest.mark.parametrize("slug", systems.all_slugs())
