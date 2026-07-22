@@ -138,6 +138,7 @@ from tenacity import (
 
 from . import (
     _venv,
+    changes,
     cli,
     console,
     crypto,
@@ -2164,7 +2165,7 @@ def _system_can_seed(sys_name: str, model: str, sys_dir: str | None) -> bool:
     if sys_kind and sys_kind not in data_gen.model_kinds(model):
         return False
     if getattr(sysobj, "supports_sql", False):
-        if not (data_gen.model_dir(model) / f"{sysobj.slug}.ddl").is_file():
+        if not (data_gen.model_dir(model) / f"{sysobj.ddl_slug}.ddl").is_file():
             return False
     return True
 
@@ -2408,6 +2409,10 @@ def _install_model_and_data(
                     use_schema_registry=False,
                 )
             )
+    # The model's tables now exist — let the system enable change capture on
+    # them (no-op unless this is a CDC system).
+    if model:
+        cli._run_configure_cdc(model, domain_path)
 
 
 def _domain_create_single(args, peeked_sys) -> int:
@@ -2555,6 +2560,123 @@ def _domain_seed(rest: list[str]) -> int:
     console.good(
         f">>> seeded domain '{doc['name']}' ({slug}) with "
         f"model={args.model} data={args.data or '-'}"
+    )
+    console.out()
+    return 0
+
+
+def _domain_changes(rest: list[str]) -> int:
+    """`tdx-domain changes --domain NAME --shape SHAPE --ops OPS --count N`:
+    apply a deterministic set of INSERT/UPDATE/DELETE operations to a
+    model-seeded domain — to drive change-data-capture (or just to mutate the
+    data). The model must ship a `changes.py` recipe.
+
+    `--shape` groups changes into transactions: `single-row` (one row),
+    `multi-row-same` (several rows, one table), `multi-row-diff` (several rows
+    across tables), or `random`. `--ops` picks the verbs: `insert` / `update` /
+    `delete` / `mix`. `--count` is the number of transactions, `--rows` the rows
+    per transaction for the multi-row shapes.
+
+    `--seed auto` (the default) walks a per-domain seed 1,2,3,… persisted in the
+    descriptor and a compact insert cursor, so every mode (insert / update /
+    delete / mix) keeps working across repeated runs — inserts never collide and
+    each run touches fresh rows. `--seed N` applies that exact seed and leaves
+    the descriptor untouched (reproducible, but re-running an insert collides).
+    File domains take inserts only (each is a new file)."""
+    p = _ArgumentParser(
+        prog="tdx-domain changes",
+        add_help=True,
+        description="Apply deterministic INSERT/UPDATE/DELETE changes to a "
+        "model-seeded domain (drives CDC).",
+    )
+    _add_domain_locator(p)
+    _add_secret_env(p)
+    _add_latch(p)
+    p.add_argument(
+        "--shape",
+        required=True,
+        choices=[s.value for s in changes.Shape],
+        help="how changes are grouped into transactions",
+    )
+    p.add_argument(
+        "--ops",
+        default=changes.OpSelector.MIX.value,
+        choices=[o.value for o in changes.OpSelector],
+        help="which DML verbs to emit (default: mix)",
+    )
+    p.add_argument(
+        "--count", type=int, required=True, help="number of transactions to apply"
+    )
+    p.add_argument(
+        "--rows",
+        type=int,
+        default=3,
+        help="rows per transaction for the multi-row shapes (default: 3)",
+    )
+    p.add_argument(
+        "--seed",
+        default="auto",
+        metavar="auto|N",
+        help="'auto' (default): sequential per-domain seed 1,2,3… persisted in "
+        "the descriptor, all modes always work; N: a fixed seed (reproducible, "
+        "descriptor untouched)",
+    )
+    args = p.parse_args(rest)
+    _apply_secret(args)
+    if _is_multi(args.domain):
+        raise DatagenError("changes operates on a single domain (no ALL / comma list)")
+    path = _domain_target(args)
+    doc = descriptor.load(path)
+    _require_role(doc, "env", "tdx-domain", "tdx-system")
+    model = doc.get("model")
+    if not model:
+        raise DatagenError(
+            f"domain '{doc['name']}' carries no model — create or seed it with "
+            f"--model first (nothing to change)"
+        )
+    if not changes.model_supports_changes(model):
+        raise DatagenError(
+            f"model '{model}' has no changes.py recipe — `changes` is not "
+            f"supported for it"
+        )
+    auto = str(args.seed).strip().lower() == "auto"
+    if auto:
+        last_seed, next_insert = descriptor.changes_state(doc)
+        seed, insert_base = last_seed + 1, next_insert
+    else:
+        try:
+            seed = int(args.seed)
+        except ValueError:
+            raise DatagenError(
+                f"--seed must be 'auto' or an integer (got {args.seed!r})"
+            ) from None
+        if seed < 0:
+            raise DatagenError("--seed must be >= 0")
+        insert_base = seed * changes.FIXED_SEED_INSERT_STRIDE
+    sysobj, ctx, _meta = cli._domain(path)
+    counts = {str(k): int(v) for k, v in (doc.get("entities") or {}).items()}
+    spec = changes.ChangeSpec(
+        shape=changes.Shape(args.shape),
+        ops=changes.OpSelector(args.ops),
+        count=args.count,
+        rows=args.rows,
+        seed=seed,
+        insert_base=insert_base,
+    )
+    recipe = changes.load_recipe(model)
+    txns = changes.plan(recipe, spec, counts)
+    n = sysobj.apply_changes(ctx, txns)
+    # Persist the auto state only after a successful apply, so a failed run
+    # doesn't burn the seed / insert cursor.
+    if auto:
+        descriptor.record_changes_state(
+            path, seed=seed, inserts=insert_base + changes.count_inserts(txns)
+        )
+    console.out()
+    console.good(
+        f">>> applied {n} change transaction(s) to '{doc['name']}' ({sysobj.slug}) "
+        f"[model={model} shape={args.shape} ops={args.ops} "
+        f"seed={seed}{' auto' if auto else ''}]"
     )
     console.out()
     return 0
@@ -2818,6 +2940,7 @@ _DOMAIN_VERBS = {
     "create": _domain_create,
     "dump": _domain_dump,
     "seed": _domain_seed,
+    "changes": _domain_changes,
     "recreate": _domain_recreate,
     "list": _domain_list,
     "destroy": _domain_destroy,
@@ -2877,11 +3000,19 @@ def _dispatch(cmd: str, verbs: dict, argv: list[str]) -> int:
 # `console` module). The quick read-only / machine-output verbs (list / info /
 # dump / types / secrets / fetch-images / connect / pause / resume) keep printing
 # straight to the terminal.
-_LOGGED_VERBS = {"create", "destroy", "status", "restart", "recreate", "seed"}
+_LOGGED_VERBS = {
+    "create",
+    "destroy",
+    "status",
+    "restart",
+    "recreate",
+    "seed",
+    "changes",
+}
 
 # Verbs that accept `--latch FILE` (see `_add_latch`): the long-running ones a
 # caller may want to run in the background and wait on.
-_LATCH_VERBS = {"create", "destroy", "seed", "recreate"}
+_LATCH_VERBS = {"create", "destroy", "seed", "recreate", "changes"}
 
 
 def _latch_files(latch: Path) -> tuple[Path, Path]:

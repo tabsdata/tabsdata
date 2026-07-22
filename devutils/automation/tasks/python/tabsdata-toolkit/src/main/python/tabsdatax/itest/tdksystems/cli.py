@@ -258,6 +258,15 @@ def _run_data_load(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_configure_cdc(model: str, domain_path: str) -> None:
+    """After a model's tables exist, let the domain's system configure CDC for
+    them. A no-op for every non-CDC system (the `System` default); CDC systems
+    enable capture per table (e.g. `REPLICA IDENTITY FULL`, `asnclp`
+    registration)."""
+    sysobj, ctx, _meta = _domain(domain_path)
+    sysobj.configure_cdc(ctx, model)
+
+
 def _generate_file_formats(
     model: str, size: str | None, out: Path, chunks: int | None
 ) -> dict[str, int]:

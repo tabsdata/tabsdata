@@ -1011,6 +1011,25 @@ def record_entities(path: str | Path, entities: dict[str, int]) -> dict:
     return doc
 
 
+def changes_state(doc: dict) -> tuple[int, int]:
+    """The domain's persisted ``--seed auto`` state as ``(last_seed,
+    next_insert_ordinal)`` — both 0 when the domain has never had an auto
+    `changes` run."""
+    st = doc.get("changes") or {}
+    return int(st.get("seed", 0)), int(st.get("inserts", 0))
+
+
+def record_changes_state(path: str | Path, *, seed: int, inserts: int) -> dict:
+    """Persist the ``--seed auto`` state: the last auto seed applied and the
+    next free insert ordinal (so the following auto run keeps minting
+    non-colliding inserts). Only `--seed auto` writes this; a fixed `--seed N`
+    leaves the descriptor untouched."""
+    doc = load(path)
+    doc["changes"] = {"seed": int(seed), "inserts": int(inserts)}
+    _write_doc(path, doc)
+    return doc
+
+
 def record_meta(path: str | Path, extra: dict[str, str]) -> dict:
     """Add (or replace) resolvable, exported meta keys on an existing descriptor
     — used to bake values that are only known AFTER provisioning, e.g. a

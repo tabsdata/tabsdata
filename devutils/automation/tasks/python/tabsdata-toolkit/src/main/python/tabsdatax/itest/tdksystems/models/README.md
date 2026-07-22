@@ -214,6 +214,74 @@ OUTPUT_DIR/
 `run-order.txt` is what `data load` walks. The DDL files are what
 `data create` reads (matched by `<system_type>.ddl`).
 
+## Change recipes — `changes.py` (optional)
+
+A model may also ship a `changes.py` next to its `generator.py`. It powers
+`tdx-domain changes --domain NAME --shape SHAPE --ops OPS --count N`, which
+applies a deterministic set of INSERT/UPDATE/DELETE operations to an
+*already-seeded* domain — the point being to drive change-data-capture (the
+`mysqlcdc` / `postgrescdc` / `db2cdc` systems) or just to mutate the data.
+It works on any seeded SQL domain; on a file domain only inserts apply (each
+insert is a new file).
+
+`--shape` groups the changes into transactions — `single-row`,
+`multi-row-same` (one table), `multi-row-diff` (across tables), or `random`;
+`--ops` selects the verbs (`insert` / `update` / `delete` / `mix`); `--count`
+is the number of transactions, `--rows` the rows per transaction for the
+multi-row shapes.
+
+`--seed auto` (the default) walks a per-domain seed 1,2,3,… and a compact
+insert cursor, both persisted in the domain descriptor, so every mode keeps
+working across repeated runs — inserts never collide and each run touches fresh
+rows. `--seed N` applies that exact seed and leaves the descriptor untouched
+(reproducible; re-running an insert with the same N re-mints the same key and
+collides). Salesforce is intentionally not supported.
+
+To make `--seed auto` "always work", a recipe must (a) mint inserts whose key is
+unique for *any* ordinal — the planner passes an ever-growing `i`, so key
+spaces must be large (integer keys, or wide CHAR keys via `base36`; don't insert
+into a tiny CHAR key), and (b) key UPDATE/DELETE targets off the seeded row
+*position* (`target(i, existing)`), which the planner keeps in range.
+
+The generic shape/ops/count planning lives in
+`tabsdatax.itest.tdksystems.changes`; a recipe only supplies model knowledge:
+
+```python
+from tabsdatax.itest.tdksystems.changes import ChangeModel, Entity, OpKind
+from tabsdatax.itest.tdksystems.emit import Column
+
+class _Widgets(Entity):
+    table = "widgets"
+    columns = [Column("widget_id", "int", auto=True), Column("name", "varchar(40)")]
+    supports = (OpKind.INSERT, OpKind.UPDATE, OpKind.DELETE)
+
+    def new_row(self, rng, i):        # a brand-new, non-colliding row for INSERT #i
+        return {"name": f"New Widget {i}"}
+    def target(self, i, existing):    # PK predicate of the i-th seeded row (in PK order)
+        return {"widget_id": i + 1}   # auto ids load 1..N, so row i is id i+1
+    def mutate(self, rng, i, existing):  # column -> new value for an UPDATE
+        return {"name": f"Renamed {i}"}
+
+def recipe() -> ChangeModel:
+    return ChangeModel(entities=[_Widgets()])   # list entities parents-first
+```
+
+Notes:
+
+- List entities **parents-first**: a `multi-row-diff` transaction (and any
+  cross-table insert) applies them in that order so foreign keys hold.
+- Mark auto-increment / IDENTITY primary keys `Column(..., auto=True)` — inserts
+  omit them and `target` reconstructs the seeded row's key from its 1-based load
+  order. For an explicit key, give inserts a value in a **high, non-colliding
+  range** (well above the largest `--data` size).
+- Restrict `supports` to what's safe: a table other tables reference is unsafe
+  to delete from; a leaf table is the natural delete target. Deletes walk the
+  tail (so a re-run targets rows already gone), updates walk the front.
+- Every INSERT must set all NOT NULL columns explicitly (don't rely on DB
+  DEFAULTs) so the same statement runs on MySQL / Postgres / Db2 alike.
+
+`employees`, `finance`, and `airportdb` ship recipes; see them for templates.
+
 ## Adding a new model
 
 1. **Pick a name** that's a valid Python identifier (used as the model
@@ -237,9 +305,12 @@ OUTPUT_DIR/
        --name m --model <name> --data xs -f
    ls target/store/m
    ```
-7. **Add to package_data** if you ship a new file kind — the existing
-   `pyproject.toml` glob picks up `generator.py`, `sizing.json`, `*.ddl`,
-   `*.csv`, `*.json`, `*.yml`, `*.md`. Then `pip install -e .` to refresh.
+7. **Add a `changes.py`** (optional) if the model should support
+   `tdx-domain changes` — see the "Change recipes" section above.
+8. **Add to package_data** if you ship a new file kind — the existing
+   `pyproject.toml` glob picks up `generator.py`, `changes.py`, `sizing.json`,
+   `*.ddl`, `*.csv`, `*.json`, `*.yml`, `*.md`. Then `pip install -e .` to
+   refresh.
 
 The existing models are good templates — pick the one whose shape
 matches what you're building.

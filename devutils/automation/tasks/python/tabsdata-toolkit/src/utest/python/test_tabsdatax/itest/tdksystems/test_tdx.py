@@ -119,6 +119,7 @@ def test_install_model_and_data_loads_without_rerunning_ddl(monkeypatch):
                         lambda ns: seen.__setitem__("create_force", ns.force))
     monkeypatch.setattr(tdx.cli, "_run_data_load",
                         lambda ns: seen.__setitem__("load_force", ns.force))
+    monkeypatch.setattr(tdx.cli, "_run_configure_cdc", lambda *a, **k: None)
     monkeypatch.setattr(tdx.data_gen, "is_sizeable", lambda m: True)
     tdx._install_model_and_data("/tmp/x/dom", "world", "xs", force=True)
     assert seen == {"create_force": True, "load_force": False}
@@ -135,6 +136,7 @@ def test_install_model_and_data_uses_ephemeral_schemas_dir(monkeypatch):
 
     monkeypatch.setattr(tdx.cli, "_run_data_create", lambda ns: None)
     monkeypatch.setattr(tdx.cli, "_run_data_load", fake_load)
+    monkeypatch.setattr(tdx.cli, "_run_configure_cdc", lambda *a, **k: None)
     monkeypatch.setattr(tdx.data_gen, "is_sizeable", lambda m: True)
     tdx._install_model_and_data("/tmp/x/domains/dom", "world", "xs", force=False)
     assert seen["live"] is True                        # available during the load
