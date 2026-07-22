@@ -10,9 +10,9 @@ Four classes, imported from `tabsdatak.conn.azureblob`:
   container, credentials (`AzureAccountKey`), `base_path`,
   `conn_cfg`. Registered on a collection, not passed to a decorator.
 * `AzureBlobSrc` -- the `@publisher` source: a list of `paths`
-  (glob-style), one parquet slot per path.
+  (glob-style), one output slot per path.
 * `AzureBlobDest` -- the `@subscriber` destination: a list of
-  `paths`, one parquet slot per path.
+  `paths`, one output slot per path.
 
 The connection (with credentials) is separate from the source /
 destination and is resolved from the function's collection at run time;
@@ -140,9 +140,9 @@ class AzureBlobDestConn(Conn):
 
     :categories: destination
 
-    Field-identical to `AzureBlobSrcConn` but a distinct class so
-    source and destination connections cannot be confused at the
-    wire-format level. See `AzureBlobSrcConn` for the field meanings.
+    Field-identical to `AzureBlobSrcConn` but a distinct class; source
+    and destination connections are separate types and cannot be used in
+    place of one another. See `AzureBlobSrcConn` for the field meanings.
     """
 
     container: AzContainerSpec
@@ -162,7 +162,7 @@ class AzureBlobDestConn(Conn):
 
 @_api.dataclass(AzureBlobErrorCode.AZURE_BLOB_2, kw_only=True)
 class AzureBlobSrc(Src):
-    """Azure Blob source for `@publisher` -- one parquet slot per path.
+    """Azure Blob source for `@publisher` -- one output slot per path.
 
     :categories: source
 

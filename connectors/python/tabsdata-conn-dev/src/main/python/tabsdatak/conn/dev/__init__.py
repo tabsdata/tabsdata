@@ -8,7 +8,7 @@ Connectors for local development and testing, backed by no external
 system. Imported from `tabsdatak.conn.dev`:
 
 * `DataGenSrcConn` / `DataGenSrc` -- a `@publisher` source that
-  emits in-line `Data` (a Polars or Pandas dataframe), one parquet
+  emits in-line `Data` (a Polars or Pandas dataframe), one output
   slot per `Data`.
 * `TrashDestConn` / `TrashDest` -- a `@subscriber` sink to
   nowhere; the frame is discarded.
@@ -205,7 +205,7 @@ class DataGenSrc(Src):
             combined base64-parquet size may not exceed 10 MB.
 
     Examples:
-        Publish two in-line frames, one output slot per `Data`:
+        Publish multiple in-line frames, one output slot per `Data`:
 
         .. code-block:: python
 

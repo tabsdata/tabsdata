@@ -10,7 +10,7 @@ Two classes, imported from `tabsdatak.conn.snowflake`:
   `UserPassword` credentials, and optional default `role` /
   `database` / `schema` / `warehouse` / `stage`.
 * `SnowflakeDest` -- the `@subscriber` destination: a list of
-  target `tables`, one parquet slot per table (loaded with `PUT` +
+  target `tables`, one output slot per table (loaded with `PUT` +
   `COPY INTO` through a stage).
 
 Snowflake is destination-only -- there is no `SnowflakeSrc`. The
@@ -167,7 +167,7 @@ class SnowflakeDestConn(Conn):
 
 @_api.dataclass(SnowflakeErrorCode.SNOWFLAKE_3, kw_only=True)
 class SnowflakeDest(Dest):
-    """Snowflake destination for `@subscriber` -- one parquet slot per table.
+    """Snowflake destination for `@subscriber` -- one output slot per table.
 
     :categories: destination
 

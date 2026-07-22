@@ -10,9 +10,9 @@ Four classes, imported from `tabsdatak.conn.mssql`:
   or ODBC `uri` and `UserPassword` credentials, plus an optional
   `entity_whitelist` and `conn_cfg`.
 * `MSSQLSrc` -- the `@publisher` source: a list of SELECT
-  `queries`, one parquet slot per query.
+  `queries`, one output slot per query.
 * `MSSQLDest` -- the `@subscriber` destination: a list of target
-  `tables`, one parquet slot per table.
+  `tables`, one output slot per table.
 
 The connection (with credentials) is registered on a collection, not
 passed to a decorator; the runtime resolves it at run time. A flow
@@ -147,9 +147,9 @@ class MSSQLDestConn(Conn):
 
     :categories: destination
 
-    Field-identical to `MSSQLSrcConn` but a distinct class so source
-    and destination connections cannot be confused at the wire-format
-    level. See `MSSQLSrcConn` for the field meanings.
+    Field-identical to `MSSQLSrcConn` but a distinct class; source and
+    destination connections are separate types and cannot be used in
+    place of one another. See `MSSQLSrcConn` for the field meanings.
     """
 
     uri: UriSpec
@@ -166,7 +166,7 @@ class MSSQLDestConn(Conn):
 
 @_api.dataclass(MssqlErrorCode.MSSQL_2, kw_only=True)
 class MSSQLSrc(Src):
-    """MSSQL source for `@publisher` -- one parquet slot per query.
+    """MSSQL source for `@publisher` -- one output slot per query.
 
     :categories: source
 
@@ -186,7 +186,7 @@ class MSSQLSrc(Src):
             `tabsdata.sql.chunkSize`.
 
     Examples:
-        Publish two SQL Server tables, one output slot per query in
+        Publish multiple SQL Server tables, one output slot per query in
         order:
 
         .. code-block:: python
@@ -256,7 +256,7 @@ class MSSQLSrc(Src):
 
 @_api.dataclass(MssqlErrorCode.MSSQL_4, kw_only=True)
 class MSSQLDest(Dest):
-    """MSSQL destination for `@subscriber` -- one parquet slot per table.
+    """MSSQL destination for `@subscriber` -- one output slot per table.
 
     :categories: destination
 

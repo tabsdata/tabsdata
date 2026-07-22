@@ -10,9 +10,9 @@ Four classes, imported from `tabsdatak.conn.gcs`:
   credentials (`GCPJson`), optional `project`, `base_path`,
   `conn_cfg`. Registered on a collection, not passed to a decorator.
 * `GCSSrc` -- the `@publisher` source: a list of `paths`
-  (glob-style), one parquet slot per path.
+  (glob-style), one output slot per path.
 * `GCSDest` -- the `@subscriber` destination: a list of `paths`,
-  one parquet slot per path.
+  one output slot per path.
 
 The connection (with credentials) is separate from the source /
 destination and is resolved from the function's collection at run time;
@@ -156,9 +156,9 @@ class GCSDestConn(Conn):
 
     :categories: destination
 
-    Field-identical to `GCSSrcConn` but a distinct class so source and
-    destination connections cannot be confused at the wire-format level.
-    See `GCSSrcConn` for the field meanings.
+    Field-identical to `GCSSrcConn` but a distinct class; source and
+    destination connections are separate types and cannot be used in
+    place of one another. See `GCSSrcConn` for the field meanings.
     """
 
     bucket: GCSBucketSpec
@@ -182,7 +182,7 @@ class GCSDestConn(Conn):
 
 @_api.dataclass(GcsErrorCode.GCS_2, kw_only=True)
 class GCSSrc(Src):
-    """GCS source for `@publisher` -- one parquet slot per path.
+    """GCS source for `@publisher` -- one output slot per path.
 
     :categories: source
 

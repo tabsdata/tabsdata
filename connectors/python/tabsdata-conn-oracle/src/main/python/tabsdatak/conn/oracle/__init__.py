@@ -8,12 +8,11 @@ Imported from `tabsdatak.conn.oracle`. Four classes:
 
 * `OracleSrcConn` / `OracleDestConn` -- the connection: a SQLAlchemy
   URI plus `UserPassword` credentials. Attribute-identical but distinct
-  classes so source and destination connections cannot be confused at
-  the wire-format level.
+  classes, one for source and one for destination connections.
 * `OracleSrc` -- the `@publisher` source: a list of SELECT
-  `queries`, one parquet slot per query.
+  `queries`, one output slot per query.
 * `OracleDest` -- the `@subscriber` destination: a list of target
-  `tables`, one parquet slot per table.
+  `tables`, one output slot per table.
 
 The connection (with credentials) is registered on a collection and
 resolved from the function's collection at run time -- it is never passed
@@ -167,9 +166,9 @@ class OracleDestConn(Conn):
 
     :categories: destination
 
-    Attribute-identical to `OracleSrcConn` but a distinct class so
-    source and destination connections cannot be confused at the
-    wire-format level. See `OracleSrcConn` for the field meanings.
+    Attribute-identical to `OracleSrcConn` but a distinct class; source
+    and destination connections are separate types and cannot be used in
+    place of one another. See `OracleSrcConn` for the field meanings.
     """
 
     uri: UriSpec
@@ -186,7 +185,7 @@ class OracleDestConn(Conn):
 
 @_api.dataclass(OracleErrorCode.ORACLE_2, kw_only=True)
 class OracleSrc(Src):
-    """Oracle source for `@publisher` -- one parquet slot per query.
+    """Oracle source for `@publisher` -- one output slot per query.
 
     :categories: source
 
@@ -209,7 +208,7 @@ class OracleSrc(Src):
             `tabsdata.sql.chunkSize`).
 
     Examples:
-        Publish two Oracle tables, one output slot per query in order:
+        Publish multiple Oracle tables, one output slot per query in order:
 
         .. code-block:: python
 

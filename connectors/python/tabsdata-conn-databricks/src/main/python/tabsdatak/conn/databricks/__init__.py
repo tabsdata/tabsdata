@@ -12,9 +12,9 @@ Four classes, imported from `tabsdatak.conn.databricks`:
   default `catalog` / `schema`.
 * `DatabricksSrc` -- the `@publisher` source: a list of SQL
   `queries` run through the Statement Execution API (external-link
-  Arrow streams), one parquet slot per statement.
+  Arrow streams), one output slot per statement.
 * `DatabricksDest` -- the `@subscriber` destination: a list of
-  target `tables`, one parquet slot per table (staged to the Volume,
+  target `tables`, one output slot per table (staged to the Volume,
   then `COPY INTO`).
 
 The connection (with credentials) is registered on a collection, not
@@ -210,9 +210,10 @@ class DatabricksDestConn(Conn):
 
     :categories: destination
 
-    Field-identical to `DatabricksSrcConn` but a distinct class so
-    source and destination connections cannot be confused at the
-    wire-format level. See `DatabricksSrcConn` for the field meanings.
+    Field-identical to `DatabricksSrcConn` but a distinct class; source
+    and destination connections are separate types and cannot be used in
+    place of one another. See `DatabricksSrcConn` for the field
+    meanings.
     """
 
     host_url: HostUrlSpec
@@ -254,7 +255,7 @@ class DatabricksDestConn(Conn):
 
 @_api.dataclass(DatabricksErrorCode.DATABRICKS_3, kw_only=True)
 class DatabricksSrc(Src):
-    """Databricks source for `@publisher` -- one parquet slot per query.
+    """Databricks source for `@publisher` -- one output slot per query.
 
     :categories: source
 
@@ -283,7 +284,7 @@ class DatabricksSrc(Src):
 
 @_api.dataclass(DatabricksErrorCode.DATABRICKS_4, kw_only=True)
 class DatabricksDest(Dest):
-    """Databricks destination for `@subscriber` -- one parquet slot per table.
+    """Databricks destination for `@subscriber` -- one output slot per table.
 
     :categories: destination
 

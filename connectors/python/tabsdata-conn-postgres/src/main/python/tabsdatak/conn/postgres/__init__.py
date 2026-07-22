@@ -8,12 +8,12 @@ Imported from `tabsdatak.conn.postgres`. Batch classes:
 
 * `PostgresSrcConn` / `PostgresDestConn` -- the connection: a
   SQLAlchemy URI plus `UserPassword` credentials. Attribute-identical
-  but distinct classes so source and destination connections cannot be
-  confused at the wire-format level.
+  but distinct classes, one for source and one for destination
+  connections.
 * `PostgresSrc` -- the `@publisher` source: a list of SELECT
-  `queries`, one parquet slot per query.
+  `queries`, one output slot per query.
 * `PostgresDest` -- the `@subscriber` destination: a list of target
-  `tables`, one parquet slot per table.
+  `tables`, one output slot per table.
 
 CDC (change-data capture) classes:
 
@@ -193,10 +193,10 @@ class PostgresDestConn(Conn):
 
     :categories: destination
 
-    Attribute-identical to `PostgresSrcConn` but a distinct class so
-    source and destination connections cannot be confused at the
-    wire-format level (the `__kind__` differs). See `PostgresSrcConn`
-    for the field meanings.
+    Attribute-identical to `PostgresSrcConn` but a distinct class;
+    source and destination connections are separate types and cannot be
+    used in place of one another. See `PostgresSrcConn` for the field
+    meanings.
     """
 
     uri: UriSpec
@@ -213,7 +213,7 @@ class PostgresDestConn(Conn):
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_2, kw_only=True)
 class PostgresSrc(Src):
-    """Postgres source for `@publisher` -- one parquet slot per query.
+    """Postgres source for `@publisher` -- one output slot per query.
 
     :categories: source
 
@@ -236,7 +236,7 @@ class PostgresSrc(Src):
             `tabsdata.sql.chunkSize`).
 
     Examples:
-        Publish two Postgres tables, one output slot per query in order:
+        Publish multiple Postgres tables, one output slot per query in order:
 
         .. code-block:: python
 

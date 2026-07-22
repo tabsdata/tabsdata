@@ -10,7 +10,7 @@ Six classes, imported from `tabsdatak.conn.starrocks`:
   `UserPassword` credentials, a `database` and a `staging` cloud
   location.
 * `StarRocksDest` -- the `@subscriber` destination: a list of
-  target `tables`, one parquet slot per table. Writes stage parquet
+  target `tables`, one output slot per table. Writes stage parquet
   in the cloud location, then ingest it with StarRocks' native
   `FILES()` table function.
 * `CloudLocation` and its concrete forms `S3Location` /
@@ -285,7 +285,7 @@ class StarRocksDestConn(Conn):
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_2, kw_only=True)
 class StarRocksDest(Dest):
-    """StarRocks destination for `@subscriber` -- one parquet slot per table.
+    """StarRocks destination for `@subscriber` -- one output slot per table.
 
     :categories: destination
 

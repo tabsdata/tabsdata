@@ -10,7 +10,7 @@ Two classes, imported from `tabsdatak.conn.mongodb`:
   credentials) plus a `UserPassword` the plugin splices into the URI
   at write time. Registered on a collection, not passed to a decorator.
 * `MongoDBDest` -- the `@subscriber` destination: a list of
-  `(collection, id_field)` pairs, one parquet slot per collection.
+  `(collection, id_field)` pairs, one output slot per collection.
 
 There is no MongoDB source today. The connection (with credentials) is
 resolved from the function's collection at run time; a flow function

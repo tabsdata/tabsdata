@@ -8,12 +8,11 @@ Imported from `tabsdatak.conn.mysql`. Batch classes:
 
 * `MySQLSrcConn` / `MySQLDestConn` -- the connection: a SQLAlchemy
   URI plus `UserPassword` credentials. Attribute-identical but distinct
-  classes so source and destination connections cannot be confused at
-  the wire-format level (the `__kind__` discriminator differs).
+  classes, one for source and one for destination connections.
 * `MySQLSrc` -- the `@publisher` source: a list of SELECT
-  `queries`, one parquet slot per query.
+  `queries`, one output slot per query.
 * `MySQLDest` -- the `@subscriber` destination: a list of target
-  `tables`, one parquet slot per table.
+  `tables`, one output slot per table.
 
 CDC (change-data capture) classes:
 
@@ -287,10 +286,9 @@ class MySQLDestConn(Conn):
 
     :categories: destination
 
-    Attribute-identical to `MySQLSrcConn` but a distinct class so
-    source and destination connections cannot be confused at the
-    wire-format level (the `__kind__` differs). See `MySQLSrcConn`
-    for the field meanings.
+    Attribute-identical to `MySQLSrcConn` but a distinct class; source
+    and destination connections are separate types and cannot be used in
+    place of one another. See `MySQLSrcConn` for the field meanings.
     """
 
     uri: UriSpec
@@ -307,7 +305,7 @@ class MySQLDestConn(Conn):
 
 @_api.dataclass(MysqlErrorCode.MYSQL_2, kw_only=True)
 class MySQLSrc(Src):
-    """MySQL source for `@publisher` -- one parquet slot per query.
+    """MySQL source for `@publisher` -- one output slot per query.
 
     :categories: source
 
@@ -331,7 +329,7 @@ class MySQLSrc(Src):
             `tabsdata.sql.chunkSize`).
 
     Examples:
-        Publish two MySQL tables, one output slot per query in order:
+        Publish multiple MySQL tables, one output slot per query in order:
 
         .. code-block:: python
 

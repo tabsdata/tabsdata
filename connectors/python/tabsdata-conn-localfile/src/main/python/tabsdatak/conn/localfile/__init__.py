@@ -10,9 +10,9 @@ Four classes, imported from `tabsdatak.conn.localfile`:
   `base_path` (an absolute local-filesystem path) and `conn_cfg`.
   No credentials. Registered on a collection, not passed to a decorator.
 * `LocalFileSrc` -- the `@publisher` source: a list of `paths`
-  (glob-style), one parquet slot per path.
+  (glob-style), one output slot per path.
 * `LocalFileDest` -- the `@subscriber` destination: a list of
-  `paths`, one parquet slot per path.
+  `paths`, one output slot per path.
 
 The connection is separate from the source / destination and is
 resolved from the function's collection at run time; a flow function
@@ -112,9 +112,9 @@ class LocalFileDestConn(Conn):
 
     :categories: destination
 
-    Field-identical to `LocalFileSrcConn` but a distinct class so
-    source and destination connections cannot be confused at the
-    wire-format level. See `LocalFileSrcConn` for the field meanings.
+    Field-identical to `LocalFileSrcConn` but a distinct class; source
+    and destination connections are separate types and cannot be used in
+    place of one another. See `LocalFileSrcConn` for the field meanings.
     """
 
     base_path: FullPathSpec = "/"
@@ -129,7 +129,7 @@ class LocalFileDestConn(Conn):
 
 @_api.dataclass(LocalFileErrorCode.LOCALFILE_2, kw_only=True)
 class LocalFileSrc(Src):
-    """LocalFile source for `@publisher` -- one parquet slot per path.
+    """LocalFile source for `@publisher` -- one output slot per path.
 
     :categories: source
 

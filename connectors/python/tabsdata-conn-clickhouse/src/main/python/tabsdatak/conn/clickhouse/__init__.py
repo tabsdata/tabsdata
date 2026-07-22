@@ -10,7 +10,7 @@ Six classes, imported from `tabsdatak.conn.clickhouse`:
   `UserPassword` credentials, a `database` and a `staging` cloud
   location.
 * `ClickHouseDest` -- the `@subscriber` destination: a list of
-  target `tables`, one parquet slot per table. Writes land parquet in
+  target `tables`, one output slot per table. Writes land parquet in
   the staging location, then read it back through ClickHouse's
   `s3()` / `azureBlobStorage()` table function (no row-by-row
   inserts).
@@ -305,7 +305,7 @@ class ClickHouseDestConn(Conn):
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_2, kw_only=True)
 class ClickHouseDest(Dest):
-    """ClickHouse destination for `@subscriber` -- one parquet slot per table.
+    """ClickHouse destination for `@subscriber` -- one output slot per table.
 
     :categories: destination
 

@@ -8,12 +8,11 @@ Imported from `tabsdatak.conn.db2`. Batch classes:
 
 * `Db2SrcConn` / `Db2DestConn` -- the connection: a SQLAlchemy URI
   plus `UserPassword` credentials. Attribute-identical but distinct
-  classes so source and destination connections cannot be confused at
-  the wire-format level.
+  classes, one for source and one for destination connections.
 * `Db2Src` -- the `@publisher` source: a list of SELECT `queries`,
-  one parquet slot per query.
+  one output slot per query.
 * `Db2Dest` -- the `@subscriber` destination: a list of target
-  `tables`, one parquet slot per table.
+  `tables`, one output slot per table.
 
 CDC (change-data capture) classes:
 
@@ -190,10 +189,9 @@ class Db2DestConn(Conn):
 
     :categories: destination
 
-    Attribute-identical to `Db2SrcConn` but a distinct class so source
-    and destination connections cannot be confused at the wire-format
-    level (the `__kind__` differs). See `Db2SrcConn` for the field
-    meanings.
+    Attribute-identical to `Db2SrcConn` but a distinct class; source and
+    destination connections are separate types and cannot be used in
+    place of one another. See `Db2SrcConn` for the field meanings.
     """
 
     uri: UriSpec
@@ -210,7 +208,7 @@ class Db2DestConn(Conn):
 
 @_api.dataclass(Db2ErrorCode.DB2_2, kw_only=True)
 class Db2Src(Src):
-    """Db2 source for `@publisher` -- one parquet slot per query.
+    """Db2 source for `@publisher` -- one output slot per query.
 
     :categories: source
 
@@ -233,7 +231,7 @@ class Db2Src(Src):
             `tabsdata.sql.chunkSize`).
 
     Examples:
-        Publish two Db2 tables, one output slot per query in order:
+        Publish multiple Db2 tables, one output slot per query in order:
 
         .. code-block:: python
 

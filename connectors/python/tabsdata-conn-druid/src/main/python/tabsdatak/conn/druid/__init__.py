@@ -11,7 +11,7 @@ Imported from `tabsdatak.conn.druid`:
   (`S3Location` / `AzBlobLocation` / `GCSLocation`). Registered
   on a collection, not passed to a decorator.
 * `DruidDest` -- the `@subscriber` destination: a list of
-  datasource names, one parquet slot per datasource.
+  datasource names, one output slot per datasource.
 
 There is no Druid source today. Writes go in two stages: parquet is
 uploaded to the cloud staging area, then a native batch

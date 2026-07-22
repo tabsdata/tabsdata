@@ -10,9 +10,9 @@ Four classes, imported from `tabsdatak.conn.s3`:
   credentials (`AwsAccessSecretKey`), `base_path`, `conn_cfg`.
   Registered on a collection, not passed to a decorator.
 * `S3Src` -- the `@publisher` source: a list of `paths`
-  (glob-style), one parquet slot per path.
+  (glob-style), one output slot per path.
 * `S3Dest` -- the `@subscriber` destination: a list of `paths`,
-  one parquet slot per path.
+  one output slot per path.
 
 The connection (with credentials) is separate from the source /
 destination and is resolved from the function's collection at run time;
@@ -139,9 +139,9 @@ class S3DestConn(Conn):
 
     :categories: destination
 
-    Field-identical to `S3SrcConn` but a distinct class so source and
-    destination connections cannot be confused at the wire-format level.
-    See `S3SrcConn` for the field meanings.
+    Field-identical to `S3SrcConn` but a distinct class; source and
+    destination connections are separate types and cannot be used in
+    place of one another. See `S3SrcConn` for the field meanings.
     """
 
     bucket: S3BucketSpec
@@ -165,7 +165,7 @@ class S3DestConn(Conn):
 
 @_api.dataclass(S3ErrorCode.S3_2, kw_only=True)
 class S3Src(Src):
-    """S3 source for `@publisher` -- one parquet slot per path.
+    """S3 source for `@publisher` -- one output slot per path.
 
     :categories: source
 

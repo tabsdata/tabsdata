@@ -9,7 +9,7 @@ Four classes, imported from `tabsdatak.conn.bigquery`:
 * `BigQueryDestConn` -- the connection: a GCS `staging` location,
   GCP `credentials`, and optional default `project` / `dataset`.
 * `BigQueryDest` -- the `@subscriber` destination: a list of target
-  `tables`, one parquet slot per table. Writes go via the GCS staging
+  `tables`, one output slot per table. Writes go via the GCS staging
   bucket and a `load_table_from_uri` load job.
 * `CloudLocation` and its concrete form `GCSLocation` -- the
   `staging` bucket the destination lands parquet in.
@@ -200,10 +200,7 @@ class BigQueryDestConn(Conn):
 
 @_api.dataclass(BigqueryErrorCode.BIGQUERY_3, kw_only=True)
 class BigQueryDest(Dest):
-    """BigQuery destination for `@subscriber` -- one parquet slot per table.
-
-    #VERIFY: `tables` was made required (previously `| None = None`) so a
-    subscriber must target at least one table, matching every other `*Dest`.
+    """BigQuery destination for `@subscriber` -- one output slot per table.
 
     :categories: destination
 
