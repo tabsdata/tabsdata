@@ -20,24 +20,27 @@ _DRUID_SQL_PATH = "druid/v2/sql"
 class DruidConnectionExplorer(SqlAlchemyConnectionExplorer):
     """Druid metadata via the pydruid SQLAlchemy dialect.
 
-    Drives the shared :class:`SqlAlchemyConnectionExplorer`
-    introspection surface (``check_connect`` / ``metadata`` / ``data``)
-    against a :class:`DruidDestConn`.
+    :categories: spi
 
-    Adapted from the CLI ``DruidConnectionExtractor``. Two Druid-specific
-    notes:
+    Drives the shared `SqlAlchemyConnectionExplorer` introspection
+    surface (`check_connect` / `metadata` / `data`) against a
+    `DruidDestConn`.
 
-    * Catalog/data reads target the **Broker** SQL endpoint, but the conn
-      only carries ``overlord_url`` (the ingestion service). We reuse its
-      host and assume the Broker's standard port (:data:`_DRUID_BROKER_PORT`)
-      and SQL path -- correct for a standard cluster where the Broker is
-      co-located. (The extractor likewise defaulted the SQL port to 8082.)
-    * Datasources live in the ``druid`` schema; the scan is pinned there,
-      and ``INFORMATION_SCHEMA`` / ``sys`` / ``lookup`` are skipped.
+    Adapted from the CLI `DruidConnectionExtractor`. Two
+    Druid-specific notes:
+
+    * Catalog / data reads target the Broker SQL endpoint, but the conn
+      only carries `overlord_url` (the ingestion service). We reuse
+      its host and assume the Broker's standard port (8082) and SQL
+      path -- correct for a standard cluster where the Broker is
+      co-located.
+    * Datasources live in the `druid` schema; the scan is pinned
+      there, and `INFORMATION_SCHEMA` / `sys` / `lookup` are
+      skipped.
     """
 
     def schema_filter(self, conn: DruidDestConn) -> str | None:
-        # Druid datasources are exposed under the ``druid`` schema.
+        # Druid datasources are exposed under the `druid` schema.
         return "druid"
 
     def system_schemas(self) -> frozenset[str]:

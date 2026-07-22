@@ -4,25 +4,43 @@
 
 """Kafka connector -- public API.
 
-Streaming only (no batch ``Src`` / ``Dest``). Modelled on the CDC
-connectors (mysql / postgres / db2):
+Streaming source only (no batch `Src` and no `Dest`); modelled on
+the CDC connectors (mysql / postgres / db2). Imported from
+`tabsdatak.conn.kafka`:
 
-* :class:`KafkaStreamSrcConn` -- per-instance Kafka connection: bootstrap
-  servers, SASL credentials, consumer group id, optional schema
-  registry.
-* :class:`KafkaStreamSrc` -- stream source that pulls from a single
-  Kafka ``topic`` and emits one tableframe-batch per rollover
-  (time / size / message-count thresholds).
-* :class:`ConfluentSchemaRegistry` / :class:`AwsGlueSchemaRegistry`
-  -- optional schema-registry configurations attached to
-  :class:`KafkaStreamSrcConn`.
-* :class:`Protobuf` -- :data:`KafkaMessageFormatSpec` variant
-  carrying the protobuf message type name.
+* `KafkaStreamSrcConn` -- the connection: bootstrap `servers`,
+  optional SASL `credentials`, consumer `group_id` and an optional
+  `schema_registry`. Registered on a collection, not passed to a
+  decorator.
+* `KafkaStreamSrc` -- the `@stream_publisher` source: pulls from a
+  single `topic` and emits one tableframe batch per rollover
+  (time / size / message-count threshold).
+* `ConfluentSchemaRegistry` / `AwsGlueSchemaRegistry` -- optional
+  schema-registry configs set as the connection's `schema_registry`.
+* `Protobuf` -- a `data_format` variant carrying the protobuf
+  message type name (the other formats are the strings `"avro"` /
+  `"json"`).
 
-Bootstrap servers, SASL credentials, schema-registry URL /
-region / names accept ``Secret`` references. CDC-style
-cfg keys live in ``KafkaStreamSrc.src_cfg`` (rollover thresholds,
-logging level).
+The connection (with credentials) is resolved from the function's
+collection at run time; a flow function only references
+`KafkaStreamSrc`. A `@stream_publisher` function receives the
+flushed batch as a list of frames and must NOT declare a `ctx`
+parameter.
+
+Examples:
+    .. code-block:: python
+
+        @stream_publisher(
+            source=KafkaStreamSrc(data_format="json", schema=SCHEMA,
+                                  topic="events"),
+            flush_interval_mins=2,
+            output_tables=["events"],
+        )
+        def ingest(events: TableFramesSpec) -> TableFrameSpec:
+            return concat(events)
+Bootstrap servers, SASL credentials and schema-registry URL / region /
+names accept a plain string or a `Secret`. Rollover thresholds and
+the logging level live in `KafkaStreamSrc.src_cfg`.
 """
 
 from __future__ import annotations
@@ -53,11 +71,11 @@ from tabsdatak.spi import Conn
 
 
 # SASL username + password. Bare strings are auto-wrapped by the
-# framework as ``Secret(...)`` at field-validation time.
+# framework as `Secret(...)` at field-validation time.
 KafkaCredentialsSpec: TypeAlias = UserPassword
 
 # Confluent SR uses basic-auth (user + password); AWS Glue uses an
-# S3-style access-key pair (``access_key_id`` + ``secret_access_key``).
+# S3-style access-key pair (`access_key_id` + `secret_access_key`).
 ConfluentSchemaRegistryCredentialsSpec: TypeAlias = UserPassword
 AwsGlueSchemaRegistryCredentialsSpec: TypeAlias = AwsAccessSecretKey
 
@@ -67,13 +85,16 @@ AwsGlueSchemaRegistryCredentialsSpec: TypeAlias = AwsAccessSecretKey
 
 @_api.dataclass(KafkaErrorCode.KAFKA_4, frozen=True, kw_only=True)
 class Protobuf:
-    """Marker carrying the Protobuf message type name. Used as a
-    :data:`KafkaMessageFormatSpec` variant when ingesting Protobuf
-    payloads.
+    """Protobuf payload marker carrying the message type name.
 
-    :param message_name: Fully-qualified protobuf message name
-        (e.g. ``"com.example.UserEvent"``) -- the descriptor
-        lookup key used at deserialisation time.
+    Used as the `data_format` of a `KafkaStreamSrc` when ingesting
+    Protobuf payloads (the `"avro"` / `"json"` string variants
+    cover the other wire formats).
+
+    Args:
+        message_name: Fully-qualified protobuf message name (e.g.
+            `"com.example.UserEvent"`) -- the descriptor lookup key
+            used at deserialization time.
     """
 
     message_name: str
@@ -95,14 +116,19 @@ ConfluentSchemaRegistryUrlNameSpec: TypeAlias = Annotated[
 @_api.dataclass(KafkaErrorCode.KAFKA_2, kw_only=True)
 class ConfluentSchemaRegistry:
     """Confluent-style schema registry attached to a
-    ``KafkaStreamSrcConn``.
+    `KafkaStreamSrcConn`.
 
-    :param url: Registry HTTP(S) URL.
-    :param credentials: Optional basic-auth credentials (resolved
-        at session open via the framework's ``Secret`` machinery).
-    :param configs: Optional dict of registry-client overrides
-        forwarded to
-        ``confluent_kafka.schema_registry.SchemaRegistryClient``.
+    :categories: source
+
+    Set as the connection's `schema_registry` for SR-aware serdes.
+
+    Args:
+        url: Registry HTTP(S) URL; accepts a plain string or a
+            `Secret`.
+        credentials: Optional `UserPassword` basic-auth credentials.
+        configs: Optional dict of registry-client overrides forwarded
+            to `confluent_kafka.schema_registry.SchemaRegistryClient`
+            (see `CfgSpec`).
     """
 
     url: ConfluentSchemaRegistryUrlNameSpec
@@ -126,16 +152,22 @@ SchemaNameSpec: TypeAlias = Annotated[
 
 @_api.dataclass(KafkaErrorCode.KAFKA_3, kw_only=True)
 class AwsGlueSchemaRegistry:
-    """AWS Glue schema registry attached to a ``KafkaStreamSrcConn``.
+    """AWS Glue schema registry attached to a `KafkaStreamSrcConn`.
 
-    :param region_name: AWS region the registry lives in
-        (e.g. ``"us-east-1"``).
-    :param credentials: :class:`AwsAccessSecretKey` with the
-        ``access_key_id`` / ``secret_access_key`` pair Glue
-        authenticates against.
-    :param registry_name: Glue registry name.
-    :param schema_name: Schema name within the registry.
-    :param configs: Optional dict of boto3-client overrides.
+    :categories: source
+
+    Set as the connection's `schema_registry` for SR-aware serdes.
+
+    Args:
+        region_name: AWS region the registry lives in, e.g.
+            `us-east-1`; accepts a plain string or a `Secret`.
+        credentials: `AwsAccessSecretKey` (access key id / secret
+            access key) Glue authenticates against.
+        registry_name: Glue registry name; plain string or `Secret`.
+        schema_name: Schema name within the registry; plain string or
+            `Secret`.
+        configs: Optional dict of boto3-client overrides (see
+            `CfgSpec`).
     """
 
     region_name: AwsRegionSpec
@@ -154,8 +186,8 @@ class AwsGlueSchemaRegistry:
         return _convert(self.schema_name, str)
 
 
-# Discriminated union of supported schema-registry types. ``None``
-# (the default on :class:`KafkaStreamSrcConn`) means schema-less ingest.
+# Discriminated union of supported schema-registry types. `None`
+# (the default on `KafkaStreamSrcConn`) means schema-less ingest.
 SchemaRegistrySpec: TypeAlias = Union[
     ConfluentSchemaRegistry,
     AwsGlueSchemaRegistry,
@@ -197,19 +229,27 @@ KafkaTopicSpec: TypeAlias = Union[
 
 @_api.dataclass(KafkaErrorCode.KAFKA_1, kw_only=True)
 class KafkaStreamSrcConn(Conn):
-    """Kafka connection.
+    """Kafka connection used by `KafkaStreamSrc`.
 
-    :param servers: Bootstrap-server list -- a single
-        comma-separated string of ``host[:port]`` items, or an
-        ``Secret`` ref that resolves to one.
-    :param credentials: :class:`UserPassword` for SASL/SCRAM-256
-        auth. Omit for an unauthenticated cluster.
-    :param group_id: Consumer-group id used by the source's
-        polling consumer. Required.
-    :param schema_registry: Optional :class:`ConfluentSchemaRegistry`
-        or :class:`AwsGlueSchemaRegistry` for SR-aware serdes.
-    :param conn_cfg: Optional driver-side config (forwarded as
-        consumer ``configs`` to ``confluent_kafka.Consumer``).
+    :categories: source
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the source at run time. `servers` and `group_id` accept a plain
+    string or a `Secret`.
+
+    Args:
+        servers: Bootstrap-server list as a single comma-separated
+            string of `host[:port]` items (any non-empty value), or a
+            `Secret` that resolves to one.
+        credentials: Optional `UserPassword` for SASL/SCRAM auth;
+            omit for an unauthenticated cluster.
+        group_id: Consumer-group id used by the polling consumer (any
+            non-empty value). Required.
+        schema_registry: Optional `ConfluentSchemaRegistry` or
+            `AwsGlueSchemaRegistry`; omit for schema-less ingest.
+        conn_cfg: Optional connector config forwarded as consumer
+            `configs` to `confluent_kafka.Consumer` (see
+            `CfgSpec`).
     """
 
     servers: KafkaServersSpec
@@ -227,7 +267,7 @@ class KafkaStreamSrcConn(Conn):
 
 # --- KafkaStreamSrc.src_cfg keys ------------------------------------
 #
-# Mirrors the CDC connectors' ``src_cfg`` shape. The rollover knobs
+# Mirrors the CDC connectors' `src_cfg` shape. The rollover knobs
 # control when the plugin closes one parquet batch and stages it.
 
 SrcCfgKey: TypeAlias = Literal[
@@ -246,28 +286,32 @@ SrcCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(KafkaErrorCode.KAFKA_5, kw_only=True)
 class KafkaStreamSrc(StreamSrc):
-    """Kafka stream source -- consumes a single topic and emits one
-    tableframe-batch per rollover.
+    """Kafka streaming source for `@stream_publisher` -- one batch
+    per rollover.
 
-    The legacy ``KafkaTrigger`` ran outside the manifest-stage
-    contract; this stream source plugs into the same
-    :class:`StreamSrcPluginCtx.stage` / ``commit`` flow the CDC
-    sources use. Each rollover yields a single-table positional
-    manifest pointing at the parquet file the buffer flushed to.
+    :categories: source
 
-    :param data_format: Wire format -- ``"avro"`` / ``"json"`` or
-        :class:`Protobuf`.
-    :param schema: Schema definition string for the data format
-        (an Avro schema, a JSON Schema, or a Protobuf ``.proto``).
-        Required for non-SR mode; SR-aware modes still use this to
-        cross-check the registry's resolved schema.
-    :param topic: Kafka topic to consume from. The output table
-        name on the flow side is the topic name.
-    :param dlq_topic: Optional dead-letter topic that
-        deserialisation failures are produced to.
-    :param src_cfg: Optional ``Mapping`` over :data:`SrcCfgKey` --
-        rollover thresholds, logging level, connection /
-        consume timeouts.
+    Consumes a single Kafka `topic` and emits one tableframe batch
+    each time a rollover threshold fires (time / size / message count).
+    Used as the `source` of a `@stream_publisher`; that function
+    receives the batch as a list of frames and must NOT declare a
+    `ctx` parameter. The emitted table name is the `topic`.
+
+    Args:
+        data_format: Payload wire format -- `"avro"`, `"json"` or a
+            `Protobuf(message_name=...)` marker.
+        schema: Schema definition string for `data_format` (an Avro
+            schema, a JSON Schema, or a Protobuf `.proto`). Required;
+            in schema-registry mode it also cross-checks the registry's
+            resolved schema.
+        topic: Kafka topic to consume; also the emitted table name.
+        dlq_topic: Optional dead-letter topic that deserialization
+            failures are produced to.
+        src_cfg: Optional connector config over the keys
+            `kafka.consume_timeout_seconds`,
+            `kafka.connection_timeout_seconds`,
+            `kafka.logging_level`, `kafka.time_rollover_seconds`,
+            `kafka.size_rollover_mb` and `kafka.messages_rollover`.
     """
 
     data_format: KafkaMessageFormatSpec
@@ -277,5 +321,5 @@ class KafkaStreamSrc(StreamSrc):
     src_cfg: SrcCfgSpec | None = None
 
     def output_table(self) -> str:
-        """Resolve the output table name -- the source's ``topic``."""
+        """Return the emitted table name -- the source's `topic`."""
         return self.topic

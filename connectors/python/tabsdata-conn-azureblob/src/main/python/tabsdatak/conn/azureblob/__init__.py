@@ -2,20 +2,35 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Azure Blob connector — public API.
+"""Azure Blob connector -- public API.
 
-* :class:`AzureBlobSrcConn` / :class:`AzureBlobDestConn` -- per-Azure
-  Blob connection (container, credentials (AzureAccountKey), base_path,
-  conn_cfg).
-* :class:`AzureBlobSrc` -- source: list of `paths` (glob-style);
-  one parquet slot per path.
-* :class:`AzureBlobDest` -- destination: list of `paths`; one
-  parquet slot per path. The tokens ``${EXEC_PLAN_ID}``, ``${TRX_ID}``
-  and ``${EXEC_PLAN_TS}`` in dest paths are resolved at write time.
+Four classes, imported from `tabsdatak.conn.azureblob`:
 
-File transport goes through the shared ``td_transporter`` binary.
-String and ``Secret`` are accepted on credential and
-identifier fields.
+* `AzureBlobSrcConn` / `AzureBlobDestConn` -- the connection:
+  container, credentials (`AzureAccountKey`), `base_path`,
+  `conn_cfg`. Registered on a collection, not passed to a decorator.
+* `AzureBlobSrc` -- the `@publisher` source: a list of `paths`
+  (glob-style), one parquet slot per path.
+* `AzureBlobDest` -- the `@subscriber` destination: a list of
+  `paths`, one parquet slot per path.
+
+The connection (with credentials) is separate from the source /
+destination and is resolved from the function's collection at run time;
+a flow function only references `AzureBlobSrc` / `AzureBlobDest`.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(source=AzureBlobSrc(paths=["parquet/*.parquet"]),
+                   output_tables=["cities"])
+        def ingest(cities: TableFramesSpec) -> TableFrameSpec:
+            return cities[0] if cities else None
+
+        @subscriber(destination=AzureBlobDest(paths=["out.csv"]),
+                    input_tables=["mycoll/cities"])
+        def publish(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+File transport goes through the shared `td_transporter` binary.
 """
 
 from __future__ import annotations
@@ -59,9 +74,11 @@ from tabsdatak.spi import Conn
 
 # AzureBlob currently supports a single credential shape -- account
 # name + account key. Adding a new credential type later means
-# widening this alias to ``Union[AzureAccountKey, NewCredentials]``
-# without touching ``AzureBlobConn``'s signature.
+# widening this alias to `Union[AzureAccountKey, NewCredentials]`
+# without touching `AzureBlobConn`'s signature.
 CredentialsSpec: TypeAlias = AzureAccountKey
+"""The credential type for Azure Blob connections: `AzureAccountKey`
+(storage account name + account key)."""
 
 
 # --- AzureBlobSrc.src_cfg keys --------------------------------------
@@ -85,14 +102,24 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(AzureBlobErrorCode.AZURE_BLOB_1, kw_only=True)
 class AzureBlobSrcConn(Conn):
-    """Azure Blob Storage connection used by :class:`AzureBlobSrc`.
+    """Azure Blob connection used by `AzureBlobSrc`.
 
-    :param container: Azure Blob container name.
-    :param credentials: Storage-account key credentials.
-    :param base_path: Full path (path prefix) from the container root:
-        starts with ``/``, no trailing ``/``. The leading ``/`` is
-        trimmed when forming the blob name. Defaults to ``/``.
-    :param conn_cfg: Optional driver-side cfg dict.
+    :categories: source
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time. Each field accepts a plain string or a
+    `Secret`.
+
+    Args:
+        container: A valid Azure Blob container name: 3-63 characters,
+            lowercase letters and digits with single (non-leading,
+            non-trailing) hyphens.
+        credentials: Azure `AzureAccountKey` credentials (account name
+            + account key).
+        base_path: Blob-name prefix from the container root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the blob name). Defaults to `/`.
+        conn_cfg: Optional connector-config dict (see `CfgSpec`).
     """
 
     container: AzContainerSpec
@@ -109,11 +136,13 @@ class AzureBlobSrcConn(Conn):
 
 @_api.dataclass(AzureBlobErrorCode.AZURE_BLOB_1, kw_only=True)
 class AzureBlobDestConn(Conn):
-    """Azure Blob Storage connection used by :class:`AzureBlobDest`.
+    """Azure Blob connection used by `AzureBlobDest`.
 
-    Attribute-identical to :class:`AzureBlobSrcConn` but a distinct
-    class so source and destination connections cannot be confused
-    at the wire-format level.
+    :categories: destination
+
+    Field-identical to `AzureBlobSrcConn` but a distinct class so
+    source and destination connections cannot be confused at the
+    wire-format level. See `AzureBlobSrcConn` for the field meanings.
     """
 
     container: AzContainerSpec
@@ -133,18 +162,29 @@ class AzureBlobDestConn(Conn):
 
 @_api.dataclass(AzureBlobErrorCode.AZURE_BLOB_2, kw_only=True)
 class AzureBlobSrc(Src):
-    """Azure Blob source — one parquet slot per path.
+    """Azure Blob source for `@publisher` -- one parquet slot per path.
 
-    :param paths: List of file paths (or glob patterns) relative
-        to the conn's root. One parquet slot per entry.
-    :param format: Optional file-format override (default AUTO).
-    :param initial_last_modified: Optional cutoff for incremental
-        ingestion. On the first run, the connector imports only
-        files modified at or after this timestamp; on each
-        subsequent run, the cutoff advances automatically so that
-        only files newer than the previous run are re-imported.
-    :param src_cfg: Optional ``Mapping`` over
-        ``{"tabsdata.file.chunkSize"}``.
+    :categories: source
+
+    Args:
+        paths: Source paths relative to the connection's `base_path`,
+            one output slot per entry. A path may use a `*` glob in
+            its final segment only; backslashes, NUL and `${...}`
+            tokens are not allowed.
+        format: File format -- one of `AUTO`, `CSV`, `JSON`,
+            `AVRO`, `PARQUET`, `LOG`. `AUTO` (the default)
+            infers it from the file extension.
+        format_cfg: Optional per-format reader options (source-side
+            keys only), keyed by the `SrcFileFormat`.
+        initial_last_modified: Optional cutoff for incremental
+            ingestion. The first run imports only files modified at or
+            after this timestamp; the cutoff then advances each run so
+            only newer files are re-imported.
+        file_info: Optional per-row provenance column -- `FILENAME`
+            adds the file's basename, `FULLPATH` its full path;
+            `None` (the default) adds nothing.
+        src_cfg: Optional connector config; supports the key
+            `tabsdata.file.chunkSize`.
     """
 
     paths: SrcPathsSpec
@@ -155,6 +195,11 @@ class AzureBlobSrc(Src):
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
+        """Cross-field validation of `format_cfg` (source side).
+
+        Called by the framework; raises `AzureBlobValidateException`
+        on failure.
+        """
         try:
             _validation.validate_format_cfg(self.format_cfg, side="src")
         except Exception as e:
@@ -166,15 +211,24 @@ class AzureBlobSrc(Src):
 
 @_api.dataclass(AzureBlobErrorCode.AZURE_BLOB_4, kw_only=True)
 class AzureBlobDest(Dest):
-    """Azure Blob destination — write one parquet slot per path.
+    """Azure Blob destination for `@subscriber` -- one target file per
+    path.
 
-    :param paths: List of target file paths relative to the
-        conn's root. One parquet slot per entry. The tokens
-        ``${EXEC_PLAN_ID}``, ``${TRX_ID}`` and ``${EXEC_PLAN_TS}``
-        are resolved at write time.
-    :param format: Optional output-format override (default AUTO).
-    :param dest_cfg: Optional ``Mapping`` over
-        ``{"tabsdata.file.chunkSize"}``.
+    :categories: destination
+
+    Args:
+        paths: Target paths relative to the connection's `base_path`,
+            one write slot per entry. Globs are not allowed; the tokens
+            `${EXEC_PLAN_ID}`, `${TRX_ID}` and `${EXEC_PLAN_TS}`
+            are substituted at write time. Backslashes and NUL are not
+            allowed.
+        format: Output format -- one of `AUTO`, `CSV`, `JSON`,
+            `AVRO`, `PARQUET`. `AUTO` (the default) infers it from
+            the file extension.
+        format_cfg: Optional per-format writer options (dest-side keys
+            only), keyed by the `DestFileFormat`.
+        dest_cfg: Optional connector config; supports the key
+            `tabsdata.file.chunkSize`.
     """
 
     paths: DestPathsSpec
@@ -183,6 +237,11 @@ class AzureBlobDest(Dest):
     dest_cfg: DestCfgSpec | None = None
 
     def validate(self) -> None:
+        """Cross-field validation of `format_cfg` (dest side).
+
+        Called by the framework; raises `AzureBlobValidateException`
+        on failure.
+        """
         try:
             _validation.validate_format_cfg(self.format_cfg, side="dest")
         except Exception as e:

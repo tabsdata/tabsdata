@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class DatabricksValidateException(ConnException):
-    """Cross-field validation failure for the Databricks connector."""
+    """Cross-field validation failure for the Databricks connector.
+
+    :categories: error
+    """
 
 
 class DatabricksRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the Databricks connector."""
+    """Runtime failure (plugin / I/O) for the Databricks connector.
+
+    :categories: error
+    """
 
 
 class DatabricksErrorCode(ErrorCode):
+    """Error codes for the Databricks connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `DatabricksErrorCode.DATABRICKS_N.exception`.
+    """
+
     DATABRICKS_1 = ErrorDef(
         ConnInitException,
         "Databricks connection validation failed",

@@ -6,22 +6,22 @@
 
 Every framework error flows through three layers:
 
-* :class:`ErrorCode` -- an :class:`enum.Enum` whose variants carry an
-  :class:`ErrorDef` (exception class + message template). Concrete
-  enums (e.g. :class:`ApiErrorCode`, ``MysqlErrorCode``) declare one
-  variant per validation site.
-* :class:`ErrorDef` -- ``(exception, message_template)`` tuple bound
-  to each enum variant. The template is ``str.format_map``-applied
-  with the kwargs passed to :meth:`ErrorCode.exception`.
-* :class:`TabsdataException` -- base exception. Carries the
-  triggering :class:`ErrorCode`, an optional cause, the kwargs used
-  to render the message, and a captured user source frame (the
-  filename + line where the user's code triggered the error -- on
-  by default, gated by the ``TABSDATA_DEBUG_FRAMES`` env var).
+* `ErrorCode` -- an `enum.Enum` whose variants carry an
+  `ErrorDef` (exception class + message template). Concrete enums
+  (e.g. `ApiErrorCode`, `MysqlErrorCode`) declare one variant per
+  validation site.
+* `ErrorDef` -- `(exception, message_template)` tuple bound to each
+  enum variant. The template is `str.format_map`-applied with the
+  kwargs passed to `ErrorCode.exception`.
+* `TabsdataException` -- base exception. Carries the triggering
+  `ErrorCode`, an optional cause, the kwargs used to render the
+  message, and a captured user source frame (the filename + line where
+  the user's code triggered the error -- on by default, gated by the
+  `TABSDATA_DEBUG_FRAMES` env var).
 
-The :class:`Api*Exception` family below partitions the API errors
-into init-time / runtime / internal so handlers can react to the
-right severity without matching on individual codes.
+The `Api*Exception` family below partitions the API errors into
+init-time / runtime / internal so handlers can react to the right
+severity without matching on individual codes.
 """
 
 from __future__ import annotations
@@ -41,8 +41,8 @@ from typing import Any, Type
 # stack-walk cost is negligible compared to the payoff of pinning
 # every error to its user call site (especially for LLM iteration).
 #
-# Set this env var to a falsy value (``""``, ``"0"``, ``"false"``,
-# ``"no"``, ``"off"`` -- case-insensitive) to disable. Any other
+# Set this env var to a falsy value (`""`, `"0"`, `"false"`,
+# `"no"`, `"off"` -- case-insensitive) to disable. Any other
 # value (including unset) keeps it on.
 DEBUG_FRAMES_ENV_VAR = "TABSDATA_DEBUG_FRAMES"
 
@@ -58,9 +58,9 @@ def _debug_frames_enabled() -> bool:
 
 # Path components that mark a frame as "framework, not user code".
 # A frame is skipped if any directory component of its filename
-# matches one of these. ``tabsdatak`` covers the api package and
-# every ``tabsdata-conn-*`` connector (they all live under a
-# ``tabsdatak`` directory). ``pydantic`` covers the wrapping
+# matches one of these. `tabsdatak` covers the api package and
+# every `tabsdata-conn-*` connector (they all live under a
+# `tabsdatak` directory). `pydantic` covers the wrapping
 # validator stack so we don't surface a frame inside pydantic
 # instead of the user's call site.
 _FRAMEWORK_PATH_PARTS = ("tabsdatak", "pydantic", "pydantic_core")
@@ -69,13 +69,13 @@ _FRAMEWORK_PATH_PARTS = ("tabsdatak", "pydantic", "pydantic_core")
 def _capture_user_source() -> str | None:
     try:
         # Walk the whole stack; the path filter -- not the index --
-        # decides what's user code. Skip frame ``[0]`` (this
+        # decides what's user code. Skip frame `[0]` (this
         # function) so we never report ourselves.
         for frame_info in inspect.stack()[1:]:
             filename = frame_info.filename
             if not filename or filename.startswith("<"):
-                # Synthetic frames (``<frozen importlib._bootstrap>``,
-                # ``<string>``, eval'd code) carry no useful source.
+                # Synthetic frames (`<frozen importlib._bootstrap>`,
+                # `<string>`, eval'd code) carry no useful source.
                 continue
             parts = set(Path(filename).parts)
             if parts.intersection(_FRAMEWORK_PATH_PARTS):
@@ -100,13 +100,15 @@ def _capture_user_source() -> str | None:
 @dataclass(frozen=True, eq=False)
 class ErrorDef:
     """Static description of one error site: the exception class to
-    raise plus a ``str.format_map`` message template.
+    raise plus a `str.format_map` message template.
 
-    :param exception: :class:`TabsdataException` subclass to
-        instantiate.
-    :param message_template: Format string applied with the kwargs
-        from :meth:`ErrorCode.exception` (missing keys are left as
-        ``{name}`` placeholders).
+    :categories: error
+
+    Args:
+        exception: `TabsdataException` subclass to instantiate.
+        message_template: Format string applied with the kwargs from
+            `ErrorCode.exception` (missing keys are left as `{name}`
+            placeholders).
     """
 
     exception: Type["TabsdataException"]
@@ -121,7 +123,7 @@ class _SafeFormatDict(dict):
 class _ErrorCodeMeta(EnumMeta, ABCMeta):
     def __new__(mcs, cls_name, bases, classdict, **kwargs):
         enum_class = super().__new__(mcs, cls_name, bases, classdict, **kwargs)
-        # The abstract base ``ErrorCode`` has no members; only validate
+        # The abstract base `ErrorCode` has no members; only validate
         # concrete subclasses that actually declare variants.
         if enum_class.__members__:
             for member in enum_class:
@@ -145,13 +147,18 @@ class _ErrorCodeMeta(EnumMeta, ABCMeta):
 class ErrorCode(Enum, metaclass=_ErrorCodeMeta):
     """Abstract base for connector error-code enums.
 
-    Concrete subclasses declare variants whose values are
-    :class:`ErrorDef` instances. Call :meth:`exception` to render a
-    template and raise the bound exception::
+    :categories: error
 
-        raise MysqlErrorCode.MYSQL_5.exception(
-            cause=sqlalchemy_err, uri=conn.uri,
-        )
+    Concrete subclasses declare variants whose values are `ErrorDef`
+    instances. Call `exception` to render a template and raise the
+    bound exception.
+
+    Examples:
+        .. code-block:: python
+
+            raise MysqlErrorCode.MYSQL_5.exception(
+                cause=sqlalchemy_err, uri=conn.uri,
+            )
     """
 
     def exception(
@@ -159,14 +166,18 @@ class ErrorCode(Enum, metaclass=_ErrorCodeMeta):
         cause: Exception | None = None,
         **kwargs: Any,
     ) -> "TabsdataException":
-        """Build a :class:`TabsdataException` for this code.
+        """Build a `TabsdataException` for this code.
 
-        :param cause: Underlying exception to chain via
-            ``__cause__`` (the framework also sets
-            ``__suppress_context__`` so the traceback reads as
-            ``raise ... from cause``).
-        :param kwargs: Substituted into the template; surplus keys
-            are stashed on the resulting exception's ``extra``.
+        Args:
+            cause: Underlying exception to chain via `__cause__` (the
+                framework also sets `__suppress_context__` so the
+                traceback reads as `raise ... from cause`).
+            kwargs: Substituted into the message template; surplus keys
+                are stashed on the exception's `extra`.
+
+        Returns:
+            The bound `TabsdataException` subclass instance, ready to
+            raise.
         """
         error_def: ErrorDef = self.value
         message = error_def.message_template.format_map(_SafeFormatDict(kwargs))
@@ -188,12 +199,15 @@ class ErrorCode(Enum, metaclass=_ErrorCodeMeta):
 class TabsdataException(Exception):
     """Base class for every framework error.
 
-    Carries the originating :class:`ErrorCode` (``api_error``),
-    optional underlying ``cause``, the kwargs used to render the
-    message (``extra``), and -- when
-    ``TABSDATA_DEBUG_FRAMES`` is enabled -- a ``filename:lineno:
-    source`` snippet pinpointing the user's call site
-    (``source``).
+    :categories: error
+
+    Attributes:
+        api_error: The originating `ErrorCode`.
+        cause: Optional underlying exception.
+        extra: The kwargs used to render the message.
+        source: When `TABSDATA_DEBUG_FRAMES` is enabled, a
+            `filename:lineno: source` snippet pinpointing the user's
+            call site; otherwise `None`.
     """
 
     def __init__(
@@ -233,9 +247,9 @@ class TabsdataException(Exception):
         if self.source:
             rendered = f"{rendered} at {self.source}"
         super().__init__(rendered)
-        # Mirror what ``raise ... from cause`` would do, so call
-        # sites only need ``raise code.exception(cause=e)`` without
-        # also writing ``from e`` to chain the traceback.
+        # Mirror what `raise ... from cause` would do, so call
+        # sites only need `raise code.exception(cause=e)` without
+        # also writing `from e` to chain the traceback.
         if cause is not None:
             self.__cause__ = cause
             self.__suppress_context__ = True
@@ -262,30 +276,52 @@ def _render_cause(cause: Exception) -> str:
 
 
 class ApiException(TabsdataException):
-    """API Top level exception class"""
+    """Top-level exception for the framework API.
+
+    :categories: error
+    """
 
     pass
 
 
 class ApiInitException(ApiException):
-    """An API object could not be created because of attributes type/value issues"""
+    """An API object could not be created (attribute type/value issue).
+
+    :categories: error
+    """
 
     pass
 
 
 class ApiRuntimeException(ApiException):
-    """An API object is not valid because of runtime conditions. I.e. an ENV not set"""
+    """An API object is invalid due to runtime conditions (e.g. an env
+    var is not set).
+
+    :categories: error
+    """
 
     pass
 
 
 class ApiInternalException(ApiException):
-    """An API internal error, a bug."""
+    """An internal API error -- a bug.
+
+    :categories: error
+    """
 
     pass
 
 
 class ApiErrorCode(ErrorCode):
+    """Error codes for the framework API (`tabsdatak.api` /
+    `tabsdatak.spi`).
+
+    :categories: error
+
+    One variant per validation site; each binds an `Api*Exception`
+    and a message template. Raise via `ApiErrorCode.API_N.exception`.
+    """
+
     # --- Triggers (tabsdatak.api) -----------------------------------
     API_1 = ErrorDef(ApiInternalException, "Cannot create Trigger")
     # Trigger (abstract base, datetime-aware check)

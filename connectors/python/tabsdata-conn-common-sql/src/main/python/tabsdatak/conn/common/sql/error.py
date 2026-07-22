@@ -9,15 +9,28 @@ from tabsdatak.error import ErrorCode, ErrorDef
 
 
 class SqlCommonRuntimeException(ConnException):
-    """Runtime failure inside the shared SQL machinery (engine
-    dispatch, retry exhaustion, ...). Connector plugins translate
-    this to their own per-connector codes when relevant."""
+    """Runtime failure inside the shared SQL machinery.
+
+    :categories: error
+
+    Raised on engine dispatch, retry exhaustion and similar failures in
+    the code shared by every SQL connector. Connector plugins translate
+    it to their own per-connector codes when relevant.
+    """
 
 
 class SqlCommonErrorCode(ErrorCode):
+    """Error codes for the shared SQL machinery.
+
+    :categories: error
+
+    One variant per failure site. Raise via
+    `SqlCommonErrorCode.SQL_COMMON_N.exception`.
+    """
+
     # _engine.factory.get_read_engine / get_write_engine: the
     # connector's defaults map listed an engine name but the factory
-    # has no concrete implementation to dispatch to. ``_config.get_cfg``
+    # has no concrete implementation to dispatch to. `_config.get_cfg`
     # already enforces the value is in the allow-list, so this only
     # fires on a misconfigured defaults dict.
     SQL_COMMON_1 = ErrorDef(

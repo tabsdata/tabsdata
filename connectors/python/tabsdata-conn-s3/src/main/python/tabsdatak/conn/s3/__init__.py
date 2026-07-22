@@ -2,19 +2,35 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""S3 connector — public API.
+"""S3 connector -- public API.
 
-* :class:`S3SrcConn` / :class:`S3DestConn` -- per-S3 connection (bucket, region,
-  credentials (AwsAccessSecretKey), base_path, conn_cfg).
-* :class:`S3Src` -- source: list of `paths` (glob-style);
+Four classes, imported from `tabsdatak.conn.s3`:
+
+* `S3SrcConn` / `S3DestConn` -- the connection: bucket, region,
+  credentials (`AwsAccessSecretKey`), `base_path`, `conn_cfg`.
+  Registered on a collection, not passed to a decorator.
+* `S3Src` -- the `@publisher` source: a list of `paths`
+  (glob-style), one parquet slot per path.
+* `S3Dest` -- the `@subscriber` destination: a list of `paths`,
   one parquet slot per path.
-* :class:`S3Dest` -- destination: list of `paths`; one
-  parquet slot per path. The tokens ``${EXEC_PLAN_ID}``, ``${TRX_ID}``
-  and ``${EXEC_PLAN_TS}`` in dest paths are resolved at write time.
 
-File transport goes through the shared ``td_transporter`` binary.
-String and ``Secret`` are accepted on credential and
-identifier fields.
+The connection (with credentials) is separate from the source /
+destination and is resolved from the function's collection at run time;
+a flow function only references `S3Src` / `S3Dest`.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(source=S3Src(paths=["parquet/*.parquet"]),
+                   output_tables=["cities"])
+        def ingest(cities: TableFramesSpec) -> TableFrameSpec:
+            return cities[0] if cities else None
+
+        @subscriber(destination=S3Dest(paths=["out.csv"]),
+                    input_tables=["mycoll/cities"])
+        def publish(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+File transport goes through the shared `td_transporter` binary.
 """
 
 from __future__ import annotations
@@ -58,6 +74,8 @@ from tabsdatak.spi import Conn
 # --- Type aliases ----------------------------------------------------
 
 CredentialsSpec: TypeAlias = AwsAccessSecretKey
+"""The credential type for S3 connections: `AwsAccessSecretKey`
+(access key ID + secret access key)."""
 
 
 # --- S3Src.src_cfg keys ---------------------------------------------
@@ -81,14 +99,22 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(S3ErrorCode.S3_1, kw_only=True)
 class S3SrcConn(Conn):
-    """S3 connection used by :class:`S3Src`.
+    """S3 connection used by `S3Src`.
 
-    Holds the bucket / region / credentials / base_path. The src
-    class wraps this conn and adds the per-flow ``paths`` list.
+    :categories: source
 
-    ``base_path`` is a full path (object-key prefix) from the bucket
-    root: it starts with ``/`` and has no trailing ``/``. The leading
-    ``/`` is trimmed when forming the object key. Defaults to ``/``.
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time. Each field accepts a plain string or a
+    `Secret`.
+
+    Args:
+        bucket: A valid S3 bucket name.
+        region: A valid AWS region, e.g. `us-east-1`.
+        credentials: AWS `AwsAccessSecretKey` credentials.
+        base_path: Object-key prefix from the bucket root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the key). Defaults to `/`.
+        conn_cfg: Optional connector-config dict (see `CfgSpec`).
     """
 
     bucket: S3BucketSpec
@@ -109,11 +135,13 @@ class S3SrcConn(Conn):
 
 @_api.dataclass(S3ErrorCode.S3_1, kw_only=True)
 class S3DestConn(Conn):
-    """S3 connection used by :class:`S3Dest`.
+    """S3 connection used by `S3Dest`.
 
-    Attribute-identical to :class:`S3SrcConn` but a distinct class
-    so source and destination connections cannot be confused at
-    the wire-format level.
+    :categories: destination
+
+    Field-identical to `S3SrcConn` but a distinct class so source and
+    destination connections cannot be confused at the wire-format level.
+    See `S3SrcConn` for the field meanings.
     """
 
     bucket: S3BucketSpec
@@ -137,18 +165,29 @@ class S3DestConn(Conn):
 
 @_api.dataclass(S3ErrorCode.S3_2, kw_only=True)
 class S3Src(Src):
-    """S3 source — one parquet slot per path.
+    """S3 source for `@publisher` -- one parquet slot per path.
 
-    :param paths: List of file paths (or glob patterns) relative
-        to the conn's root. One parquet slot per entry.
-    :param format: Optional file-format override (default AUTO).
-    :param initial_last_modified: Optional cutoff for incremental
-        ingestion. On the first run, the connector imports only
-        files modified at or after this timestamp; on each
-        subsequent run, the cutoff advances automatically so that
-        only files newer than the previous run are re-imported.
-    :param src_cfg: Optional ``Mapping`` over
-        ``{"tabsdata.file.chunkSize"}``.
+    :categories: source
+
+    Args:
+        paths: Source paths relative to the connection's `base_path`,
+            one output slot per entry. A path may use a `*` glob in
+            its final segment only; backslashes, NUL and `${...}`
+            tokens are not allowed.
+        format: File format -- one of `AUTO`, `CSV`, `JSON`,
+            `AVRO`, `PARQUET`, `LOG`. `AUTO` (the default)
+            infers it from the file extension.
+        format_cfg: Optional per-format reader options (source-side
+            keys only), keyed by the `SrcFileFormat`.
+        initial_last_modified: Optional cutoff for incremental
+            ingestion. The first run imports only files modified at or
+            after this timestamp; the cutoff then advances each run so
+            only newer files are re-imported.
+        file_info: Optional per-row provenance column -- `FILENAME`
+            adds the file's basename, `FULLPATH` its full path;
+            `None` (the default) adds nothing.
+        src_cfg: Optional connector config; supports the key
+            `tabsdata.file.chunkSize`.
     """
 
     paths: SrcPathsSpec
@@ -159,6 +198,11 @@ class S3Src(Src):
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
+        """Cross-field validation of `format_cfg` (source side).
+
+        Called by the framework; raises `S3ValidateException` on
+        failure.
+        """
         try:
             _validation.validate_format_cfg(self.format_cfg, side="src")
         except Exception as e:
@@ -170,15 +214,23 @@ class S3Src(Src):
 
 @_api.dataclass(S3ErrorCode.S3_4, kw_only=True)
 class S3Dest(Dest):
-    """S3 destination — write one parquet slot per path.
+    """S3 destination for `@subscriber` -- one target file per path.
 
-    :param paths: List of target file paths relative to the
-        conn's root. One parquet slot per entry. The tokens
-        ``${EXEC_PLAN_ID}``, ``${TRX_ID}`` and ``${EXEC_PLAN_TS}``
-        are resolved at write time.
-    :param format: Optional output-format override (default AUTO).
-    :param dest_cfg: Optional ``Mapping`` over
-        ``{"tabsdata.file.chunkSize"}``.
+    :categories: destination
+
+    Args:
+        paths: Target paths relative to the connection's `base_path`,
+            one write slot per entry. Globs are not allowed; the tokens
+            `${EXEC_PLAN_ID}`, `${TRX_ID}` and `${EXEC_PLAN_TS}`
+            are substituted at write time. Backslashes and NUL are not
+            allowed.
+        format: Output format -- one of `AUTO`, `CSV`, `JSON`,
+            `AVRO`, `PARQUET`. `AUTO` (the default) infers it from
+            the file extension.
+        format_cfg: Optional per-format writer options (dest-side keys
+            only), keyed by the `DestFileFormat`.
+        dest_cfg: Optional connector config; supports the key
+            `tabsdata.file.chunkSize`.
     """
 
     paths: DestPathsSpec
@@ -187,6 +239,11 @@ class S3Dest(Dest):
     dest_cfg: DestCfgSpec | None = None
 
     def validate(self) -> None:
+        """Cross-field validation of `format_cfg` (dest side).
+
+        Called by the framework; raises `S3ValidateException` on
+        failure.
+        """
         try:
             _validation.validate_format_cfg(self.format_cfg, side="dest")
         except Exception as e:

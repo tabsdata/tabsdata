@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class DevValidateException(ConnException):
-    """Cross-field validation failure for the Development connectors."""
+    """Cross-field validation failure for the Development connectors.
+
+    :categories: error
+    """
 
 
 class DevRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the Development connectors."""
+    """Runtime failure (plugin / I/O) for the Development connectors.
+
+    :categories: error
+    """
 
 
 class DevErrorCode(ErrorCode):
+    """Error codes for the Development connectors.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `DevErrorCode.DEV_N.exception`.
+    """
+
     DEV_1 = ErrorDef(
         ConnInitException,
         "DataGenSrcConn validation failed",

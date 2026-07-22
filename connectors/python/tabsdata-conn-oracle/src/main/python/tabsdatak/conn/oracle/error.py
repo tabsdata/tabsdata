@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class OracleValidateException(ConnException):
-    """Cross-field validation failure for the Oracle connector."""
+    """Cross-field validation failure for the Oracle connector.
+
+    :categories: error
+    """
 
 
 class OracleRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the Oracle connector."""
+    """Runtime failure (plugin / I/O) for the Oracle connector.
+
+    :categories: error
+    """
 
 
 class OracleErrorCode(ErrorCode):
+    """Error codes for the Oracle connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `OracleErrorCode.ORACLE_N.exception`.
+    """
+
     ORACLE_1 = ErrorDef(
         ConnInitException,
         "Oracle connection validation failed",

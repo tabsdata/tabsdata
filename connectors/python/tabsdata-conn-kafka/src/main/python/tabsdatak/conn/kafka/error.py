@@ -15,15 +15,29 @@ from tabsdatak.error import (
 
 
 class KafkaValidateException(ConnException):
-    """Cross-field validation failure for the Kafka connector."""
+    """Cross-field validation failure for the Kafka connector.
+
+    :categories: error
+    """
 
 
 class KafkaRuntimeException(ConnException):
     """Runtime failure (plugin / consumer / serde) for the Kafka
-    connector."""
+    connector.
+
+    :categories: error
+    """
 
 
 class KafkaErrorCode(ErrorCode):
+    """Error codes for the Kafka connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `KafkaErrorCode.KAFKA_N.exception`.
+    """
+
     # --- Public types ----------------------------------------------
 
     KAFKA_1 = ErrorDef(
@@ -77,7 +91,7 @@ class KafkaErrorCode(ErrorCode):
     KAFKA_12 = ErrorDef(
         KafkaRuntimeException,
         "Kafka end-time reached before any data was consumed (end={end!r})",
-    )  # consume_loop: hit ``end`` empty-handed
+    )  # consume_loop: hit `end` empty-handed
 
     # --- Serdes -----------------------------------------------------
 

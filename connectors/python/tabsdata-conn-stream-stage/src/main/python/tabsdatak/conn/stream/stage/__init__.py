@@ -2,6 +2,23 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+"""Stream-stage connector -- internal streaming source.
+
+Framework plumbing for the streaming pipeline (not a user-facing
+database connector). A streamer pod writes per-flush manifests and the
+staged parquet files to a cloud / local stage; this source picks up one
+new manifest per trigger and materialises the files it lists.
+
+* `ManifestStageConn` -- the connection: exactly one backend
+  sub-connection (`local` / `s3` / `az` / `gcs`) pointing at
+  the stage root.
+* `ManifestStageSrc` -- the source; the number of output slots is
+  decided by the manifest at run time.
+
+Manifests live under `<stage_root>/manifests/` and are consumed in
+last-modified order; a per-flow cursor advances one manifest per run.
+"""
+
 from __future__ import annotations
 
 import json
@@ -44,6 +61,15 @@ logger = logging.getLogger(__name__)
 
 
 class ManifestStageConn(Conn):
+    """Connection for `ManifestStageSrc` -- one stage backend.
+
+    :categories: source
+
+    Exactly one of `local` / `s3` / `az` / `gcs` must be set;
+    it points at the stage root the streamer pod writes to. The others
+    stay `None`.
+    """
+
     local: LocalFileSrcConn | None
     s3: S3SrcConn | None
     az: AzureBlobSrcConn | None
@@ -51,23 +77,30 @@ class ManifestStageConn(Conn):
 
 
 class ManifestStageSrc(Src):
-    pass
+    """Stream-stage source -- materialises the files in one manifest.
+
+    :categories: source
+
+    Carries no configuration: each run fetches the next unseen manifest
+    from the stage and emits its listed parquet files. The manifest
+    decides the output slot count, so it is not fixed on the class.
+    """
 
 
-# Manifests live under the conn's ``manifests/`` subdir (the layout
+# Manifests live under the conn's `manifests/` subdir (the layout
 # the streamer pod writes; see
-# ``tabsdata-server/_lib/stage_layout.py`` and
-# ``_lib/stage_manifest.py``). The wildcard is relative to
-# ``conn.base_path``, which by convention is the stage root, so this
-# globs ``<stage_root>/manifests/stream-manifest-*.json``. The file
+# `tabsdata-server/_lib/stage_layout.py` and
+# `_lib/stage_manifest.py`). The wildcard is relative to
+# `conn.base_path`, which by convention is the stage root, so this
+# globs `<stage_root>/manifests/stream-manifest-*.json`. The file
 # paths inside each manifest stay relative to the same
-# ``conn.base_path`` (typically ``files/<TS>/<name>.parquet``, one
+# `conn.base_path` (typically `files/<TS>/<name>.parquet`, one
 # subdir per manifest).
 _STREAM_MANIFEST_FILE_WILDCARD = "manifests/stream-manifest-*.json"
 
 # Per-flow cursor for the manifest wildcard. Dot-separated, hyphenated
 # segments only (no underscores) so it matches the context-key regex, and
-# kept out of the file connector's reserved ``file-lastmod.*`` namespace.
+# kept out of the file connector's reserved `file-lastmod.*` namespace.
 _MANIFEST_LASTMOD_KEY = "stream-manifest.lastmod"
 
 # Baseline handed to the transporter so last-modified tracking activates on
@@ -140,7 +173,7 @@ class ManifestStageSrcPlugin(SrcPlugin[ManifestStageConn, ManifestStageSrc]):
             )
 
         # Advance the cursor so the next trigger picks up the next manifest.
-        # ``None`` means nothing was observed; leave the prior cursor in place.
+        # `None` means nothing was observed; leave the prior cursor in place.
         if report.lastmod_info is not None:
             ctx.set_attr(_MANIFEST_LASTMOD_KEY, report.lastmod_info)
 
@@ -232,9 +265,9 @@ def _local_path(file_uri: str) -> Path:
 
 
 # Default stream-stage source binding. The manifest decides how many
-# output slots a run yields, so ``cardinality`` returns ``-1`` -- the
+# output slots a run yields, so `cardinality` returns `-1` -- the
 # sentinel that disables the framework's produced-vs-declared slot-count
-# check -- and there is no explorer. ``ARRAY`` mode because a single
+# check -- and there is no explorer. `ARRAY` mode because a single
 # manifest slot may list more than one parquet file.
 STREAM_STAGE_SRC = SrcDef(
     conn=_StreamStageSrcConn,

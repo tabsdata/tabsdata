@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class Db2ValidateException(ConnException):
-    """Cross-field validation failure for the Db2 connector."""
+    """Cross-field validation failure for the Db2 connector.
+
+    :categories: error
+    """
 
 
 class Db2RuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the Db2 connector."""
+    """Runtime failure (plugin / I/O) for the Db2 connector.
+
+    :categories: error
+    """
 
 
 class Db2ErrorCode(ErrorCode):
+    """Error codes for the Db2 connector.
+
+    :categories: error
+
+    One variant per validation / runtime site (batch and CDC). Raise via
+    `Db2ErrorCode.DB2_N.exception`.
+    """
+
     DB2_1 = ErrorDef(
         ConnInitException,
         "Db2 connection validation failed",

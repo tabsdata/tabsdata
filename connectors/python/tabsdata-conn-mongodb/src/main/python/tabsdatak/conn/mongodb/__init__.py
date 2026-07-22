@@ -2,18 +2,29 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""MongoDB connector — public API.
+"""MongoDB connector -- public API.
 
-* :class:`MongoDBDestConn` -- per-cluster MongoDB connection
-  (URI without credentials + a :class:`UserPassword` that the
-  plugin splices into the URI at write time).
-* :class:`MongoDBDest` -- destination: list of
-  ``([<db>.]<collection>, <id_field>|None)`` tuples; one parquet
-  slot per collection. A bare ``<collection>`` targets the database
-  named in the connection URI. ``id_field=None`` does insert-only;
-  ``id_field="user_id"`` does upsert-by-id.
+Two classes, imported from `tabsdatak.conn.mongodb`:
 
-No ``MongoDBSrc`` today.
+* `MongoDBDestConn` -- the connection: a `uri` (without
+  credentials) plus a `UserPassword` the plugin splices into the URI
+  at write time. Registered on a collection, not passed to a decorator.
+* `MongoDBDest` -- the `@subscriber` destination: a list of
+  `(collection, id_field)` pairs, one parquet slot per collection.
+
+There is no MongoDB source today. The connection (with credentials) is
+resolved from the function's collection at run time; a flow function
+only references `MongoDBDest`.
+
+Examples:
+    .. code-block:: python
+
+        @subscriber(
+            destination=MongoDBDest(collections_with_ids=[("users", "id")]),
+            input_tables=["mycoll/users"],
+        )
+        def publish(users: TableFrameSpec) -> TableFrameSpec:
+            return users
 """
 
 from __future__ import annotations
@@ -68,13 +79,22 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(MongodbErrorCode.MONGODB_1, kw_only=True)
 class MongoDBDestConn(Conn):
-    """MongoDB connection.
+    """MongoDB connection used by `MongoDBDest`.
 
-    :param uri: MongoDB connection URI WITHOUT credentials
-        (``mongodb://host:port/?...``). The plugin splices in
-        the user / password from ``credentials`` at write time.
-    :param credentials: :class:`UserPassword`.
-    :param conn_cfg: Optional driver-side config dict.
+    :categories: destination
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time.
+
+    Args:
+        uri: MongoDB connection URI WITHOUT credentials, e.g.
+            `mongodb://host:27017/?...`. Must start with
+            `mongodb://` or `mongodb+srv://`. The plugin splices in
+            the user / password from `credentials` at write time.
+            Accepts a plain string or a `Secret`.
+        credentials: `UserPassword` for the connection.
+        conn_cfg: Optional connector config; `pymongo.*` keys are
+            forwarded to `pymongo.MongoClient` (see `CfgSpec`).
     """
 
     uri: UriSpec
@@ -90,43 +110,46 @@ class MongoDBDestConn(Conn):
 
 @_api.dataclass(MongodbErrorCode.MONGODB_2, kw_only=True)
 class MongoDBDest(Dest):
-    """MongoDB destination — one parquet slot per collection.
+    """MongoDB destination for `@subscriber` -- one slot per
+    collection.
 
-    :param collections_with_ids: List of
-        ``(collection_name, id_field)`` tuples; one slot per
-        entry. ``collection_name`` is the destination collection,
-        optionally qualified as ``<database>.<collection>``; a bare
-        ``<collection>`` targets the database named in the connection
-        URI. ``id_field`` is the document field used as the unique
-        id (e.g. ``("mydb.users", "user_id")``). Pass ``id_field=None``
-        (e.g. ``("mydb.logs", None)``) to let MongoDB auto-generate
-        ``_id``.
-    :param if_collection_exists: ``"append"`` (default) leaves
-        existing documents alone; ``"replace"`` drops the
-        collection first.
-    :param use_trxs: When ``True``, each batch of ``docs_per_trx``
-        documents is wrapped in a MongoDB transaction. Requires the
-        server to be configured with a replica set.
-    :param docs_per_trx: Max documents per write batch /
-        transaction (default 1000). Must be > 0.
-    :param maintain_order: When ``True``, documents are inserted in
-        the order they appear in the input (slower but deterministic
-        ordering on the server).
-    :param update_existing: When ``True``, existing documents with
-        the same id are upserted (``UpdateOne`` with
-        ``upsert=True``); when ``False``, ``InsertOne`` is used and
-        a collision aborts the batch. Ignored when ``id_field`` is
-        ``None`` (auto-generated ids never collide).
-    :param fail_on_duplicate_key: When ``True``, a duplicate-key
-        error from MongoDB is re-raised. When ``False`` the error is
-        logged and the batch continues.
-    :param log_intermediate_files: When ``True``, each intermediate
-        JSONL chunk written to the work dir is logged before upload
-        -- useful for debugging large writes.
-    :param dest_cfg: Optional ``Mapping`` over the single key
-        ``"mongodb.logging_level"`` (int). Note: ``pymongo.*``
-        options are read from ``conn.conn_cfg`` (not ``dest_cfg``)
-        and forwarded to ``pymongo.MongoClient``.
+    :categories: destination
+
+    Args:
+        collections_with_ids: List of `(collection, id_field)`
+            pairs, one write slot per entry. `collection` is the
+            target collection, optionally qualified as
+            `<database>.<collection>`; a bare `<collection>`
+            targets the database named in the connection URI (a name up
+            to 235 bytes, no NUL or `$`, not starting with
+            `system.`). `id_field` is the document field used as
+            the unique id, e.g. `("mydb.users", "user_id")`; pass
+            `None` (e.g. `("mydb.logs", None)`) to let MongoDB
+            auto-generate `_id`. An `id_field` may not be empty,
+            contain `.` or NUL, or start with `$`.
+        if_collection_exists: `"append"` (default) leaves existing
+            documents in place; `"replace"` drops the collection
+            first.
+        use_trxs: When true, each batch of `docs_per_trx` documents
+            is wrapped in a MongoDB transaction (requires a replica
+            set).
+        docs_per_trx: Max documents per write batch / transaction
+            (default 1000; must be greater than 0).
+        maintain_order: When true, documents are inserted in input
+            order (slower but deterministic server-side ordering).
+        update_existing: When true, documents whose id already exists
+            are upserted (`UpdateOne` with `upsert=True`); when
+            false, `InsertOne` is used and a collision aborts the
+            batch. Ignored when `id_field` is `None` (auto-generated
+            ids never collide).
+        fail_on_duplicate_key: When true, a duplicate-key error is
+            re-raised; when false it is logged and the batch continues.
+        log_intermediate_files: When true, each intermediate JSONL
+            chunk written to the work dir is logged before upload --
+            useful for debugging large writes.
+        dest_cfg: Optional connector config over the single key
+            `mongodb.logging_level`. Note: `pymongo.*` options are
+            read from the connection's `conn_cfg`, not here.
     """
 
     collections_with_ids: CollectionsWithIdsSpec
@@ -140,6 +163,10 @@ class MongoDBDest(Dest):
     dest_cfg: DestCfgSpec | None = None
 
     def validate(self) -> None:
+        """Validate that `docs_per_trx` is positive.
+
+        Called by the framework; raises `MongoDBValidateException`.
+        """
         if self.docs_per_trx <= 0:
             raise MongodbErrorCode.MONGODB_17.exception(
                 docs_per_trx=self.docs_per_trx,

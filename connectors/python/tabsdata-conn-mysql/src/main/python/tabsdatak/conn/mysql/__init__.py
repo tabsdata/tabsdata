@@ -2,38 +2,60 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""MySQL connector — public API.
+"""MySQL connector -- public API.
 
-Batch:
+Imported from `tabsdatak.conn.mysql`. Batch classes:
 
-* :class:`MySQLSrcConn` -- per-instance MySQL connection for
-  :class:`MySQLSrc`.
-* :class:`MySQLDestConn` -- per-instance MySQL connection for
-  :class:`MySQLDest`. Attribute-identical to
-  :class:`MySQLSrcConn` but a distinct class so source and
-  destination connections cannot be confused at the wire level
-  (the ``__kind__`` discriminator differs).
-* :class:`MySQLSrc` -- source: list of SOQL/SELECT queries; produces
-  one parquet slot per query.
-* :class:`MySQLDest` -- destination: list of target table names;
-  consumes one parquet slot per table.
+* `MySQLSrcConn` / `MySQLDestConn` -- the connection: a SQLAlchemy
+  URI plus `UserPassword` credentials. Attribute-identical but distinct
+  classes so source and destination connections cannot be confused at
+  the wire-format level (the `__kind__` discriminator differs).
+* `MySQLSrc` -- the `@publisher` source: a list of SELECT
+  `queries`, one parquet slot per query.
+* `MySQLDest` -- the `@subscriber` destination: a list of target
+  `tables`, one parquet slot per table.
 
-CDC (change-data capture):
+CDC (change-data capture) classes:
 
-* :class:`MySQLCdcStreamSrcConn` -- per-instance MySQL CDC
-  connection. Adds ``server_id`` for the binlog replication
-  identity.
-* :class:`MySQLCdcStreamSrc` -- stream source that emits one
+* `MySQLCdcStreamSrcConn` -- the CDC connection; adds `server_id`,
+  the binlog replication identity.
+* `MySQLCdcStreamSrc` -- the `@stream_publisher` source; emits one
   tableframe-batch per binlog flush across the tracked tables.
-* :class:`GtidPosition` / :class:`BinlogPosition` /
-  :class:`TimestampPosition` -- ``start_from`` primitives for
-  resuming binlog replication at a specific position.
+* `GtidPosition` / `BinlogPosition` / `TimestampPosition` --
+  `start_from` primitives for resuming binlog replication at a
+  specific position.
 
-URI and credential fields accept ``Secret`` references.
-Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
-size, read/write engine selection); CDC tuning lives in
-``MySQLCdcStreamSrc.src_cfg`` (buffer / trigger thresholds, polling
-cadence).
+The connection (with credentials) is registered on a collection and
+resolved from the function's collection at run time -- it is never passed
+to a decorator. A flow function only references the source / destination.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(source=MySQLSrc(queries=["SELECT * FROM city"]),
+                   output_tables=["cities"])
+        def ingest(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+
+        @subscriber(destination=MySQLDest(tables=["cap_rows"]),
+                    input_tables=["mycoll/cities"])
+        def publish(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+A `@stream_publisher` receives the flushed batch as a list of frames
+and must NOT declare a `ctx` parameter.
+
+Examples:
+    .. code-block:: python
+
+        @stream_publisher(source=MySQLCdcStreamSrc(tables=["app.city"],
+                                                   start_from="tail"),
+                          flush_interval_mins=2, output_tables=["cdc_raw"])
+        def stream(rows: TableFramesSpec) -> TableFrameSpec:
+            return concat(rows)
+URI and credential fields accept `Secret` references. Cross-cutting
+cfg keys live in `src_cfg` / `dest_cfg` (chunk size, read/write
+engine selection); CDC tuning lives in `MySQLCdcStreamSrc.src_cfg`
+(buffer / trigger thresholds, polling cadence).
 """
 
 from __future__ import annotations
@@ -73,34 +95,45 @@ from tabsdatak.spi import Conn
 # --- CDC public primitives ------------------------------------------
 #
 # These types are mysql-local rather than re-exported from
-# ``conn.common.sql.cdc.typing`` so the user-visible schema of one
+# `conn.common.sql.cdc.typing` so the user-visible schema of one
 # connector cannot widen another's by accident. The plugin
-# (``_cdc_plugin.py``) converts them onto the runner-side common
-# representation when invoking the dialect-agnostic ``run_cdc`` loop.
+# (`_cdc_plugin.py`) converts them onto the runner-side common
+# representation when invoking the dialect-agnostic `run_cdc` loop.
 
-# Default MySQL replica ``server_id`` for the binlog stream. Each
+# Default MySQL replica `server_id` for the binlog stream. Each
 # concurrent CDC replica must use a unique id across the cluster;
 # 512 is the legacy default and works fine for single-replica
-# deployments. ``MySQLCdcConn.server_id`` overrides per-connection.
+# deployments. `MySQLCdcConn.server_id` overrides per-connection.
 DEFAULT_SERVER_ID = 512
+"""Default MySQL replica `server_id` for the binlog stream (512). Each
+concurrent CDC replica must use a unique id across the cluster."""
 
-# Relative position keywords: ``"head"`` rewinds to the oldest
-# available change in retention; ``"tail"`` skips to the live edge.
+# Relative position keywords: `"head"` rewinds to the oldest
+# available change in retention; `"tail"` skips to the live edge.
 RelativePositionSpec: TypeAlias = Literal["head", "tail"]
+"""Relative CDC start position: `"head"` rewinds to the oldest change
+still in binlog retention; `"tail"` skips to the live edge (only later
+changes are emitted)."""
 
 # Layout for the columns payload on each emitted change row.
 CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
+"""Layout of the change-values payload on each emitted row: one of
+`"columns"`, `"struct"` or `"map"`."""
 
 
 @_api.dataclass(MysqlErrorCode.MYSQL_12, frozen=True, kw_only=True)
 class GtidPosition:
-    """Start binlog replication at a specific MySQL Global
-    Transaction ID. The ingester converts ``"uuid:N"`` to the
-    pymysqlreplication-friendly set range ``"uuid:1-N"``.
+    """CDC start position: a MySQL Global Transaction ID.
 
-    :param gtid: GTID to resume from, in ``"uuid:N"`` shape (single
-        position) or ``"uuid:M-N"`` shape (range). Empty string is
-        the cold-start marker.
+    :categories: source
+
+    A `start_from` value; the ingester converts `"uuid:N"` to the
+    pymysqlreplication-friendly set range `"uuid:1-N"`.
+
+    Args:
+        gtid: GTID to resume from, in `"uuid:N"` shape (single
+            position) or `"uuid:M-N"` shape (range). Empty string is
+            the cold-start marker.
     """
 
     gtid: str
@@ -108,14 +141,17 @@ class GtidPosition:
 
 @_api.dataclass(MysqlErrorCode.MYSQL_13, frozen=True, kw_only=True)
 class BinlogPosition:
-    """Start binlog replication at a binlog file + byte offset
-    (the pre-GTID position shape).
+    """CDC start position: a binlog file + byte offset.
 
-    :param file: Binlog filename as reported by
-        ``SHOW BINARY LOGS`` (e.g. ``"mysql-bin.000001"``).
-    :param pos: Byte offset within ``file``. The binlog file's
-        magic bytes occupy positions 0-3; use 4 to replay from the
-        beginning.
+    :categories: source
+
+    A `start_from` value in the pre-GTID position shape.
+
+    Args:
+        file: Binlog filename as reported by `SHOW BINARY LOGS` (e.g.
+            `"mysql-bin.000001"`).
+        pos: Byte offset within `file`. The binlog magic bytes occupy
+            positions 0-3; use 4 to replay from the beginning.
     """
 
     file: str
@@ -124,12 +160,16 @@ class BinlogPosition:
 
 @_api.dataclass(MysqlErrorCode.MYSQL_18, frozen=True, kw_only=True)
 class TimestampPosition:
-    """Start binlog replication at the first event with a timestamp
-    at or after ``ts``.
+    """CDC start position given as a wall-clock timestamp.
 
-    :param ts: Wall-clock cut-off; tz-aware datetimes are honoured,
-        naive datetimes are interpreted in the MySQL server's
-        timezone.
+    :categories: source
+
+    A `start_from` value resolved to the first binlog event at or after
+    `ts`.
+
+    Args:
+        ts: Wall-clock cut-off. Tz-aware datetimes are honoured; naive
+            datetimes are interpreted in the MySQL server's timezone.
     """
 
     ts: datetime
@@ -141,27 +181,47 @@ MySQLCdcStartFromSpec: TypeAlias = Union[
     BinlogPosition,
     TimestampPosition,
 ]
+"""Where a MySQL CDC stream begins: a `"head"` / `"tail"` keyword, a
+`GtidPosition`, a `BinlogPosition` or a `TimestampPosition`."""
 
 # --- Type aliases ----------------------------------------------------
 
 
 CredentialsSpec: TypeAlias = UserPassword
+"""The credential type for MySQL connections: `UserPassword` (user +
+password), spliced into the URI by the engine factory."""
 
 UriSpec: TypeAlias = Annotated[
     StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.MSYQL_URI_PATTERN)
 ]
+"""A SQLAlchemy-style MySQL URI, e.g.
+`mysql+mysqlconnector://host:port/db`. The scheme must be `mysql` or
+`mariadb` (an optional `+driver` is allowed). Accepts a plain string
+or a `Secret`."""
+
 QueriesSpec: TypeAlias = list[str]
+"""A non-empty, ordered list of SELECT statements -- one output slot per
+query."""
+
 MySQLTableNameSpec: TypeAlias = Annotated[str, _validation.MYSQL_TABLE_FQN_VALIDATOR]
+"""A MySQL table name, either `table` or `database.table` (at most
+two dot-separated parts). Parts may be backtick-quoted, using the
+doubled-backtick convention to embed a literal backtick."""
+
 MySQLTableNamesSpec: TypeAlias = list[MySQLTableNameSpec]
+"""A list of MySQL table names (see `MySQLTableNameSpec`)."""
+
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+"""Write disposition when the target table exists: `"append"` adds
+rows; `"replace"` truncates before insert."""
 
 
 # --- MySQLSrc.src_cfg keys ------------------------------------------
 #
-# Restricts ``MySQLSrc.src_cfg`` to the keys the source plugin
-# (``_plugin.py`` / engine factory) actually consumes. Pydantic
+# Restricts `MySQLSrc.src_cfg` to the keys the source plugin
+# (`_plugin.py` / engine factory) actually consumes. Pydantic
 # enforces the literal membership of keys at validation time, so
-# unknown keys are rejected at construction; ``CONN_CFG_VALIDATOR``
+# unknown keys are rejected at construction; `CONN_CFG_VALIDATOR`
 # reuses the conn_cfg basic-value checks (str/int/float/bool/None,
 # plus list/dict compositions).
 SrcCfgKey: TypeAlias = Literal[
@@ -192,18 +252,24 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(MysqlErrorCode.MYSQL_1, kw_only=True)
 class MySQLSrcConn(Conn):
-    """MySQL connection used by :class:`MySQLSrc`.
+    """MySQL connection used by `MySQLSrc`.
 
-    :param uri: SQLAlchemy-style URI
-        (``mysql+mysqlconnector://host:port/db``). Accepts a plain
-        str or ``Secret``.
-    :param credentials: :class:`UserPassword` -- user + password
-        spliced into the URI by the engine factory.
-    :param entity_whitelist: Optional list of regex patterns; the
-        runtime uses these to narrow which tables this conn
-        contributes to discovery.
-    :param conn_cfg: Optional driver-side config (forwarded as
-        ``connect_args`` to SQLAlchemy).
+    :categories: source
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time.
+
+    Args:
+        uri: SQLAlchemy-style MySQL URI
+            (`mysql+mysqlconnector://host:port/db`). Accepts a plain
+            string or a `Secret`.
+        credentials: `UserPassword` -- user + password spliced into
+            the URI by the engine factory.
+        entity_whitelist: Optional list of regex patterns narrowing
+            which tables this connection contributes to discovery.
+            `None` (the default) means no filtering.
+        conn_cfg: Optional driver-side config forwarded to SQLAlchemy as
+            `connect_args`.
     """
 
     uri: UriSpec
@@ -217,11 +283,14 @@ class MySQLSrcConn(Conn):
 
 @_api.dataclass(MysqlErrorCode.MYSQL_1, kw_only=True)
 class MySQLDestConn(Conn):
-    """MySQL connection used by :class:`MySQLDest`.
+    """MySQL connection used by `MySQLDest`.
 
-    Attribute-identical to :class:`MySQLSrcConn` but a distinct
-    class so source and destination connections cannot be confused
-    at the wire-format level (the ``__kind__`` differs).
+    :categories: destination
+
+    Attribute-identical to `MySQLSrcConn` but a distinct class so
+    source and destination connections cannot be confused at the
+    wire-format level (the `__kind__` differs). See `MySQLSrcConn`
+    for the field meanings.
     """
 
     uri: UriSpec
@@ -238,27 +307,31 @@ class MySQLDestConn(Conn):
 
 @_api.dataclass(MysqlErrorCode.MYSQL_2, kw_only=True)
 class MySQLSrc(Src):
-    """MySQL source — one parquet slot per SELECT query.
+    """MySQL source for `@publisher` -- one parquet slot per query.
 
-    :param queries: List of SELECT statements; one slot per query.
-    :param transactional: When ``True`` (default), run all queries
-        inside one transactional session; ``False`` opens a fresh
-        autocommit connection per query.
-    :param schema_overrides: Optional per-query column dtype hints
-        (one entry per query, same length as ``queries``); else MYSQL_3.
-    :param initial_values: Optional ``{bind_name: value}`` seed dict.
-        Each name is bound into the query as a SQLAlchemy ``:name``
-        parameter at execute time. Acts as the **first-run seed** for
-        each bind name: at runtime, the plugin looks up
-        ``ctx.get_attr(bind_name)`` per bind, and falls back to this
-        field when the ctx scratch store has no entry for that name.
-        User functions persist new values for the next run with
-        ``ctx.set_attr(bind_name, new_value)``.
-    :param src_cfg: Optional ``Mapping`` over the literal cfg key
-        set (``mysql.logging_level``, ``tabsdata.sql.sql.readEngine``,
-        ``tabsdata.sql.chunkSize``).
+    :categories: source
+
+    Args:
+        queries: SELECT statements; one output slot per query, in order.
+        transactional: When `True` (default), run all queries inside
+            one transactional session; `False` opens a fresh
+            autocommit connection per query.
+        schema_overrides: Optional per-query column dtype hints. When
+            given it must have exactly one entry per query (same length
+            and order as `queries`); each entry is a
+            `{column: DataType}` map or `None`.
+        initial_values: Optional `{bind_name: value}` seed dict. Each
+            name is bound into the query as a SQLAlchemy `:var`
+            parameter at execute time, and acts as the first-run seed:
+            the plugin reads `ctx.get_attr(bind_name)` per bind and
+            falls back to this value when the ctx store has no entry.
+            Persist the next value with `ctx.set_attr(bind_name, v)`.
+        src_cfg: Optional config mapping over the allowed keys only
+            (`mysql.logging_level`, `tabsdata.sql.sql.readEngine`,
+            `tabsdata.sql.chunkSize`).
     """
 
+    # devguide-ref: trx context state (initial_values seed / cursor resume)
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -266,6 +339,11 @@ class MySQLSrc(Src):
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
+        """Check `schema_overrides` has one entry per query.
+
+        Called by the framework; raises `MySQLValidateException` when
+        the lengths differ.
+        """
         if self.schema_overrides is not None and len(self.schema_overrides) != len(
             self.queries
         ):
@@ -280,17 +358,20 @@ class MySQLSrc(Src):
 
 @_api.dataclass(MysqlErrorCode.MYSQL_4, kw_only=True)
 class MySQLDest(Dest):
-    """MySQL destination — write one parquet slot per target table.
+    """MySQL destination for `@subscriber` -- one target table per slot.
 
-    :param tables: Target table names (FQN or bare); one parquet
-        slot per table.
-    :param if_table_exists: ``"append"`` (default) or ``"replace"``
-        (truncate before insert).
-    :param transactional: When ``True`` (default), wrap every table
-        write in one transactional session.
-    :param dest_cfg: Optional ``Mapping`` over the literal cfg key
-        set (``mysql.logging_level``,
-        ``tabsdata.sql.sql.writeEngine``, ``tabsdata.sql.chunkSize``).
+    :categories: destination
+
+    Args:
+        tables: Target table names, qualified or bare (see
+            `MySQLTableNameSpec`); one input slot per table, in order.
+        if_table_exists: `"append"` (default) adds rows; `"replace"`
+            truncates the table before inserting.
+        transactional: When `True` (default), wrap every table write
+            in one transactional session.
+        dest_cfg: Optional config mapping over the allowed keys only
+            (`mysql.logging_level`, `tabsdata.sql.sql.writeEngine`,
+            `tabsdata.sql.chunkSize`).
     """
 
     tables: MySQLTableNamesSpec
@@ -302,9 +383,9 @@ class MySQLDest(Dest):
 # --- CDC -------------------------------------------------------------
 
 
-# Allowed keys on ``MySQLCdcStreamSrc.src_cfg``. The plugin reads
+# Allowed keys on `MySQLCdcStreamSrc.src_cfg`. The plugin reads
 # these (falling back to defaults) before constructing the runner's
-# ``CdcRunConfig``.
+# `CdcRunConfig`.
 CdcSrcCfgKey: TypeAlias = Literal[
     "mysql.cdc.blocking_timeout_seconds",
     "mysql.cdc.logging_level",
@@ -324,29 +405,29 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(MysqlErrorCode.MYSQL_10, kw_only=True)
 class MySQLCdcStreamSrcConn(Conn):
-    """MySQL CDC connection used by :class:`MySQLCdcStreamSrc`.
+    """MySQL CDC connection used by `MySQLCdcStreamSrc`.
 
-    Mirrors :class:`MySQLSrcConn` for the SQLAlchemy / catalog
-    introspection side and adds ``server_id`` -- the unique replica
-    identifier the source uses for binlog replication. Each
-    concurrent CDC connection against the same MySQL must declare a
-    distinct ``server_id``; collisions cause the source to disconnect
-    one of the replicas.
+    :categories: source
 
-    Not a subclass of :class:`MySQLSrcConn`: CDC and batch SQL have
-    different operational guarantees (replication grants vs query
-    permissions, replica id reservation) and a divergent attribute
-    set is expected over time.
+    Mirrors `MySQLSrcConn` for the SQLAlchemy / catalog introspection
+    side and adds `server_id` -- the unique replica identifier the
+    source uses for binlog replication. Each concurrent CDC connection
+    against the same MySQL must declare a distinct `server_id`;
+    collisions cause the source to disconnect one of the replicas. Not a
+    subclass of `MySQLSrcConn` -- CDC and batch SQL have different
+    operational guarantees (replication grants vs query permissions,
+    replica-id reservation).
 
-    :param uri: SQLAlchemy-style URI; accepts ``str`` / ``Secret``
-        per :data:`UriSpec`.
-    :param credentials: :class:`UserPassword`.
-    :param server_id: MySQL replica id for the binlog stream.
-        Default 512 matches the legacy connector.
-    :param entity_whitelist: Optional regex patterns narrowing
-        discovery.
-    :param conn_cfg: Optional driver-side config forwarded as
-        ``connect_args``.
+    Args:
+        uri: SQLAlchemy-style MySQL URI; accepts a plain string or a
+            `Secret` (see `UriSpec`).
+        credentials: `UserPassword` credentials.
+        server_id: MySQL replica id for the binlog stream. Defaults to
+            `DEFAULT_SERVER_ID` (512).
+        entity_whitelist: Optional regex patterns narrowing discovery;
+            `None` (default) means no filtering.
+        conn_cfg: Optional driver-side config forwarded as
+            `connect_args`.
     """
 
     uri: UriSpec
@@ -361,27 +442,34 @@ class MySQLCdcStreamSrcConn(Conn):
 
 @_api.dataclass(MysqlErrorCode.MYSQL_11, kw_only=True)
 class MySQLCdcStreamSrc(StreamSrc):
-    """MySQL CDC stream source -- emits one tableframe-batch per
-    binlog flush across the tracked tables.
+    """MySQL CDC stream source for `@stream_publisher`.
 
-    :param tables: Qualified ``schema.table`` names to track.
-    :param start_from: Where to begin reading the binlog when no
-        prior offset has been persisted on the trx context --
-        ``"head"`` / ``"tail"`` keywords, a :class:`GtidPosition`, a
-        :class:`BinlogPosition`, or a :class:`TimestampPosition`.
-    :param columns_format: Layout for the new (and old, when present)
-        columns payload on each emitted change row. See
-        :data:`CdcColumnsFormatSpec`.
-    :param flatten_columns: When ``True`` the new columns are inlined
-        as top-level columns -- the connector's downstream consumer
-        sees an ordinary tabular row and ``columns_format`` only
-        affects the *old*-columns layout.
-    :param src_cfg: Optional ``Mapping`` over the literal
-        :data:`CdcSrcCfgKey` set -- buffer / trigger thresholds and
-        polling cadence. The plugin falls back to its built-in
-        defaults for missing keys.
+    :categories: source
+
+    A streaming change-data-capture source: it emits one
+    tableframe-batch per binlog flush across the tracked tables. The
+    decorated `@stream_publisher` function receives the flushed batch
+    as a list of frames and must NOT declare a `ctx` parameter.
+
+    Args:
+        tables: Qualified `schema.table` names to track.
+        start_from: Where to begin reading the binlog when no prior
+            offset is persisted -- `"head"` / `"tail"` keyword, a
+            `GtidPosition`, a `BinlogPosition` or a
+            `TimestampPosition`.
+        columns_format: Layout for the new (and old, when present)
+            columns payload on each change row -- `"columns"`
+            (default), `"struct"` or `"map"`.
+        flatten_columns: When `True` (default), the new columns are
+            inlined as top-level columns, so the downstream consumer sees
+            an ordinary tabular row and `columns_format` then only
+            affects the old-columns layout.
+        src_cfg: Optional config mapping over the allowed CDC keys only
+            -- buffer / trigger thresholds and polling cadence. The
+            plugin falls back to its built-in defaults for missing keys.
     """
 
+    # devguide-ref: CDC cursor / resume (start_from, offset persistence)
     tables: list[MySQLTableNameSpec]
     start_from: MySQLCdcStartFromSpec
     columns_format: CdcColumnsFormatSpec = "columns"

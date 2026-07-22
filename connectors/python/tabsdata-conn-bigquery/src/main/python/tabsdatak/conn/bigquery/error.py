@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class BigQueryValidateException(ConnException):
-    """Cross-field validation failure for the BigQuery connector."""
+    """Cross-field validation failure for the BigQuery connector.
+
+    :categories: error
+    """
 
 
 class BigQueryRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the BigQuery connector."""
+    """Runtime failure (plugin / I/O) for the BigQuery connector.
+
+    :categories: error
+    """
 
 
 class BigqueryErrorCode(ErrorCode):
+    """Error codes for the BigQuery connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `BigqueryErrorCode.BIGQUERY_N.exception`.
+    """
+
     BIGQUERY_1 = ErrorDef(
         ConnInitException,
         "BigQueryDestConn validation failed",

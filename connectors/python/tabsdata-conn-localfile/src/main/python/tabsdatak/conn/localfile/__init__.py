@@ -2,19 +2,35 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""LocalFile connector — public API.
+"""LocalFile connector -- public API.
 
-* :class:`LocalFileSrcConn` / :class:`LocalFileDestConn` -- per-LocalFile
-  connection (base_path, conn_cfg).
-* :class:`LocalFileSrc` -- source: list of `paths` (glob-style);
-  one parquet slot per path.
-* :class:`LocalFileDest` -- destination: list of `paths`; one
-  parquet slot per path. The tokens ``${EXEC_PLAN_ID}``, ``${TRX_ID}``
-  and ``${EXEC_PLAN_TS}`` in dest paths are resolved at write time.
+Four classes, imported from `tabsdatak.conn.localfile`:
 
-File transport goes through the shared ``td_transporter`` binary.
-String and ``Secret`` are accepted on credential and
-identifier fields.
+* `LocalFileSrcConn` / `LocalFileDestConn` -- the connection:
+  `base_path` (an absolute local-filesystem path) and `conn_cfg`.
+  No credentials. Registered on a collection, not passed to a decorator.
+* `LocalFileSrc` -- the `@publisher` source: a list of `paths`
+  (glob-style), one parquet slot per path.
+* `LocalFileDest` -- the `@subscriber` destination: a list of
+  `paths`, one parquet slot per path.
+
+The connection is separate from the source / destination and is
+resolved from the function's collection at run time; a flow function
+only references `LocalFileSrc` / `LocalFileDest`.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(source=LocalFileSrc(paths=["parquet/*.parquet"]),
+                   output_tables=["cities"])
+        def ingest(cities: TableFramesSpec) -> TableFrameSpec:
+            return cities[0] if cities else None
+
+        @subscriber(destination=LocalFileDest(paths=["out.csv"]),
+                    input_tables=["mycoll/cities"])
+        def publish(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+File transport goes through the shared `td_transporter` binary.
 """
 
 from __future__ import annotations
@@ -69,11 +85,18 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(LocalFileErrorCode.LOCALFILE_1, kw_only=True)
 class LocalFileSrcConn(Conn):
-    """LocalFile connection used by :class:`LocalFileSrc`.
+    """LocalFile connection used by `LocalFileSrc`.
 
-    ``base_path`` is an absolute local-filesystem path: it must start
-    with ``/`` and must not end with one (other than the bare root
-    ``/``). It defaults to the root ``/``.
+    :categories: source
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time. Has no credentials.
+
+    Args:
+        base_path: Absolute local-filesystem path; starts with `/` and
+            has no trailing `/` (other than the bare root `/`).
+            Defaults to `/`. Accepts a plain string or a `Secret`.
+        conn_cfg: Optional connector-config dict (see `CfgSpec`).
     """
 
     base_path: FullPathSpec = "/"
@@ -85,11 +108,13 @@ class LocalFileSrcConn(Conn):
 
 @_api.dataclass(LocalFileErrorCode.LOCALFILE_1, kw_only=True)
 class LocalFileDestConn(Conn):
-    """LocalFile connection used by :class:`LocalFileDest`.
+    """LocalFile connection used by `LocalFileDest`.
 
-    Attribute-identical to :class:`LocalFileSrcConn` but a
-    distinct class so source and destination connections cannot
-    be confused at the wire-format level.
+    :categories: destination
+
+    Field-identical to `LocalFileSrcConn` but a distinct class so
+    source and destination connections cannot be confused at the
+    wire-format level. See `LocalFileSrcConn` for the field meanings.
     """
 
     base_path: FullPathSpec = "/"
@@ -104,18 +129,29 @@ class LocalFileDestConn(Conn):
 
 @_api.dataclass(LocalFileErrorCode.LOCALFILE_2, kw_only=True)
 class LocalFileSrc(Src):
-    """LocalFile source — one parquet slot per path.
+    """LocalFile source for `@publisher` -- one parquet slot per path.
 
-    :param paths: List of file paths (or glob patterns) relative
-        to the conn's root. One parquet slot per entry.
-    :param format: Optional file-format override (default AUTO).
-    :param initial_last_modified: Optional cutoff for incremental
-        ingestion. On the first run, the connector imports only
-        files modified at or after this timestamp; on each
-        subsequent run, the cutoff advances automatically so that
-        only files newer than the previous run are re-imported.
-    :param src_cfg: Optional ``Mapping`` over
-        ``{"tabsdata.file.chunkSize"}``.
+    :categories: source
+
+    Args:
+        paths: Source paths relative to the connection's `base_path`,
+            one output slot per entry. A path may use a `*` glob in
+            its final segment only; backslashes, NUL and `${...}`
+            tokens are not allowed.
+        format: File format -- one of `AUTO`, `CSV`, `JSON`,
+            `AVRO`, `PARQUET`, `LOG`. `AUTO` (the default)
+            infers it from the file extension.
+        format_cfg: Optional per-format reader options (source-side
+            keys only), keyed by the `SrcFileFormat`.
+        initial_last_modified: Optional cutoff for incremental
+            ingestion. The first run imports only files modified at or
+            after this timestamp; the cutoff then advances each run so
+            only newer files are re-imported.
+        file_info: Optional per-row provenance column -- `FILENAME`
+            adds the file's basename, `FULLPATH` its full path;
+            `None` (the default) adds nothing.
+        src_cfg: Optional connector config; supports the key
+            `tabsdata.file.chunkSize`.
     """
 
     paths: SrcPathsSpec
@@ -126,6 +162,11 @@ class LocalFileSrc(Src):
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
+        """Cross-field validation of `format_cfg` (source side).
+
+        Called by the framework; raises `LocalFileValidateException`
+        on failure.
+        """
         try:
             _file_validation.validate_format_cfg(self.format_cfg, side="src")
         except Exception as e:
@@ -137,15 +178,24 @@ class LocalFileSrc(Src):
 
 @_api.dataclass(LocalFileErrorCode.LOCALFILE_4, kw_only=True)
 class LocalFileDest(Dest):
-    """LocalFile destination — write one parquet slot per path.
+    """LocalFile destination for `@subscriber` -- one target file per
+    path.
 
-    :param paths: List of target file paths relative to the
-        conn's root. One parquet slot per entry. The tokens
-        ``${EXEC_PLAN_ID}``, ``${TRX_ID}`` and ``${EXEC_PLAN_TS}``
-        are resolved at write time.
-    :param format: Optional output-format override (default AUTO).
-    :param dest_cfg: Optional ``Mapping`` over
-        ``{"tabsdata.file.chunkSize"}``.
+    :categories: destination
+
+    Args:
+        paths: Target paths relative to the connection's `base_path`,
+            one write slot per entry. Globs are not allowed; the tokens
+            `${EXEC_PLAN_ID}`, `${TRX_ID}` and `${EXEC_PLAN_TS}`
+            are substituted at write time. Backslashes and NUL are not
+            allowed.
+        format: Output format -- one of `AUTO`, `CSV`, `JSON`,
+            `AVRO`, `PARQUET`. `AUTO` (the default) infers it from
+            the file extension.
+        format_cfg: Optional per-format writer options (dest-side keys
+            only), keyed by the `DestFileFormat`.
+        dest_cfg: Optional connector config; supports the key
+            `tabsdata.file.chunkSize`.
     """
 
     paths: DestPathsSpec
@@ -154,6 +204,11 @@ class LocalFileDest(Dest):
     dest_cfg: DestCfgSpec | None = None
 
     def validate(self) -> None:
+        """Cross-field validation of `format_cfg` (dest side).
+
+        Called by the framework; raises `LocalFileValidateException`
+        on failure.
+        """
         try:
             _file_validation.validate_format_cfg(self.format_cfg, side="dest")
         except Exception as e:

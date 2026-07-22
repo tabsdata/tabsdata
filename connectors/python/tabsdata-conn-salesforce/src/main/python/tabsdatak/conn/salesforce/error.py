@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class SalesforceValidateException(ConnException):
-    """Cross-field validation failure for the Salesforce connector."""
+    """Cross-field validation failure for the Salesforce connector.
+
+    :categories: error
+    """
 
 
 class SalesforceRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the Salesforce connector."""
+    """Runtime failure (plugin / I/O) for the Salesforce connector.
+
+    :categories: error
+    """
 
 
 class SalesforceErrorCode(ErrorCode):
+    """Error codes for the Salesforce connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `SalesforceErrorCode.SALESFORCE_N.exception`.
+    """
+
     SALESFORCE_1 = ErrorDef(
         ConnInitException,
         "SalesforceTokenCredentials validation failed",

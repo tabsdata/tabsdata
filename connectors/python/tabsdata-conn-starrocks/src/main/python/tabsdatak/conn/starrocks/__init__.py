@@ -2,18 +2,35 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""StarRocks connector — public API.
+"""StarRocks connector -- public API.
 
-* :class:`StarRocksDestConn` -- per-cluster StarRocks connection
-  (host, port, credentials, database, cloud staging area).
-* :class:`StarRocksDest` -- destination: list of table FQNs;
-  one parquet slot per table. Writes go through an S3 staging
-  area + native ``FILES()`` ingestion.
+Six classes, imported from `tabsdatak.conn.starrocks`:
 
-Every string-or-secret field carries the value as a plain string
-or a ``Secret``; the plugin reads the parsed value through the
-``_host`` / ``_port`` / ``_database`` getters. Iceberg-style
-schema evolution is supported on the dest.
+* `StarRocksDestConn` -- the connection: `host` / `port`,
+  `UserPassword` credentials, a `database` and a `staging` cloud
+  location.
+* `StarRocksDest` -- the `@subscriber` destination: a list of
+  target `tables`, one parquet slot per table. Writes stage parquet
+  in the cloud location, then ingest it with StarRocks' native
+  `FILES()` table function.
+* `CloudLocation` and its concrete forms `S3Location` /
+  `AzBlobLocation` / `GCSLocation` -- the `staging` area the
+  destination lands parquet in.
+
+StarRocks is destination-only -- there is no `StarRocksSrc`. The
+connection (with credentials) is registered on a collection, not
+passed to a decorator; the runtime resolves it at run time. A flow
+function only references `StarRocksDest`.
+
+Examples:
+    .. code-block:: python
+
+        @subscriber(destination=StarRocksDest(tables=["wld_country"]),
+                    input_tables=["mycoll/cities"])
+        def publish(rows: TableFrameSpec) -> TableFrameSpec:
+            return rows
+`port` is a string-or-secret field; the plugin reads its parsed value
+through the `_port` getter.
 """
 
 from __future__ import annotations
@@ -62,10 +79,12 @@ from tabsdatak.spi import Conn
 # --- Type aliases ----------------------------------------------------
 
 CredentialsSpec: TypeAlias = UserPassword
+"""The credential type for StarRocks connections: `UserPassword`
+(user + password)."""
 
 # host / port are the shared string-or-secret specs from
-# ``tabsdatak.conn.common.types`` (HostSpec / PortSpec). Read their parsed
-# values through the ``_host`` / ``_port`` getters.
+# `tabsdatak.conn.common.types` (HostSpec / PortSpec). Read their parsed
+# values through the `_host` / `_port` getters.
 
 # Database: StarRocks identifier shape (alphanumeric + underscore).
 _IDENTIFIER_PATTERN = r"^(?:[A-Za-z_][A-Za-z0-9_]*)$"
@@ -91,29 +110,41 @@ DestCfgSpec: TypeAlias = Annotated[
 
 # --- Cloud locations -------------------------------------------------
 #
-# StarRocks carries a per-Conn ``staging`` field whose value is one of
+# StarRocks carries a per-Conn `staging` field whose value is one of
 # the concrete CloudLocation subclasses below. They mirror the legacy
 # conn-common shapes but live here so starrocks owns its own location
 # surface and routes init failures through StarRocksErrorCode.
 
 
 class CloudLocation(_api.DescriptorBase, ABC):
+    """Abstract base for a StarRocks `staging` cloud location.
+
+    :categories: destination
+
+    Concrete forms are `S3Location` / `AzBlobLocation` /
+    `GCSLocation`; set one as `StarRocksDestConn.staging`.
+    """
+
     __kind__ = "startRocksCloudLocation"
 
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_8, kw_only=True)
 class S3Location(CloudLocation):
-    """S3 staging area used by ``StarRocksDest``. The plugin
-    uploads parquet files here, then issues a StarRocks
-    ``BROKER LOAD`` / ``FILES()`` reference for ingest.
+    """S3 staging area for `StarRocksDest`.
 
-    :param bucket: S3 bucket name.
-    :param region: AWS region (e.g. ``"us-east-1"``).
-    :param credentials: AWS access-key / secret-key pair.
-    :param base_path: Full path (key prefix) from the bucket root:
-        starts with ``/``, no trailing ``/``. The leading ``/`` is
-        trimmed when forming the object key. Defaults to ``/``.
-    :param cfg: Optional cfg dict for the S3 client.
+    :categories: destination
+
+    The plugin uploads parquet here, then ingests it via a StarRocks
+    `FILES()` reference.
+
+    Args:
+        bucket: A valid S3 bucket name.
+        region: A valid AWS region, e.g. `us-east-1`.
+        credentials: AWS access-key / secret-key credentials.
+        base_path: Object-key prefix from the bucket root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the key). Defaults to `/`.
+        cfg: Optional connector-config dict for the S3 client.
     """
 
     __kind__ = "startRocksS3Location"
@@ -135,14 +166,20 @@ class S3Location(CloudLocation):
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_9, kw_only=True)
 class AzBlobLocation(CloudLocation):
-    """Azure Blob staging area used by ``StarRocksDest``.
+    """Azure Blob staging area for `StarRocksDest`.
 
-    :param container: Azure Blob container name.
-    :param credentials: Storage-account key credentials.
-    :param base_path: Full path (path prefix) from the container root:
-        starts with ``/``, no trailing ``/``. The leading ``/`` is
-        trimmed when forming the blob name. Defaults to ``/``.
-    :param cfg: Optional cfg dict for the Azure Blob client.
+    :categories: destination
+
+    The plugin uploads parquet to the container, then ingests it via a
+    StarRocks `FILES()` reference.
+
+    Args:
+        container: A valid Azure Blob container name.
+        credentials: Azure storage account name / key credentials.
+        base_path: Blob-name prefix from the container root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the blob name). Defaults to `/`.
+        cfg: Optional connector-config dict for the Azure Blob client.
     """
 
     __kind__ = "startRocksAzBlobLocation"
@@ -160,27 +197,26 @@ class AzBlobLocation(CloudLocation):
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_10, kw_only=True)
 class GCSLocation(CloudLocation):
-    """GCS staging area used by ``StarRocksDest``.
+    """GCS staging area for `StarRocksDest`.
 
-    Carries two credentials -- one per code path, mirroring the ClickHouse
-    connector:
+    :categories: destination
 
-    - :attr:`credentials` (:class:`~tabsdatak.conn.common.types.GCPJson`):
-      service-account JSON used to upload the staged Parquet to the bucket
-      via the native GCS API.
-    - :attr:`hmac_credentials` (:class:`~tabsdatak.conn.common.types.GCPHmac`):
-      HMAC access / secret key pair fed to StarRocks' ``FILES()`` table
-      function so the server reads the staged file back through the
-      S3-compatible endpoint (``https://storage.googleapis.com``) -- the
-      only protocol StarRocks speaks to GCS.
+    Carries two credentials, one per code path (mirroring ClickHouse):
+    `credentials` (GCP service-account JSON) uploads parquet via the
+    native GCS API, while `hmac_credentials` (GCS HMAC keys) let
+    StarRocks' `FILES()` table function read the staged file back
+    through the S3-compatible endpoint (`https://storage.googleapis.com`,
+    the only protocol StarRocks speaks to GCS). Both are required.
 
-    :param bucket: GCS bucket name.
-    :param credentials: GCP service-account JSON credentials (upload).
-    :param hmac_credentials: GCS HMAC keys for StarRocks' S3-compatible read.
-    :param base_path: Full path (object-key prefix) from the bucket
-        root: starts with ``/``, no trailing ``/``. The leading ``/`` is
-        trimmed when forming the object key. Defaults to ``/``.
-    :param cfg: Optional cfg dict for the GCS client.
+    Args:
+        bucket: A valid GCS bucket name.
+        credentials: GCP service-account JSON credentials (upload).
+        hmac_credentials: GCS HMAC access-key / secret-key credentials
+            (StarRocks' S3-compatible read-back).
+        base_path: Object-key prefix from the bucket root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the key). Defaults to `/`.
+        cfg: Optional connector-config dict for the GCS client.
     """
 
     __kind__ = "startRocksGcsLocation"
@@ -204,17 +240,26 @@ class GCSLocation(CloudLocation):
 class StarRocksDestConn(Conn):
     """StarRocks connection.
 
-    Every string-or-secret field carries the value as a plain string or a
-    ``Secret``; the plugin reads the parsed value through the ``_host`` /
-    ``_port`` / ``_database`` getters.
+    :categories: destination
 
-    :param host: StarRocks FE host.
-    :param port: MySQL-protocol port; default ``"9030"``.
-    :param credentials: :class:`UserPassword`.
-    :param staging: :class:`CloudLocation` (S3 / AzBlob / GCS).
-    :param database: Default database; default ``"default"``.
-    :param entity_whitelist: Optional regex-based table filter.
-    :param conn_cfg: Optional driver-side config dict.
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time. Each string field accepts a plain string or
+    a `Secret`; the plugin reads parsed values through the `_host` /
+    `_port` / `_database` getters.
+
+    Args:
+        host: A DNS host name or IPv4 literal for the StarRocks FE.
+        port: The MySQL-protocol port, 1-65535. Defaults to `"9030"`.
+        credentials: `UserPassword` (user + password).
+        staging: A `CloudLocation` (`S3Location` / `AzBlobLocation`
+            / `GCSLocation`) where parquet is staged before ingest.
+        database: The default database (a StarRocks identifier: a letter
+            or underscore, then letters, digits and underscores).
+            Defaults to `"default"`.
+        entity_whitelist: Optional list of regex patterns narrowing
+            which tables the connector considers; `None` (the default)
+            filters nothing.
+        conn_cfg: Optional connector-config dict (see `CfgSpec`).
     """
 
     host: HostSpec
@@ -240,23 +285,28 @@ class StarRocksDestConn(Conn):
 
 @_api.dataclass(StarRocksErrorCode.STARROCKS_2, kw_only=True)
 class StarRocksDest(Dest):
-    """StarRocks destination — one parquet slot per table.
+    """StarRocks destination for `@subscriber` -- one parquet slot per table.
 
-    The target tables **must already exist**; this destination does not
-    create them. StarRocks table creation requires physical layout that
-    cannot be inferred from the data alone -- a key definition (e.g.
-    ``DUPLICATE KEY`` / ``PRIMARY KEY``) and a ``DISTRIBUTED BY`` clause --
-    so ``append`` issues ``INSERT INTO`` and ``replace`` issues
-    ``TRUNCATE`` + ``INSERT INTO`` against the existing table. Writing to a
-    missing table fails with a StarRocks table-not-found error.
+    :categories: destination
 
-    :param tables: FQN table names; one parquet slot per entry. Each must
-        reference an existing StarRocks table.
-    :param if_table_exists: ``"append"`` (default) or
-        ``"replace"``.
-    :param schema_evolution: ``"strict"`` (default) or
-        ``"iceberg"``.
-    :param dest_cfg: Optional dest cfg dict.
+    The target tables must already exist; this destination does not
+    create them (StarRocks table creation needs physical layout -- a key
+    definition and a `DISTRIBUTED BY` clause -- that cannot be inferred
+    from the data). Writing to a missing table fails with a StarRocks
+    table-not-found error.
+
+    Args:
+        tables: Target table names, one write slot per entry; each must
+            reference an existing table. Each is a 1- or 2-part name
+            (`table` or `database.table`); backtick-quote a part for
+            special characters.
+        if_table_exists: `"append"` (the default) issues
+            `INSERT INTO`; `"replace"` issues `TRUNCATE` +
+            `INSERT INTO` against the existing table.
+        schema_evolution: `"strict"` (the default) rejects schema
+            changes; `"iceberg"` applies Iceberg-style schema deltas.
+        dest_cfg: Optional connector config; the only supported key is
+            `starrocks.logging_level`.
     """
 
     tables: StarRocksTableNamesSpec

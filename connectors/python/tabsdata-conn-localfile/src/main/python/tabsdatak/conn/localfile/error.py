@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class LocalFileValidateException(ConnException):
-    """Cross-field validation failure for the LocalFile connector."""
+    """Cross-field validation failure for the LocalFile connector.
+
+    :categories: error
+    """
 
 
 class LocalFileRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the LocalFile connector."""
+    """Runtime failure (plugin / I/O) for the LocalFile connector.
+
+    :categories: error
+    """
 
 
 class LocalFileErrorCode(ErrorCode):
+    """Error codes for the LocalFile connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `LocalFileErrorCode.LOCALFILE_N.exception`.
+    """
+
     LOCALFILE_1 = ErrorDef(
         ConnInitException,
         "LocalFile connection validation failed",

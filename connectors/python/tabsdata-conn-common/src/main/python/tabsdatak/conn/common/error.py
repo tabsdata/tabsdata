@@ -12,21 +12,36 @@ from tabsdatak.error import (
 
 
 class ConnException(TabsdataException):
-    """Top-level base exception for the connector hierarchy. Each
-    connector package defines its own subclasses for the categories
-    it needs (init / validate / runtime)."""
+    """Top-level base exception for the connector hierarchy.
+
+    :categories: error
+
+    Each connector package defines its own subclasses for the
+    categories it needs (init / validate / runtime).
+    """
 
     pass
 
 
 class ConnInitException(ConnException):
-    """An object in the connector layer could not be created because
-    of attribute type / value issues at construction time."""
+    """A connector-layer object could not be created (attribute type /
+    value issue at construction time).
+
+    :categories: error
+    """
 
     pass
 
 
 class ConnErrorCode(ErrorCode):
+    """Error codes shared across the connector-common layer.
+
+    :categories: error
+
+    One variant per validation site (credentials, cloud locations,
+    explorer/metadata). Raise via `ConnErrorCode.CONN_N.exception`.
+    """
+
     # --- Credentials (tabsdatak.conn.common.typing_) ----------------
     CONN_1 = ErrorDef(ConnInitException, "Cannot create UserPassword")  # UserPassword
     CONN_2 = ErrorDef(ConnInitException, "Cannot create GCPJson")  # GCPJson

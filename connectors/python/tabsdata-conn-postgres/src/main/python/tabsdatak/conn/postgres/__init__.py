@@ -2,38 +2,62 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Postgres connector — public API.
+"""Postgres connector -- public API.
 
-Batch:
+Imported from `tabsdatak.conn.postgres`. Batch classes:
 
-* :class:`PostgresSrcConn` / :class:`PostgresDestConn` --
-  per-instance Postgres connections for :class:`PostgresSrc` /
-  :class:`PostgresDest`. Attribute-identical but distinct classes
-  so source and destination connections cannot be confused at the
-  wire-format level.
-* :class:`PostgresSrc` -- source: list of SELECT queries; produces
-  one parquet slot per query.
-* :class:`PostgresDest` -- destination: list of target table names;
-  consumes one parquet slot per table.
+* `PostgresSrcConn` / `PostgresDestConn` -- the connection: a
+  SQLAlchemy URI plus `UserPassword` credentials. Attribute-identical
+  but distinct classes so source and destination connections cannot be
+  confused at the wire-format level.
+* `PostgresSrc` -- the `@publisher` source: a list of SELECT
+  `queries`, one parquet slot per query.
+* `PostgresDest` -- the `@subscriber` destination: a list of target
+  `tables`, one parquet slot per table.
 
-CDC (change-data capture):
+CDC (change-data capture) classes:
 
-* :class:`PostgresCdcStreamSrcConn` -- per-instance Postgres CDC
-  connection. The connecting role must hold the ``REPLICATION``
-  attribute.
-* :class:`PostgresCdcStreamSrc` -- stream source that emits one
-  tableframe-batch per WAL flush across the tracked tables. The
-  source attaches to a *logical replication slot* (named on the
-  src; created or reused per
-  :data:`ReplicationSlotBehaviorSpec`).
-* :class:`LsnPosition` -- ``start_from`` primitive for resuming
-  logical replication at a specific WAL LSN.
+* `PostgresCdcStreamSrcConn` -- the CDC connection; the connecting
+  role must hold the `REPLICATION` attribute.
+* `PostgresCdcStreamSrc` -- the `@stream_publisher` source; emits
+  one tableframe-batch per WAL flush across the tracked tables, attached
+  to a logical replication slot named on the source.
+* `LsnPosition` -- `start_from` primitive for resuming logical
+  replication at a specific WAL LSN.
 
-URI and credential fields accept ``Secret`` references.
-Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
-size, read/write engine selection); CDC tuning lives in
-``PostgresCdcStreamSrc.src_cfg`` (buffer / trigger thresholds,
-polling cadence, wal2json format version).
+The connection (with credentials) is registered on a collection and
+resolved from the function's collection at run time -- it is never passed
+to a decorator. A flow function only references the source / destination.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(source=PostgresSrc(queries=["SELECT * FROM city"]),
+                   output_tables=["cities"])
+        def ingest(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+
+        @subscriber(destination=PostgresDest(tables=["cap_rows"]),
+                    input_tables=["mycoll/cities"])
+        def publish(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+A `@stream_publisher` receives the flushed batch as a list of frames
+and must NOT declare a `ctx` parameter.
+
+Examples:
+    .. code-block:: python
+
+        @stream_publisher(
+            source=PostgresCdcStreamSrc(tables=["public.city"],
+                                        replication_slot="td_slot",
+                                        start_from="tail"),
+            flush_interval_mins=2, output_tables=["cdc_raw"])
+        def stream(rows: TableFramesSpec) -> TableFrameSpec:
+            return concat(rows)
+URI and credential fields accept `Secret` references. Cross-cutting
+cfg keys live in `src_cfg` / `dest_cfg` (chunk size, read/write
+engine selection); CDC tuning lives in `PostgresCdcStreamSrc.src_cfg`
+(buffer / trigger thresholds, polling cadence, wal2json format version).
 """
 
 from __future__ import annotations
@@ -73,17 +97,36 @@ from tabsdatak.spi import Conn
 
 
 CredentialsSpec: TypeAlias = UserPassword
+"""The credential type for Postgres connections: `UserPassword` (user
++ password), spliced into the URI by the engine factory."""
 
 UriSpec: TypeAlias = Annotated[
     StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.URI_PATTERN)
 ]
+"""A SQLAlchemy-style Postgres URI, e.g.
+`postgres+psycopg2://host:port/db`. The scheme must be `postgres` or
+`postgresql` (an optional `+driver` is allowed). Accepts a plain
+string or a `Secret`."""
+
 QueriesSpec: TypeAlias = list[str]
+"""A non-empty, ordered list of SELECT statements -- one output slot per
+query."""
+
 PostgresTableNameSpec: TypeAlias = Annotated[
     str,
     _validation.POSTGRES_TABLE_FQN_VALIDATOR,
 ]
+"""A Postgres table name -- `table`, `schema.table` or
+`database.schema.table` (at most three dot-separated parts). Parts may
+be double-quoted, using the doubled double-quote convention to embed a
+literal quote."""
+
 PostgresTableNamesSpec: TypeAlias = list[PostgresTableNameSpec]
+"""A list of Postgres table names (see `PostgresTableNameSpec`)."""
+
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+"""Write disposition when the target table exists: `"append"` adds
+rows; `"replace"` truncates before insert."""
 
 
 # --- PostgresSrc.src_cfg keys ---------------------------------------
@@ -115,18 +158,24 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_1, kw_only=True)
 class PostgresSrcConn(Conn):
-    """Postgres connection used by :class:`PostgresSrc`.
+    """Postgres connection used by `PostgresSrc`.
 
-    :param uri: SQLAlchemy-style URI
-        (``postgres+psycopg2://host:port/db``). Accepts a plain str
-        or ``Secret``.
-    :param credentials: :class:`UserPassword` -- user + password
-        spliced into the URI by the engine factory.
-    :param entity_whitelist: Optional list of regex patterns; the
-        runtime uses these to narrow which tables this conn
-        contributes to discovery.
-    :param conn_cfg: Optional driver-side config (forwarded as
-        ``connect_args`` to SQLAlchemy).
+    :categories: source
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time.
+
+    Args:
+        uri: SQLAlchemy-style Postgres URI
+            (`postgres+psycopg2://host:port/db`). Accepts a plain
+            string or a `Secret`.
+        credentials: `UserPassword` -- user + password spliced into
+            the URI by the engine factory.
+        entity_whitelist: Optional list of regex patterns narrowing
+            which tables this connection contributes to discovery.
+            `None` (the default) means no filtering.
+        conn_cfg: Optional driver-side config forwarded to SQLAlchemy as
+            `connect_args`.
     """
 
     uri: UriSpec
@@ -140,11 +189,14 @@ class PostgresSrcConn(Conn):
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_1, kw_only=True)
 class PostgresDestConn(Conn):
-    """Postgres connection used by :class:`PostgresDest`.
+    """Postgres connection used by `PostgresDest`.
 
-    Attribute-identical to :class:`PostgresSrcConn` but a distinct
-    class so source and destination connections cannot be confused
-    at the wire-format level (the ``__kind__`` differs).
+    :categories: destination
+
+    Attribute-identical to `PostgresSrcConn` but a distinct class so
+    source and destination connections cannot be confused at the
+    wire-format level (the `__kind__` differs). See `PostgresSrcConn`
+    for the field meanings.
     """
 
     uri: UriSpec
@@ -161,25 +213,30 @@ class PostgresDestConn(Conn):
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_2, kw_only=True)
 class PostgresSrc(Src):
-    """Postgres source — one parquet slot per SELECT query.
+    """Postgres source for `@publisher` -- one parquet slot per query.
 
-    :param queries: List of SELECT statements; one slot per query.
-    :param transactional: When ``True`` (default), run all queries
-        inside one transactional session.
-    :param schema_overrides: Optional per-query column dtype hints
-        (same length as ``queries``).
-    :param initial_values: Optional ``{bind_name: value}`` seed dict.
-        Each name is bound into the query as a SQLAlchemy ``:name``
-        parameter at execute time. Acts as the **first-run seed** for
-        each bind name: at runtime, the plugin looks up
-        ``ctx.get_attr(bind_name)`` per bind, and falls back to this
-        field when the ctx scratch store has no entry for that name.
-        User functions persist new values for the next run with
-        ``ctx.set_attr(bind_name, new_value)``.
-    :param src_cfg: Optional ``Mapping`` over the literal cfg key
-        set (logging_level, readEngine, chunkSize).
+    :categories: source
+
+    Args:
+        queries: SELECT statements; one output slot per query, in order.
+        transactional: When `True` (default), run all queries inside
+            one transactional session.
+        schema_overrides: Optional per-query column dtype hints. When
+            given it must have exactly one entry per query (same length
+            and order as `queries`); each entry is a
+            `{column: DataType}` map or `None`.
+        initial_values: Optional `{bind_name: value}` seed dict. Each
+            name is bound into the query as a SQLAlchemy `:var`
+            parameter at execute time, and acts as the first-run seed:
+            the plugin reads `ctx.get_attr(bind_name)` per bind and
+            falls back to this value when the ctx store has no entry.
+            Persist the next value with `ctx.set_attr(bind_name, v)`.
+        src_cfg: Optional config mapping over the allowed keys only
+            (`postgres.logging_level`, `tabsdata.sql.sql.readEngine`,
+            `tabsdata.sql.chunkSize`).
     """
 
+    # devguide-ref: trx context state (initial_values seed / cursor resume)
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -187,6 +244,11 @@ class PostgresSrc(Src):
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
+        """Check `schema_overrides` has one entry per query.
+
+        Called by the framework; raises `PostgresValidateException`
+        when the lengths differ.
+        """
         if self.schema_overrides is not None and len(self.schema_overrides) != len(
             self.queries
         ):
@@ -201,16 +263,21 @@ class PostgresSrc(Src):
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_4, kw_only=True)
 class PostgresDest(Dest):
-    """Postgres destination — write one parquet slot per target table.
+    """Postgres destination for `@subscriber` -- one target table per slot.
 
-    :param tables: Target table names (FQN or bare); one parquet
-        slot per table.
-    :param if_table_exists: ``"append"`` (default) or ``"replace"``
-        (truncate before insert).
-    :param transactional: When ``True`` (default), wrap every table
-        write in one transactional session.
-    :param dest_cfg: Optional ``Mapping`` over the literal cfg key
-        set (logging_level, writeEngine, chunkSize).
+    :categories: destination
+
+    Args:
+        tables: Target table names, qualified or bare (see
+            `PostgresTableNameSpec`); one input slot per table, in
+            order.
+        if_table_exists: `"append"` (default) adds rows; `"replace"`
+            truncates the table before inserting.
+        transactional: When `True` (default), wrap every table write
+            in one transactional session.
+        dest_cfg: Optional config mapping over the allowed keys only
+            (`postgres.logging_level`,
+            `tabsdata.sql.sql.writeEngine`, `tabsdata.sql.chunkSize`).
     """
 
     tables: PostgresTableNamesSpec
@@ -222,42 +289,56 @@ class PostgresDest(Dest):
 # --- CDC public primitives ------------------------------------------
 #
 # These types are postgres-local rather than re-exported from
-# ``conn.common.sql.cdc.typing`` so the user-visible schema of one
+# `conn.common.sql.cdc.typing` so the user-visible schema of one
 # connector cannot widen another's by accident. The plugin
-# (``_cdc_plugin.py``) converts them onto the runner-side common
-# representation when invoking the dialect-agnostic ``run_cdc`` loop.
+# (`_cdc_plugin.py`) converts them onto the runner-side common
+# representation when invoking the dialect-agnostic `run_cdc` loop.
 
-# Relative position keywords: ``"head"`` rewinds to the oldest
-# available change available on the replication slot; ``"tail"``
+# Relative position keywords: `"head"` rewinds to the oldest
+# available change available on the replication slot; `"tail"`
 # skips to the current WAL position so only events that occur
 # *after* the trigger starts are emitted.
 RelativePositionSpec: TypeAlias = Literal["head", "tail"]
+"""Relative CDC start position: `"head"` rewinds to the oldest change
+still retained on the replication slot; `"tail"` skips to the current
+WAL position (only changes made after the stream starts are emitted)."""
 
 # Layout for the columns payload on each emitted change row.
 CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
+"""Layout of the change-values payload on each emitted row: one of
+`"columns"`, `"struct"` or `"map"`."""
 
-# Slot create / reuse strategy. ``"reuse"`` (default) attaches to an
-# existing logical replication slot; ``"create"`` creates one and
+# Slot create / reuse strategy. `"reuse"` (default) attaches to an
+# existing logical replication slot; `"create"` creates one and
 # falls back to attach if it already exists.
 ReplicationSlotBehaviorSpec: TypeAlias = Literal["create", "reuse"]
+"""Logical replication slot strategy: `"reuse"` (default) requires the
+named slot to already exist; `"create"` creates it, doing nothing if it
+already exists."""
 
 # wal2json output-plugin format version. v2 is the default
-# (per-action ``B`` / ``I`` / ``U`` / ``D`` / ``C`` messages with
+# (per-action `B` / `I` / `U` / `D` / `C` messages with
 # explicit transaction begin/commit framing); v1 is the older
 # whole-transaction batch payload.
 Wal2JsonFormatVersionSpec: TypeAlias = Literal[1, 2]
+"""wal2json output-plugin format version: `2` (default, per-action
+messages with explicit begin/commit framing) or `1` (the older
+whole-transaction batch payload)."""
 
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_12, frozen=True, kw_only=True)
 class LsnPosition:
-    """Start logical replication at a specific WAL Log Sequence
-    Number. Resuming from a persisted offset uses this shape too --
-    the runner persists ``LsnOffset.write()`` (the JSON string
-    ``{"lsn": int}``) on the trx state.
+    """CDC start position: a WAL Log Sequence Number.
 
-    :param lsn: 64-bit integer LSN -- the form
-        ``pg_current_wal_lsn() - '0/0'::pg_lsn`` returns. Use ``0``
-        to replay from the oldest WAL the slot retains.
+    :categories: source
+
+    A `start_from` value; resuming from a persisted offset uses this
+    shape too (the runner persists `{"lsn": int}` on the trx state).
+
+    Args:
+        lsn: 64-bit integer LSN -- the value
+            `pg_current_wal_lsn() - '0/0'::pg_lsn` returns. Use `0`
+            to replay from the oldest WAL the slot retains.
     """
 
     lsn: int
@@ -267,6 +348,8 @@ PostgresCdcStartFromSpec: TypeAlias = Union[
     RelativePositionSpec,
     LsnPosition,
 ]
+"""Where a Postgres CDC stream begins: a `"head"` / `"tail"` keyword
+or an `LsnPosition`."""
 
 
 # --- PostgresCdcStreamSrc.src_cfg keys ------------------------------
@@ -290,27 +373,27 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_10, kw_only=True)
 class PostgresCdcStreamSrcConn(Conn):
-    """Postgres CDC connection used by :class:`PostgresCdcStreamSrc`.
+    """Postgres CDC connection used by `PostgresCdcStreamSrc`.
 
-    Mirrors :class:`PostgresSrcConn` for the SQLAlchemy / catalog
-    introspection side. The replication slot + publication live on
-    :class:`PostgresCdcStreamSrc` instead -- one connection can
-    front multiple sources if they each use a distinct slot.
+    :categories: source
 
-    Not a subclass of :class:`PostgresSrcConn`: CDC and batch SQL
-    have different operational guarantees (the connecting role
-    needs the ``REPLICATION`` attribute; the slot retention model
-    is separate from query permissions) and a divergent attribute
-    set is expected over time.
+    Mirrors `PostgresSrcConn` for the SQLAlchemy / catalog
+    introspection side. The replication slot and publication live on
+    `PostgresCdcStreamSrc` instead, so one connection can front
+    multiple sources if each uses a distinct slot. Not a subclass of
+    `PostgresSrcConn` -- CDC and batch SQL have different operational
+    guarantees (the connecting role needs the `REPLICATION` attribute;
+    the slot retention model is separate from query permissions).
 
-    :param uri: SQLAlchemy-style URI; accepts ``str`` /
-        ``Secret`` per :data:`UriSpec`.
-    :param credentials: :class:`UserPassword`. The connecting role
-        must have the ``REPLICATION`` attribute.
-    :param entity_whitelist: Optional regex patterns narrowing
-        discovery.
-    :param conn_cfg: Optional driver-side config forwarded as
-        ``connect_args``.
+    Args:
+        uri: SQLAlchemy-style Postgres URI; accepts a plain string or a
+            `Secret` (see `UriSpec`).
+        credentials: `UserPassword` credentials. The connecting role
+            must have the `REPLICATION` attribute.
+        entity_whitelist: Optional regex patterns narrowing discovery;
+            `None` (default) means no filtering.
+        conn_cfg: Optional driver-side config forwarded as
+            `connect_args`.
     """
 
     uri: UriSpec
@@ -324,35 +407,40 @@ class PostgresCdcStreamSrcConn(Conn):
 
 @_api.dataclass(PostgresErrorCode.POSTGRES_11, kw_only=True)
 class PostgresCdcStreamSrc(StreamSrc):
-    """Postgres CDC stream source -- emits one tableframe-batch per
-    WAL flush across the tracked tables.
+    """Postgres CDC stream source for `@stream_publisher`.
 
-    Postgres logical replication requires a *replication slot*: a
-    persistent cursor on the WAL the database refuses to garbage-
-    collect until the consumer confirms. The source's
-    ``replication_slot`` names the slot;
-    ``replication_slot_behavior`` controls whether the plugin
-    creates it (``"create"``, no-op if it already exists) or
-    requires it to exist (``"reuse"``, default).
+    :categories: source
 
-    :param tables: Qualified ``schema.table`` names to track.
-    :param replication_slot: Logical replication slot to attach to.
-    :param replication_slot_behavior: ``"reuse"`` (default) or
-        ``"create"``.
-    :param publication_name: Optional publication name to scope the
-        slot's output (wal2json's ``publication_names`` option).
-    :param start_from: ``"head"`` (replay from the oldest available
-        WAL), ``"tail"`` (current WAL LSN), or a :class:`LsnPosition`.
-    :param columns_format: Layout for the new (and old) columns
-        payload on each emitted change row. See
-        :data:`CdcColumnsFormatSpec`.
-    :param flatten_columns: When ``True`` the new columns are
-        inlined as top-level columns.
-    :param src_cfg: Optional ``Mapping`` over the literal
-        :data:`CdcSrcCfgKey` set -- buffer / trigger thresholds,
-        polling cadence, wal2json format version.
+    A streaming change-data-capture source: it emits one
+    tableframe-batch per WAL flush across the tracked tables. Postgres
+    logical replication requires a replication slot -- a persistent
+    cursor on the WAL the database will not garbage-collect until the
+    consumer confirms. `replication_slot` names it and
+    `replication_slot_behavior` controls create vs reuse. The
+    decorated `@stream_publisher` function receives the flushed batch
+    as a list of frames and must NOT declare a `ctx` parameter.
+
+    Args:
+        tables: Qualified `schema.table` names to track.
+        replication_slot: Logical replication slot to attach to.
+        start_from: Where to begin -- `"head"` (replay from the oldest
+            retained WAL), `"tail"` (current WAL LSN) or an
+            `LsnPosition`.
+        replication_slot_behavior: `"reuse"` (default, slot must
+            exist) or `"create"` (create it, no-op if it exists).
+        publication_name: Optional publication scoping the slot's output
+            (wal2json's `publication_names` option).
+        columns_format: Layout for the new (and old) columns payload on
+            each change row -- `"columns"` (default), `"struct"` or
+            `"map"`.
+        flatten_columns: When `True` (default), the new columns are
+            inlined as top-level columns.
+        src_cfg: Optional config mapping over the allowed CDC keys only
+            -- buffer / trigger thresholds, polling cadence, wal2json
+            format version.
     """
 
+    # devguide-ref: CDC cursor / resume (start_from, offset persistence)
     tables: list[PostgresTableNameSpec]
     replication_slot: str
     start_from: PostgresCdcStartFromSpec

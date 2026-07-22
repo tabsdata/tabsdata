@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class StarRocksValidateException(ConnException):
-    """Cross-field validation failure for the StarRocks connector."""
+    """Cross-field validation failure for the StarRocks connector.
+
+    :categories: error
+    """
 
 
 class StarRocksRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the StarRocks connector."""
+    """Runtime failure (plugin / I/O) for the StarRocks connector.
+
+    :categories: error
+    """
 
 
 class StarRocksErrorCode(ErrorCode):
+    """Error codes for the StarRocks connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `StarRocksErrorCode.STARROCKS_N.exception`.
+    """
+
     STARROCKS_1 = ErrorDef(
         ConnInitException,
         "StarRocksDestConn validation failed",

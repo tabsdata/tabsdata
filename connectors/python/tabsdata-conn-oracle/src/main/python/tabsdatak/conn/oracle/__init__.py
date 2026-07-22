@@ -2,17 +2,38 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Oracle connector — public API.
+"""Oracle connector -- public API.
 
-* :class:`OracleSrcConn` / :class:`OracleDestConn` -- per-instance Oracle connection.
-* :class:`OracleSrc` -- source: list of SELECT queries; produces
-  one parquet slot per query.
-* :class:`OracleDest` -- destination: list of target table names;
-  consumes one parquet slot per table.
+Imported from `tabsdatak.conn.oracle`. Four classes:
 
-URI and credential fields accept ``Secret`` references.
-Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
-size, read/write engine selection).
+* `OracleSrcConn` / `OracleDestConn` -- the connection: a SQLAlchemy
+  URI plus `UserPassword` credentials. Attribute-identical but distinct
+  classes so source and destination connections cannot be confused at
+  the wire-format level.
+* `OracleSrc` -- the `@publisher` source: a list of SELECT
+  `queries`, one parquet slot per query.
+* `OracleDest` -- the `@subscriber` destination: a list of target
+  `tables`, one parquet slot per table.
+
+The connection (with credentials) is registered on a collection and
+resolved from the function's collection at run time -- it is never passed
+to a decorator. A flow function only references the source / destination.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(source=OracleSrc(queries=["SELECT * FROM city"]),
+                   output_tables=["cities"])
+        def ingest(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+
+        @subscriber(destination=OracleDest(tables=["cap_rows"]),
+                    input_tables=["mycoll/cities"])
+        def publish(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+URI and credential fields accept `Secret` references. Cross-cutting
+cfg keys live in `src_cfg` / `dest_cfg` (chunk size, read/write
+engine selection).
 """
 
 from __future__ import annotations
@@ -51,17 +72,35 @@ from tabsdatak.spi import Conn
 
 
 CredentialsSpec: TypeAlias = UserPassword
+"""The credential type for Oracle connections: `UserPassword` (user +
+password), spliced into the URI by the engine factory."""
 
 UriSpec: TypeAlias = Annotated[
     StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.URI_PATTERN)
 ]
+"""A SQLAlchemy-style Oracle URI, e.g.
+`oracle+oracledb://host:port/service`. The scheme must be `oracle`
+(an optional `+driver` is allowed). Accepts a plain string or a
+`Secret`."""
+
 QueriesSpec: TypeAlias = list[str]
+"""A non-empty, ordered list of SELECT statements -- one output slot per
+query."""
+
 OracleTableNameSpec: TypeAlias = Annotated[
     str,
     _validation.ORACLE_TABLE_FQN_VALIDATOR,
 ]
+"""An Oracle table name, either `table` or `schema.table` (at most
+two dot-separated parts). Parts may be double-quoted; Oracle has no way
+to embed a literal double-quote inside a quoted identifier."""
+
 OracleTableNamesSpec: TypeAlias = list[OracleTableNameSpec]
+"""A list of Oracle table names (see `OracleTableNameSpec`)."""
+
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+"""Write disposition when the target table exists: `"append"` adds
+rows; `"replace"` truncates before insert."""
 
 
 # --- OracleSrc.src_cfg keys -----------------------------------------
@@ -93,7 +132,25 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(OracleErrorCode.ORACLE_1, kw_only=True)
 class OracleSrcConn(Conn):
-    """Oracle connection used by :class:`OracleSrc`."""
+    """Oracle connection used by `OracleSrc`.
+
+    :categories: source
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time.
+
+    Args:
+        uri: SQLAlchemy-style Oracle URI
+            (`oracle+oracledb://host:port/service`). Accepts a plain
+            string or a `Secret`.
+        credentials: `UserPassword` -- user + password spliced into
+            the URI by the engine factory.
+        entity_whitelist: Optional list of regex patterns narrowing
+            which tables this connection contributes to discovery.
+            `None` (the default) means no filtering.
+        conn_cfg: Optional driver-side config forwarded to SQLAlchemy as
+            `connect_args`.
+    """
 
     uri: UriSpec
     credentials: CredentialsSpec
@@ -106,11 +163,13 @@ class OracleSrcConn(Conn):
 
 @_api.dataclass(OracleErrorCode.ORACLE_1, kw_only=True)
 class OracleDestConn(Conn):
-    """Oracle connection used by :class:`OracleDest`.
+    """Oracle connection used by `OracleDest`.
 
-    Attribute-identical to :class:`OracleSrcConn` but a distinct
-    class so source and destination connections cannot be
-    confused at the wire-format level.
+    :categories: destination
+
+    Attribute-identical to `OracleSrcConn` but a distinct class so
+    source and destination connections cannot be confused at the
+    wire-format level. See `OracleSrcConn` for the field meanings.
     """
 
     uri: UriSpec
@@ -127,25 +186,30 @@ class OracleDestConn(Conn):
 
 @_api.dataclass(OracleErrorCode.ORACLE_2, kw_only=True)
 class OracleSrc(Src):
-    """Oracle source — one parquet slot per SELECT query.
+    """Oracle source for `@publisher` -- one parquet slot per query.
 
-    :param queries: List of SELECT statements; one slot per query.
-    :param transactional: When ``True`` (default), run all queries
-        inside one transactional session.
-    :param schema_overrides: Optional per-query column dtype hints
-        (same length as ``queries``).
-    :param initial_values: Optional ``{bind_name: value}`` seed dict.
-        Each name is bound into the query as a SQLAlchemy ``:name``
-        parameter at execute time. Acts as the **first-run seed** for
-        each bind name: at runtime, the plugin looks up
-        ``ctx.get_attr(bind_name)`` per bind, and falls back to this
-        field when the ctx scratch store has no entry for that name.
-        User functions persist new values for the next run with
-        ``ctx.set_attr(bind_name, new_value)``.
-    :param src_cfg: Optional ``Mapping`` over the literal cfg key
-        set (logging_level, readEngine, chunkSize).
+    :categories: source
+
+    Args:
+        queries: SELECT statements; one output slot per query, in order.
+        transactional: When `True` (default), run all queries inside
+            one transactional session.
+        schema_overrides: Optional per-query column dtype hints. When
+            given it must have exactly one entry per query (same length
+            and order as `queries`); each entry is a
+            `{column: DataType}` map or `None`.
+        initial_values: Optional `{bind_name: value}` seed dict. Each
+            name is bound into the query as a SQLAlchemy `:var`
+            parameter at execute time, and acts as the first-run seed:
+            the plugin reads `ctx.get_attr(bind_name)` per bind and
+            falls back to this value when the ctx store has no entry.
+            Persist the next value with `ctx.set_attr(bind_name, v)`.
+        src_cfg: Optional config mapping over the allowed keys only
+            (`oracle.logging_level`, `tabsdata.sql.sql.readEngine`,
+            `tabsdata.sql.chunkSize`).
     """
 
+    # devguide-ref: trx context state (initial_values seed / cursor resume)
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -153,6 +217,11 @@ class OracleSrc(Src):
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
+        """Check `schema_overrides` has one entry per query.
+
+        Called by the framework; raises `OracleValidateException` when
+        the lengths differ.
+        """
         if self.schema_overrides is not None and len(self.schema_overrides) != len(
             self.queries
         ):
@@ -167,16 +236,20 @@ class OracleSrc(Src):
 
 @_api.dataclass(OracleErrorCode.ORACLE_4, kw_only=True)
 class OracleDest(Dest):
-    """Oracle destination — write one parquet slot per target table.
+    """Oracle destination for `@subscriber` -- one target table per slot.
 
-    :param tables: Target table names (FQN or bare); one parquet
-        slot per table.
-    :param if_table_exists: ``"append"`` (default) or ``"replace"``
-        (truncate before insert).
-    :param transactional: When ``True`` (default), wrap every table
-        write in one transactional session.
-    :param dest_cfg: Optional ``Mapping`` over the literal cfg key
-        set (logging_level, writeEngine, chunkSize).
+    :categories: destination
+
+    Args:
+        tables: Target table names, qualified or bare (see
+            `OracleTableNameSpec`); one input slot per table, in order.
+        if_table_exists: `"append"` (default) adds rows; `"replace"`
+            truncates the table before inserting.
+        transactional: When `True` (default), wrap every table write
+            in one transactional session.
+        dest_cfg: Optional config mapping over the allowed keys only
+            (`oracle.logging_level`, `tabsdata.sql.sql.writeEngine`,
+            `tabsdata.sql.chunkSize`).
     """
 
     tables: OracleTableNamesSpec

@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class S3ValidateException(ConnException):
-    """Cross-field validation failure for the S3 connector."""
+    """Cross-field validation failure for the S3 connector.
+
+    :categories: error
+    """
 
 
 class S3RuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the S3 connector."""
+    """Runtime failure (plugin / I/O) for the S3 connector.
+
+    :categories: error
+    """
 
 
 class S3ErrorCode(ErrorCode):
+    """Error codes for the S3 connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `S3ErrorCode.S3_N.exception`.
+    """
+
     S3_1 = ErrorDef(
         ConnInitException,
         "S3 connection validation failed",

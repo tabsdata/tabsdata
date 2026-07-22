@@ -6,12 +6,20 @@ from __future__ import annotations
 
 from enum import Enum
 
-# Duplicated from ``tabsdata._utils.tableframe._constants`` so the shared
-# CDC code carries no dependency on the legacy ``tabsdata.*`` packages.
+# Duplicated from `tabsdata._utils.tableframe._constants` so the shared
+# CDC code carries no dependency on the legacy `tabsdata.*` packages.
 TD_CONNECTOR_COLUMN_PREFIX = "@td."
 
 
 class CdcOperation(str, Enum):
+    """The change operation carried by an emitted CDC row.
+
+    :categories: source
+
+    Recorded in the change metadata of each row a CDC source emits:
+    `INSERT` (`"i"`), `UPDATE` (`"u"`) or `DELETE` (`"d"`).
+    """
+
     INSERT = "i"
     UPDATE = "u"
     DELETE = "d"

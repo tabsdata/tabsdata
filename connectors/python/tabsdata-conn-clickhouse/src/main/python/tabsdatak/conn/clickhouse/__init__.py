@@ -2,18 +2,36 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""ClickHouse connector — public API.
+"""ClickHouse connector -- public API.
 
-* :class:`ClickHouseDestConn` -- per-cluster ClickHouse connection
-  (host, port, credentials, database, cloud staging area).
-* :class:`ClickHouseDest` -- destination: list of table FQNs;
-  one parquet slot per table. Writes go through a cloud-staged
-  bulk loader (S3 / GCS / Azure) rather than row-by-row inserts.
+Six classes, imported from `tabsdatak.conn.clickhouse`:
 
-``port`` and ``secure`` are string-or-secret fields (``PortSpec`` /
-``BoolSpec``); call ``_convert(...)`` from ``tabsdatak.conn.common.types``
-at the use site to resolve them to a concrete ``int`` / ``bool`` for the
-plugin. Iceberg-style schema evolution is supported on the dest.
+* `ClickHouseDestConn` -- the connection: `host` / `port`,
+  `UserPassword` credentials, a `database` and a `staging` cloud
+  location.
+* `ClickHouseDest` -- the `@subscriber` destination: a list of
+  target `tables`, one parquet slot per table. Writes land parquet in
+  the staging location, then read it back through ClickHouse's
+  `s3()` / `azureBlobStorage()` table function (no row-by-row
+  inserts).
+* `CloudLocation` and its concrete forms `S3Location` /
+  `AzBlobLocation` / `GCSLocation` -- the `staging` area the
+  destination lands parquet in.
+
+ClickHouse is destination-only -- there is no `ClickHouseSrc`. The
+connection (with credentials) is registered on a collection, not
+passed to a decorator; the runtime resolves it at run time. A flow
+function only references `ClickHouseDest`.
+
+Examples:
+    .. code-block:: python
+
+        @subscriber(destination=ClickHouseDest(tables=["cap_rows"]),
+                    input_tables=["mycoll/cities"])
+        def publish(rows: TableFrameSpec) -> TableFrameSpec:
+            return rows
+`port` and `secure` are string-or-secret fields; the plugin reads
+their parsed values through the `_port` / `_secure` getters.
 """
 
 from __future__ import annotations
@@ -63,11 +81,13 @@ from tabsdatak.spi import Conn
 # --- Type aliases ----------------------------------------------------
 
 CredentialsSpec: TypeAlias = UserPassword
+"""The credential type for ClickHouse connections: `UserPassword`
+(user + password)."""
 
 
 # host / port / secure are the shared string-or-secret specs from
-# ``tabsdatak.conn.common.types`` (HostSpec / PortSpec / BoolSpec). Read
-# their parsed values through the ``_host`` / ``_port`` / ``_secure`` getters.
+# `tabsdatak.conn.common.types` (HostSpec / PortSpec / BoolSpec). Read
+# their parsed values through the `_host` / `_port` / `_secure` getters.
 
 # Database: ClickHouse identifier shape (alphanumeric + underscore).
 _IDENTIFIER_PATTERN = r"^(?:[A-Za-z_][A-Za-z0-9_]*)$"
@@ -85,10 +105,10 @@ SchemaEvolutionSpec: TypeAlias = Literal["strict", "iceberg"]
 
 # --- ClickHouseDest.dest_cfg keys ------------------------------------
 #
-# Restricts ``ClickHouseDest.dest_cfg`` to the keys the destination
+# Restricts `ClickHouseDest.dest_cfg` to the keys the destination
 # plugin actually consumes. Pydantic enforces the literal membership
 # of keys at validation time, so unknown keys are rejected at
-# construction; ``CONN_CFG_VALIDATOR`` reuses the conn_cfg basic-value
+# construction; `CONN_CFG_VALIDATOR` reuses the conn_cfg basic-value
 # checks (str/int/float/bool/None, plus list/dict compositions).
 DestCfgKey: TypeAlias = Literal["clickhouse.logging_level",]
 
@@ -100,37 +120,45 @@ DestCfgSpec: TypeAlias = Annotated[
 # --- Cloud locations (clickhouse-local) ------------------------------
 #
 # ClickHouse ingests via cloud-staged bulk load and reads the staged
-# files through its native ``s3()`` / ``azureBlobStorage()`` table
+# files through its native `s3()` / `azureBlobStorage()` table
 # functions. The location types live here (rather than reusing
-# ``tabsdatak.conn.common.types``) so the GCS variant can carry
-# ``GCPHmac`` credentials directly: ClickHouse reads GCS exclusively
+# `tabsdatak.conn.common.types`) so the GCS variant can carry
+# `GCPHmac` credentials directly: ClickHouse reads GCS exclusively
 # through the S3-compatible endpoint and has no path that uses the
-# GCS-native ``GCPJson`` service-account credential. Keeping the
+# GCS-native `GCPJson` service-account credential. Keeping the
 # types local also lets the dataclass init failures surface via
-# ``ClickHouseErrorCode``.
+# `ClickHouseErrorCode`.
 
 
 class CloudLocation(_api.DescriptorBase, ABC):
+    """Abstract base for a ClickHouse `staging` cloud location.
+
+    :categories: destination
+
+    Concrete forms are `S3Location` / `AzBlobLocation` /
+    `GCSLocation`; set one as `ClickHouseDestConn.staging`.
+    """
+
     __kind__ = "clickHouseCloudLocation"
 
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_8, kw_only=True)
 class S3Location(CloudLocation):
-    """S3 staging area used by ``ClickHouseDest`` to land parquet
-    files before issuing the ``COPY`` / ``INSERT INTO ... FROM s3()``
-    statement. ClickHouse reads parquet directly from S3, so the
-    plugin uploads to this bucket and references the resulting
-    object via ClickHouse's S3 table function.
+    """S3 staging area for `ClickHouseDest`.
 
-    :param bucket: S3 bucket name (e.g. ``"my-staging-bucket"``).
-    :param region: AWS region (e.g. ``"us-east-1"``).
-    :param credentials: AWS access-key / secret-key pair.
-    :param base_path: Full path (key prefix) from the bucket root
-        (e.g. ``"/staging/clickhouse"``): starts with ``/``, no trailing
-        ``/``. The leading ``/`` is trimmed when forming the object key.
-        Defaults to ``/``.
-    :param cfg: Optional cfg dict passed to the underlying
-        S3 client.
+    :categories: destination
+
+    The plugin lands parquet in this bucket, then references the object
+    via ClickHouse's `s3()` table function to ingest it.
+
+    Args:
+        bucket: A valid S3 bucket name.
+        region: A valid AWS region, e.g. `us-east-1`.
+        credentials: AWS access-key / secret-key credentials.
+        base_path: Object-key prefix from the bucket root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the key). Defaults to `/`.
+        cfg: Optional connector-config dict for the S3 client.
     """
 
     __kind__ = "clickHouseS3Location"
@@ -152,18 +180,20 @@ class S3Location(CloudLocation):
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_9, kw_only=True)
 class AzBlobLocation(CloudLocation):
-    """Azure Blob Storage staging area used by ``ClickHouseDest``.
-    The plugin uploads parquet files to the container and references
-    them via ClickHouse's ``azureBlobStorage()`` table function.
+    """Azure Blob staging area for `ClickHouseDest`.
 
-    :param container: Azure Blob container name.
-    :param credentials: Storage-account key credentials.
-    :param base_path: Full path (path prefix) from the container root
-        (e.g. ``"/staging/clickhouse"``): starts with ``/``, no trailing
-        ``/``. The leading ``/`` is trimmed when forming the blob name.
-        Defaults to ``/``.
-    :param cfg: Optional cfg dict passed to the underlying
-        Azure Blob client.
+    :categories: destination
+
+    The plugin uploads parquet to the container, then references it via
+    ClickHouse's `azureBlobStorage()` table function to ingest it.
+
+    Args:
+        container: A valid Azure Blob container name.
+        credentials: Azure storage account name / key credentials.
+        base_path: Blob-name prefix from the container root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the blob name). Defaults to `/`.
+        cfg: Optional connector-config dict for the Azure Blob client.
     """
 
     __kind__ = "clickHouseAzBlobLocation"
@@ -181,21 +211,26 @@ class AzBlobLocation(CloudLocation):
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_10, kw_only=True)
 class GCSLocation(CloudLocation):
-    """GCS staging for ClickHouse.
+    """GCS staging area for `ClickHouseDest`.
 
-    Carries two required credentials -- one per code path:
+    :categories: destination
 
-    - :attr:`credentials` (:class:`~tabsdatak.conn.common.types.GCPJson`):
-      service-account JSON used by ``google-cloud-storage`` to upload
-      Parquet files to the bucket. The native GCS API is markedly
-      faster than the S3-compat layer for uploads / lists / deletes.
-    - :attr:`hmac_credentials` (:class:`~tabsdatak.conn.common.types.GCPHmac`):
-      HMAC access / secret key pair fed to ClickHouse's ``s3()``
-      table function so the server can fetch the staged file back
-      via the S3-compatible endpoint (the only protocol ClickHouse
-      speaks to GCS).
+    Carries two credentials, one per code path: `credentials` (GCP
+    service-account JSON) uploads parquet via the native GCS API, while
+    `hmac_credentials` (GCS HMAC keys) let ClickHouse's `s3()` table
+    function fetch the staged file back through the S3-compatible
+    endpoint (the only protocol ClickHouse speaks to GCS). Both are
+    required.
 
-    Both are required: drop either and you lose a code path.
+    Args:
+        bucket: A valid GCS bucket name.
+        credentials: GCP service-account JSON credentials (upload).
+        hmac_credentials: GCS HMAC access-key / secret-key credentials
+            (ClickHouse's S3-compatible read-back).
+        base_path: Object-key prefix from the bucket root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the key). Defaults to `/`.
+        cfg: Optional connector-config dict for the GCS client.
     """
 
     __kind__ = "clickHouseGcsLocation"
@@ -219,18 +254,28 @@ class GCSLocation(CloudLocation):
 class ClickHouseDestConn(Conn):
     """ClickHouse connection.
 
-    Every string-or-secret field carries the value as a plain string or a
-    ``Secret``; the plugin reads the parsed value through the ``_host`` /
-    ``_port`` / ``_database`` / ``_secure`` getters.
+    :categories: destination
 
-    :param host: ClickHouse host.
-    :param port: HTTP port; default ``"8123"``.
-    :param credentials: :class:`UserPassword`.
-    :param staging: :class:`CloudLocation` (S3 / AzBlob / GCS).
-    :param database: Default database; default ``"default"``.
-    :param secure: ``true`` for HTTPS, ``false`` for HTTP; default ``"false"``.
-    :param entity_whitelist: Optional regex-based table filter.
-    :param conn_cfg: Optional driver-side config dict.
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time. Each string field accepts a plain string or
+    a `Secret`; the plugin reads parsed values through the `_host` /
+    `_port` / `_database` / `_secure` getters.
+
+    Args:
+        host: A DNS host name or IPv4 literal for the ClickHouse server.
+        port: The HTTP(S) port, 1-65535. Defaults to `"8123"`.
+        credentials: `UserPassword` (user + password).
+        staging: A `CloudLocation` (`S3Location` / `AzBlobLocation`
+            / `GCSLocation`) where parquet is staged before ingest.
+        database: The default database (a ClickHouse identifier: a
+            letter or underscore, then letters, digits and underscores).
+            Defaults to `"default"`.
+        secure: `true` for HTTPS, `false` for HTTP (boolean as
+            text). Defaults to `"false"`.
+        entity_whitelist: Optional list of regex patterns narrowing
+            which tables the connector considers; `None` (the default)
+            filters nothing.
+        conn_cfg: Optional connector-config dict (see `CfgSpec`).
     """
 
     host: HostSpec
@@ -260,15 +305,21 @@ class ClickHouseDestConn(Conn):
 
 @_api.dataclass(ClickHouseErrorCode.CLICKHOUSE_2, kw_only=True)
 class ClickHouseDest(Dest):
-    """ClickHouse destination — one parquet slot per table.
+    """ClickHouse destination for `@subscriber` -- one parquet slot per table.
 
-    :param tables: FQN table names (``[<db>.]<table>``); one
-        parquet slot per entry.
-    :param if_table_exists: ``"append"`` (default) or
-        ``"replace"``.
-    :param schema_evolution: ``"strict"`` (default) or
-        ``"iceberg"`` (apply Iceberg-style schema deltas).
-    :param dest_cfg: Optional dest cfg dict.
+    :categories: destination
+
+    Args:
+        tables: Target table names (non-empty), one write slot per
+            entry. Each is a 1- or 2-part name (`table` or
+            `database.table`); backtick-quote a part for special
+            characters.
+        if_table_exists: `"append"` (the default) adds rows;
+            `"replace"` overwrites the table.
+        schema_evolution: `"strict"` (the default) rejects schema
+            changes; `"iceberg"` applies Iceberg-style schema deltas.
+        dest_cfg: Optional connector config; the only supported key is
+            `clickhouse.logging_level`.
     """
 
     tables: ClickHouseTableNamesSpec
@@ -277,5 +328,9 @@ class ClickHouseDest(Dest):
     dest_cfg: DestCfgSpec | None = None
 
     def validate(self) -> None:
+        """Cross-field validation: `tables` must be non-empty.
+
+        Called by the framework; raises `ClickHouseValidateException`.
+        """
         if not self.tables:
             raise ClickHouseErrorCode.CLICKHOUSE_3.exception()

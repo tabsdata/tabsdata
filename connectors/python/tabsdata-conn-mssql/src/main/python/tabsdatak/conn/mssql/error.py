@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class MSSQLValidateException(ConnException):
-    """Cross-field validation failure for the MSSQL connector."""
+    """Cross-field validation failure for the MSSQL connector.
+
+    :categories: error
+    """
 
 
 class MSSQLRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the MSSQL connector."""
+    """Runtime failure (plugin / I/O) for the MSSQL connector.
+
+    :categories: error
+    """
 
 
 class MssqlErrorCode(ErrorCode):
+    """Error codes for the MSSQL connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `MssqlErrorCode.MSSQL_N.exception`.
+    """
+
     MSSQL_1 = ErrorDef(
         ConnInitException,
         "MSSQL connection validation failed",

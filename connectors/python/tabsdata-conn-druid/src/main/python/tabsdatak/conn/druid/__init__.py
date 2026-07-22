@@ -2,17 +2,34 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Apache Druid connector — public API.
+"""Apache Druid connector -- public API.
 
-* :class:`DruidDestConn` -- per-Druid-Overlord connection.
-* :class:`DruidDest` -- destination: list of datasource names;
-  one parquet slot per datasource. Writes go in two stages:
-  parquet -> cloud staging (S3 / GCS / Azure), then a native
-  batch ``index_parallel`` task to the Overlord with polling
-  until completion.
+Imported from `tabsdatak.conn.druid`:
 
-No ``DruidSrc``. URL and credential fields accept ``Secret``
-references.
+* `DruidDestConn` -- the connection: the Overlord URL, a
+  `UserPassword` for basic auth, and a cloud `staging` area
+  (`S3Location` / `AzBlobLocation` / `GCSLocation`). Registered
+  on a collection, not passed to a decorator.
+* `DruidDest` -- the `@subscriber` destination: a list of
+  datasource names, one parquet slot per datasource.
+
+There is no Druid source today. Writes go in two stages: parquet is
+uploaded to the cloud staging area, then a native batch
+`index_parallel` task is submitted to the Overlord and polled to
+completion. The connection (with credentials) is resolved from the
+function's collection at run time; a flow function only references
+`DruidDest`.
+
+Examples:
+    .. code-block:: python
+
+        @subscriber(
+            destination=DruidDest(tables=["events"], time_column="ts"),
+            input_tables=["mycoll/events"],
+        )
+        def publish(events: TableFrameSpec) -> TableFrameSpec:
+            return events
+URL and credential fields accept a plain string or a `Secret`.
 """
 
 from __future__ import annotations
@@ -99,31 +116,46 @@ DestCfgSpec: TypeAlias = Annotated[
 
 # --- Cloud locations -------------------------------------------------
 #
-# Druid carries a per-Conn ``staging`` field whose value is one of the
+# Druid carries a per-Conn `staging` field whose value is one of the
 # concrete CloudLocation subclasses below. The classes mirror the
 # legacy conn-common shapes but live here so druid owns its own
 # location surface (and routes init failures through DruidErrorCode).
 
 
 class CloudLocation(_api.DescriptorBase, ABC):
+    """Abstract base for a `DruidDest` cloud staging area.
+
+    :categories: destination
+
+    Concrete subclasses (`S3Location` / `AzBlobLocation` /
+    `GCSLocation`) are set as the connection's `staging` field; the
+    plugin uploads parquet there before submitting the Druid ingestion
+    task.
+    """
+
     __kind__ = "druidCloudLocation"
 
 
 @_api.dataclass(DruidErrorCode.DRUID_12, kw_only=True)
 class S3Location(CloudLocation):
-    """S3 staging area used by ``DruidDest``. The plugin uploads
-    parquet files here, then issues a Druid ingestion spec
+    """S3 staging area for `DruidDest`.
+
+    :categories: destination
+
+    The plugin uploads parquet here, then issues a Druid ingestion spec
     referencing the S3 input source.
 
-    :param bucket: S3 bucket name.
-    :param region: AWS region (e.g. ``"us-east-1"``).
-    :param credentials: AWS access-key / secret-key pair.
-    :param base_path: Full path (key prefix) from the bucket root
-        (e.g. ``"/staging/druid"``): starts with ``/``, no trailing
-        ``/``. The leading ``/`` is trimmed when forming the object key.
-        Defaults to ``/``.
-    :param cfg: Optional cfg dict passed to the underlying S3
-        client.
+    Args:
+        bucket: A valid S3 bucket name.
+        region: A valid AWS region, e.g. `us-east-1`.
+        credentials: `AwsAccessSecretKey` (access key id / secret
+            access key).
+        base_path: Object-key prefix from the bucket root, e.g.
+            `/staging/druid`; starts with `/` and has no trailing
+            `/` (the leading `/` is trimmed when forming the key).
+            Defaults to `/`.
+        cfg: Optional connector config for the underlying S3 client
+            (see `CfgSpec`).
     """
 
     __kind__ = "druidS3Location"
@@ -145,16 +177,21 @@ class S3Location(CloudLocation):
 
 @_api.dataclass(DruidErrorCode.DRUID_13, kw_only=True)
 class AzBlobLocation(CloudLocation):
-    """Azure Blob staging area used by ``DruidDest``. The plugin
-    uploads parquet to the container, then issues a Druid ingestion
-    spec referencing the Azure input source.
+    """Azure Blob staging area for `DruidDest`.
 
-    :param container: Azure Blob container name.
-    :param credentials: Storage-account key credentials.
-    :param base_path: Full path (path prefix) from the container root:
-        starts with ``/``, no trailing ``/``. The leading ``/`` is
-        trimmed when forming the blob name. Defaults to ``/``.
-    :param cfg: Optional cfg dict for the Azure Blob client.
+    :categories: destination
+
+    The plugin uploads parquet to the container, then issues a Druid
+    ingestion spec referencing the Azure input source.
+
+    Args:
+        container: A valid Azure Blob container name.
+        credentials: `AzureAccountKey` storage-account credentials.
+        base_path: Path prefix from the container root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the blob name). Defaults to `/`.
+        cfg: Optional connector config for the Azure Blob client (see
+            `CfgSpec`).
     """
 
     __kind__ = "druidAzBlobLocation"
@@ -172,16 +209,21 @@ class AzBlobLocation(CloudLocation):
 
 @_api.dataclass(DruidErrorCode.DRUID_14, kw_only=True)
 class GCSLocation(CloudLocation):
-    """GCS staging area used by ``DruidDest``. The plugin uploads
-    parquet to the bucket, then issues a Druid ingestion spec
-    referencing the GCS input source.
+    """GCS staging area for `DruidDest`.
 
-    :param bucket: GCS bucket name.
-    :param credentials: GCP service-account JSON credentials.
-    :param base_path: Full path (object-key prefix) from the bucket
-        root: starts with ``/``, no trailing ``/``. The leading ``/`` is
-        trimmed when forming the object key. Defaults to ``/``.
-    :param cfg: Optional cfg dict for the GCS client.
+    :categories: destination
+
+    The plugin uploads parquet to the bucket, then issues a Druid
+    ingestion spec referencing the GCS input source.
+
+    Args:
+        bucket: A valid GCS bucket name.
+        credentials: `GCPJson` service-account JSON credentials.
+        base_path: Object-key prefix from the bucket root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the key). Defaults to `/`.
+        cfg: Optional connector config for the GCS client (see
+            `CfgSpec`).
     """
 
     __kind__ = "druidGcsLocation"
@@ -202,19 +244,21 @@ class GCSLocation(CloudLocation):
 
 @_api.dataclass(DruidErrorCode.DRUID_1, kw_only=True)
 class DruidDestConn(Conn):
-    """Druid Overlord connection.
+    """Druid Overlord connection used by `DruidDest`.
 
-    ``overlord_url`` carries the value as a plain string or a ``Secret``;
-    the plugin reads the parsed value through the ``_overlord_url`` getter.
+    :categories: destination
 
-    :param overlord_url: Druid Overlord URL
-        (e.g. ``http://druid.example:8081``).
-    :param staging: :class:`S3Location` / :class:`AzBlobLocation`
-        / :class:`GCSLocation` -- the cloud staging area for
-        parquet uploads.
-    :param credentials: :class:`UserPassword` -- Overlord HTTP
-        basic-auth credentials.
-    :param conn_cfg: Optional driver-side config dict.
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time.
+
+    Args:
+        overlord_url: Druid Overlord `http(s)://` URL, e.g.
+            `http://druid.example:8081`. Accepts a plain string or a
+            `Secret`.
+        staging: Cloud staging area for parquet uploads -- an
+            `S3Location`, `AzBlobLocation` or `GCSLocation`.
+        credentials: `UserPassword` for Overlord HTTP basic auth.
+        conn_cfg: Optional connector config dict (see `CfgSpec`).
     """
 
     overlord_url: UrlSpec
@@ -231,26 +275,38 @@ class DruidDestConn(Conn):
 
 @_api.dataclass(DruidErrorCode.DRUID_2, kw_only=True)
 class DruidDest(Dest):
-    """Druid destination — one parquet slot per datasource.
+    """Druid destination for `@subscriber` -- one slot per
+    datasource.
 
-    :param tables: Datasource names; one slot per entry.
-    :param if_table_exists: ``"append"`` (default) or
-        ``"replace"`` (overwrite the datasource).
-    :param time_column: Name of the row-level timestamp column
-        Druid uses as its primary ``__time`` field at ingest. Druid
-        requires a time column on every datasource; if the source
-        rows don't carry one, leave unset and the ingestion spec
-        falls back to the current ingest time.
-    :param segment_granularity: Druid segment grain
-        (``SECOND``..``YEAR``, default ``ALL``).
-    :param max_concurrent_subtasks: Druid ingestion-task
-        concurrency knob.
-    :param max_rows_per_segment: Per-segment row cap.
-    :param max_rows_in_memory: Per-task memory cap.
-    :param http_timeout_sec: HTTP request timeout (s).
-    :param dest_cfg: Optional dest cfg dict; keys include
-        ``druid.logging_level`` / ``druid.poll_interval_seconds`` /
-        ``druid.retry_attempts`` / ``druid.retry_backoff_seconds``.
+    :categories: destination
+
+    Args:
+        tables: Datasource names, one write slot per entry (each 1-128
+            chars, not starting with `.` or `_`, and containing no
+            `/`, backslash or NUL).
+        if_table_exists: `"append"` (default) or `"replace"`
+            (overwrite the datasource).
+        time_column: Name of the row-level timestamp column Druid uses
+            as its primary `__time` field at ingest. Druid requires a
+            time column on every datasource; if the rows carry none,
+            leave unset and the ingestion spec falls back to the
+            current ingest time.
+        segment_granularity: Druid segment grain -- one of `ALL`
+            (default), `NONE`, `SECOND`, `MINUTE`,
+            `FIFTEEN_MINUTE`, `THIRTY_MINUTE`, `HOUR`,
+            `SIX_HOUR`, `DAY`, `WEEK`, `MONTH`, `QUARTER` or
+            `YEAR`.
+        max_concurrent_subtasks: Druid ingestion-task concurrency
+            (default 1).
+        max_rows_per_segment: Per-segment row cap (default 5,000,000).
+        max_rows_in_memory: Per-task in-memory row cap (default
+            1,000,000).
+        http_timeout_sec: HTTP request timeout in seconds (default
+            300).
+        dest_cfg: Optional connector config over the keys
+            `druid.logging_level`, `druid.poll_interval_seconds`,
+            `druid.retry_attempts` and
+            `druid.retry_backoff_seconds`.
     """
 
     tables: DruidTableNamesSpec

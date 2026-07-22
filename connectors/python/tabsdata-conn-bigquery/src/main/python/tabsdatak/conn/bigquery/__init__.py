@@ -2,18 +2,30 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""BigQuery connector — public API.
+"""BigQuery connector -- public API.
 
-* :class:`BigQueryDestConn` -- per-project BigQuery connection
-  (project + GCS staging + GCP credentials).
-* :class:`BigQueryDest` -- destination: list of table names
-  (``[[project.]dataset.]table``, partial names completed from the
-  connection's ``project`` / ``dataset`` defaults); one parquet slot
-  per table. Writes go via a GCS staging bucket and a
-  ``load_table_from_uri`` load job.
+Four classes, imported from `tabsdatak.conn.bigquery`:
 
-No ``BigQuerySrc`` today. Credential fields accept ``Secret``
-references.
+* `BigQueryDestConn` -- the connection: a GCS `staging` location,
+  GCP `credentials`, and optional default `project` / `dataset`.
+* `BigQueryDest` -- the `@subscriber` destination: a list of target
+  `tables`, one parquet slot per table. Writes go via the GCS staging
+  bucket and a `load_table_from_uri` load job.
+* `CloudLocation` and its concrete form `GCSLocation` -- the
+  `staging` bucket the destination lands parquet in.
+
+BigQuery is destination-only -- there is no `BigQuerySrc`. The
+connection (with credentials) is registered on a collection, not
+passed to a decorator; the runtime resolves it at run time. A flow
+function only references `BigQueryDest`.
+
+Examples:
+    .. code-block:: python
+
+        @subscriber(destination=BigQueryDest(tables=["`cap_rows`"]),
+                    input_tables=["mycoll/cities"])
+        def publish(rows: TableFrameSpec) -> TableFrameSpec:
+            return rows
 """
 
 from __future__ import annotations
@@ -51,6 +63,8 @@ from tabsdatak.spi import Conn
 
 
 CredentialsSpec: TypeAlias = GCPJson
+"""The credential type for BigQuery connections: `GCPJson`
+(service-account JSON key)."""
 
 
 ProjectSpec: TypeAlias = Annotated[
@@ -86,24 +100,34 @@ DestCfgSpec: TypeAlias = Annotated[
 
 
 class CloudLocation(_api.DescriptorBase, ABC):
+    """Abstract base for a BigQuery `staging` location.
+
+    :categories: destination
+
+    The only concrete form today is `GCSLocation` -- BigQuery stages
+    exclusively via GCS. Kept parallel to the other connectors so the
+    import / dispatch surface stays consistent.
+    """
+
     __kind__ = "bigQueryCloudLocation"
 
 
 @_api.dataclass(BigqueryErrorCode.BIGQUERY_8, kw_only=True)
 class GCSLocation(CloudLocation):
-    """GCS staging area used by ``BigQueryDest``. The plugin uploads
-    parquet files here, then issues a ``LOAD DATA`` /
-    ``load_table_from_uri`` against BigQuery referencing the
-    object.
+    """GCS staging area for `BigQueryDest`.
 
-    :param bucket: GCS bucket name.
-    :param credentials: GCP service-account JSON credentials.
-    :param base_path: Full path (object-key prefix) from the bucket
-        root (e.g. ``"/staging/bigquery"``): starts with ``/``, no
-        trailing ``/``. The leading ``/`` is trimmed when forming the
-        object key. Defaults to ``/``.
-    :param cfg: Optional cfg dict passed to the underlying GCS
-        client.
+    :categories: destination
+
+    The plugin uploads parquet here, then runs a `load_table_from_uri`
+    load job against BigQuery referencing the object.
+
+    Args:
+        bucket: A valid GCS bucket name.
+        credentials: GCP service-account JSON credentials.
+        base_path: Object-key prefix from the bucket root; starts with
+            `/` and has no trailing `/` (the leading `/` is
+            trimmed when forming the key). Defaults to `/`.
+        cfg: Optional connector-config dict for the GCS client.
     """
 
     __kind__ = "bigQueryGcsLocation"
@@ -126,14 +150,26 @@ class GCSLocation(CloudLocation):
 class BigQueryDestConn(Conn):
     """BigQuery connection.
 
-    :param staging: :class:`GCSLocation` used as the parquet
-        staging bucket for load jobs.
-    :param credentials: GCP service-account JSON
-        (:class:`GCPJson`).
-    :param project: Default GCP project. Optional.
-    :param dataset: Default BigQuery dataset. Optional.
-    :param entity_whitelist: Optional regex-based table filter.
-    :param conn_cfg: Optional driver-side config dict.
+    :categories: destination
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time. Each string field accepts a plain string or
+    a `Secret`.
+
+    Args:
+        staging: A `GCSLocation` used as the parquet staging bucket
+            for load jobs.
+        credentials: GCP service-account JSON credentials (`GCPJson`).
+        project: Optional default GCP project id (6-30 characters,
+            lowercase letters, digits and hyphens, starting with a
+            letter, ending alphanumeric). Required when `dataset` is
+            set.
+        dataset: Optional default BigQuery dataset id (1-1024
+            characters, letters, digits and underscores).
+        entity_whitelist: Optional list of regex patterns narrowing
+            which tables the connector considers; `None` (the default)
+            filters nothing.
+        conn_cfg: Optional connector-config dict (see `CfgSpec`).
     """
 
     staging: GCSLocation
@@ -150,6 +186,10 @@ class BigQueryDestConn(Conn):
         return _convert(self.dataset, str)
 
     def validate(self) -> None:
+        """Cross-field validation: `dataset` requires `project`.
+
+        Called by the framework; raises `BigQueryValidateException`.
+        """
         if self.dataset is not None and self.project is None:
             # noinspection PyProtectedMember
             raise BigqueryErrorCode.BIGQUERY_2.exception(dataset=self.dataset)
@@ -160,21 +200,28 @@ class BigQueryDestConn(Conn):
 
 @_api.dataclass(BigqueryErrorCode.BIGQUERY_3, kw_only=True)
 class BigQueryDest(Dest):
-    """BigQuery destination — one parquet slot per target table.
+    """BigQuery destination for `@subscriber` -- one parquet slot per table.
 
-    :param tables: Table names (``[[project.]dataset.]table``). A
-        bare ``table`` or ``dataset.table`` is completed from the
-        connection's ``project`` / ``dataset`` defaults. One slot per
-        table.
-    :param if_table_exists: ``"append"`` (default) or
-        ``"replace"`` (drop + recreate).
-    :param schema_evolution: ``"update"`` (default; allow new
-        columns) or ``"strict"`` (reject schema changes).
-    :param dest_cfg: Optional dest cfg dict; key set is
-        ``"bigquery.logging_level"``.
+    #VERIFY: `tables` was made required (previously `| None = None`) so a
+    subscriber must target at least one table, matching every other `*Dest`.
+
+    :categories: destination
+
+    Args:
+        tables: Target table names, one write slot per entry. Each is
+            `[[project.]dataset.]table`; a bare `table` or
+            `dataset.table` is completed from the connection's
+            `project` / `dataset` defaults. BigQuery wraps the whole
+            name in one backtick pair, e.g. `my-project.ds.t`.
+        if_table_exists: `"append"` (the default) adds rows;
+            `"replace"` drops and recreates the table.
+        schema_evolution: `"update"` (the default) allows new columns;
+            `"strict"` rejects schema changes.
+        dest_cfg: Optional connector config; the only supported key is
+            `bigquery.logging_level`.
     """
 
-    tables: BigQueryTableNamesSpec | None = None
+    tables: BigQueryTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "update"
     dest_cfg: DestCfgSpec | None = None

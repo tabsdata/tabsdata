@@ -2,17 +2,37 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Databricks connector — public API.
+"""Databricks connector -- public API.
 
-* :class:`DatabricksConn` -- per-workspace connection (host_url,
-  PAT token, warehouse, volume, catalog/schema).
-* :class:`DatabricksSrc` -- source: list of SQL statements; one
-  parquet slot per statement. Uses the Statement Execution API
-  + external-link Arrow streams.
-* :class:`DatabricksDest` -- destination: list of table FQNs;
-  one parquet slot per table. Uses Volumes + ``COPY INTO``.
+Four classes, imported from `tabsdatak.conn.databricks`:
 
-Token, host, identifier fields accept ``Secret``.
+* `DatabricksSrcConn` / `DatabricksDestConn` -- the connection: a
+  workspace `host_url` and PAT `token` (both bare `Secret`), a
+  staging `volume`, an optional `warehouse` / `warehouse_id` and
+  default `catalog` / `schema`.
+* `DatabricksSrc` -- the `@publisher` source: a list of SQL
+  `queries` run through the Statement Execution API (external-link
+  Arrow streams), one parquet slot per statement.
+* `DatabricksDest` -- the `@subscriber` destination: a list of
+  target `tables`, one parquet slot per table (staged to the Volume,
+  then `COPY INTO`).
+
+The connection (with credentials) is registered on a collection, not
+passed to a decorator; the runtime resolves it at run time. A flow
+function only references `DatabricksSrc` / `DatabricksDest`.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(source=DatabricksSrc(queries=["SELECT * FROM wld_city"]),
+                   output_tables=["cities"])
+        def ingest(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+
+        @subscriber(destination=DatabricksDest(tables=["cap_rows"]),
+                    input_tables=["mycoll/cities"])
+        def publish(rows: TableFrameSpec) -> TableFrameSpec:
+            return rows
 """
 
 from __future__ import annotations
@@ -54,6 +74,8 @@ from tabsdatak.spi import Conn
 HostUrlSpec: TypeAlias = Secret
 DatabricksTokenSpec: TypeAlias = Secret
 CredentialsSpec: TypeAlias = DatabricksTokenSpec
+"""The credential type for Databricks connections: a bare `Secret`
+holding the personal access token (PAT)."""
 
 
 IdentifierSpec: TypeAlias = Annotated[
@@ -118,44 +140,34 @@ def _validate_databricks_conn(conn) -> None:
 
 @_api.dataclass(DatabricksErrorCode.DATABRICKS_1, kw_only=True)
 class DatabricksSrcConn(Conn):
-    """Databricks workspace connection used by :class:`DatabricksSrc`."""
+    """Databricks workspace connection used by `DatabricksSrc`.
 
-    host_url: HostUrlSpec
-    token: CredentialsSpec
-    volume: VolumeSpec
-    warehouse: WarehouseSpec | None = None
-    warehouse_id: WarehouseIdSpec | None = None
-    catalog: IdentifierSpec | None = None
-    schema: IdentifierSpec | None = None
-    entity_whitelist: EntityWhitelistSpec | None = None
-    conn_cfg: CfgSpec | None = None
+    :categories: source
 
-    def _volume(self) -> str:
-        return _convert(self.volume, str)
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time. `host_url` and `token` are bare
+    `Secret` values; the identifier fields accept a plain string or a
+    `Secret`.
 
-    def _warehouse(self) -> str:
-        return _convert(self.warehouse, str)
-
-    def _warehouse_id(self) -> str:
-        return _convert(self.warehouse_id, str)
-
-    def _catalog(self) -> str:
-        return _convert(self.catalog, str)
-
-    def _schema(self) -> str:
-        return _convert(self.schema, str)
-
-    def validate(self) -> None:
-        _validate_databricks_conn(self)
-
-
-@_api.dataclass(DatabricksErrorCode.DATABRICKS_1, kw_only=True)
-class DatabricksDestConn(Conn):
-    """Databricks workspace connection used by :class:`DatabricksDest`.
-
-    Attribute-identical to :class:`DatabricksSrcConn` but a distinct
-    class so source and destination connections cannot be confused
-    at the wire-format level.
+    Args:
+        host_url: The workspace URL (a `Secret`), e.g.
+            `https://<workspace>.cloud.databricks.com`.
+        token: The personal access token (PAT), a `Secret`.
+        volume: A Unity Catalog Volume used to stage parquet, given as a
+            `[catalog.][schema.]volume` name (backtick-quote a part
+            for special characters).
+        warehouse: Optional SQL warehouse name (1-100 characters, no
+            leading / trailing whitespace). Mutually exclusive with
+            `warehouse_id`.
+        warehouse_id: Optional SQL warehouse id (16-character lowercase
+            hex). Mutually exclusive with `warehouse`.
+        catalog: Optional default catalog (a Databricks identifier).
+        schema: Optional default schema (a Databricks identifier);
+            requires `catalog`.
+        entity_whitelist: Optional list of regex patterns narrowing
+            which tables the source considers; `None` (the default)
+            filters nothing.
+        conn_cfg: Optional connector-config dict (see `CfgSpec`).
     """
 
     host_url: HostUrlSpec
@@ -184,6 +196,56 @@ class DatabricksDestConn(Conn):
         return _convert(self.schema, str)
 
     def validate(self) -> None:
+        """Cross-field validation: `warehouse` and `warehouse_id` are
+        mutually exclusive, and `schema` requires `catalog`.
+
+        Called by the framework; raises `DatabricksValidateException`.
+        """
+        _validate_databricks_conn(self)
+
+
+@_api.dataclass(DatabricksErrorCode.DATABRICKS_1, kw_only=True)
+class DatabricksDestConn(Conn):
+    """Databricks workspace connection used by `DatabricksDest`.
+
+    :categories: destination
+
+    Field-identical to `DatabricksSrcConn` but a distinct class so
+    source and destination connections cannot be confused at the
+    wire-format level. See `DatabricksSrcConn` for the field meanings.
+    """
+
+    host_url: HostUrlSpec
+    token: CredentialsSpec
+    volume: VolumeSpec
+    warehouse: WarehouseSpec | None = None
+    warehouse_id: WarehouseIdSpec | None = None
+    catalog: IdentifierSpec | None = None
+    schema: IdentifierSpec | None = None
+    entity_whitelist: EntityWhitelistSpec | None = None
+    conn_cfg: CfgSpec | None = None
+
+    def _volume(self) -> str:
+        return _convert(self.volume, str)
+
+    def _warehouse(self) -> str:
+        return _convert(self.warehouse, str)
+
+    def _warehouse_id(self) -> str:
+        return _convert(self.warehouse_id, str)
+
+    def _catalog(self) -> str:
+        return _convert(self.catalog, str)
+
+    def _schema(self) -> str:
+        return _convert(self.schema, str)
+
+    def validate(self) -> None:
+        """Cross-field validation: `warehouse` and `warehouse_id` are
+        mutually exclusive, and `schema` requires `catalog`.
+
+        Called by the framework; raises `DatabricksValidateException`.
+        """
         _validate_databricks_conn(self)
 
 
@@ -192,23 +254,24 @@ class DatabricksDestConn(Conn):
 
 @_api.dataclass(DatabricksErrorCode.DATABRICKS_3, kw_only=True)
 class DatabricksSrc(Src):
-    """Databricks source — one parquet slot per SQL statement.
+    """Databricks source for `@publisher` -- one parquet slot per query.
 
-    :param queries: List of SQL statements.
-    :param initial_values: Optional ``{bind_name: value}`` dict.
-        Each occurrence of ``{bind_name}`` in a query is substituted
-        by the corresponding value at execute time (Python
-        ``str.format``-style; values are inlined verbatim, not
-        parameterised -- use only for literal-safe substitutions
-        like dates and ids). Acts as the **first-run seed** for
-        each bind name: at runtime, the plugin looks up
-        ``ctx.get_attr(bind_name)`` per bind, and falls back to
-        this field when the ctx scratch store has no entry for that
-        name. User functions persist new values for the next run
-        with ``ctx.set_attr(bind_name, new_value)``.
-    :param src_cfg: Optional ``Mapping`` over
-        ``databricks.logging_level``.
+    :categories: source
+
+    Args:
+        queries: SQL statements, one output slot per entry, run through
+            the Statement Execution API.
+        initial_values: Optional `{bind_name: value}` seed dict. Each
+            name binds into the query as a `:var` statement parameter
+            (typed, native binding); it seeds the first run only, after
+            which the plugin reads `ctx.get_attr(bind_name)` and the
+            function persists new values with
+            `ctx.set_attr(bind_name, ...)`.
+        src_cfg: Optional connector config; the only supported key is
+            `databricks.logging_level`.
     """
+
+    # devguide-ref: source bind-value seeding & ctx scratch state
 
     queries: QueriesSpec
     initial_values: BasicDictSpec | None = None
@@ -220,15 +283,23 @@ class DatabricksSrc(Src):
 
 @_api.dataclass(DatabricksErrorCode.DATABRICKS_4, kw_only=True)
 class DatabricksDest(Dest):
-    """Databricks destination — one parquet slot per table.
+    """Databricks destination for `@subscriber` -- one parquet slot per table.
 
-    :param tables: Table names ([catalog.][schema.]table).
-    :param if_table_exists: ``"append"`` (default) or
-        ``"replace"``.
-    :param schema_evolution: ``"update"`` (default; forwards
-        ``mergeSchema=true`` to ``COPY INTO``) or ``"strict"``
-        (reject schema changes).
-    :param dest_cfg: Optional dest cfg dict.
+    :categories: destination
+
+    Args:
+        tables: Target table names, one write slot per entry. Each is a
+            1-, 2- or 3-part name (`table`, `schema.table` or
+            `catalog.schema.table`); backtick-quote a part for special
+            characters. Partial names are completed from the
+            connection's `catalog` / `schema` defaults.
+        if_table_exists: `"append"` (the default) adds rows;
+            `"replace"` overwrites the table.
+        schema_evolution: `"update"` (the default) forwards
+            `mergeSchema=true` to `COPY INTO` so new columns are
+            added; `"strict"` rejects schema changes.
+        dest_cfg: Optional connector config; the only supported key is
+            `databricks.logging_level`.
     """
 
     tables: DatabricksTableNamesSpec

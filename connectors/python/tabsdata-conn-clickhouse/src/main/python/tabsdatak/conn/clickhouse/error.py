@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class ClickHouseValidateException(ConnException):
-    """Cross-field validation failure for the ClickHouse connector."""
+    """Cross-field validation failure for the ClickHouse connector.
+
+    :categories: error
+    """
 
 
 class ClickHouseRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the ClickHouse connector."""
+    """Runtime failure (plugin / I/O) for the ClickHouse connector.
+
+    :categories: error
+    """
 
 
 class ClickHouseErrorCode(ErrorCode):
+    """Error codes for the ClickHouse connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `ClickHouseErrorCode.CLICKHOUSE_N.exception`.
+    """
+
     CLICKHOUSE_1 = ErrorDef(
         ConnInitException,
         "ClickHouseDestConn validation failed",

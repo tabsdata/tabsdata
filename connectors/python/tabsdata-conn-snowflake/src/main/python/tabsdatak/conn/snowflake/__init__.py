@@ -2,22 +2,29 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Snowflake connector — public API.
+"""Snowflake connector -- public API.
 
-Defines the dataclasses a flow author wires onto a publisher,
-subscriber, or transformer to target Snowflake:
+Two classes, imported from `tabsdatak.conn.snowflake`:
 
-* :class:`SnowflakeDestConn` -- per-account connection (account id,
-  user/password, optional default role/database/schema/warehouse/
-  stage).
-* :class:`SnowflakeDest` -- destination wrapper bound to a
-  :class:`SnowflakeDestConn` plus a list of target table names. Used
-  by the destination plugin (``COPY INTO`` via a stage).
+* `SnowflakeDestConn` -- the connection: a Snowflake `account`,
+  `UserPassword` credentials, and optional default `role` /
+  `database` / `schema` / `warehouse` / `stage`.
+* `SnowflakeDest` -- the `@subscriber` destination: a list of
+  target `tables`, one parquet slot per table (loaded with `PUT` +
+  `COPY INTO` through a stage).
 
-Snowflake is dest-only in this connector; there is no
-``SnowflakeSrc``. Identifier and account fields accept ``Secret``
-references so values can be injected from the runtime
-environment rather than hard-coded.
+Snowflake is destination-only -- there is no `SnowflakeSrc`. The
+connection (with credentials) is registered on a collection, not
+passed to a decorator; the runtime resolves it at run time. A flow
+function only references `SnowflakeDest`.
+
+Examples:
+    .. code-block:: python
+
+        @subscriber(destination=SnowflakeDest(tables=["cap_rows"]),
+                    input_tables=["mycoll/cities"])
+        def publish(rows: TableFrameSpec) -> TableFrameSpec:
+            return rows
 """
 
 from __future__ import annotations
@@ -51,6 +58,8 @@ from tabsdatak.spi import Conn
 
 
 CredentialsSpec: TypeAlias = UserPassword
+"""The credential type for Snowflake connections: `UserPassword`
+(user + password / PAT)."""
 
 AccountSpec: TypeAlias = Annotated[
     StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.ACCOUNT_PATTERN)
@@ -58,8 +67,8 @@ AccountSpec: TypeAlias = Annotated[
 
 
 # Snowflake identifier shape (unquoted or double-quoted), shared by
-# both the dedicated identifier field (``stage``) and the Name fields
-# (``role`` / ``database`` / ``schema`` / ``warehouse``) -- all four
+# both the dedicated identifier field (`stage`) and the Name fields
+# (`role` / `database` / `schema` / `warehouse`) -- all four
 # follow the same identifier rules.
 
 IdentifierSpec: TypeAlias = Annotated[
@@ -90,21 +99,30 @@ DestCfgSpec: TypeAlias = Annotated[
 class SnowflakeDestConn(Conn):
     """Snowflake account connection.
 
-    :param account: Snowflake account locator (e.g. ``ABCDEFG-XY12345``).
-        Accepts a plain str or ``Secret``.
-    :param credentials: :class:`UserPassword` (user + password / PAT).
-    :param role: Default Snowflake role. Optional.
-    :param database: Default database. Required if ``schema`` is set.
-    :param schema: Default schema. Requires ``database``.
-    :param warehouse: Default warehouse to ``USE`` before write.
-        Optional -- the dest plugin issues ``USE WAREHOUSE`` only when set.
-    :param stage: Permanent stage to use for ``PUT`` + ``COPY INTO``.
-        When unset the plugin creates a session-scoped ``TEMPORARY`` stage.
-    :param conn_cfg: Optional driver-specific config dict
-        (snowflake-connector-python kwargs).
+    :categories: destination
 
-    Cross-field rule: ``schema`` without ``database`` raises
-    ``SNOWFLAKE_2``.
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time. Each string field accepts a plain string or
+    a `Secret`. `role` / `database` / `schema` / `warehouse`
+    follow the same Snowflake identifier rules as `stage`.
+
+    Args:
+        account: A valid Snowflake account identifier / locator, e.g.
+            `ABCDEFG-XY12345` (alphanumerics with dots, hyphens and
+            underscores; starts and ends alphanumeric).
+        credentials: `UserPassword` (user + password or PAT).
+        role: Optional default role to `USE` before writing.
+        database: Optional default database. Required when `schema`
+            is set.
+        schema: Optional default schema. Requires `database`.
+        warehouse: Optional default warehouse; the plugin issues
+            `USE WAREHOUSE` only when set.
+        stage: Optional permanent stage for `PUT` + `COPY INTO`;
+            when unset the plugin creates a session-scoped
+            `TEMPORARY` stage. A Snowflake identifier -- unquoted, or
+            double-quoted for case-sensitive / special-char names.
+        conn_cfg: Optional connector-config dict (see `CfgSpec`),
+            forwarded to snowflake-connector-python.
     """
 
     account: AccountSpec
@@ -135,6 +153,10 @@ class SnowflakeDestConn(Conn):
         return _convert(self.stage, str)
 
     def validate(self) -> None:
+        """Cross-field validation: `schema` requires `database`.
+
+        Called by the framework; raises `SnowflakeValidateException`.
+        """
         if self.schema is not None and self.database is None:
             # noinspection PyProtectedMember
             raise SnowflakeErrorCode.SNOWFLAKE_2.exception(schema=self.schema)
@@ -145,17 +167,20 @@ class SnowflakeDestConn(Conn):
 
 @_api.dataclass(SnowflakeErrorCode.SNOWFLAKE_3, kw_only=True)
 class SnowflakeDest(Dest):
-    """Snowflake destination — write one parquet per target table.
+    """Snowflake destination for `@subscriber` -- one parquet slot per table.
 
-    :param tables: Fully-qualified Snowflake table names
-        (``[<db>.]<schema>.<table>`` or bare). Identifier parts
-        accept double-quoted spelling for case-sensitive / special-
-        char names.
-    :param if_table_exists: ``"append"`` (default) or ``"replace"``
-        (issues ``TRUNCATE`` before ``COPY INTO`` to preserve the
-        existing schema).
-    :param dest_cfg: Optional dest cfg dict; the only key the plugin
-        consumes today is ``"snowflake.logging_level"``.
+    :categories: destination
+
+    Args:
+        tables: Target table names, one write slot per entry. Each is a
+            1-, 2- or 3-part name (`table`, `schema.table` or
+            `database.schema.table`); double-quote a part for
+            case-sensitive / special-char names.
+        if_table_exists: `"append"` (the default) adds rows;
+            `"replace"` issues `TRUNCATE` before `COPY INTO` (so
+            the existing schema is preserved).
+        dest_cfg: Optional connector config; the only supported key is
+            `snowflake.logging_level`.
     """
 
     tables: SnowflakeTableNamesSpec

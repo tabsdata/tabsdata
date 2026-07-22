@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class PostgresValidateException(ConnException):
-    """Cross-field validation failure for the Postgres connector."""
+    """Cross-field validation failure for the Postgres connector.
+
+    :categories: error
+    """
 
 
 class PostgresRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the Postgres connector."""
+    """Runtime failure (plugin / I/O) for the Postgres connector.
+
+    :categories: error
+    """
 
 
 class PostgresErrorCode(ErrorCode):
+    """Error codes for the Postgres connector.
+
+    :categories: error
+
+    One variant per validation / runtime site (batch and CDC). Raise via
+    `PostgresErrorCode.POSTGRES_N.exception`.
+    """
+
     POSTGRES_1 = ErrorDef(
         ConnInitException,
         "Postgres connection validation failed",

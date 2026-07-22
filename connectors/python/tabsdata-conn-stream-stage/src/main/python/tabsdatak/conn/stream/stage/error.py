@@ -15,10 +15,21 @@ from tabsdatak.error import (
 
 
 class ManifestStageException(ConnException):
-    """Runtime failure while reading a stream-stage manifest."""
+    """Runtime failure while reading a stream-stage manifest.
+
+    :categories: error
+    """
 
 
 class ManifestStageErrorCode(ErrorCode):
+    """Error codes for the stream-stage connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `ManifestStageErrorCode.MANIFEST_STAGE_N.exception`.
+    """
+
     MANIFEST_STAGE_1 = ErrorDef(
         ConnInitException,
         "ManifestStageConn requires exactly one backend connection "

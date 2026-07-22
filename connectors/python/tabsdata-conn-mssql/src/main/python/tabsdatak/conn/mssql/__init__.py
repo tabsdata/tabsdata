@@ -2,17 +2,34 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""MSSQL connector — public API.
+"""MSSQL connector -- public API.
 
-* :class:`MSSQLSrcConn` / :class:`MSSQLDestConn` -- per-instance MSSQL connection.
-* :class:`MSSQLSrc` -- source: list of SELECT queries; produces
-  one parquet slot per query.
-* :class:`MSSQLDest` -- destination: list of target table names;
-  consumes one parquet slot per table.
+Four classes, imported from `tabsdatak.conn.mssql`:
 
-URI and credential fields accept ``Secret`` references.
-Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
-size, read/write engine selection).
+* `MSSQLSrcConn` / `MSSQLDestConn` -- the connection: a SQLAlchemy
+  or ODBC `uri` and `UserPassword` credentials, plus an optional
+  `entity_whitelist` and `conn_cfg`.
+* `MSSQLSrc` -- the `@publisher` source: a list of SELECT
+  `queries`, one parquet slot per query.
+* `MSSQLDest` -- the `@subscriber` destination: a list of target
+  `tables`, one parquet slot per table.
+
+The connection (with credentials) is registered on a collection, not
+passed to a decorator; the runtime resolves it at run time. A flow
+function only references `MSSQLSrc` / `MSSQLDest`.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(source=MSSQLSrc(queries=["SELECT * FROM wld_city"]),
+                   output_tables=["cities"])
+        def ingest(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+
+        @subscriber(destination=MSSQLDest(tables=["cap_rows"]),
+                    input_tables=["mycoll/cities"])
+        def publish(rows: TableFrameSpec) -> TableFrameSpec:
+            return rows
 """
 
 from __future__ import annotations
@@ -51,6 +68,8 @@ from tabsdatak.spi import Conn
 
 
 CredentialsSpec: TypeAlias = UserPassword
+"""The credential type for MSSQL connections: `UserPassword` (user +
+password)."""
 
 UriSpec: TypeAlias = Annotated[
     StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.MSSQL_URI_PATTERN)
@@ -93,7 +112,25 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(MssqlErrorCode.MSSQL_1, kw_only=True)
 class MSSQLSrcConn(Conn):
-    """MSSQL connection used by :class:`MSSQLSrc`."""
+    """MSSQL connection used by `MSSQLSrc`.
+
+    :categories: source
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time. The `uri` accepts a plain string or a
+    `Secret`.
+
+    Args:
+        uri: An MSSQL connection URI -- either a SQLAlchemy URI
+            (`mssql[+driver]://host[:port][/db]`; the driver defaults
+            to `pyodbc`) or a raw ODBC connection string
+            (`DRIVER=...;SERVER=...;DATABASE=...`).
+        credentials: `UserPassword` (user + password).
+        entity_whitelist: Optional list of regex patterns narrowing
+            which tables the source considers; `None` (the default)
+            filters nothing.
+        conn_cfg: Optional connector-config dict (see `CfgSpec`).
+    """
 
     uri: UriSpec
     credentials: CredentialsSpec
@@ -106,11 +143,13 @@ class MSSQLSrcConn(Conn):
 
 @_api.dataclass(MssqlErrorCode.MSSQL_1, kw_only=True)
 class MSSQLDestConn(Conn):
-    """MSSQL connection used by :class:`MSSQLDest`.
+    """MSSQL connection used by `MSSQLDest`.
 
-    Attribute-identical to :class:`MSSQLSrcConn` but a distinct
-    class so source and destination connections cannot be
-    confused at the wire-format level.
+    :categories: destination
+
+    Field-identical to `MSSQLSrcConn` but a distinct class so source
+    and destination connections cannot be confused at the wire-format
+    level. See `MSSQLSrcConn` for the field meanings.
     """
 
     uri: UriSpec
@@ -127,24 +166,27 @@ class MSSQLDestConn(Conn):
 
 @_api.dataclass(MssqlErrorCode.MSSQL_2, kw_only=True)
 class MSSQLSrc(Src):
-    """MSSQL source — one parquet slot per SELECT query.
+    """MSSQL source for `@publisher` -- one parquet slot per query.
 
-    :param queries: List of SELECT statements; one slot per query.
-    :param transactional: When ``True`` (default), run all queries
-        inside one transactional session.
-    :param schema_overrides: Optional per-query column dtype hints
-        (same length as ``queries``).
-    :param initial_values: Optional ``{bind_name: value}`` seed dict.
-        Each name is bound into the query as a SQLAlchemy ``:name``
-        parameter at execute time. Acts as the **first-run seed** for
-        each bind name: at runtime, the plugin looks up
-        ``ctx.get_attr(bind_name)`` per bind, and falls back to this
-        field when the ctx scratch store has no entry for that name.
-        User functions persist new values for the next run with
-        ``ctx.set_attr(bind_name, new_value)``.
-    :param src_cfg: Optional ``Mapping`` over the literal cfg key
-        set (logging_level, readEngine, chunkSize).
+    :categories: source
+
+    Args:
+        queries: SELECT statements, one output slot per entry.
+        transactional: When `True` (the default), run all queries in
+            one transactional session.
+        schema_overrides: Optional per-query column dtype hints; when
+            given, must have the same length as `queries`.
+        initial_values: Optional `{bind_name: value}` seed dict. Each
+            name binds into the query as a SQLAlchemy `:var`
+            parameter; it seeds the first run only, after which the
+            plugin reads `ctx.get_attr(bind_name)` and the function
+            persists new values with `ctx.set_attr(bind_name, ...)`.
+        src_cfg: Optional connector config; supported keys are
+            `mssql.logging_level`, `tabsdata.sql.sql.readEngine` and
+            `tabsdata.sql.chunkSize`.
     """
+
+    # devguide-ref: source bind-value seeding & ctx scratch state
 
     queries: QueriesSpec
     transactional: bool = True
@@ -153,6 +195,11 @@ class MSSQLSrc(Src):
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
+        """Cross-field validation: `schema_overrides` length must match
+        `queries`.
+
+        Called by the framework; raises `MSSQLValidateException`.
+        """
         if self.schema_overrides is not None and len(self.schema_overrides) != len(
             self.queries
         ):
@@ -167,16 +214,22 @@ class MSSQLSrc(Src):
 
 @_api.dataclass(MssqlErrorCode.MSSQL_4, kw_only=True)
 class MSSQLDest(Dest):
-    """MSSQL destination — write one parquet slot per target table.
+    """MSSQL destination for `@subscriber` -- one parquet slot per table.
 
-    :param tables: Target table names (FQN or bare); one parquet
-        slot per table.
-    :param if_table_exists: ``"append"`` (default) or ``"replace"``
-        (truncate before insert).
-    :param transactional: When ``True`` (default), wrap every table
-        write in one transactional session.
-    :param dest_cfg: Optional ``Mapping`` over the literal cfg key
-        set (logging_level, writeEngine, chunkSize).
+    :categories: destination
+
+    Args:
+        tables: Target table names, one write slot per entry. Each is a
+            1-, 2- or 3-part name (`table`, `schema.table` or
+            `database.schema.table`); bracket-quote a part
+            (`[name]`) to allow special characters.
+        if_table_exists: `"append"` (the default) adds rows;
+            `"replace"` truncates the table before inserting.
+        transactional: When `True` (the default), wrap every table
+            write in one transactional session.
+        dest_cfg: Optional connector config; supported keys are
+            `mssql.logging_level`, `tabsdata.sql.sql.writeEngine`
+            and `tabsdata.sql.chunkSize`.
     """
 
     tables: MSSQLTableNamesSpec

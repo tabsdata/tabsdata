@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class SnowflakeValidateException(ConnException):
-    """Cross-field validation failure for the Snowflake connector."""
+    """Cross-field validation failure for the Snowflake connector.
+
+    :categories: error
+    """
 
 
 class SnowflakeRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the Snowflake connector."""
+    """Runtime failure (plugin / I/O) for the Snowflake connector.
+
+    :categories: error
+    """
 
 
 class SnowflakeErrorCode(ErrorCode):
+    """Error codes for the Snowflake connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `SnowflakeErrorCode.SNOWFLAKE_N.exception`.
+    """
+
     SNOWFLAKE_1 = ErrorDef(
         ConnInitException,
         "SnowflakeDestConn validation failed",

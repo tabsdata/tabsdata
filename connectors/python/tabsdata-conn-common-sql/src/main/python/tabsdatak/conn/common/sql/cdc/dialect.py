@@ -26,19 +26,36 @@ CdcIngesterType = Literal[
     "sqlreplica",
     "wal2json",
 ]
+"""The CDC capture mechanism a dialect drives: `"binlog"` (MySQL),
+`"sqlreplica"` (Db2 SQL Replication) or `"wal2json"` (Postgres
+logical replication)."""
 
 
 class Dialect(ABC):
-    @property
-    @abstractmethod
-    def open_quote(self) -> str: ...
+    """Per-database hooks the shared CDC loop needs from a dialect.
+
+    :categories: spi
+
+    Each SQL CDC connector supplies one concrete subclass to bridge the
+    dialect-agnostic ingester to its database: identifier quoting and
+    case-folding, catalog column introspection, large-column detection,
+    the server timezone and the mapping of capture-specific dtypes onto
+    SQLAlchemy types.
+    """
 
     @property
     @abstractmethod
-    def close_quote(self) -> str: ...
+    def open_quote(self) -> str:
+        """The identifier opening-quote character (e.g. a double quote or backtick)."""
+
+    @property
+    @abstractmethod
+    def close_quote(self) -> str:
+        """The identifier closing-quote character."""
 
     @abstractmethod
-    def default_case_fold(self, name: str) -> str: ...
+    def default_case_fold(self, name: str) -> str:
+        """Fold an unquoted identifier to the dialect's default case."""
 
     @abstractmethod
     def get_catalog_columns(
@@ -46,25 +63,39 @@ class Dialect(ABC):
         connection: Any,
         schema: str,
         table: str,
-    ) -> list[str]: ...
+    ) -> list[str]:
+        """Return the column names of `schema.table` from the catalog,
+        in definition order."""
 
     @abstractmethod
-    def is_large_column(self, satype: Any) -> bool: ...
+    def is_large_column(self, satype: Any) -> bool:
+        """Report whether a SQLAlchemy type is a large-object column
+        (BLOB / CLOB / large binary)."""
 
     @abstractmethod
-    def server_timezone(self, engine: Any) -> tzinfo | None: ...
+    def server_timezone(self, engine: Any) -> tzinfo | None:
+        """Return the database server's timezone, or `None` if
+        unknown; used to interpret naive CDC timestamps."""
 
     def cdc_to_sa(
         self,
         ingester_type: CdcIngesterType,
         cdc_dtype: Any,
     ) -> sa_types.TypeEngine:
+        """Map a capture-specific dtype onto a SQLAlchemy type.
+
+        The default raises `NotImplementedError`; a dialect overrides
+        it for each `ingester_type` it supports.
+        """
         raise NotImplementedError(
             f"{type(self).__name__}.cdc_to_sa is not implemented "
             f"for ingester type {ingester_type!r}"
         )
 
     def parse_qualified_table(self, spec: str) -> tuple[quoted_name, quoted_name]:
+        """Split a `schema.table` spec into quoted schema and table
+        identifiers, honouring the dialect's quoting and doubled-quote
+        escaping. Raises `ValueError` on a malformed spec."""
         raw = spec
         spec = spec.strip()
         oq = self.open_quote

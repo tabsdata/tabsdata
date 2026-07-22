@@ -2,17 +2,34 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Salesforce connector — public API.
+"""Salesforce connector -- public API.
 
-* :class:`SalesforceSrcConn` -- per-org connection (token credentials,
-  optional instance URL, optional ``objects`` / ``category`` API
-  hints, optional ``entity_whitelist``).
-* :class:`SalesforceSrc` -- SOQL source (1 SOQL query per call).
-* :class:`SalesforceReportSrc` -- Analytics Report source
+Imported from `tabsdatak.conn.salesforce`:
+
+* `SalesforceSrcConn` -- the connection:
+  `SalesforceTokenCredentials` plus an optional instance URL and
+  entity-discovery hints. Registered on a collection, not passed to a
+  decorator.
+* `SalesforceSrc` -- a `@publisher` SOQL source (one SOQL query).
+* `SalesforceReportSrc` -- a `@publisher` Analytics Report source
   (Tabular reports only).
+* `SalesforceTokenCredentials` -- username / password /
+  security-token credentials set on the connection.
 
-No ``SalesforceDest`` today. Uses ``simple-salesforce`` (REST +
-Bulk API 2.0).
+There is no Salesforce destination today; the connector uses
+`simple-salesforce` (REST + Bulk API 2.0). The connection (with
+credentials) is resolved from the function's collection at run time; a
+flow function only references the source.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(
+            source=SalesforceSrc(queries=["SELECT Id, Name FROM Account"]),
+            output_tables=["accounts"],
+        )
+        def ingest(accounts: TableFrameSpec) -> TableFrameSpec:
+            return accounts
 """
 
 from __future__ import annotations
@@ -51,25 +68,33 @@ from tabsdatak.spi import Conn
 
 
 class SalesforceCredentials(Credentials, ABC):
-    """Abstract base for Salesforce credential shapes. Today only
-    :class:`SalesforceTokenCredentials` (username + password +
-    security token) is supported; sibling subclasses can add
-    OAuth / JWT auth without changing the connector surface."""
+    """Abstract base for Salesforce credential shapes.
+
+    :categories: credentials
+
+    Today only `SalesforceTokenCredentials` (username + password +
+    security token) is supported; sibling subclasses can add OAuth /
+    JWT auth without changing the connector surface.
+    """
 
 
 @_api.dataclass(SalesforceErrorCode.SALESFORCE_1, kw_only=True)
 class SalesforceTokenCredentials(SalesforceCredentials):
-    """Salesforce username + password + security-token credentials,
-    the standard SOAP / REST credential triple. All three fields
-    accept ``Secret`` references; the plugin combines
-    ``password`` and ``security_token`` per Salesforce's expected
-    concatenated-secret format at login time.
+    """Salesforce username / password / security-token credentials.
 
-    :param username: Salesforce login username
-        (e.g. ``"user@example.com"``).
-    :param password: Salesforce login password.
-    :param security_token: User-specific security token (reset
-        from Salesforce setup > Reset My Security Token).
+    :categories: credentials
+
+    The standard SOAP / REST credential triple. Each field accepts a
+    plain string or a `Secret`; the plugin combines `password` and
+    `security_token` in Salesforce's concatenated-secret format at
+    login.
+
+    Args:
+        username: Salesforce login username, e.g.
+            `"user@example.com"`.
+        password: Salesforce login password.
+        security_token: User-specific security token (reset from
+            Salesforce setup > Reset My Security Token).
     """
 
     __kind__ = "salesforceTokenCredentials"
@@ -118,9 +143,9 @@ OperatorSpec: TypeAlias = Literal[
     "between",
 ]
 
-# Each entry is ``(column, operator, value)`` -- a single condition
+# Each entry is `(column, operator, value)` -- a single condition
 # on a Salesforce report. The middle element is constrained by
-# :data:`OperatorSpec`.
+# `OperatorSpec`.
 FilterSpec: TypeAlias = list[tuple[str, OperatorSpec, str]]
 
 
@@ -137,17 +162,31 @@ SrcCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(SalesforceErrorCode.SALESFORCE_2, kw_only=True)
 class SalesforceSrcConn(Conn):
-    """Salesforce org connection.
+    """Salesforce org connection used by `SalesforceSrc` /
+    `SalesforceReportSrc`.
 
-    :param credentials: :class:`SalesforceTokenCredentials`
-        (username + password + security token).
-    :param instance_url: Optional explicit instance URL.
-    :param category: Optional category hint for entity
-        discovery; mutually exclusive with ``objects``.
-    :param objects: Optional explicit list of Salesforce object
-        API names. Mutually exclusive with ``category``.
-    :param entity_whitelist: Optional regex-based filter.
-    :param conn_cfg: Optional driver-side config dict.
+    :categories: source
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the source at run time.
+
+    Args:
+        credentials: `SalesforceTokenCredentials` (username +
+            password + security token).
+        instance_url: Optional explicit instance URL; must be an
+            `https://` URL on a Salesforce domain (`salesforce.com`
+            / `force.com` / `cloudforce.com` /
+            `salesforce-setup.com`). Accepts a plain string or a
+            `Secret`.
+        category: Optional category hint for entity discovery; mutually
+            exclusive with `objects`.
+        objects: Optional non-empty list of explicit Salesforce object
+            API names (each 1-80 chars, starting with a letter, then
+            letters / digits / single underscores, optionally ending
+            `__c` or `__r`). Mutually exclusive with `category`.
+        entity_whitelist: Optional list of regex patterns narrowing
+            which objects the source considers.
+        conn_cfg: Optional connector config dict (see `CfgSpec`).
     """
 
     credentials: CredentialsSpec
@@ -166,18 +205,21 @@ class SalesforceSrcConn(Conn):
 
 @_api.dataclass(SalesforceErrorCode.SALESFORCE_3, kw_only=True)
 class SalesforceSrc(Src):
-    """Salesforce SOQL source — exactly one SOQL query.
+    """Salesforce SOQL source for `@publisher` -- one query.
 
-    :param queries: SOQL query list (today exactly one; the
-        list shape leaves room for future multi-query support).
-    :param include_deleted: When ``True``, scan deleted rows
-        (queryAll).
-    :param initial_last_modified: Optional cutoff; substituted
-        for ``$lastModified`` tokens in the SOQL string.
-    :param api_version: Optional API version override
-        (e.g. ``"60.0"``).
-    :param src_cfg: Optional ``Mapping`` over
-        ``salesforce.logging_level``.
+    :categories: source
+
+    Args:
+        queries: SOQL query list; today exactly one entry (one output
+            slot). The list shape leaves room for future multi-query
+            support.
+        include_deleted: When true, also scan deleted rows (queryAll).
+        initial_last_modified: Optional cutoff substituted for any
+            `$lastModified` token in the SOQL string.
+        api_version: Optional API-version override, e.g. `"60.0"`
+            (`<major>.<minor>`, 1-3 digit major, 1-2 digit minor).
+        src_cfg: Optional connector config over the single key
+            `salesforce.logging_level`.
     """
 
     queries: QueriesSpec
@@ -192,28 +234,36 @@ class SalesforceSrc(Src):
 
 @_api.dataclass(SalesforceErrorCode.SALESFORCE_4, kw_only=True)
 class SalesforceReportSrc(Src):
-    """Salesforce report source — Tabular reports only.
+    """Salesforce report source for `@publisher` -- Tabular reports
+    only.
 
-    :param reports: Report ids or names; one slot per entry.
-    :param column_name_strategy: ``"columnName"`` (default,
-        API names) or ``"label"`` (display names).
-    :param find_report_by: Lookup strategy for entries in
-        ``reports`` that could be interpreted as either a Salesforce
-        report id (15- or 18-char alphanumeric) or a report name.
-        ``"id"`` forces id lookup, ``"name"`` forces name lookup.
-        Leave unset to auto-detect; set explicitly when both forms
-        resolve to a hit and you need to break the tie.
-    :param filter: Optional list of
-        ``(column, operator, value)`` triples applied to the
-        report on the server before download.
-    :param filter_logic: Optional boolean expression over the
-        ``filter`` entries (e.g. ``"(1 AND 2) OR 3"``).
-    :param last_modified_column: Optional column for incremental
-        last-modified filtering. Requires ``initial_last_modified``.
-    :param initial_last_modified: Cutoff datetime. Requires
-        ``last_modified_column``.
-    :param src_cfg: Optional ``Mapping`` over
-        ``salesforce.logging_level``.
+    :categories: source
+
+    Args:
+        reports: Report ids or names, one output slot per entry
+            (non-empty list).
+        column_name_strategy: `"columnName"` (default, API names) or
+            `"label"` (display names).
+        find_report_by: Lookup strategy for a `reports` entry that
+            could be either a report id (15- or 18-char alphanumeric)
+            or a report name -- `"id"` forces id lookup, `"name"`
+            forces name lookup. Leave unset to auto-detect; set it to
+            break the tie when both forms resolve.
+        filter: Optional list of `(column, operator, value)` triples
+            applied on the server before download. `operator` is one
+            of `equals`, `notEqual`, `lessThan`, `greaterThan`,
+            `lessOrEqual`, `greaterOrEqual`, `contains`,
+            `notContain`, `startsWith`, `includes`, `excludes`,
+            `within` or `between`.
+        filter_logic: Optional boolean expression over the `filter`
+            entries, e.g. `"(1 AND 2) OR 3"`.
+        last_modified_column: Optional column for incremental
+            last-modified filtering; requires `initial_last_modified`
+            (and vice versa).
+        initial_last_modified: Cutoff datetime; requires
+            `last_modified_column`.
+        src_cfg: Optional connector config over the single key
+            `salesforce.logging_level`.
     """
 
     reports: ReportsSpec
@@ -226,6 +276,10 @@ class SalesforceReportSrc(Src):
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
+        """Validate the last-modified column and cutoff are set together.
+
+        Called by the framework; raises `SalesforceValidateException`.
+        """
         if bool(self.last_modified_column) != bool(self.initial_last_modified):
             # noinspection PyProtectedMember
             raise SalesforceErrorCode.SALESFORCE_17.exception()

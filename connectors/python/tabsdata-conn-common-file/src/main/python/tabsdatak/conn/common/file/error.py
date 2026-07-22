@@ -15,14 +15,29 @@ from tabsdatak.error import (
 
 
 class FileValidateException(ConnException):
-    """Cross-field validation failure for the File connector."""
+    """Cross-field validation failure shared by the cloud-file connectors.
+
+    :categories: error
+    """
 
 
 class FileRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the File connector."""
+    """Runtime failure (plugin / I/O) shared by the cloud-file connectors.
+
+    :categories: error
+    """
 
 
 class FileCommonErrorCode(ErrorCode):
+    """Error codes shared by the cloud-file connectors.
+
+    :categories: error
+
+    One variant per path / format-cfg / runtime validation site, reused
+    by `azureblob`, `gcs`, `localfile` and `s3`. Raise via
+    `FileCommonErrorCode.FILE_COMMON_N.exception`.
+    """
+
     FILE_COMMON_1 = ErrorDef(
         ConnInitException,
         "Source path cannot be empty",
@@ -84,12 +99,12 @@ class FileCommonErrorCode(ErrorCode):
     FILE_COMMON_17 = ErrorDef(
         ConnInitException,
         "Source format=AUTO could not be inferred from paths {paths}: {reason}. "
-        "Set ``format=SrcFileFormat.<...>`` explicitly.",
+        "Set `format=SrcFileFormat.<...>` explicitly.",
     )  # resolve_auto_src_format -- AUTO inference failure
     FILE_COMMON_18 = ErrorDef(
         ConnInitException,
         "Destination format=AUTO could not be inferred from paths {paths}: {reason}. "
-        "Set ``format=DestFileFormat.<...>`` explicitly.",
+        "Set `format=DestFileFormat.<...>` explicitly.",
     )  # resolve_auto_dest_format -- AUTO inference failure
     FILE_COMMON_19 = ErrorDef(
         ConnInitException, "Cannot create FileStorageConnMetaModel"

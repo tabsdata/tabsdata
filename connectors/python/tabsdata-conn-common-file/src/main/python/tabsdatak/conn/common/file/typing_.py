@@ -2,24 +2,28 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Shared types for the cloud-file (object-store) connectors:
-``azureblob``, ``gcs``, ``localfile``, ``s3``.
+"""Shared type shapes for the cloud-file (object-store) connectors --
+`azureblob`, `gcs`, `localfile` and `s3` -- so each package
+builds its `Src` / `Dest` on the same path and format specs.
 
-* :class:`SrcFileFormat` / :class:`DestFileFormat` -- enumerations
-  of the parquet / csv / json / avro / log formats the file
-  connectors can read and write. The ``AUTO`` variant lets the
+* `SrcFileFormat` / `DestFileFormat` -- the formats the file
+  connectors read and write: `AUTO`, `CSV`, `JSON`, `AVRO`,
+  `PARQUET` (plus `LOG` on the source side). `AUTO` lets the
   transporter infer the format from the file extension.
-* :class:`FileInfo` -- per-row provenance enrichment opt-in
-  (``BASENAME`` / ``FULLPATH`` / ``NONE``).
-* Field aliases (``PathsSpec`` / ``FormatCfgSpec``) used by every
-  cloud-file ``Src`` / ``Dest`` dataclass for the per-flow
-  ``paths`` list and per-format ``format_cfg`` dict.
+* `FileInfo` -- per-row provenance enrichment opt-in for a source
+  (`FILENAME` / `FULLPATH`).
+* `SrcPathsSpec` / `DestPathsSpec` -- the validated `paths` list
+  a `Src` / `Dest` takes (one slot per entry).
+* `SrcFormatCfgSpec` / `DestFormatCfgSpec` -- the per-format
+  `format_cfg` dict, side-typed by the file-format enum.
+* `EXEC_PLAN_ID` / `TRX_ID` / `EXEC_PLAN_TS` -- substitution
+  tokens allowed in destination paths.
 
-The per-format ``format_cfg`` dict is side-typed: only the keys
-appropriate for the ``Src`` side (``has_header``, ``separator``,
-...) are accepted on ``*Src`` instances; the ``Dest``-side keys
-(``include_header``, ``compression``, ...) are accepted only on
-``*Dest`` instances. Cross-side keys fail field validation.
+The per-format `format_cfg` dict is side-typed: only the keys valid
+for the `Src` side (`has_header`, `separator`, ...) are accepted
+on `*Src` instances; the `Dest`-side keys (`include_header`,
+`compression`, ...) only on `*Dest` instances. A cross-side key
+fails validation.
 """
 
 from __future__ import annotations
@@ -36,6 +40,13 @@ from tabsdatak.conn.common.file import _validation
 
 
 class FileInfo(Enum):
+    """Per-row provenance column added by a file source.
+
+    `FILENAME` adds the source file's basename; `FULLPATH` adds its
+    full path. Leave the source's `file_info` field `None` to add
+    nothing.
+    """
+
     FILENAME = "FILENAME"
     FULLPATH = "FULLPATH"
 
@@ -44,10 +55,21 @@ class FileInfo(Enum):
 
 
 SrcPathNameSpec: TypeAlias = Annotated[str, _validation.SRC_PATH_VALIDATOR]
+"""A single source path, relative to the connection's `base_path`. May
+use a `*` glob in its final segment only; backslashes, NUL and
+`${...}` tokens are not allowed."""
 SrcPathsSpec: TypeAlias = list[SrcPathNameSpec]
+"""List of source paths, one output slot per entry (each entry follows
+`SrcPathNameSpec`)."""
 
 DestPathNameSpec: TypeAlias = Annotated[str, _validation.DEST_PATH_VALIDATOR]
+"""A single destination path, relative to the connection's `base_path`.
+Globs are not allowed; backslashes and NUL are not allowed; the tokens
+`${EXEC_PLAN_ID}`, `${TRX_ID}` and `${EXEC_PLAN_TS}` are
+substituted at write time."""
 DestPathsSpec: TypeAlias = list[DestPathNameSpec]
+"""List of destination paths, one write slot per entry (each entry
+follows `DestPathNameSpec`)."""
 
 
 # --- CSV format-cfg key specs --------------------------------------
@@ -55,13 +77,15 @@ DestPathsSpec: TypeAlias = list[DestPathNameSpec]
 # The CSV reader / writer accept different option sets. The literals
 # below are the single source of truth for what is allowed; the
 # format-cfg validator extracts the allowed key set with
-# ``typing.get_args``.
+# `typing.get_args`.
 
 CsvCommonKey: TypeAlias = Literal[
     "separator",
     "quote_char",
     "eol_char",
 ]
+"""CSV options valid on both the read and write side (`separator`,
+`quote_char`, `eol_char`)."""
 
 CsvSrcKey: TypeAlias = Literal[
     "separator",
@@ -80,6 +104,7 @@ CsvSrcKey: TypeAlias = Literal[
     "raise_if_empty",
     "ignore_errors",
 ]
+"""CSV reader options accepted in a source `format_cfg[CSV]` entry."""
 
 CsvDestKey: TypeAlias = Literal[
     "separator",
@@ -95,45 +120,55 @@ CsvDestKey: TypeAlias = Literal[
     "quote_style",
     "maintain_order",
 ]
+"""CSV writer options accepted in a destination `format_cfg[CSV]`
+entry."""
 
 CsvSrcCfg: TypeAlias = dict[CsvSrcKey, Any]
 CsvDestCfg: TypeAlias = dict[CsvDestKey, Any]
 
 
-# `SrcFormatCfgSpec` -- per-format config dict for **sources**.
-#
-# Today only ``SrcFileFormat.CSV`` accepts non-empty values; every
-# other entry must map to ``{}`` (or be omitted entirely). The CSV
-# entry's keys are typed by :data:`CsvSrcKey`; mixing in a
-# destination-only key (``include_header``, ``datetime_format``, ...)
-# raises ``ConnValidateException(<NAME>_5)`` at descriptor
-# construction.
 SrcFormatCfgSpec: TypeAlias = dict[SrcFileFormat, CsvSrcCfg | dict]
+"""Per-format reader options for a source, keyed by `SrcFileFormat`.
 
-# `DestFormatCfgSpec` -- per-format config dict for **destinations**.
-#
-# Today only ``DestFileFormat.CSV`` accepts non-empty values; every
-# other entry must map to ``{}`` (or be omitted entirely). The CSV
-# entry's keys are typed by :data:`CsvDestKey`; mixing in a
-# source-only key (``has_header``, ``encoding``, ...) raises
-# ``ConnValidateException(<NAME>_5)`` at descriptor construction.
+Only `CSV` accepts non-empty options today (keys typed by
+`CsvSrcKey`); every other format must map to `{}` or be omitted. A
+destination-only key raises the connector's validate exception at
+descriptor construction.
+"""
+
 DestFormatCfgSpec: TypeAlias = dict[DestFileFormat, CsvDestCfg | dict]
+"""Per-format writer options for a destination, keyed by
+`DestFileFormat`.
+
+Only `CSV` accepts non-empty options today (keys typed by
+`CsvDestKey`); every other format must map to `{}` or be omitted. A
+source-only key raises the connector's validate exception at descriptor
+construction.
+"""
 
 
 # --- Destination-path tokens ---------------------------------------
 #
-# Substitution tokens accepted in ``Dest.path`` entries. Each
-# constant carries the full ``${...}`` marker so users can drop them
-# directly into path strings (``f"out/{EXEC_PLAN_ID}/x.csv"``). The
-# :data:`DEST_PATH_TOKENS` set is the single source of truth the
+# Substitution tokens accepted in `Dest.path` entries. Each
+# constant carries the full `${...}` marker so users can drop them
+# directly into path strings (`f"out/{EXEC_PLAN_ID}/x.csv"`). The
+# `DEST_PATH_TOKENS` set is the single source of truth the
 # path validator consults.
 
 EXEC_PLAN_ID: str = "${EXEC_PLAN_ID}"
+"""Destination-path token replaced with the execution-plan id at write
+time."""
 TRX_ID: str = "${TRX_ID}"
+"""Destination-path token replaced with the transaction id at write
+time."""
 EXEC_PLAN_TS: str = "${EXEC_PLAN_TS}"
+"""Destination-path token replaced with the execution-plan timestamp at
+write time."""
 
 DEST_PATH_TOKENS: frozenset[str] = frozenset({
     EXEC_PLAN_ID,
     TRX_ID,
     EXEC_PLAN_TS,
 })
+"""The substitution tokens allowed in a destination path:
+`${EXEC_PLAN_ID}`, `${TRX_ID}` and `${EXEC_PLAN_TS}`."""

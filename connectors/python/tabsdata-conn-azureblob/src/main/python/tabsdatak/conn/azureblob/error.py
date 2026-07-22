@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class AzureBlobValidateException(ConnException):
-    """Cross-field validation failure for the AzureBlob connector."""
+    """Cross-field validation failure for the AzureBlob connector.
+
+    :categories: error
+    """
 
 
 class AzureBlobRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the AzureBlob connector."""
+    """Runtime failure (plugin / I/O) for the AzureBlob connector.
+
+    :categories: error
+    """
 
 
 class AzureBlobErrorCode(ErrorCode):
+    """Error codes for the AzureBlob connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `AzureBlobErrorCode.AZURE_BLOB_N.exception`.
+    """
+
     AZURE_BLOB_1 = ErrorDef(
         ConnInitException,
         "AzureBlob connection validation failed",

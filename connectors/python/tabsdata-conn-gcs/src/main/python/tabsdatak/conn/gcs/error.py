@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class GcsValidateException(ConnException):
-    """Cross-field validation failure for the Gcs connector."""
+    """Cross-field validation failure for the GCS connector.
+
+    :categories: error
+    """
 
 
 class GcsRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the Gcs connector."""
+    """Runtime failure (plugin / I/O) for the GCS connector.
+
+    :categories: error
+    """
 
 
 class GcsErrorCode(ErrorCode):
+    """Error codes for the GCS connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `GcsErrorCode.GCS_N.exception`.
+    """
+
     GCS_1 = ErrorDef(
         ConnInitException,
         "GCS connection validation failed",

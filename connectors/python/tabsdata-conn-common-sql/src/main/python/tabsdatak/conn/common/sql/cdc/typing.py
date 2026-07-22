@@ -14,19 +14,25 @@ from tabsdatak.conn.common.sql.cdc.error import (
 )
 
 QualifiedTableSpec: TypeAlias = str
+"""A single qualified `schema.table` name of a table to track."""
 
 QualifiedTablesSpec: TypeAlias = Union[QualifiedTableSpec, list[QualifiedTableSpec]]
+"""One qualified `schema.table` name, or a list of them."""
 
 RelativePositionSpec: TypeAlias = Literal["head", "tail"]
+"""Relative CDC start position: `"head"` replays from the oldest
+change still retained, `"tail"` starts at the current position so only
+changes made after the stream starts are emitted."""
 
 
 @dataclass(frozen=True, init=False)
 class TimestampPosition:
-    """
-    Specifies a CDC start position based on a timestamp.
+    """A CDC start position given as a wall-clock timestamp.
 
-    Attributes:
-        ts: The timestamp from which to start reading changes.
+    :categories: source
+
+    Args:
+        ts: The timestamp at or after which to start reading changes.
     """
 
     ts: datetime
@@ -37,16 +43,23 @@ class TimestampPosition:
 
 
 CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
+"""Layout of the change-values payload on each emitted CDC row: one of
+`"columns"` (each value as its own column), `"struct"` (a single
+nested struct) or `"map"` (a single name-to-value map)."""
 
 
 @dataclass(frozen=True, init=False)
 class CdcFormat:
-    """
-    Specifies the output format for CDC change data.
+    """Output shape for the change data a CDC source emits.
 
-    Attributes:
-        columns_format: The layout for change values ("columns", "struct", or "map").
-        flatten_columns: Whether to flatten new values into top-level columns.
+    :categories: source
+
+    Args:
+        columns_format: Layout for the change values -- one of
+            `"columns"`, `"struct"` or `"map"`. Defaults to
+            `"columns"`.
+        flatten_columns: When `True` (default), the new values are
+            inlined as top-level columns.
     """
 
     columns_format: CdcColumnsFormatSpec = "columns"

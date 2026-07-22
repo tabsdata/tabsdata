@@ -2,18 +2,33 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Development connectors — public API.
+"""Development connectors -- public API.
 
-Connectors meant for local development and testing, backed by no
-external system:
+Connectors for local development and testing, backed by no external
+system. Imported from `tabsdatak.conn.dev`:
 
-* :class:`TrashDestConn` / :class:`TrashDest` -- a sink to nowhere;
-  the subscriber's frame is discarded.
-* :class:`DataGenSrcConn` / :class:`DataGenSrc` -- a source that emits
-  in-line :class:`Data` (a Polars or Pandas dataframe), one parquet
-  slot per :class:`Data`. Each :class:`Data` carries its dataframe as
-  base64-encoded parquet on the wire (see :class:`Data`); the combined
-  encoded size of all dataframes may not exceed 10 MB.
+* `DataGenSrcConn` / `DataGenSrc` -- a `@publisher` source that
+  emits in-line `Data` (a Polars or Pandas dataframe), one parquet
+  slot per `Data`.
+* `TrashDestConn` / `TrashDest` -- a `@subscriber` sink to
+  nowhere; the frame is discarded.
+
+Each `Data` carries its dataframe as base64-encoded parquet on the
+wire; the combined encoded size of all dataframes may not exceed 10 MB.
+The connection is registered on a collection; a flow function only
+references `DataGenSrc` / `TrashDest`.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(source=DataGenSrc(data=[Data(df)]),
+                   output_tables=["rows"])
+        def gen(rows: TableFrameSpec) -> TableFrameSpec:
+            return rows
+
+        @subscriber(destination=TrashDest(), input_tables=["mycoll/rows"])
+        def sink(rows: TableFrameSpec) -> TableFrameSpec:
+            return rows
 """
 
 from __future__ import annotations
@@ -34,7 +49,7 @@ from tabsdatak.api import (
 from tabsdatak.conn.dev.error import DevErrorCode
 from tabsdatak.spi import Conn
 
-# Combined budget for every dataframe carried by a ``DataGenSrc``,
+# Combined budget for every dataframe carried by a `DataGenSrc`,
 # measured as the length of its base64-encoded parquet payload.
 MAX_DATA_BYTES = 10 * 1024 * 1024
 
@@ -54,22 +69,30 @@ def _to_polars(df: Any) -> Any:
 
 
 class Data:
-    """One dataframe emitted by :class:`DataGenSrc`, optionally chunked.
+    """One dataframe emitted by `DataGenSrc`, optionally chunked.
 
-    A ``Data`` wraps a Polars or Pandas dataframe (a Pandas frame is
-    converted to Polars on construction) plus a per-run ``chunk_size``:
+    :categories: source
 
-    * ``chunk_size=None`` -- the whole dataframe is emitted on every run.
-    * ``chunk_size=N`` -- ``N`` rows are emitted per run, advancing an
-      offset kept in the plugin's per-flow state; once the offset reaches
-      the end the slot yields ``None`` (no more rows).
+    A `Data` wraps a Polars or Pandas dataframe (a Pandas frame is
+    converted to Polars on construction) plus a per-run `chunk_size`:
 
-    On the wire a ``Data`` serialises to ``{"parquet": <base64>,
-    "chunk_size": <int|null>}``: the dataframe is written to parquet and
+    * `chunk_size=None` -- the whole dataframe is emitted on every
+      run.
+    * `chunk_size=N` -- `N` rows are emitted per run, advancing an
+      offset kept in the plugin's per-flow state; once the offset
+      reaches the end the slot yields `None` (no more rows).
+
+    On the wire a `Data` serialises to `{"parquet": <base64>,
+    "chunk_size": <int|null>}`: the dataframe is written to parquet and
     base64-encoded on serialisation, and decoded back to a Polars frame
     on deserialisation so the plugin can materialise it to parquet for
-    its output. Like :class:`~tabsdatak.api.Secret`, it round-trips via
-    its own pydantic core schema rather than the descriptor envelope.
+    its output. Like `Secret`, it round-trips via its own pydantic
+    core schema rather than the descriptor envelope.
+
+    Args:
+        df: A Polars or Pandas `DataFrame` to emit.
+        chunk_size: Optional positive row count per run; `None` (the
+            default) emits the whole frame every run.
     """
 
     def __init__(self, df: Any, chunk_size: int | None = None):
@@ -85,7 +108,7 @@ class Data:
 
     @property
     def frame(self) -> Any:
-        """The wrapped dataframe as a Polars ``DataFrame``."""
+        """The wrapped dataframe as a Polars `DataFrame`."""
         return self._frame
 
     def parquet_b64(self) -> str:
@@ -147,14 +170,24 @@ class Data:
 
 @_api.dataclass(DevErrorCode.DEV_1, kw_only=True)
 class DataGenSrcConn(Conn):
-    """Connection for :class:`DataGenSrc` -- carries no configuration
-    (the source generates its data in-line)."""
+    """Connection for `DataGenSrc` -- no configuration.
+
+    :categories: source
+
+    The source generates its data in-line, so the connection carries
+    nothing.
+    """
 
 
 @_api.dataclass(DevErrorCode.DEV_3, kw_only=True)
 class TrashDestConn(Conn):
-    """Connection for :class:`TrashDest` -- carries no configuration
-    (the destination discards everything)."""
+    """Connection for `TrashDest` -- no configuration.
+
+    :categories: destination
+
+    The destination discards everything, so the connection carries
+    nothing.
+    """
 
 
 # --- Source ---------------------------------------------------------
@@ -162,16 +195,23 @@ class TrashDestConn(Conn):
 
 @_api.dataclass(DevErrorCode.DEV_2, kw_only=True)
 class DataGenSrc(Src):
-    """Source emitting in-line dataframes -- one parquet slot per
-    :class:`Data`.
+    """Source emitting in-line dataframes for `@publisher` -- one
+    slot per `Data`.
 
-    :param data: The :class:`Data` entries to emit. The combined
-        base64-parquet size of every entry may not exceed 10 MB.
+    :categories: source
+
+    Args:
+        data: The `Data` entries to emit, one output slot each. Their
+            combined base64-parquet size may not exceed 10 MB.
     """
 
     data: list[Data]
 
     def validate(self) -> None:
+        """Validate the combined `Data` payload fits the 10 MB budget.
+
+        Called by the framework; raises `DevValidateException`.
+        """
         total = sum(len(d.parquet_b64()) for d in self.data)
         if total > MAX_DATA_BYTES:
             raise DevErrorCode.DEV_7.exception(size=total, limit=MAX_DATA_BYTES)
@@ -182,6 +222,11 @@ class DataGenSrc(Src):
 
 @_api.dataclass(DevErrorCode.DEV_4, kw_only=True)
 class TrashDest(Dest):
-    """Destination that discards the frame -- a sink to nowhere with no
-    configuration. The subscriber returns a single frame, which is
-    dropped."""
+    """Destination that discards the frame for `@subscriber` -- a
+    sink to nowhere.
+
+    :categories: destination
+
+    Carries no configuration; the subscriber returns a single frame,
+    which is dropped.
+    """

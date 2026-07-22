@@ -2,40 +2,61 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Db2 connector — public API.
+"""Db2 connector -- public API.
 
-Batch:
+Imported from `tabsdatak.conn.db2`. Batch classes:
 
-* :class:`Db2SrcConn` / :class:`Db2DestConn` -- per-instance Db2
-  connections for :class:`Db2Src` / :class:`Db2Dest`.
-  Attribute-identical but distinct classes so source and
-  destination connections cannot be confused at the wire-format
-  level.
-* :class:`Db2Src` -- source: list of SELECT queries; produces
+* `Db2SrcConn` / `Db2DestConn` -- the connection: a SQLAlchemy URI
+  plus `UserPassword` credentials. Attribute-identical but distinct
+  classes so source and destination connections cannot be confused at
+  the wire-format level.
+* `Db2Src` -- the `@publisher` source: a list of SELECT `queries`,
   one parquet slot per query.
-* :class:`Db2Dest` -- destination: list of target table names;
-  consumes one parquet slot per table.
+* `Db2Dest` -- the `@subscriber` destination: a list of target
+  `tables`, one parquet slot per table.
 
-CDC (change-data capture):
+CDC (change-data capture) classes:
 
-* :class:`Db2CdcStreamSrcConn` -- per-instance Db2 CDC connection.
-  Sibling of the batch Db2 conns; expects the IBM SQL Replication
-  apparatus (``ASN.IBMSNAP_*`` control tables + ``asncap``
-  capture program) to be in place in the same database.
-* :class:`Db2CdcStreamSrc` -- stream source that polls the IBM
-  SQL Replication CD (change-data) tables and emits one
-  tableframe-batch per capture flush. ``tables`` lists the CD
-  table FQNs (not the source tables); the ingester resolves the
-  source via ``ASN.IBMSNAP_REGISTER``.
-* :class:`CommitSeqPosition` / :class:`TableCommitSeqPosition` /
-  :class:`TimestampPosition` -- ``start_from`` primitives for
-  resuming CD-table ingestion at a specific commit sequence.
+* `Db2CdcStreamSrcConn` -- the CDC connection. Expects the IBM SQL
+  Replication apparatus (`ASN.IBMSNAP_*` control tables + the
+  `asncap` capture program) in the same database.
+* `Db2CdcStreamSrc` -- the `@stream_publisher` source; polls the CD
+  (change-data) tables and emits one tableframe-batch per capture flush.
+* `CommitSeqPosition` / `TableCommitSeqPosition` /
+  `TimestampPosition` -- `start_from` primitives for resuming
+  CD-table ingestion at a specific commit sequence.
 
-URI and credential fields accept ``Secret`` references.
-Cross-cutting cfg keys live in ``src_cfg`` / ``dest_cfg`` (chunk
-size, read/write engine selection); CDC tuning lives in
-``Db2CdcStreamSrc.src_cfg`` (buffer / trigger thresholds, polling
-cadence, server-side fetch size).
+The connection (with credentials) is registered on a collection and
+resolved from the function's collection at run time -- it is never passed
+to a decorator. A flow function only references the source / destination.
+
+Examples:
+    .. code-block:: python
+
+        @publisher(source=Db2Src(queries=["SELECT * FROM wld_city"]),
+                   output_tables=["cities"])
+        def ingest(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+
+        @subscriber(destination=Db2Dest(tables=["cap_rows"]),
+                    input_tables=["mycoll/cities"])
+        def publish(cities: TableFrameSpec) -> TableFrameSpec:
+            return cities
+A `@stream_publisher` receives the flushed batch as a list of frames
+and must NOT declare a `ctx` parameter.
+
+Examples:
+    .. code-block:: python
+
+        @stream_publisher(source=Db2CdcStreamSrc(tables=["CDC.CITY"],
+                                                 start_from="tail"),
+                          flush_interval_mins=2, output_tables=["cdc_raw"])
+        def stream(rows: TableFramesSpec) -> TableFrameSpec:
+            return concat(rows)
+URI and credential fields accept `Secret` references. Cross-cutting
+cfg keys live in `src_cfg` / `dest_cfg` (chunk size, read/write
+engine selection); CDC tuning lives in `Db2CdcStreamSrc.src_cfg`
+(buffer / trigger thresholds, polling cadence, server-side fetch size).
 """
 
 from __future__ import annotations
@@ -76,17 +97,34 @@ from tabsdatak.spi import Conn
 
 
 CredentialsSpec: TypeAlias = UserPassword
+"""The credential type for Db2 connections: `UserPassword` (user +
+password), spliced into the URI by the engine factory."""
 
 UriSpec: TypeAlias = Annotated[
     StrOrSecretSpec, StrOrSecretConstraints(pattern=_validation.URI_PATTERN)
 ]
+"""A SQLAlchemy-style Db2 URI, e.g. `db2+ibm_db://host:port/db`. The
+scheme must be `db2` or `ibm_db_sa` (an optional `+driver` is
+allowed). Accepts a plain string or a `Secret`."""
+
 QueriesSpec: TypeAlias = list[str]
+"""A non-empty, ordered list of SELECT statements -- one output slot per
+query."""
+
 Db2TableNameSpec: TypeAlias = Annotated[
     str,
     _validation.DB2_TABLE_FQN_VALIDATOR,
 ]
+"""A Db2 table name, either `table` or `schema.table` (at most two
+dot-separated parts). Parts may be double-quoted, using the doubled
+double-quote convention to embed a literal quote."""
+
 Db2TableNamesSpec: TypeAlias = list[Db2TableNameSpec]
+"""A list of Db2 table names (see `Db2TableNameSpec`)."""
+
 IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+"""Write disposition when the target table exists: `"append"` adds
+rows; `"replace"` truncates before insert."""
 
 
 # --- Db2Src.src_cfg keys --------------------------------------------
@@ -118,18 +156,23 @@ DestCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(Db2ErrorCode.DB2_1, kw_only=True)
 class Db2SrcConn(Conn):
-    """Db2 connection used by :class:`Db2Src`.
+    """Db2 connection used by `Db2Src`.
 
-    :param uri: SQLAlchemy-style URI
-        (``db2+ibm_db://host:port/db``). Accepts a plain str,
-        or ``Secret``.
-    :param credentials: :class:`UserPassword` -- user + password
-        spliced into the URI by the engine factory.
-    :param entity_whitelist: Optional list of regex patterns; the
-        runtime uses these to narrow which tables this conn
-        contributes to discovery.
-    :param conn_cfg: Optional driver-side config (forwarded as
-        ``connect_args`` to SQLAlchemy).
+    :categories: source
+
+    Registered on a collection; the runtime resolves it and hands it to
+    the plugin at run time.
+
+    Args:
+        uri: SQLAlchemy-style Db2 URI (`db2+ibm_db://host:port/db`).
+            Accepts a plain string or a `Secret`.
+        credentials: `UserPassword` -- user + password spliced into
+            the URI by the engine factory.
+        entity_whitelist: Optional list of regex patterns narrowing
+            which tables this connection contributes to discovery.
+            `None` (the default) means no filtering.
+        conn_cfg: Optional driver-side config forwarded to SQLAlchemy as
+            `connect_args`.
     """
 
     uri: UriSpec
@@ -143,11 +186,14 @@ class Db2SrcConn(Conn):
 
 @_api.dataclass(Db2ErrorCode.DB2_1, kw_only=True)
 class Db2DestConn(Conn):
-    """Db2 connection used by :class:`Db2Dest`.
+    """Db2 connection used by `Db2Dest`.
 
-    Attribute-identical to :class:`Db2SrcConn` but a distinct class
-    so source and destination connections cannot be confused at
-    the wire-format level (the ``__kind__`` differs).
+    :categories: destination
+
+    Attribute-identical to `Db2SrcConn` but a distinct class so source
+    and destination connections cannot be confused at the wire-format
+    level (the `__kind__` differs). See `Db2SrcConn` for the field
+    meanings.
     """
 
     uri: UriSpec
@@ -164,25 +210,30 @@ class Db2DestConn(Conn):
 
 @_api.dataclass(Db2ErrorCode.DB2_2, kw_only=True)
 class Db2Src(Src):
-    """Db2 source — one parquet slot per SELECT query.
+    """Db2 source for `@publisher` -- one parquet slot per query.
 
-    :param queries: List of SELECT statements; one slot per query.
-    :param transactional: When ``True`` (default), run all queries
-        inside one transactional session.
-    :param schema_overrides: Optional per-query column dtype hints
-        (same length as ``queries``).
-    :param initial_values: Optional ``{bind_name: value}`` seed dict.
-        Each name is bound into the query as a SQLAlchemy ``:name``
-        parameter at execute time. Acts as the **first-run seed** for
-        each bind name: at runtime, the plugin looks up
-        ``ctx.get_attr(bind_name)`` per bind, and falls back to this
-        field when the ctx scratch store has no entry for that name.
-        User functions persist new values for the next run with
-        ``ctx.set_attr(bind_name, new_value)``.
-    :param src_cfg: Optional ``Mapping`` over the literal cfg key
-        set (logging_level, readEngine, chunkSize).
+    :categories: source
+
+    Args:
+        queries: SELECT statements; one output slot per query, in order.
+        transactional: When `True` (default), run all queries inside
+            one transactional session.
+        schema_overrides: Optional per-query column dtype hints. When
+            given it must have exactly one entry per query (same length
+            and order as `queries`); each entry is a
+            `{column: DataType}` map or `None`.
+        initial_values: Optional `{bind_name: value}` seed dict. Each
+            name is bound into the query as a SQLAlchemy `:var`
+            parameter at execute time, and acts as the first-run seed:
+            the plugin reads `ctx.get_attr(bind_name)` per bind and
+            falls back to this value when the ctx store has no entry.
+            Persist the next value with `ctx.set_attr(bind_name, v)`.
+        src_cfg: Optional config mapping over the allowed keys only
+            (`db2.logging_level`, `tabsdata.sql.sql.readEngine`,
+            `tabsdata.sql.chunkSize`).
     """
 
+    # devguide-ref: trx context state (initial_values seed / cursor resume)
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None
@@ -190,6 +241,11 @@ class Db2Src(Src):
     src_cfg: SrcCfgSpec | None = None
 
     def validate(self) -> None:
+        """Check `schema_overrides` has one entry per query.
+
+        Called by the framework; raises `Db2ValidateException` when the
+        lengths differ.
+        """
         if self.schema_overrides is not None and len(self.schema_overrides) != len(
             self.queries
         ):
@@ -204,16 +260,20 @@ class Db2Src(Src):
 
 @_api.dataclass(Db2ErrorCode.DB2_4, kw_only=True)
 class Db2Dest(Dest):
-    """Db2 destination — write one parquet slot per target table.
+    """Db2 destination for `@subscriber` -- one target table per slot.
 
-    :param tables: Target table names (FQN or bare); one parquet
-        slot per table.
-    :param if_table_exists: ``"append"`` (default) or ``"replace"``
-        (truncate before insert).
-    :param transactional: When ``True`` (default), wrap every table
-        write in one transactional session.
-    :param dest_cfg: Optional ``Mapping`` over the literal cfg key
-        set (logging_level, writeEngine, chunkSize).
+    :categories: destination
+
+    Args:
+        tables: Target table names, qualified or bare (see
+            `Db2TableNameSpec`); one input slot per table, in order.
+        if_table_exists: `"append"` (default) adds rows; `"replace"`
+            truncates the table before inserting.
+        transactional: When `True` (default), wrap every table write
+            in one transactional session.
+        dest_cfg: Optional config mapping over the allowed keys only
+            (`db2.logging_level`, `tabsdata.sql.sql.writeEngine`,
+            `tabsdata.sql.chunkSize`).
     """
 
     tables: Db2TableNamesSpec
@@ -225,29 +285,38 @@ class Db2Dest(Dest):
 # --- CDC public primitives ------------------------------------------
 #
 # These types are db2-local rather than re-exported from
-# ``conn.common.sql.cdc.typing`` so the user-visible schema of one
+# `conn.common.sql.cdc.typing` so the user-visible schema of one
 # connector cannot widen another's by accident. The plugin
-# (``_cdc_plugin.py``) converts them onto the runner-side common
-# representation when invoking the dialect-agnostic ``run_cdc`` loop.
+# (`_cdc_plugin.py`) converts them onto the runner-side common
+# representation when invoking the dialect-agnostic `run_cdc` loop.
 
-# Relative position keywords: ``"head"`` rewinds to the oldest
-# available row in each tracked CD (change-data) table; ``"tail"``
+# Relative position keywords: `"head"` rewinds to the oldest
+# available row in each tracked CD (change-data) table; `"tail"`
 # skips to each CD table's current watermark.
 RelativePositionSpec: TypeAlias = Literal["head", "tail"]
+"""Relative CDC start position: `"head"` rewinds to the oldest row
+still retained in each tracked CD table; `"tail"` skips to each CD
+table's current watermark (only later changes are emitted)."""
 
 # Layout for the columns payload on each emitted change row.
 CdcColumnsFormatSpec: TypeAlias = Literal["columns", "struct", "map"]
+"""Layout of the change-values payload on each emitted row: one of
+`"columns"`, `"struct"` or `"map"`."""
 
 
 @_api.dataclass(Db2ErrorCode.DB2_12, frozen=True, kw_only=True)
 class CommitSeqPosition:
-    """Start ingestion at a single global commit sequence applied
-    to every tracked CD table.
+    """CDC start position: one global commit sequence for every table.
 
-    :param seq: Hex-string form of the binary 16-byte
-        ``IBMSNAP_COMMITSEQ`` column (e.g.
-        ``"00000000000000000000000000000042"``). All-zeros is the
-        cold-start marker.
+    :categories: source
+
+    A `start_from` value applying a single commit sequence to every
+    tracked CD table.
+
+    Args:
+        seq: Hex-string form of the binary 16-byte `IBMSNAP_COMMITSEQ`
+            column (e.g. `"000...0042"`). All zeros is the cold-start
+            marker.
     """
 
     seq: str
@@ -255,14 +324,18 @@ class CommitSeqPosition:
 
 @_api.dataclass(Db2ErrorCode.DB2_13, frozen=True, kw_only=True)
 class TableCommitSeqPosition:
-    """Start ingestion at per-table commit sequences -- useful when
-    different CD tables need to resume from independent positions
-    (e.g. after a partial re-snapshot).
+    """CDC start position: independent commit sequence per table.
 
-    :param seqs: Mapping of qualified CD table names
-        (``"CDSCHEMA.CDTABLE"``) to hex-string commit-sequence
-        values. Tracked CD tables missing from this mapping start
-        from :data:`COMMITSEQ_ORIGIN` (16 zero bytes).
+    :categories: source
+
+    A `start_from` value giving each CD table its own resume point --
+    useful after a partial re-snapshot.
+
+    Args:
+        seqs: Mapping of qualified CD table names (`"CDSCHEMA.CDTABLE"`)
+            to hex-string commit-sequence values. Tracked CD tables
+            missing from the mapping start from the origin (16 zero
+            bytes).
     """
 
     seqs: dict[str, str]
@@ -270,14 +343,17 @@ class TableCommitSeqPosition:
 
 @_api.dataclass(Db2ErrorCode.DB2_14, frozen=True, kw_only=True)
 class TimestampPosition:
-    """Start ingestion at the earliest commit sequence whose
-    ``IBMSNAP_LOGMARKER`` is at or after ``ts``. The translation
-    is a one-shot lookup in ``ASN.IBMSNAP_UOW``; once resolved the
-    per-table marks advance independently.
+    """CDC start position given as a wall-clock timestamp.
 
-    :param ts: Wall-clock cut-off; tz-aware datetimes are honoured,
-        naive datetimes are interpreted in the Db2 server's
-        timezone.
+    :categories: source
+
+    A `start_from` value resolved once to the earliest commit sequence
+    whose `IBMSNAP_LOGMARKER` is at or after `ts` (a lookup in
+    `ASN.IBMSNAP_UOW`); per-table marks then advance independently.
+
+    Args:
+        ts: Wall-clock cut-off. Tz-aware datetimes are honoured; naive
+            datetimes are interpreted in the Db2 server's timezone.
     """
 
     ts: datetime
@@ -289,6 +365,9 @@ Db2CdcStartFromSpec: TypeAlias = Union[
     TableCommitSeqPosition,
     TimestampPosition,
 ]
+"""Where a Db2 CDC stream begins: a `"head"` / `"tail"` keyword, a
+`CommitSeqPosition`, a `TableCommitSeqPosition` or a
+`TimestampPosition`."""
 
 
 # --- Db2CdcStreamSrc.src_cfg keys -----------------------------------
@@ -312,29 +391,27 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
 
 @_api.dataclass(Db2ErrorCode.DB2_10, kw_only=True)
 class Db2CdcStreamSrcConn(Conn):
-    """Db2 CDC connection used by :class:`Db2CdcStreamSrc`.
+    """Db2 CDC connection used by `Db2CdcStreamSrc`.
 
-    Mirrors :class:`Db2SrcConn` for the SQLAlchemy / catalog
-    introspection side. SQL Replication does not require a
-    distinct replica identifier on the connection: the CD tables
-    + the ``ASN.IBMSNAP_*`` capture tables live in the same
-    database that the source resides in, so a normal authenticated
-    role with SELECT on the CD tables and ``ASN.IBMSNAP_REGISTER``
-    is sufficient.
+    :categories: source
 
-    Not a subclass of :class:`Db2SrcConn`: CDC and batch SQL have
-    different operational guarantees (the capture / apply schema
-    has to be in place, the connecting role typically needs
-    different grants) and a divergent attribute set is expected
-    over time.
+    Mirrors `Db2SrcConn` for the SQLAlchemy / catalog introspection
+    side. SQL Replication needs no distinct replica identifier on the
+    connection: the CD tables and the `ASN.IBMSNAP_*` capture tables
+    live in the same database as the source, so an authenticated role
+    with SELECT on the CD tables and `ASN.IBMSNAP_REGISTER` suffices.
+    Not a subclass of `Db2SrcConn` -- CDC and batch SQL have different
+    operational guarantees (the capture schema must be in place, the
+    connecting role typically needs different grants).
 
-    :param uri: SQLAlchemy-style URI; accepts ``str`` /
-        ``Secret`` per :data:`UriSpec`.
-    :param credentials: :class:`UserPassword`.
-    :param entity_whitelist: Optional regex patterns narrowing
-        discovery.
-    :param conn_cfg: Optional driver-side config forwarded as
-        ``connect_args``.
+    Args:
+        uri: SQLAlchemy-style Db2 URI; accepts a plain string or a
+            `Secret` (see `UriSpec`).
+        credentials: `UserPassword` credentials.
+        entity_whitelist: Optional regex patterns narrowing discovery;
+            `None` (default) means no filtering.
+        conn_cfg: Optional driver-side config forwarded as
+            `connect_args`.
     """
 
     uri: UriSpec
@@ -348,36 +425,37 @@ class Db2CdcStreamSrcConn(Conn):
 
 @_api.dataclass(Db2ErrorCode.DB2_11, kw_only=True)
 class Db2CdcStreamSrc(StreamSrc):
-    """Db2 CDC stream source -- emits one tableframe-batch per
-    capture-table flush across the tracked CD (change-data)
-    tables.
+    """Db2 CDC stream source for `@stream_publisher`.
 
-    Db2 SQL Replication captures changes into shadow ``CD``
-    tables; the ASN capture program (``asncap``) populates them
-    in the background. ``tables`` here lists the CD tables (not
-    the source tables); the ingester resolves the source via
-    ``ASN.IBMSNAP_REGISTER`` and reads the IBMSNAP_* system
-    columns to discover the operation / commit sequence /
-    intent sequence / before-image prefix.
+    :categories: source
 
-    :param tables: Qualified ``cd_schema.cd_table`` CD table names.
-    :param start_from: ``"head"`` (every tracked CD table replayed
-        from the origin), ``"tail"`` (each table's current
-        watermark), a :class:`CommitSeqPosition` (single seq
-        applied to every table), a :class:`TableCommitSeqPosition`
-        (per-table seqs), or a :class:`TimestampPosition` (the
-        max commit sequence whose IBMSNAP_LOGMARKER is at or
-        before ``ts``).
-    :param columns_format: Layout for the new (and old) columns
-        payload on each emitted change row. See
-        :data:`CdcColumnsFormatSpec`.
-    :param flatten_columns: When ``True`` the new columns are
-        inlined as top-level columns.
-    :param src_cfg: Optional ``Mapping`` over the literal
-        :data:`CdcSrcCfgKey` set -- buffer / trigger thresholds,
-        polling cadence, server-side fetch size.
+    A streaming change-data-capture source: it emits one
+    tableframe-batch per capture-table flush across the tracked CD
+    (change-data) tables. Db2 SQL Replication captures changes into
+    shadow CD tables that the ASN capture program (`asncap`) populates
+    in the background. `tables` lists the CD tables (not the source
+    tables); the ingester resolves the source via
+    `ASN.IBMSNAP_REGISTER`. The decorated `@stream_publisher`
+    function receives the flushed batch as a list of frames and must NOT
+    declare a `ctx` parameter.
+
+    Args:
+        tables: Qualified `cd_schema.cd_table` CD table names.
+        start_from: Where to begin -- `"head"` (replay each tracked CD
+            table from the origin), `"tail"` (each table's current
+            watermark), a `CommitSeqPosition`, a
+            `TableCommitSeqPosition` or a `TimestampPosition`.
+        columns_format: Layout for the new (and old) columns payload on
+            each change row -- `"columns"` (default), `"struct"` or
+            `"map"`.
+        flatten_columns: When `True` (default), the new columns are
+            inlined as top-level columns.
+        src_cfg: Optional config mapping over the allowed CDC keys only
+            -- buffer / trigger thresholds, polling cadence, server-side
+            fetch size.
     """
 
+    # devguide-ref: CDC cursor / resume (start_from, offset persistence)
     tables: list[Db2TableNameSpec]
     start_from: Db2CdcStartFromSpec
     columns_format: CdcColumnsFormatSpec = "columns"

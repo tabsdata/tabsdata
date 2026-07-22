@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class MySQLValidateException(ConnException):
-    """Cross-field validation failure for the MySQL connector."""
+    """Cross-field validation failure for the MySQL connector.
+
+    :categories: error
+    """
 
 
 class MySQLRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the MySQL connector."""
+    """Runtime failure (plugin / I/O) for the MySQL connector.
+
+    :categories: error
+    """
 
 
 class MysqlErrorCode(ErrorCode):
+    """Error codes for the MySQL connector.
+
+    :categories: error
+
+    One variant per validation / runtime site (batch and CDC). Raise via
+    `MysqlErrorCode.MYSQL_N.exception`.
+    """
+
     MYSQL_1 = ErrorDef(
         ConnInitException,
         "MySQL connection validation failed",

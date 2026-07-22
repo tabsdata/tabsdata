@@ -15,14 +15,28 @@ from tabsdatak.error import (
 
 
 class MongoDBValidateException(ConnException):
-    """Cross-field validation failure for the MongoDB connector."""
+    """Cross-field validation failure for the MongoDB connector.
+
+    :categories: error
+    """
 
 
 class MongoDBRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the MongoDB connector."""
+    """Runtime failure (plugin / I/O) for the MongoDB connector.
+
+    :categories: error
+    """
 
 
 class MongodbErrorCode(ErrorCode):
+    """Error codes for the MongoDB connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `MongodbErrorCode.MONGODB_N.exception`.
+    """
+
     MONGODB_1 = ErrorDef(
         ConnInitException,
         "MongoDBDestConn validation failed",

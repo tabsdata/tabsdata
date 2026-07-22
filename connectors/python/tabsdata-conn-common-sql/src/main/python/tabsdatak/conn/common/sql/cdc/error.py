@@ -4,18 +4,16 @@
 
 """Error machinery for the shared CDC connector code.
 
-Mirrors the per-connector ``error.py`` convention (see
-:mod:`tabsdatak.conn.common.sql.error`): a single
-:class:`~tabsdatak.error.ErrorCode` enum whose variants each carry an
-:class:`~tabsdatak.error.ErrorDef` (exception class + message
-template). Raise via :meth:`ErrorCode.exception`::
+Mirrors the per-connector `error.py` convention (see
+`tabsdatak.conn.common.sql.error`): a single `ErrorCode` enum whose
+variants each carry an `ErrorDef` (exception class + message
+template). Raise via `SqlCdcErrorCode.CDC_N.exception(...)`, e.g.
+`SqlCdcErrorCode.CDC_2.exception(schema=schema, table=table)`.
 
-    raise SqlCdcErrorCode.CDC_2.exception(schema=schema, table=table)
-
-:func:`cdc_validate_call` is the CDC-local replacement for the old
-``tabsdata._utils.validation._td_validate_call``: it wraps a callable
-with pydantic argument validation and converts a ``ValidationError``
-into the bound :class:`SqlCdcException`.
+`cdc_validate_call` is the CDC-local replacement for the old
+`tabsdata._utils.validation._td_validate_call`: it wraps a callable
+with pydantic argument validation and converts a `ValidationError`
+into the bound `SqlCdcException`.
 """
 
 from __future__ import annotations
@@ -34,13 +32,25 @@ from tabsdatak.error import ErrorCode, ErrorDef
 
 
 class SqlCdcException(ConnException):
-    """Failure raised by the shared CDC machinery (table resolution,
-    schema reflection, buffering / offset handling, spec validation).
-    Connector-specific CDC code can translate this into its own
-    per-connector codes when relevant."""
+    """Failure raised by the shared CDC machinery.
+
+    :categories: error
+
+    Covers table resolution, schema reflection, buffering / offset
+    handling and spec validation. Connector-specific CDC code can
+    translate it into its own per-connector codes when relevant.
+    """
 
 
 class SqlCdcErrorCode(ErrorCode):
+    """Error codes for the shared CDC machinery.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `SqlCdcErrorCode.CDC_N.exception`.
+    """
+
     CDC_1 = ErrorDef(
         SqlCdcException,
         "Invalid table specification {spec!r}",
@@ -113,16 +123,28 @@ def cdc_validate_call(
     error_code: SqlCdcErrorCode,
     f: Callable | None = None,
 ) -> Callable:
-    """Decorator that validates a callable's arguments with pydantic and
-    raises ``error_code``'s bound :class:`SqlCdcException` on failure.
+    """Validate a callable's arguments with pydantic, raising a bound
+    `SqlCdcException` on failure.
+
+    :categories: error
 
     CDC-local replacement for the old
-    ``tabsdata._utils.validation._td_validate_call``; the pydantic
-    ``ValidationError`` is chained as the cause (the framework renders
-    it onto the message)::
+    `tabsdata._utils.validation._td_validate_call`; the pydantic
+    `ValidationError` is chained as the cause (the framework renders
+    it onto the message). Usable bare or as a partial -- decorate an
+    `__init__` with `@cdc_validate_call(SqlCdcErrorCode.CDC_14)`.
 
-        @cdc_validate_call(SqlCdcErrorCode.CDC_14)
-        def __init__(self, ...): ...
+    Args:
+        error_code: The `SqlCdcErrorCode` whose bound exception is
+            raised when argument validation fails.
+        f: The callable to wrap. Omitted when used as
+            `@cdc_validate_call(code)` (returns a decorator).
+
+    Returns:
+        The wrapped callable, or a decorator when `f` is omitted.
+
+    Raises:
+        SqlCdcException: If the wrapped call's arguments fail validation.
     """
     if f is None:
         return lambda fn: cdc_validate_call(error_code, fn)

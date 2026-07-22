@@ -12,10 +12,21 @@ from tabsdatak.error import (
 
 
 class DruidRuntimeException(ConnException):
-    """Runtime failure (plugin / I/O) for the Druid connector."""
+    """Runtime failure (plugin / I/O) for the Druid connector.
+
+    :categories: error
+    """
 
 
 class DruidErrorCode(ErrorCode):
+    """Error codes for the Druid connector.
+
+    :categories: error
+
+    One variant per validation / runtime site. Raise via
+    `DruidErrorCode.DRUID_N.exception`.
+    """
+
     DRUID_1 = ErrorDef(
         ConnInitException,
         "DruidDestConn validation failed",
