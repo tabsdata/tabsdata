@@ -6,7 +6,7 @@ use super::ConnectionStore;
 use async_trait::async_trait;
 use http::StatusCode;
 use td_error::{TdError, api_error};
-use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
+use td_objects::dxo::connection::{ConnectionHydrated, ConnectionRead, ConnectionUpsert};
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 
 /// No backend configured — every operation fails as unconfigured.
@@ -26,6 +26,14 @@ impl ConnectionStore for NoopConnectionStore {
     }
 
     async fn fetch(&self, _: &ProjectId, _: &ConnectionId) -> Result<ConnectionRead, TdError> {
+        Err(unconfigured())
+    }
+
+    async fn fetch_hydrated(
+        &self,
+        _: &ProjectId,
+        _: &ConnectionId,
+    ) -> Result<ConnectionHydrated, TdError> {
         Err(unconfigured())
     }
 

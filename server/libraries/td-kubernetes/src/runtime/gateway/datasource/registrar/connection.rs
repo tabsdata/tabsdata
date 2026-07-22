@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 use td_bridge::connection::{ConnectionStore, merge_kept, read_of};
 use td_error::TdError;
-use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert, KeyValue};
+use td_objects::dxo::connection::{ConnectionHydrated, ConnectionRead, ConnectionUpsert, KeyValue};
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 
 use crate::base::error::connection::KubeConnectionError;
@@ -119,6 +119,27 @@ impl ConnectionStore for KubernetesConnectionStore {
             connection: parse_document(&document)?,
             secret_names,
             var_names: Vec::new(),
+        })
+    }
+
+    async fn fetch_hydrated(
+        &self,
+        _: &ProjectId,
+        connection_id: &ConnectionId,
+    ) -> Result<ConnectionHydrated, TdError> {
+        let name = self.name_object(connection_id)?;
+        let document = configmap::get_configmap(&self.context, &name)
+            .await?
+            .ok_or(KubeConnectionError::NotConfigured)?;
+        let secrets = secret::get_secret(&self.context, &name)
+            .await?
+            .map(decode_secret_entries)
+            .transpose()?
+            .unwrap_or_default();
+        Ok(ConnectionHydrated {
+            connection: parse_document(&document)?,
+            secrets,
+            vars: Vec::new(),
         })
     }
 

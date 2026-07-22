@@ -61,6 +61,16 @@ pub struct ConnectionRead {
     pub var_names: Vec<String>,
 }
 
+/// Privileged read: the dehydrated document plus the secret/var key-values
+/// WITH values.
+#[ta_objects::Dto]
+pub struct ConnectionHydrated {
+    #[schema(value_type = Object)]
+    pub connection: serde_json::Value,
+    pub secrets: Vec<KeyValue>,
+    pub vars: Vec<KeyValue>,
+}
+
 #[ta_objects::dxo]
 mod definitions {
     use crate::dxo::crudl::RequestContext;

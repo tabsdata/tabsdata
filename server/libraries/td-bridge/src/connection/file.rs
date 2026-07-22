@@ -20,13 +20,13 @@
 //! database files in the same repository tree are equally readable);
 //! instance-key encryption is a follow-up.
 
-use super::{ConnectionStore, merge_kept, read_of};
+use super::{ConnectionStore, hydrated_of, merge_kept, read_of};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use td_common::env::{REPOSITORY_URI_ENV, get_current_dir};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
+use td_objects::dxo::connection::{ConnectionHydrated, ConnectionRead, ConnectionUpsert};
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 use tokio::fs;
 
@@ -227,6 +227,20 @@ impl ConnectionStore for FileConnectionStore {
         }
     }
 
+    async fn fetch_hydrated(
+        &self,
+        project_id: &ProjectId,
+        connection_id: &ConnectionId,
+    ) -> Result<ConnectionHydrated, TdError> {
+        match self.read_record(project_id, connection_id).await? {
+            Some(record) => Ok(hydrated_of(&record.upsert)),
+            None => Err(api_error!(
+                ApiError::NotFound,
+                "the collection has no connection configured"
+            )),
+        }
+    }
+
     async fn delete(
         &self,
         project_id: &ProjectId,
@@ -355,6 +369,35 @@ mod tests {
         assert_eq!(read.secret_names, vec!["CREDENTIALS_PASSWORD"]);
         // Values never leave the store.
         assert!(!serde_json::to_string(&read).unwrap().contains("hunter2"));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_hydrated_returns_values() {
+        let store = store();
+        let project = ProjectId::default();
+        let id = ConnectionId::default();
+
+        upsert_conn(&store, &project, &id, &upsert("Finance", Some("hunter2")))
+            .await
+            .unwrap();
+
+        let hydrated = store.fetch_hydrated(&project, &id).await.unwrap();
+        assert_eq!(hydrated.connection["name"], "Finance");
+        assert_eq!(hydrated.secrets.len(), 1);
+        assert_eq!(hydrated.secrets[0].key, "CREDENTIALS_PASSWORD");
+        assert_eq!(hydrated.secrets[0].value.as_deref(), Some("hunter2"));
+        let read = store.fetch(&project, &id).await.unwrap();
+        assert!(!serde_json::to_string(&read).unwrap().contains("hunter2"));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_hydrated_missing_is_not_found() {
+        let store = store();
+        let err = store
+            .fetch_hydrated(&ProjectId::default(), &ConnectionId::default())
+            .await
+            .expect_err("gone");
+        assert!(err.to_string().contains("no connection configured"));
     }
 
     #[tokio::test]

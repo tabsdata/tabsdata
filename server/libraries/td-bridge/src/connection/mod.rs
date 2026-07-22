@@ -12,7 +12,7 @@
 
 use async_trait::async_trait;
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert, KeyValue};
+use td_objects::dxo::connection::{ConnectionHydrated, ConnectionRead, ConnectionUpsert, KeyValue};
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 
 /// Writes are IDEMPOTENT — that is contract, not detail: the server calls the
@@ -51,6 +51,13 @@ pub trait ConnectionStore: Send + Sync {
         connection_id: &ConnectionId,
     ) -> Result<ConnectionRead, TdError>;
 
+    /// Privileged read: the stored connection WITH secret/var values.
+    async fn fetch_hydrated(
+        &self,
+        project_id: &ProjectId,
+        connection_id: &ConnectionId,
+    ) -> Result<ConnectionHydrated, TdError>;
+
     /// Drop the connection (e.g. on collection delete) so its secrets aren't
     /// orphaned. Idempotent: deleting a never-stored id succeeds.
     async fn delete(
@@ -72,6 +79,15 @@ pub fn read_of(upsert: &ConnectionUpsert) -> ConnectionRead {
         connection: upsert.connection.clone().unwrap_or(serde_json::Value::Null),
         secret_names: keys(upsert.secrets.as_deref()),
         var_names: keys(upsert.vars.as_deref()),
+    }
+}
+
+/// Full-values view of a stored triple — for privileged reads only.
+pub fn hydrated_of(upsert: &ConnectionUpsert) -> ConnectionHydrated {
+    ConnectionHydrated {
+        connection: upsert.connection.clone().unwrap_or(serde_json::Value::Null),
+        secrets: upsert.secrets.clone().unwrap_or_default(),
+        vars: upsert.vars.clone().unwrap_or_default(),
     }
 }
 

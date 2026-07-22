@@ -22,7 +22,9 @@ use td_database::pool::scoped::{InProject, Scoped};
 use td_error::{TdError, api_error};
 use td_objects::Buildable;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
-use td_objects::dxo::connection::{ConnectionDB, ConnectionRead, ConnectionUpsert, KeyValue};
+use td_objects::dxo::connection::{
+    ConnectionDB, ConnectionHydrated, ConnectionRead, ConnectionUpsert, KeyValue,
+};
 use td_objects::dxo::crudl::{CreateRequest, ReadRequest, RequestContext, UpdateRequest};
 use td_objects::rest_urls::CollectionParam;
 use td_objects::types::basic::{
@@ -59,6 +61,13 @@ impl ConnectionStore for MockStore {
     async fn fetch(&self, _: &ProjectId, _: &ConnectionId) -> Result<ConnectionRead, TdError> {
         unreachable!()
     }
+    async fn fetch_hydrated(
+        &self,
+        _: &ProjectId,
+        _: &ConnectionId,
+    ) -> Result<ConnectionHydrated, TdError> {
+        unreachable!()
+    }
     async fn delete(&self, _: &ProjectId, _: &ConnectionId) -> Result<(), TdError> {
         unreachable!()
     }
@@ -85,6 +94,13 @@ impl ConnectionStore for FailingStore {
         ))
     }
     async fn fetch(&self, _: &ProjectId, _: &ConnectionId) -> Result<ConnectionRead, TdError> {
+        unreachable!()
+    }
+    async fn fetch_hydrated(
+        &self,
+        _: &ProjectId,
+        _: &ConnectionId,
+    ) -> Result<ConnectionHydrated, TdError> {
         unreachable!()
     }
     async fn delete(&self, _: &ProjectId, _: &ConnectionId) -> Result<(), TdError> {
@@ -117,6 +133,13 @@ impl ConnectionStore for KeepStore {
             .var_names(Vec::<String>::new())
             .build()
             .unwrap())
+    }
+    async fn fetch_hydrated(
+        &self,
+        _: &ProjectId,
+        _: &ConnectionId,
+    ) -> Result<ConnectionHydrated, TdError> {
+        unreachable!()
     }
     async fn delete(&self, _: &ProjectId, _: &ConnectionId) -> Result<(), TdError> {
         unreachable!()

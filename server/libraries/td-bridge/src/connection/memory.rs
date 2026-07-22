@@ -8,12 +8,12 @@
 //!
 //! [`TestBridgeProvider`]: crate::test::TestBridgeProvider
 
-use super::{ConnectionStore, merge_kept, read_of};
+use super::{ConnectionStore, hydrated_of, merge_kept, read_of};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::connection::{ConnectionRead, ConnectionUpsert};
+use td_objects::dxo::connection::{ConnectionHydrated, ConnectionRead, ConnectionUpsert};
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 
 #[derive(Default)]
@@ -72,6 +72,25 @@ impl ConnectionStore for InMemoryConnectionStore {
             .get(&(*project_id, *connection_id))
         {
             Some(entry) => Ok(read_of(entry)),
+            None => Err(api_error!(
+                ApiError::NotFound,
+                "the collection has no connection configured"
+            )),
+        }
+    }
+
+    async fn fetch_hydrated(
+        &self,
+        project_id: &ProjectId,
+        connection_id: &ConnectionId,
+    ) -> Result<ConnectionHydrated, TdError> {
+        match self
+            .entries
+            .lock()
+            .unwrap()
+            .get(&(*project_id, *connection_id))
+        {
+            Some(entry) => Ok(hydrated_of(entry)),
             None => Err(api_error!(
                 ApiError::NotFound,
                 "the collection has no connection configured"
