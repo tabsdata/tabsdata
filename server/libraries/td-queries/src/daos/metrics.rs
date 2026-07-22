@@ -52,7 +52,7 @@ use td_database::sea_query::builder::SeaQueryExt;
 #[cfg(postgres)]
 use td_database::sea_query::kind::DatabaseBackend;
 use td_database::sea_query::kind::DatabaseKind;
-use td_objects::dxo::collection::CollectionDBIden;
+use td_objects::dxo::collection::CollectionCreateDBIden;
 use td_objects::dxo::group::GroupDBIden;
 use td_objects::dxo::logical::{
     FunctionRunDBWithNames, FunctionRunDBWithNamesIden, LogicalFunctionRunDB,
@@ -1581,8 +1581,19 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
         LogicalFunctionRunDBIden::Table,
         LogicalFunctionRunDBIden::CollectionId,
     ))
+    // Resolve the name against the base `collections` table, not the
+    // `collections_active` view `CollectionDB` maps to: a collection
+    // soft-deleted while one of its runs is still in flight is hidden from
+    // the view, so the LEFT JOIN would miss and decode NULL into the
+    // non-nullable name. `name_when_deleted` holds the pre-deletion name.
     .expr_as(
-        Expr::col((CollectionDBIden::Table, CollectionDBIden::Name)),
+        Func::coalesce([
+            Expr::col((
+                CollectionCreateDBIden::Table,
+                CollectionCreateDBIden::NameWhenDeleted,
+            )),
+            Expr::col((CollectionCreateDBIden::Table, CollectionCreateDBIden::Name)),
+        ]),
         Alias::new("collection_name"),
     )
     .column((
@@ -1609,12 +1620,12 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
     .from(LogicalFunctionRunDBIden::Table)
     .join(
         JoinType::LeftJoin,
-        CollectionDBIden::Table,
+        CollectionCreateDBIden::Table,
         Expr::col((
             LogicalFunctionRunDBIden::Table,
             LogicalFunctionRunDBIden::CollectionId,
         ))
-        .equals((CollectionDBIden::Table, CollectionDBIden::Id)),
+        .equals((CollectionCreateDBIden::Table, CollectionCreateDBIden::Id)),
     )
     .join(
         JoinType::LeftJoin,
@@ -1662,7 +1673,11 @@ fn inflight_query(req: &InflightRequest) -> SelectStatement {
         LogicalFunctionRunDBIden::Table,
         LogicalFunctionRunDBIden::CollectionId,
     ))
-    .group_by_col((CollectionDBIden::Table, CollectionDBIden::Name))
+    .group_by_col((
+        CollectionCreateDBIden::Table,
+        CollectionCreateDBIden::NameWhenDeleted,
+    ))
+    .group_by_col((CollectionCreateDBIden::Table, CollectionCreateDBIden::Name))
     .group_by_col((
         LogicalFunctionRunDBIden::Table,
         LogicalFunctionRunDBIden::GroupId,
