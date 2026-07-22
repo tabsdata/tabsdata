@@ -22,6 +22,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from tabsdatak.tableframe.expr import Expr
+from tabsdatak.tableframe.datatypes import Int64
 from tabsdatak.tableframe._typing import (
     Ambiguous,
     IntoExpr,
@@ -30,10 +31,21 @@ from tabsdatak.tableframe._typing import (
     TimeUnit,
 )
 
-""" """
+"""String operations for text `TableFrame` columns.
+
+Reached through the `str` accessor of an `Expr` (for example
+`col("name").str.to_uppercase()`). Methods measure, case-fold, trim,
+pad, search, slice and rewrite strings, and parse them into temporal or
+integer types. Pattern arguments are regular expressions unless
+`literal=True` is passed.
+"""
 
 class ExprStringNameSpace:
-    """ """
+    """String methods, accessed via `Expr.str`.
+
+    :categories: string
+    """
+    # devguide-ref: regex vs literal string matching
     def to_date(
         self,
         format: str | None = None,
@@ -42,7 +54,19 @@ class ExprStringNameSpace:
         exact: bool = True,
         cache: bool = True,
     ) -> Expr:
-        """ """
+        """Parse each string into a date.
+
+        :categories: type-casting
+
+        Args:
+            format: chrono-style date format (e.g. `%Y-%m-%d`); inferred
+                when omitted.
+            strict: If `True`, raise on an unparseable string; if
+                `False`, set it to null.
+            exact: If `True`, the whole string must match; if `False`,
+                match a date found anywhere in it.
+            cache: Cache parsing of repeated strings.
+        """
 
     def to_datetime(
         self,
@@ -55,73 +79,226 @@ class ExprStringNameSpace:
         cache: bool = True,
         ambiguous: Ambiguous | Expr = "raise",
     ) -> Expr:
-        """ """
+        """Parse each string into a datetime.
+
+        :categories: type-casting
+
+        Args:
+            format: chrono-style datetime format; inferred when omitted.
+            time_unit: Resolution of the result: `ns`, `us` or `ms`.
+            time_zone: Time zone to attach to the result.
+            strict: If `True`, raise on an unparseable string; if
+                `False`, set it to null.
+            exact: If `True`, the whole string must match; if `False`,
+                match a datetime found anywhere in it.
+            cache: Cache parsing of repeated strings.
+            ambiguous: Policy for ambiguous local times: `earliest`,
+                `latest`, `raise` or `null`.
+        """
 
     def to_time(
         self, format: str | None = None, *, strict: bool = True, cache: bool = True
     ) -> Expr:
-        """ """
+        """Parse each string into a time.
+
+        :categories: type-casting
+
+        Args:
+            format: chrono-style time format (e.g. `%H:%M:%S`); inferred
+                when omitted.
+            strict: If `True`, raise on an unparseable string; if
+                `False`, set it to null.
+            cache: Cache parsing of repeated strings.
+        """
 
     def len_bytes(self) -> Expr:
-        """ """
+        """Number of bytes in each string (not characters).
+
+        :categories: string
+        """
 
     def len_chars(self) -> Expr:
-        """ """
+        """Number of characters in each string (not bytes).
+
+        :categories: string
+        """
 
     def to_uppercase(self) -> Expr:
-        """ """
+        """Convert each string to uppercase.
+
+        :categories: string
+        """
 
     def to_lowercase(self) -> Expr:
-        """ """
+        """Convert each string to lowercase.
+
+        :categories: string
+        """
 
     def to_titlecase(self) -> Expr:
-        """ """
+        """Title-case each string, capitalizing the first letter of a word.
+
+        :categories: string
+        """
 
     def strip_chars(self, characters: IntoExpr = None) -> Expr:
-        """ """
+        """Trim the given characters from both ends of each string.
+
+        :categories: string
+
+        Args:
+            characters: Set of characters to remove, in any order;
+                whitespace when omitted.
+        """
 
     def strip_chars_start(self, characters: IntoExpr = None) -> Expr:
-        """ """
+        """Trim the given characters from the start of each string.
+
+        :categories: string
+
+        Args:
+            characters: Set of characters to remove, in any order;
+                whitespace when omitted.
+        """
 
     def strip_chars_end(self, characters: IntoExpr = None) -> Expr:
-        """ """
+        """Trim the given characters from the end of each string.
+
+        :categories: string
+
+        Args:
+            characters: Set of characters to remove, in any order;
+                whitespace when omitted.
+        """
 
     def strip_prefix(self, prefix: IntoExpr) -> Expr:
-        """ """
+        """Remove `prefix` from the start of each string if present.
+
+        :categories: string
+
+        Args:
+            prefix: Exact prefix to remove.
+        """
 
     def strip_suffix(self, suffix: IntoExpr) -> Expr:
-        """ """
+        """Remove `suffix` from the end of each string if present.
+
+        :categories: string
+
+        Args:
+            suffix: Exact suffix to remove.
+        """
 
     def pad_start(self, length: int | IntoExprColumn, fill_char: str = " ") -> Expr:
-        """ """
+        """Left-pad each string to `length` with a fill character.
+
+        :categories: string
+
+        Strings already at or over `length` are unchanged.
+
+        Args:
+            length: Target length.
+            fill_char: Single character used for padding.
+        """
 
     def pad_end(self, length: int | IntoExprColumn, fill_char: str = " ") -> Expr:
-        """ """
+        """Right-pad each string to `length` with a fill character.
+
+        :categories: string
+
+        Strings already at or over `length` are unchanged.
+
+        Args:
+            length: Target length.
+            fill_char: Single character used for padding.
+        """
 
     def zfill(self, length: int | IntoExprColumn) -> Expr:
-        """ """
+        """Left-pad each numeric string with zeros to `length`.
+
+        :categories: string
+
+        A leading sign is preserved before the zeros. Strings already at
+        or over `length` are unchanged.
+
+        Args:
+            length: Target length.
+        """
 
     def contains(
         self, pattern: str | Expr, *, literal: bool = False, strict: bool = True
     ) -> Expr:
-        """ """
+        """Return whether each string contains `pattern`.
+
+        :categories: string
+
+        Args:
+            pattern: Regular expression, or a literal when `literal` is
+                `True`.
+            literal: Treat `pattern` as a literal string, not a regex.
+            strict: If `True`, raise on an invalid regex.
+        """
 
     def find(
         self, pattern: str | Expr, *, literal: bool = False, strict: bool = True
     ) -> Expr:
-        """ """
+        """Return the index of the first match of `pattern`, or null.
+
+        :categories: string
+
+        Args:
+            pattern: Regular expression, or a literal when `literal` is
+                `True`.
+            literal: Treat `pattern` as a literal string, not a regex.
+            strict: If `True`, raise on an invalid regex.
+        """
 
     def ends_with(self, suffix: str | Expr) -> Expr:
-        """ """
+        """Return whether each string ends with `suffix`.
+
+        :categories: string
+
+        Args:
+            suffix: Literal suffix to test for.
+        """
 
     def starts_with(self, prefix: str | Expr) -> Expr:
-        """ """
+        """Return whether each string starts with `prefix`.
+
+        :categories: string
+
+        Args:
+            prefix: Literal prefix to test for.
+        """
 
     def extract(self, pattern: IntoExprColumn, group_index: int = 1) -> Expr:
-        """ """
+        """Extract a regex capture group from each string.
+
+        :categories: string
+
+        Returns null where the pattern does not match.
+
+        Args:
+            pattern: Regular expression with one or more capture groups.
+            group_index: 1-based group to return; `0` returns the whole
+                match.
+
+        Examples:
+            .. code-block:: python
+
+                col("email").str.extract(r"(.+)@(.+)", 2)  # the domain
+        """
 
     def count_matches(self, pattern: str | Expr, *, literal: bool = False) -> Expr:
-        """ """
+        """Count non-overlapping matches of `pattern` in each string.
+
+        :categories: string
+
+        Args:
+            pattern: Regular expression, or a literal when `literal` is
+                `True`.
+            literal: Treat `pattern` as a literal string, not a regex.
+        """
 
     def replace(
         self,
@@ -131,26 +308,70 @@ class ExprStringNameSpace:
         literal: bool = False,
         n: int = 1,
     ) -> Expr:
-        """ """
+        """Replace matches of `pattern` with `value` in each string.
+
+        :categories: string
+
+        Args:
+            pattern: Regular expression, or a literal when `literal` is
+                `True`.
+            value: Replacement string; may reference capture groups.
+            literal: Treat `pattern` as a literal string, not a regex.
+            n: Number of matches to replace, counted from the left.
+        """
 
     def replace_all(
         self, pattern: str | Expr, value: str | Expr, *, literal: bool = False
     ) -> Expr:
-        """ """
+        """Replace all matches of `pattern` with `value` in each string.
+
+        :categories: string
+
+        Args:
+            pattern: Regular expression, or a literal when `literal` is
+                `True`.
+            value: Replacement string; may reference capture groups.
+            literal: Treat `pattern` as a literal string, not a regex.
+        """
 
     def reverse(self) -> Expr:
-        """ """
+        """Reverse the characters of each string.
+
+        :categories: string
+        """
 
     def slice(
         self, offset: int | IntoExprColumn, length: int | IntoExprColumn | None = None
     ) -> Expr:
-        """ """
+        """Extract a substring at an offset for a given length.
+
+        :categories: string
+
+        Args:
+            offset: Start index; a negative value counts from the end.
+            length: Number of characters; to the end of the string when
+                omitted.
+        """
 
     def head(self, n: int | IntoExprColumn) -> Expr:
-        """ """
+        """Return the first `n` characters of each string.
+
+        :categories: string
+
+        Args:
+            n: Number of leading characters; a negative value drops that
+                many from the end.
+        """
 
     def tail(self, n: int | IntoExprColumn) -> Expr:
-        """ """
+        """Return the last `n` characters of each string.
+
+        :categories: string
+
+        Args:
+            n: Number of trailing characters; a negative value drops that
+                many from the start.
+        """
 
     def to_integer(
         self,
@@ -159,12 +380,33 @@ class ExprStringNameSpace:
         dtype: PolarsIntegerType = Int64,
         strict: bool = True,
     ) -> Expr:
-        """ """
+        """Parse each string into an integer.
+
+        #MANUAL CHANGE POST GEN: default `dtype` is the Tabsdata alias
+        `Int64` from `tabsdatak.tableframe.datatypes` (import added); the
+        generated stub referenced a bare, unimported `Int64`.
+
+        :categories: type-casting
+
+        Args:
+            base: Numeric base for parsing (e.g. `10`, `2`, `16`).
+            dtype: Target integer type -- a Tabsdata datatype (e.g. `Int64`,
+                `Int32`, `UInt16`), not a raw polars one.
+            strict: If `True`, raise on an unparseable string; if
+                `False`, set it to null.
+        """
 
     def contains_any(
         self, patterns: IntoExpr, *, ascii_case_insensitive: bool = False
     ) -> Expr:
-        """ """
+        """Return whether each string contains any of the patterns.
+
+        :categories: string
+
+        Args:
+            patterns: Collection of substrings to search for.
+            ascii_case_insensitive: Match ASCII letters case-insensitively.
+        """
 
     def replace_many(
         self,
@@ -174,4 +416,20 @@ class ExprStringNameSpace:
         ascii_case_insensitive: bool = False,
         leftmost: bool = False,
     ) -> Expr:
-        """ """
+        """Replace all occurrences of many substrings at once.
+
+        :categories: string
+
+        Args:
+            patterns: Substrings to replace, or a `{pattern: replacement}`
+                mapping.
+            replace_with: Replacement for each pattern, matched by
+                position; omit when `patterns` is a mapping.
+            ascii_case_insensitive: Match ASCII letters case-insensitively.
+            leftmost: Match the leftmost pattern instead of the longest.
+
+        Examples:
+            .. code-block:: python
+
+                col("s").str.replace_many({"id": "ID", "n": "N"})
+        """

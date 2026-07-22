@@ -10,38 +10,121 @@ from typing import (
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._typing import IntoExpr
 
-""" """
+"""Grouped-aggregation handle for `TableFrame.group_by`.
+
+`TableFrame.group_by(...)` returns a `LazyGroupBy`; call `.agg(...)` on
+it to reduce each group to a single row.
+"""
 
 class LazyGroupBy:
-    """ """
+    """Pending group-by over a `TableFrame`, produced by `group_by`.
+
+    :categories: aggregation
+
+    Obtain one from `TableFrame.group_by(...)`, then call `.agg(...)` with
+    reducing expressions such as `col("v").sum()`. The reduction shortcut
+    methods (`sum` / `min` / `max` / `mean` / `median` /
+    `n_unique`) reduce EVERY column and can fail on a table's hidden system
+    columns; prefer `agg(col(...).<reduction>())`. `count` and `len` are
+    always safe.
+    """
+    # devguide-ref: group_by/agg
     def __init__(self, lgb, parent, by) -> None:
-        """ """
+        """Wrap a grouper; created by `TableFrame.group_by`, not directly."""
 
     def agg(
         self, *aggs: IntoExpr | Iterable[IntoExpr], **named_aggs: IntoExpr
     ) -> TableFrame:
-        """ """
+        """Reduce each group to one row using the given expressions.
+
+        :categories: aggregation
+
+        Each expression is a column reduction -- typically `col(name)` plus a
+        reducer and an `alias`. The result has one row per group: the group
+        key column(s) followed by the aggregated columns.
+
+        Args:
+            aggs: Aggregation expressions to compute per group.
+            named_aggs: Aggregation expressions as keyword arguments, where
+                the keyword names the output column.
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("k").agg(col("v").sum().alias("s"))
+                tf.group_by("k").agg(col("v").mean().alias("m"))
+        """
 
     def len(self, name: str | None = None) -> TableFrame:
-        """ """
+        """Count the rows in each group.
+
+        :categories: aggregation
+
+        Safe on any `TableFrame` (it counts rows, not column values).
+
+        Args:
+            name: Name for the count column (default `"len"`).
+        """
 
     def count(self) -> TableFrame:
-        """ """
+        """Count the non-null values of each column within each group.
+
+        :categories: aggregation
+
+        Yields one count column per non-key column. Safe on any
+        `TableFrame` (it counts values, not reduces them).
+        """
 
     def max(self) -> TableFrame:
-        """ """
+        """Take the maximum of each non-key column within each group.
+
+        :categories: aggregation
+
+        Reduces EVERY column; may fail on a table's hidden system columns
+        through storage. Prefer `agg(col(...).max())`.
+        """
 
     def mean(self) -> TableFrame:
-        """ """
+        """Average each non-key column within each group.
+
+        :categories: aggregation
+
+        Reduces EVERY column; may fail on a table's hidden system columns
+        through storage. Prefer `agg(col(...).mean())`.
+        """
 
     def median(self) -> TableFrame:
-        """ """
+        """Take the median of each non-key column within each group.
+
+        :categories: aggregation
+
+        Reduces EVERY column; may fail on a table's hidden system columns
+        through storage. Prefer `agg(col(...).median())`.
+        """
 
     def min(self) -> TableFrame:
-        """ """
+        """Take the minimum of each non-key column within each group.
+
+        :categories: aggregation
+
+        Reduces EVERY column; may fail on a table's hidden system columns
+        through storage. Prefer `agg(col(...).min())`.
+        """
 
     def n_unique(self) -> TableFrame:
-        """ """
+        """Count the distinct values of each non-key column within each group.
+
+        :categories: aggregation
+
+        Reduces EVERY column; may fail on a table's hidden system columns
+        through storage. Prefer `agg(col(...).n_unique())`.
+        """
 
     def sum(self) -> TableFrame:
-        """ """
+        """Sum each non-key column within each group.
+
+        :categories: aggregation
+
+        Reduces EVERY column; may fail on a table's hidden system columns
+        through storage. Prefer `agg(col(...).sum())`.
+        """

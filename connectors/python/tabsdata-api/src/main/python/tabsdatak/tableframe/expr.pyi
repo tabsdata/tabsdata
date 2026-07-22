@@ -36,164 +36,357 @@ from tabsdatak.tableframe._typing import (
     TemporalLiteral,
 )
 
-""" """
+"""Column expressions for `TableFrame` transformations.
+
+An `Expr` names a computation over one or more columns. Build one with
+`col` or `lit` from `tabsdatak.tableframe.functions`, combine
+expressions with Python operators and the methods here, then consume them
+in a frame's `select`, `filter`, `with_columns` or `group_by().agg`.
+Date/time and string helpers are grouped under the `dt` and `str`
+namespaces.
+"""
 
 class Expr:
-    """ """
+    """A lazy column expression evaluated against a `TableFrame`.
+
+    :categories: tableframe
+
+    Create expressions with `col` / `lit` from
+    `tabsdatak.tableframe.functions` and pass them to a frame's
+    `select`, `filter`, `with_columns` or `group_by().agg`.
+    Operators are element-wise; reducers (`sum`, `mean`, `min` ...)
+    collapse a group. Date/time and string helpers live under `dt` and
+    `str`.
+    """
+    # devguide-ref: expression composition and lazy evaluation; polars-equivalence
     @property
     def dt(self) -> ExprDateTimeNameSpace:
-        """ """
+        """Namespace of date and time operations for temporal columns.
+
+        :categories: date
+        """
 
     @property
     def str(self) -> ExprStringNameSpace:
-        """ """
+        """Namespace of string operations for string columns.
+
+        :categories: string
+        """
 
     def __abs__(self) -> Expr:
-        """ """
+        """Absolute value of each element; see `abs`.
+
+        :categories: numeric
+        """
 
     def __add__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise addition; for strings, concatenation.
+
+        :categories: numeric
+        """
 
     def __radd__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Reflected addition (`other` on the left).
+
+        :categories: numeric
+        """
 
     def __and__(self, other: IntoExprColumn | int | bool) -> Expr:
-        """ """
+        """Element-wise bitwise/logical `and` (integer or boolean).
+
+        :categories: logic
+        """
 
     def __rand__(self, other: IntoExprColumn | int | bool) -> Expr:
-        """ """
+        """Reflected `and` (`other` on the left).
+
+        :categories: logic
+        """
 
     def __eq__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise equality; see `eq`.
+
+        :categories: logic
+        """
 
     def __floordiv__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise floor division.
+
+        :categories: numeric
+        """
 
     def __rfloordiv__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Reflected floor division (`other` on the left).
+
+        :categories: numeric
+        """
 
     def __ge__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise greater-than-or-equal comparison.
+
+        :categories: logic
+        """
 
     def __gt__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise greater-than comparison.
+
+        :categories: logic
+        """
 
     def __invert__(self) -> Expr:
-        """ """
+        """Logical negation of a boolean expression; see `not_`.
+
+        :categories: logic
+        """
 
     def __le__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise less-than-or-equal comparison.
+
+        :categories: logic
+        """
 
     def __lt__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise less-than comparison.
+
+        :categories: logic
+        """
 
     def __mod__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise modulo (remainder).
+
+        :categories: numeric
+        """
 
     def __rmod__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Reflected modulo (`other` on the left).
+
+        :categories: numeric
+        """
 
     def __mul__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise multiplication.
+
+        :categories: numeric
+        """
 
     def __rmul__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Reflected multiplication (`other` on the left).
+
+        :categories: numeric
+        """
 
     def __ne__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise inequality; see `ne`.
+
+        :categories: logic
+        """
 
     def __neg__(self) -> Expr:
-        """ """
+        """Unary negation of each element.
+
+        :categories: numeric
+        """
 
     def __or__(self, other: IntoExprColumn | int | bool) -> Expr:
-        """ """
+        """Element-wise bitwise/logical `or` (integer or boolean).
+
+        :categories: logic
+        """
 
     def __ror__(self, other: IntoExprColumn | int | bool) -> Expr:
-        """ """
+        """Reflected `or` (`other` on the left).
+
+        :categories: logic
+        """
 
     def __pos__(self) -> Expr:
-        """ """
+        """Unary plus; returns the expression unchanged (identity).
+
+        #VERIFY: passthrough to polars `Expr.__pos__` (identity). The old
+        API doubled the value (`self + self`) -- confirm the current engine
+        does NOT double.
+
+        :categories: numeric
+        """
 
     def __pow__(self, exponent: IntoExprColumn | int | float) -> Expr:
-        """ """
+        """Raise each element to the power of `exponent`.
+
+        :categories: numeric
+        """
 
     def __rpow__(self, base: IntoExprColumn | int | float) -> Expr:
-        """ """
+        """Reflected exponentiation (this expression is the exponent).
+
+        :categories: numeric
+        """
 
     def __sub__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise subtraction.
+
+        :categories: numeric
+        """
 
     def __rsub__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Reflected subtraction (`other` on the left).
+
+        :categories: numeric
+        """
 
     def __truediv__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Element-wise true (floating-point) division.
+
+        :categories: numeric
+        """
 
     def __rtruediv__(self, other: IntoExpr) -> Expr:
-        """ """
+        """Reflected true division (`other` on the left).
+
+        :categories: numeric
+        """
 
     def __xor__(self, other: IntoExprColumn | int | bool) -> Expr:
-        """ """
+        """Element-wise bitwise/logical `xor` (integer or boolean).
+
+        :categories: logic
+        """
 
     def __rxor__(self, other: IntoExprColumn | int | bool) -> Expr:
-        """ """
+        """Reflected `xor` (`other` on the left).
+
+        :categories: logic
+        """
 
     def sqrt(self) -> Expr:
-        """ """
+        """Square root of each element.
+
+        :categories: numeric
+        """
 
     def cbrt(self) -> Expr:
-        """ """
+        """Cube root of each element.
+
+        :categories: numeric
+        """
 
     def log10(self) -> Expr:
-        """ """
+        """Base-10 logarithm of each element.
+
+        :categories: numeric
+        """
 
     def exp(self) -> Expr:
-        """ """
+        """Exponential (`e` raised to each element).
+
+        :categories: numeric
+        """
 
     def alias(self, name: Any) -> Expr:
-        """ """
+        """Rename the output column of this expression.
+
+        :categories: manipulation
+
+        Args:
+            name: New column name. Must be a valid identifier (letters,
+                digits, underscores; starting with a letter or
+                underscore) up to 100 characters.
+        """
 
     def not_(self) -> Expr:
-        """ """
+        """Logical negation of a boolean expression.
+
+        :categories: logic
+        """
 
     def is_null(self) -> Expr:
-        """ """
+        """Return whether each element is null.
+
+        :categories: logic
+        """
 
     def is_not_null(self) -> Expr:
-        """ """
+        """Return whether each element is not null.
+
+        :categories: logic
+        """
 
     def is_finite(self) -> Expr:
-        """ """
+        """Return whether each floating-point element is finite.
+
+        :categories: logic
+        """
 
     def is_infinite(self) -> Expr:
-        """ """
+        """Return whether each floating-point element is infinite.
+
+        :categories: logic
+        """
 
     def is_nan(self) -> Expr:
-        """ """
+        """Return whether each floating-point element is NaN.
+
+        :categories: logic
+        """
 
     def is_not_nan(self) -> Expr:
-        """ """
+        """Return whether each floating-point element is not NaN.
+
+        :categories: logic
+        """
 
     def count(self) -> Expr:
-        """ """
+        """Count the non-null elements in the group; see `len`.
+
+        :categories: aggregation
+        """
 
     def len(self) -> Expr:
-        """ """
+        """Count all rows in the group, including nulls; see `count`.
+
+        :categories: aggregation
+        """
 
     def slice(self, offset: int | Expr, length: int | Expr | None = None) -> Expr:
-        """ """
+        """Take a contiguous slice of the column's values.
+
+        :categories: filters
+
+        Args:
+            offset: Start index; a negative value counts from the end.
+            length: Number of values to take; all remaining if omitted.
+        """
 
     def floor(self) -> Expr:
-        """ """
+        """Round each element down to the nearest integer.
+
+        :categories: numeric
+        """
 
     def ceil(self) -> Expr:
-        """ """
+        """Round each element up to the nearest integer.
+
+        :categories: numeric
+        """
 
     def round(self, decimals: int = 0, mode: RoundMode = "half_to_even") -> Expr:
-        """ """
+        """Round floating-point elements to a number of decimals.
+
+        :categories: numeric
+
+        Args:
+            decimals: Number of decimal places to keep; non-negative.
+            mode: Tie-breaking rule, one of `half_to_even`,
+                `half_away_from_zero` or `to_zero`.
+        """
 
     def round_sig_figs(self, digits: int) -> Expr:
-        """ """
+        """Round elements to a number of significant figures.
+
+        :categories: numeric
+
+        Args:
+            digits: Number of significant figures to keep; positive.
+        """
 
     def cast(
         self,
@@ -202,7 +395,19 @@ class Expr:
         strict: bool = True,
         wrap_numerical: bool = False,
     ) -> Expr:
-        """ """
+        """Cast the expression to a different data type.
+
+        :categories: type-casting
+
+        Args:
+            dtype: Target data type (e.g. `pl.Int64`, `pl.Float64`,
+                `pl.String`).
+            strict: If `True`, raise on values that do not fit the
+                target; if `False`, set them to null instead.
+            wrap_numerical: If `True`, wrap on numeric overflow rather
+                than raising.
+        """
+        # devguide-ref: cast strictness and numeric overflow
 
     def fill_null(
         self,
@@ -210,104 +415,293 @@ class Expr:
         strategy: FillNullStrategy | None = None,
         limit: int | None = None,
     ) -> Expr:
-        """ """
+        """Replace null values with a value or a fill strategy.
+
+        :categories: manipulation
+
+        Pass either `value` or `strategy`, not both.
+
+        Args:
+            value: Value or expression to substitute for nulls.
+            strategy: Fill strategy instead of `value`: one of
+                `forward`, `backward`, `min`, `max`, `mean`,
+                `zero` or `one`.
+            limit: Maximum consecutive nulls to fill with `forward` or
+                `backward`.
+        """
 
     def fill_nan(self, value: int | float | Expr | None) -> Expr:
-        """ """
+        """Replace NaN values with the given value.
+
+        :categories: manipulation
+
+        Only affects NaN, not null. Use `fill_null` for nulls.
+
+        Args:
+            value: Value or expression to substitute for NaN.
+        """
 
     def max(self) -> Expr:
-        """ """
+        """Return the maximum element in the group.
+
+        :categories: aggregation
+        """
 
     def min(self) -> Expr:
-        """ """
+        """Return the minimum element in the group.
+
+        :categories: aggregation
+        """
 
     def sum(self) -> Expr:
-        """ """
+        """Return the sum of the elements in the group.
+
+        :categories: aggregation
+        """
 
     def mean(self) -> Expr:
-        """ """
+        """Return the mean of the elements in the group.
+
+        :categories: aggregation
+        """
 
     def median(self) -> Expr:
-        """ """
+        """Return the median of the elements in the group.
+
+        :categories: aggregation
+        """
 
     def n_unique(self) -> Expr:
-        """ """
+        """Count the distinct elements in the group.
+
+        :categories: aggregation
+        """
 
     def first(self, *, ignore_nulls: bool = False) -> Expr:
-        """ """
+        """Return the first element in the group.
+
+        :categories: aggregation
+
+        Args:
+            ignore_nulls: If `True`, return the first non-null element.
+        """
 
     def last(self, *, ignore_nulls: bool = False) -> Expr:
-        """ """
+        """Return the last element in the group.
+
+        :categories: aggregation
+
+        Args:
+            ignore_nulls: If `True`, return the last non-null element.
+        """
 
     def is_unique(self) -> Expr:
-        """ """
+        """Return whether each element occurs only once in the column.
+
+        :categories: logic
+        """
 
     def filter(
         self, *predicates: IntoExprColumn | Iterable[IntoExprColumn], **constraints: Any
     ) -> Expr:
-        """ """
+        """Keep only the values that satisfy the given predicates.
+
+        :categories: filters
+
+        Values whose predicate is not `True` (including null) are
+        dropped. Typically used inside an aggregation.
+
+        Args:
+            predicates: Boolean expressions to apply.
+            constraints: `column=value` keyword filters, combined with
+                `predicates` using logical `and`.
+        """
+        # devguide-ref: filtering within group aggregations
 
     def and_(self, *others: Any) -> Expr:
-        """ """
+        """Bitwise `and` with the given expressions (integer or boolean).
+
+        :categories: logic
+
+        Args:
+            others: Expressions to combine with logical/bitwise `and`.
+        """
 
     def or_(self, *others: Any) -> Expr:
-        """ """
+        """Bitwise `or` with the given expressions (integer or boolean).
+
+        :categories: logic
+
+        Args:
+            others: Expressions to combine with logical/bitwise `or`.
+        """
 
     def eq(self, other: Any) -> Expr:
-        """ """
+        """Element-wise equality, equivalent to `expr == other`.
+
+        :categories: logic
+
+        Args:
+            other: Value or expression to compare against. A null on
+                either side yields null; use `eq_missing` to treat two
+                nulls as equal.
+        """
 
     def eq_missing(self, other: Any) -> Expr:
-        """ """
+        """Element-wise equality where two nulls compare as equal.
+
+        :categories: logic
+
+        Args:
+            other: Value or expression to compare against.
+        """
 
     def ge(self, other: Any) -> Expr:
-        """ """
+        """Element-wise greater-than-or-equal, like `expr >= other`.
+
+        :categories: logic
+
+        Args:
+            other: Value or expression to compare against.
+        """
 
     def gt(self, other: Any) -> Expr:
-        """ """
+        """Element-wise greater-than, like `expr > other`.
+
+        :categories: logic
+
+        Args:
+            other: Value or expression to compare against.
+        """
 
     def le(self, other: Any) -> Expr:
-        """ """
+        """Element-wise less-than-or-equal, like `expr <= other`.
+
+        :categories: logic
+
+        Args:
+            other: Value or expression to compare against.
+        """
 
     def lt(self, other: Any) -> Expr:
-        """ """
+        """Element-wise less-than, like `expr < other`.
+
+        :categories: logic
+
+        Args:
+            other: Value or expression to compare against.
+        """
 
     def ne(self, other: Any) -> Expr:
-        """ """
+        """Element-wise inequality, equivalent to `expr != other`.
+
+        :categories: logic
+
+        Args:
+            other: Value or expression to compare against. A null on
+                either side yields null; use `ne_missing` to treat two
+                nulls as equal.
+        """
 
     def ne_missing(self, other: Any) -> Expr:
-        """ """
+        """Element-wise inequality where two nulls compare as equal.
+
+        :categories: logic
+
+        Args:
+            other: Value or expression to compare against.
+        """
 
     def add(self, other: Any) -> Expr:
-        """ """
+        """Add `other`; for strings, concatenate. Same as `+`.
+
+        :categories: numeric
+
+        Args:
+            other: Value or expression to add or concatenate.
+        """
 
     def floordiv(self, other: Any) -> Expr:
-        """ """
+        """Floor division by `other`. Same as `//`.
+
+        :categories: numeric
+
+        Args:
+            other: Value or expression to divide by.
+        """
 
     def mod(self, other: Any) -> Expr:
-        """ """
+        """Modulo (remainder) by `other`. Same as `%`.
+
+        :categories: numeric
+
+        Args:
+            other: Value or expression to divide by.
+        """
 
     def mul(self, other: Any) -> Expr:
-        """ """
+        """Multiply by `other`. Same as `*`.
+
+        :categories: numeric
+
+        Args:
+            other: Value or expression to multiply by.
+        """
 
     def sub(self, other: Any) -> Expr:
-        """ """
+        """Subtract `other`. Same as `-`.
+
+        :categories: numeric
+
+        Args:
+            other: Value or expression to subtract.
+        """
 
     def neg(self) -> Expr:
-        """ """
+        """Unary negation of each element. Same as unary `-`.
+
+        :categories: numeric
+        """
 
     def truediv(self, other: Any) -> Expr:
-        """ """
+        """True (floating-point) division by `other`. Same as `/`.
+
+        :categories: numeric
+
+        Args:
+            other: Value or expression to divide by.
+        """
 
     def pow(self, exponent: IntoExprColumn | int | float) -> Expr:
-        """ """
+        """Raise each element to the power of `exponent`. Same as `**`.
+
+        :categories: numeric
+
+        Args:
+            exponent: Value or expression to use as the exponent.
+        """
 
     def xor(self, other: Any) -> Expr:
-        """ """
+        """Bitwise `xor` with `other` (integer or boolean). Same as `^`.
+
+        :categories: logic
+
+        Args:
+            other: Value or expression to combine with `xor`.
+        """
 
     def is_in(
         self, other: Expr | Collection[Any], *, nulls_equal: bool = False
     ) -> Expr:
-        """ """
+        """Return whether each element is contained in `other`.
+
+        :categories: logic
+
+        Args:
+            other: Collection or expression of allowed values.
+            nulls_equal: If `True`, a null element matches a null in
+                `other`.
+        """
 
     def is_between(
         self,
@@ -315,7 +709,16 @@ class Expr:
         upper_bound: IntoExpr,
         closed: ClosedInterval = "both",
     ) -> Expr:
-        """ """
+        """Return whether each element lies between two bounds.
+
+        :categories: logic
+
+        Args:
+            lower_bound: Lower bound value or expression.
+            upper_bound: Upper bound value or expression.
+            closed: Which ends are inclusive: `both` (default),
+                `left`, `right` or `none`.
+        """
 
     def hash(
         self,
@@ -324,15 +727,38 @@ class Expr:
         seed_2: int | None = None,
         seed_3: int | None = None,
     ) -> Expr:
-        """ """
+        """Hash each element to a 64-bit unsigned integer.
+
+        :categories: numeric
+
+        Args:
+            seed: Base seed for the hash.
+            seed_1: Optional additional seed.
+            seed_2: Optional additional seed.
+            seed_3: Optional additional seed.
+        """
 
     def reinterpret(
         self, *, signed: bool | None = None, dtype: PolarsDataType | None = None
     ) -> Expr:
-        """ """
+        """Reinterpret a 64-bit integer's bits as another integer type.
+
+        :categories: numeric
+
+        Reinterprets the raw bits (no value conversion); for a real
+        conversion use `cast`. Only valid on 64-bit integer columns.
+
+        Args:
+            signed: If `True` reinterpret as signed, if `False` as
+                unsigned.
+            dtype: Explicit target integer type; overrides `signed`.
+        """
 
     def abs(self) -> Expr:
-        """ """
+        """Absolute value of each element.
+
+        :categories: numeric
+        """
 
     def rank(
         self,
@@ -341,73 +767,166 @@ class Expr:
         descending: bool = False,
         seed: int | None = None,
     ) -> Expr:
-        """ """
+        """Assign a rank to each element within the column.
+
+        :categories: aggregation
+
+        Args:
+            method: Tie-handling method: `average` (default), `min`,
+                `max`, `dense`, `ordinal` or `random`.
+            descending: If `True`, rank from largest to smallest.
+            seed: Random seed, used only when `method` is `random`.
+        """
 
     def diff(
         self, n: int | IntoExpr = 1, null_behavior: NullBehavior = "ignore"
     ) -> Expr:
-        """ """
+        """Difference between each element and one `n` rows away.
+
+        :categories: numeric
+
+        Works on numeric and temporal columns. Order-dependent, so sort
+        first for a deterministic result.
+
+        Args:
+            n: Rows to look back; negative looks forward.
+            null_behavior: How to handle nulls: `ignore` or `drop`.
+        """
 
     def clip(
         self,
         lower_bound: NumericLiteral | TemporalLiteral | IntoExprColumn | None = None,
         upper_bound: NumericLiteral | TemporalLiteral | IntoExprColumn | None = None,
     ) -> Expr:
-        """ """
+        """Clamp each element to the given bounds.
+
+        :categories: numeric
+
+        Values below `lower_bound` become it, values above
+        `upper_bound` become it, values in range are unchanged. Provide
+        at least one bound.
+
+        Args:
+            lower_bound: Minimum allowed value; `None` for no lower bound.
+            upper_bound: Maximum allowed value; `None` for no upper bound.
+        """
 
     def sign(self) -> Expr:
-        """ """
+        """Return the sign of each element (-1, 0 or 1).
+
+        :categories: numeric
+        """
 
     def sin(self) -> Expr:
-        """ """
+        """Sine of each element, in radians.
+
+        :categories: numeric
+        """
 
     def cos(self) -> Expr:
-        """ """
+        """Cosine of each element, in radians.
+
+        :categories: numeric
+        """
 
     def tan(self) -> Expr:
-        """ """
+        """Tangent of each element, in radians.
+
+        :categories: numeric
+        """
 
     def cot(self) -> Expr:
-        """ """
+        """Cotangent of each element, in radians.
+
+        :categories: numeric
+        """
 
     def arcsin(self) -> Expr:
-        """ """
+        """Inverse sine of each element.
+
+        :categories: numeric
+        """
 
     def arccos(self) -> Expr:
-        """ """
+        """Inverse cosine of each element.
+
+        :categories: numeric
+        """
 
     def arctan(self) -> Expr:
-        """ """
+        """Inverse tangent of each element.
+
+        :categories: numeric
+        """
 
     def sinh(self) -> Expr:
-        """ """
+        """Hyperbolic sine of each element.
+
+        :categories: numeric
+        """
 
     def cosh(self) -> Expr:
-        """ """
+        """Hyperbolic cosine of each element.
+
+        :categories: numeric
+        """
 
     def tanh(self) -> Expr:
-        """ """
+        """Hyperbolic tangent of each element.
+
+        :categories: numeric
+        """
 
     def arcsinh(self) -> Expr:
-        """ """
+        """Inverse hyperbolic sine of each element.
+
+        :categories: numeric
+        """
 
     def arccosh(self) -> Expr:
-        """ """
+        """Inverse hyperbolic cosine of each element.
+
+        :categories: numeric
+        """
 
     def arctanh(self) -> Expr:
-        """ """
+        """Inverse hyperbolic tangent of each element.
+
+        :categories: numeric
+        """
 
     def degrees(self) -> Expr:
-        """ """
+        """Convert each element from radians to degrees.
+
+        :categories: numeric
+        """
 
     def radians(self) -> Expr:
-        """ """
+        """Convert each element from degrees to radians.
+
+        :categories: numeric
+        """
 
     def log(self, base: float | IntoExpr = 2.718281828459045) -> Expr:
-        """ """
+        """Logarithm of each element to the given base.
+
+        :categories: numeric
+
+        Args:
+            base: Logarithm base; defaults to `e` (natural logarithm).
+        """
 
     def log1p(self) -> Expr:
-        """ """
+        """Natural logarithm of `1 + element`.
 
-    def shrink_dtype(self) -> Expr:
-        """ """
+        :categories: numeric
+        """
+
+    # MANUAL CHANGE POST GEN: shrink_dtype is a deprecated (since 1.5.0)
+    # no-op; hidden from the public API stub. Restore only if the engine
+    # gives it real behavior.
+    # def shrink_dtype(self) -> Expr:
+    #     """Shrink an integer column to the smallest dtype that fits it.
+    #
+    #     :categories: numeric
+    #     """

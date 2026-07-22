@@ -34,28 +34,91 @@ from tabsdatak.tableframe.expr import Expr
 from tabsdatak.tableframe.group_by import LazyGroupBy
 from tabsdatak.tableframe.schema import Schema
 
-""" """
+"""Frame-level TableFrame API -- a lazy, immutable table mirroring polars
+`LazyFrame`.
+
+A `TableFrame` is the value a `@publisher` / `@transformer` /
+`@subscriber` function receives and returns. Operations are lazy and
+chainable, each returning a NEW `TableFrame` (inputs are never mutated).
+Build column expressions with `col` / `lit` from
+`tabsdatak.tableframe.functions` and feed them to `select` /
+`with_columns` / `filter` / `group_by(...).agg`. Hidden `$TD.*` system
+columns are carried automatically and dropped when data is materialized.
+"""
 
 class TableFrame(EngineFrame):
-    """ """
+    """A lazy, immutable tabular frame -- Tabsdata's wrapper over polars
+    `LazyFrame`.
+
+    :categories: tableframe
+
+    Every operation returns a new `TableFrame` without mutating the input.
+    Instances arrive as arguments (and are returned) in `@publisher` /
+    `@transformer` / `@subscriber` functions; build one directly with
+    `TableFrame.from_polars` / `from_pandas` / `from_dict` / `empty`.
+    Reference columns with `col` and constants with `lit` (both from
+    `tabsdatak.tableframe.functions`).
+    """
+    # devguide-ref: lazy evaluation
     @property
     def columns(self) -> list[str]:
-        """ """
+        """Names of this `TableFrame`'s columns, in column order.
+
+        #VERIFY: may expose hidden `$TD.*` system columns; the old API
+        filtered to user columns only.
+
+        :categories: attributes
+        """
 
     @property
     def dtypes(self) -> list[DataType]:
-        """ """
+        """Data type of each column, in column order.
+
+        #VERIFY: may expose hidden `$TD.*` system columns; the old API
+        filtered to user columns only.
+
+        :categories: attributes
+        """
 
     @property
     def schema(self) -> Schema:
-        """ """
+        """Ordered mapping of column name to data type, as a `Schema`.
+
+        #VERIFY: may expose hidden `$TD.*` system columns; the old API
+        filtered to user columns only.
+
+        :categories: attributes
+        """
 
     @property
     def width(self) -> int:
-        """ """
+        """Number of columns in this `TableFrame`.
+
+        #VERIFY: may count hidden `$TD.*` system columns; the old API
+        filtered to user columns only.
+
+        :categories: attributes
+        """
 
     def __getitem__(self, item: Any) -> TableFrame:
-        """ """
+        """Select columns by name, or slice rows by position.
+
+        #VERIFY: string / list-of-strings selection routes to `select`, but
+        the xp `tf_getitem` note says column subscription should raise --
+        confirm the intended behavior.
+
+        :categories: projection, filters
+
+        A string selects one column and a list of strings selects several
+        (both equivalent to `select`); a slice (`tf[start:stop]`) returns
+        that range of rows. Always returns a new `TableFrame`.
+
+        Examples:
+            .. code-block:: python
+
+                tf["a"]
+                tf.sort("id")[:2]
+        """
 
     def explain(
         self,
@@ -76,7 +139,22 @@ class TableFrame(EngineFrame):
         tree_format: bool | None = None,
         optimizations: Any = ...,
     ) -> str:
-        """ """
+        """Return the query plan of this `TableFrame` as text.
+
+        :categories: description
+
+        Args:
+            format: `"plain"` or `"tree"` rendering.
+            optimized: Show the optimized plan (default) rather than the raw
+                logical plan.
+            streaming: Show the plan for streaming execution.
+            engine: Target engine -- `"auto"`, `"in-memory"`,
+                `"streaming"` or `"gpu"`.
+
+        The remaining boolean flags each toggle one query-plan optimization
+        (predicate/projection pushdown, common-subplan elimination, ...);
+        leave them at their defaults unless diagnosing the plan.
+        """
 
     def show_graph(
         self,
@@ -101,10 +179,34 @@ class TableFrame(EngineFrame):
         _check_order: bool = True,
         optimizations: Any = ...,
     ) -> str | None:
-        """ """
+        """Render the query plan of this `TableFrame` as a graph.
+
+        :categories: description
+
+        Args:
+            optimized: Graph the optimized plan (default) rather than the raw
+                logical plan.
+            show: Display the graph (needs Graphviz); set `False` to only
+                return or write it.
+            output_path: If given, write the rendered graph to this path.
+            raw_output: Return the raw DOT string instead of rendering.
+            figsize: Figure size as `(width, height)` in inches.
+
+        The remaining boolean flags toggle individual query-plan
+        optimizations; leave them at their defaults unless diagnosing the plan.
+        """
 
     def inspect(self, fmt: str = "{}") -> TableFrame:
-        """ """
+        """Print this `TableFrame` mid-chain and pass it through unchanged.
+
+        :categories: description
+
+        Handy for debugging a chained pipeline: it returns the same
+        `TableFrame` so it can sit between other operations.
+
+        Args:
+            fmt: Format string applied to the printed frame.
+        """
 
     def sort(
         self,
@@ -115,7 +217,23 @@ class TableFrame(EngineFrame):
         maintain_order: bool = False,
         multithreaded: bool = True,
     ) -> TableFrame:
-        """ """
+        """Sort the rows by one or more columns or expressions.
+
+        :categories: sorting
+
+        Args:
+            by: Column name(s) or expression(s) to sort by.
+            more_by: Additional sort keys, as positional arguments.
+            descending: Sort descending; a single bool, or one per sort key.
+            nulls_last: Place nulls last; a single bool, or one per sort key.
+            maintain_order: Keep the input order of tied rows.
+
+        Examples:
+            .. code-block:: python
+
+                tf.sort("k", descending=True)
+                tf.sort(["k", "n"], descending=[True, False])
+        """
 
     def cast(
         self,
@@ -127,22 +245,80 @@ class TableFrame(EngineFrame):
         *,
         strict: bool = True,
     ) -> TableFrame:
-        """ """
+        """Cast columns to new data types.
+
+        :categories: type-casting
+
+        Data types come from `tabsdatak.tableframe.datatypes`.
+
+        Args:
+            dtypes: A single data type applied to every column, a mapping of
+                column (name or selector) to its target data type, or a
+                `Schema`.
+            strict: If `True` (default), raise when a value cannot be cast;
+                if `False`, unconvertible values become null.
+
+        Examples:
+            .. code-block:: python
+
+                tf.cast({"a": Float64, "b": String})
+                tf.cast({"id": Int8}, strict=False)
+        """
 
     def clear(self, n: int = 0) -> TableFrame:
-        """ """
+        """Return a frame with the same schema but no data.
+
+        :categories: manipulation
+
+        Args:
+            n: Number of all-null rows to produce. `0` (default) yields a
+                zero-row frame; a positive `n` yields `n` rows of nulls.
+        """
 
     def filter(
         self,
         *predicates: IntoExprColumn | Iterable[IntoExprColumn] | bool | list[bool],
         **constraints: Any,
     ) -> TableFrame:
-        """ """
+        """Keep only the rows matching every given predicate.
+
+        :categories: filters
+
+        Args:
+            predicates: Boolean expressions; a row is kept only if it
+                satisfies ALL of them (they are AND-ed together).
+            constraints: Column-equality shortcuts as keyword arguments --
+                `filter(g="x")` means `filter(col("g") == "x")`.
+
+        Examples:
+            .. code-block:: python
+
+                tf.filter(col("a") > 2)
+                tf.filter((col("a") > 1) & (col("a") < 5))
+                tf.filter(col("g").is_in(["x", "y"]))
+                tf.filter(g="x")
+        """
 
     def select(
         self, *exprs: IntoExpr | Iterable[IntoExpr], **named_exprs: IntoExpr
     ) -> TableFrame:
-        """ """
+        """Select and/or derive columns, dropping every other column.
+
+        :categories: projection
+
+        Args:
+            exprs: Column names or expressions to keep; each expression
+                becomes a column (name it with `Expr.alias`).
+            named_exprs: Expressions as keyword arguments, where the keyword
+                is the output column name.
+
+        Examples:
+            .. code-block:: python
+
+                tf.select("a", "b")
+                tf.select((col("a") * 2).alias("a2"))
+                tf.select(a2=col("a") * 2)
+        """
 
     def group_by(
         self,
@@ -150,7 +326,27 @@ class TableFrame(EngineFrame):
         maintain_order: bool = False,
         **named_by: IntoExpr,
     ) -> LazyGroupBy:
-        """ """
+        """Group rows by one or more keys for aggregation.
+
+        :categories: aggregation
+
+        Returns a `LazyGroupBy`; call `.agg(...)` on it with reducing
+        expressions to produce one row per group. Prefer
+        `agg(col(...).<reduction>())` over the `LazyGroupBy` reduction
+        shortcuts (see `LazyGroupBy`).
+
+        Args:
+            by: Column name(s) or expression(s) to group by.
+            maintain_order: Emit groups in the order they first appear.
+            named_by: Grouping expressions as keyword arguments, where the
+                keyword names the group column.
+
+        Examples:
+            .. code-block:: python
+
+                tf.group_by("k").agg(col("v").sum().alias("s"))
+        """
+        # devguide-ref: group_by/agg
 
     def join(
         self,
@@ -161,49 +357,157 @@ class TableFrame(EngineFrame):
         left_on: str | Expr | Sequence[str | Expr] | None = None,
         right_on: str | Expr | Sequence[str | Expr] | None = None,
         suffix: str = "_right",
-        validate: JoinValidation = "m:m",
-        nulls_equal: bool = False,
-        coalesce: bool | None = None,
-        maintain_order: MaintainOrderJoin | None = None,
-        allow_parallel: bool = True,
-        force_parallel: bool = False,
     ) -> TableFrame:
-        """ """
+        """Join this `TableFrame` with another on one or more keys.
+
+        #MANUAL CHANGE POST GEN: dropped the generated params `validate`,
+        `nulls_equal`, `coalesce`, `maintain_order`, `allow_parallel`,
+        `force_parallel` -- the runtime does not accept them (TypeError).
+
+        :categories: join
+
+        Args:
+            other: The right `TableFrame` to join with.
+            on: Key column(s) present in BOTH frames. Use this OR
+                `left_on`/`right_on`, never both; omit it for
+                `how="cross"`.
+            how: Join strategy -- one of `"inner"`, `"left"`, `"right"`,
+                `"full"` (a.k.a. `"outer"`), `"cross"`, `"semi"` or
+                `"anti"`. `"semi"` keeps left rows that have a match,
+                `"anti"` keeps those that do not, and `"cross"` is the
+                cartesian product (takes no keys).
+            left_on: Key column(s) on the left frame, paired positionally with
+                `right_on` when the join keys have different names.
+            right_on: Key column(s) on the right frame; use with `left_on`.
+            suffix: Suffix added to right-frame columns whose names collide
+                with the left frame (default `"_right"`).
+
+        Examples:
+            .. code-block:: python
+
+                left.join(right, on="id", how="inner")
+                left.join(right, left_on="id", right_on="rid")
+                left.join(right, how="cross")
+        """
+        # devguide-ref: join semantics
 
     def with_columns(
         self, *exprs: IntoExpr | Iterable[IntoExpr], **named_exprs: IntoExpr
     ) -> TableFrame:
-        """ """
+        """Add or replace columns, keeping all existing ones.
+
+        :categories: projection
+
+        Like `select` but non-destructive: the given expressions are added,
+        and any whose name matches an existing column replaces it in place.
+
+        Args:
+            exprs: Expressions to add; name each with `Expr.alias`.
+            named_exprs: Expressions as keyword arguments, where the keyword
+                is the output column name.
+
+        Examples:
+            .. code-block:: python
+
+                tf.with_columns((col("a") + 1).alias("c"))
+                tf.with_columns(c=col("a") + col("b"))
+        """
 
     def drop(
         self,
         *columns: ColumnNameOrSelector | Iterable[ColumnNameOrSelector],
         strict: bool = True,
     ) -> TableFrame:
-        """ """
+        """Remove the named columns.
+
+        :categories: projection
+
+        Args:
+            columns: Column name(s) or selector(s) to drop, as several
+                positional arguments or a single list.
+            strict: If `True` (default), raise when a named column is
+                missing; if `False`, silently ignore missing names.
+
+        Examples:
+            .. code-block:: python
+
+                tf.drop("a", "b")
+                tf.drop(["b", "c"])
+        """
 
     def rename(
         self, mapping: Mapping[str, str] | Callable[[str], str], *, strict: bool = True
     ) -> TableFrame:
-        """ """
+        """Rename columns.
+
+        #VERIFY: the callable form (a function over column names) has a known
+        system-column divergence (xp `failing` sub-suite); the dict form is
+        the reliable one.
+
+        :categories: projection
+
+        Args:
+            mapping: A dict of `{old_name: new_name}` (the reliable form),
+                or a callable applied to each existing column name to produce
+                its new name.
+            strict: If `True` (default), raise when a key in `mapping` is
+                not an existing column.
+
+        Examples:
+            .. code-block:: python
+
+                tf.rename({"a": "x", "b": "y"})
+        """
 
     def slice(self, offset: int, length: int | None = None) -> TableFrame:
-        """ """
+        """Return `length` rows starting at row `offset`.
+
+        :categories: filters
+
+        Args:
+            offset: Zero-based index of the first row to keep.
+            length: Number of rows to keep; `None` keeps all rows from
+                `offset` to the end.
+        """
 
     def limit(self, n: int = 5) -> TableFrame:
-        """ """
+        """Return the first `n` rows (an alias of `head`).
+
+        :categories: filters
+
+        Args:
+            n: Number of rows to keep.
+        """
 
     def head(self, n: int = 5) -> TableFrame:
-        """ """
+        """Return the first `n` rows.
+
+        :categories: filters
+
+        Args:
+            n: Number of rows to keep.
+        """
 
     def tail(self, n: int = 5) -> TableFrame:
-        """ """
+        """Return the last `n` rows.
+
+        :categories: filters
+
+        Args:
+            n: Number of rows to keep.
+        """
 
     def last(self) -> TableFrame:
-        """ """
+        """Return the last row as a one-row `TableFrame`.
+
+        :categories: filters
+        """
 
     def first(self) -> TableFrame:
-        """ """
+        """Return the first row as a one-row `TableFrame`.
+
+        :categories: filters
+        """
 
     def fill_null(
         self,
@@ -213,10 +517,40 @@ class TableFrame(EngineFrame):
         *,
         matches_supertype: bool = True,
     ) -> TableFrame:
-        """ """
+        """Replace null values with a value or a fill strategy.
+
+        :categories: manipulation
+
+        Provide either `value` or `strategy`, not both.
+
+        Args:
+            value: Value (or expression) to substitute for nulls.
+            strategy: Fill rule instead of a value -- one of `"forward"`,
+                `"backward"`, `"min"`, `"max"`, `"mean"`, `"zero"`
+                or `"one"`.
+            limit: With `"forward"` / `"backward"`, the maximum number of
+                consecutive nulls to fill.
+            matches_supertype: Cast the fill value to the column's supertype
+                when their types differ.
+
+        Examples:
+            .. code-block:: python
+
+                tf.fill_null(0)
+                tf.sort("id").fill_null(strategy="forward", limit=1)
+        """
 
     def fill_nan(self, value: int | float | Expr | None) -> TableFrame:
-        """ """
+        """Replace floating-point `NaN` values with the given value.
+
+        :categories: manipulation
+
+        Targets `NaN` entries in float columns -- distinct from `fill_null`,
+        which replaces nulls.
+
+        Args:
+            value: Value (or expression) to substitute for `NaN`.
+        """
 
     def unique(
         self,
@@ -225,19 +559,54 @@ class TableFrame(EngineFrame):
         keep: UniqueKeepStrategy = "any",
         maintain_order: bool = False,
     ) -> TableFrame:
-        """ """
+        """Remove duplicate rows.
+
+        #VERIFY: omitting `subset` (dedup on all columns) has a known
+        system-column divergence (xp `failing` sub-suite); pass `subset`
+        explicitly.
+
+        :categories: filters
+
+        Args:
+            subset: Column(s) whose values define a duplicate; pass this
+                explicitly. When omitted, all columns are considered.
+            keep: Which duplicate to keep -- `"any"` (default, fastest),
+                `"first"`, `"last"` or `"none"` (drop every duplicated
+                row).
+            maintain_order: Preserve the input row order.
+
+        Examples:
+            .. code-block:: python
+
+                tf.unique(subset="a")
+                tf.unique(subset="k", keep="last")
+        """
 
     def drop_nans(
         self,
         subset: ColumnNameOrSelector | Collection[ColumnNameOrSelector] | None = None,
     ) -> TableFrame:
-        """ """
+        """Drop rows containing floating-point `NaN` values.
+
+        :categories: manipulation
+
+        Args:
+            subset: Column(s) to check for `NaN`; when omitted, all columns
+                are considered.
+        """
 
     def drop_nulls(
         self,
         subset: ColumnNameOrSelector | Collection[ColumnNameOrSelector] | None = None,
     ) -> TableFrame:
-        """ """
+        """Drop rows containing null values.
+
+        :categories: manipulation
+
+        Args:
+            subset: Column(s) to check for nulls; when omitted, all columns
+                are considered.
+        """
 
     def unnest(
         self,
@@ -245,4 +614,22 @@ class TableFrame(EngineFrame):
         *more_columns: ColumnNameOrSelector,
         separator: str | None = None,
     ) -> TableFrame:
-        """ """
+        """Expand struct columns into one column per field.
+
+        :categories: projection
+
+        Each named struct column is replaced, in place, by its fields as
+        top-level columns.
+
+        Args:
+            columns: Struct column(s) to expand.
+            more_columns: Additional struct columns, as positional arguments.
+            separator: If given, prefix each new column with its parent name
+                and this separator to avoid name clashes.
+
+        Examples:
+            .. code-block:: python
+
+                tf.unnest("s")
+                tf.unnest("s", "t")
+        """

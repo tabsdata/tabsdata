@@ -27,6 +27,16 @@ from tabsdatak.tableframe.datatypes import DataType
 from tabsdatak.tableframe.datatypes import Decimal
 from tabsdatak.tableframe.expr import Expr
 
+"""Public type aliases used across the TableFrame API.
+
+These name the value domains that appear in `TableFrame` / `Expr` method
+signatures -- expression inputs (`IntoExpr` / `IntoExprColumn`), the join
+strategy set (`JoinStrategy`), null-fill strategies (`FillNullStrategy`),
+duplicate keep-strategies (`UniqueKeepStrategy`), data-type unions, and the
+like. They are type-checker hints only; the accepted values for each are
+documented on the method that uses them.
+"""
+
 Ambiguous: TypeAlias = Literal["earliest", "latest", "raise", "null"]
 ClosedInterval: TypeAlias = Literal["left", "right", "both", "none"]
 ColumnNameOrSelector: TypeAlias = str | SelectorType

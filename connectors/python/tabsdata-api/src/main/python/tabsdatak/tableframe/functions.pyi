@@ -26,7 +26,12 @@ from tabsdatak.api import TableFrameSpec
 from tabsdatak.api import TableFramesSpec
 from tabsdatak.tableframe._typing import ConcatMethod, PolarsDataType, PythonDataType
 
-""" """
+"""Free functions that build column expressions and combine frames.
+
+Import these from `tabsdatak.tableframe.functions`. `col` and `lit`
+build `Expr` values consumed by `TableFrame.select` / `with_columns` /
+`filter` / `group_by(...).agg`; `concat` stacks whole `TableFrame`s.
+"""
 
 def col(
     name: str
@@ -36,12 +41,67 @@ def col(
     | Iterable[PolarsDataType | PythonDataType],
     *more_names: str | PolarsDataType | PythonDataType,
 ) -> Expr:
-    """ """
+    """Reference one or more columns as an expression.
+
+    :categories: projection
+
+    The returned `Expr` is the building block passed to `select`,
+    `with_columns`, `filter` and `agg`.
+
+    Args:
+        name: A column name, a data type (to select every column of that
+            type), or an iterable of either. A name wrapped in `^` and
+            `$` is treated as a regular expression.
+        more_names: Additional column names or data types, as positional
+            arguments.
+
+    Examples:
+        .. code-block:: python
+
+            tf.select(col("a"), (col("b") * 2).alias("b2"))
+            tf.filter(col("g").is_in(["x", "y"]))
+    """
 
 def concat(items: TableFramesSpec, *, how: ConcatMethod = "vertical") -> TableFrameSpec:
-    """ """
+    """Stack several `TableFrame`s into one by appending their rows.
+
+    :categories: union
+
+    Args:
+        items: The `TableFrame`s to concatenate. `None` entries are
+            skipped; `None`, an empty iterable, or one that is empty after
+            skipping yields `None`.
+        how: How to line up columns -- `"vertical"` (default; every input
+            must share the same columns and types), `"vertical_relaxed"`
+            (same, but cast to a common supertype), `"diagonal"` (union of
+            columns, missing ones filled with null), or `"diagonal_relaxed"`
+            (diagonal plus supertype casting).
+
+    Returns:
+        The combined `TableFrame`, or `None` when there is nothing to
+        concatenate.
+    """
+    # devguide-ref: concat schema alignment
 
 def lit(
     value: Any, dtype: PolarsDataType | None = None, *, allow_object: bool = False
 ) -> Expr:
-    """ """
+    """Build an expression from a literal (constant) value.
+
+    :categories: generation
+
+    Use it to add or compare against constant values in `select` /
+    `with_columns` / `filter`.
+
+    Args:
+        value: The literal value.
+        dtype: Data type for the literal; inferred from `value` when
+            omitted.
+        allow_object: Allow storing an arbitrary Python object as the value.
+
+    Examples:
+        .. code-block:: python
+
+            tf.with_columns(lit(7).alias("c"))
+            tf.select(lit(1.5).alias("r"))
+    """

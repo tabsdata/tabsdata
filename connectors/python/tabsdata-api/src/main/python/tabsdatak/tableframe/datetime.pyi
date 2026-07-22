@@ -31,10 +31,20 @@ from tabsdatak.tableframe._typing import (
     TimeUnit,
 )
 
-""" """
+"""Date and time operations for temporal `TableFrame` columns.
+
+Reached through the `dt` accessor of an `Expr` (for example
+`col("ts").dt.year()`). Methods extract calendar or clock fields,
+convert time zones and units, and shift or truncate instants. Interval
+and offset strings use polars duration syntax such as `1mo`, `1w`,
+`1d`, `1h`, `30m` or `10s`.
+"""
 
 class ExprDateTimeNameSpace:
-    """ """
+    """Date and time methods, accessed via `Expr.dt`.
+
+    :categories: date
+    """
     def add_business_days(
         self,
         n: int | IntoExpr,
@@ -43,10 +53,33 @@ class ExprDateTimeNameSpace:
         holidays: Iterable[Any] | Expr = (),
         roll: Roll = "raise",
     ) -> Expr:
-        """ """
+        """Shift a date or datetime by `n` business days.
+
+        :categories: date
+
+        Args:
+            n: Number of business days to add; negative subtracts.
+            week_mask: Seven booleans, Monday to Sunday, marking which
+                weekdays count as business days.
+            holidays: Dates to skip in addition to non-business weekdays.
+            roll: How to handle a non-business start date: `raise`,
+                `forward` or `backward`.
+        """
 
     def truncate(self, every: str | Expr) -> Expr:
-        """ """
+        """Truncate each datetime down to a multiple of an interval.
+
+        :categories: date
+
+        Args:
+            every: Interval to truncate to, e.g. `1mo`, `1w`, `1d`,
+                `1h` or `15m`.
+
+        Examples:
+            .. code-block:: python
+
+                col("ts").dt.truncate("1mo")  # -> first day of the month
+        """
 
     def replace(
         self,
@@ -60,91 +93,220 @@ class ExprDateTimeNameSpace:
         microsecond: int | IntoExpr | None = None,
         ambiguous: Ambiguous | Expr = "raise",
     ) -> Expr:
-        """ """
+        """Replace individual date or time components with new values.
+
+        :categories: date
+
+        Each component left as `None` is kept unchanged.
+
+        Args:
+            year: New year value.
+            month: New month value (1 to 12).
+            day: New day of month (1 to 31).
+            hour: New hour (0 to 23).
+            minute: New minute (0 to 59).
+            second: New second (0 to 59).
+            microsecond: New microsecond.
+            ambiguous: Policy for ambiguous local times: `earliest`,
+                `latest`, `raise` or `null`.
+        """
 
     def combine(self, time: Expr, time_unit: TimeUnit = "us") -> Expr:
-        """ """
+        """Combine the date part with a time into a datetime.
+
+        :categories: date
+
+        Args:
+            time: Time or expression to attach to each date.
+            time_unit: Resolution of the result: `ns`, `us` or `ms`.
+        """
 
     def to_string(self, format: str | None = None) -> Expr:
-        """ """
+        """Format each temporal value as a string.
+
+        :categories: date, type-casting
+
+        Args:
+            format: chrono-style format string (e.g. `%Y-%m-%d`);
+                defaults to ISO 8601 when omitted.
+        """
 
     def strftime(self, format: str) -> Expr:
-        """ """
+        """Format each temporal value as a string using `format`.
+
+        :categories: date, type-casting
+
+        Args:
+            format: chrono-style format string, e.g. `%Y-%m-%d %H:%M:%S`.
+        """
 
     def millennium(self) -> Expr:
-        """ """
+        """Extract the millennium of each date.
+
+        :categories: date
+        """
 
     def century(self) -> Expr:
-        """ """
+        """Extract the century of each date.
+
+        :categories: date
+        """
 
     def year(self) -> Expr:
-        """ """
+        """Extract the year of each date.
+
+        :categories: date
+        """
 
     def is_leap_year(self) -> Expr:
-        """ """
+        """Return whether each year is a leap year.
+
+        :categories: date
+        """
 
     def iso_year(self) -> Expr:
-        """ """
+        """Extract the ISO 8601 year of each date.
+
+        :categories: date
+        """
 
     def quarter(self) -> Expr:
-        """ """
+        """Extract the quarter of each date (1 to 4).
+
+        :categories: date
+        """
 
     def month(self) -> Expr:
-        """ """
+        """Extract the month of each date (1 to 12).
+
+        :categories: date
+        """
 
     def week(self) -> Expr:
-        """ """
+        """Extract the ISO 8601 week number of each date (1 to 53).
+
+        :categories: date
+        """
 
     def weekday(self) -> Expr:
-        """ """
+        """Extract the ISO weekday (1 for Monday to 7 for Sunday).
+
+        :categories: date
+        """
 
     def day(self) -> Expr:
-        """ """
+        """Extract the day of the month (1 to 31).
+
+        :categories: date
+        """
 
     def ordinal_day(self) -> Expr:
-        """ """
+        """Extract the day of the year (1 to 366).
+
+        :categories: date
+        """
 
     def time(self) -> Expr:
-        """ """
+        """Extract the time component of each datetime.
+
+        :categories: date
+        """
 
     def date(self) -> Expr:
-        """ """
+        """Extract the date component of each datetime.
+
+        :categories: date
+        """
 
     def datetime(self) -> Expr:
-        """ """
+        """Extract the datetime value.
+
+        :categories: date
+        """
 
     def hour(self) -> Expr:
-        """ """
+        """Extract the hour of each datetime (0 to 23).
+
+        :categories: date
+        """
 
     def minute(self) -> Expr:
-        """ """
+        """Extract the minute of each datetime (0 to 59).
+
+        :categories: date
+        """
 
     def second(self, *, fractional: bool = False) -> Expr:
-        """ """
+        """Extract the second of each datetime (0 to 59).
+
+        :categories: date
+
+        Args:
+            fractional: If `True`, include the sub-second fraction.
+        """
 
     def millisecond(self) -> Expr:
-        """ """
+        """Extract the millisecond of each datetime.
+
+        :categories: date
+        """
 
     def microsecond(self) -> Expr:
-        """ """
+        """Extract the microsecond of each datetime.
+
+        :categories: date
+        """
 
     def nanosecond(self) -> Expr:
-        """ """
+        """Extract the nanosecond of each datetime.
+
+        :categories: date
+        """
 
     def epoch(self, time_unit: EpochTimeUnit = "us") -> Expr:
-        """ """
+        """Return time since the Unix epoch in the given unit.
+
+        :categories: date
+
+        Args:
+            time_unit: Output unit: `ns`, `us`, `ms`, `s` or `d`.
+        """
 
     def timestamp(self, time_unit: TimeUnit = "us") -> Expr:
-        """ """
+        """Return the timestamp of each datetime in the given unit.
+
+        :categories: date
+
+        Args:
+            time_unit: Output unit: `ns`, `us` or `ms`.
+        """
 
     def with_time_unit(self, time_unit: TimeUnit) -> Expr:
-        """ """
+        """Relabel the time unit without changing the stored values.
+
+        :categories: date
+
+        Args:
+            time_unit: New unit: `ns`, `us` or `ms`.
+        """
 
     def cast_time_unit(self, time_unit: TimeUnit) -> Expr:
-        """ """
+        """Cast to a different time unit, converting the values.
+
+        :categories: date
+
+        Args:
+            time_unit: Target unit: `ns`, `us` or `ms`.
+        """
 
     def convert_time_zone(self, time_zone: str) -> Expr:
-        """ """
+        """Convert to another time zone, keeping the same instant.
+
+        :categories: date
+
+        Args:
+            time_zone: Target IANA time zone, e.g. `America/New_York`.
+        """
 
     def replace_time_zone(
         self,
@@ -153,40 +315,118 @@ class ExprDateTimeNameSpace:
         ambiguous: Ambiguous | Expr = "raise",
         non_existent: NonExistent = "raise",
     ) -> Expr:
-        """ """
+        """Set the time zone without shifting the instant.
+
+        :categories: date
+
+        Args:
+            time_zone: Target IANA time zone, or `None` to make the
+                value time-zone-naive.
+            ambiguous: Policy for ambiguous local times: `earliest`,
+                `latest`, `raise` or `null`.
+            non_existent: Policy for non-existent local times: `raise`
+                or `null`.
+        """
+        # devguide-ref: time-zone and DST handling
 
     def total_days(self, *, fractional: bool = False) -> Expr:
-        """ """
+        """Total number of days in each duration.
+
+        :categories: date
+
+        Args:
+            fractional: If `True`, include the fractional remainder.
+        """
 
     def total_hours(self, *, fractional: bool = False) -> Expr:
-        """ """
+        """Total number of hours in each duration.
+
+        :categories: date
+
+        Args:
+            fractional: If `True`, include the fractional remainder.
+        """
 
     def total_minutes(self, *, fractional: bool = False) -> Expr:
-        """ """
+        """Total number of minutes in each duration.
+
+        :categories: date
+
+        Args:
+            fractional: If `True`, include the fractional remainder.
+        """
 
     def total_seconds(self, *, fractional: bool = False) -> Expr:
-        """ """
+        """Total number of seconds in each duration.
+
+        :categories: date
+
+        Args:
+            fractional: If `True`, include the fractional remainder.
+        """
 
     def total_milliseconds(self, *, fractional: bool = False) -> Expr:
-        """ """
+        """Total number of milliseconds in each duration.
+
+        :categories: date
+
+        Args:
+            fractional: If `True`, include the fractional remainder.
+        """
 
     def total_microseconds(self, *, fractional: bool = False) -> Expr:
-        """ """
+        """Total number of microseconds in each duration.
+
+        :categories: date
+
+        Args:
+            fractional: If `True`, include the fractional remainder.
+        """
 
     def total_nanoseconds(self, *, fractional: bool = False) -> Expr:
-        """ """
+        """Total number of nanoseconds in each duration.
+
+        :categories: date
+
+        Args:
+            fractional: If `True`, include the fractional remainder.
+        """
 
     def offset_by(self, by: str | Expr) -> Expr:
-        """ """
+        """Shift each datetime by a duration offset.
+
+        :categories: date
+
+        Args:
+            by: Offset duration, e.g. `1mo`, `1d` or `-2h`; a
+                negative value shifts backwards.
+
+        Examples:
+            .. code-block:: python
+
+                col("ts").dt.offset_by("1d")  # add one day
+        """
 
     def month_start(self) -> Expr:
-        """ """
+        """Return the first day of the month for each date.
+
+        :categories: date
+        """
 
     def month_end(self) -> Expr:
-        """ """
+        """Return the last day of the month for each date.
+
+        :categories: date
+        """
 
     def base_utc_offset(self) -> Expr:
-        """ """
+        """Return the base UTC offset, excluding daylight saving.
+
+        :categories: date
+        """
 
     def dst_offset(self) -> Expr:
-        """ """
+        """Return the additional daylight-saving offset.
+
+        :categories: date
+        """

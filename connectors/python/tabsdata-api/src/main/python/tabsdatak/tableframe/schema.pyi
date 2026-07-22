@@ -24,99 +24,136 @@ from pathlib import Path
 from tabsdatak.tableframe.datatypes import DataType
 from tabsdatak.tableframe import TableFrame
 
-""" """
+"""Schema of a `TableFrame` -- an ordered mapping of column name to data type.
+
+Obtain one from `TableFrame.schema`. It behaves like an ordered dict
+(iteration, `in`, indexing by column name) and adds the query helpers below.
+"""
 
 class Schema:
-    """ """
+    """Ordered mapping of column name to data type.
+
+    :categories: attributes
+
+    Returned by `TableFrame.schema`. Iterates in column order and supports
+    mapping access (`schema["col"]`, `"col" in schema`, `len(schema)`)
+    plus the query helpers below.
+    """
     def clear(*args, **kwargs):
-        """ """
+        """Remove all entries, leaving an empty schema."""
 
     def copy(*args, **kwargs):
-        """ """
+        """Return a shallow copy of this schema."""
 
     def fromkeys(iterable, value=None):
-        """ """
+        """Build a schema from the given names, all with the same data type."""
 
     def get(self, key, default=None, /):
-        """ """
+        """Return the data type for `key`, or `default` if absent."""
 
     def items(*args, **kwargs):
-        """ """
+        """Return the `(name, data type)` pairs, in column order."""
 
     def keys(*args, **kwargs):
-        """ """
+        """Return the column names, in column order."""
 
     def move_to_end(self, /, key, last=True):
-        """ """
+        """Move column `key` to the end (or the start when `last` is False)."""
 
     def pop(*args, **kwargs):
-        """ """
+        """Remove column `key` and return its data type."""
 
     def popitem(self, /, last=True):
-        """ """
+        """Remove and return the last (or first) `(name, data type)` pair."""
 
     def setdefault(self, /, key, default=None):
-        """ """
+        """Return `key`'s data type, inserting `default` if it is absent."""
 
     def update(*args, **kwargs):
-        """ """
+        """Update this schema in place from another mapping of columns."""
 
     def values(*args, **kwargs):
-        """ """
+        """Return the data types, in column order."""
 
     def __lt__(self, value, /):
-        """ """
+        """Ordering comparison against another mapping."""
 
     def __le__(self, value, /):
-        """ """
+        """Ordering comparison against another mapping."""
 
     def __gt__(self, value, /):
-        """ """
+        """Ordering comparison against another mapping."""
 
     def __ge__(self, value, /):
-        """ """
+        """Ordering comparison against another mapping."""
 
     def __or__(self, value, /):
-        """ """
+        """Return a new schema merging this one with `value` (right wins)."""
 
     def __ror__(self, value, /):
-        """ """
+        """Return a new schema merging `value` with this one (self wins)."""
 
     def __getitem__(self, key, /):
-        """ """
+        """Return the data type of the column named `key`."""
 
     def __iter__(self, /):
-        """ """
+        """Iterate over the column names, in column order."""
 
     def __len__(self, /):
-        """ """
+        """Return the number of columns."""
 
     def __contains__(self, key, /):
-        """ """
+        """Return whether a column named `key` is present."""
 
     def __eq__(self, other: object) -> bool:
-        """ """
+        """Return whether two schemas share the same columns, types and order."""
 
     def __ne__(self, other: object) -> bool:
-        """ """
+        """Return whether two schemas differ in columns, types or order."""
 
     def names(self) -> list[str]:
-        """ """
+        """Return the column names, in column order.
+
+        :categories: attributes
+        """
 
     def dtypes(self) -> list[DataType]:
-        """ """
+        """Return the column data types, in column order.
+
+        :categories: attributes
+        """
 
     def to_arrow(self, *, compat_level: None = None) -> Any:
-        """ """
+        """Return this schema as a PyArrow schema.
+
+        :categories: attributes
+        """
 
     def to_frame(self, *, eager: bool = True) -> TableFrame:
-        """ """
+        """Return an empty `TableFrame` having exactly this schema.
+
+        :categories: attributes
+        """
 
     def len(self) -> int:
-        """ """
+        """Return the number of columns.
+
+        :categories: attributes
+        """
 
     def to_python(self) -> dict[str, type]:
-        """ """
+        """Return a dict mapping each column name to its Python type.
+
+        :categories: attributes
+        """
 
     def contains_dtype(self, dtype: DataType, *, recursive: bool) -> bool:
-        """ """
+        """Return whether any column has the given data type.
+
+        :categories: attributes
+
+        Args:
+            dtype: Data type to look for.
+            recursive: Also match the type nested inside `List` / `Struct`
+                / `Array` columns.
+        """
