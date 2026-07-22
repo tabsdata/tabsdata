@@ -25,6 +25,7 @@ from tabsdatak.conn.bigquery.error import (
 )
 from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
 from tabsdatak.conn.bigquery import GCSLocation
+from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import GCPJson
 
 pytestmark = pytest.mark.bigquery
@@ -176,8 +177,8 @@ def test_write_cfg_unwraps_backticked_tables():
     assert cfg.schema_evolution == "update"
 
 
-def test_write_cfg_handles_tables_none():
-    dest = BigQueryDest()
+def test_write_cfg_handles_empty_tables():
+    dest = BigQueryDest(tables=[])
     cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
     assert cfg.target_tables == []
 
@@ -263,8 +264,8 @@ def test_dest_plugin_raises_bigquery_4_on_tables_slots_mismatch(work_dir):
     assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_4
 
 
-def test_dest_plugin_raises_bigquery_4_when_tables_none(work_dir):
-    dest = BigQueryDest()
+def test_dest_plugin_raises_bigquery_4_when_empty_tables(work_dir):
+    dest = BigQueryDest(tables=[])
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
     with pytest.raises(BigQueryRuntimeException) as ei:
         plugin._BigQueryDestPlugin().write_out(
@@ -486,9 +487,15 @@ def test_bigquery_dest_cardinality_uses_tables_length():
     assert plugin.BIGQUERY_DEST.cardinality(dest) == 2
 
 
-def test_bigquery_dest_cardinality_zero_for_none_tables():
-    dest = BigQueryDest()
+def test_bigquery_dest_cardinality_zero_for_empty_tables():
+    dest = BigQueryDest(tables=[])
     assert plugin.BIGQUERY_DEST.cardinality(dest) == 0
+
+
+def test_bigquery_dest_requires_tables():
+    with pytest.raises(ConnInitException) as ei:
+        BigQueryDest()
+    assert ei.value.api_error is BigqueryErrorCode.BIGQUERY_3
 
 
 # ---------------------------------------------------------------------------

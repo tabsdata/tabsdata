@@ -86,7 +86,7 @@ def test_bigquery_conn_fields_wire_expected_specs():
 
 
 def test_bigquery_dest_fields_wire_expected_specs():
-    assert _hint(BigQueryDest, "tables") == BigQueryTableNamesSpec | None
+    assert _hint(BigQueryDest, "tables") == BigQueryTableNamesSpec
     assert _hint(BigQueryDest, "if_table_exists") == IfTableExistsSpec
     assert _hint(BigQueryDest, "schema_evolution") == SchemaEvolutionSpec
     assert _hint(BigQueryDest, "dest_cfg") == DestCfgSpec | None
