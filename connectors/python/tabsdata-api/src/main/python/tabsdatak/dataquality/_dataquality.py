@@ -28,21 +28,35 @@ OperatorsSpec: TypeAlias = Annotated[list[Operator], _api.NON_EMPTY_LIST_CONSTRA
 
 @_api.dataclass(DataQualityErrorCode.DQC_201)
 class DataQuality(OnTablesAction):
-    """
+    """A data quality check applied to one of a function's output tables.
+
     :categories: dq-action
 
-    Represents a data quality action to be performed on a table.
+    Bundles classifiers (which label each row) with operators (which act on
+    those labels). Pass it to a `@publisher` / `@transformer` /
+    `@subscriber` via `on_tables=[DataQuality(...)]`; the runtime runs
+    the check against the named output table after the function succeeds.
 
-    This class encapsulates a set of data quality rules, defined by classifiers
-    and operators, that are applied to a specified table. It serves as a container
-    for a complete data quality workflow.
+    Args:
+        table: Output table the check runs on; a valid table name
+            (alphanumerics and underscores, starting with a letter).
+        classifiers: Classifiers that label the table's columns; a
+            non-empty list (at least one).
+        operators: Operators applied to the labels -- `Enrich`,
+            `Summary`, `Filter`, `Select` or `Fail`; a non-empty
+            list (at least one).
 
-    :param table: The name of the table to which the data quality rules will be
-        applied.
-    :param classifiers: The classifiers to evaluate the data in the table.
-    :param operators: The operators that define the actions to take based on the
-        classifier results.
+    Examples:
+        .. code-block:: python
+
+            DataQuality(
+                table="checked",
+                classifiers=[IsNull(["value"])],
+                operators=[Enrich(), Summary()],
+            )
     """
+
+    # devguide-ref: how classifiers/operators compose into a DataQuality check
 
     table: TableNameSpec
     classifiers: ClassifiersSpec

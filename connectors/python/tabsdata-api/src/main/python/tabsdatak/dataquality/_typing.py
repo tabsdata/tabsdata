@@ -150,21 +150,21 @@ A type alias for a percentage value, which can be an integer or a float between
 
 # --- Scale Specifications ---
 
-ScaleIdentityLimitSpec = StrictInt
+ScaleIdentityLimitSpec: TypeAlias = StrictInt
 """A type alias for a limit in a scale identity, ranging from 0 to 100."""
 
-ScaleLimitSpec = Union[StrictInt, StrictFloat]
+ScaleLimitSpec: TypeAlias = Union[StrictInt, StrictFloat]
 """
 A type alias for a generic limit in a scale, which can be an integer or a
 float.
 """
 
-ScalePowerSpec = Annotated[StrictFloat, Field(gt=0)]
+ScalePowerSpec: TypeAlias = Annotated[StrictFloat, Field(gt=0)]
 """
 A type alias for the power of a scale, which must be a float greater than 0.
 """
 
-ScaleBaseSpec = Annotated[StrictFloat, Field(gt=0)]
+ScaleBaseSpec: TypeAlias = Annotated[StrictFloat, Field(gt=0)]
 """
 A type alias for the base of a scale, which must be a float greater than 0.
 """

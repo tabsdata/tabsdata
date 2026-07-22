@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from tabsdatak.dataquality._classifier import (
+    BetweenClassifier as BetweenClassifier,
     BoolClassifier as BoolClassifier,
     Categorizer as Categorizer,
     Classifier as Classifier,
@@ -12,6 +13,7 @@ from tabsdatak.dataquality._classifier import (
     ExponentialScale as ExponentialScale,
     HasLength as HasLength,
     IdentityScale as IdentityScale,
+    InClassifier as InClassifier,
     IsBetween as IsBetween,
     IsFalse as IsFalse,
     IsIn as IsIn,
@@ -32,18 +34,24 @@ from tabsdatak.dataquality._classifier import (
     IsZero as IsZero,
     LinearScale as LinearScale,
     LogarithmicScale as LogarithmicScale,
+    MatchClassifier as MatchClassifier,
     Matches as Matches,
     MonomialScale as MonomialScale,
     Scale as Scale,
     ScaleCategorizer as ScaleCategorizer,
 )
-from tabsdatak.dataquality._dataquality import DataQuality as DataQuality
+from tabsdatak.dataquality._dataquality import (
+    ClassifiersSpec as ClassifiersSpec,
+    DataQuality as DataQuality,
+    OperatorsSpec as OperatorsSpec,
+)
 from tabsdatak.dataquality._operator import (
     AllOk as AllOk,
     AnyFailed as AnyFailed,
     BoolCriteria as BoolCriteria,
     CategoryCriteria as CategoryCriteria,
     Criteria as Criteria,
+    CriteriaOperator as CriteriaOperator,
     Enrich as Enrich,
     Fail as Fail,
     Filter as Filter,
@@ -54,5 +62,33 @@ from tabsdatak.dataquality._operator import (
     RowCountThreshold as RowCountThreshold,
     Select as Select,
     Summary as Summary,
+    TagOperator as TagOperator,
     Threshold as Threshold,
+)
+from tabsdatak.dataquality._typing import (
+    MAX_BINS as MAX_BINS,
+    BinCountSpec as BinCountSpec,
+    BinIdxSpec as BinIdxSpec,
+    BinsCriteriaSpec as BinsCriteriaSpec,
+    BinSpec as BinSpec,
+    ColumnNameSpec as ColumnNameSpec,
+    ColumnNamesWithAltSpec as ColumnNamesWithAltSpec,
+    ColumnNameWithAltSpec as ColumnNameWithAltSpec,
+    IncludeQualityColumnsSpec as IncludeQualityColumnsSpec,
+    LenSpec as LenSpec,
+    OnInvalidColumnSpec as OnInvalidColumnSpec,
+    OnInvalidValueSpec as OnInvalidValueSpec,
+    PercentSpec as PercentSpec,
+    PythonDataTypeSpec as PythonDataTypeSpec,
+    RangeClosedOnSpec as RangeClosedOnSpec,
+    RangeValueSpec as RangeValueSpec,
+    RowCountSpec as RowCountSpec,
+    ScaleBaseSpec as ScaleBaseSpec,
+    ScaleIdentityLimitSpec as ScaleIdentityLimitSpec,
+    ScaleLimitSpec as ScaleLimitSpec,
+    ScalePowerSpec as ScalePowerSpec,
+    SpecialBinSpec as SpecialBinSpec,
+    TagSpec as TagSpec,
+    TagsSpec as TagsSpec,
+    ValuesSpec as ValuesSpec,
 )

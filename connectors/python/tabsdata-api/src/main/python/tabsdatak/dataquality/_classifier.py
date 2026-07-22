@@ -9,8 +9,8 @@ rules. These include boolean classifiers for simple checks (e.g., `IsNull`, `IsB
 and categorizers for binning data.
 
 Classifiers are frozen dataclasses that serialize through the `JsonSerde`
-envelope; per-field validation is handled by pydantic via the ``Annotated``
-type aliases in `_typing`, and cross-field invariants by ``model_validator``
+envelope; per-field validation is handled by pydantic via the `Annotated`
+type aliases in `_typing`, and cross-field invariants by `model_validator`
 hooks that raise the relevant `DataQualityErrorCode`.
 """
 
@@ -72,7 +72,7 @@ def _parameter_value_message(
 def _check_identity_min_max(
     min_val: int, max_val: int, fn_name: str, error_code: DataQualityErrorCode
 ) -> None:
-    """Validates that ``min_val < max_val`` and the delta is at most MAX_BINS."""
+    """Validates that `min_val < max_val` and the delta is at most MAX_BINS."""
     if min_val >= max_val:
         detail = (
             f"min={min_val}, max={max_val}, the maximum value must be strictly "
@@ -94,7 +94,7 @@ def _check_min_max(
     fn_name: str,
     error_code: DataQualityErrorCode,
 ) -> None:
-    """Validates that ``min_val < max_val``."""
+    """Validates that `min_val < max_val`."""
     if min_val >= max_val:
         detail = (
             f"min={min_val}, max={max_val}, the maximum value must be strictly "
@@ -126,8 +126,8 @@ def _check_range(
     fn_name: str,
     error_code: DataQualityErrorCode,
 ) -> None:
-    """Validates a ``[low, high]`` range: both endpoints, when present, must be
-    of the same type and ``low`` must not exceed ``high``."""
+    """Validates a `[low, high]` range: both endpoints, when present, must be
+    of the same type and `low` must not exceed `high`."""
     if low is not None and high is not None:
         if type(low) is not type(high):
             detail = f" low={low} and high={high}, values must be of the same type."
@@ -144,7 +144,7 @@ def _check_range(
 def _check_regex(
     pattern: str, fn_name: str, error_code: DataQualityErrorCode
 ) -> None:
-    """Validates that ``pattern`` compiles as a regular expression."""
+    """Validates that `pattern` compiles as a regular expression."""
     try:
         re.compile(pattern)
     except re.error as e:
@@ -160,10 +160,10 @@ def _check_regex(
 
 
 class Scale(ABC, _api.JsonSerde):
-    """
-    Abstract base class for scales used in categorization.
+    """Abstract base class for the scales used by `ScaleCategorizer`.
 
-    A scale defines how numerical data is divided into bins.
+    A scale defines how a numeric range is divided into bins. Concrete
+    scales differ only in how the bin edges are spaced.
     """
 
     __kind__ = "dqScale"
@@ -171,10 +171,18 @@ class Scale(ABC, _api.JsonSerde):
 
 @_api.dataclass(DataQualityErrorCode.DQC_106)
 class IdentityScale(Scale):
-    """
+    """A scale where every integer in `[min_val, max_val)` maps to its own
+    bin (used with `ScaleCategorizer`).
+
     :categories: dq-classifier
 
-    An identity scale where each integer value corresponds to a bin.
+    Args:
+        min_val: Lowest integer of the scale; a whole number.
+        max_val: Highest integer of the scale; a whole number strictly
+            greater than `min_val` and no more than 100 above it (the
+            span is the bin count).
+        use_bin_zero: If `False`, the minimum value belongs to the first
+            bin; if `True`, `min_val` gets its own bin 0.
     """
 
     __kind__ = "dqIdentityScale"
@@ -198,10 +206,19 @@ class IdentityScale(Scale):
 
 @_api.dataclass(DataQualityErrorCode.DQC_110)
 class LinearScale(Scale):
-    """
+    """A scale that splits `[min_val, max_val]` into equal-width bins (used
+    with `ScaleCategorizer`).
+
     :categories: dq-classifier
 
-    A linear scale.
+    Args:
+        min_val: Lowest value of the scale; an int or float.
+        max_val: Highest value of the scale; strictly greater than
+            `min_val`.
+        bins: Number of bins to split the range into; a whole number from
+            1 to 100 (default 100).
+        use_bin_zero: If `False`, the minimum value belongs to the first
+            bin; if `True`, `min_val` gets its own bin 0.
     """
 
     __kind__ = "dqLinearScale"
@@ -224,10 +241,19 @@ class LinearScale(Scale):
 
 @_api.dataclass(DataQualityErrorCode.DQC_111)
 class MonomialScale(Scale):
-    """
+    """A power-law scale over `[min_val, max_val]` whose bin widths grow as
+    a power of the value (used with `ScaleCategorizer`).
+
     :categories: dq-classifier
 
-    A monomial (power-law) scale.
+    Args:
+        min_val: Lowest value of the scale; an int or float.
+        max_val: Highest value of the scale; strictly greater than
+            `min_val`.
+        power: Exponent of the power-law spacing; a float greater than 0.
+        bins: Number of bins; a whole number from 1 to 100 (default 100).
+        use_bin_zero: If `False`, the minimum value belongs to the first
+            bin; if `True`, `min_val` gets its own bin 0.
     """
 
     __kind__ = "dqMonomialScale"
@@ -251,10 +277,20 @@ class MonomialScale(Scale):
 
 @_api.dataclass(DataQualityErrorCode.DQC_113)
 class LogarithmicScale(Scale):
-    """
+    """A scale whose bin edges are spaced logarithmically over
+    `[min_val, max_val]` (used with `ScaleCategorizer`).
+
     :categories: dq-classifier
 
-    A logarithmic scale.
+    Args:
+        min_val: Lowest value of the scale; an int or float.
+        max_val: Highest value of the scale; strictly greater than
+            `min_val`.
+        base: Base of the logarithm; a float greater than 0 (default
+            `e`).
+        bins: Number of bins; a whole number from 1 to 100 (default 100).
+        use_bin_zero: If `False`, the minimum value belongs to the first
+            bin; if `True`, `min_val` gets its own bin 0.
     """
 
     __kind__ = "dqLogarithmicScale"
@@ -278,10 +314,20 @@ class LogarithmicScale(Scale):
 
 @_api.dataclass(DataQualityErrorCode.DQC_115)
 class ExponentialScale(Scale):
-    """
+    """A scale whose bin edges are spaced exponentially over
+    `[min_val, max_val]` (used with `ScaleCategorizer`).
+
     :categories: dq-classifier
 
-    An exponential scale.
+    Args:
+        min_val: Lowest value of the scale; an int or float.
+        max_val: Highest value of the scale; strictly greater than
+            `min_val`.
+        base: Base of the exponent; a float greater than 0 (default
+            `e`).
+        bins: Number of bins; a whole number from 1 to 100 (default 100).
+        use_bin_zero: If `False`, the minimum value belongs to the first
+            bin; if `True`, `min_val` gets its own bin 0.
     """
 
     __kind__ = "dqExponentialScale"
@@ -309,13 +355,33 @@ class ExponentialScale(Scale):
 
 
 class Classifier(ABC, _api.JsonSerde):
-    """
-    Abstract base class for all data quality classifiers.
+    """Abstract base class for all data quality classifiers.
 
-    A classifier is applied to one or more columns to produce a classification
-    result, which is stored in a new column. It supports tags to allow data quality
-    operations to selectively act on specific classifiers.
+    A classifier evaluates one or more columns and writes a per-row verdict
+    into a new column. Collect classifiers in a `DataQuality` action
+    (`classifiers=[...]`) alongside the operators that act on their
+    verdicts. Concrete classifiers are frozen; build one per rule.
+
+    Concrete classifiers share these construction fields (a few fix
+    `on_wrong_type` / `on_wrong_value` and do not expose them):
+
+    Args:
+        column_names: Columns to classify, as a list. Each entry is a
+            source column name, or a `(source, destination)` tuple naming
+            the verdict column (`destination` `None` auto-generates it).
+            `None` applies the classifier to every column; always pass a
+            list, single values are not coerced.
+        on_missing_column: `"ignore"` or `"fail"` when a named column
+            is absent.
+        on_wrong_type: `"ignore"` or `"fail"` when a column's type is
+            not supported by the classifier.
+        on_wrong_value: `"ignore"` or `"fail"` when a comparison value
+            is incompatible with the column's type.
+        tags: Optional list of tags; an operator can target only the
+            classifiers carrying a matching tag.
     """
+
+    # devguide-ref: how classifiers/operators compose into a DataQuality check
 
     __kind__ = "dqClassifier"
 
@@ -326,9 +392,11 @@ class Classifier(ABC, _api.JsonSerde):
 
 
 class BoolClassifier(Classifier, ABC):
-    """
-    Abstract base class for classifiers that produce a boolean result
-    (`True` or `False`).
+    """Abstract base class for classifiers with a boolean verdict.
+
+    Each row is labelled `True` or `False` (or a reserved sentinel for
+    null / nan). Boolean verdicts are consumed by the `AllOk` and
+    `AnyFailed` criteria used in `Filter` / `Select` / `Fail`.
     """
 
     @classmethod
@@ -338,15 +406,18 @@ class BoolClassifier(Classifier, ABC):
 
 
 class Categorizer(Classifier, ABC):
-    """A base class for categorizers."""
+    """Abstract base class for classifiers that assign each value to a bin.
+
+    Bin verdicts are consumed by the `InBins` and `NotInBins` criteria.
+    """
 
 
 @_api.dataclass(DataQualityErrorCode.DQC_154)
 class IsTrue(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a value is `True`. Applies
+    to boolean columns.
 
-    A boolean classifier that checks if a value is `True`.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsTrue"
@@ -365,10 +436,10 @@ class IsTrue(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_155)
 class IsFalse(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a value is `False`. Applies
+    to boolean columns.
 
-    A boolean classifier that checks if a value is `False`.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsFalse"
@@ -387,10 +458,10 @@ class IsFalse(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_123)
 class IsNull(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a value is null. Applies to
+    columns of any type.
 
-    A boolean classifier that checks if a value is `NULL`.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsNull"
@@ -409,10 +480,10 @@ class IsNull(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_124)
 class IsNotNull(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a value is not null. Applies
+    to columns of any type.
 
-    A boolean classifier that checks if a value is *not* `NULL`.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsNotNull"
@@ -431,10 +502,10 @@ class IsNotNull(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_125)
 class IsNan(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a value is `NaN` (not a
+    number). Applies to floating-point columns.
 
-    A boolean classifier that checks if a value is `NaN` (Not a Number).
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsNan"
@@ -453,10 +524,10 @@ class IsNan(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_126)
 class IsNotNan(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a value is not `NaN`.
+    Applies to floating-point columns.
 
-    A boolean classifier that checks if a value is *not* `NaN`.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsNotNan"
@@ -475,10 +546,10 @@ class IsNotNan(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_127)
 class IsNullOrNan(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a value is null or `NaN`.
+    Applies to floating-point columns.
 
-    A boolean classifier that checks if a value is either `NULL` or `NaN`.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsNullOrNan"
@@ -497,10 +568,10 @@ class IsNullOrNan(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_128)
 class IsNotNullNorNan(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a value is neither null nor
+    `NaN`. Applies to floating-point columns.
 
-    A boolean classifier that checks if a value is neither `NULL` nor `NaN`.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsNotNullNorNan"
@@ -519,10 +590,10 @@ class IsNotNullNorNan(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_129)
 class IsZero(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a numeric value is zero.
+    Applies to numeric columns.
 
-    A boolean classifier that checks if a numeric value is zero.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsZero"
@@ -541,10 +612,10 @@ class IsZero(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_130)
 class IsNotZero(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a numeric value is not zero.
+    Applies to numeric columns.
 
-    A boolean classifier that checks if a numeric value is not zero.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsNotZero"
@@ -563,10 +634,10 @@ class IsNotZero(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_131)
 class IsPositive(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a numeric value is positive.
+    Applies to signed numeric columns.
 
-    A boolean classifier that checks if a numeric value is positive.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsPositive"
@@ -585,10 +656,10 @@ class IsPositive(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_132)
 class IsPositiveOrZero(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a numeric value is positive or
+    zero. Applies to signed numeric columns.
 
-    A boolean classifier that checks if a numeric value is positive or zero.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsPositiveOrZero"
@@ -607,10 +678,10 @@ class IsPositiveOrZero(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_133)
 class IsNegative(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a numeric value is negative.
+    Applies to signed numeric columns.
 
-    A boolean classifier that checks if a numeric value is negative.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsNegative"
@@ -629,10 +700,10 @@ class IsNegative(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_134)
 class IsNegativeOrZero(BoolClassifier):
-    """
-    :categories: dq-classifier
+    """A boolean classifier that checks whether a numeric value is negative or
+    zero. Applies to signed numeric columns.
 
-    A boolean classifier that checks if a numeric value is negative or zero.
+    :categories: dq-classifier
     """
 
     __kind__ = "dqIsNegativeOrZero"
@@ -678,10 +749,23 @@ class BetweenClassifier(BoolClassifier, ABC):
 
 @_api.dataclass(DataQualityErrorCode.DQC_135)
 class IsBetween(BetweenClassifier):
-    """
+    """A boolean classifier that checks whether a value is inside a range.
+    Applies to non-boolean columns.
+
     :categories: dq-classifier
 
-    A boolean classifier that checks if a value is *inside* a specified range.
+    Args:
+        min_val: Lower bound; `None` leaves the low side unbounded.
+        max_val: Upper bound; `None` leaves the high side unbounded. When
+            both are given they must be the same type and `min_val` must
+            not exceed `max_val`.
+        closed_on: Which bounds are inclusive: `"none"`, `"lower"`,
+            `"upper"` or `"both"` (default `"both"`).
+
+    Examples:
+        .. code-block:: python
+
+            IsBetween(["value"], min_val=0.0, max_val=10.0, closed_on="both")
     """
 
     __kind__ = "dqIsBetween"
@@ -689,10 +773,18 @@ class IsBetween(BetweenClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_135)
 class IsNotBetween(BetweenClassifier):
-    """
+    """A boolean classifier that checks whether a value is outside a range.
+    Applies to non-boolean columns.
+
     :categories: dq-classifier
 
-    A boolean classifier that checks if a value is *outside* a specified range.
+    Args:
+        min_val: Lower bound; `None` leaves the low side unbounded.
+        max_val: Upper bound; `None` leaves the high side unbounded. When
+            both are given they must be the same type and `min_val` must
+            not exceed `max_val`.
+        closed_on: Which bounds are inclusive: `"none"`, `"lower"`,
+            `"upper"` or `"both"` (default `"both"`).
     """
 
     __kind__ = "dqIsNotBetween"
@@ -719,10 +811,20 @@ class InClassifier(BoolClassifier, ABC):
 
 @_api.dataclass(DataQualityErrorCode.DQC_142)
 class IsIn(InClassifier):
-    """
+    """A boolean classifier that checks whether a value is in a set of values.
+    Applies to columns of any type.
+
     :categories: dq-classifier
 
-    A boolean classifier that checks if a value is in a specified set of values.
+    Args:
+        values: Values to test membership against; a non-empty collection
+            (at least one). Include `None` to match nulls; duplicates are
+            removed.
+
+    Examples:
+        .. code-block:: python
+
+            IsIn(["value"], values=[10, 20])
     """
 
     __kind__ = "dqIsIn"
@@ -730,10 +832,15 @@ class IsIn(InClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_142)
 class IsNotIn(InClassifier):
-    """
+    """A boolean classifier that checks whether a value is not in a set of
+    values. Applies to columns of any type.
+
     :categories: dq-classifier
 
-    A boolean classifier that checks if a value is *not* in a specified set of values.
+    Args:
+        values: Values to test membership against; a non-empty collection
+            (at least one). Include `None` to match nulls; duplicates are
+            removed.
     """
 
     __kind__ = "dqIsNotIn"
@@ -765,10 +872,18 @@ class MatchClassifier(BoolClassifier, ABC):
 
 @_api.dataclass(DataQualityErrorCode.DQC_144)
 class Matches(MatchClassifier):
-    """
+    """A boolean classifier that checks whether a value matches a regular
+    expression. Applies to string columns.
+
     :categories: dq-classifier
 
-    A boolean classifier that checks if a value matches a regex pattern.
+    Args:
+        pattern: Regular expression to match; must be a valid regex.
+
+    Examples:
+        .. code-block:: python
+
+            Matches(["value"], pattern=r"[a-z]+")
     """
 
     __kind__ = "dqMatches"
@@ -776,10 +891,13 @@ class Matches(MatchClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_144)
 class DoesNotMatch(MatchClassifier):
-    """
+    """A boolean classifier that checks whether a value does not match a
+    regular expression. Applies to string columns.
+
     :categories: dq-classifier
 
-    A boolean classifier that checks if a value does *not* match a regex pattern.
+    Args:
+        pattern: Regular expression to test against; must be a valid regex.
     """
 
     __kind__ = "dqDoesNotMatch"
@@ -787,10 +905,21 @@ class DoesNotMatch(MatchClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_146)
 class HasLength(BoolClassifier):
-    """
+    """A boolean classifier that checks whether a value's length is within a
+    range. Applies to string columns.
+
     :categories: dq-classifier
 
-    A boolean classifier that checks if the length of a value is within a given range.
+    Args:
+        min_len: Minimum length, inclusive; a non-negative whole number
+            (default 0).
+        max_len: Maximum length, inclusive; a non-negative whole number.
+            Must be the same type as `min_len` and not less than it.
+
+    Examples:
+        .. code-block:: python
+
+            HasLength(["value"], min_len=2, max_len=5)
     """
 
     __kind__ = "dqHasLength"
@@ -818,10 +947,21 @@ class HasLength(BoolClassifier):
 
 @_api.dataclass(DataQualityErrorCode.DQC_121)
 class ScaleCategorizer(Categorizer):
-    """
+    """A classifier that assigns each value to a bin defined by a `Scale`.
+    Applies to numeric columns. The verdict column holds the bin index (or
+    a reserved sentinel for null / nan / under- / overflow); pair it with
+    an `InBins` or `NotInBins` criteria.
+
     :categories: dq-classifier
 
-    A classifier that bucketizes data into bins based on a given scale.
+    Args:
+        scale: The `Scale` (e.g. `LinearScale`, `LogarithmicScale`)
+            that maps values to bins.
+
+    Examples:
+        .. code-block:: python
+
+            ScaleCategorizer(["value"], scale=LinearScale(0.0, 10.0, bins=5))
     """
 
     __kind__ = "dqScaleCategorizer"
