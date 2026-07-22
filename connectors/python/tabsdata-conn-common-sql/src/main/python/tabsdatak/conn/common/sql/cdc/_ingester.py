@@ -105,7 +105,21 @@ class CdcIngester(ABC):
                 spec=tablespec,
             )
 
-        db_schema = self.resolve_identifier(schema)
+        # An unqualified spec resolves against the connection's default schema,
+        # exactly as batch SQL resolves an unqualified table name.
+        if schema is None:
+            default = self.dialect.default_schema(inspector)
+            if not default:
+                raise SqlCdcErrorCode.CDC_1.exception(
+                    cause=ValueError(
+                        "unqualified table and the connection has no default "
+                        "schema to qualify it with"
+                    ),
+                    spec=tablespec,
+                )
+            db_schema = default
+        else:
+            db_schema = self.resolve_identifier(schema)
         db_table = self.resolve_identifier(table)
 
         sa_dialect = inspector.bind.dialect

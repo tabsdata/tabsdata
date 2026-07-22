@@ -190,17 +190,38 @@ class Db2Dialect(Dialect):
         # Db2 folds unquoted identifiers to upper case.
         return name.upper()
 
-    def parse_qualified_table(self, tablespec: str) -> tuple[quoted_name, quoted_name]:
+    def default_schema(self, inspector: sa.engine.reflection.Inspector) -> str:
+        # Db2's effective schema for unqualified names is CURRENT SCHEMA, which
+        # honours the connection's `currentSchema=` attribute. SQLAlchemy's
+        # reported default_schema_name is the authorization-id schema instead,
+        # so query CURRENT SCHEMA directly.
+        with inspector.bind.connect() as connection:
+            schema = connection.execute(
+                text("select current schema from sysibm.sysdummy1")
+            ).scalar()
+        return schema.strip() if isinstance(schema, str) else schema
+
+    def parse_qualified_table(
+        self, tablespec: str
+    ) -> tuple[quoted_name | None, quoted_name]:
         spec = tablespec.strip()
-        if not spec or "." not in spec:
-            raise ValueError(f"expected 'schema.table', got {tablespec!r}")
-        schema_part, _, table_part = spec.partition(".")
+        if not spec:
+            raise ValueError(f"expected 'schema.table' or 'table', got {tablespec!r}")
 
         def _unquote(part: str) -> tuple[str, bool]:
             if part.startswith('"') and part.endswith('"') and len(part) >= 2:
                 return part[1:-1].replace('""', '"'), True
             return part, False
 
+        # Unqualified: the schema is filled from the connection's CURRENT SCHEMA
+        # by the caller (see default_schema).
+        if "." not in spec:
+            table, table_quoted = _unquote(spec)
+            if not table:
+                raise ValueError(f"empty table in {tablespec!r}")
+            return None, quoted_name(table, quote=table_quoted)
+
+        schema_part, _, table_part = spec.partition(".")
         schema, schema_quoted = _unquote(schema_part)
         table, table_quoted = _unquote(table_part)
         if not schema or not table:
@@ -493,18 +514,32 @@ class SqlReplicaIngester(CdcIngester):
         registered source via ASN.IBMSNAP_REGISTER and seed a
         ``TrackedTable`` whose ``cdc_table`` points at the CD
         table and ``data_table`` points at the source."""
+        from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
+
         sa_dialect = inspector.bind.dialect
         try:
             cd_schema, cd_table = self.dialect.parse_qualified_table(tablespec)
         except ValueError as error:
-            from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
-
             raise SqlCdcErrorCode.CDC_1.exception(
                 cause=error,
                 spec=tablespec,
             )
 
-        real_cd_schema = self.resolve_identifier(cd_schema)
+        # An unqualified CD table resolves against the connection's CURRENT
+        # SCHEMA, just as batch SQL resolves an unqualified name.
+        if cd_schema is None:
+            default = self.dialect.default_schema(inspector)
+            if not default:
+                raise SqlCdcErrorCode.CDC_1.exception(
+                    cause=ValueError(
+                        "unqualified table and the connection has no default "
+                        "schema to qualify it with"
+                    ),
+                    spec=tablespec,
+                )
+            real_cd_schema = default
+        else:
+            real_cd_schema = self.resolve_identifier(cd_schema)
         real_cd_table = self.resolve_identifier(cd_table)
 
         with inspector.bind.connect() as connection:

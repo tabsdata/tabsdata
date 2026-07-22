@@ -73,9 +73,19 @@ def test_parse_qualified_table_doubled_quote_escape(d):
     assert str(schema) == 'weird "schema'
 
 
-def test_parse_qualified_table_rejects_unqualified(d):
-    with pytest.raises(ValueError):
-        d.parse_qualified_table("users")
+def test_parse_qualified_table_allows_unqualified(d):
+    # Unqualified name: schema is None; the ingester fills it from the
+    # connection's default schema (current_schema()); see default_schema.
+    schema, table = d.parse_qualified_table("users")
+    assert schema is None
+    assert str(table) == "users"
+
+
+def test_parse_qualified_table_allows_unqualified_double_quoted(d):
+    schema, table = d.parse_qualified_table('"Users"')
+    assert schema is None
+    assert str(table) == "Users"
+    assert table.quote is True
 
 
 def test_parse_qualified_table_rejects_empty_side(d):
@@ -83,6 +93,16 @@ def test_parse_qualified_table_rejects_empty_side(d):
         d.parse_qualified_table(".users")
     with pytest.raises(ValueError):
         d.parse_qualified_table("public.")
+    with pytest.raises(ValueError):
+        d.parse_qualified_table("")
+
+
+def test_default_schema_uses_inspector_default(d):
+    # Postgres resolves an unqualified name against current_schema(), which is
+    # what SQLAlchemy reports as default_schema_name.
+    inspector = MagicMock()
+    inspector.default_schema_name = "public"
+    assert d.default_schema(inspector) == "public"
 
 
 # --- Large-column detection -----------------------------------------

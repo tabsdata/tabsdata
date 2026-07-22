@@ -10,6 +10,7 @@ from datetime import tzinfo
 from typing import Any, Literal
 
 import sqlalchemy.types as sa_types
+from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.sql.elements import quoted_name
 from sqlalchemy.types import BLOB, CLOB, LargeBinary
 
@@ -92,10 +93,32 @@ class Dialect(ABC):
             f"for ingester type {ingester_type!r}"
         )
 
-    def parse_qualified_table(self, spec: str) -> tuple[quoted_name, quoted_name]:
+    def default_schema(self, inspector: Inspector) -> str:
+        """The schema used to qualify an UNqualified table name -- the
+        connection's effective default schema, matching how batch SQL
+        resolves an unqualified table.
+
+        The default returns SQLAlchemy's reported default schema, which is
+        correct for dialects whose default schema is the one an unqualified
+        name resolves against (e.g. MySQL's current database, Postgres'
+        ``current_schema()``). A dialect whose effective default differs --
+        e.g. Db2, where the ``currentSchema=`` connection attribute governs
+        resolution but SQLAlchemy still reports the authorization-id schema --
+        overrides this.
+        """
+        return inspector.default_schema_name
+
+    def parse_qualified_table(
+        self, spec: str
+    ) -> tuple[quoted_name | None, quoted_name]:
         """Split a `schema.table` spec into quoted schema and table
         identifiers, honouring the dialect's quoting and doubled-quote
-        escaping. Raises `ValueError` on a malformed spec."""
+        escaping.
+
+        An UNqualified `table` spec (no separator) yields a ``None`` schema;
+        the caller fills it from the connection's default schema (see
+        :meth:`default_schema`), matching batch-SQL resolution of unqualified
+        names. Raises `ValueError` on a malformed spec."""
         raw = spec
         spec = spec.strip()
         oq = self.open_quote
@@ -145,8 +168,12 @@ class Dialect(ABC):
                     )
                 return quoted_name(name, quote=False), end
 
-        schema, idx = token(spec, 0)
-        if idx >= len(spec) or spec[idx] != ".":
+        first, idx = token(spec, 0)
+        if idx >= len(spec):
+            # Unqualified: the single token is the table; the schema is filled
+            # from the connection default by the caller (see default_schema).
+            return None, first
+        if spec[idx] != ".":
             raise ValueError(
                 f"Invalid qualified table spec: {raw!r}, expected '.' after schema"
             )
@@ -156,4 +183,4 @@ class Dialect(ABC):
                 f"Invalid qualified table spec: {raw!r}, "
                 f"unexpected content after table name"
             )
-        return schema, table
+        return first, table

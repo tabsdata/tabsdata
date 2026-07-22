@@ -73,9 +73,19 @@ def test_parse_qualified_table_backticked(d):
     assert table.quote is True
 
 
-def test_parse_qualified_table_rejects_unqualified(d):
-    with pytest.raises(ValueError):
-        d.parse_qualified_table("users")
+def test_parse_qualified_table_allows_unqualified(d):
+    # Unqualified name: schema is None; the ingester fills it from the
+    # connection's default database (see default_schema).
+    schema, table = d.parse_qualified_table("users")
+    assert schema is None
+    assert str(table) == "users"
+
+
+def test_parse_qualified_table_allows_unqualified_backticked(d):
+    schema, table = d.parse_qualified_table("`users`")
+    assert schema is None
+    assert str(table) == "users"
+    assert table.quote is True
 
 
 def test_parse_qualified_table_rejects_empty_side(d):
@@ -83,6 +93,16 @@ def test_parse_qualified_table_rejects_empty_side(d):
         d.parse_qualified_table(".users")
     with pytest.raises(ValueError):
         d.parse_qualified_table("app.")
+    with pytest.raises(ValueError):
+        d.parse_qualified_table("")
+
+
+def test_default_schema_uses_inspector_default(d):
+    # MySQL's effective schema for an unqualified name is the current database,
+    # which is what SQLAlchemy reports as default_schema_name.
+    inspector = MagicMock()
+    inspector.default_schema_name = "app_db"
+    assert d.default_schema(inspector) == "app_db"
 
 
 # --- Large-column detection ------------------------------------------

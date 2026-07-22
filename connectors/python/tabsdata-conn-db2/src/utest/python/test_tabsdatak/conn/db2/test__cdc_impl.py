@@ -76,9 +76,19 @@ def test_parse_qualified_table_doubled_quote_escape(d):
     assert str(schema) == 'weird "schema'
 
 
-def test_parse_qualified_table_rejects_unqualified(d):
-    with pytest.raises(ValueError):
-        d.parse_qualified_table("USERS")
+def test_parse_qualified_table_allows_unqualified(d):
+    # Unqualified CD name: schema is None; the ingester fills it from the
+    # connection's CURRENT SCHEMA (see default_schema).
+    schema, table = d.parse_qualified_table("USERS")
+    assert schema is None
+    assert str(table) == "USERS"
+
+
+def test_parse_qualified_table_allows_unqualified_double_quoted(d):
+    schema, table = d.parse_qualified_table('"Users"')
+    assert schema is None
+    assert str(table) == "Users"
+    assert table.quote is True
 
 
 def test_parse_qualified_table_rejects_empty_side(d):
@@ -86,6 +96,21 @@ def test_parse_qualified_table_rejects_empty_side(d):
         d.parse_qualified_table(".USERS")
     with pytest.raises(ValueError):
         d.parse_qualified_table("APP.")
+    with pytest.raises(ValueError):
+        d.parse_qualified_table("")
+
+
+def test_default_schema_queries_current_schema(d):
+    # Db2 must NOT use SQLAlchemy's default_schema_name (the authorization-id
+    # schema); it reads CURRENT SCHEMA, which honours the `currentSchema=`
+    # connection attribute.
+    inspector = MagicMock()
+    connection = inspector.bind.connect.return_value.__enter__.return_value
+    connection.execute.return_value.scalar.return_value = "  XP_20260719  "
+    assert d.default_schema(inspector) == "XP_20260719"
+    # the query text is CURRENT SCHEMA, not a reliance on default_schema_name
+    sql = str(connection.execute.call_args.args[0]).lower()
+    assert "current schema" in sql
 
 
 # --- Large-column detection -----------------------------------------

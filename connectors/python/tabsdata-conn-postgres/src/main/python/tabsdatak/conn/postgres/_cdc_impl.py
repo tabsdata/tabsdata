@@ -252,17 +252,27 @@ class PostgresDialect(Dialect):
         # Postgres folds unquoted identifiers to lower case.
         return name.lower()
 
-    def parse_qualified_table(self, tablespec: str) -> tuple[quoted_name, quoted_name]:
+    def parse_qualified_table(
+        self, tablespec: str
+    ) -> tuple[quoted_name | None, quoted_name]:
         spec = tablespec.strip()
-        if not spec or "." not in spec:
-            raise ValueError(f"expected 'schema.table', got {tablespec!r}")
-        schema_part, _, table_part = spec.partition(".")
+        if not spec:
+            raise ValueError(f"expected 'schema.table' or 'table', got {tablespec!r}")
 
         def _unquote(part: str) -> tuple[str, bool]:
             if part.startswith('"') and part.endswith('"') and len(part) >= 2:
                 return part[1:-1].replace('""', '"'), True
             return part, False
 
+        # Unqualified: the schema is filled from the connection's default
+        # schema (current_schema()) by the caller.
+        if "." not in spec:
+            table, table_quoted = _unquote(spec)
+            if not table:
+                raise ValueError(f"empty table in {tablespec!r}")
+            return None, quoted_name(table, quote=table_quoted)
+
+        schema_part, _, table_part = spec.partition(".")
         schema, schema_quoted = _unquote(schema_part)
         table, table_quoted = _unquote(table_part)
         if not schema or not table:
