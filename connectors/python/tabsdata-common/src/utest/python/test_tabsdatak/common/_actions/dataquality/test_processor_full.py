@@ -5,7 +5,7 @@
 import pytest
 
 from tabsdatak.common._actions.dataquality.processor import DataQualityProcessor
-from tabsdatak.dataquality import DataQuality, Filter, Select, Summary
+from tabsdatak.dataquality import DataQuality, Filter, IsNull, Select, Summary
 from tabsdatak.dataquality._error import (
     DataQualityErrorCode,
     DataQualityProcessingError,
@@ -56,7 +56,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="input1_select")],
         )
 
@@ -93,7 +93,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Filter(AnyFailed(), to_table="input1_filter")],
         )
 
@@ -130,7 +130,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Summary(table="input1_summary")],
         )
 
@@ -167,7 +167,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="input1_select"),
                 Filter(AnyFailed(), to_table="input1_filter"),
@@ -220,13 +220,13 @@ class TestDataQualityProcessorTableNames:
 
         dq_action1 = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="input1_select")],
         )
 
         dq_action2 = DataQuality(
             "input2",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Filter(AnyFailed(), to_table="input2_filter")],
         )
 
@@ -264,7 +264,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "table",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="table_select")],
         )
 
@@ -287,7 +287,7 @@ class TestDataQualityProcessorTableNames:
     @pytest.mark.dq
     @pytest.mark.xfail(
         reason=_URI_TABLE_NAME_REJECTED,
-        raises=ValueError,
+        raises=ParameterValidationError,
         strict=True,
     )
     def test_table_names_collection_slash_table_format(self):
@@ -304,7 +304,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "collection/table",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="qualified_select")],
         )
 
@@ -327,7 +327,7 @@ class TestDataQualityProcessorTableNames:
     @pytest.mark.dq
     @pytest.mark.xfail(
         reason=_URI_TABLE_NAME_REJECTED,
-        raises=ValueError,
+        raises=ParameterValidationError,
         strict=True,
     )
     def test_table_names_table_at_version_format(self):
@@ -344,7 +344,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "table@HEAD",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="versioned_select")],
         )
 
@@ -367,7 +367,7 @@ class TestDataQualityProcessorTableNames:
     @pytest.mark.dq
     @pytest.mark.xfail(
         reason=_URI_TABLE_NAME_REJECTED,
-        raises=ValueError,
+        raises=ParameterValidationError,
         strict=True,
     )
     def test_table_names_full_uri_format(self):
@@ -384,7 +384,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "collection/table@HEAD~1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="full_uri_select")],
         )
 
@@ -407,7 +407,7 @@ class TestDataQualityProcessorTableNames:
     @pytest.mark.dq
     @pytest.mark.xfail(
         reason=_URI_TABLE_NAME_REJECTED,
-        raises=ValueError,
+        raises=ParameterValidationError,
         strict=True,
     )
     def test_table_names_version_with_carets_format(self):
@@ -424,7 +424,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "table@HEAD^^",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="caret_version_select")],
         )
 
@@ -447,7 +447,7 @@ class TestDataQualityProcessorTableNames:
     @pytest.mark.dq
     @pytest.mark.xfail(
         reason=_URI_TABLE_NAME_REJECTED,
-        raises=ValueError,
+        raises=ParameterValidationError,
         strict=True,
     )
     def test_table_names_version_with_hash_format(self):
@@ -464,7 +464,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "table@ABCDEFGHIJKLMNOPQRSTUVWXY0",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="hash_version_select")],
         )
 
@@ -507,7 +507,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "table_a",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="alias_resolved_select")],
         )
 
@@ -530,7 +530,7 @@ class TestDataQualityProcessorTableNames:
     @pytest.mark.dq
     @pytest.mark.xfail(
         reason=_URI_TABLE_NAME_REJECTED,
-        raises=ValueError,
+        raises=ParameterValidationError,
         strict=True,
     )
     def test_name_collision_resolved_via_qualified_name_single_match(self):
@@ -547,7 +547,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "collection_a/customers",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="qualified_resolved_select")],
         )
 
@@ -570,7 +570,7 @@ class TestDataQualityProcessorTableNames:
     @pytest.mark.dq
     @pytest.mark.xfail(
         reason=_URI_TABLE_NAME_REJECTED,
-        raises=ValueError,
+        raises=ParameterValidationError,
         strict=True,
     )
     def test_name_collision_resolved_different_collections(self):
@@ -595,7 +595,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "collection_a/customers",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="different_collection_select")],
         )
 
@@ -630,7 +630,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "customers",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="default_collection_select")],
         )
 
@@ -681,7 +681,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "latest",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="version_alias_select")],
         )
 
@@ -724,7 +724,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "customers",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="unresolved_select")],
         )
 
@@ -757,7 +757,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "products",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="not_found_select")],
         )
 
@@ -778,7 +778,7 @@ class TestDataQualityProcessorTableNames:
     @pytest.mark.dq
     @pytest.mark.xfail(
         reason=_URI_TABLE_NAME_REJECTED,
-        raises=ValueError,
+        raises=ParameterValidationError,
         strict=True,
     )
     def test_name_collision_unresolved_wrong_collection(self):
@@ -795,7 +795,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "collection_b/customers",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="wrong_collection_select")],
         )
 
@@ -816,7 +816,7 @@ class TestDataQualityProcessorTableNames:
     @pytest.mark.dq
     @pytest.mark.xfail(
         reason=_URI_TABLE_NAME_REJECTED,
-        raises=ValueError,
+        raises=ParameterValidationError,
         strict=True,
     )
     def test_name_collision_unresolved_ambiguous_qualified_name(self):
@@ -841,7 +841,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "collection/customers",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="ambiguous_select")],
         )
 
@@ -864,7 +864,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "customers",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="empty_tables_select")],
         )
 
@@ -888,7 +888,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "output1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="output_select")],
         )
 
@@ -914,7 +914,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "output3",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="unresolved_output_select")],
         )
 
@@ -946,7 +946,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Filter(AnyFailed())],
         )
 
@@ -978,7 +978,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Summary(table=None)],
         )
 
@@ -1031,7 +1031,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action1 = DataQuality(
             "customers_latest",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="customers_select"),
                 Filter(AnyFailed(), to_table="customers_filter"),
@@ -1041,7 +1041,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action2 = DataQuality(
             "orders_latest",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Filter(AnyFailed(), to_table="orders_filter"),
             ],
@@ -1049,7 +1049,7 @@ class TestDataQualityProcessorTableNames:
 
         output_action1 = DataQuality(
             "cleaned_customers",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Summary(table="output_summary"),
             ],
@@ -1103,7 +1103,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "table1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="collection_test_select")],
         )
 
@@ -1138,7 +1138,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "table_123",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="special_chars_456")],
         )
 
@@ -1173,7 +1173,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="mixed_select"),
                 Filter(AnyFailed(), to_table="mixed_filter"),
@@ -1231,7 +1231,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Filter(AnyFailed())],
         )
 
@@ -1263,7 +1263,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Summary(table=None)],
         )
 
@@ -1298,7 +1298,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="custom_select"),
                 Filter(AnyFailed()),
@@ -1359,7 +1359,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action1 = DataQuality(
             "table1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="sales_valid"),
                 Filter(AnyFailed(), to_table="sales_invalid"),
@@ -1369,7 +1369,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action2 = DataQuality(
             "table2",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="inventory_valid"),
                 Filter(AnyFailed()),
@@ -1379,7 +1379,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action3 = DataQuality(
             "table3",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="customer_valid"),
                 Filter(AnyFailed(), to_table="customer_invalid"),
@@ -1426,7 +1426,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action1 = DataQuality(
             "output1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="output1_select"),
                 Filter(AnyFailed(), to_table="output1_filter"),
@@ -1436,7 +1436,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action2 = DataQuality(
             "output2",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="output2_select"),
                 Filter(AnyFailed(), to_table="output2_filter"),
@@ -1446,7 +1446,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action3 = DataQuality(
             "output3",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="output3_select"),
                 Filter(AnyFailed()),
@@ -1511,7 +1511,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action1 = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="input1_select"),
                 Filter(AnyFailed()),
@@ -1521,7 +1521,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action2 = DataQuality(
             "input2",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="input2_select"),
                 Filter(AnyFailed(), to_table="input2_filter"),
@@ -1531,7 +1531,7 @@ class TestDataQualityProcessorTableNames:
 
         output_action1 = DataQuality(
             "output1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="output1_select"),
                 Filter(AnyFailed(), to_table="output1_filter"),
@@ -1540,7 +1540,7 @@ class TestDataQualityProcessorTableNames:
 
         output_action2 = DataQuality(
             "output2",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Summary(table="output2_summary"),
             ],
@@ -1583,7 +1583,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="custom_select_1"),
                 Select(AllOk(), to_table="custom_select_2"),
@@ -1633,7 +1633,7 @@ class TestDataQualityProcessorTableNames:
         for i in range(1, 6):
             action = DataQuality(
                 f"input{i}",
-                classifiers=[],
+                classifiers=[IsNull(["value"])],
                 operators=[
                     Select(AllOk(), to_table=f"select_{i}_1"),
                     Select(AllOk(), to_table=f"select_{i}_2"),
@@ -1715,7 +1715,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action1 = DataQuality(
             "raw_sales",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="valid_sales"),
                 Filter(AnyFailed(), to_table="invalid_sales"),
@@ -1725,7 +1725,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action2 = DataQuality(
             "raw_inventory",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="inventory_select"),
                 Filter(AnyFailed()),
@@ -1735,7 +1735,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action3 = DataQuality(
             "raw_customers",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="verified_customers"),
                 Summary(table=None),
@@ -1744,7 +1744,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action4 = DataQuality(
             "raw_products",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Filter(AnyFailed()),
                 Summary(table="product_quality_report"),
@@ -1753,7 +1753,7 @@ class TestDataQualityProcessorTableNames:
 
         output_action1 = DataQuality(
             "cleaned_sales",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="final_sales"),
                 Summary(table=None),
@@ -1762,7 +1762,7 @@ class TestDataQualityProcessorTableNames:
 
         output_action2 = DataQuality(
             "cleaned_inventory",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Filter(AnyFailed()),
             ],
@@ -1770,7 +1770,7 @@ class TestDataQualityProcessorTableNames:
 
         output_action3 = DataQuality(
             "cleaned_customers",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Summary(table="customer_quality_metrics"),
             ],
@@ -1821,7 +1821,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="duplicate_name"),
                 Filter(AnyFailed(), to_table="duplicate_name"),
@@ -1864,7 +1864,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action_filter_with_table = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Filter(AnyFailed(), to_table="filtered_output")],
         )
 
@@ -1883,7 +1883,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action_filter_no_table = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Filter(AnyFailed())],
         )
 
@@ -1900,7 +1900,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action_select = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[Select(AllOk(), to_table="selected_output")],
         )
 
@@ -1940,7 +1940,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action1 = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="shared_output"),
             ],
@@ -1948,7 +1948,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action2 = DataQuality(
             "input2",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Filter(AnyFailed(), to_table="shared_output"),
             ],
@@ -1974,7 +1974,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "output1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="duplicate_output"),
                 Summary(table="duplicate_output"),
@@ -2001,7 +2001,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action1 = DataQuality(
             "output1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="shared_name"),
             ],
@@ -2009,7 +2009,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action2 = DataQuality(
             "output2",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Filter(AnyFailed(), to_table="shared_name"),
             ],
@@ -2045,7 +2045,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="conflict_name"),
             ],
@@ -2053,7 +2053,7 @@ class TestDataQualityProcessorTableNames:
 
         output_action = DataQuality(
             "output1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Filter(AnyFailed(), to_table="conflict_name"),
             ],
@@ -2088,7 +2088,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="dup1"),
                 Select(AllOk(), to_table="dup1"),
@@ -2128,7 +2128,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="triple"),
                 Filter(AnyFailed(), to_table="triple"),
@@ -2167,7 +2167,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="unique_select"),
                 Filter(AnyFailed(), to_table="unique_filter"),
@@ -2177,7 +2177,7 @@ class TestDataQualityProcessorTableNames:
 
         output_action = DataQuality(
             "output1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="unique_output_select"),
                 Summary(table="unique_output_summary"),
@@ -2220,7 +2220,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action1 = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="source1_select"),
             ],
@@ -2228,7 +2228,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action2 = DataQuality(
             "input2",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="source2_select"),
             ],
@@ -2272,7 +2272,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action1 = DataQuality(
             "input1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="processed_data"),
                 Filter(AnyFailed(), to_table=None),
@@ -2281,7 +2281,7 @@ class TestDataQualityProcessorTableNames:
 
         input_action2 = DataQuality(
             "input2",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Summary(table="processed_data"),
             ],
@@ -2289,7 +2289,7 @@ class TestDataQualityProcessorTableNames:
 
         output_action1 = DataQuality(
             "output1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="final_output"),
             ],
@@ -2340,7 +2340,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action1 = DataQuality(
             "table_a",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="output_from_a"),
                 Filter(AnyFailed(), to_table="filtered_from_a"),
@@ -2349,7 +2349,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action2 = DataQuality(
             "table_b",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Summary(table="summary_from_b"),
             ],
@@ -2357,7 +2357,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action3 = DataQuality(
             "table_c",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="output_from_c"),
             ],
@@ -2401,7 +2401,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action1 = DataQuality(
             "output_table1",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="validated_output1"),
                 Summary(table="summary_output1"),
@@ -2410,7 +2410,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action2 = DataQuality(
             "output_table2",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Filter(AnyFailed(), to_table="filtered_output2"),
             ],
@@ -2446,7 +2446,7 @@ class TestDataQualityProcessorTableNames:
     @pytest.mark.dq
     @pytest.mark.xfail(
         reason=_URI_TABLE_NAME_REJECTED,
-        raises=ValueError,
+        raises=ParameterValidationError,
         strict=True,
     )
     def test_from_table_and_from_collection_with_qualified_table_reference(self):
@@ -2471,7 +2471,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action1 = DataQuality(
             "sales/transactions@HEAD",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Select(AllOk(), to_table="clean_transactions"),
             ],
@@ -2479,7 +2479,7 @@ class TestDataQualityProcessorTableNames:
 
         dq_action2 = DataQuality(
             "inventory/stock_levels",
-            classifiers=[],
+            classifiers=[IsNull(["value"])],
             operators=[
                 Filter(AnyFailed(), to_table="valid_stock"),
             ],

@@ -1593,7 +1593,7 @@ def _make_categorizer_checker(scale):
             f" {df.schema['value_category']}"
         )
 
-        minimum, maximum = scale.scale_range
+        minimum, maximum = scale.min_val, scale.max_val
         dtype = df.schema["value"]
 
         cuts = []
@@ -2225,7 +2225,7 @@ def _make_categorizer_action(scale):
                 ScaleCategorizer(
                     column_names=[("value", "value_category")],
                     scale=scale,
-                    tags=tag,
+                    tags=[tag],
                 )
             ],
             operators=[Summary()],
@@ -4606,7 +4606,7 @@ def boolean_dataset(dtype) -> TableFrame:
 
 
 def categorical_dataset(scale, dtype, sample_size: int = Q_CATEGORIZER) -> TableFrame:
-    minimum, maximum = scale.scale_range
+    minimum, maximum = scale.min_val, scale.max_val
     values = []
     values.extend(np.linspace(minimum, maximum, sample_size).tolist())
 

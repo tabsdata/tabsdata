@@ -84,31 +84,31 @@ def _convert_classifier_values(classifier, dtype):
             )
     elif isinstance(classifier, (IsBetween, IsNotBetween)):
         if is_uint:
-            if classifier.min is not None:
-                if classifier.min == NaN:
+            if classifier.min_val is not None:
+                if classifier.min_val == NaN:
                     converted_min = None
-                elif isinstance(classifier.min, (int, float)):
-                    converted_min = int(classifier.min)
+                elif isinstance(classifier.min_val, (int, float)):
+                    converted_min = int(classifier.min_val)
                 else:
-                    converted_min = converter(classifier.min)
+                    converted_min = converter(classifier.min_val)
             else:
                 converted_min = None
 
-            if classifier.max is not None:
-                if classifier.max == NaN:
+            if classifier.max_val is not None:
+                if classifier.max_val == NaN:
                     converted_max = None
-                elif isinstance(classifier.max, (int, float)):
-                    converted_max = int(classifier.max)
+                elif isinstance(classifier.max_val, (int, float)):
+                    converted_max = int(classifier.max_val)
                 else:
-                    converted_max = converter(classifier.max)
+                    converted_max = converter(classifier.max_val)
             else:
                 converted_max = None
         else:
             converted_min = (
-                converter(classifier.min) if classifier.min is not None else None
+                converter(classifier.min_val) if classifier.min_val is not None else None
             )
             converted_max = (
-                converter(classifier.max) if classifier.max is not None else None
+                converter(classifier.max_val) if classifier.max_val is not None else None
             )
 
         if isinstance(classifier, IsBetween):
@@ -308,7 +308,7 @@ def dq_negative_parameters():
 @pytest.mark.dq
 @pytest.mark.parametrize("scale,dtype", dq_negative_parameters())
 def test_categorizer_with_negative_values(scale, dtype):
-    minimum, maximum = scale.scale_range
+    minimum, maximum = scale.min_val, scale.max_val
 
     values = []
 
