@@ -567,7 +567,8 @@ version = "0.1.0"
 
 [workspace.dependencies.postgresql_embedded]
 version = "0.20.4"
-features = ["bundled", "tokio"]
+default-features = false
+features = ["bundled", "tokio", "theseus", "rustls"]
 
 [workspace.dependencies.rand]
 version = "0.10.0"
