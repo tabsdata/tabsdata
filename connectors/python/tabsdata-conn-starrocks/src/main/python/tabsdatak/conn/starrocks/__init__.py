@@ -307,6 +307,33 @@ class StarRocksDest(Dest):
             changes; `"iceberg"` applies Iceberg-style schema deltas.
         dest_cfg: Optional connector config; the only supported key is
             `starrocks.logging_level`.
+
+    Examples:
+        Append to an existing table -- row count grows each run:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=StarRocksDest(
+                    tables=["wld_country"], if_table_exists="append"
+                ),
+                input_tables=["subs_tables/wld_country"],
+            )
+            def out_append(country: TableFrameSpec) -> TableFrameSpec:
+                return country
+
+        Replace truncates the target table, then reloads it:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=StarRocksDest(
+                    tables=["wld_city"], if_table_exists="replace"
+                ),
+                input_tables=["subs_tables/wld_city"],
+            )
+            def out_replace(city: TableFrameSpec) -> TableFrameSpec:
+                return city
     """
 
     tables: StarRocksTableNamesSpec

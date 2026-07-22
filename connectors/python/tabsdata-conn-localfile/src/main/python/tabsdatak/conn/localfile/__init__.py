@@ -152,6 +152,37 @@ class LocalFileSrc(Src):
             `None` (the default) adds nothing.
         src_cfg: Optional connector config; supports the key
             `tabsdata.file.chunkSize`.
+
+    Examples:
+        Publish one file, selecting the reader `format` explicitly.
+        Each path is an array slot, so its frames arrive as a list:
+
+        .. code-block:: python
+
+            @publisher(
+                source=LocalFileSrc(
+                    paths=["cities.csv"],
+                    format=SrcFileFormat.CSV,
+                ),
+                output_tables=["cities"],
+            )
+            def ingest(rows: TableFramesSpec) -> TableFrameSpec:
+                return rows[0] if rows else None
+
+        Incremental ingestion: `initial_last_modified` imports only
+        files at or after the cutoff, advancing it on each run:
+
+        .. code-block:: python
+
+            @publisher(
+                source=LocalFileSrc(
+                    paths=["daily/*.parquet"],
+                    initial_last_modified=datetime(2024, 1, 1, tzinfo=timezone.utc),
+                ),
+                output_tables=["new_files"],
+            )
+            def ingest_new(rows: TableFramesSpec) -> TableFrameSpec:
+                return rows[0] if rows else None
     """
 
     paths: SrcPathsSpec

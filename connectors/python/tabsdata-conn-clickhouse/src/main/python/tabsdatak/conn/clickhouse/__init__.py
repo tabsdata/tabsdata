@@ -320,6 +320,39 @@ class ClickHouseDest(Dest):
             changes; `"iceberg"` applies Iceberg-style schema deltas.
         dest_cfg: Optional connector config; the only supported key is
             `clickhouse.logging_level`.
+
+    Examples:
+        Write a table with the `replace` disposition -- the first run
+        creates it, later runs drop and recreate it (row count stays):
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=ClickHouseDest(
+                    tables=["cap_replace"],
+                    if_table_exists="replace",
+                ),
+                input_tables=["caps_input/cap_rows"],
+            )
+            def out_replace(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
+
+        Append rows with a wider schema and let ClickHouse evolve the
+        table -- `schema_evolution="iceberg"` adds the new column rather
+        than failing on the mismatch (`"strict"` would reject it):
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=ClickHouseDest(
+                    tables=["cap_evolve"],
+                    if_table_exists="append",
+                    schema_evolution="iceberg",
+                ),
+                input_tables=["caps_input/cap_evo_v2"],
+            )
+            def evolve(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
     """
 
     tables: ClickHouseTableNamesSpec

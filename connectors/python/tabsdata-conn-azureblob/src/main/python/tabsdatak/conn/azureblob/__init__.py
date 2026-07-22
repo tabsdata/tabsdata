@@ -229,6 +229,42 @@ class AzureBlobDest(Dest):
             only), keyed by the `DestFileFormat`.
         dest_cfg: Optional connector config; supports the key
             `tabsdata.file.chunkSize`.
+
+    Examples:
+        Write a table to a single Parquet file, one slot per path:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=AzureBlobDest(
+                    paths=["exports/rows.parquet"],
+                    format=DestFileFormat.PARQUET,
+                ),
+                input_tables=["mycoll/rows"],
+            )
+            def publish(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
+
+        Write CSV and tune the writer through `format_cfg`, keyed by
+        the `DestFileFormat`:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=AzureBlobDest(
+                    paths=["exports/rows.csv"],
+                    format=DestFileFormat.CSV,
+                    format_cfg={
+                        DestFileFormat.CSV: {
+                            "separator": ";",
+                            "include_header": True,
+                        },
+                    },
+                ),
+                input_tables=["mycoll/rows"],
+            )
+            def publish(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
     """
 
     paths: DestPathsSpec

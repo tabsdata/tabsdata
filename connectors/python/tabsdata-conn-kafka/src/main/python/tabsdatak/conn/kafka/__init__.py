@@ -250,6 +250,20 @@ class KafkaStreamSrcConn(Conn):
         conn_cfg: Optional connector config forwarded as consumer
             `configs` to `confluent_kafka.Consumer` (see
             `CfgSpec`).
+
+    Examples:
+        A connection with a Confluent schema registry for SR-aware
+        serdes:
+
+        .. code-block:: python
+
+            KafkaStreamSrcConn(
+                servers="broker:9092",
+                group_id="ingest",
+                schema_registry=ConfluentSchemaRegistry(
+                    url="http://registry:8081",
+                ),
+            )
     """
 
     servers: KafkaServersSpec
@@ -312,6 +326,42 @@ class KafkaStreamSrc(StreamSrc):
             `kafka.connection_timeout_seconds`,
             `kafka.logging_level`, `kafka.time_rollover_seconds`,
             `kafka.size_rollover_mb` and `kafka.messages_rollover`.
+
+    Examples:
+        Consume Avro payloads, staging a batch every 500 messages
+        via a `src_cfg` rollover threshold:
+
+        .. code-block:: python
+
+            @stream_publisher(
+                source=KafkaStreamSrc(
+                    topic="users",
+                    data_format="avro",
+                    schema=AVRO_SCHEMA,
+                    src_cfg={"kafka.messages_rollover": 500},
+                ),
+                flush_interval_mins=1,
+                output_tables=["users"],
+            )
+            def ingest(users: TableFramesSpec) -> TableFrameSpec:
+                return concat(users)
+
+        Consume Protobuf payloads; the `Protobuf` marker carries the
+        message type name:
+
+        .. code-block:: python
+
+            @stream_publisher(
+                source=KafkaStreamSrc(
+                    topic="persons",
+                    data_format=Protobuf(message_name="PersonV1"),
+                    schema=PROTO_SCHEMA,
+                ),
+                flush_interval_mins=1,
+                output_tables=["persons"],
+            )
+            def ingest(persons: TableFramesSpec) -> TableFrameSpec:
+                return concat(persons)
     """
 
     data_format: KafkaMessageFormatSpec

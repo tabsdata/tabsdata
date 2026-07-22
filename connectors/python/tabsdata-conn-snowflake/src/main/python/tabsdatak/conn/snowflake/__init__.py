@@ -181,6 +181,37 @@ class SnowflakeDest(Dest):
             the existing schema is preserved).
         dest_cfg: Optional connector config; the only supported key is
             `snowflake.logging_level`.
+
+    Examples:
+        Append rows to a table -- the default disposition, which
+        accumulates across runs:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=SnowflakeDest(
+                    tables=["cap_append"],
+                    if_table_exists="append",
+                ),
+                input_tables=["caps_input/cap_rows"],
+            )
+            def load_append(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
+
+        Replace mode truncates the target before `COPY INTO`,
+        preserving the existing schema on reload:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=SnowflakeDest(
+                    tables=["cap_replace"],
+                    if_table_exists="replace",
+                ),
+                input_tables=["caps_input/cap_rows"],
+            )
+            def load_replace(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
     """
 
     tables: SnowflakeTableNamesSpec

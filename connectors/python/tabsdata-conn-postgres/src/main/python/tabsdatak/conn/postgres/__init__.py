@@ -234,6 +234,44 @@ class PostgresSrc(Src):
         src_cfg: Optional config mapping over the allowed keys only
             (`postgres.logging_level`, `tabsdata.sql.sql.readEngine`,
             `tabsdata.sql.chunkSize`).
+
+    Examples:
+        Publish two Postgres tables, one output slot per query in order:
+
+        .. code-block:: python
+
+            @publisher(
+                source=PostgresSrc(
+                    queries=[
+                        "SELECT * FROM wld_country",
+                        "SELECT * FROM wld_city",
+                    ],
+                ),
+                output_tables=["pg_country", "pg_city"],
+            )
+            def ingest(country: TableFrameSpec, city: TableFrameSpec):
+                return country, city
+
+        Incremental read: an `initial_values` bind seeds the `:wm`
+        watermark on the first run, then `ctx` advances it each run:
+
+        .. code-block:: python
+
+            @publisher(
+                source=PostgresSrc(
+                    queries=[
+                        "SELECT * FROM wld_city WHERE id > :wm ORDER BY id LIMIT 10",
+                    ],
+                    initial_values={"wm": 0},
+                ),
+                output_tables=["pg_city_inc"],
+            )
+            def ingest_inc(city: TableFrameSpec, ctx: TrxCtx):
+                if city is not None:
+                    row = city.max_for("id")
+                    if row is not None and row["id"] is not None:
+                        ctx.set_attr("wm", int(row["id"]))
+                return city
     """
 
     # devguide-ref: trx context state (initial_values seed / cursor resume)

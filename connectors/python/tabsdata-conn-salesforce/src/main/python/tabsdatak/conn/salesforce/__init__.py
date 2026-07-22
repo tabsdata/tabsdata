@@ -220,6 +220,21 @@ class SalesforceSrc(Src):
             (`<major>.<minor>`, 1-3 digit major, 1-2 digit minor).
         src_cfg: Optional connector config over the single key
             `salesforce.logging_level`.
+
+    Examples:
+        Publish an SObject query, including deleted rows (queryAll):
+
+        .. code-block:: python
+
+            @publisher(
+                source=SalesforceSrc(
+                    queries=["SELECT Id, Name FROM Account"],
+                    include_deleted=True,
+                ),
+                output_tables=["accounts"],
+            )
+            def ingest(accounts: TableFrameSpec) -> TableFrameSpec:
+                return accounts
     """
 
     queries: QueriesSpec
@@ -264,6 +279,22 @@ class SalesforceReportSrc(Src):
             `last_modified_column`.
         src_cfg: Optional connector config over the single key
             `salesforce.logging_level`.
+
+    Examples:
+        Publish a Tabular report by id, filtered server-side before
+        download:
+
+        .. code-block:: python
+
+            @publisher(
+                source=SalesforceReportSrc(
+                    reports=["00O000000000001"],
+                    filter=[("Type", "equals", "Customer")],
+                ),
+                output_tables=["customers"],
+            )
+            def ingest(customers: TableFrameSpec) -> TableFrameSpec:
+                return customers
     """
 
     reports: ReportsSpec

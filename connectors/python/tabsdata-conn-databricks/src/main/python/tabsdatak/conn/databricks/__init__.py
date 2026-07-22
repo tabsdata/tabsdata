@@ -300,6 +300,37 @@ class DatabricksDest(Dest):
             added; `"strict"` rejects schema changes.
         dest_cfg: Optional connector config; the only supported key is
             `databricks.logging_level`.
+
+    Examples:
+        Overwrite a Databricks table on each run:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=DatabricksDest(
+                    tables=["cap_replace"],
+                    if_table_exists="replace",
+                ),
+                input_tables=["caps_input/cap_rows"],
+            )
+            def publish(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
+
+        Append rows and let `COPY INTO` add new columns via
+        `schema_evolution`:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=DatabricksDest(
+                    tables=["cap_evolve"],
+                    if_table_exists="append",
+                    schema_evolution="update",
+                ),
+                input_tables=["caps_input/cap_evo_v2"],
+            )
+            def evolve(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
     """
 
     tables: DatabricksTableNamesSpec

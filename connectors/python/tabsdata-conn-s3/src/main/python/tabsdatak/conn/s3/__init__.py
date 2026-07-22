@@ -231,6 +231,41 @@ class S3Dest(Dest):
             only), keyed by the `DestFileFormat`.
         dest_cfg: Optional connector config; supports the key
             `tabsdata.file.chunkSize`.
+
+    Examples:
+        Subscribe rows to S3, choosing the output file format:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=S3Dest(
+                    paths=["caps_out.json"],
+                    format=DestFileFormat.JSON,
+                ),
+                input_tables=["caps_input/cap_rows"],
+            )
+            def write_json(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
+
+        Write CSV, tuning the writer through `format_cfg`:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=S3Dest(
+                    paths=["caps_out.csv"],
+                    format=DestFileFormat.CSV,
+                    format_cfg={
+                        DestFileFormat.CSV: {
+                            "separator": ";",
+                            "include_header": True,
+                        }
+                    },
+                ),
+                input_tables=["caps_input/cap_rows"],
+            )
+            def write_csv(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
     """
 
     paths: DestPathsSpec

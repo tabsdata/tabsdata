@@ -219,6 +219,36 @@ class BigQueryDest(Dest):
             `"strict"` rejects schema changes.
         dest_cfg: Optional connector config; the only supported key is
             `bigquery.logging_level`.
+
+    Examples:
+        Overwrite the target table each run with `if_table_exists="replace"`:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=BigQueryDest(
+                    tables=["`cap_replace`"],
+                    if_table_exists="replace",
+                ),
+                input_tables=["caps_input/cap_rows"],
+            )
+            def publish(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
+
+        Append a wider frame; `schema_evolution="update"` adds the new column:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=BigQueryDest(
+                    tables=["`cap_evolve`"],
+                    if_table_exists="append",
+                    schema_evolution="update",
+                ),
+                input_tables=["caps_input/cap_evo_v2"],
+            )
+            def evolve(v2: TableFrameSpec) -> TableFrameSpec:
+                return v2
     """
 
     tables: BigQueryTableNamesSpec

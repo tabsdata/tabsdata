@@ -329,6 +329,42 @@ class MySQLSrc(Src):
         src_cfg: Optional config mapping over the allowed keys only
             (`mysql.logging_level`, `tabsdata.sql.sql.readEngine`,
             `tabsdata.sql.chunkSize`).
+
+    Examples:
+        Publish two MySQL tables, one output slot per query in order:
+
+        .. code-block:: python
+
+            @publisher(
+                source=MySQLSrc(
+                    queries=[
+                        "SELECT * FROM country",
+                        "SELECT * FROM city",
+                    ],
+                ),
+                output_tables=["country", "city"],
+            )
+            def ingest(country: TableFrameSpec, city: TableFrameSpec):
+                return country, city
+
+        Incremental read: an `initial_values` bind seeds the `:wm`
+        watermark on the first run, then `ctx` advances it each run:
+
+        .. code-block:: python
+
+            @publisher(
+                source=MySQLSrc(
+                    queries=["SELECT * FROM city WHERE id > :wm LIMIT 10"],
+                    initial_values={"wm": 0},
+                ),
+                output_tables=["city_inc"],
+            )
+            def ingest_inc(city: TableFrameSpec, ctx: TrxCtx):
+                if city is not None:
+                    row = city.max_for("id")
+                    if row is not None and row["id"] is not None:
+                        ctx.set_attr("wm", int(row["id"]))
+                return city
     """
 
     # devguide-ref: trx context state (initial_values seed / cursor resume)

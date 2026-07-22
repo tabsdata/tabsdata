@@ -205,6 +205,33 @@ class GCSSrc(Src):
             `None` (the default) adds nothing.
         src_cfg: Optional connector config; supports the key
             `tabsdata.file.chunkSize`.
+
+    Examples:
+        Read a single object, selecting the CSV format explicitly:
+
+        .. code-block:: python
+
+            @publisher(
+                source=GCSSrc(paths=["export.csv"], format=SrcFileFormat.CSV),
+                output_tables=["rows"],
+            )
+            def ingest(rows: TableFramesSpec) -> TableFrameSpec:
+                return rows[0] if rows else None
+
+        Incremental read: only objects modified at or after the
+        cutoff are imported, and the cutoff advances each run:
+
+        .. code-block:: python
+
+            @publisher(
+                source=GCSSrc(
+                    paths=["parquet/orders.parquet"],
+                    initial_last_modified=datetime(2024, 1, 1, tzinfo=timezone.utc),
+                ),
+                output_tables=["orders"],
+            )
+            def ingest_new(orders: TableFramesSpec) -> TableFrameSpec:
+                return orders[0] if orders else None
     """
 
     paths: SrcPathsSpec

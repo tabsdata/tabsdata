@@ -231,6 +231,47 @@ class Db2Src(Src):
         src_cfg: Optional config mapping over the allowed keys only
             (`db2.logging_level`, `tabsdata.sql.sql.readEngine`,
             `tabsdata.sql.chunkSize`).
+
+    Examples:
+        Publish two Db2 tables, one output slot per query in order:
+
+        .. code-block:: python
+
+            @publisher(
+                source=Db2Src(
+                    queries=[
+                        "SELECT * FROM wld_country",
+                        "SELECT * FROM wld_city",
+                    ],
+                ),
+                output_tables=["d2_country", "d2_city"],
+            )
+            def ingest(country: TableFrameSpec, city: TableFrameSpec):
+                return country, city
+
+        Incremental read: an `initial_values` bind seeds the `:wm`
+        watermark on the first run, then `ctx` advances it each run.
+        Db2 folds unquoted identifiers to uppercase, so the column
+        is `ID`:
+
+        .. code-block:: python
+
+            @publisher(
+                source=Db2Src(
+                    queries=[
+                        "SELECT * FROM wld_city WHERE id > :wm "
+                        "ORDER BY id FETCH FIRST 10 ROWS ONLY"
+                    ],
+                    initial_values={"wm": 0},
+                ),
+                output_tables=["d2_city_inc"],
+            )
+            def ingest_inc(city: TableFrameSpec, ctx: TrxCtx):
+                if city is not None:
+                    row = city.max_for("ID")
+                    if row is not None and row["ID"] is not None:
+                        ctx.set_attr("wm", int(row["ID"]))
+                return city
     """
 
     # devguide-ref: trx context state (initial_values seed / cursor resume)

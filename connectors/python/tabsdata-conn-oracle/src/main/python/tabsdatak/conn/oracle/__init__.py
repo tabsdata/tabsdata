@@ -207,6 +207,47 @@ class OracleSrc(Src):
         src_cfg: Optional config mapping over the allowed keys only
             (`oracle.logging_level`, `tabsdata.sql.sql.readEngine`,
             `tabsdata.sql.chunkSize`).
+
+    Examples:
+        Publish two Oracle tables, one output slot per query in order:
+
+        .. code-block:: python
+
+            @publisher(
+                source=OracleSrc(
+                    queries=[
+                        "SELECT * FROM wld_country",
+                        "SELECT * FROM wld_city",
+                    ],
+                ),
+                output_tables=["or_country", "or_city"],
+            )
+            def ingest(country: TableFrameSpec, city: TableFrameSpec):
+                return country, city
+
+        Incremental read: an `initial_values` bind seeds the `:wm`
+        watermark, `FETCH FIRST n ROWS ONLY` pages the scan, and `ctx`
+        advances it each run. Oracle folds unquoted identifiers to
+        uppercase, so the watermark column is read as `ID`:
+
+        .. code-block:: python
+
+            @publisher(
+                source=OracleSrc(
+                    queries=[
+                        "SELECT * FROM wld_city WHERE id > :wm "
+                        "ORDER BY id FETCH FIRST 10 ROWS ONLY"
+                    ],
+                    initial_values={"wm": 0},
+                ),
+                output_tables=["or_city_inc"],
+            )
+            def ingest_inc(city: TableFrameSpec, ctx: TrxCtx):
+                if city is not None:
+                    row = city.max_for("ID")
+                    if row is not None and row["ID"] is not None:
+                        ctx.set_attr("wm", int(row["ID"]))
+                return city
     """
 
     # devguide-ref: trx context state (initial_values seed / cursor resume)

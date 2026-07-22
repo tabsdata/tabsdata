@@ -203,6 +203,31 @@ class DataGenSrc(Src):
     Args:
         data: The `Data` entries to emit, one output slot each. Their
             combined base64-parquet size may not exceed 10 MB.
+
+    Examples:
+        Publish two in-line frames, one output slot per `Data`:
+
+        .. code-block:: python
+
+            @publisher(
+                source=DataGenSrc(data=[Data(rows_df), Data(narrow_df)]),
+                output_tables=["rows", "narrow"],
+            )
+            def gen(rows: TableFrameSpec, narrow: TableFrameSpec):
+                return rows, narrow
+
+        Chunked emission -- `chunk_size` emits the next N rows each run;
+        re-run to walk the frame, and the slot arrives as `None` once
+        exhausted:
+
+        .. code-block:: python
+
+            @publisher(
+                source=DataGenSrc(data=[Data(big_df, chunk_size=5)]),
+                output_tables=["chunk"],
+            )
+            def gen_chunk(chunk: TableFrameSpec):
+                return chunk
     """
 
     data: list[Data]

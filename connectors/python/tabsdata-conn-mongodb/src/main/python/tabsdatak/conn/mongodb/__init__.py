@@ -150,6 +150,37 @@ class MongoDBDest(Dest):
         dest_cfg: Optional connector config over the single key
             `mongodb.logging_level`. Note: `pymongo.*` options are
             read from the connection's `conn_cfg`, not here.
+
+    Examples:
+        Append documents, letting MongoDB auto-generate `_id` (the
+        id field is `None`):
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=MongoDBDest(
+                    collections_with_ids=[("cap_append", None)],
+                ),
+                input_tables=["caps_input/cap_rows"],
+            )
+            def publish(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
+
+        Upsert on a natural key -- `code` becomes each document's
+        `_id`, so re-runs update the same documents instead of
+        inserting duplicates:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=MongoDBDest(
+                    collections_with_ids=[("cap_upsert", "code")],
+                    update_existing=True,
+                ),
+                input_tables=["caps_input/cap_rows"],
+            )
+            def upsert(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
     """
 
     collections_with_ids: CollectionsWithIdsSpec

@@ -184,6 +184,48 @@ class MSSQLSrc(Src):
         src_cfg: Optional connector config; supported keys are
             `mssql.logging_level`, `tabsdata.sql.sql.readEngine` and
             `tabsdata.sql.chunkSize`.
+
+    Examples:
+        Publish two SQL Server tables, one output slot per query in
+        order:
+
+        .. code-block:: python
+
+            @publisher(
+                source=MSSQLSrc(
+                    queries=[
+                        "SELECT * FROM wld_country",
+                        "SELECT * FROM wld_city",
+                    ],
+                ),
+                output_tables=["ms_country", "ms_city"],
+            )
+            def ingest(country: TableFrameSpec, city: TableFrameSpec):
+                return country, city
+
+        Incremental read -- SQL Server has no `LIMIT`, so page with
+        `OFFSET ... FETCH NEXT` (which needs `ORDER BY`); an
+        `initial_values` bind seeds `:wm` on the first run and `ctx`
+        advances it each run:
+
+        .. code-block:: python
+
+            @publisher(
+                source=MSSQLSrc(
+                    queries=[
+                        "SELECT * FROM wld_city WHERE id > :wm "
+                        "ORDER BY id OFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY"
+                    ],
+                    initial_values={"wm": 0},
+                ),
+                output_tables=["ms_city_inc"],
+            )
+            def ingest_inc(city: TableFrameSpec, ctx: TrxCtx):
+                if city is not None:
+                    row = city.max_for("id")
+                    if row is not None and row["id"] is not None:
+                        ctx.set_attr("wm", int(row["id"]))
+                return city
     """
 
     # devguide-ref: source bind-value seeding & ctx scratch state

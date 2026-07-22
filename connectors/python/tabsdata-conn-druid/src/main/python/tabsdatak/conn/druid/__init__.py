@@ -259,6 +259,28 @@ class DruidDestConn(Conn):
             `S3Location`, `AzBlobLocation` or `GCSLocation`.
         credentials: `UserPassword` for Overlord HTTP basic auth.
         conn_cfg: Optional connector config dict (see `CfgSpec`).
+
+    Examples:
+        A connection that stages parquet in S3 before Druid ingests it:
+
+        .. code-block:: python
+
+            DruidDestConn(
+                overlord_url="http://druid.example:8081",
+                staging=S3Location(
+                    bucket="my-bucket",
+                    region="us-east-1",
+                    credentials=AwsAccessSecretKey(
+                        access_key_id=Secret("AKIA..."),
+                        secret_access_key=Secret("..."),
+                    ),
+                    base_path="/staging/druid",
+                ),
+                credentials=UserPassword(
+                    user=Secret("admin"),
+                    password=Secret("..."),
+                ),
+            )
     """
 
     overlord_url: UrlSpec
@@ -307,6 +329,18 @@ class DruidDest(Dest):
             `druid.logging_level`, `druid.poll_interval_seconds`,
             `druid.retry_attempts` and
             `druid.retry_backoff_seconds`.
+
+    Examples:
+        Overwrite the datasource on every run instead of appending:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=DruidDest(tables=["events"], if_table_exists="replace"),
+                input_tables=["mycoll/events"],
+            )
+            def publish(events: TableFrameSpec) -> TableFrameSpec:
+                return events
     """
 
     tables: DruidTableNamesSpec
