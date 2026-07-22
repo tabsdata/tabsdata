@@ -308,6 +308,58 @@ fn join_produced_tdv(stmt: &mut SelectStatement, lateral: bool) {
     }
 }
 
+/// Fenced probe of the consuming inputs for the current window run, keyed by
+/// `logical_function_run_id = fr.id`. Same fence rationale as [`fr_probe`]:
+/// without it the planner cross-joins the whole LFRI table against the window
+/// runs at wide windows (a cartesian re-running the run-resolution probe once
+/// per pair); fenced, it stays an index lookup per window row.
+fn lfri_probe() -> SelectStatement {
+    let p = Alias::new("p").into_iden();
+    let mut stmt = Query::select();
+    for col in [
+        LogicalFunctionRunInputDBIden::LogicalFunctionRunId,
+        LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+        LogicalFunctionRunInputDBIden::RequirementDependencyPos,
+    ] {
+        stmt.column((p.clone(), col));
+    }
+    stmt.from_as(LogicalFunctionRunInputDBIden::Table, p.clone())
+        .and_where(
+            Expr::col((p, LogicalFunctionRunInputDBIden::LogicalFunctionRunId)).equals((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Id,
+            )),
+        )
+        .offset(0)
+        .take()
+}
+
+/// Join the run's consumed inputs, keyed by `LFRI.logical_function_run_id =
+/// fr.id`: fenced lateral probe, or the plain view join on SQLite.
+fn join_consumed_lfri(stmt: &mut SelectStatement, lateral: bool) {
+    if lateral {
+        stmt.join_lateral(
+            JoinType::InnerJoin,
+            lfri_probe(),
+            LogicalFunctionRunInputDBIden::Table,
+            Expr::val(true),
+        );
+    } else {
+        stmt.join(
+            JoinType::InnerJoin,
+            LogicalFunctionRunInputDBIden::Table,
+            Expr::col((
+                LogicalFunctionRunInputDBIden::Table,
+                LogicalFunctionRunInputDBIden::LogicalFunctionRunId,
+            ))
+            .equals((
+                FunctionRunDBWithNamesIden::Table,
+                FunctionRunDBWithNamesIden::Id,
+            )),
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // /metrics — nodes
 // ---------------------------------------------------------------------------
@@ -971,19 +1023,8 @@ fn edge_real_branch(req: &MetricsRequest, lateral: bool) -> SelectStatement {
                 FunctionRunDBWithNamesIden::Project,
             )),
             Alias::new("project_name"),
-        )
-        .join(
-            JoinType::InnerJoin,
-            LogicalFunctionRunInputDBIden::Table,
-            Expr::col((
-                LogicalFunctionRunInputDBIden::Table,
-                LogicalFunctionRunInputDBIden::LogicalFunctionRunId,
-            ))
-            .equals((
-                FunctionRunDBWithNamesIden::Table,
-                FunctionRunDBWithNamesIden::Id,
-            )),
         );
+    join_consumed_lfri(&mut stmt, lateral);
     join_source_tdv(&mut stmt, lateral);
     stmt
         // Qualifications.
@@ -1295,19 +1336,8 @@ fn edge_egress_branch(req: &MetricsRequest, lateral: bool) -> SelectStatement {
                 FunctionRunDBWithNamesIden::Project,
             )),
             Alias::new("project_name"),
-        )
-        .join(
-            JoinType::InnerJoin,
-            LogicalFunctionRunInputDBIden::Table,
-            Expr::col((
-                LogicalFunctionRunInputDBIden::Table,
-                LogicalFunctionRunInputDBIden::LogicalFunctionRunId,
-            ))
-            .equals((
-                FunctionRunDBWithNamesIden::Table,
-                FunctionRunDBWithNamesIden::Id,
-            )),
         );
+    join_consumed_lfri(&mut stmt, lateral);
     join_source_tdv(&mut stmt, lateral);
     stmt
         // Qualifying LFRI: dep_pos >= 0 and ltdv id not null.

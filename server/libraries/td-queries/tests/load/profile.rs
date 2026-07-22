@@ -39,14 +39,17 @@ impl SizeProfile {
             SizeProfile::Smoke => MetricsKnobs {
                 publishers: 20,
                 consumers: 10,
+                projects: 3,
             },
             SizeProfile::Load => MetricsKnobs {
                 publishers: 1_000,
                 consumers: 500,
+                projects: 25,
             },
             SizeProfile::Stress => MetricsKnobs {
                 publishers: 10_000,
                 consumers: 5_000,
+                projects: 100,
             },
         }
     }
@@ -62,10 +65,13 @@ impl SizeProfile {
 
 /// `publishers` are functions with no qualifying input (node rows + synthetic
 /// edges); `consumers` each reference one publisher's output LTDV (real edges).
+/// Both are spread round-robin across `projects` (min 1) so RLS scoping is
+/// exercised under many tenants.
 #[derive(Clone, Copy, Debug)]
 pub struct MetricsKnobs {
     pub publishers: usize,
     pub consumers: usize,
+    pub projects: usize,
 }
 
 /// One `unit` = a producer/consumer function pair with a dependency, an LFRI,

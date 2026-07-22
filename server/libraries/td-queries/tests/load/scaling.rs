@@ -567,12 +567,64 @@ async fn time_metrics_queries(db: &TdPool) -> Result<Vec<(&'static str, f64)>, T
     Ok(out)
 }
 
+/// Asserts the metrics queries stay window-first with every correlated probe
+/// fenced — the shape that keeps them O(window) under RLS. Checked on the SQL
+/// text rather than by timing: the cartesian a missing fence causes only
+/// surfaces once a window holds thousands of rows, past the suite's seed sizes.
+#[cfg(postgres)]
+#[test]
+fn metrics_queries_hold_window_first_fenced_contract() {
+    use td_objects::dxo::query_filters::WindowUnit::{Day, Hour, Month, Quarter, Week, Year};
+
+    for unit in [Hour, Day, Week, Month, Quarter, Year] {
+        for dim in [Dim::Collection, Dim::Group] {
+            let mut req = metrics_request();
+            req.unit = unit;
+            req.dim = dim;
+            let (node, edge) = td_queries::metrics_plan_sql(&req);
+            let tag = format!("{unit:?}/{dim:?}");
+
+            for (which, sql) in [("node", &node), ("edge", &edge)] {
+                assert!(
+                    sql.contains(r#"FROM "physical_function_runs""#)
+                        && sql.contains(r#""physical_function_runs"."ended_on" >="#)
+                        && sql.contains(r#""physical_function_runs"."ended_on" <"#),
+                    "{which} {tag}: not window-first (no ended_on-bounded \
+                     physical_function_runs drive):\n{sql}"
+                );
+                let probes = sql.matches(r#" AS "p""#).count();
+                let fences = sql.matches("OFFSET 0").count();
+                assert!(
+                    probes > 0 && probes == fences,
+                    "{which} {tag}: {probes} correlated probes but {fences} \
+                     OFFSET-0 fences — a probe escaped its fence and will \
+                     cartesian at wide windows:\n{sql}"
+                );
+                assert!(
+                    sql.contains(r#"FROM "function_runs__with_names" AS "p""#),
+                    "{which} {tag}: run-resolution probe not fenced:\n{sql}"
+                );
+                assert!(
+                    sql.contains(r#"FROM "table_data_versions__with_names" AS "p""#),
+                    "{which} {tag}: magnitude (TDV) probe not fenced:\n{sql}"
+                );
+            }
+            assert!(
+                edge.contains(r#"FROM "logical_function_run_inputs" AS "p""#),
+                "edge {tag}: consumed-input (LFRI) join not fenced — wide \
+                 windows will cartesian:\n{edge}"
+            );
+        }
+    }
+}
+
 #[ignore = "expensive: seeds the metrics dataset at two sizes and times every metrics query"]
 #[td_test::test(db)]
 async fn report_scaling_metrics(db: TdPool) -> Result<(), TdError> {
     let small = MetricsKnobs {
         publishers: SMALL,
         consumers: SMALL / 2,
+        projects: 8,
     };
     dataset::metrics_dataset(&db, small).await?;
     db.execute_batch(&["ANALYZE".to_string()])
@@ -582,6 +634,7 @@ async fn report_scaling_metrics(db: TdPool) -> Result<(), TdError> {
     let big = MetricsKnobs {
         publishers: BIG,
         consumers: BIG / 2,
+        projects: 8,
     };
     dataset::metrics_dataset(&db, big).await?;
     db.execute_batch(&["ANALYZE".to_string()])
@@ -630,10 +683,12 @@ async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
         MetricsKnobs {
             publishers: SMALL,
             consumers: SMALL / 2,
+            projects: 1,
         },
         MetricsKnobs {
             publishers: BIG,
             consumers: BIG / 2,
+            projects: 1,
         },
     ] {
         dataset::metrics_dataset(&db, knobs).await?;
@@ -706,6 +761,7 @@ async fn report_scaling_coverage(db: TdPool, dv_db: TdPool) -> Result<(), TdErro
         MetricsKnobs {
             publishers: SMALL,
             consumers: SMALL / 2,
+            projects: 1,
         },
     )
     .await?;

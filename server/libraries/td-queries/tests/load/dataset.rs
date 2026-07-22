@@ -41,15 +41,19 @@ pub const WINDOW_START_MS: i64 = 1_700_000_000_000;
 pub const WINDOW_END_MS: i64 = WINDOW_START_MS + 86_400_000;
 const IN_WINDOW_MS: i64 = WINDOW_START_MS + 3_600_000;
 
-/// Get-or-create: the two-size scaling passes build a dataset more than once
-/// against the same pool, and the project name is unique.
-async fn test_project(db: &TdPool) -> Result<ProjectDB, TdError> {
-    let name = ProjectName::try_from("test")?;
+/// Get-or-create `n` projects (min 1). Get-or-create because the two-size
+/// scaling passes build a dataset more than once against the same pool.
+async fn test_projects(db: &TdPool, n: usize) -> Result<Vec<ProjectDB>, TdError> {
     let existing: Vec<ProjectDB> = db.live().fetch_all::<ProjectDB>(()).await?;
-    match existing.into_iter().find(|p| p.name == name) {
-        Some(p) => Ok(p),
-        None => db.seed().project(name).await,
+    let mut out = Vec::with_capacity(n.max(1));
+    for i in 0..n.max(1) {
+        let name = ProjectName::try_from(format!("test_p{i}").as_str())?;
+        match existing.iter().find(|p| p.name == name) {
+            Some(p) => out.push(p.clone()),
+            None => out.push(db.seed().project(name).await?),
+        }
     }
+    Ok(out)
 }
 
 fn system_user() -> Result<UserId, TdError> {
@@ -68,15 +72,36 @@ fn next_salt() -> u64 {
 /// PFR window/magnitude columns are stamped at build time, so no per-row
 /// UPDATE is needed.
 pub async fn metrics_dataset(db: &TdPool, knobs: MetricsKnobs) -> Result<usize, TdError> {
+    let projects = test_projects(db, knobs.projects).await?;
+    let np = projects.len();
+    for (pi, project) in projects.iter().enumerate() {
+        let pubs = share(knobs.publishers, np, pi);
+        let cons = share(knobs.consumers, np, pi);
+        seed_project_runs(db, project.id, pubs, cons).await?;
+    }
+    Ok(knobs.publishers + knobs.consumers)
+}
+
+/// Even split of `total` across `n` buckets, remainder on the first buckets.
+fn share(total: usize, n: usize, i: usize) -> usize {
+    total / n + usize::from(i < total % n)
+}
+
+/// Seed one project's runs into its own [`RunGraph`], flushed under that
+/// project's scope so the field-less LFRI rows land in the right tenant.
+async fn seed_project_runs(
+    db: &TdPool,
+    pid: ProjectId,
+    publishers: usize,
+    consumers: usize,
+) -> Result<(), TdError> {
     let user = system_user()?;
     let stamp = metrics_stamp()?;
     let s = next_salt();
-    let project = test_project(db).await?;
-    let pid = project.id;
     let mut graph = RunGraph::default();
-    let mut producers: Vec<LogicalTableDataVersionDB> = Vec::with_capacity(knobs.publishers);
+    let mut producers: Vec<LogicalTableDataVersionDB> = Vec::with_capacity(publishers);
 
-    for i in 0..knobs.publishers {
+    for i in 0..publishers {
         let coll = db
             .scoped(pid)
             .seed()
@@ -98,7 +123,7 @@ pub async fn metrics_dataset(db: &TdPool, knobs: MetricsKnobs) -> Result<usize, 
         producers.push(unit.ltdv);
     }
 
-    for j in 0..knobs.consumers {
+    for j in 0..consumers {
         let coll = db
             .scoped(pid)
             .seed()
@@ -117,12 +142,12 @@ pub async fn metrics_dataset(db: &TdPool, knobs: MetricsKnobs) -> Result<usize, 
             &mut graph,
         )
         .await?;
-        let producer_ltdv = &producers[j % producers.len().max(1)];
-        graph.lfris.push(build_lfri(&coll, &unit, producer_ltdv)?);
+        if let Some(producer_ltdv) = producers.get(j % producers.len().max(1)) {
+            graph.lfris.push(build_lfri(&coll, &unit, producer_ltdv)?);
+        }
     }
 
-    graph.flush(db, &pid).await?;
-    Ok(knobs.publishers + knobs.consumers)
+    graph.flush(db, &pid).await
 }
 
 /// PFR window/metric stamp applied to seeded runs so they land inside the
@@ -218,7 +243,7 @@ struct Unit {
 /// scan.
 pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle, TdError> {
     let user = system_user()?;
-    let project = test_project(db).await?;
+    let project = test_projects(db, 1).await?.remove(0);
     let pid = project.id;
     let mut execs = Vec::with_capacity(knobs.units * 2);
     let mut fr_ids = Vec::with_capacity(knobs.units * 2);
