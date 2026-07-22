@@ -437,7 +437,7 @@ class ContainerBase(System):
         uri = self._require_uri(ctx)
         if force:
             self._drop_all_tables(uri)
-        print(f">>> creating schema from {self.slug}.ddl ...")
+        print(f">>> creating schema from {self.ddl_slug}.ddl ...")
         run_sql_text(uri, self._model_ddl_text(model))
         print(">>> schema ready")
 
@@ -452,7 +452,7 @@ class ContainerBase(System):
         uri = self._require_uri(ctx)
         if req.force:
             self._drop_all_tables(uri)
-            print(f">>> creating schema from {self.slug}.ddl ...")
+            print(f">>> creating schema from {self.ddl_slug}.ddl ...")
             run_sql_text(uri, self._model_ddl_text(req.model))
         order = req.data_dir / "run-order.txt"
         if not order.is_file():
@@ -475,6 +475,36 @@ class ContainerBase(System):
             n += 1
         print(">>> load complete")
         return n
+
+    # ANSI double quote works for the bundled models on every SQL container
+    # (their identifiers are bare, so nothing is actually quoted). A dialect
+    # that needs a different quote char overrides this.
+    sql_quote = '"'
+
+    def apply_changes(self, ctx: DomainContext, transactions: list) -> int:
+        from .. import changes as changes_mod
+        from ..sql_runner import run_sql_transactions
+
+        uri = self._require_uri(ctx)
+        rendered = [
+            [changes_mod.render_sql(c, quote=self.sql_quote) for c in txn]
+            for txn in transactions
+        ]
+        return run_sql_transactions(uri, rendered, label="changes")
+
+    def _reflect_table_names(self, ctx: DomainContext) -> list[str]:
+        """The domain's current table names (reflected over its connection). A
+        freshly-seeded domain holds exactly the model's tables, so CDC systems
+        use this to enumerate what to enable capture on."""
+        from sqlalchemy import MetaData, create_engine
+
+        engine = create_engine(self._require_uri(ctx))
+        try:
+            md = MetaData()
+            md.reflect(bind=engine)
+            return sorted(md.tables.keys())
+        finally:
+            engine.dispose()
 
     @staticmethod
     def _require_uri(ctx: DomainContext) -> str:

@@ -214,6 +214,7 @@ namespaces = true
 ]
 "tabsdatax.itest.tdksystems" = [
     "models/*/generator.py",
+    "models/*/changes.py",
     "models/*/sizing.json",
     "models/*/*.ddl",
     "models/*/*.csv",

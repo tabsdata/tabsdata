@@ -111,6 +111,51 @@ class CloudBase(System):
         print(f">>> uploaded {n} file(s)")
         return n
 
+    def apply_changes(self, ctx: DomainContext, transactions: list) -> int:
+        """File domains take inserts only — each run stages the inserted rows as
+        NEW data files (per staged format), alongside the seed. The file name
+        carries a short content hash so an identical plan is idempotent
+        (overwrites) while a different plan adds fresh files. Returns the number
+        of transactions applied."""
+        import hashlib
+        import json
+        import tempfile
+        from pathlib import Path
+
+        from .. import changes as changes_mod, data_gen
+        from ..emit import ENTITIES_MANIFEST, Table, write_tables
+
+        if not changes_mod.has_insert(transactions):
+            raise DatagenError(
+                f"{self.slug} domains support only inserts for `changes` "
+                f"(a change is a new file); use --ops insert"
+            )
+        tables = changes_mod.insert_tables(transactions)
+        tag = hashlib.sha1(
+            json.dumps(
+                [[t.name, t.rows] for t in tables], sort_keys=True, default=str
+            ).encode()
+        ).hexdigest()[:8]
+        values = self.resolve_values(self.settings_from_meta(ctx.meta))
+        backend = self._backend(values)
+        full = ctx.meta["BASE_PATH"]
+        rows = sum(len(t.rows) for t in tables)
+        with tempfile.TemporaryDirectory(prefix="tdx-changes-") as tmp:
+            root = Path(tmp)
+            for fmt in data_gen.FILE_FORMATS:
+                fmt_dir = root / fmt
+                staged = [
+                    Table(name=f"{t.name}__chg_{tag}", columns=t.columns, rows=t.rows)
+                    for t in tables
+                ]
+                write_tables(staged, fmt_dir, fmt)
+                (fmt_dir / "run-order.txt").unlink(missing_ok=True)
+                (fmt_dir / ENTITIES_MANIFEST).unlink(missing_ok=True)
+            print(f">>> staging {rows} inserted row(s) -> {self.slug}://{full} ...")
+            backend.upload(full, [str(root)])
+        print(f">>> wrote {rows} row(s) as new change file(s)")
+        return len(transactions)
+
     def _reachable(self, meta: dict[str, str], what: str) -> Health:
         values = self.resolve_values(self.settings_from_meta(meta))
         try:

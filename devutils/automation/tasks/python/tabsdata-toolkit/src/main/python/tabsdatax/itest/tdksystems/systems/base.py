@@ -413,14 +413,38 @@ class System(ABC):
         count. Default: unsupported (a backend without a data plane)."""
         raise Unsupported(f"{self.slug} has no data-load path")
 
+    def configure_cdc(self, ctx: DomainContext, model: str) -> None:
+        """Configure change-data-capture for the model's tables, once they
+        exist (called at the tail of seed / create --model). Default: no-op —
+        most systems (and every non-CDC system) capture nothing, so seeding a
+        model needs no extra step. A CDC system overrides this to do whatever
+        its capture mechanism needs per table (e.g. Postgres `REPLICA IDENTITY
+        FULL`, Db2 `asnclp` registration); it may still be a no-op where capture
+        is server-wide (MySQL binlog)."""
+        return None
+
+    def apply_changes(self, ctx: DomainContext, transactions: list) -> int:
+        """Apply planned change transactions (see `changes.Transaction`) to the
+        domain, returning the number of transactions applied. Default:
+        unsupported (a backend with no change plane). SQL systems apply each
+        transaction atomically; file systems take inserts only (new files)."""
+        raise Unsupported(f"{self.slug} does not support `changes`")
+
+    @property
+    def ddl_slug(self) -> str:
+        """The model DDL / recipe flavour to use — normally the system's own
+        slug, but a variant system (e.g. `postgrescdc`) overrides this to reuse
+        the base system's DDL (`postgres.ddl`) rather than needing its own."""
+        return self.slug
+
     def _model_ddl_text(self, model: str) -> str:
-        """Read the model's `<slug>.ddl` (for SQL systems)."""
+        """Read the model's `<ddl_slug>.ddl` (for SQL systems)."""
         from .. import data_gen
 
-        ddl = data_gen.model_dir(model) / f"{self.slug}.ddl"
+        ddl = data_gen.model_dir(model) / f"{self.ddl_slug}.ddl"
         if not ddl.is_file():
             raise DatagenError(
-                f"model '{model}' has no DDL for {self.slug} (looked for {ddl})"
+                f"model '{model}' has no DDL for {self.ddl_slug} (looked for {ddl})"
             )
         return ddl.read_text()
 

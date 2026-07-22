@@ -18,6 +18,7 @@ from tabsdatax.itest.tdksystems.sql_runner import (
     _print_result,
     run_sql_file,
     run_sql_text,
+    run_sql_transactions,
     split_sql_statements,
 )
 
@@ -33,6 +34,44 @@ def _capture_run(uri: str, sql: str) -> str:
     sink = io.StringIO()
     run_sql_text(uri, sql, out=sink)
     return sink.getvalue()
+
+
+# ---- run_sql_transactions (used by `changes`) -----------------------------
+
+def test_run_sql_transactions_commits_each_group(sqlite_uri):
+    run_sql_text(sqlite_uri, "CREATE TABLE t (id INT, name TEXT)")
+    n = run_sql_transactions(
+        sqlite_uri,
+        [
+            ["INSERT INTO t VALUES (1, 'a')", "INSERT INTO t VALUES (2, 'b')"],
+            ["UPDATE t SET name = 'z' WHERE id = 1"],
+            ["DELETE FROM t WHERE id = 2"],
+        ],
+    )
+    assert n == 3
+    out = io.StringIO()
+    run_sql_text(sqlite_uri, "SELECT id, name FROM t ORDER BY id", out=out)
+    assert out.getvalue() == "id\tname\n1\tz\n"
+
+
+def test_run_sql_transactions_rolls_back_failing_transaction(sqlite_uri):
+    run_sql_text(sqlite_uri, "CREATE TABLE t (id INT PRIMARY KEY)")
+    run_sql_transactions(sqlite_uri, [["INSERT INTO t VALUES (1)"]])
+    # A transaction whose second statement violates the PK must abort as a unit:
+    # the first insert in that same transaction is rolled back, not left behind.
+    with pytest.raises(DatagenError):
+        run_sql_transactions(
+            sqlite_uri,
+            [["INSERT INTO t VALUES (2)", "INSERT INTO t VALUES (1)"]],
+        )
+    out = io.StringIO()
+    run_sql_text(sqlite_uri, "SELECT id FROM t ORDER BY id", out=out)
+    assert out.getvalue() == "id\n1\n"
+
+
+def test_run_sql_transactions_empty_uri_raises():
+    with pytest.raises(DatagenError, match="empty"):
+        run_sql_transactions("", [["SELECT 1"]])
 
 
 # ---- DDL / DML produce no output ------------------------------------------

@@ -85,13 +85,7 @@ def run_sql_text(
     engine = create_engine(uri)
     try:
         with engine.begin() as conn:
-            if engine.dialect.name == "oracle":
-                for stmt in (
-                    "ALTER SESSION SET NLS_DATE_FORMAT='YYYY-MM-DD'",
-                    "ALTER SESSION SET NLS_TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS'",
-                    "ALTER SESSION SET NLS_TIMESTAMP_TZ_FORMAT='YYYY-MM-DD HH24:MI:SS'",
-                ):
-                    conn.exec_driver_sql(stmt)
+            _oracle_session_setup(conn, engine)
             for stmt in statements:
                 stmt = stmt.rstrip(";").strip()
                 if not stmt:
@@ -113,6 +107,54 @@ def run_sql_text(
         # destroy runs, orphaning the database and masking the real error as a
         # later "already exists".
         engine.dispose()
+
+
+def _oracle_session_setup(conn, engine) -> None:
+    """Set ISO date/timestamp NLS formats so 'YYYY-MM-DD' literals parse on
+    Oracle. No-op on every other dialect."""
+    if engine.dialect.name != "oracle":
+        return
+    for stmt in (
+        "ALTER SESSION SET NLS_DATE_FORMAT='YYYY-MM-DD'",
+        "ALTER SESSION SET NLS_TIMESTAMP_FORMAT='YYYY-MM-DD HH24:MI:SS'",
+        "ALTER SESSION SET NLS_TIMESTAMP_TZ_FORMAT='YYYY-MM-DD HH24:MI:SS'",
+    ):
+        conn.exec_driver_sql(stmt)
+
+
+def run_sql_transactions(
+    uri: str,
+    transactions: list[list[str]],
+    label: str = "changes",
+) -> int:
+    """Run each inner list of statements as ONE transaction (a single commit),
+    returning the number of transactions applied. Unlike `run_sql_text` (which
+    commits every statement together), this preserves per-transaction commit
+    boundaries — what a change-data-capture consumer sees as distinct
+    transactions. All transactions share one engine/pool."""
+    if not uri:
+        raise DatagenError("SQLALCHEMY_URI is empty")
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.exc import SQLAlchemyError
+
+    engine = create_engine(uri)
+    applied = 0
+    try:
+        for stmts in transactions:
+            with engine.begin() as conn:
+                _oracle_session_setup(conn, engine)
+                for stmt in stmts:
+                    stmt = stmt.rstrip(";").strip()
+                    if stmt:
+                        conn.exec_driver_sql(stmt)
+            applied += 1
+    except SQLAlchemyError as exc:
+        orig = getattr(exc, "orig", None) or exc
+        raise DatagenError(f"SQL error while running {label}: {orig}") from None
+    finally:
+        engine.dispose()
+    return applied
 
 
 def run_sql_file(
