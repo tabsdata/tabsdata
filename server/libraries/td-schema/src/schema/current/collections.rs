@@ -9,7 +9,7 @@ use sea_query::{
 
 use super::connections::Connections;
 use super::groups::Groups;
-use super::projects::Projects;
+use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::backend::Backend;
@@ -209,6 +209,7 @@ fn collections_with_names(b: &Backend) -> ViewDef {
                 Alias::new("modified_by"),
             )
             .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
+            .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
             .from(CollectionsActive)
             .join_as(
                 JoinType::LeftJoin,
@@ -231,6 +232,13 @@ fn collections_with_names(b: &Backend) -> ViewDef {
                 Expr::col((CollectionsActive, Collections::GroupId))
                     .equals((groups_alias.clone(), Groups::Id))
                     .and(Expr::col((CollectionsActive, Collections::ProjectId)).equals((groups_alias, Groups::ProjectId))),
+            )
+            // Safe as an inner join: projects_resolved holds every project
+            // (soft-deleted included), so it never drops a collection row.
+            .join(
+                JoinType::InnerJoin,
+                ProjectsResolved,
+                Expr::col((CollectionsActive, Collections::ProjectId)).equals((ProjectsResolved, Projects::Id)),
             )
             .to_owned(),
     )

@@ -6,7 +6,7 @@ use td_apiforge::router_ext;
 
 #[router_ext(CollectionsRouter)]
 mod routes {
-    use crate::extractors::Project;
+    use crate::extractors::{Project, WildcardProject};
     use axum::Extension;
     use axum::extract::{Path, State};
     use axum_extra::extract::Query;
@@ -32,15 +32,16 @@ mod routes {
 
     const COLLECTIONS_TAG: &str = "Collections";
 
+    // `*` spans every project the caller can view; a concrete project lists just that one.
     #[apiserver_path(method = get, path = LIST_COLLECTIONS, tag = COLLECTIONS_TAG)]
     #[doc = "Lists collections"]
     pub async fn list_collections(
         State(collection_state): State<Arc<CollectionServices>>,
         Extension(context): Extension<RequestContext>,
-        Project(project_id): Project,
+        WildcardProject(selector): WildcardProject,
         Query(query_params): Query<ListParams>,
     ) -> Result<ListStatus<CollectionRead>, ErrorStatus> {
-        let request = context.list((), query_params).in_project(project_id);
+        let request = context.list((), query_params).in_project(selector);
         let response = collection_state.list.service().oneshot(request).await?;
         Ok(ListStatus::OK(response))
     }
