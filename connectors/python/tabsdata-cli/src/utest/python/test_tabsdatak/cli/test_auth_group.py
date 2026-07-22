@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 """``tdk auth add-cert`` copies the PEM into the managed certificate folder; the

@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 """Shared Azure Blob test fixtures for this package's integration and e2e suites:

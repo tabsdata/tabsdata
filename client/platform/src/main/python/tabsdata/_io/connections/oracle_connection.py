@@ -1,4 +1,4 @@
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 from typing import Optional

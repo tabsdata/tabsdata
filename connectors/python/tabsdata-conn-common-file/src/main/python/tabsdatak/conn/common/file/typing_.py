@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Shared types for the cloud-file (object-store) connectors:
 ``azureblob``, ``gcs``, ``localfile``, ``s3``.
 

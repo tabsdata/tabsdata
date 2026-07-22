@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 use td_error::{ApiError, TdError, api_error};

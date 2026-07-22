@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 GENERAL_ERROR_EXIT_STATUS = 201

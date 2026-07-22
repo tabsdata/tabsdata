@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Update a source/destination collection's connection. ManageProject-gated

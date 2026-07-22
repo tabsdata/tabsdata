@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 //! `#[td_test::test(...)]` — exactly one flavor must be set:

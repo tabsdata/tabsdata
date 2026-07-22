@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for tabsdatax.itest.tdksystems.env_check — distribution-metadata parsing + check."""
 from __future__ import annotations
 

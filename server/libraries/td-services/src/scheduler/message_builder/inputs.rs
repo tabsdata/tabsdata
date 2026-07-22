@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Input-version resolution: the logical→physical step that maps each

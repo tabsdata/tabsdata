@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 FROM ghcr.io/cross-rs/x86_64-unknown-linux-musl:main

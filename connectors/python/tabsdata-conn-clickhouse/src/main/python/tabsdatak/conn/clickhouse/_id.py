@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Upload-id generator for staged bulk loads.
 
 Returns a 26-character base32hex string that:

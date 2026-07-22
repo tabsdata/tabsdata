@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Cross-partition ranked-CTE reads — the slow-path versioned surface.

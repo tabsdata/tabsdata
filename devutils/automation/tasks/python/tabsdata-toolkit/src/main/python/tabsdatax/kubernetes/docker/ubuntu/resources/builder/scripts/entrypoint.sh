@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 source /root/.td/bin/devpi-start.sh

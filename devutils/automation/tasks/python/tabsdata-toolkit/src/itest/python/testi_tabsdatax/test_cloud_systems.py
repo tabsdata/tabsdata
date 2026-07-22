@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Integration tests: every cloud-storage system end-to-end.
 
 Cloud creds come from a 1Password vault — by default `dev_xp`. Tests

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Kafka connector -- public API.
 
 Streaming only (no batch ``Src`` / ``Dest``). Modelled on the CDC

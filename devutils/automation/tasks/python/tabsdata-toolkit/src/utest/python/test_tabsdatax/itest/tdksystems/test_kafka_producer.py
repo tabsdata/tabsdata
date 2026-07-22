@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for tabsdatax.itest.tdksystems.kafka_producer — schema derivation and the
 plain (no-registry) serializers, plus the CLI's kafka load routing.
 

@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! SQLite provider. Thin delegate over [`td_database::test_utils::sqlite::pool`].

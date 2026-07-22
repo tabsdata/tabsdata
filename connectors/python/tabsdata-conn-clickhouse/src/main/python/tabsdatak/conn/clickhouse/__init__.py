@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """ClickHouse connector — public API.
 
 * :class:`ClickHouseDestConn` -- per-cluster ClickHouse connection

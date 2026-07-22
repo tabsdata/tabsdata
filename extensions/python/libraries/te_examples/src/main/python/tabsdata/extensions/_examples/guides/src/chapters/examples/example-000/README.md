@@ -1,5 +1,5 @@
 <!--
-    Copyright 2025 Tabs Data Inc.
+    Copyright 2025 Tabsdata Inc.
 -->
 
 <p style="text-align:center; padding-right: 6px;">

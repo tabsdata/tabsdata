@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests that each container / cloud system declares the right metadata.
 
 These are class-attribute checks; they don't talk to docker or any cloud

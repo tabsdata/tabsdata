@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Query load-test suite: every public query in `td-queries` has a case that

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Credentials are never echoed to the terminal by `tdx-system`/domain create —
 passwords and the password inside a sqlalchemy URI are masked."""
 from __future__ import annotations

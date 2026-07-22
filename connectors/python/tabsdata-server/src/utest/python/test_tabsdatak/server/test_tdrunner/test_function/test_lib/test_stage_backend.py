@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 """Unit tests for ``_lib/stage_backend.py``: ``Location`` -> ``StageBackend``

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end MSSQL plugin tests against a real MSSQL instance.
 
 The ``fresh_mssql`` fixture (defined in ``conftest.py``) provisions a

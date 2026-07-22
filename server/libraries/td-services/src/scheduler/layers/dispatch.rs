@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 //! These layers should not fail for single messages errors, only for wider errors (system, connection, etc.).

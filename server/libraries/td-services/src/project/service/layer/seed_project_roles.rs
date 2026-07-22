@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Mint the three per-project roles (`<name>_admin`, `<name>_dev`,

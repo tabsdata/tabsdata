@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Integration tests: every container system can be created and exercised
 through its tdx lifecycle (create, status, create domain, destroy).
 

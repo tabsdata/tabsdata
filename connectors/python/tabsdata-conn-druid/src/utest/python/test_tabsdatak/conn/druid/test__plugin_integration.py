@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end Druid integration tests.
 
 The Druid pipeline is two-stage:

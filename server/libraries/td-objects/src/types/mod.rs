@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 // Basic types reexported for convenience under basic module

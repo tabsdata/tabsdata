@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Integration-test shared fixtures.
 
 Tests in this directory require external resources (Docker, network,

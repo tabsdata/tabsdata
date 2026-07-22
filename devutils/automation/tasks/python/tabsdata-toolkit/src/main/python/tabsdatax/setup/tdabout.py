@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 import getpass
@@ -592,7 +592,7 @@ def write_build_manifest(root_path, output_path):
             sort_keys=False,
             allow_unicode=True,
         )
-        header = f"#\n# Copyright {current_year} Tabs Data Inc.\n#\n\n"
+        header = f"#\n# Copyright {current_year} Tabsdata Inc.\n#\n\n"
         yaml_content = header + build_content
         build_file.write_text(yaml_content, encoding="utf-8")
     except Exception as exception:

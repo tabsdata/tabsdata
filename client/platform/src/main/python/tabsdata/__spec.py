@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 MIN_PYTHON_VERSION = "3.12"

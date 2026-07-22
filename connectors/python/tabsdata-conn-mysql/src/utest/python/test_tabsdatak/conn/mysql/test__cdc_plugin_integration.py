@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end MySQL CDC integration tests against a real
 binlog-enabled MySQL instance.
 

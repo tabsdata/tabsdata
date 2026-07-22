@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Public SR / Protobuf types on the kafka connector -- shape +
 validation. ``KafkaStreamSrcConn`` / ``KafkaStreamSrc`` coverage lands
 alongside the connector module in a follow-up commit."""

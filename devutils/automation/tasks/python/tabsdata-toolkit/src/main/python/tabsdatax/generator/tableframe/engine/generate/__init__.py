@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 """Generate the ``.py`` delegation and ``.pyi`` stubs from a manifest.

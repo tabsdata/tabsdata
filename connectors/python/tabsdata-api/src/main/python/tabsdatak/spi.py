@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Service-provider interface (SPI) for connector authors.
 
 The user-facing :mod:`tabsdatak.api` defines *what* a flow looks

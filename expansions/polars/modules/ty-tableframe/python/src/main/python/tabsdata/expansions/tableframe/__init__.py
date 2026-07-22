@@ -7,7 +7,7 @@ __path__ = pkgutil.extend_path(__path__, __name__)
 # PyCharm correctly recognizes namespace packages.
 
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 # Required import to ensure dynamic library with native components is loaded.

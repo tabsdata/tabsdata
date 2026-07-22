@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """LocalFile connector — public API.
 
 * :class:`LocalFileSrcConn` / :class:`LocalFileDestConn` -- per-LocalFile

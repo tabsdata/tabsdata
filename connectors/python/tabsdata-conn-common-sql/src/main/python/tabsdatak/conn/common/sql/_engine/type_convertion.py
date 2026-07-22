@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 # --- DataType -> polars dtype --------------------------------------
 from typing import Any, Mapping
 

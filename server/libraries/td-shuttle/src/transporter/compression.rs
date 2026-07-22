@@ -1,5 +1,5 @@
 //
-// Copyright 2025. Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 //! Provides dynamic compression and decompression for async I/O streams.

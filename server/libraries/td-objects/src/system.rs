@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 pub const TD_FN_STATE_PREFIX: &str = "td.fn_state";

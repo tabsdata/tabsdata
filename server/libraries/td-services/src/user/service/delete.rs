@@ -1,5 +1,5 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2024 Tabsdata Inc.
 //
 
 use crate::user::layers::delete::delete_user_validate;

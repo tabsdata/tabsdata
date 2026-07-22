@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """S3 connector — public API.
 
 * :class:`S3SrcConn` / :class:`S3DestConn` -- per-S3 connection (bucket, region,

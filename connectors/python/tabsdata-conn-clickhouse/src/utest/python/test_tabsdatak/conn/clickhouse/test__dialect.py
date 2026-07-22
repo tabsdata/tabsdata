@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for ``_dialect.py`` -- focused on the FQN/escape helpers
 and the ``ClickHouseDialect`` SQL generation contract.
 

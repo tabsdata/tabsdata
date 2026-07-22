@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Kafka serdes -- wire-format (de)serialisers for the Kafka
 stream source.
 

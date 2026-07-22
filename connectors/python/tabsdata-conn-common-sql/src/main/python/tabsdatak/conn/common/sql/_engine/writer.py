@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable, Literal

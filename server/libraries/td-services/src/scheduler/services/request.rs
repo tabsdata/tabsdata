@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 use crate::logical::layers::dispatch_mint::mint_function_runs_on_dispatch;

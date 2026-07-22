@@ -1,5 +1,5 @@
 //
-//  Copyright 2024 Tabs Data Inc.
+//  Copyright 2024 Tabsdata Inc.
 //
 
 //! A generic layer to wrap a function as a `tower::Service`. Similar to

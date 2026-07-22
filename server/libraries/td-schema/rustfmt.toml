@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 # Wide widths so sea_query column definitions stay one-per-line —
 # `ColumnDef::new(X).text().not_null().primary_key()` reads as a
 # columnar table, not a four-line tower. Applies to chained builders

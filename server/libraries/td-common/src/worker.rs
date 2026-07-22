@@ -1,5 +1,5 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2024 Tabsdata Inc.
 //
 
 //! The supervisor↔worker file protocol: the request/response/exception YAML

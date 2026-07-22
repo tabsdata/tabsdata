@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Shared pytest fixtures.
 
 Descriptors are encrypted with `$TD_BACKENDS_CRYPTO_KEY`, so every test that writes or

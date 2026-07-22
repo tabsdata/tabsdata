@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end Postgres plugin tests against a real Postgres instance.
 
 The ``fresh_postgres`` fixture (defined in ``conftest.py``) provisions a

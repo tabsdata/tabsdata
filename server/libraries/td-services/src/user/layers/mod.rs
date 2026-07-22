@@ -1,5 +1,5 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2024 Tabsdata Inc.
 //
 
 pub mod create;

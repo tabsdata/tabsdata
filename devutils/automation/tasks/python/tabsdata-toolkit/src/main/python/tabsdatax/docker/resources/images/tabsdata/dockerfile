@@ -1,6 +1,6 @@
 # check=skip=SecretsUsedInArgOrEnv
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 FROM ubuntu:24.04

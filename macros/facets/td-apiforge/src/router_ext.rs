@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 use crate::attributes::{extract_result_types, extract_type_in_generic_argument};

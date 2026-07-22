@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 /// Tests for the `#[dxo]` module-level macro: verifies field inheritance via

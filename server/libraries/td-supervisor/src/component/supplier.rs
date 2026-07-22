@@ -1,5 +1,5 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2024 Tabsdata Inc.
 //
 
 //! Module that provides all the required resources to run a worker under Tabsdata system.

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end BigQuery plugin tests against real BigQuery + GCS.
 
 BigQuery and GCS are managed services -- there is no per-test

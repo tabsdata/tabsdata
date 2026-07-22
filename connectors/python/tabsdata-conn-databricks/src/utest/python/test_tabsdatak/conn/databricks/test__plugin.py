@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Unit tests for the Databricks plugin -- error wrapping behaviour,
 DestDef / SrcDef wiring, and the _is_connection_error classifier.
 

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """db2 domains are SCHEMAS inside one shared 'XP' database (db names cap at 8
 chars, too short for the prefixed domain names; schemas allow 128). We connect
 as the instance user (db2inst1) with currentSchema pinned — no per-domain OS

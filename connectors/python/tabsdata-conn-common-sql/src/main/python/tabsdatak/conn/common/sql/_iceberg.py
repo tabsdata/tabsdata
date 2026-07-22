@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Iceberg-style schema evolution infrastructure shared by SQL
 connectors.
 

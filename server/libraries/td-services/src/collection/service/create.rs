@@ -1,5 +1,5 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2024 Tabsdata Inc.
 //
 
 //! Create a collection. A source/destination collection is created WITH its

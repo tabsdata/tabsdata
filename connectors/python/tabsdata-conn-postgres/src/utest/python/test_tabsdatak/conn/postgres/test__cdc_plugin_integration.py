@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end Postgres CDC integration tests against a real
 logical-replication-enabled Postgres instance.
 

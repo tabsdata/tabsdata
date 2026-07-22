@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for ``_bulk_loader.py`` phase orchestration -- focused on the
 ``if_table_exists='replace'`` contract: the target is dropped *before* the
 create/verify loop, so a re-run recreates it fresh (and a same-name re-run can

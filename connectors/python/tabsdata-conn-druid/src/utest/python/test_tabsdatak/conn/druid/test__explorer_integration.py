@@ -1,5 +1,5 @@
 #
-#  Copyright 2026. Tabs Data Inc.
+#  Copyright 2026 Tabsdata Inc.
 #
 
 """``DruidConnectionExplorer`` catalog tests against a real Druid cluster.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 set -euo pipefail

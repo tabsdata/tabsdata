@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Sqlite-backed fixtures for the conn-common-sql ``_engine`` tests.
 
 The engine layer (``SqlReadEngine`` / ``SqlWriteEngine``) is

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Public API for declaring tabsdata flows.
 
 A flow is built from four decorated functions:

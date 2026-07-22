@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 use crate::metrics::layers::{build_inflight_response, build_inflight_response_global};

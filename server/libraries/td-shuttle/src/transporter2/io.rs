@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Object-store IO: resolve a [`Location`] (`{ uri, configs }`) to a backend

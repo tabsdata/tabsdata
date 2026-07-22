@@ -1,5 +1,5 @@
 //
-//   Copyright 2024 Tabs Data Inc.
+//   Copyright 2024 Tabsdata Inc.
 //
 
 //! Wrapper for axum::extract::JSON to control error handling.

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """``PostgresCdcStreamSrcPlugin`` -- assert the StreamSrcDef shape
 and that ``run`` wires a Wal2JsonIngester + run_cdc with the right
 config translated from the user-facing ``src_cfg``."""

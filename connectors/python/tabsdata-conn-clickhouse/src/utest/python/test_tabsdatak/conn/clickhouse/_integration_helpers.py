@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Shared helpers for the ClickHouse integration test files.
 
 Lives in a private (underscore-prefixed) module so pytest doesn't

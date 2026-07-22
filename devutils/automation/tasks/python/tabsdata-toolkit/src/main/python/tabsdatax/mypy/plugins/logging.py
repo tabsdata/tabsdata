@@ -1,5 +1,5 @@
 #
-#  Copyright 2026 Tabs Data Inc.
+#  Copyright 2026 Tabsdata Inc.
 #
 
 """A mypy plugin that forbids logging configuration calls inside ``tabsdatak``.

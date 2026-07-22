@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 use sea_query::{DynIden, Expr, ExprTrait, Func, Iden, Order, OverStatement, Query, WindowStatement};

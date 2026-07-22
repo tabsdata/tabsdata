@@ -1,5 +1,5 @@
 //
-// Copyright 2025. Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 use crate::auth::layers::create_access_token::create_access_token;

@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 from __future__ import annotations
@@ -124,7 +124,7 @@ FALSE_VALUES = {FALSE_0, FALSE_FALSE, FALSE_NO, FALSE_N, FALSE_OFF}
 
 NO_VERSION = "♾️"
 
-COPYRIGHT_HEADER = "#\n# Copyright {} Tabs Data Inc.\n#\n\n"
+COPYRIGHT_HEADER = "#\n# Copyright {} Tabsdata Inc.\n#\n\n"
 
 INTERNAL_ERROR_MESSAGE = (
     "Internal error: {}. Contact Tabsdata for help and to report it."

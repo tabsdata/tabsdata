@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """tdx.py routes s3 / mysql / snowflake through the unified systems/ registry
 (not the container/cloud/saas category branches). Exercised end-to-end through
 the real tdx verb functions with the docker / boto3 / connector layers faked."""

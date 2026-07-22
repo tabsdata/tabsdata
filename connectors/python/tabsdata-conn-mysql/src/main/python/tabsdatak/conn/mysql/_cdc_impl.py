@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """MySQL CDC implementation -- dialect + binlog ingester.
 
 Mirrors the layering of the batch side (``_impl.py``): the connector

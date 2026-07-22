@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Postgres CDC plugin glue.
 
 Mirrors the layering of the batch side (``_plugin.py`` / ``_impl.py``):

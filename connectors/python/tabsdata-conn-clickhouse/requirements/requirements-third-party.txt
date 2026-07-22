@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 # Required at runtime by ``_id.new_upload_id`` (UUIDv7 backing for

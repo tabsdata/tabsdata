@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Confluent-Schema-Registry serdes.
 
 Confluent's wire format prepends a 5-byte header to every payload:

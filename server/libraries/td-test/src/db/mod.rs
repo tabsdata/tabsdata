@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Db-backed test setup. The macro `#[td_test::test(db, ...)]` expands to one

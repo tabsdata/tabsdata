@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version};

@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Mint-at-dispatch: mint FR + output TDV placeholders for each ready LFR in

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for tabsdatax.itest.tdksystems.shell — pure-Python helpers (no docker)."""
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! [`AdminPool`] — the privileged admin/upgrader pool used by the `components` module.

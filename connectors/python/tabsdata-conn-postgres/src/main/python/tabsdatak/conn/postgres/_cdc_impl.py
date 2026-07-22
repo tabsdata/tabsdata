@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Postgres CDC implementation -- dialect + wal2json logical-decoding
 ingester.
 

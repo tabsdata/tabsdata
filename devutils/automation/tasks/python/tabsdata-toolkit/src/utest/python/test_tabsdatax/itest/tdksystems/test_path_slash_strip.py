@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """`tdx-system` / `tdx-domain` never rewrite a given path: SYS_PATH / BASE_PATH
 are stored and resolved exactly as given — leading, trailing and inner slashes
 are all preserved, for object stores, file-staging containers and fs alike.

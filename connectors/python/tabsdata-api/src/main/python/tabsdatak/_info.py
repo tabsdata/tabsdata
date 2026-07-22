@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Function descriptors built by the user-facing decorators.
 
 The four decorators in :mod:`tabsdatak.api` (``@publisher``,

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Compile a Protocol Buffers schema string into a Python message
 class. Used by every Protobuf serde variant (no-SR, Confluent SR,
 Glue SR) to recover a ``message_class`` from the user-supplied

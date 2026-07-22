@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """``build_serde`` dispatcher + ``build_schema_registry_client``
 factory."""
 

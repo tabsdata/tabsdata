@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Internal framework primitives shared across :mod:`tabsdatak.api`
 / :mod:`tabsdatak.spi` / :mod:`tabsdatak._info`.
 

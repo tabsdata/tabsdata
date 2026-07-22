@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Integration tests: every bundled model can generate data end-to-end.
 
 Strategy: spin up one shared `fs` system (no docker required) and, per model,

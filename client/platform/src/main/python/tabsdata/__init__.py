@@ -332,7 +332,7 @@ Registering and Executing Functions
 """
 
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 # This must be done early, as other imports might be importing packages that require

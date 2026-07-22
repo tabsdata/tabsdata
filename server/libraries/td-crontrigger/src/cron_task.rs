@@ -1,5 +1,5 @@
 //
-// Copyright 2026. Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! A `Task` implementation that runs another `Task` on a cron schedule.

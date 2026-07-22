@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Cross-connector pydantic validators shared by every
 ``tabsdatak.conn.*`` package: fully-qualified-name parsing,
 identifier shape checks, conn_cfg / src_cfg / dest_cfg key-set

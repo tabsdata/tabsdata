@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 # Shell emulator of td_ec (Dummy Ephemeral Worker): 60 ticks at 1 s
 # intervals, then exits. Used by kprofile development manifests in the

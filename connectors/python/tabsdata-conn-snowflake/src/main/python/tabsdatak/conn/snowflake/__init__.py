@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Snowflake connector — public API.
 
 Defines the dataclasses a flow author wires onto a publisher,

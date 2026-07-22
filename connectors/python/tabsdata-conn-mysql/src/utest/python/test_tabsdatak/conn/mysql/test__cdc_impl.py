@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """``_cdc_impl.py`` -- pure-function coverage for the MySQL CDC
 dialect, binlog ingester and offset. Catalog / engine calls
 (``server_timezone``, ``get_catalog_columns``, stream init,

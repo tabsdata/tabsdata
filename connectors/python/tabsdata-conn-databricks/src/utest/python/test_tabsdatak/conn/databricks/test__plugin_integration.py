@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end Databricks plugin tests against a real Databricks
 workspace.
 

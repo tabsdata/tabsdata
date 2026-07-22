@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Oracle connector — public API.
 
 * :class:`OracleSrcConn` / :class:`OracleDestConn` -- per-instance Oracle connection.

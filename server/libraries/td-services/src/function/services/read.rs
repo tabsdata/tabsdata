@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 use crate::function::layers::read::{map_create_worker, vec_create_table_dependency};

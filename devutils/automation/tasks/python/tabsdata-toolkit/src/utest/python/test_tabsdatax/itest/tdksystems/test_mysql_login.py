@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """MySQL domain login: the per-domain user is the database name, trimmed to
 MySQL's 32-char login limit (with a warning when trimming risks a collision).
 The database itself keeps the full name (MySQL's 64-char identifier limit)."""

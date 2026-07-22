@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Databricks connector — public API.
 
 * :class:`DatabricksConn` -- per-workspace connection (host_url,

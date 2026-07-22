@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for tabsdatax.itest.tdksystems.errors."""
 from __future__ import annotations
 

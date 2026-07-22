@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Kafka stream-source consumer + buffer.
 
 The wire-format (de)serialisers live in the

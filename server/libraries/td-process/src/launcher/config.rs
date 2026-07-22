@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 use crate::launcher::cli::{move_to_dir, obtain_config_dir, obtain_current_dir};

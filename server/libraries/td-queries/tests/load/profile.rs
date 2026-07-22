@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Dataset sizes, selected by `TD_QUERY_LOAD_PROFILE` (`smoke` | `load` |

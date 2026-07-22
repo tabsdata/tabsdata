@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """No-schema-registry serdes.
 
 The schema lives client-side (the user supplies it as a string

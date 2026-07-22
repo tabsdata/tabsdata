@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 [tasks.__os__lock_py_ta_features]
@@ -165,11 +165,11 @@ script = [
 
     debug "📝 Adding copyright header to tabsdata-requirements.txt"
     content = readfile ./variant/resources/lock/tabsdata-requirements.txt
-    writefile ./variant/resources/lock/tabsdata-requirements.txt "#\n# Copyright ${current_year} Tabs Data Inc.\n#\n\n${content}"
+    writefile ./variant/resources/lock/tabsdata-requirements.txt "#\n# Copyright ${current_year} Tabsdata Inc.\n#\n\n${content}"
 
     debug "📝 Adding copyright header to tabsdata-requirements-dev.txt"
     content = readfile ./variant/resources/lock/tabsdata-requirements-dev.txt
-    writefile ./variant/resources/lock/tabsdata-requirements-dev.txt "#\n# Copyright ${current_year} Tabs Data Inc.\n#\n\n${content}"
+    writefile ./variant/resources/lock/tabsdata-requirements-dev.txt "#\n# Copyright ${current_year} Tabsdata Inc.\n#\n\n${content}"
     ''']
 
 [tasks.__os__lock_py_connectors]

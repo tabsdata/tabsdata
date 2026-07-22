@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end Db2 CDC integration tests against a real Db2
 instance with a hand-built IBM SQL Replication apparatus.
 

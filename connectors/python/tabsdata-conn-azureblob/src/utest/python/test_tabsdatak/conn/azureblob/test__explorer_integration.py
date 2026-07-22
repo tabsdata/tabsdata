@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end ``AzureBlobConnectionExplorer`` tests against a real Azure
 Blob Storage container.
 

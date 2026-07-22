@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """AWS Glue Schema Registry serdes.
 
 AWS Glue's wire format prepends an 18-byte header to every

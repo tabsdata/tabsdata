@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """fs fixture + the shared load/validate engine in `backend`, and the
 declaration markers that inject declared systems/domains by name.
 

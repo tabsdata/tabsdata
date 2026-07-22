@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 # Worker capacity: set to 16 to match the default pytest-xdist worker count.
 # See each test's docstring in test_output_druid.py for per-test slot usage.
 

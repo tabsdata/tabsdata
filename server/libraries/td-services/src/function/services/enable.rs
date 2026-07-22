@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 use crate::function::layers::enable::{update_function_db_builder, update_table_db_builder};

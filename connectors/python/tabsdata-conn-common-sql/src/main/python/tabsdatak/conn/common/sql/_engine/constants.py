@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 from tabsdatak.conn.common import _config
 
 SQL_KEY_PREFIX = _config.TABSDATA_CFG_PREFIX + "sql."

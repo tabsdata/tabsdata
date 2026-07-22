@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 // So absolute paths emitted by the `tm-test` proc macro (`::td_test::...`)

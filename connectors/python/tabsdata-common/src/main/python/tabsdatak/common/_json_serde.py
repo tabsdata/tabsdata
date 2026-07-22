@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Visitor helpers for the dict-representation of a `_JsonSerde` subclass,
 plus the secret dehydrate/hydrate pipeline built on top.
 

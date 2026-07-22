@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """``_stream_plugin.py`` -- StreamSrcDef shape, rollover-cfg
 resolution, and ``run()`` wiring (consumer patched out)."""
 

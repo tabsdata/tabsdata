@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 """End-to-end S3 integration tests: invoke ``td_transporter2`` against a real

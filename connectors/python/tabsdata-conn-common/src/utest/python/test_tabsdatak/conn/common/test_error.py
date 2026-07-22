@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 from __future__ import annotations
 
 from tabsdatak.error import DEBUG_FRAMES_ENV_VAR, TabsdataException

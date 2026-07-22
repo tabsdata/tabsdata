@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Provision backends for the fixture tests by running the REAL `tdx-system` /
 `tdx-domain` create path (with the live provisioning I/O stubbed), so the
 fixtures are exercised against exactly the descriptors tdx writes — not

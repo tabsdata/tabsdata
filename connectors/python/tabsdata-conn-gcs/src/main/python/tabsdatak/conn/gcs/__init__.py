@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """GCS connector — public API.
 
 * :class:`GCSSrcConn` / :class:`GCSDestConn` -- per-GCS connection

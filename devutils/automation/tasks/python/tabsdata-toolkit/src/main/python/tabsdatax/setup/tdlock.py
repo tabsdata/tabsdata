@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 import logging
@@ -46,7 +46,7 @@ def write_requirements_lock(requirements, output_path, cwd=None):
             with open(output_path, "r") as f:
                 content = f.read()
             year = datetime.now().year
-            header = f"#\n# Copyright {year} Tabs Data Inc.\n#\n\n"
+            header = f"#\n# Copyright {year} Tabsdata Inc.\n#\n\n"
             with open(output_path, "w") as f:
                 f.write(header + content)
             return

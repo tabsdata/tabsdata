@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """_wait_ready aborts immediately when _readiness_fatal reports an
 unrecoverable state (e.g. StarRocks' BE crash-loop), instead of burning the
 whole timeout."""

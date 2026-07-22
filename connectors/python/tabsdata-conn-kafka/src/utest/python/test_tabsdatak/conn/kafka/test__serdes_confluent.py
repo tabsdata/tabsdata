@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Confluent SR serdes: schema-id extraction + compat checker.
 
 The serializer / deserializer callables wrap the confluent-kafka

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """bigquery: a managed warehouse (datasets) staged through a GCS bucket. The
 system takes project / service-account-key / bucket / sys-path; a domain is
 named like every other system — the domain NAME is both the dataset and the GCS

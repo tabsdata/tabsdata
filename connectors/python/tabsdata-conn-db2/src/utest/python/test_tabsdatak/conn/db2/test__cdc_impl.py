@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """``_cdc_impl.py`` -- pure-function coverage for the Db2 CDC
 dialect, CD-column matcher, SQL Replication ingester and offset.
 Catalog / engine calls (``server_timezone``,

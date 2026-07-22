@@ -1,5 +1,5 @@
 <!--
-Copyright 2025 Tabs Data Inc.
+Copyright 2025 Tabsdata Inc.
 -->
 
 <p align="center" style="font-size:24px; color: #FD9A00;">

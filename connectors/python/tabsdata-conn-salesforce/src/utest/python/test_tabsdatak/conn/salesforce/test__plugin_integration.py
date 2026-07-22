@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end Salesforce integration tests against a real Salesforce
 org. Skipped unless ALL of these are set:
 

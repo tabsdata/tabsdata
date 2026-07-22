@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for the annotation rewriter / alias redefinition (Option C, no leaks)."""
 
 from tabsdatax.generator.tableframe.engine.generate.annotations import (

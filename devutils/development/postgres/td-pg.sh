@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 #
+# Copyright 2026 Tabsdata Inc.
+#
+
+#
 # Dev helper: spin up a local PostgreSQL container for tabsdata.
 #
 # Usage:

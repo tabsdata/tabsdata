@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! `GET /api/v1/resources/{*path}` — serve a file from the apiserver's

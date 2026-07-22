@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """ClickHouse domains are databases with a dedicated owner user. Beyond owning
 its database, that user needs the global privileges the s3/gcs staged INSERT
 relies on (the ``s3()`` table function reads into a temporary table)."""

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for tdx._prepare_descriptor_path -- the pre-write checkpoint shared by
 `create`, `connect` and `domain create`. It refuses to clobber an existing
 descriptor and creates the descriptor's parent directory, so a `<dir>/<file>`

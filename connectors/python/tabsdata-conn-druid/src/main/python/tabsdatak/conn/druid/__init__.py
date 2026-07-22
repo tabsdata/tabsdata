@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Apache Druid connector — public API.
 
 * :class:`DruidDestConn` -- per-Druid-Overlord connection.

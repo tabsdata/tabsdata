@@ -1,5 +1,5 @@
 #
-# Copyright 2025å Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 import tabsdata as td

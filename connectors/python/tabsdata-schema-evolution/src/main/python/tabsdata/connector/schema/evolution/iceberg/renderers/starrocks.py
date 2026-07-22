@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 """StarRocks-specific schema evolution: renderer, type helpers, and schema conversion.

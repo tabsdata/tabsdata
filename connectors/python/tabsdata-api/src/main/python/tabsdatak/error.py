@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Error machinery for the tabsdata API.
 
 Every framework error flows through three layers:

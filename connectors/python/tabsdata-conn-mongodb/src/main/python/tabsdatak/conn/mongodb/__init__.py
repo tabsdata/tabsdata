@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """MongoDB connector — public API.
 
 * :class:`MongoDBDestConn` -- per-cluster MongoDB connection

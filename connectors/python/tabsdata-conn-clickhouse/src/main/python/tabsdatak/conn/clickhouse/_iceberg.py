@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """ClickHouse-specific Iceberg schema-evolution renderer + helpers.
 
 The dialect-agnostic infrastructure (models, delta core,

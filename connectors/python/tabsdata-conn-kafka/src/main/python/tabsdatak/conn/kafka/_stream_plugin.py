@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Kafka stream-source plugin glue.
 
 Mirrors the layering of the CDC sides (``_cdc_plugin.py`` /

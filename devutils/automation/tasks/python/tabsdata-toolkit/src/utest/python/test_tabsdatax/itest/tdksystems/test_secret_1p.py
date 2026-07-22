@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Unit tests for the 1Password secret provider (`tabsdatax.itest.tdksystems.secret_1p`).
 
 We exercise the parts that don't need the real `op` CLI: name normalisation,

@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Post-run analysis over the JSONL the cases emit. `#[ignore]`: they read a

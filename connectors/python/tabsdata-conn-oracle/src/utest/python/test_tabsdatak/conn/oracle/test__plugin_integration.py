@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end Oracle plugin tests against a real Oracle instance.
 
 The ``fresh_oracle`` fixture (defined in ``conftest.py``) provisions a

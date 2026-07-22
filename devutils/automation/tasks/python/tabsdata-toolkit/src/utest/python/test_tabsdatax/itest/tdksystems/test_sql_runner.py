@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for tabsdatax.itest.tdksystems.sql_runner — uses an in-memory SQLite engine so we
 exercise the real SQLAlchemy code path without any external DB."""
 from __future__ import annotations

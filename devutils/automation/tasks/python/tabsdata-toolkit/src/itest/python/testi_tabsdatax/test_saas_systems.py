@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Integration tests for saas systems: databricks / snowflake / salesforce.
 
 Mirrors test_cloud_systems.py but with schema-based domain semantics:

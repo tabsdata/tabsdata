@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """AWS Glue SR serdes: wire-header parsing + round-trips against
 a mocked boto3 ``glue`` client."""
 

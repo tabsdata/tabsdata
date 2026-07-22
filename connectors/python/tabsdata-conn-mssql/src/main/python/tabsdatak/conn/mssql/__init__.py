@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """MSSQL connector — public API.
 
 * :class:`MSSQLSrcConn` / :class:`MSSQLDestConn` -- per-instance MSSQL connection.

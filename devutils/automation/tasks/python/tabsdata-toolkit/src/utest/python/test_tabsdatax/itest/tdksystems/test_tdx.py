@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for the tdx-system / tdx-domain command layer (tabsdatax.itest.tdksystems.tdx).
 
 We exercise the fs backend end-to-end (no Docker / creds needed) plus the

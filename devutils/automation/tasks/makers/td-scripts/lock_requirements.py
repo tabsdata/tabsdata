@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 import argparse
@@ -174,7 +174,7 @@ def gather_polars_modules(root: str) -> list[tuple[str, str]]:
 def lock_requirements_dev(root: str, connectors: list[tuple[str, str]], year: int):
     dev_lines = [
         "#\n",
-        f"# Copyright {year} Tabs Data Inc.\n",
+        f"# Copyright {year} Tabsdata Inc.\n",
         "#\n",
         "\n",
         (
@@ -213,7 +213,7 @@ def lock_requirements_dev(root: str, connectors: list[tuple[str, str]], year: in
 def lock_requirements_test(root: str, connectors: list[tuple[str, str]], year: int):
     test_lines = [
         "#\n",
-        f"# Copyright {year} Tabs Data Inc.\n",
+        f"# Copyright {year} Tabsdata Inc.\n",
         "#\n",
         "\n",
         (
@@ -249,7 +249,7 @@ def lock_requirements_dev_first_party(
 ):
     dev_lines = [
         "#\n",
-        f"# Copyright {year} Tabs Data Inc.\n",
+        f"# Copyright {year} Tabsdata Inc.\n",
         "#\n",
         "\n",
     ]
@@ -270,7 +270,7 @@ def lock_requirements_first_party(
 ):
     dev_lines = [
         "#\n",
-        f"# Copyright {year} Tabs Data Inc.\n",
+        f"# Copyright {year} Tabsdata Inc.\n",
         "#\n",
         "\n",
     ]
@@ -291,7 +291,7 @@ def lock_requirements_third_party_all(
 ):
     test_lines = [
         "#\n",
-        f"# Copyright {year} Tabs Data Inc.\n",
+        f"# Copyright {year} Tabsdata Inc.\n",
         "#\n",
         "\n",
         "-r requirements-third-party.txt\n",

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 # Shell emulator of td_ac (Dummy Application Worker): runs forever,
 # ticks every 30 s. Used by kprofile development manifests in the

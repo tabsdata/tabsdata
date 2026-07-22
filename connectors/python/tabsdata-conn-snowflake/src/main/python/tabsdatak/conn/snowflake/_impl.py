@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Snowflake adapter: every driver-touching piece used by ``_plugin.py``.
 
 The legacy :class:`tabsdata.connector.snowflake._connector.SnowflakeDestination`

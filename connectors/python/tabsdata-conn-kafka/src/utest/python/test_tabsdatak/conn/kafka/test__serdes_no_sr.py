@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """No-schema-registry serdes: ``JsonKafkaSerde`` /
 ``AvroKafkaSerde`` / ``ProtobufKafkaSerde``."""
 

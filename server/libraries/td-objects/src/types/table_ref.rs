@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 use crate::parse::{parse_table_ref, parse_versioned_table_ref, parse_versions};

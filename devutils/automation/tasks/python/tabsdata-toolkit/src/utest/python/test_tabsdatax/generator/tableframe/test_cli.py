@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Smoke tests for the rich-click CLI."""
 
 from click.testing import CliRunner

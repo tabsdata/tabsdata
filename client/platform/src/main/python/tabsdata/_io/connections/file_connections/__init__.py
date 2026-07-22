@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 """Cloud storage connection classes: S3Conn, GCSConn, AzureConn."""

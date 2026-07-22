@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 pub const ACCEPT_TERMS_ARGUMENT: &str = "--accept-terms";

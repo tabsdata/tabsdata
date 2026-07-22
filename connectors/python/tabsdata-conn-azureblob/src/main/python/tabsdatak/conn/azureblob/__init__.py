@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Azure Blob connector — public API.
 
 * :class:`AzureBlobSrcConn` / :class:`AzureBlobDestConn` -- per-Azure

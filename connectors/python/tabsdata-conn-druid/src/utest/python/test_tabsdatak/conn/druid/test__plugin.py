@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Unit tests for the Druid plugin -- fault-injection via mocks.
 
 The real-Druid happy paths live in ``test__plugin_integration.py``.

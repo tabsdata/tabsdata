@@ -7,7 +7,7 @@ __path__ = pkgutil.extend_path(__path__, __name__)
 # PyCharm correctly recognizes namespace packages.
 
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 import pytest

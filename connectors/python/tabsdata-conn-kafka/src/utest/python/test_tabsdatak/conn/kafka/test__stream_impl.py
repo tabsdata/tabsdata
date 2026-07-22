@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """``_stream_impl.py`` -- consumer + buffer + kafka-config builder
 pure-function coverage. Real broker calls live in
 ``test__stream_plugin_integration.py``."""

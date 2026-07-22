@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Serde dispatcher + schema-registry client factory.
 
 The connector's plugin calls :func:`build_serde` once per session

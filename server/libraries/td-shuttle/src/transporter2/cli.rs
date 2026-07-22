@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! `td_transporter2` CLI: `td_transporter2 <find|find-copy|copy|delete|samples>

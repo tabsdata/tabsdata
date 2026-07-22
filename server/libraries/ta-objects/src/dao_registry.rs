@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Registry of every read [`Dao`](crate::Dao), populated by the `#[Dao]`

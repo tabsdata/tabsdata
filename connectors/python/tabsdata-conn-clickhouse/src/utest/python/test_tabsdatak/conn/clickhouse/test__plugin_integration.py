@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end ClickHouse plugin tests against a real ClickHouse
 instance.
 

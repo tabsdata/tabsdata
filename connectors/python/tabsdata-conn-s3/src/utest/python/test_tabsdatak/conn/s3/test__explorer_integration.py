@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end ``S3ConnectionExplorer`` tests against a real S3 bucket.
 
 The ``s3_world_xs`` domain (provisioned by tdx) holds the world dataset laid

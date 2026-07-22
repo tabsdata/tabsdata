@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """mssqlserver domains are DATABASES, each with a dedicated login that owns it.
 Destroy drops the database (after forcing it single-user) and the login. A
 destroy of a database that is already gone (container restarted with lost data,

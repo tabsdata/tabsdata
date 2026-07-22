@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Databricks adapter: every driver-touching piece used by
 ``_plugin.py``.
 

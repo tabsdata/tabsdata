@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end ``Db2ConnectionExplorer`` tests against a real Db2 instance.
 
 The ``db2_world_xs`` domain (provisioned by tdx) seeds the connecting user's

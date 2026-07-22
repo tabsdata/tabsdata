@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Integration test: full lifecycle of a `dev` (no-op) system + domain via the
 tdx CLI.
 

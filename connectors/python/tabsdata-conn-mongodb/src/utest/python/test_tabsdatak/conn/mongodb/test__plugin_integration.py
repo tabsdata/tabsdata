@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end MongoDB integration tests: invoke the destination plugin
 against a real MongoDB server.
 

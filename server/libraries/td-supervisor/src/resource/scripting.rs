@@ -1,5 +1,5 @@
 //
-// Copyright 2024 Tabs Data Inc.
+// Copyright 2024 Tabsdata Inc.
 //
 
 use std::fs::File;
@@ -45,9 +45,9 @@ impl ScriptBuilder {
     const CONTEXT: [&'static str; 2] = ["@echo off", "setlocal"];
 
     #[cfg(not(windows))]
-    const COPYRIGHT: [&'static str; 3] = ["#", "# Copyright 2024 Tabs Data Inc.", "#"];
+    const COPYRIGHT: [&'static str; 3] = ["#", "# Copyright 2024 Tabsdata Inc.", "#"];
     #[cfg(windows)]
-    const COPYRIGHT: [&'static str; 3] = ["@rem", "@rem Copyright 2024 Tabs Data Inc.", "@rem"];
+    const COPYRIGHT: [&'static str; 3] = ["@rem", "@rem Copyright 2024 Tabsdata Inc.", "@rem"];
 
     #[cfg(not(windows))]
     const MAIN_CALL: [&'static str; 0] = [];

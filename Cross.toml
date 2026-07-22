@@ -1,5 +1,5 @@
 #
-# Copyright 2024 Tabs Data Inc.
+# Copyright 2024 Tabsdata Inc.
 #
 
 # docker run -it --rm --platform linux/amd64 ghcr.io/cross-rs/x86_64-unknown-linux-musl:main bash

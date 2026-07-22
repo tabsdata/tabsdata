@@ -1,5 +1,5 @@
 #
-# Copyright {c.year} Tabs Data Inc.
+# Copyright {c.year} Tabsdata Inc.
 #
 
 from __future__ import annotations

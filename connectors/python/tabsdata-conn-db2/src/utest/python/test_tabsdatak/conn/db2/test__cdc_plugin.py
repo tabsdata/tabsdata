@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """``Db2CdcStreamSrcPlugin`` -- assert the StreamSrcDef shape
 and that ``run`` wires a SqlReplicaIngester + run_cdc with the right
 config translated from the user-facing ``src_cfg``."""

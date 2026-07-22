@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for the .pyi merge/preserve behavior on regeneration."""
 
 import pytest

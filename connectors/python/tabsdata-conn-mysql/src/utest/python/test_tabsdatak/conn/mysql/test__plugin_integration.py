@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end MySQL plugin tests against a real MySQL instance.
 
 The ``fresh_mysql`` fixture (defined in ``conftest.py``) provisions a

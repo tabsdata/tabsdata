@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Abstract base for Kafka (de)serialisers.
 
 Every concrete serde implements:

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end Iceberg schema-evolution tests for the ClickHouse
 destination plugin.
 

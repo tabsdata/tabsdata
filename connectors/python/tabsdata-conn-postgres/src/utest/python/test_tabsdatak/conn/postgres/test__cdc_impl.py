@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """``_cdc_impl.py`` -- pure-function coverage for the Postgres CDC
 dialect, wal2json ingester and offset. Catalog / engine calls
 (``server_timezone``, ``get_catalog_columns``, slot create /

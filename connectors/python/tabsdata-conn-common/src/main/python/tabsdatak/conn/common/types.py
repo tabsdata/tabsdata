@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Cross-connector type shapes shared by every ``tabsdatak.conn.*``
 package.
 

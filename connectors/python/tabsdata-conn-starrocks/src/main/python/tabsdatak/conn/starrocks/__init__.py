@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """StarRocks connector — public API.
 
 * :class:`StarRocksDestConn` -- per-cluster StarRocks connection

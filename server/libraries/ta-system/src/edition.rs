@@ -1,5 +1,5 @@
 //
-// Copyright 2025 Tabs Data Inc.
+// Copyright 2025 Tabsdata Inc.
 //
 
 pub const OPEN_SOURCE_EDITION_LABEL: &str = "opensource";

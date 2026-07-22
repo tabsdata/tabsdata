@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """`tdx-system connect`: open an SSH tunnel to a remote container system and
 write a LOCAL system descriptor pointing at localhost:<tunnel-port>. The remote
 descriptor is decrypted with the server secret (--remote-secret-env); the local

@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 """Load a stored connection into a live :class:`~tabsdatak.spi.Conn`.

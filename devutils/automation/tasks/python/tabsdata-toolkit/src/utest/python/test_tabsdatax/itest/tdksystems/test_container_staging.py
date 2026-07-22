@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """File-staging container systems (clickhouse / starrocks) carry a staging-root
 SYS_PATH on the system and a full BASE_PATH (= SYS_PATH/<domain>) on each domain
 — mirroring the cloud/fs systems."""

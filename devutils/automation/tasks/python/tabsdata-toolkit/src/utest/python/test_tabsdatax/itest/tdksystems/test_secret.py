@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Unit tests for the pluggable secret registry (`tabsdatax.itest.tdksystems.secret`):
 `--set <PROVIDER>:<REF>` parsing, provider dispatch, and `--out` rendering."""
 from __future__ import annotations

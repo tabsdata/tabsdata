@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for cloud helpers — path normalisation, prefix handling, walk_paths."""
 from __future__ import annotations
 

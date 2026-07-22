@@ -1,5 +1,5 @@
 #
-#  Copyright 2026 Tabs Data Inc.
+#  Copyright 2026 Tabsdata Inc.
 #
 
 """``tabsdatak.cli.td.config_utils`` -- the variant-action config loader.

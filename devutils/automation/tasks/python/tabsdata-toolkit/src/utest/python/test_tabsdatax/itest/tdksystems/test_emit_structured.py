@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for the emit additions backing the kafka + saas-sql loaders:
 the schema sidecar (gated on TDX_SCHEMA_SIDECAR), read_structured, and
 batched iter_insert_statements."""

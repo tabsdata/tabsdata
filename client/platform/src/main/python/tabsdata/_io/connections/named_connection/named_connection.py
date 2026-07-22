@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 import os
 from dataclasses import dataclass
 from enum import Enum

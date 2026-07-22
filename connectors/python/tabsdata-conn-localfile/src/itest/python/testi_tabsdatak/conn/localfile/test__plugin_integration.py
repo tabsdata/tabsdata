@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end LocalFile integration tests: invoke ``td_transporter2``
 against real filesystem paths. Requires the ``td_transporter2`` binary in the
 active Python environment's scripts folder (hydration is mandatory; a missing

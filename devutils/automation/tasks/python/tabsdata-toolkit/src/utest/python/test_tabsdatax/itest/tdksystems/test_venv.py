@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for the self-managing uv-venv bootstrap (`_venv`) and its CLI wiring.
 
 The actual venv creation/install shells out to `uv`; these tests cover the

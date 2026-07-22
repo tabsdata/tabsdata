@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Integration: `tdx-system connect` over SSH, tunnelling to localhost.
 
 Stands up a real mysql container (the "server"), then connects to it through an

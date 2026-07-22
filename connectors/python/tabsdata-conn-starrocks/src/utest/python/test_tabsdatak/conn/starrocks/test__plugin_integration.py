@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end StarRocks plugin tests against a real StarRocks instance.
 
 The ``fresh_starrocks`` fixture (defined in ``conftest.py``) provisions a

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for report comparison."""
 
 from tabsdatax.generator.tableframe.engine.compare import compute_diff

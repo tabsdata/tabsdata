@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end Db2 plugin tests against a real Db2 instance.
 
 The ``fresh_db2`` fixture (defined in ``conftest.py``) provisions a

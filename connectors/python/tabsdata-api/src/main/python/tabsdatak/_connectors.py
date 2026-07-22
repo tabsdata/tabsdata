@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Connector registry built from the ``tabsdatak.connectors``
 entry-point group.
 

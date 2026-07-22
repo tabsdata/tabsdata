@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """`tdx-system destroy` cascades to dependent domains: refuse unless -f, and
 with -f destroy the domains (ignoring failures) before the system. Uses the
 `dev` (no-op) backend so no external resource / docker is involved."""

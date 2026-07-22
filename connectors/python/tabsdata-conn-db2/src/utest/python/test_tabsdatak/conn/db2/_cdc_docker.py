@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 """Real-``asncap`` CDC fixture machinery for ``tabsdata-conn-db2``.

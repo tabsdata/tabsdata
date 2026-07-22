@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Shared test helpers for connector unit tests.
 
 Lives in sql-common's utest tree so every SQL connector test can

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end Snowflake integration tests: write parquet files to
 real Snowflake tables via SQLAlchemy. Skipped unless ALL of these
 env vars are set:

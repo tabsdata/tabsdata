@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Integration tests that invoke the real ``td_transporter2`` binary.
 
 These tests are skipped unless the ``td_transporter2`` binary is

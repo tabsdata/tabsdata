@@ -1,3 +1,3 @@
 rem
-rem Copyright 2024 Tabs Data Inc.
+rem Copyright 2024 Tabsdata Inc.
 rem

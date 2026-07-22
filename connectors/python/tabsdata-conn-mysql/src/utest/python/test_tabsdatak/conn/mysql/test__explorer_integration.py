@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end ``MySQLConnectionExplorer`` tests against a real MySQL
 instance.
 

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Unit tests for the cloud-storage layer focused on the credential
 surface and the ``s3()`` / ``azureBlobStorage()`` table-function
 strings each ``ClickHouseCloudStorage`` emits.

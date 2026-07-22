@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! The pool's **shared** schema lifecycle: the `tabsdata_system` ledger is created

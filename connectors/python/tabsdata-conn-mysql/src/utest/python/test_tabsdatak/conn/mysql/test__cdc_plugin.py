@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """``MySQLCdcStreamSrcPlugin`` -- assert the StreamSrcDef shape
 and that ``run`` wires a BinlogIngester + run_cdc with the right
 config translated from the user-facing ``src_cfg``."""

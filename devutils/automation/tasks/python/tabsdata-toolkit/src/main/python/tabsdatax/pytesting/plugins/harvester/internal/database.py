@@ -1,5 +1,5 @@
 #
-#  Copyright 2026 Tabs Data Inc.
+#  Copyright 2026 Tabsdata Inc.
 #
 
 """SQLite-based harvester database for fixture timing and other events.

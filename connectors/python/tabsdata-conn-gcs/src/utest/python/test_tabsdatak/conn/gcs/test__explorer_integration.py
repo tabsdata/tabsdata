@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """End-to-end ``GCSConnectionExplorer`` tests against a real GCS bucket.
 
 The ``gcs_world_xs`` domain (provisioned by tdx) holds the world dataset laid

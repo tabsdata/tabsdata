@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for the automated salesforce loader's pure logic — URL→domain
 mapping, value coercion, and parsing the cci load mapping. The org-facing
 parts (snowfakery generation, simple-salesforce login/bulk) need the

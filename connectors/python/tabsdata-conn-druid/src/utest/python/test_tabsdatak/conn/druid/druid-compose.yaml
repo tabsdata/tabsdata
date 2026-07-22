@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 # Docker-compose stack for Apache Druid integration tests.
 #
 # Mirrors the legacy ``client/platform/.../druid-compose.yaml`` shape:

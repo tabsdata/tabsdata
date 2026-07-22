@@ -1,10 +1,10 @@
 //
-// Copyright 2026. Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! A task for executing HTTP requests.
 //
-// Copyright 2026. Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 use crate::task_runner::{Task, TaskRunnerError};

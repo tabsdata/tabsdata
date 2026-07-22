@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Db2 CDC implementation -- dialect + SQL Replication ingester.
 
 Mirrors the layering of the batch side (``_impl.py``): the

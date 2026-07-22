@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for tabsdatax.itest.tdksystems.crypto — the $TD_BACKENDS_CRYPTO_KEY gate and the
 PEM-armored encrypt/decrypt used for descriptor files."""
 from __future__ import annotations

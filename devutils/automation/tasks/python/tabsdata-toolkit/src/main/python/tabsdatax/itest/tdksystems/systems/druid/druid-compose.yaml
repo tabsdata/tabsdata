@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 # Apache Druid single-server cluster for tdx: one ZooKeeper + the five Druid
 # processes (coordinator[+overlord] / broker / historical / middleManager /
 # router) sharing a volume for local deep storage. Only the coordinator (8081,

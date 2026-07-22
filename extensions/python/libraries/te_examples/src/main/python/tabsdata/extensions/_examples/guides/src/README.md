@@ -1,5 +1,5 @@
 <!--
-Copyright 2025 Tabs Data Inc.
+Copyright 2025 Tabsdata Inc.
 -->
 
 <p style="text-align:center; padding-right: 6px;"><img src="/resources/images/tabsdata.png" alt="Tabsdata" width="380"></p>

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Integration test: full lifecycle of an `fs` system + domain via the tdx CLI.
 
 Self-contained — uses a tmp directory under /tmp (so it satisfies fs's

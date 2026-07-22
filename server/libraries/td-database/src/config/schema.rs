@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! [`Schema`] — a PostgreSQL schema name, plus the shared test schema constant.

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """BigQuery connector — public API.
 
 * :class:`BigQueryDestConn` -- per-project BigQuery connection

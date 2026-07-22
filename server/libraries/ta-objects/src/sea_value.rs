@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 /// Typed value trait. Call `.as_sea_value()` to get a `sea_query::Value`

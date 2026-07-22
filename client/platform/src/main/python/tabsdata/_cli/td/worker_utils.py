@@ -1,5 +1,5 @@
 #
-#  Copyright 2026. Tabs Data Inc.
+#  Copyright 2026 Tabsdata Inc.
 #
 import rich_click as click
 from rich.table import Table

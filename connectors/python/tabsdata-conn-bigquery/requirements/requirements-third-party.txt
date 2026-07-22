@@ -1,4 +1,4 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 sqlalchemy-bigquery==1.17.0

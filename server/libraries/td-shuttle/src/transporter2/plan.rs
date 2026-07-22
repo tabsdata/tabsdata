@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! The **pure** router: [`plan`] maps a fully-resolved [`CopySpec`] to a

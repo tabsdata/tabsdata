@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! Seed datasets for the load cases — `metrics_dataset` and `chain_dataset`.

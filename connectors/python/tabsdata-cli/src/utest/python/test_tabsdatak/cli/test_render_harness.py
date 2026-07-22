@@ -1,5 +1,5 @@
 #
-#  Copyright 2026 Tabs Data Inc.
+#  Copyright 2026 Tabsdata Inc.
 #
 
 """Mocked-client renderer harness for the ``tdk`` read commands.

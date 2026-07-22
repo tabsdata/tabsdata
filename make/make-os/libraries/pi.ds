@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabs Data Inc.
+# Copyright 2026 Tabsdata Inc.
 #
 
 # Parse publish/assembly arguments from CARGO_MAKE_TASK_ARGS.

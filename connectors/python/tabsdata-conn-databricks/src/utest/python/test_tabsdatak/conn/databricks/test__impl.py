@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Unit tests for the Databricks impl -- the pure-Python helpers
 that don't need the SDK / SQL connector libraries at module level.
 

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 from typing import Any, Mapping
 
 # noinspection PyProtectedMember

@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Salesforce connector — public API.
 
 * :class:`SalesforceSrcConn` -- per-org connection (token credentials,

@@ -1,10 +1,10 @@
 //
-// Copyright 2026. Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 //! A task for touching a file, typically used for heartbeats.
 //
-// Copyright 2026. Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
 use crate::task_runner::Task;

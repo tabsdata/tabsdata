@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """CONTAINER_ID staleness guard: a container descriptor records the container's
 real docker id (CONTAINER_ID; SYS_CONTAINER_ID on its domains). Reads flag and
 mutations refuse when the live container no longer matches (removed / replaced)."""

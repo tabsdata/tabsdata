@@ -1,5 +1,5 @@
 //
-// Copyright 2026 Tabs Data Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 //! This module provides an ID implementation with human friendly representation
 //! '<KEY><YYYYMMDD>-<COUNTER>' that is 'domain backwards compatible' with base32hex(UUIDv7)

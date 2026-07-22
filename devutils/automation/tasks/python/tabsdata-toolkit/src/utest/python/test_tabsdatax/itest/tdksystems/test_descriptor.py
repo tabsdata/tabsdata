@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for tabsdatax.itest.tdksystems.descriptor — writing connection settings, the
 `stamp` that attaches the tdx identity (name/started/model/data), and the
 `info` renderer (json/export/unset, with unprefixed keys)."""

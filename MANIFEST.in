@@ -1,5 +1,5 @@
 #
-# Copyright 2025 Tabs Data Inc.
+# Copyright 2025 Tabsdata Inc.
 #
 
 recursive-include extensions/python/libraries/te_examples/src/main/python/tabsdata/extensions/_examples/guides/book *

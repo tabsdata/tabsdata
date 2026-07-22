@@ -1,3 +1,7 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
 """Tests for the saas-sql data create / load path (databricks / snowflake),
 with the network-facing `exec_statements` mocked. Verifies the SQL-capability
 gate, DDL table discovery, DDL parity, and the generated DDL/INSERT statements."""
