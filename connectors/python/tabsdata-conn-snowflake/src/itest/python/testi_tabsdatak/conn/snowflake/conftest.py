@@ -38,7 +38,10 @@ class _SnowflakeStore:
         )
 
     def _fq(self, table: str) -> str:
-        return f'"{self._db}"."{self._schema}"."{table}"'
+        # Reference identifiers bare so Snowflake upper-folds them onto the stored
+        # (unquoted, upper-folded) objects tdx provisions — matching the connector.
+        # The scratch table is already upper-case.
+        return f"{self._db}.{self._schema}.{table}"
 
     def read_table(self, table: str) -> pl.DataFrame:
         cur = self._conn.cursor()

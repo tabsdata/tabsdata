@@ -5,7 +5,6 @@
 """Snowflake metadata explorer."""
 
 from sqlalchemy import engine
-from sqlalchemy.sql.elements import quoted_name
 
 from tabsdatak.conn.common.sql._explorer import SqlAlchemyConnectionExplorer
 from tabsdatak.conn.snowflake import SnowflakeDestConn
@@ -22,11 +21,10 @@ class SnowflakeConnectionExplorer(SqlAlchemyConnectionExplorer):
     def schema_filter(self, conn: SnowflakeDestConn) -> str | None:
         if conn.schema is None:
             return None
-        name = conn._schema() or None
-        # Snowflake schema names are case-sensitive as stored; tdx provisions them
-        # lowercase (quoted), so force-quote to reference them verbatim rather than
-        # letting the dialect upper-fold an unquoted name.
-        return quoted_name(name, quote=True) if name else None
+        # Return the plain schema name and let the snowflake-sqlalchemy dialect
+        # (requires_name_normalize=True) denormalize it to the stored,
+        # upper-folded identifier — the same normalization path Oracle/Db2 use.
+        return conn._schema() or None
 
     def system_schemas(self) -> frozenset[str]:
         return frozenset({"INFORMATION_SCHEMA"})
@@ -40,12 +38,6 @@ class SnowflakeConnectionExplorer(SqlAlchemyConnectionExplorer):
             "database": conn._database() if conn.database is not None else "",
             "schema": schema or "",
         }
-
-    def _data_schema(self, entity):
-        # `SQLEntity` coerces the quoted_name back to a plain str, so re-quote
-        # here (as in `schema_filter`) so `data()` references the case-sensitive
-        # schema verbatim rather than letting the dialect upper-fold it.
-        return quoted_name(entity.schema, quote=True) if entity.schema else None
 
     def make_url(self, conn: SnowflakeDestConn) -> engine.URL:
         query: dict[str, str] = {}

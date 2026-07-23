@@ -44,14 +44,15 @@ _SRC_IMPORT = "import polars as pl\nfrom tabsdatak.conn.dev import DataGenSrc, D
 
 
 def _dest_conn(domain: SnowflakeDomain) -> SnowflakeDestConn:
-    # Quote the case-sensitive lower-case tdx schema so USE SCHEMA preserves case.
+    # Pass the schema bare: tdx provisions it unquoted (Snowflake upper-folds it),
+    # so the connector resolves it to the stored, upper-folded identifier.
     return SnowflakeDestConn(
         account=domain.account,
         credentials=UserPassword(
             user=Secret(domain.username), password=Secret(domain.pat)
         ),
         database=domain.database,
-        schema=f'"{domain.schema}"',
+        schema=domain.schema,
         warehouse=domain.warehouse,
     )
 

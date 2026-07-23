@@ -41,16 +41,16 @@ pytestmark = pytest.mark.snowflake
 
 
 def _dest_conn(domain: SnowflakeDomain) -> SnowflakeDestConn:
-    # The tdx schema is a case-sensitive lower-case identifier; quote it so the
-    # session's USE SCHEMA preserves case (unquoted folds to upper case and the
-    # schema is not found -> "session does not have a current schema").
+    # Pass the schema bare: tdx provisions it unquoted (Snowflake upper-folds it),
+    # so the connector references it the same way and Snowflake resolves it to the
+    # stored, upper-folded identifier.
     return SnowflakeDestConn(
         account=domain.account,
         credentials=UserPassword(
             user=Secret(domain.username), password=Secret(domain.pat)
         ),
         database=domain.database,
-        schema=f'"{domain.schema}"',
+        schema=domain.schema,
         warehouse=domain.warehouse,
     )
 

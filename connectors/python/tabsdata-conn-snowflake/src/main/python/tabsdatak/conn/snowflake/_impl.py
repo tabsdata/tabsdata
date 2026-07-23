@@ -129,6 +129,14 @@ def _fq_for_sql(fq_table: str) -> str:
     return fqn(parts, _SNOWFLAKE_FQN_DEF)
 
 
+def _use_ident(name: str) -> str:
+    """Reference `name` in a ``USE DATABASE/SCHEMA``, mirroring snowflake-sqlalchemy
+    name denormalisation: an all-lower-case bare identifier is left UNQUOTED so
+    Snowflake upper-folds it onto the stored object (how tdx provisions schemas —
+    unquoted, upper-folded); any other form is double-quoted to preserve its case."""
+    return name if (name.isidentifier() and name.islower()) else _fq_for_sql(name)
+
+
 def _use_namespace(sf_conn, conn: SnowflakeDestConn) -> None:
     """Force the session onto ``conn``'s database/schema so every bare object
     reference (the stage, unqualified target tables) resolves where the caller
@@ -142,9 +150,9 @@ def _use_namespace(sf_conn, conn: SnowflakeDestConn) -> None:
     schema = conn._schema() if conn.schema is not None else None
     try:
         with sf_conn.cursor() as cur:
-            cur.execute(f"USE DATABASE {_fq_for_sql(database)}")
+            cur.execute(f"USE DATABASE {_use_ident(database)}")
             if schema is not None:
-                cur.execute(f"USE SCHEMA {_fq_for_sql(schema)}")
+                cur.execute(f"USE SCHEMA {_use_ident(schema)}")
     except Exception as e:
         raise SnowflakeErrorCode.SNOWFLAKE_7.exception(
             cause=e, database=database, schema=schema
