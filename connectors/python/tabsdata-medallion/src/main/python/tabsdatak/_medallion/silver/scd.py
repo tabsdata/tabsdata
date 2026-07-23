@@ -7,7 +7,7 @@ from datetime import timezone
 
 import polars as pl
 
-from tabsdatak._medallion._bronze._cdc import OP_DELETE, OP_TOMBSTONE
+from tabsdatak._medallion.bronze.cdc import OP_DELETE, OP_TOMBSTONE
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat, lit
 

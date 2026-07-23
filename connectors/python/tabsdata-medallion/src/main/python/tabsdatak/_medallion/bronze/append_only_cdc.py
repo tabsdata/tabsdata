@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import polars as pl
 
-from tabsdatak._medallion._bronze._cdc import OP_INSERT
+from tabsdatak._medallion.bronze.cdc import OP_INSERT
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat, lit
 

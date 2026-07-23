@@ -9,12 +9,12 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, lit
-from tabsdatak._medallion._gold._dim import (
+from tabsdatak._medallion.gold.dim import (
     _drop_pk,
     build_type1_dim,
     build_type2_dim,
 )
-from tabsdatak._medallion._gold._fact import build_fact
+from tabsdatak._medallion.gold.fact import build_fact
 
 pytestmark = pytest.mark.medallion
 

@@ -9,7 +9,7 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col
-from tabsdatak._medallion._bronze._snapshot_diff_cdc import (
+from tabsdatak._medallion.bronze.snapshot_diff_cdc import (
     OP_DELETE,
     OP_INSERT,
     OP_TOMBSTONE,

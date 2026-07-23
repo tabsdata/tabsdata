@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from functools import reduce
 from operator import or_
 
-from tabsdatak._medallion._bronze._cdc import (
+from tabsdatak._medallion.bronze.cdc import (
     OP_DELETE,
     OP_INSERT,
     OP_TOMBSTONE,

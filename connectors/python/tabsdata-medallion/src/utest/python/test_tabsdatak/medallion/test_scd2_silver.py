@@ -9,13 +9,13 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col
-from tabsdatak._medallion._bronze._cdc import (
+from tabsdatak._medallion.bronze.cdc import (
     OP_DELETE,
     OP_INSERT,
     OP_TOMBSTONE,
     OP_UPDATE,
 )
-from tabsdatak._medallion._silver._scd import build_scd2_silver
+from tabsdatak._medallion.silver.scd import build_scd2_silver
 
 pytestmark = pytest.mark.medallion
 

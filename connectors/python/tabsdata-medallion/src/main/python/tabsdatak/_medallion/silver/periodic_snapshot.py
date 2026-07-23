@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-from tabsdatak._medallion._silver._scd import _strip_bronze_metadata
+from tabsdatak._medallion.silver.scd import _strip_bronze_metadata
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import concat
 

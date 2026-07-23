@@ -9,7 +9,7 @@ import pytest
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, lit
-from tabsdatak._medallion._silver._append_only import build_append_only_silver
+from tabsdatak._medallion.silver.append_only import build_append_only_silver
 
 pytestmark = pytest.mark.medallion
 

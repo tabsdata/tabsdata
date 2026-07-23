@@ -9,7 +9,7 @@ import pytest
 
 import tabsdatak.tableframe.datatypes as td_dtypes
 from tabsdatak.tableframe import TableFrame
-from tabsdatak._medallion._bronze._append_only_cdc import (
+from tabsdatak._medallion.bronze.append_only_cdc import (
     OP_INSERT,
     build_append_only_cdc_bronze,
 )
