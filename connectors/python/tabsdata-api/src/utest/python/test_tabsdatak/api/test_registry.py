@@ -117,9 +117,9 @@ def test_get_src_unregistered_class_raises_keyerror():
 
 
 def test_explorer_for_known_type_returns_explorer():
-    from tabsdatak.conn.localfile._plugin import LocalFileSrcExplorer
+    from tabsdatak.conn.localfile._plugin import LocalFileExplorer
 
-    assert explorer_for("local-file-in") is LocalFileSrcExplorer
+    assert explorer_for("local-file-in") is LocalFileExplorer
 
 
 def test_explorer_for_unknown_type_returns_none():
@@ -138,22 +138,19 @@ def test_def_for_unknown_type_returns_none():
 
 def test_explorer_for_conn_resolves_by_conn_class():
     from tabsdatak.conn.localfile import LocalFileDestConn, LocalFileSrcConn
-    from tabsdatak.conn.localfile._plugin import (
-        LocalFileDestExplorer,
-        LocalFileSrcExplorer,
-    )
+    from tabsdatak.conn.localfile._plugin import LocalFileExplorer
 
-    assert explorer_for_conn(LocalFileSrcConn) is LocalFileSrcExplorer
-    assert explorer_for_conn(LocalFileDestConn) is LocalFileDestExplorer
+    assert explorer_for_conn(LocalFileSrcConn) is LocalFileExplorer
+    assert explorer_for_conn(LocalFileDestConn) is LocalFileExplorer
 
 
 def test_explorer_for_conn_accepts_an_instance():
     # Resolution keys on the class, so even an uninitialized instance resolves.
     from tabsdatak.conn.localfile import LocalFileSrcConn
-    from tabsdatak.conn.localfile._plugin import LocalFileSrcExplorer
+    from tabsdatak.conn.localfile._plugin import LocalFileExplorer
 
     inst = LocalFileSrcConn.__new__(LocalFileSrcConn)
-    assert explorer_for_conn(inst) is LocalFileSrcExplorer
+    assert explorer_for_conn(inst) is LocalFileExplorer
 
 
 def test_explorer_for_conn_unregistered_returns_none():
