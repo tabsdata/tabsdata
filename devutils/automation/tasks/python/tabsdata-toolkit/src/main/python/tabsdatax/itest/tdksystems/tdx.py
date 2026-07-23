@@ -2566,16 +2566,17 @@ def _domain_seed(rest: list[str]) -> int:
 
 
 def _domain_changes(rest: list[str]) -> int:
-    """`tdx-domain changes --domain NAME --shape SHAPE --ops OPS --count N`:
+    """`tdx-domain changes --domain NAME --entities T1,T2,... --ops OPS --count N`:
     apply a deterministic set of INSERT/UPDATE/DELETE operations to a
     model-seeded domain — to drive change-data-capture (or just to mutate the
     data). The model must ship a `changes.py` recipe.
 
-    `--shape` groups changes into transactions: `single-row` (one row),
-    `multi-row-same` (several rows, one table), `multi-row-diff` (several rows
-    across tables), or `random`. `--ops` picks the verbs: `insert` / `update` /
-    `delete` / `mix`. `--count` is the number of transactions, `--rows` the rows
-    per transaction for the multi-row shapes.
+    `--entities` names the recipe entities (tables) to mutate; each transaction
+    applies `--rows` changes (default 1) to EACH named entity, in the recipe's
+    parents-first order so foreign keys hold. An entity that can't take the
+    chosen verb (or has no seeded row to target) is simply skipped. `--ops`
+    picks the verbs: `insert` / `update` / `delete` / `mix`. `--count` is the
+    number of transactions.
 
     `--seed auto` (the default) walks a per-domain seed 1,2,3,… persisted in the
     descriptor and a compact insert cursor, so every mode (insert / update /
@@ -2593,10 +2594,11 @@ def _domain_changes(rest: list[str]) -> int:
     _add_secret_env(p)
     _add_latch(p)
     p.add_argument(
-        "--shape",
+        "--entities",
         required=True,
-        choices=[s.value for s in changes.Shape],
-        help="how changes are grouped into transactions",
+        metavar="NAME,...",
+        help="comma-separated entity (table) names to apply changes on — must "
+        "be entities the model's changes.py recipe defines",
     )
     p.add_argument(
         "--ops",
@@ -2610,8 +2612,8 @@ def _domain_changes(rest: list[str]) -> int:
     p.add_argument(
         "--rows",
         type=int,
-        default=3,
-        help="rows per transaction for the multi-row shapes (default: 3)",
+        default=1,
+        help="changes per listed entity per transaction (default: 1)",
     )
     p.add_argument(
         "--seed",
@@ -2653,10 +2655,13 @@ def _domain_changes(rest: list[str]) -> int:
         if seed < 0:
             raise DatagenError("--seed must be >= 0")
         insert_base = seed * changes.FIXED_SEED_INSERT_STRIDE
+    entity_names = [e.strip() for e in args.entities.split(",") if e.strip()]
+    if not entity_names:
+        raise DatagenError("--entities must name at least one entity")
     sysobj, ctx, _meta = cli._domain(path)
     counts = {str(k): int(v) for k, v in (doc.get("entities") or {}).items()}
     spec = changes.ChangeSpec(
-        shape=changes.Shape(args.shape),
+        entities=entity_names,
         ops=changes.OpSelector(args.ops),
         count=args.count,
         rows=args.rows,
@@ -2675,7 +2680,7 @@ def _domain_changes(rest: list[str]) -> int:
     console.out()
     console.good(
         f">>> applied {n} change transaction(s) to '{doc['name']}' ({sysobj.slug}) "
-        f"[model={model} shape={args.shape} ops={args.ops} "
+        f"[model={model} entities={','.join(entity_names)} ops={args.ops} "
         f"seed={seed}{' auto' if auto else ''}]"
     )
     console.out()

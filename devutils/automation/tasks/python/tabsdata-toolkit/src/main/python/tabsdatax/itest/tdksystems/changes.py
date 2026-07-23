@@ -8,13 +8,13 @@
 A *change recipe* (``models/<name>/changes.py``) knows how to mutate the rows a
 model seeds: which tables to touch, how to build a brand-new row, and how to
 target an already-seeded row. This module turns a recipe plus a
-:class:`ChangeSpec` (shape / ops / count / seed) into a deterministic list of
+:class:`ChangeSpec` (entities / ops / count / seed) into a deterministic list of
 :class:`Transaction` s, and renders each :class:`Change` either to portable SQL
 (for SQL domains) or to fresh rows (for file domains, which support inserts
 only — a change is a new file).
 
-The recipe is model-specific; the shape/ops/count planning is generic and lives
-here, so adding change support to a model is only writing its
+The recipe is model-specific; the entity-selection / ops / count planning is
+generic and lives here, so adding change support to a model is only writing its
 :class:`Entity` s. The execution is system-specific and lives on the
 ``System`` backends (``apply_changes``), so adding a system that can take
 changes is only implementing that one hook.
@@ -35,15 +35,6 @@ from pathlib import Path
 from . import data_gen
 from .emit import Column, Table, _sql_literal, _sql_quote_ident
 from .errors import DatagenError
-
-
-class Shape(str, enum.Enum):
-    """How the changes of one transaction are distributed."""
-
-    SINGLE_ROW = "single-row"  # one row in one table
-    MULTI_SAME = "multi-row-same"  # several rows in the SAME table
-    MULTI_DIFF = "multi-row-diff"  # several rows across DIFFERENT tables
-    RANDOM = "random"  # a random one of the above, per transaction
 
 
 class OpSelector(str, enum.Enum):
@@ -113,17 +104,18 @@ Transaction = list[Change]
 class ChangeSpec:
     """The parsed `tdx-domain changes` request.
 
-    `seed` drives the RNG (shape choice) and shifts UPDATE/DELETE targets so
-    successive seeds touch different rows. `insert_base` is the starting ordinal
-    for INSERTs: the `changes` verb passes a compact, persisted cursor for
-    ``--seed auto`` (so inserts never collide across runs) or a seed-derived
-    block for a fixed ``--seed N``. The recipe turns each ordinal into a
-    non-colliding primary key."""
+    `entities` names the recipe entities (tables) to mutate; every transaction
+    applies `rows` changes to each of them, in the recipe's parents-first order.
+    `seed` shifts UPDATE/DELETE targets so successive seeds touch different rows.
+    `insert_base` is the starting ordinal for INSERTs: the `changes` verb passes
+    a compact, persisted cursor for ``--seed auto`` (so inserts never collide
+    across runs) or a seed-derived block for a fixed ``--seed N``. The recipe
+    turns each ordinal into a non-colliding primary key."""
 
-    shape: Shape
+    entities: list[str]
     ops: OpSelector
     count: int  # number of transactions
-    rows: int = 3  # rows per transaction for the multi-row shapes
+    rows: int = 1  # changes per listed entity per transaction
     seed: int = 0
     insert_base: int = 0
 
@@ -162,55 +154,69 @@ class Entity:
 @dataclass
 class ChangeModel:
     """A model's change recipe: the entities `changes` may mutate, ordered
-    parents-first so multi-diff transactions and inserts satisfy foreign keys."""
+    parents-first so a transaction that spans tables (and its inserts) satisfy
+    foreign keys."""
 
     entities: list[Entity] = field(default_factory=list)
 
-    def supporting(self, kind: OpKind) -> list[Entity]:
-        return [e for e in self.entities if kind in e.supports]
-
 
 # ======================================================================
-# Planning — generic (shape / ops / count), model-agnostic
+# Planning — generic (entities / ops / count), model-agnostic
 # ======================================================================
+
+
+def resolve_entities(model: ChangeModel, names: list[str]) -> list[Entity]:
+    """Map the requested entity (table) `names` to the recipe's :class:`Entity`
+    objects, in the recipe's own parents-first order (so a transaction that
+    inserts across tables satisfies foreign keys) and de-duplicated. Fails if a
+    name is not one the recipe defines."""
+    if not names:
+        raise DatagenError("changes: --entities must name at least one entity")
+    known = {e.table: e for e in model.entities}
+    unknown = [n for n in names if n not in known]
+    if unknown:
+        raise DatagenError(
+            f"changes: unknown entit{'y' if len(unknown) == 1 else 'ies'} "
+            f"{', '.join(unknown)} — the model's recipe defines: "
+            f"{', '.join(known)}"
+        )
+    wanted = set(names)
+    return [e for e in model.entities if e.table in wanted]
 
 
 def plan(
     model: ChangeModel, spec: ChangeSpec, counts: dict[str, int]
 ) -> list[Transaction]:
-    """Build `spec.count` transactions from `model`, using `counts` (the seeded
-    per-table row counts, from the domain descriptor's `entities`) to bound
-    UPDATE / DELETE targets. Deterministic for a given `spec.seed`."""
+    """Build `spec.count` transactions from `model`, mutating the entities named
+    in `spec.entities` (`spec.rows` changes each, parents-first), using `counts`
+    (the seeded per-table row counts, from the domain descriptor's `entities`) to
+    bound UPDATE / DELETE targets. Deterministic for a given `spec.seed`."""
     if spec.count < 1:
         raise DatagenError("changes: --count must be >= 1")
     if spec.rows < 1:
         raise DatagenError("changes: --rows must be >= 1")
+    entities = resolve_entities(model, spec.entities)
     rng = random.Random(spec.seed)
-    planner = _Planner(model, spec, counts, rng)
+    planner = _Planner(model, spec, counts, rng, entities)
     txns: list[Transaction] = []
     for t in range(spec.count):
-        shape = _pick_shape(spec.shape, rng)
-        txn = planner.build(shape, t)
+        txn = planner.build(t)
         if txn:
             txns.append(txn)
     if not txns:
         raise DatagenError(
-            "changes: nothing to do — the model's recipe produced no operations "
-            "for this shape/ops (a domain seeded with --model but no --data has "
-            "no rows to update/delete; use --ops insert or seed data first)"
+            "changes: nothing to do — the requested entities / ops produced no "
+            "operations (a domain seeded with --model but no --data has no rows "
+            "to update/delete; use --ops insert or seed data first, or name "
+            "entities that support the chosen ops)"
         )
     return txns
 
 
-def _pick_shape(shape: Shape, rng: random.Random) -> Shape:
-    if shape is not Shape.RANDOM:
-        return shape
-    return rng.choice([Shape.SINGLE_ROW, Shape.MULTI_SAME, Shape.MULTI_DIFF])
-
-
 class _Planner:
-    """Turns (shape, transaction index) into a transaction, walking a
-    per-entity/per-kind cursor so successive transactions touch fresh rows."""
+    """Turns a transaction index into a transaction — `spec.rows` changes on each
+    requested entity (parents-first) — walking a per-entity/per-kind cursor so
+    successive transactions touch fresh rows."""
 
     def __init__(
         self,
@@ -218,11 +224,13 @@ class _Planner:
         spec: ChangeSpec,
         counts: dict[str, int],
         rng: random.Random,
+        entities: list[Entity],
     ) -> None:
         self.model = model
         self.spec = spec
         self.counts = counts
         self.rng = rng
+        self.entities = entities
         self._cursor: dict[tuple[str, OpKind], int] = {}
         self._inserts = 0  # global INSERT counter -> ordinal = insert_base + this
         self._mix = 0
@@ -270,54 +278,17 @@ class _Planner:
             kind, entity.table, entity.columns, where=entity.target(idx, existing)
         )
 
-    def _pool(self, kind: OpKind) -> list[Entity]:
-        return self.model.supporting(kind)
-
-    def build(self, shape: Shape, t: int) -> Transaction:
-        if shape is Shape.SINGLE_ROW:
-            return self._single(t)
-        if shape is Shape.MULTI_SAME:
-            return self._multi_same(t)
-        return self._multi_diff(t)
-
-    def _single(self, t: int) -> Transaction:
+    def build(self, t: int) -> Transaction:
+        """One transaction: `spec.rows` changes of this transaction's verb on
+        each requested entity, parents-first. An entity that can't take the verb
+        (or has no seeded row to target) contributes nothing."""
         kind = self._next_kind()
-        pool = self._pool(kind)
-        if not pool:
-            return []
-        entity = pool[t % len(pool)]
-        ch = self._take(entity, kind)
-        return [ch] if ch else []
-
-    def _multi_same(self, t: int) -> Transaction:
-        kind = self._next_kind()
-        pool = self._pool(kind)
-        if not pool:
-            return []
-        entity = pool[t % len(pool)]
         out: Transaction = []
-        for _ in range(self.spec.rows):
-            ch = self._take(entity, kind)
-            if ch:
-                out.append(ch)
-        return out
-
-    def _multi_diff(self, t: int) -> Transaction:
-        kind = self._next_kind()
-        pool = self._pool(kind)
-        if not pool:
-            return []
-        # Distinct entities, kept in recipe order (parents-first) so a
-        # transaction that inserts across tables satisfies foreign keys.
-        n = min(self.spec.rows, len(pool))
-        start = t % len(pool)
-        chosen = [pool[(start + k) % len(pool)] for k in range(n)]
-        chosen = sorted(set(chosen), key=self.model.entities.index)
-        out: Transaction = []
-        for entity in chosen:
-            ch = self._take(entity, kind)
-            if ch:
-                out.append(ch)
+        for entity in self.entities:
+            for _ in range(self.spec.rows):
+                ch = self._take(entity, kind)
+                if ch:
+                    out.append(ch)
         return out
 
 

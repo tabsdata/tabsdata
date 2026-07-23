@@ -4,6 +4,7 @@
 
 """Tests for tabsdatax.itest.tdksystems.changes — the model-agnostic change
 planner, SQL rendering, file-insert conversion, and recipe loading."""
+
 from __future__ import annotations
 
 import pytest
@@ -18,8 +19,16 @@ _COUNTS = {
     "airportdb": {"ap_airport": 30, "ap_passenger": 30, "ap_booking": 25},
 }
 
+# Every change entity a model's recipe defines (recipe / parents-first order).
+_ALL = {
+    "employees": ["emp_employees", "emp_departments"],
+    "finance": ["customers", "customer_subscription_events"],
+    "airportdb": ["ap_airport", "ap_passenger", "ap_booking"],
+}
+
 
 # ---- recipe discovery / loading -------------------------------------------
+
 
 @pytest.mark.parametrize("model", ["employees", "finance", "airportdb"])
 def test_bundled_models_ship_a_recipe(model):
@@ -36,13 +45,14 @@ def test_model_without_recipe_is_unsupported():
         ch.load_recipe("sakila")
 
 
-# ---- planning: shapes -----------------------------------------------------
+# ---- planning: entities ---------------------------------------------------
 
-def _plan(model, shape, ops, count=6, rows=3, seed=7, insert_base=0):
+
+def _plan(model, entities, ops, count=6, rows=1, seed=7, insert_base=0):
     return ch.plan(
         ch.load_recipe(model),
         ch.ChangeSpec(
-            shape=shape,
+            entities=entities,
             ops=ops,
             count=count,
             rows=rows,
@@ -53,29 +63,77 @@ def _plan(model, shape, ops, count=6, rows=3, seed=7, insert_base=0):
     )
 
 
-def test_single_row_is_one_change_per_transaction():
-    txns = _plan("employees", ch.Shape.SINGLE_ROW, ch.OpSelector.INSERT)
+def test_one_entity_one_row_is_one_change_per_transaction():
+    txns = _plan("employees", ["emp_employees"], ch.OpSelector.INSERT, rows=1)
     assert len(txns) == 6
     assert all(len(t) == 1 for t in txns)
 
 
-def test_multi_same_groups_rows_in_one_table():
-    txns = _plan("employees", ch.Shape.MULTI_SAME, ch.OpSelector.INSERT, rows=3)
+def test_rows_group_in_the_named_entity():
+    txns = _plan("employees", ["emp_employees"], ch.OpSelector.INSERT, rows=3)
     assert all(len(t) == 3 for t in txns)
     for t in txns:
-        assert len({c.table for c in t}) == 1
+        assert {c.table for c in t} == {"emp_employees"}
 
 
-def test_multi_diff_spreads_across_tables():
-    txns = _plan("airportdb", ch.Shape.MULTI_DIFF, ch.OpSelector.INSERT, rows=3)
-    # airportdb has two insert-capable tables (ap_airport, ap_passenger).
+def test_multiple_entities_spread_across_tables():
+    txns = _plan(
+        "airportdb", ["ap_airport", "ap_passenger"], ch.OpSelector.INSERT, rows=1
+    )
     assert all(len(t) == 2 for t in txns)
     for t in txns:
-        assert len({c.table for c in t}) == len(t)
+        assert {c.table for c in t} == {"ap_airport", "ap_passenger"}
+
+
+def test_rows_apply_per_listed_entity():
+    txns = _plan(
+        "airportdb", ["ap_airport", "ap_passenger"], ch.OpSelector.INSERT, rows=2
+    )
+    for t in txns:
+        assert len(t) == 4
+        assert sum(1 for c in t if c.table == "ap_airport") == 2
+        assert sum(1 for c in t if c.table == "ap_passenger") == 2
+
+
+def test_entities_ordered_parents_first_regardless_of_arg_order():
+    # Listed passenger-before-airport, but the recipe order (airport, passenger)
+    # is what a transaction follows, so inserts satisfy foreign keys.
+    txns = _plan(
+        "airportdb", ["ap_passenger", "ap_airport"], ch.OpSelector.INSERT, rows=1
+    )
+    for t in txns:
+        assert [c.table for c in t] == ["ap_airport", "ap_passenger"]
+
+
+def test_entity_not_supporting_the_verb_is_skipped():
+    # emp_departments supports only UPDATE; asking INSERT on both leaves each
+    # transaction with just the emp_employees insert.
+    txns = _plan(
+        "employees",
+        ["emp_employees", "emp_departments"],
+        ch.OpSelector.INSERT,
+        rows=1,
+    )
+    for t in txns:
+        assert {c.table for c in t} == {"emp_employees"}
+
+
+def test_unknown_entity_rejected():
+    recipe = ch.load_recipe("employees")
+    spec = ch.ChangeSpec(entities=["nope"], ops=ch.OpSelector.INSERT, count=1)
+    with pytest.raises(DatagenError, match="unknown entit"):
+        ch.plan(recipe, spec, _COUNTS["employees"])
+
+
+def test_empty_entities_rejected():
+    recipe = ch.load_recipe("employees")
+    spec = ch.ChangeSpec(entities=[], ops=ch.OpSelector.INSERT, count=1)
+    with pytest.raises(DatagenError, match="at least one entity"):
+        ch.plan(recipe, spec, _COUNTS["employees"])
 
 
 def test_mix_cycles_verbs():
-    txns = _plan("employees", ch.Shape.SINGLE_ROW, ch.OpSelector.MIX, count=6)
+    txns = _plan("employees", ["emp_employees"], ch.OpSelector.MIX, count=6)
     kinds = [t[0].kind for t in txns]
     assert ch.OpKind.INSERT in kinds
     assert ch.OpKind.UPDATE in kinds
@@ -84,40 +142,37 @@ def test_mix_cycles_verbs():
 
 # ---- planning: targeting / determinism ------------------------------------
 
+
 def test_inserts_use_non_colliding_keys():
-    txns = _plan("employees", ch.Shape.SINGLE_ROW, ch.OpSelector.INSERT)
-    emp_inserts = [
-        c for t in txns for c in t if c.table == "emp_employees"
-    ]
-    assert emp_inserts  # the recipe rotates employees / departments
+    txns = _plan("employees", ["emp_employees"], ch.OpSelector.INSERT)
+    emp_inserts = [c for t in txns for c in t if c.table == "emp_employees"]
+    assert emp_inserts
     assert all(c.row["emp_no"] >= 9_000_000 for c in emp_inserts)
 
 
 def test_deletes_walk_the_tail():
     # At seed 0 the fold is a no-op: the first delete targets the tail (emp 10050).
-    txns = _plan("employees", ch.Shape.SINGLE_ROW, ch.OpSelector.DELETE, seed=0)
+    txns = _plan("employees", ["emp_employees"], ch.OpSelector.DELETE, seed=0)
     assert txns[0][0].where["emp_no"] == 10001 + 50 - 1
 
 
 def test_updates_target_the_front():
     # At seed 0 the first update targets the front (customer_id 1).
-    txns = _plan("finance", ch.Shape.SINGLE_ROW, ch.OpSelector.UPDATE, seed=0)
+    txns = _plan("finance", ["customers"], ch.OpSelector.UPDATE, seed=0)
     assert txns[0][0].where["customer_id"] == 1
 
 
 def test_seed_shifts_update_delete_targets():
     # Different seeds (what --seed auto increments through) touch different rows.
-    u0 = _plan("finance", ch.Shape.SINGLE_ROW, ch.OpSelector.UPDATE, count=1, seed=0)
-    u1 = _plan("finance", ch.Shape.SINGLE_ROW, ch.OpSelector.UPDATE, count=1, seed=1)
+    u0 = _plan("finance", ["customers"], ch.OpSelector.UPDATE, count=1, seed=0)
+    u1 = _plan("finance", ["customers"], ch.OpSelector.UPDATE, count=1, seed=1)
     assert u0[0][0].where["customer_id"] != u1[0][0].where["customer_id"]
 
 
 def test_insert_base_makes_inserts_disjoint_across_runs():
     # --seed auto advances a compact insert cursor; distinct bases never collide.
-    a = _plan("employees", ch.Shape.SINGLE_ROW, ch.OpSelector.INSERT, insert_base=0)
-    b = _plan(
-        "employees", ch.Shape.SINGLE_ROW, ch.OpSelector.INSERT, insert_base=100
-    )
+    a = _plan("employees", ["emp_employees"], ch.OpSelector.INSERT, insert_base=0)
+    b = _plan("employees", ["emp_employees"], ch.OpSelector.INSERT, insert_base=100)
     ka = {c.row["emp_no"] for t in a for c in t}
     kb = {c.row["emp_no"] for t in b for c in t}
     assert ka and kb and ka.isdisjoint(kb)
@@ -129,34 +184,40 @@ def test_all_ops_deterministic_and_nonempty_with_seeded_data():
     for model in ("employees", "finance", "airportdb"):
         for ops in ch.OpSelector:
             base = 5 if ops in (ch.OpSelector.INSERT, ch.OpSelector.MIX) else 0
-            a = _plan(model, ch.Shape.RANDOM, ops, count=8, seed=3, insert_base=base)
-            b = _plan(model, ch.Shape.RANDOM, ops, count=8, seed=3, insert_base=base)
+            a = _plan(model, _ALL[model], ops, count=8, seed=3, insert_base=base)
+            b = _plan(model, _ALL[model], ops, count=8, seed=3, insert_base=base)
             render = [ch.render_sql(c) for t in a for c in t]
             assert render == [ch.render_sql(c) for t in b for c in t]
-            inserts = [
-                c.row for t in a for c in t if c.kind is ch.OpKind.INSERT
-            ]
+            inserts = [c.row for t in a for c in t if c.kind is ch.OpKind.INSERT]
             keys = [tuple(sorted(r.items())) for r in inserts]
             assert len(keys) == len(set(keys))  # no dup insert rows within a run
 
 
 def test_plan_is_deterministic_for_a_seed():
-    a = _plan("airportdb", ch.Shape.RANDOM, ch.OpSelector.MIX, count=12, seed=3)
-    b = _plan("airportdb", ch.Shape.RANDOM, ch.OpSelector.MIX, count=12, seed=3)
-    render = lambda txns: [ch.render_sql(c) for t in txns for c in t]  # noqa: E731
+    a = _plan("airportdb", _ALL["airportdb"], ch.OpSelector.MIX, count=12, seed=3)
+    b = _plan("airportdb", _ALL["airportdb"], ch.OpSelector.MIX, count=12, seed=3)
+
+    def render(txns):
+        return [ch.render_sql(c) for t in txns for c in t]
+
     assert render(a) == render(b)
 
 
 def test_empty_counts_leaves_update_delete_with_nothing():
     recipe = ch.load_recipe("finance")
-    spec = ch.ChangeSpec(ch.Shape.SINGLE_ROW, ch.OpSelector.DELETE, count=4, seed=1)
+    spec = ch.ChangeSpec(
+        entities=["customer_subscription_events"],
+        ops=ch.OpSelector.DELETE,
+        count=4,
+        seed=1,
+    )
     with pytest.raises(DatagenError, match="nothing to do"):
         ch.plan(recipe, spec, {})
 
 
 def test_insert_needs_no_seeded_rows():
     recipe = ch.load_recipe("airportdb")
-    spec = ch.ChangeSpec(ch.Shape.SINGLE_ROW, ch.OpSelector.INSERT, count=3, seed=1)
+    spec = ch.ChangeSpec(entities=["ap_airport"], ops=ch.OpSelector.INSERT, count=3)
     txns = ch.plan(recipe, spec, {})  # no counts -> inserts still fine
     assert len(txns) == 3
 
@@ -164,7 +225,9 @@ def test_insert_needs_no_seeded_rows():
 @pytest.mark.parametrize("count", [0, -1])
 def test_bad_count_rejected(count):
     recipe = ch.load_recipe("employees")
-    spec = ch.ChangeSpec(ch.Shape.SINGLE_ROW, ch.OpSelector.INSERT, count=count)
+    spec = ch.ChangeSpec(
+        entities=["emp_employees"], ops=ch.OpSelector.INSERT, count=count
+    )
     with pytest.raises(DatagenError, match="count"):
         ch.plan(recipe, spec, _COUNTS["employees"])
 
@@ -198,16 +261,23 @@ def test_render_delete():
 
 # ---- file (insert-only) conversion ----------------------------------------
 
+
 def test_insert_tables_collects_inserts_by_table():
-    txns = _plan("airportdb", ch.Shape.MULTI_SAME, ch.OpSelector.INSERT, count=3, rows=4)
+    txns = _plan(
+        "airportdb",
+        ["ap_airport", "ap_passenger"],
+        ch.OpSelector.INSERT,
+        count=3,
+        rows=4,
+    )
     tables = ch.insert_tables(txns)
     by_name = {t.name: t for t in tables}
-    assert set(by_name) <= {"ap_airport", "ap_passenger"}
-    assert sum(len(t.rows) for t in tables) == 12
+    assert set(by_name) == {"ap_airport", "ap_passenger"}
+    assert sum(len(t.rows) for t in tables) == 24  # 3 txns * (4 + 4)
 
 
 def test_has_insert():
-    ins = _plan("employees", ch.Shape.SINGLE_ROW, ch.OpSelector.INSERT)
-    dele = _plan("employees", ch.Shape.SINGLE_ROW, ch.OpSelector.DELETE)
+    ins = _plan("employees", ["emp_employees"], ch.OpSelector.INSERT)
+    dele = _plan("employees", ["emp_employees"], ch.OpSelector.DELETE)
     assert ch.has_insert(ins)
     assert not ch.has_insert(dele)

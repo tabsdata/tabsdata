@@ -179,8 +179,10 @@ class _Console:
         detail: str = "",
     ) -> None:
         """One live per-target line as a batch item completes: ``[k/N] <mark>
-        name (1.2s): detail`` — green when `ok`, red otherwise."""
-        line = f"  [{done}/{total}] {mark}  {name} ({seconds:.1f}s)"
+        name (1.2s): detail`` — green when `ok`, red otherwise. The counter is
+        right-padded to the width of `total` so the lines stay column-aligned."""
+        width = len(str(total))
+        line = f"  [{done:>{width}}/{total}] {mark}  {name} ({seconds:.1f}s)"
         if detail:
             line += f": {detail}"
         (self.good if ok else self.bad)(line)
