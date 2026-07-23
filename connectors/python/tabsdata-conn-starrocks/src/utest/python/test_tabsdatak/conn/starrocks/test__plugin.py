@@ -188,7 +188,10 @@ def test_dest_plugin_uploads_then_executes_insert(monkeypatch, work_dir):
 
     assert calls == [("upload", "users.parquet", "users")]
     assert len(executed) == 1
-    assert executed[0].startswith("INSERT INTO `testdb`.`users` SELECT * FROM FILES(")
+    # The INSERT names the staged parquet's columns explicitly.
+    assert executed[0].startswith(
+        "INSERT INTO `testdb`.`users` (`id`, `name`) SELECT * FROM FILES("
+    )
     fake_engine.dispose.assert_called()
 
 
@@ -227,7 +230,53 @@ def test_dest_plugin_replace_truncates_then_inserts(monkeypatch, work_dir):
 
     assert len(executed) == 2
     assert executed[0] == "TRUNCATE TABLE `testdb`.`users`"
-    assert executed[1].startswith("INSERT INTO `testdb`.`users` SELECT * FROM FILES(")
+    assert executed[1].startswith(
+        "INSERT INTO `testdb`.`users` (`id`) SELECT * FROM FILES("
+    )
+
+
+def test_dest_plugin_insert_omits_columns_absent_from_parquet(monkeypatch, work_dir):
+    # Regression: the INSERT must name only the columns the staged parquet
+    # actually carries, so a target column the file omits (e.g. an
+    # AUTO_INCREMENT `id`) is left for StarRocks to populate. A bare
+    # ``INSERT ... SELECT *`` used to fail with "Inserted target column count: 5
+    # doesn't match select/value column count: 4" against such a table.
+    monkeypatch.setattr(impl, "upload_parquet", lambda *a, **kw: "s3://x/city/c.parquet")
+
+    executed: list[str] = []
+
+    class _FakeConn:
+        def execute(self, stmt):
+            executed.append(str(stmt))
+
+    class _BeginCtx:
+        def __enter__(self):
+            return _FakeConn()
+
+        def __exit__(self, *a):
+            return False
+
+    fake_engine = MagicMock()
+    fake_engine.begin.side_effect = lambda: _BeginCtx()
+    monkeypatch.setattr(impl, "build_starrocks_engine", lambda **kw: fake_engine)
+
+    # No `id` column -- mirrors the file-seeded `city` table whose target has an
+    # AUTO_INCREMENT `id`.
+    parquet = _make_parquet(
+        work_dir / "city.parquet",
+        [{"name": "Kabul", "country_code": "AFG", "district": "Kabol", "population": 1}],
+    )
+    dest = StarRocksDest(tables=["city"])
+    plugin.StarRocksDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [parquet]
+    )
+
+    assert len(executed) == 1
+    assert executed[0].startswith(
+        "INSERT INTO `testdb`.`city` "
+        "(`name`, `country_code`, `district`, `population`) SELECT * FROM FILES("
+    )
+    assert "`id`" not in executed[0]
 
 
 # ---------------------------------------------------------------------------

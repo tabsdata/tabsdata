@@ -118,6 +118,49 @@ def test_fq_for_sql_round_trip_strips_then_reapplies_quotes():
 
 
 # ---------------------------------------------------------------------------
+# _use_ident -- USE DATABASE/SCHEMA reference
+# ---------------------------------------------------------------------------
+#
+# tdx provisions databases/schemas UNQUOTED, so Snowflake stores them
+# upper-folded. Any name expressible as an unquoted identifier must be emitted
+# UNQUOTED so it folds back onto the stored object -- otherwise a quoted,
+# case-sensitive reference misses it.
+# ---------------------------------------------------------------------------
+
+
+def test_use_ident_leaves_lowercase_bare_name_unquoted():
+    assert impl._use_ident("public") == "public"
+
+
+def test_use_ident_leaves_uppercase_bare_name_unquoted():
+    assert impl._use_ident("ANALYTICS") == "ANALYTICS"
+
+
+def test_use_ident_leaves_mixed_case_run_stamp_unquoted():
+    # Regression: the uppercase ``T`` in a tdx run stamp must NOT force a quoted,
+    # case-sensitive reference. Unquoted, Snowflake folds it onto the stored
+    # ``XP_TUCU_20260722T144945_SNOWFLAKE`` schema; quoted, it missed and raised
+    # "could not adopt ... schema=...: Object does not exist".
+    name = "xp_tucu_20260722T144945_snowflake"
+    assert impl._use_ident(name) == name
+    assert '"' not in impl._use_ident(name)
+
+
+def test_use_ident_quotes_name_with_space():
+    assert impl._use_ident("weird schema") == '"weird schema"'
+
+
+def test_use_ident_quotes_name_with_leading_digit():
+    # A leading digit is not a legal unquoted identifier, so it must be quoted.
+    assert impl._use_ident("1_schema") == '"1_schema"'
+
+
+def test_use_ident_quotes_dotted_name_per_part():
+    # A dotted name is not a single unquoted identifier -> per-part quoting.
+    assert impl._use_ident("DB.S") == '"DB"."S"'
+
+
+# ---------------------------------------------------------------------------
 # Stage resolution
 # ---------------------------------------------------------------------------
 
@@ -240,8 +283,11 @@ def test_write_all_tables_forces_database_and_schema_before_stage(
     impl.write_all_tables(cfg, [parquet])
     sql = fake_sf_connection.log
     use_wh = sql.index("USE WAREHOUSE ETL_WH")
-    use_db = sql.index('USE DATABASE "ANALYTICS"')
-    use_schema = sql.index('USE SCHEMA "PUBLIC"')
+    # Bare identifiers are emitted UNQUOTED (Snowflake folds them onto the
+    # unquoted-provisioned objects); only names that can't be spelled unquoted
+    # are double-quoted.
+    use_db = sql.index("USE DATABASE ANALYTICS")
+    use_schema = sql.index("USE SCHEMA PUBLIC")
     first_ddl = next(i for i, s in enumerate(sql) if s.startswith("CREATE"))
     assert use_wh < use_db < use_schema < first_ddl
 

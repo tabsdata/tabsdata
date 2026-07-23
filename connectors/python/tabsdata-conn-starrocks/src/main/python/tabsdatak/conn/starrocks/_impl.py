@@ -330,6 +330,16 @@ def upload_parquet(
     return staged_uri(staging, rel)
 
 
+def _parquet_column_names(parquet: Path) -> list[str]:
+    """Column names of a staged parquet, in file order. Used to build an
+    explicit INSERT column list so a target column the file does not carry
+    (e.g. an ``AUTO_INCREMENT`` key) is left for StarRocks to populate rather
+    than triggering a positional column-count mismatch."""
+    import pyarrow.parquet as pq
+
+    return list(pq.read_schema(parquet).names)
+
+
 def execute(
     cfg: StarRocksWriteCfg,
     tables: list[Path],
@@ -337,7 +347,7 @@ def execute(
     upload_id: str,
 ) -> None:
     """Stage each parquet to cloud, then issue one
-    ``INSERT INTO <table> SELECT * FROM FILES(...)`` per table.
+    ``INSERT INTO <table> (<cols>) SELECT * FROM FILES(...)`` per table.
 
     Each table is loaded independently (StarRocks does not support
     multi-statement transactions for bulk loads); a failure after some
@@ -364,15 +374,23 @@ def execute(
     )
 
     @_starrocks_retry
-    def _load_one(qualified: str, files_fn: str) -> None:
-        """``TRUNCATE`` (replace mode) + ``INSERT INTO ... FROM FILES(...)``
-        for a single table, retried on transient StarRocks errors such as
-        "Current available backends: []" that surface under heavy
-        concurrent load on a single-BE cluster."""
+    def _load_one(qualified: str, files_fn: str, columns: list[str]) -> None:
+        """``TRUNCATE`` (replace mode) + ``INSERT INTO <t> (<cols>) ... FROM
+        FILES(...)`` for a single table, retried on transient StarRocks errors
+        such as "Current available backends: []" that surface under heavy
+        concurrent load on a single-BE cluster.
+
+        Columns are named explicitly (from the staged parquet) rather than a
+        bare ``SELECT *`` insert, so a target column the file omits -- e.g. an
+        ``AUTO_INCREMENT`` key -- is left for StarRocks to populate instead of
+        causing a positional column-count mismatch."""
+        collist = ", ".join(_quote_ident(c) for c in columns)
         with engine.begin() as conn:
             if cfg.if_table_exists == "replace":
                 conn.execute(text(f"TRUNCATE TABLE {qualified}"))
-            conn.execute(text(f"INSERT INTO {qualified} SELECT * FROM {files_fn}"))
+            conn.execute(
+                text(f"INSERT INTO {qualified} ({collist}) SELECT * FROM {files_fn}")
+            )
 
     total = len(cfg.target_tables)
     try:
@@ -396,7 +414,7 @@ def execute(
             )
             files_fn = build_files_function(cfg.staging, [staged])
             qualified = _qualify(cfg.database, table_name)
-            _load_one(qualified, files_fn)
+            _load_one(qualified, files_fn, _parquet_column_names(parquet))
             logger.info(
                 "starrocks: loaded %s from %d staged file(s)",
                 qualified,

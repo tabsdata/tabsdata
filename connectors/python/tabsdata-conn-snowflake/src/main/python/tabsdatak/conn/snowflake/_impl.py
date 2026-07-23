@@ -21,6 +21,7 @@ the plugin (registry scans pay only for the DestDef metadata).
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -129,12 +130,21 @@ def _fq_for_sql(fq_table: str) -> str:
     return fqn(parts, _SNOWFLAKE_FQN_DEF)
 
 
+# Snowflake's unquoted-identifier grammar: a letter/underscore start followed by
+# letters, digits, underscores or dollar signs. Such a name is CASE-INSENSITIVE
+# -- Snowflake upper-folds it -- so an unquoted reference resolves onto an object
+# that was created unquoted (upper-folded), whatever case we happen to spell it in.
+_UNQUOTED_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*\Z")
+
+
 def _use_ident(name: str) -> str:
-    """Reference `name` in a ``USE DATABASE/SCHEMA``, mirroring snowflake-sqlalchemy
-    name denormalisation: an all-lower-case bare identifier is left UNQUOTED so
-    Snowflake upper-folds it onto the stored object (how tdx provisions schemas —
-    unquoted, upper-folded); any other form is double-quoted to preserve its case."""
-    return name if (name.isidentifier() and name.islower()) else _fq_for_sql(name)
+    """Reference `name` in a ``USE DATABASE/SCHEMA``.
+
+    Any name that fits the unquoted-identifier grammar is therefore emitted
+    UNQUOTED here so Snowflake folds it back onto the stored object regardless of
+    the case we were handed.
+    """
+    return name if _UNQUOTED_IDENT_RE.fullmatch(name) else _fq_for_sql(name)
 
 
 def _use_namespace(sf_conn, conn: SnowflakeDestConn) -> None:
