@@ -174,11 +174,17 @@ def iter_insert_statements(
 
 
 def _frame(tbl: "Table"):
-    """A polars DataFrame of `tbl` (non-``auto`` columns), preserving column
-    order even when there are no rows."""
+    """A polars DataFrame of `tbl` (ALL columns, incl. ``auto``), preserving
+    column order even when there are no rows.
+
+    Unlike SQL ``INSERT`` (where ``auto`` columns are skipped and the DB
+    regenerates them), a file seed has no DB to regenerate anything — dropping
+    ``auto`` columns would strip surrogate primary keys that other tables
+    reference as foreign keys, leaving the file dataset internally unjoinable.
+    datagen already populates these columns with real values, so keep them."""
     import polars as pl
 
-    cols = [c for c in tbl.columns if not c.auto]
+    cols = list(tbl.columns)
     if tbl.rows:
         return pl.DataFrame({
             c.name: [r.get(c.name) for r in tbl.rows] for c in cols
@@ -194,8 +200,8 @@ def file_stamp() -> str:
 
 
 def write_frame(tbl: "Table", path: str | Path, fmt: str) -> None:
-    """Write `tbl`'s (non-``auto``) columns and rows to `path` as `fmt` (one of
-    :data:`FILE_FORMATS`), creating parent directories."""
+    """Write `tbl`'s columns and rows (incl. ``auto`` surrogate keys) to `path`
+    as `fmt` (one of :data:`FILE_FORMATS`), creating parent directories."""
     if fmt not in FILE_FORMATS:
         raise ValueError(f"unknown format {fmt!r}; expected one of {FILE_FORMATS}")
     p = Path(path)

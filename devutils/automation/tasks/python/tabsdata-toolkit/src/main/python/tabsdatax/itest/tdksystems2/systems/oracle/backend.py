@@ -38,10 +38,14 @@ class Oracle(SqlContainerBackend):
 
     def session_setup(self) -> list[str]:
         # So the generator's ISO date/timestamp literals parse regardless of the
-        # image's NLS defaults.
+        # image's NLS defaults. TIMESTAMP WITH TIME ZONE columns (e.g. bronze's
+        # data_ts) use NLS_TIMESTAMP_TZ_FORMAT, a distinct parameter from the
+        # plain-timestamp one — without it the ISO literal hits the image default
+        # (DD-MON-RR …) and fails with ORA-01843.
         return [
             "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'",
             "ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS'",
+            "ALTER SESSION SET NLS_TIMESTAMP_TZ_FORMAT = 'YYYY-MM-DD HH24:MI:SS'",
         ]
 
     def drop_all_tables(self, uri: str) -> None:
