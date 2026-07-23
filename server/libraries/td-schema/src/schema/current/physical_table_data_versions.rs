@@ -44,6 +44,7 @@ pub enum PhysicalTableDataVersions {
     RowCount,
     DataBytes,
     SchemaHash,
+    ColumnarLineage,
     ExecutionId,
     TransactionId,
     PhysicalFunctionRunId,
@@ -83,6 +84,7 @@ impl Entity for Defs {
                 // omits it (e.g., older Python worker yamls).
                 .col(ColumnDef::new(PhysicalTableDataVersions::DataBytes).big_integer().null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::SchemaHash).text().null())
+                .col(ColumnDef::new(PhysicalTableDataVersions::ColumnarLineage).text().null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::ExecutionId).text().not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::TransactionId).text().not_null())
                 .col(ColumnDef::new(PhysicalTableDataVersions::PhysicalFunctionRunId).text().not_null())
