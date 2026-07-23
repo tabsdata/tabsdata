@@ -134,8 +134,8 @@ class Provisioner:
 def provision(tmp_path, monkeypatch):
     monkeypatch.setenv(store.BACKENDS_DIR_ENV, str(tmp_path))
     monkeypatch.setenv(crypto.ENV_VAR, "fixture-test-key-abcdef")
-    monkeypatch.delenv("TD_TEST_ON_MISSING_BACKEND", raising=False)
-    monkeypatch.delenv("TD_TEST_SKIP_BACKENDS", raising=False)
+    for var in (*backend.ON_MISSING_ENV.values(), *backend.SKIP_ENV.values()):
+        monkeypatch.delenv(var, raising=False)
     crypto.use_secret_env(None)
     # fs validates its root lives under /tmp|/home|/Users and mkdirs it for real.
     sys_path = Path(f"/tmp/fixture-be-{tmp_path.name}")

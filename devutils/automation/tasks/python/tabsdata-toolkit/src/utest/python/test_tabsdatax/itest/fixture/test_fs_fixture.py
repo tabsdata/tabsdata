@@ -77,20 +77,20 @@ def test_system_type_mismatch_fails(provision):
 
 
 def test_missing_backend_fails_by_default(provision, monkeypatch):
-    monkeypatch.delenv(common.ON_MISSING_ENV, raising=False)
+    monkeypatch.delenv(common.ON_MISSING_ENV[common.SYSTEM], raising=False)
     with pytest.raises(pytest.fail.Exception, match="not found"):
         common.load("does_not_exist", FsSystem)
 
 
 def test_missing_backend_skips_when_configured(provision, monkeypatch):
-    monkeypatch.setenv(common.ON_MISSING_ENV, "skip")
+    monkeypatch.setenv(common.ON_MISSING_ENV[common.DOMAIN], "skip")
     with pytest.raises(pytest.skip.Exception):
         common.load("does_not_exist", FsDomain)
 
 
-def test_skip_backends_by_type(provision, monkeypatch):
+def test_skip_backends_by_name(provision, monkeypatch):
     provision.system("fs", "my_fs")
-    monkeypatch.setenv(common.SKIP_ENV, "other,fs")
+    monkeypatch.setenv(common.SKIP_ENV[common.SYSTEM], "other,my_fs")
     with pytest.raises(pytest.skip.Exception, match="skipped"):
         common.load("my_fs", FsSystem)
 
@@ -143,5 +143,5 @@ def test_inject_multiple_systems_and_domains(
 
 
 def test_undeclared_backend_fails(request, fs_ready):
-    with pytest.raises(pytest.fail.Exception, match="No backend 'my_fs' declared"):
+    with pytest.raises(pytest.fail.Exception, match="No system 'my_fs' declared"):
         request.getfixturevalue("system_my_fs")

@@ -8,13 +8,19 @@ from pathlib import Path
 
 import pytest
 
+# `td_tabsdata_instance` (a consumer shorthand) and `meta_instance` (registered
+# as the `instance` meta-relay) normally generate at plugin import from the itest
+# registry, which does not exist in-process; import them so the tests exercising
+# the shorthand and the relay can request them.
 from tabsdatax.itest.fixture.instances import tabsdata
 from tabsdatax.itest.fixture.instances.tabsdata import (
     Instance,
     Port,
     consumer_instance_fixture,
     tabsdata_instance,
+    td_tabsdata_instance,
 )
+from tabsdatax.itest.fixture.instances.tabsdata import meta_instance as instance
 
 MONKEYPATCH_CONSUMERS = ("tdtest", "aitest")
 

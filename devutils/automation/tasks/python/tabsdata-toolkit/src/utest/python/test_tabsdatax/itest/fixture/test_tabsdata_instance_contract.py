@@ -79,7 +79,15 @@ HARNESS_PACKAGE = "tabsdatak/itest/fixture/instances"
 
 def run_harness(pytester, name: str):
     copied = pytester.copy_example(f"{HARNESS_PACKAGE}/{name}")
-    return pytester.runpytest("--collect-only", "-q", copied.name)
+    # Load the instance plugin so its collection-time contract hook runs in the
+    # sub-pytest (that hook is what emits the "contract violated" error).
+    return pytester.runpytest(
+        "--collect-only",
+        "-q",
+        "-p",
+        "tabsdatax.itest.fixture.instances.tabsdata",
+        copied.name,
+    )
 
 
 def violation_lines(result, needle: str) -> None:

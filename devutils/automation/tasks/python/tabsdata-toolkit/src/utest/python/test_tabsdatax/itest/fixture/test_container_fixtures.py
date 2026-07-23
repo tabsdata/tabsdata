@@ -62,10 +62,13 @@ def test_container_domain(provision, slug, kind, staging, Sys, Dom):
     obj = common.load("d", Dom)
     assert isinstance(obj, Dom) and obj.system_type == slug
     assert obj.system_kind == kind and obj.host == "localhost"
-    # The entity (db) is the prefixed external name (default DOMAIN_PREFIX);
-    # the descriptor's logical name stays "d".
+    # The entity (db) is the prefixed external name (default DOMAIN_PREFIX),
+    # compared case-insensitively since some backends upper-case identifiers
+    # (db2); the descriptor's logical name stays "d". The sqlalchemy_uri is a
+    # real connection URI that references that entity.
     ext = tdx._resolve_domain_prefix(None) + "d"
-    assert obj.db == ext and obj.sqlalchemy_uri == f"proto://{ext}"
+    assert obj.db.lower() == ext.lower()
+    assert ext.lower() in obj.sqlalchemy_uri.lower()
     assert obj.model is None and obj.data is None
 
 
