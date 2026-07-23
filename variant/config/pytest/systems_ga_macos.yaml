@@ -4,78 +4,49 @@
 
 - name: azureblob
   type: azureblob
-  container:
-    env: AZ__CONTAINER
-  account-name:
-    env: AZ__ACCOUNT_NAME
-  account-key:
-    env: AZ__ACCOUNT_KEY
-  sys-path:
-    env: AZ__SYS_PATH
+  container$: AZ__CONTAINER
+  account-name$: AZ__ACCOUNT_NAME
+  account-key$: AZ__ACCOUNT_KEY
+  sys-path$: AZ__SYS_PATH
 - name: bigquery
   type: bigquery
-  project:
-    env: BIGQUERY__PROJECT
-  service-account-key:
-    env: BIGQUERY__SERVICE_ACCOUNT_KEY
-  bucket:
-    env: BIGQUERY__BUCKET
-  sys-path:
-    env: BIGQUERY__SYS_PATH
+  project$: BIGQUERY__PROJECT
+  bucket$: BIGQUERY__BUCKET
+  service-account-key$: BIGQUERY__SERVICE_ACCOUNT_KEY
+  sys-path$: BIGQUERY__SYS_PATH
 - name: databricks
   type: databricks
-  host:
-    env: DATABRICKS__HOST
-  token:
-    env: DATABRICKS__TOKEN
-  warehouse-id:
-    env: DATABRICKS__WAREHOUSE_ID
-  catalog:
-    env: DATABRICKS__CATALOG
-  volume:
-    env: DATABRICKS__VOLUME
+  host$: DATABRICKS__HOST
+  token$: DATABRICKS__TOKEN
+  warehouse-id$: DATABRICKS__WAREHOUSE_ID
+  catalog$: DATABRICKS__CATALOG
+  volume$: DATABRICKS__VOLUME
 - name: fs
   type: fs
-  sys-path: target/backends/fs
 - name: gcs
   type: gcs
-  bucket:
-    env: GCS__BUCKET
-  service-account-key:
-    env: GCS__SERVICE_ACCOUNT_KEY
-  sys-path:
-    env: GCS__SYS_PATH
+  bucket$: GCS__BUCKET
+  service-account-key$: GCS__SERVICE_ACCOUNT_KEY
+  hmac-access-key$: GCS__HMAC_ACCESS_KEY
+  hmac-secret-key$: GCS__HMAC_SECRET_KEY
+  sys-path$: GCS__SYS_PATH
 - name: s3
   type: s3
-  bucket:
-    env: S3__BUCKET
-  region:
-    env: S3__REGION
-  access-key:
-    env: S3__ACCESS_KEY
-  secret-key:
-    env: S3__SECRET_KEY
-  sys-path:
-    env: S3__SYS_PATH
+  bucket$: S3__BUCKET
+  region$: S3__REGION
+  access-key$: S3__ACCESS_KEY
+  secret-key$: S3__SECRET_KEY
+  sys-path$: S3__SYS_PATH
 - name: salesforce
   type: salesforce
-  url:
-    env: SALESFORCE__URL
-  username:
-    env: SALESFORCE__USERNAME
-  password:
-    env: SALESFORCE__PASSWORD
-  token:
-    env: SALESFORCE__TOKEN
+  url$: SALESFORCE__URL
+  username$: SALESFORCE__USERNAME
+  password$: SALESFORCE__PASSWORD
+  token$: SALESFORCE__TOKEN
 - name: snowflake
   type: snowflake
-  account:
-    env: SNOWFLAKE__ACCOUNT
-  username:
-    env: SNOWFLAKE__USERNAME
-  pat:
-    env: SNOWFLAKE__PAT
-  warehouse:
-    env: SNOWFLAKE__WAREHOUSE
-  database:
-    env: SNOWFLAKE__DATABASE
+  account$: SNOWFLAKE__ACCOUNT
+  username$: SNOWFLAKE__USERNAME
+  pat$: SNOWFLAKE__PAT
+  database$: SNOWFLAKE__DATABASE
+  warehouse$: SNOWFLAKE__WAREHOUSE

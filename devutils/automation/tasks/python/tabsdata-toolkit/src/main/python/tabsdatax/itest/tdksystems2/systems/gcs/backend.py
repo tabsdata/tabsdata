@@ -6,9 +6,11 @@
 
 Config from the ``GCS__`` environment: ``GCS__BUCKET`` and
 ``GCS__SERVICE_ACCOUNT_KEY`` (inline JSON — starts with ``{`` — or a file path),
-plus ``GCS__SYS_PATH`` (staging-root prefix). The HMAC keys some callers set are
-not used here. Only the GCS storage ops live here — the rest is
-:class:`CloudFileBackend`.
+plus ``GCS__SYS_PATH`` (staging-root prefix). The S3-interop HMAC keys
+(``GCS__HMAC_ACCESS_KEY`` / ``GCS__HMAC_SECRET_KEY``) are carried in the descriptor
+for consumers that reach GCS over the S3 protocol (ClickHouse / StarRocks
+staging); the storage ops here use the service-account key. Only the GCS storage
+ops live here — the rest is :class:`CloudFileBackend`.
 """
 
 from __future__ import annotations
@@ -39,6 +41,24 @@ class Gcs(CloudFileBackend):
                 options.ENV,
                 "env $GCS__SERVICE_ACCOUNT_KEY (inline JSON or a file path)",
                 secret=True,
+            ),
+            # S3-interop (HMAC) credentials, baked into the descriptor for consumers
+            # that reach GCS over the S3 protocol (ClickHouse / StarRocks staging).
+            # Optional: a GCS system without S3-interop keys still creates.
+            options.Option(
+                "HMAC_ACCESS_KEY",
+                "hmac-access-key",
+                options.ENV,
+                "env $GCS__HMAC_ACCESS_KEY (S3-interop access key)",
+                required=False,
+            ),
+            options.Option(
+                "HMAC_SECRET_KEY",
+                "hmac-secret-key",
+                options.ENV,
+                "env $GCS__HMAC_SECRET_KEY (S3-interop secret key)",
+                secret=True,
+                required=False,
             ),
             options.Option("SYS_PATH", "sys-path", options.ENV, "env $GCS__SYS_PATH"),
         )

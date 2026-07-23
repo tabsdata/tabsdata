@@ -7,7 +7,7 @@
 - name: azureblob_world_xs
   sys: azureblob
   model: world
-  data: xs
+  size: 200
 - name: bigquery
   sys: bigquery
 - name: databricks
@@ -15,25 +15,25 @@
 - name: databricks_world_xs
   sys: databricks
   model: world
-  data: xs
+  size: 200
 - name: fs
   sys: fs
 - name: fs_world_xs
   sys: fs
   model: world
-  data: xs
+  size: 200
 - name: gcs
   sys: gcs
 - name: gcs_world_xs
   sys: gcs
   model: world
-  data: xs
+  size: 200
 - name: s3
   sys: s3
 - name: s3_world_xs
   sys: s3
   model: world
-  data: xs
+  size: 200
 - name: salesforce
   sys: salesforce
 - name: snowflake
@@ -41,4 +41,4 @@
 - name: snowflake_world_xs
   sys: snowflake
   model: world
-  data: xs
+  size: 200

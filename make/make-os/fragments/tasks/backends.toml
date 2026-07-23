@@ -287,8 +287,8 @@ script = [
 
     info "📄 Using systems manifest: ${manifest}"
     info "🛠️ Creating backend systems..."
-    debug "🚀 tdx-system create --sys-manifest ${manifest} -f"
-    exec --fail-on-error tdx-system create --sys-manifest ${manifest} -f
+    debug "🚀 tdx-system create --manifest ${manifest} -f"
+    exec --fail-on-error tdx-system create --manifest ${manifest} -f
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -370,8 +370,8 @@ script = [
 
     info "📄 Using systems manifest: ${manifest}"
     info "💥 Destroying backend systems..."
-    debug "🚀 tdx-system destroy --sys-manifest ${manifest}"
-    exec --fail-on-error tdx-system destroy --sys-manifest ${manifest}
+    debug "🚀 tdx-system destroy --manifest ${manifest}"
+    exec --fail-on-error tdx-system destroy --manifest ${manifest}
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -421,9 +421,9 @@ script = [
     systems_folder = trim ${systems_folder}
     if is_empty ${systems_folder}
         home = get_env HOME
-        systems_folder = set ${home}/.tabsdatax/systems
+        systems_folder = set ${home}/.tabsdatax/systems2
     else
-        systems_folder = set ${systems_folder}/systems
+        systems_folder = set ${systems_folder}/systems2
     end
 
     documents = array
@@ -552,8 +552,8 @@ script = [
 
     info "📄 Using domains manifest: ${manifest}"
     info "🛠️ Creating backend domains..."
-    debug "🚀 tdx-domain create --domain-manifest ${manifest} -f"
-    exec --fail-on-error tdx-domain create --domain-manifest ${manifest} -f
+    debug "🚀 tdx-domain create --manifest ${manifest} -f"
+    exec --fail-on-error tdx-domain create --manifest ${manifest} -f
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -640,8 +640,8 @@ script = [
 
     info "📄 Using domains manifest: ${manifest}"
     info "💥 Destroying backend domains..."
-    debug "🚀 tdx-domain destroy --domain-manifest ${manifest}"
-    exec --fail-on-error tdx-domain destroy --domain-manifest ${manifest}
+    debug "🚀 tdx-domain destroy --manifest ${manifest}"
+    exec --fail-on-error tdx-domain destroy --manifest ${manifest}
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -662,8 +662,8 @@ script = [
 
     exec tdx-itest banner --color green "🚥 Status for backend domains"
 
-    debug "🚀 tdx-domain status --auto ALL"
-    status_code = exec --get-exit-code tdx-domain status --auto ALL
+    debug "🚀 tdx-domain status --domain ALL"
+    status_code = exec --get-exit-code tdx-domain status --domain ALL
     if not eq ${status_code} "0"
         warn "⚠️ Some backend domains reported an unhealthy status (exit code ${status_code})."
     end
@@ -691,9 +691,9 @@ script = [
     domains_folder = trim ${domains_folder}
     if is_empty ${domains_folder}
         home = get_env HOME
-        domains_folder = set ${home}/.tabsdatax/domains
+        domains_folder = set ${home}/.tabsdatax/domains2
     else
-        domains_folder = set ${domains_folder}/domains
+        domains_folder = set ${domains_folder}/domains2
     end
 
     documents = array

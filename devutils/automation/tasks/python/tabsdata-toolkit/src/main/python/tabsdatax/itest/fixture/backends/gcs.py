@@ -22,6 +22,9 @@ class GcsSystem(System):
     sys_path: Path
     bucket: str
     service_account_key: str
+    # S3-interop HMAC keys (optional; present when the system carries S3-compat creds)
+    hmac_access_key: str | None = None
+    hmac_secret_key: str | None = None
 
 
 @dataclass(frozen=True)

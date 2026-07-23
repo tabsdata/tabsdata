@@ -1,5 +1,5 @@
 #
-# Copyright 2026 Tabsdata Inc.
+# Copyright 2026 Tabssize Inc.
 #
 
 - name: anthropic
@@ -9,7 +9,7 @@
 - name: azureblob_world_xs
   sys: azureblob
   model: world
-  data: xs
+  size: 200
 - name: bigquery
   sys: bigquery
 - name: clickhouse
@@ -17,19 +17,19 @@
 - name: clickhouse_world_xs
   sys: clickhouse
   model: world
-  data: xs
+  size: 200
 - name: databricks
   sys: databricks
 - name: databricks_world_xs
   sys: databricks
   model: world
-  data: xs
+  size: 200
 - name: db2
   sys: db2
 - name: db2_world_xs
   sys: db2
   model: world
-  data: xs
+  size: 200
 - name: druid
   sys: druid
 - name: druid_world
@@ -40,13 +40,13 @@
 - name: fs_world_xs
   sys: fs
   model: world
-  data: xs
+  size: 200
 - name: gcs
   sys: gcs
 - name: gcs_world_xs
   sys: gcs
   model: world
-  data: xs
+  size: 200
 - name: mongodb
   sys: mongodb
 - name: mssqlserver
@@ -54,13 +54,13 @@
 - name: mssqlserver_world_xs
   sys: mssqlserver
   model: world
-  data: xs
+  size: 200
 - name: mysql
   sys: mysql
 - name: mysql_world_xs
   sys: mysql
   model: world
-  data: xs
+  size: 200
 - name: openai
   sys: openai
 - name: oracle
@@ -68,25 +68,25 @@
 - name: oracle_world_xs
   sys: oracle
   model: world
-  data: xs
+  size: 200
 - name: postgres
   sys: postgres
 - name: postgres_world_xs
   sys: postgres
   model: world
-  data: xs
+  size: 200
 - name: redpanda
   sys: redpanda
 - name: redpanda_world_xs
   sys: redpanda
   model: world
-  data: xs
+  size: 200
 - name: s3
   sys: s3
 - name: s3_world_xs
   sys: s3
   model: world
-  data: xs
+  size: 200
 - name: salesforce
   sys: salesforce
 - name: snowflake
@@ -94,10 +94,10 @@
 - name: snowflake_world_xs
   sys: snowflake
   model: world
-  data: xs
+  size: 200
 - name: starrocks
   sys: starrocks
 - name: starrocks_world_xs
   sys: starrocks
   model: world
-  data: xs
+  size: 200
