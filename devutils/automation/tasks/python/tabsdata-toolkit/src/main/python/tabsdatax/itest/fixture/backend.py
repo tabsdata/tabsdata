@@ -44,12 +44,15 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import subprocess
+from pathlib import Path
 from typing import ClassVar
 
 import pytest
 from pydantic import ValidationError
 
 from ..tdksystems import crypto, descriptor, store
+from . import operations
 
 SYSTEM = "system"
 DOMAIN = "domain"
@@ -80,9 +83,45 @@ class System:
 
 
 class Domain:
-    """Base for a domain fixture dataclass (see :class:`System`)."""
+    """Base for a domain fixture dataclass (see :class:`System`).
+
+    Every domain fixture inherits :meth:`changes`, which drives ``tdx-domain
+    changes`` against this domain (by ``name``) through :mod:`.operations` — the
+    shared util all domains use, so applying CDC changes is the same for every
+    backend. It only works for a domain whose model ships a ``changes.py``
+    recipe.
+    """
 
     system_type: ClassVar[str]
+    name: str
+
+    def changes(
+        self,
+        *,
+        entities: str | list[str],
+        count: int,
+        ops: str = "mix",
+        rows: int | None = None,
+        seed: str | int | None = None,
+        latch: str | Path | None = None,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        """Apply deterministic INSERT/UPDATE/DELETE changes to this domain's
+        ``entities`` via ``tdx-domain changes`` (see :func:`.operations.changes`).
+
+        Runs against the same store the fixture loaded from, decrypting with the
+        ambient ``$TD_BACKENDS_CRYPTO_KEY`` — nothing else to wire up. Only
+        works for a domain whose model ships a ``changes.py`` recipe."""
+        return operations.changes(
+            self.name,
+            entities=entities,
+            count=count,
+            ops=ops,
+            rows=rows,
+            seed=seed,
+            latch=latch,
+            check=check,
+        )
 
 
 def _on_missing(family: str) -> str:
