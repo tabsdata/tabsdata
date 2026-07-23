@@ -621,6 +621,41 @@ fn metrics_queries_hold_window_first_fenced_contract() {
     }
 }
 
+/// Deterministic plan guard (cheap, unconditional). Under the Global RLS-bypass
+/// path the metrics plans must reach the LFR view via `logical_function_runs_pkey`;
+/// keying the view by `physical_function_run_id` instead re-expands it per window
+/// row (the O(window × history) blowup). Multi-project seed is load-bearing —
+/// single-project folds against MCVs and hides the regression.
+#[cfg(postgres)]
+#[td_test::test(db)]
+async fn metrics_plans_reach_lfr_by_pk_under_bypass(db: TdPool) -> Result<(), TdError> {
+    dataset::metrics_dataset(
+        &db,
+        MetricsKnobs {
+            publishers: SMALL,
+            consumers: SMALL / 2,
+            projects: 8,
+        },
+    )
+    .await?;
+    db.execute_batch(&["ANALYZE".to_string()])
+        .await
+        .expect("analyze after metrics seed");
+
+    let (node_sql, edge_sql) = td_queries::metrics_plan_sql(&metrics_request());
+    let mut conn = db.acquire_for_read().await.unwrap();
+    for (name, sql) in [("nodes", &node_sql), ("edges", &edge_sql)] {
+        let plan = conn.explain(sql).await.expect("explain").join("\n");
+        assert!(
+            plan.contains("logical_function_runs_pkey"),
+            "{name} plan does not reach the LFR view by primary key — the window \
+             probe regressed to per-row view re-expansion (the RLS \
+             O(window×history) blowup):\n{plan}"
+        );
+    }
+    Ok(())
+}
+
 #[ignore = "expensive: seeds the metrics dataset at two sizes and times every metrics query"]
 #[td_test::test(db)]
 async fn report_scaling_metrics(db: TdPool) -> Result<(), TdError> {
@@ -701,16 +736,19 @@ async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
             .expect("analyze after history push");
         passes.push(time_metrics_queries(&db).await?);
     }
-    // Mechanism first (deterministic), at the big size: window-driven through
-    // the reverse index.
+    // Mechanism (deterministic): the attempt is resolved to its run by pk, not
+    // by re-expanding the LFR-anchored view per window row. The reverse index on
+    // the pointer hop is logged, not asserted — discretionary at these sizes.
     let (node_sql, edge_sql) = td_queries::metrics_plan_sql(&metrics_request());
     let mut conn = db.acquire_for_read().await.unwrap();
     for (name, sql) in [("nodes", &node_sql), ("edges", &edge_sql)] {
         let plan = conn.explain(sql).await.expect("explain").join("\n");
         eprintln!("[query-load] window plan {name}:\n{plan}\n");
         assert!(
-            plan.contains("lfr_pointers_current___physical_function_run_id___idx"),
-            "{name} plan is not window-driven through the pointer-current reverse index:\n{plan}"
+            plan.contains("logical_function_runs_pkey"),
+            "{name} plan does not resolve the window attempt to its run by \
+             primary key — the probe regressed to per-row view re-expansion \
+             (the RLS O(window×history) blowup):\n{plan}"
         );
     }
     drop(conn);

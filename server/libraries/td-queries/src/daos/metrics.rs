@@ -46,8 +46,8 @@ use sea_query::{
     Alias, Expr, ExprTrait, Func, IntoIden, JoinType, NullOrdering, Order, Query, SelectStatement,
     SimpleExpr, UnionType, Value,
 };
-use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
+use ta_objects::{CurrentDao, SeaValue};
 use td_database::sea_query::builder::SeaQueryExt;
 #[cfg(postgres)]
 use td_database::sea_query::kind::DatabaseBackend;
@@ -56,7 +56,8 @@ use td_objects::dxo::collection::CollectionCreateDBIden;
 use td_objects::dxo::group::GroupDBIden;
 use td_objects::dxo::logical::{
     FunctionRunDBWithNames, FunctionRunDBWithNamesIden, LogicalFunctionRunDB,
-    LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden, LogicalTableDataVersionDBIden,
+    LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden, LogicalFunctionRunPointerDB,
+    LogicalFunctionRunPointerDBIden, LogicalTableDataVersionDBIden,
     TableDataVersionDBWithNamesIden,
 };
 use td_objects::dxo::metrics::{
@@ -65,7 +66,7 @@ use td_objects::dxo::metrics::{
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
 use td_objects::dxo::project::ActiveProjectDBIden;
 use td_objects::dxo::query_filters::{DimensionFilter, WindowUnit};
-use td_objects::types::basic::{HasData, LogicalFunctionRunStatus, Private};
+use td_objects::types::basic::{HasData, LogicalFunctionRunStatus, LogicalPointerStatus, Private};
 
 query_handle! {
     /// Entry trait providing [`metrics`](MetricsEntry::metrics) on every
@@ -152,10 +153,11 @@ pub fn metrics_plan_sql(req: &MetricsRequest) -> (String, String) {
     )
 }
 
-/// FROM the windowed attempts (`physical_function_runs (ended_on)` index),
-/// each resolved to its bound run through the pointer-current reverse index —
-/// Θ(window), independent of total history. [`fr_probe`] is aliased back to
-/// the view's own name so everything downstream is shape-agnostic.
+/// FROM the windowed attempts (`physical_function_runs (ended_on)` index).
+/// Two fenced hops resolve each to its bound run: [`lfr_pointer_probe`] via the
+/// pointer reverse index, then [`fr_probe`] by primary key — Θ(window),
+/// independent of history. [`fr_probe`] keeps the view's own name so downstream
+/// is shape-agnostic.
 fn from_windowed_runs(stmt: &mut SelectStatement, req: &MetricsRequest, lateral: bool) {
     if lateral {
         let ended_on = (
@@ -165,6 +167,12 @@ fn from_windowed_runs(stmt: &mut SelectStatement, req: &MetricsRequest, lateral:
         stmt.from(PhysicalFunctionRunDBIden::Table)
             .and_where(Expr::col(ended_on).gte(ms_to_dt(req.window.start_ms)))
             .and_where(Expr::col(ended_on).lt(ms_to_dt(req.window.end_ms)))
+            .join_lateral(
+                JoinType::InnerJoin,
+                lfr_pointer_probe(),
+                LogicalFunctionRunPointerDBIden::Table,
+                Expr::val(true),
+            )
             .join_lateral(
                 JoinType::InnerJoin,
                 fr_probe(),
@@ -178,13 +186,43 @@ fn from_windowed_runs(stmt: &mut SelectStatement, req: &MetricsRequest, lateral:
     }
 }
 
-/// The per-attempt probe: the LFR view keyed by the bound-attempt id.
-///
-/// The `OFFSET 0` fence is load-bearing: without it the planner flattens the
-/// lateral and reorders the join tree on the ~1-row estimates the RLS qual
-/// produces, so the window stops driving (measured 100–1000× worse). The
-/// explicit column list is too: a fenced subquery's target list is never
-/// pruned, so select only what the outer query reads.
+/// Reverse-index hop: window attempt → currently-bound `logical_function_run_id`
+/// via `logical_function_run_pointers_current`. INNER JOIN drops attempts that
+/// aren't the current binding; `OFFSET 0` keeps it a per-window-row lookup.
+fn lfr_pointer_probe() -> SelectStatement {
+    let p = Alias::new("p").into_iden();
+    let mut stmt = Query::select();
+    stmt.column((
+        p.clone(),
+        LogicalFunctionRunPointerDBIden::LogicalFunctionRunId,
+    ))
+    .from_as(
+        Alias::new(<LogicalFunctionRunPointerDB as CurrentDao>::current_table_name()),
+        p.clone(),
+    )
+    .and_where(
+        Expr::col((
+            p.clone(),
+            LogicalFunctionRunPointerDBIden::PhysicalFunctionRunId,
+        ))
+        .equals((
+            PhysicalFunctionRunDBIden::Table,
+            PhysicalFunctionRunDBIden::Id,
+        )),
+    )
+    .and_where(
+        Expr::col((p, LogicalFunctionRunPointerDBIden::Status))
+            .eq(LogicalPointerStatus::Bound.as_sea_value()),
+    )
+    .offset(0)
+    .take()
+}
+
+/// The LFR view keyed by its primary key (resolved by [`lfr_pointer_probe`]).
+/// Keying on `id`, not `physical_function_run_id`, lets the planner reach the
+/// row by index instead of re-expanding the view per row under RLS's ~1-row
+/// estimates. `OFFSET 0` fences the lateral so the window keeps driving; the
+/// explicit column list avoids the unpruned target list of a fenced subquery.
 fn fr_probe() -> SelectStatement {
     let p = Alias::new("p").into_iden();
     let mut stmt = Query::select();
@@ -206,12 +244,10 @@ fn fr_probe() -> SelectStatement {
         stmt.column((p.clone(), col));
     }
     stmt.from_as(FunctionRunDBWithNamesIden::Table, p.clone())
-        .and_where(
-            Expr::col((p, FunctionRunDBWithNamesIden::PhysicalFunctionRunId)).equals((
-                PhysicalFunctionRunDBIden::Table,
-                PhysicalFunctionRunDBIden::Id,
-            )),
-        )
+        .and_where(Expr::col((p, FunctionRunDBWithNamesIden::Id)).equals((
+            LogicalFunctionRunPointerDBIden::Table,
+            LogicalFunctionRunPointerDBIden::LogicalFunctionRunId,
+        )))
         .offset(0)
         .take()
 }
@@ -1923,6 +1959,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::CurrentEntry;
     use crate::LiveEntry;
     use crate::test_utils::SeedEntry;
