@@ -117,7 +117,7 @@ def test_s3_conn_accepts_absolute_base_path(conn_cls):
     assert c.base_path == "/data/sub"
 
 
-@pytest.mark.parametrize("bad", ["data", "data/sub", "/data/"])
+@pytest.mark.parametrize("bad", ["data", "data/sub", "/data/", "/data//sub"])
 def test_s3_conn_rejects_non_absolute_or_trailing_slash_base_path(conn_cls, bad):
     # A bare string that fails the FullPathSpec pattern is rejected by the
     # StrOrSecretConstraints regex at construction time.

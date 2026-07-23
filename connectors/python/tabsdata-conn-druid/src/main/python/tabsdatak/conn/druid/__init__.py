@@ -151,9 +151,9 @@ class S3Location(CloudLocation):
         credentials: `AwsAccessSecretKey` (access key id / secret
             access key).
         base_path: Object-key prefix from the bucket root, e.g.
-            `/staging/druid`; starts with `/` and has no trailing
-            `/` (the leading `/` is trimmed when forming the key).
-            Defaults to `/`.
+            `/staging/druid`; starts with `/`, has no trailing `/`
+            and no empty segments (`//`) (the leading `/` is trimmed
+            when forming the key). Defaults to `/`.
         cfg: Optional connector config for the underlying S3 client
             (see `CfgSpec`).
     """
@@ -188,8 +188,9 @@ class AzBlobLocation(CloudLocation):
         container: A valid Azure Blob container name.
         credentials: `AzureAccountKey` storage-account credentials.
         base_path: Path prefix from the container root; starts with
-            `/` and has no trailing `/` (the leading `/` is
-            trimmed when forming the blob name). Defaults to `/`.
+            `/`, has no trailing `/` and no empty segments (`//`)
+            (the leading `/` is trimmed when forming the blob name).
+            Defaults to `/`.
         cfg: Optional connector config for the Azure Blob client (see
             `CfgSpec`).
     """
@@ -220,8 +221,9 @@ class GCSLocation(CloudLocation):
         bucket: A valid GCS bucket name.
         credentials: `GCPJson` service-account JSON credentials.
         base_path: Object-key prefix from the bucket root; starts with
-            `/` and has no trailing `/` (the leading `/` is
-            trimmed when forming the key). Defaults to `/`.
+            `/`, has no trailing `/` and no empty segments (`//`)
+            (the leading `/` is trimmed when forming the key).
+            Defaults to `/`.
         cfg: Optional connector config for the GCS client (see
             `CfgSpec`).
     """

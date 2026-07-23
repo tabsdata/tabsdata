@@ -142,8 +142,9 @@ class S3Location(CloudLocation):
         region: A valid AWS region, e.g. `us-east-1`.
         credentials: AWS access-key / secret-key credentials.
         base_path: Object-key prefix from the bucket root; starts with
-            `/` and has no trailing `/` (the leading `/` is
-            trimmed when forming the key). Defaults to `/`.
+            `/`, has no trailing `/` and no empty segments (`//`)
+            (the leading `/` is trimmed when forming the key).
+            Defaults to `/`.
         cfg: Optional connector-config dict for the S3 client.
     """
 
@@ -177,8 +178,9 @@ class AzBlobLocation(CloudLocation):
         container: A valid Azure Blob container name.
         credentials: Azure storage account name / key credentials.
         base_path: Blob-name prefix from the container root; starts with
-            `/` and has no trailing `/` (the leading `/` is
-            trimmed when forming the blob name). Defaults to `/`.
+            `/`, has no trailing `/` and no empty segments (`//`)
+            (the leading `/` is trimmed when forming the blob name).
+            Defaults to `/`.
         cfg: Optional connector-config dict for the Azure Blob client.
     """
 
@@ -214,8 +216,9 @@ class GCSLocation(CloudLocation):
         hmac_credentials: GCS HMAC access-key / secret-key credentials
             (StarRocks' S3-compatible read-back).
         base_path: Object-key prefix from the bucket root; starts with
-            `/` and has no trailing `/` (the leading `/` is
-            trimmed when forming the key). Defaults to `/`.
+            `/`, has no trailing `/` and no empty segments (`//`)
+            (the leading `/` is trimmed when forming the key).
+            Defaults to `/`.
         cfg: Optional connector-config dict for the GCS client.
     """
 

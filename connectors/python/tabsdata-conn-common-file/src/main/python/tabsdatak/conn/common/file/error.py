@@ -117,3 +117,27 @@ class FileCommonErrorCode(ErrorCode):
         ConnInitException,
         "Cannot create FilePattern",
     )
+    FILE_COMMON_22 = ErrorDef(
+        ConnInitException,
+        "Source path '{path}' must be relative (cannot start with '/')",
+    )  # validate_src_path
+    FILE_COMMON_23 = ErrorDef(
+        ConnInitException,
+        "Source path '{path}' cannot end with '/'",
+    )  # validate_src_path
+    FILE_COMMON_24 = ErrorDef(
+        ConnInitException,
+        "Source path '{path}' cannot contain empty segments ('//')",
+    )  # validate_src_path
+    FILE_COMMON_25 = ErrorDef(
+        ConnInitException,
+        "Destination path '{path}' must be relative (cannot start with '/')",
+    )  # validate_dest_path
+    FILE_COMMON_26 = ErrorDef(
+        ConnInitException,
+        "Destination path '{path}' cannot end with '/'",
+    )  # validate_dest_path
+    FILE_COMMON_27 = ErrorDef(
+        ConnInitException,
+        "Destination path '{path}' cannot contain empty segments ('//')",
+    )  # validate_dest_path

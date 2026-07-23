@@ -112,8 +112,9 @@ class S3SrcConn(Conn):
         region: A valid AWS region, e.g. `us-east-1`.
         credentials: AWS `AwsAccessSecretKey` credentials.
         base_path: Object-key prefix from the bucket root; starts with
-            `/` and has no trailing `/` (the leading `/` is
-            trimmed when forming the key). Defaults to `/`.
+            `/`, has no trailing `/` and no empty segments (`//`)
+            (the leading `/` is trimmed when forming the key).
+            Defaults to `/`.
         conn_cfg: Optional connector-config dict (see `CfgSpec`).
     """
 
@@ -171,9 +172,11 @@ class S3Src(Src):
 
     Args:
         paths: Source paths relative to the connection's `base_path`,
-            one output slot per entry. A path may use a `*` glob in
-            its final segment only; backslashes, NUL and `${...}`
-            tokens are not allowed.
+            one output slot per entry. Each path is relative (no
+            leading `/`), must not end with `/`, and must not contain
+            empty segments (`//`). A path may use a `*` glob in its
+            final segment only; backslashes, NUL and `${...}` tokens
+            are not allowed.
         format: File format -- one of `AUTO`, `CSV`, `JSON`,
             `AVRO`, `PARQUET`, `LOG`. `AUTO` (the default)
             infers it from the file extension.
@@ -220,7 +223,9 @@ class S3Dest(Dest):
 
     Args:
         paths: Target paths relative to the connection's `base_path`,
-            one write slot per entry. Globs are not allowed; the tokens
+            one write slot per entry. Each path is relative (no leading
+            `/`), must not end with `/`, and must not contain empty
+            segments (`//`). Globs are not allowed; the tokens
             `${EXEC_PLAN_ID}`, `${TRX_ID}` and `${EXEC_PLAN_TS}`
             are substituted at write time. Backslashes and NUL are not
             allowed.

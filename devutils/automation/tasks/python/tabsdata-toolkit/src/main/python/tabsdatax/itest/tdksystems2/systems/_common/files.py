@@ -32,10 +32,19 @@ from tabsdatax.itest.tdksystems2.datagen import OpKind
 from tabsdatax.itest.tdksystems2.errors import TdxError
 
 
+def squash_slashes(path: str) -> str:
+    """Collapse every run of ``/`` down to a single ``/`` so a stray ``//`` in a
+    configured ``SYS_PATH`` never reaches a composed key/path (the connectors
+    reject empty path segments). A single leading ``/`` is preserved."""
+    while "//" in path:
+        path = path.replace("//", "/")
+    return path
+
+
 def normalise_prefix(prefix: str) -> str:
     """An object-store key prefix: no leading ``/``, a single trailing ``/`` when
     non-empty (so ``prefix + rel`` is a valid key)."""
-    p = (prefix or "").strip().lstrip("/")
+    p = squash_slashes((prefix or "").strip()).lstrip("/")
     if p and not p.endswith("/"):
         p += "/"
     return p
@@ -93,7 +102,7 @@ class FileBackend:
         raise NotImplementedError
 
     def join(self, root: str, child: str) -> str:
-        return f"{root.rstrip('/')}/{child}"
+        return squash_slashes(f"{root.rstrip('/')}/{child}")
 
     # ---- system lifecycle ----
 
@@ -283,14 +292,14 @@ class CloudFileBackend(FileBackend):
         return self._location(dest)  # s3:// / gs:// / az:// bucket/prefix
 
     def join(self, root: str, child: str) -> str:
-        root = root.strip("/")
-        return f"{root}/{child}" if root else child
+        root = squash_slashes(root).strip("/")
+        return squash_slashes(f"{root}/{child}") if root else squash_slashes(child)
 
     def plan_system(
         self, name: str, overrides: dict[str, str] | None = None
     ) -> dict[str, str]:
         o = overrides or {}
-        root = (o.get("SYS_PATH") or "").strip("/")
+        root = squash_slashes(o.get("SYS_PATH") or "").strip("/")
         meta = {"SYS_PATH": root, "ENV_PREFIX": self.env_prefix}
         for opt in self.options():
             if opt.name != "SYS_PATH":

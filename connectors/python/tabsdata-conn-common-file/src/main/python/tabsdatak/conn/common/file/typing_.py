@@ -55,18 +55,20 @@ class FileInfo(Enum):
 
 
 SrcPathNameSpec: TypeAlias = Annotated[str, _validation.SRC_PATH_VALIDATOR]
-"""A single source path, relative to the connection's `base_path`. May
-use a `*` glob in its final segment only; backslashes, NUL and
-`${...}` tokens are not allowed."""
+"""A single source path, relative to the connection's `base_path`: it
+must not start with `/` (it is relative, not absolute), end with `/`,
+or contain empty segments (`//`). May use a `*` glob in its final
+segment only; backslashes, NUL and `${...}` tokens are not allowed."""
 SrcPathsSpec: TypeAlias = list[SrcPathNameSpec]
 """List of source paths, one output slot per entry (each entry follows
 `SrcPathNameSpec`)."""
 
 DestPathNameSpec: TypeAlias = Annotated[str, _validation.DEST_PATH_VALIDATOR]
-"""A single destination path, relative to the connection's `base_path`.
-Globs are not allowed; backslashes and NUL are not allowed; the tokens
-`${EXEC_PLAN_ID}`, `${TRX_ID}` and `${EXEC_PLAN_TS}` are
-substituted at write time."""
+"""A single destination path, relative to the connection's `base_path`:
+it must not start with `/` (it is relative, not absolute), end with
+`/`, or contain empty segments (`//`). Globs are not allowed;
+backslashes and NUL are not allowed; the tokens `${EXEC_PLAN_ID}`,
+`${TRX_ID}` and `${EXEC_PLAN_TS}` are substituted at write time."""
 DestPathsSpec: TypeAlias = list[DestPathNameSpec]
 """List of destination paths, one write slot per entry (each entry
 follows `DestPathNameSpec`)."""

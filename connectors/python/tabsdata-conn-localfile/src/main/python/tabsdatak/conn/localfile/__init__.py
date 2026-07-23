@@ -93,9 +93,10 @@ class LocalFileSrcConn(Conn):
     the plugin at run time. Has no credentials.
 
     Args:
-        base_path: Absolute local-filesystem path; starts with `/` and
-            has no trailing `/` (other than the bare root `/`).
-            Defaults to `/`. Accepts a plain string or a `Secret`.
+        base_path: Absolute local-filesystem path; starts with `/`, has
+            no trailing `/` (other than the bare root `/`) and no empty
+            segments (`//`). Defaults to `/`. Accepts a plain string or
+            a `Secret`.
         conn_cfg: Optional connector-config dict (see `CfgSpec`).
     """
 
@@ -135,9 +136,11 @@ class LocalFileSrc(Src):
 
     Args:
         paths: Source paths relative to the connection's `base_path`,
-            one output slot per entry. A path may use a `*` glob in
-            its final segment only; backslashes, NUL and `${...}`
-            tokens are not allowed.
+            one output slot per entry. Each path is relative (no
+            leading `/`), must not end with `/`, and must not contain
+            empty segments (`//`). A path may use a `*` glob in its
+            final segment only; backslashes, NUL and `${...}` tokens
+            are not allowed.
         format: File format -- one of `AUTO`, `CSV`, `JSON`,
             `AVRO`, `PARQUET`, `LOG`. `AUTO` (the default)
             infers it from the file extension.
@@ -216,7 +219,9 @@ class LocalFileDest(Dest):
 
     Args:
         paths: Target paths relative to the connection's `base_path`,
-            one write slot per entry. Globs are not allowed; the tokens
+            one write slot per entry. Each path is relative (no leading
+            `/`), must not end with `/`, and must not contain empty
+            segments (`//`). Globs are not allowed; the tokens
             `${EXEC_PLAN_ID}`, `${TRX_ID}` and `${EXEC_PLAN_TS}`
             are substituted at write time. Backslashes and NUL are not
             allowed.

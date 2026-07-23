@@ -212,7 +212,7 @@ def test_full_path_wire_accepts_dehydrated_secret():
 
 @pytest.mark.parametrize(
     "path",
-    ["", "a", "a/b", "staging", "/a/", "//", "/a/b/", "/a\\b", "/a\x00"],
+    ["", "a", "a/b", "staging", "/a/", "//", "/a//b", "/a/b/", "/a\\b", "/a\x00"],
 )
 def test_full_path_wire_rejects_bad_shape(path):
     # The regex rejects these whether the value is plain (str:/bare) or secret.

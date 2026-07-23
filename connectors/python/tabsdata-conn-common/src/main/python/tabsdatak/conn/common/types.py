@@ -249,27 +249,28 @@ class StrOrSecretConstraints:
 # --- FullPath -------------------------------------------------------
 
 # `base_path` is always spelled as a full, absolute-looking path: it
-# starts with `/` and never ends with one (other than the bare root
-# `/` itself). This gives one consistent shape across every connector
-# -- local filesystem and cloud object store alike. For the local-file
-# connector the leading `/` is the real absolute path. For the cloud
-# connectors it is a UX convention: the value denotes a "folder"
-# (object-key prefix) from the container / bucket root, and the leading
-# `/` is trimmed when composing the actual object key (`full_path` /
-# `normalize_dir_path` do the trimming). Backslash and NUL are
-# forbidden. pydantic_core's regex engine has no lookaround, so the rule
-# is spelled out per character: the first char must be `/`, the last
-# char must not be `/` (interior `/` separate segments), and the bare
-# `/` root is allowed. Defaults to `/`.
-_FULL_PATH_RE_STR = r"^(?:/|/[^\\\x00]*[^/\\\x00])$"
+# starts with `/`, never ends with one (other than the bare root `/`
+# itself), and has no empty segments (no `//`). This gives one
+# consistent shape across every connector -- local filesystem and cloud
+# object store alike. For the local-file connector the leading `/` is
+# the real absolute path. For the cloud connectors it is a UX
+# convention: the value denotes a "folder" (object-key prefix) from the
+# container / bucket root, and the leading `/` is trimmed when composing
+# the actual object key (`full_path` / `normalize_dir_path` do the
+# trimming). Backslash and NUL are forbidden. pydantic_core's regex
+# engine has no lookaround, so the rule is spelled out structurally: a
+# leading `/` followed by zero or more `/`-separated segments, each a run
+# of one or more chars that are not `/`, `\` or NUL; the bare `/` root is
+# allowed. Defaults to `/`.
+_FULL_PATH_RE_STR = r"^/(?:[^/\\\x00]+(?:/[^/\\\x00]+)*)?$"
 FullPathSpec: TypeAlias = Annotated[
     StrOrSecretSpec, StrOrSecretConstraints(pattern=_FULL_PATH_RE_STR)
 ]
 """A full path (object-key prefix) from the container/bucket root.
 
-Starts with `/` and has no trailing `/` (except the bare root
-`/`); backslash and NUL are forbidden. Accepts a plain string or a
-`Secret`.
+Starts with `/`, has no trailing `/` (except the bare root `/`) and no
+empty segments (no `//`); backslash and NUL are forbidden. Accepts a
+plain string or a `Secret`.
 """
 
 

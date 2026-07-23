@@ -48,6 +48,25 @@ def test_src_path_rejects_glob_outside_basename():
     assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_5
 
 
+def test_src_path_rejects_leading_slash():
+    # A source path is relative to the connection's base_path.
+    with pytest.raises(ConnInitException) as ei:
+        _validation.validate_src_path("/dir/file.csv")
+    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_22
+
+
+def test_src_path_rejects_trailing_slash():
+    with pytest.raises(ConnInitException) as ei:
+        _validation.validate_src_path("dir/")
+    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_23
+
+
+def test_src_path_rejects_double_slash():
+    with pytest.raises(ConnInitException) as ei:
+        _validation.validate_src_path("dir//file.csv")
+    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_24
+
+
 # --- dest path ----------------------------------------------------------
 
 
@@ -75,6 +94,25 @@ def test_dest_path_rejects_unknown_token():
     with pytest.raises(ConnInitException) as ei:
         _validation.validate_dest_path("out/${UNKNOWN_TOKEN}.csv")
     assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_10
+
+
+def test_dest_path_rejects_leading_slash():
+    # A destination path is relative to the connection's base_path.
+    with pytest.raises(ConnInitException) as ei:
+        _validation.validate_dest_path("/out/file.csv")
+    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_25
+
+
+def test_dest_path_rejects_trailing_slash():
+    with pytest.raises(ConnInitException) as ei:
+        _validation.validate_dest_path("out/")
+    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_26
+
+
+def test_dest_path_rejects_double_slash():
+    with pytest.raises(ConnInitException) as ei:
+        _validation.validate_dest_path("out//file.csv")
+    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_27
 
 
 # --- format_cfg ---------------------------------------------------------

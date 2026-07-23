@@ -106,3 +106,21 @@ def test_fs_rejects_unsafe_root():
         with pytest.raises(TdxError):
             validate_fs_root(bad)
     validate_fs_root("/tmp/tdx-ok/data")  # absolute, safe head, >= 2 elements
+
+
+def test_file_paths_collapse_double_slashes():
+    # A stray '//' in a configured SYS_PATH must never reach a composed
+    # key/base_path -- the connectors reject empty path segments.
+    from tabsdatax.itest.tdksystems2 import systems
+    from tabsdatax.itest.tdksystems2.systems._common.files import (
+        normalise_prefix,
+        squash_slashes,
+    )
+
+    assert squash_slashes("a//b///c") == "a/b/c"
+    assert squash_slashes("/a//b") == "/a/b"  # a single leading slash is kept
+    assert normalise_prefix("/a//b") == "a/b/"
+
+    s3 = systems.get("s3")
+    assert s3.join("staging//x", "dom") == "staging/x/dom"
+    assert s3.plan_system("s3", {"SYS_PATH": "staging//x//"})["SYS_PATH"] == "staging/x"

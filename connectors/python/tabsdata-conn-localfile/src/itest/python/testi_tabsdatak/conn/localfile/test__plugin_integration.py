@@ -103,8 +103,8 @@ def test_src_treats_absolute_path_as_relative_to_base_path(
     pl.DataFrame([{"x": 1}]).write_parquet(in_parquet, use_pyarrow=True)
 
     conn = LocalFileSrcConn(base_path=str(base))
-    # Note the leading slash on the entry -- the plugin strips it.
-    src = LocalFileSrc(paths=["/data.parquet"])
+    # The entry is relative to the connection's base_path.
+    src = LocalFileSrc(paths=["data.parquet"])
 
     out = plugin.LocalFileSrcPlugin().read_in(PluginSrcCtx(work), conn, src)
     assert len(out[0]) >= 1

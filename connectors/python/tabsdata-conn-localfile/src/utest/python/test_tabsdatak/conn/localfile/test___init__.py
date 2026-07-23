@@ -104,7 +104,7 @@ def test_localfile_conn_accepts_absolute_base_path(conn_cls):
     assert c.base_path == "/data/sub"
 
 
-@pytest.mark.parametrize("bad", ["", "data", "data/sub", "/data/"])
+@pytest.mark.parametrize("bad", ["", "data", "data/sub", "/data/", "/data//sub"])
 def test_localfile_conn_rejects_non_absolute_or_trailing_slash(conn_cls, bad):
     # FullPathSpec requires a leading "/" and forbids a trailing one;
     # a bare string that fails the pattern is rejected by the

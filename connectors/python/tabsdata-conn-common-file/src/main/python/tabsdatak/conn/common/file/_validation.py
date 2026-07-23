@@ -17,6 +17,9 @@ _TOKEN_RE = re.compile(r"\$\{[^}]*\}")
 
 
 def validate_src_path(value: str) -> str:
+    # A source path is relative to the connection's `base_path`: it must not
+    # start with `/` (relative), end with `/`, or contain empty segments
+    # (`//`).
     if not value:
         raise FileCommonErrorCode.FILE_COMMON_1.exception()
     if "\x00" in value:
@@ -24,6 +27,12 @@ def validate_src_path(value: str) -> str:
         raise FileCommonErrorCode.FILE_COMMON_2.exception(path=value)
     if "\\" in value:
         raise FileCommonErrorCode.FILE_COMMON_3.exception(path=value)
+    if value.startswith("/"):
+        raise FileCommonErrorCode.FILE_COMMON_22.exception(path=value)
+    if value.endswith("/"):
+        raise FileCommonErrorCode.FILE_COMMON_23.exception(path=value)
+    if "//" in value:
+        raise FileCommonErrorCode.FILE_COMMON_24.exception(path=value)
     if _TOKEN_RE.search(value):
         raise FileCommonErrorCode.FILE_COMMON_4.exception(path=value)
     if "*" in value:
@@ -52,6 +61,15 @@ def validate_dest_path(value: str) -> str:
         raise FileCommonErrorCode.FILE_COMMON_7.exception(path=value)
     if "\\" in value:
         raise FileCommonErrorCode.FILE_COMMON_8.exception(path=value)
+    # A destination path is relative to the connection's `base_path`: it must
+    # not start with `/` (relative), end with `/`, or contain empty segments
+    # (`//`).
+    if value.startswith("/"):
+        raise FileCommonErrorCode.FILE_COMMON_25.exception(path=value)
+    if value.endswith("/"):
+        raise FileCommonErrorCode.FILE_COMMON_26.exception(path=value)
+    if "//" in value:
+        raise FileCommonErrorCode.FILE_COMMON_27.exception(path=value)
     if "*" in value:
         raise FileCommonErrorCode.FILE_COMMON_9.exception(path=value)
     for m in _TOKEN_RE.finditer(value):

@@ -125,8 +125,9 @@ class GCSLocation(CloudLocation):
         bucket: A valid GCS bucket name.
         credentials: GCP service-account JSON credentials.
         base_path: Object-key prefix from the bucket root; starts with
-            `/` and has no trailing `/` (the leading `/` is
-            trimmed when forming the key). Defaults to `/`.
+            `/`, has no trailing `/` and no empty segments (`//`)
+            (the leading `/` is trimmed when forming the key).
+            Defaults to `/`.
         cfg: Optional connector-config dict for the GCS client.
     """
 
