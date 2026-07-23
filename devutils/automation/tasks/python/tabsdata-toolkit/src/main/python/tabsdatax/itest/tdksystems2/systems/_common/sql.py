@@ -20,6 +20,7 @@ iff that file exists), so the same generic ``models`` / ``create-model`` /
 
 from __future__ import annotations
 
+import hashlib
 import inspect
 import platform
 import time
@@ -117,7 +118,15 @@ class SqlContainerBackend(PortPoolMixin):
         return f"{_CONTAINER_PREFIX}{sys_name}"
 
     def _login(self, name: str) -> str:
-        return name[: self.login_maxlen]
+        # The owner user is named after the domain, capped at the dialect's
+        # identifier limit. A plain truncation collides when sibling domains
+        # share a prefix longer than the cap (their distinguishing suffix is
+        # cut off), so past the cap keep a prefix and append a hash of the full
+        # name to stay unique. Deterministic, so create and delete agree.
+        if len(name) <= self.login_maxlen:
+            return name
+        digest = hashlib.sha1(name.encode()).hexdigest()[:8]
+        return f"{name[: self.login_maxlen - len(digest) - 1]}_{digest}"
 
     def _package_dir(self) -> Path:
         return Path(inspect.getfile(type(self))).parent
