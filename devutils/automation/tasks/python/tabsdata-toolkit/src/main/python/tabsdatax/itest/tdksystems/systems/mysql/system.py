@@ -25,6 +25,7 @@ class MysqlSystem(ContainerBase):
     slug = "mysql"
     label = "MySQL"
     domain_desc = "a database (with a dedicated user that owns it)"
+    max_entity_name_length = 64  # MySQL database name limit
 
     image = f"mysql:{os.environ.get('MYSQL_IMAGE_VERSION', '8.4')}"
     image_platform = (

@@ -11,13 +11,14 @@ Domain == schema (`<database>.<name>`). Auth uses a Personal Access Token
 from __future__ import annotations
 
 from .._saas import SaasBase
-from ..base import DomainContext, Option
+from ..base import DomainContext, Option, SystemContext
 from . import connection
 
 
 class SnowflakeSystem(SaasBase):
     slug = "snowflake"
     label = "Snowflake"
+    owns_entities = True  # schemas record an owner role (see list_owned...)
     options = (
         Option("ACCOUNT", "account"),
         Option("USERNAME", "username"),
@@ -46,6 +47,28 @@ class SnowflakeSystem(SaasBase):
         db = values.get("DATABASE", "")
         with self._cursor(values) as cur:
             cur.execute(f'DROP SCHEMA IF EXISTS "{db}"."{name}" CASCADE')
+
+    def list_schemas(self, values: dict[str, str]) -> list[str]:
+        db = values.get("DATABASE", "")
+        with self._cursor(values) as cur:
+            cur.execute(f'SELECT SCHEMA_NAME FROM "{db}".INFORMATION_SCHEMA.SCHEMATA')
+            rows = cur.fetchall()
+        names = [str(r[0]) for r in rows if r and r[0] is not None]
+        return [n for n in names if n.upper() not in ("INFORMATION_SCHEMA", "PUBLIC")]
+
+    def list_owned_domain_entities(self, ctx: SystemContext) -> list[str]:
+        # Snowflake objects are owned by a ROLE; keep the schemas whose owner is
+        # the login's current role.
+        values = self.resolve_values(self.settings_from_meta(ctx.meta))
+        db = values.get("DATABASE", "")
+        with self._cursor(values) as cur:
+            cur.execute(
+                f'SELECT SCHEMA_NAME FROM "{db}".INFORMATION_SCHEMA.SCHEMATA '
+                f"WHERE SCHEMA_OWNER = CURRENT_ROLE()"
+            )
+            rows = cur.fetchall()
+        names = [str(r[0]) for r in rows if r and r[0] is not None]
+        return [n for n in names if n.upper() not in ("INFORMATION_SCHEMA", "PUBLIC")]
 
     def exec_statements(self, ctx: DomainContext, statements: list[str]) -> None:
         values = self.resolve_values(self.settings_from_meta(ctx.meta))

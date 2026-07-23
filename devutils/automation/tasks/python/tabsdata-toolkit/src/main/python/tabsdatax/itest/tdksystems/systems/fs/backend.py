@@ -25,6 +25,12 @@ class FsBackend:
         p = Path(prefix)
         return p.is_dir() and any(p.iterdir())
 
+    def children(self, root: str) -> list[str]:
+        r = Path(root)
+        if not r.is_dir():
+            return []
+        return sorted(p.name for p in r.iterdir() if p.is_dir())
+
     def clear(self, prefix: str) -> None:
         p = Path(prefix)
         if p.is_dir():

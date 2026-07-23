@@ -19,6 +19,15 @@ def _td_dev_secret(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _fixed_build_identity(monkeypatch):
+    """Pin the build identity so the default external-entity prefix
+    `d_<user>_<build>_` (here `d_u_0_`) is deterministic across the suite. Tests
+    that exercise the identity itself override these with their own monkeypatch."""
+    monkeypatch.setenv("TD_BUILD_USER", "u")
+    monkeypatch.setenv("TD_BUILD_NUMBER", "0")
+
+
+@pytest.fixture(autouse=True)
 def _reset_active_secret_env():
     """Every descriptor verb points crypto at its `--secret-env` (a module
     global). Reset it around each test so a `--secret-env FOO` case can't leak

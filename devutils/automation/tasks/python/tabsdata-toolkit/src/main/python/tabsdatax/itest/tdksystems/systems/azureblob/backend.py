@@ -39,6 +39,17 @@ class AzureblobBackend:
             return True
         return False
 
+    def children(self, root: str) -> list[str]:
+        p = normalise_prefix(root)
+        names: list[str] = []
+        for item in self.container.walk_blobs(name_starts_with=p, delimiter="/"):
+            name = getattr(item, "name", "")
+            if name.endswith("/"):  # a BlobPrefix (a child "folder"), not a blob
+                child = name[len(p) :].rstrip("/")
+                if child:
+                    names.append(child)
+        return sorted(names)
+
     def clear(self, prefix: str) -> None:
         p = normalise_prefix(prefix)
         names = [b.name for b in self.container.list_blobs(name_starts_with=p)]

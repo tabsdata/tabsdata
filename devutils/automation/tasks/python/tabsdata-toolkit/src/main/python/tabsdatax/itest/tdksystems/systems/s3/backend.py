@@ -39,6 +39,17 @@ class S3Backend:
         resp = self.client.list_objects_v2(Bucket=self.bucket, Prefix=p, MaxKeys=1)
         return resp.get("KeyCount", 0) > 0
 
+    def children(self, root: str) -> list[str]:
+        p = normalise_prefix(root)
+        names: list[str] = []
+        paginator = self.client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=p, Delimiter="/"):
+            for cp in page.get("CommonPrefixes", []) or []:
+                child = cp.get("Prefix", "")[len(p) :].rstrip("/")
+                if child:
+                    names.append(child)
+        return sorted(names)
+
     def clear(self, prefix: str) -> None:
         p = normalise_prefix(prefix)
         paginator = self.client.get_paginator("list_objects_v2")

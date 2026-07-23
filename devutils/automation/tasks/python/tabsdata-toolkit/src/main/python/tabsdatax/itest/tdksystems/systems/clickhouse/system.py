@@ -18,6 +18,7 @@ class ClickhouseSystem(ContainerBase):
     label = "ClickHouse"
     domain_desc = "a database (with a dedicated user that owns it)"
     domain_flag = "database"
+    max_entity_name_length = 255  # ClickHouse database name (filesystem-backed)
     supports_sql = True
     uses_file_staging = True
 

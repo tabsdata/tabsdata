@@ -39,6 +39,8 @@ class BigQuerySystem(System):
     staging_root = True  # -> base adds the SYS_PATH (--sys-path) option
     supports_models = False  # datasets + prefixes only; no schema/data load
     domain_flag = "dataset"  # a domain is a BigQuery dataset (DATASET is baked)
+    max_entity_name_length = 1024  # BigQuery dataset id limit
+    owns_entities = True  # datasets carry an OWNER access entry (see list_owned...)
 
     options = (
         Option("PROJECT", "project"),
@@ -157,6 +159,23 @@ class BigQuerySystem(System):
         base = ctx.meta.get("BASE_PATH")
         if base:
             self._gcs(values).clear(base)
+
+    def list_domain_entities(self, ctx: SystemContext) -> list[str]:
+        # A domain is a BigQuery dataset; enumerate the project's datasets.
+        values = self.resolve_values(self.settings_from_meta(ctx.meta))
+        return self._bq(values).list_datasets()
+
+    def list_owned_domain_entities(self, ctx: SystemContext) -> list[str]:
+        # Datasets our service account created carry it as an OWNER access entry.
+        values = self.resolve_values(self.settings_from_meta(ctx.meta))
+        return self._bq(values).list_owned_datasets()
+
+    def purge_domain_entity(self, ctx: SystemContext, name: str) -> None:
+        # Drop the dataset AND clear its GCS staging prefix (SYS_PATH/<name>),
+        # mirroring destroy_domain.
+        values = self.resolve_values(self.settings_from_meta(ctx.meta))
+        self._bq(values).delete_dataset(name)
+        self._gcs(values).clear(self._base_path(values, name))
 
     def domain_status(self, ctx: DomainContext) -> Health:
         values = self.resolve_values(self.settings_from_meta(ctx.meta))

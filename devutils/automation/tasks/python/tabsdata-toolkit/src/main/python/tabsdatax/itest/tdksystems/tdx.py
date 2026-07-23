@@ -38,6 +38,15 @@
                                                     # host machine / Docker was
                                                     # restarted); systems with no
                                                     # container are skipped
+    tdx-system purge   --sys NAME | --auto ALL|N1,N2,... [--prefix PREFIX] \\
+                       [--sys-dir DIR] [-f]         # drop domains straight from
+                                                    # the system (NO domain
+                                                    # descriptor): containers owned
+                                                    # by the login user (snowflake/
+                                                    # databricks/bigquery), else the
+                                                    # `d_<user>_<build>_` prefix
+                                                    # (raw --prefix overrides, ''=
+                                                    # all); previews unless -f
     tdx-system info    --sys NAME [--sys-dir DIR] [--format json|export|unset] \\
                        [--prefix PREFIX]            # PREFIX -> <PREFIX>__<KEY>
     tdx-system pause | resume --sys NAME [--sys-dir DIR]  # stop / start container
@@ -48,16 +57,15 @@
                                                     # destroy stops the tunnel
 
     tdx-domain create  --sys NAME [--domain NAME] [--model MODEL [--data xs|..|xl]] \\
-                       [--domain-prefix PREFIX | --name-in-system NAME] \\
-                       [--sys-dir DIR] [--domain-dir DIR]
+                       [--name-in-system NAME] [--sys-dir DIR] [--domain-dir DIR]
                                                     # domain named <NAME> (defaults
                                                     # to the system); entity =
-                                                    # <PREFIX><NAME>; PREFIX =
-                                                    # --domain-prefix, else
-                                                    # $TD_BUILD_USER_$TD_BUILD_NUMBER_,
-                                                    # else <os-user>_0_.
-                                                    # --name-in-system NAME sets the
-                                                    # entity name verbatim instead
+                                                    # d_<user>_<build>_<NAME> (user/
+                                                    # build from $TD_BUILD_USER /
+                                                    # $TD_BUILD_NUMBER, else os-user
+                                                    # / 0). --name-in-system NAME
+                                                    # sets the entity name verbatim
+                                                    # (no d_) instead
     tdx-domain create  --auto ALL|S1,S2,... [--model MODEL [--data xs|..|xl]] [-f]
                                                     # one domain per system, each
                                                     # named after its system, seeded
@@ -114,7 +122,7 @@ if it is unset. `--type` names the external system — every backend in the
 `container` / `cloud` / `saas` / `service` helper packages is a valid type, so
 adding a new system is just a new module.
 
-The mutating verbs (`create`, `destroy`, `status`, `restart`, and the
+The mutating verbs (`create`, `destroy`, `purge`, `status`, `restart`, and the
 `tdx-domain` `recreate` / `seed`) keep the console output brief: colored
 per-target progress and success / failure counters, with any docker image
 fetch called out so slow first-time downloads are visible. Their full detail
@@ -124,9 +132,11 @@ fetch called out so slow first-time downloads are visible. Their full detail
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from tenacity import (
@@ -284,29 +294,59 @@ def _expand_names(value: str, directory: Path, role: str, opt: str) -> list[str]
     return names
 
 
-# --- DOMAIN_PREFIX / external entity name ---------------------------------
+# --- external entity-container name ---------------------------------------
 # A domain's descriptor name is a plain local identifier, but the entity it
 # creates in the *shared* external system (schema / dataset / folder /
-# database) is named `<DOMAIN_PREFIX><domain>` so concurrent CI runs and
-# developers don't collide. The prefix is `--domain-prefix` if given, else
-# `$TD_BUILD_USER`_`$TD_BUILD_NUMBER`_ (the CI identity), else the OS login name
-# and build 0. `--name-in-system` bypasses this entirely, naming the entity
-# container verbatim; either way the chosen name is stamped as `external_name`.
+# database) is named to avoid collisions across concurrent CI runs and
+# developers. By default that name is `d_<user>_<build>_<domain>`: the `d_`
+# marks it a tdx domain container, `<user>_<build>` (the build identity, see
+# `_build_identity`) namespaces the run. `--name-in-system NAME` overrides it
+# entirely, naming the container `NAME` verbatim (no `d_`). Either way the
+# chosen name is stamped as `external_name`, trimmed to fit the system's max
+# identifier length (see `_fit_entity_name`).
+
+_DOMAIN_ENTITY_PREFIX = "d_"
+_ENTITY_COUNTER_MAX = 100  # trimmed-name suffixes __00 .. __99
 
 
-def _resolve_domain_prefix(explicit: str | None) -> str:
-    """The DOMAIN_PREFIX prepended to a domain's external entity name.
-    `--domain-prefix` wins verbatim; otherwise it is the build identity
-    (`<user>_<build>`, see `_build_identity`) with a trailing `_`."""
-    if explicit is not None:
-        return explicit
-    return _build_identity() + "_"
+def _default_domain_prefix() -> str:
+    """The prefix tdx puts before a domain's external entity name by default:
+    `d_<user>_<build>_` — the `d_` marker plus the build identity."""
+    return _DOMAIN_ENTITY_PREFIX + _build_identity() + "_"
 
 
-def _external_name(domain: str, explicit_prefix: str | None) -> str:
-    """The entity-container name to create in the external system for `domain`:
-    `<DOMAIN_PREFIX><domain>` (see `_resolve_domain_prefix`)."""
-    return _resolve_domain_prefix(explicit_prefix) + domain
+def _external_name(domain: str) -> str:
+    """The default entity-container name for `domain`: `d_<user>_<build>_<domain>`
+    (see `_default_domain_prefix`). `--name-in-system` bypasses this."""
+    return _default_domain_prefix() + domain
+
+
+def _fit_entity_name(sysobj, sysctx, name: str) -> str:
+    """Fit `name` to the system's max entity-container length. If it fits,
+    return it unchanged; otherwise trim to `max-4` and append `__NN` (2-digit),
+    using the lowest counter whose full name isn't already present in the system
+    (listed live), so a trimmed name never collides with an existing one."""
+    max_len = sysobj.max_entity_name_length
+    if len(name) <= max_len:
+        return name
+    stem = name[: max_len - 4]
+    existing = {e.lower() for e in sysobj.list_domain_entities(sysctx)}
+    for n in range(_ENTITY_COUNTER_MAX):
+        candidate = f"{stem}__{n:02d}"
+        if candidate.lower() not in existing:
+            return candidate
+    raise DatagenError(
+        f"cannot fit entity name into {max_len} chars for {sysobj.slug}: "
+        f"every '{stem}__NN' (00-{_ENTITY_COUNTER_MAX - 1:02d}) is taken"
+    )
+
+
+def _purge_match(name: str, prefix: str | None) -> bool:
+    """Whether entity `name` matches the purge prefix (case-insensitive
+    `startswith`). `prefix is None` -> the default `d_<user>_<build>_` (this
+    run's own containers); `""` -> every container; else the raw prefix given."""
+    eff = _default_domain_prefix() if prefix is None else prefix
+    return name.lower().startswith(eff.lower())
 
 
 def _system_meta_from_domain(meta: dict[str, str]) -> dict[str, str]:
@@ -1778,6 +1818,207 @@ def _sys_restart(rest: list[str]) -> int:
     )
 
 
+def _purge_system(
+    sys_name: str, sys_dir: str | None, prefix: str | None, force: bool
+) -> tuple[int, int, int]:
+    """Purge domain entities from one system: connect, list the containers that
+    are ours, then — only with `force` — drop each (in parallel). "Ours" means
+    OWNED BY THE LOGIN USER where the backend records an owner (snowflake /
+    databricks / bigquery), otherwise the containers whose name matches the
+    prefix (`prefix` if given — `""` matches all — else this run's own
+    `d_<user>_<build>_`). Without `force` it just previews. Returns
+    `(matched, dropped, failed)`; prints its own block."""
+    doc = descriptor.load(store.system_path(sys_name, sys_dir))
+    _require_role(doc, "sys", "tdx-system", "tdx-domain")
+    meta = descriptor.resolve(doc)
+    _setenv(meta)
+    slug = doc["system"]
+    sysobj = systems.get(slug)
+    # The system's own word for its entity container (postgres: schema, mysql:
+    # database, s3/gcs: prefix, fs: folder, bigquery: dataset, redpanda: topic,
+    # druid: datasource), so the preview names exactly what will be trashed.
+    flag = sysobj.domain_flag or "entity"
+    ctx = SystemContext(slug, doc["name"], meta)
+    if sysobj.owns_entities:
+        # Shared account: scope to containers OWNED by the login user; a --prefix
+        # narrows further. Never touches another login's containers.
+        scope = "owned by the login user" + (f", prefix '{prefix}'" if prefix else "")
+    else:
+        # No ownership metadata: match by prefix — this run's own containers by
+        # default (`d_<user>_<build>_`), or the raw --prefix (`""` = all).
+        eff = _default_domain_prefix() if prefix is None else prefix
+        scope = f"prefix '{eff}'" if eff else "any name (empty prefix)"
+    console.out()
+    console.out(
+        f">>> purge '{sys_name}' ({slug}): scanning {flag} containers ({scope}) …"
+    )
+    stale = _container_stale(meta)
+    if stale:
+        raise DatagenError(stale)
+    if sysobj.owns_entities:
+        entities = sysobj.list_owned_domain_entities(ctx)
+        matched = sorted(
+            e
+            for e in entities
+            if prefix is None or e.lower().startswith(prefix.lower())
+        )
+    else:
+        entities = sysobj.list_domain_entities(ctx)
+        matched = sorted(e for e in entities if _purge_match(e, prefix))
+    if not matched:
+        console.good(
+            f">>> '{sys_name}': nothing to purge ({scope}) — {len(entities)} present"
+        )
+        return (0, 0, 0)
+    console.out(
+        f">>> '{sys_name}': {len(matched)} of {len(entities)} {flag} containers "
+        f"to purge ({scope})"
+    )
+    if not force:
+        for e in matched:
+            console.out(f"    would drop {flag}: {e}")
+        console.warn(
+            f">>> dry-run: {len(matched)} {flag} container(s) would be dropped "
+            f"from '{sys_name}' — pass -f/--force to delete"
+        )
+        return (len(matched), 0, 0)
+    # Drop each container IN-PROCESS, fanned out with threads — NOT forked
+    # workers. Listing already opened the system's native client in this process,
+    # and several backends' clients (grpc for bigquery/gcs, boto3 for s3,
+    # snowflake, psycopg2, pyodbc) crash or break when used after fork() on macOS.
+    # Each drop builds its own client from the (immutable) ctx.meta and never
+    # mutates os.environ, so threads are safe here (unlike create/destroy, which
+    # must fork because their workers rewrite os.environ).
+    ok = fail = done = 0
+    total = len(matched)
+    workers = dispatch.max_workers(total)
+    _batch_banner("purging", total, f"{flag} container")
+
+    def _drop(entity: str) -> tuple[str, bool, float, str]:
+        started = time.monotonic()
+        try:
+            sysobj.purge_domain_entity(ctx, entity)
+            return (entity, True, time.monotonic() - started, "")
+        except Exception as exc:  # noqa: BLE001 - reported per entity, never fatal
+            return (entity, False, time.monotonic() - started, str(exc))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_drop, e) for e in matched]
+        for fut in concurrent.futures.as_completed(futures):
+            entity, entity_ok, seconds, detail = fut.result()
+            done += 1
+            ok += entity_ok
+            fail += not entity_ok
+            _progress(
+                done,
+                total,
+                entity_ok,
+                "ok  " if entity_ok else "FAIL",
+                f"{flag} {entity}",
+                seconds,
+                detail,
+            )
+    console.out()
+    _summary(
+        f">>> purged {ok}/{total} {flag} container(s) from '{sys_name}'"
+        + (f", {fail} failed" if fail else ""),
+        fail == 0,
+    )
+    return (total, ok, fail)
+
+
+def _sys_purge(rest: list[str]) -> int:
+    """`tdx-system purge`: drop domain entities straight from the connected
+    system(s), WITHOUT reading any domain descriptor — for cleaning up domains
+    left behind by crashed runs. Scopes to what is ours: containers owned by the
+    login user (snowflake / databricks / bigquery), else this run's own
+    `d_<user>_<build>_` prefix (override with --prefix; system containers are
+    never touched). Previews by default; `-f` actually deletes. A single system
+    (`--sys NAME`) or a batch (`--auto ALL|N1,N2,...`)."""
+    p = _ArgumentParser(
+        prog="tdx-system purge",
+        add_help=True,
+        description="Drop domain entities (databases / schemas / datasets / "
+        "prefixes / topics) directly from the connected system, WITHOUT reading "
+        "any domain descriptor. Scopes to containers owned by the login user "
+        "where the backend records an owner (snowflake / databricks / bigquery), "
+        "else this run's own `d_<user>_<build>_` prefix. system-level containers "
+        "(catalogs / the login database / bucket) are never touched. Previews by "
+        "default; pass -f to delete.",
+    )
+    grp = p.add_mutually_exclusive_group(required=True)
+    grp.add_argument(
+        "--sys",
+        metavar="NAME",
+        help="a single system (a file in the system store dir)",
+    )
+    grp.add_argument(
+        "--auto",
+        metavar="ALL|N1,N2,...",
+        help="batch: ALL systems in the store, or a comma list of names",
+    )
+    p.add_argument(
+        "--prefix",
+        default=None,
+        metavar="PREFIX",
+        help="raw name prefix to match instead of the default `d_<user>_<build>_` "
+        "(include `d_` yourself); `--prefix ''` matches every container. On "
+        "owner-aware backends it narrows within the login user's own containers",
+    )
+    p.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="actually delete; without it, purge only previews what it would drop",
+    )
+    _add_sys_dir(p)
+    _add_secret_env(p)
+    _add_latch(p)
+    args = p.parse_args(rest)
+    _apply_secret(args)
+    if args.auto is not None:
+        names = _expand_names(
+            args.auto, store.system_dir(args.sys_dir), "sys", "--auto"
+        )
+    else:
+        _require_single_system(args.sys)
+        names = [args.sys]
+    if not names:
+        console.out()
+        console.out(">>> no systems found")
+        console.out()
+        return 0
+    total_matched = total_dropped = total_failed = 0
+    for name in names:
+        try:
+            matched, dropped, failed = _purge_system(
+                name, args.sys_dir, args.prefix, args.force
+            )
+            total_matched += matched
+            total_dropped += dropped
+            total_failed += failed
+        except Exception as exc:  # noqa: BLE001 - one bad system must not stop the rest
+            console.bad(f">>> FAIL  {name}: {exc}")
+            total_failed += 1
+    console.out()
+    if not args.force:
+        _summary(
+            f">>> dry-run: {total_matched} container(s) across {len(names)} "
+            f"system(s) would be dropped — pass -f/--force to delete",
+            total_failed == 0,
+        )
+        console.out()
+        return 0 if total_failed == 0 else 1
+    _summary(
+        f">>> purge complete: dropped {total_dropped}/{total_matched} container(s) "
+        f"across {len(names)} system(s)"
+        + (f", {total_failed} failed" if total_failed else ""),
+        total_failed == 0,
+    )
+    console.out()
+    return 0 if total_failed == 0 else 1
+
+
 def _sys_info(rest: list[str]) -> int:
     args = _locator_ns("tdx-system info", "sys", rest, want_format=True)
     doc = descriptor.load(_sys_target(args))
@@ -2010,8 +2251,7 @@ def _domain_create(rest: list[str]) -> int:
     """`tdx-domain create`: create one domain (`--sys` + optional `--domain`) or a
     batch (`--auto` / `--domain-manifest`). The domain is named by `--domain`
     (default: the system name); its external entity (schema / dataset / directory)
-    is named `<PREFIX><domain>`, the PREFIX defaulting to the run's
-    `<user>_<build>_` (see `--domain-prefix`), or named verbatim by
+    is named `d_<user>_<build>_<domain>` by default, or verbatim by
     `--name-in-system` (single-domain create only)."""
     p = _ArgumentParser(
         prog="tdx-domain create",
@@ -2062,24 +2302,14 @@ def _domain_create(rest: list[str]) -> int:
         help="load model data at this size (requires --model)",
     )
     p.add_argument(
-        "--domain-prefix",
-        dest="domain_prefix",
-        default=None,
-        metavar="PREFIX",
-        help="prefix for the entity container's name in the external system "
-        "(schema/dataset/folder/db), so runs don't collide; default: "
-        "$TD_BUILD_USER_$TD_BUILD_NUMBER_, else <os-user>_0_ (not stored in a "
-        "manifest, so a manifest replays under each user's own prefix)",
-    )
-    p.add_argument(
         "--name-in-system",
         dest="name_in_system",
         default=None,
         metavar="NAME",
         help="use NAME verbatim as the entity container (schema/dataset/folder/db) "
         "created in the target system, instead of the default "
-        "<domain-prefix><domain>; overrides --domain-prefix. Single-domain create "
-        "only (in a manifest, use the per-entry `name-in-system` key)",
+        "d_<user>_<build>_<domain>. Single-domain create only (in a manifest, use "
+        "the per-entry `name-in-system` key)",
     )
     p.add_argument(
         "-f", "--force", action="store_true", help="recreate if it already exists"
@@ -2179,9 +2409,8 @@ def _system_loads_data(sys_name: str, sys_dir: str | None) -> bool:
 
 
 def _domain_common_argv(args) -> list[str]:
-    """The store/secret/prefix/force flags to forward from a batch domain-create to
-    each per-item single create. `--domain-prefix` is forwarded only when given
-    explicitly, so a manifest replay defaults to each run's own prefix."""
+    """The store/secret/force flags to forward from a batch domain-create to each
+    per-item single create."""
     common: list[str] = []
     if args.sys_dir:
         common += ["--sys-dir", args.sys_dir]
@@ -2189,8 +2418,6 @@ def _domain_common_argv(args) -> list[str]:
         common += ["--domain-dir", args.domain_dir]
     if args.secret_env and args.secret_env != crypto.ENV_VAR:
         common += ["--secret-env", args.secret_env]
-    if args.domain_prefix is not None:
-        common += ["--domain-prefix", args.domain_prefix]
     if args.force:
         common.append("-f")
     return common
@@ -2449,13 +2676,16 @@ def _domain_create_single(args, peeked_sys) -> int:
             f"{slug} does not load data (--model records the model; --data is "
             f"not supported)"
         )
-    # `--name-in-system` names the external entity container verbatim (overriding
-    # the default <domain-prefix><domain>); it is stamped as external_name, so a
+    # `--name-in-system` names the external entity container verbatim; otherwise
+    # it is the default `d_<user>_<build>_<domain>`. Either way it is trimmed to
+    # fit the system's max identifier length and stamped as external_name, so a
     # later recreate rebuilds the SAME container.
-    external = getattr(args, "name_in_system", None) or _external_name(
-        args.domain, args.domain_prefix
-    )
     sysctx = SystemContext(slug, sysdoc["name"], sysmeta)
+    external = _fit_entity_name(
+        sysobj,
+        sysctx,
+        getattr(args, "name_in_system", None) or _external_name(args.domain),
+    )
     spec = CreateDomainSpec(
         name=args.domain,
         out=domain_path,
@@ -2933,6 +3163,7 @@ _SYS_VERBS = {
     "dump": _sys_dump,
     "list": _sys_list,
     "destroy": _sys_destroy,
+    "purge": _sys_purge,
     "status": _sys_status,
     "restart": _sys_restart,
     "info": _sys_info,
@@ -3008,6 +3239,7 @@ def _dispatch(cmd: str, verbs: dict, argv: list[str]) -> int:
 _LOGGED_VERBS = {
     "create",
     "destroy",
+    "purge",
     "status",
     "restart",
     "recreate",
@@ -3017,7 +3249,7 @@ _LOGGED_VERBS = {
 
 # Verbs that accept `--latch FILE` (see `_add_latch`): the long-running ones a
 # caller may want to run in the background and wait on.
-_LATCH_VERBS = {"create", "destroy", "seed", "recreate", "changes"}
+_LATCH_VERBS = {"create", "destroy", "purge", "seed", "recreate", "changes"}
 
 
 def _latch_files(latch: Path) -> tuple[Path, Path]:

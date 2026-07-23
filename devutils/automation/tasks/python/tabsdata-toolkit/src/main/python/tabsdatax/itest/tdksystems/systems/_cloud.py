@@ -32,6 +32,8 @@ class CloudBase(System):
     kind = "file"
     staging_root = True  # -> base adds the SYS_PATH (--sys-path) option
     domain_flag = "prefix"  # object stores name the domain a prefix (fs: folder)
+    max_entity_name_length = 1024  # object-store keys/prefixes are effectively
+    # unbounded for our names
 
     def _backend(self, values: dict[str, str]):
         raise NotImplementedError
@@ -94,6 +96,17 @@ class CloudBase(System):
 
     def domain_status(self, ctx: DomainContext) -> Health:
         return self._reachable(ctx.meta, f"{self.slug} domain '{ctx.name}'")
+
+    def list_domain_entities(self, ctx: SystemContext) -> list[str]:
+        # Domains are the immediate child prefixes / folders under the staging
+        # root (SYS_PATH); each was created as `<root>/<entity>`.
+        values = self.resolve_values(self.settings_from_meta(ctx.meta))
+        return self._backend(values).children(values.get("SYS_PATH", ""))
+
+    def purge_domain_entity(self, ctx: SystemContext, name: str) -> None:
+        values = self.resolve_values(self.settings_from_meta(ctx.meta))
+        root = values.get("SYS_PATH", "")
+        self._backend(values).clear(f"{root}/{name}" if root else name)
 
     # ---- data plane ----
 

@@ -30,6 +30,7 @@ services authenticate to each other; it is passed to the stack but not exported.
 from __future__ import annotations
 
 import base64
+import json
 import os
 import time
 import urllib.error
@@ -82,6 +83,8 @@ class DruidSystem(ContainersBase):
     slug = "druid"
     label = "Apache Druid"
     kind = "druid"
+    domain_flag = "datasource"  # a domain is a Druid datasource
+    max_entity_name_length = 255  # datasources have no hard limit; cap sanely
     # `--model` records the model the domain will hold (no schema to create);
     # `--data` is rejected — tdx never stages or ingests, so a datasource
     # materialises only when the connector under test ingests through its own
@@ -212,6 +215,39 @@ class DruidSystem(ContainersBase):
             f"{self.label} datasource '{ds}' via {router} "
             f"{'reachable' if ok else 'unreachable'}",
         )
+
+    def list_domain_entities(self, ctx: SystemContext) -> list[str]:
+        overlord = ctx.meta.get("OVERLORD_URL", "")
+        user, password = ctx.meta.get("USER", ""), ctx.meta.get("PASSWORD", "")
+        return self._list_datasources(overlord, user, password)
+
+    def purge_domain_entity(self, ctx: SystemContext, name: str) -> None:
+        overlord = ctx.meta.get("OVERLORD_URL", "")
+        user, password = ctx.meta.get("USER", ""), ctx.meta.get("PASSWORD", "")
+        self._delete_datasource(overlord, name, user, password)
+
+    @staticmethod
+    def _list_datasources(
+        overlord_url: str, user: str = "", password: str = ""
+    ) -> list[str]:
+        """Every datasource known to the cluster (coordinator API). An
+        unreachable cluster reports nothing rather than failing the purge."""
+        url = f"{overlord_url}/druid/coordinator/v1/datasources"
+        req = urllib.request.Request(url, method="GET")  # noqa: S310
+        if user:
+            token = base64.b64encode(f"{user}:{password}".encode()).decode()
+            req.add_header("Authorization", f"Basic {token}")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+                data = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            raise DatagenError(
+                f"Druid list datasources failed: HTTP {exc.code} {exc.reason}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            print(f">>> Druid cluster unreachable ({exc.reason}); no datasources")
+            return []
+        return [str(d) for d in data] if isinstance(data, list) else []
 
     @staticmethod
     def _delete_datasource(

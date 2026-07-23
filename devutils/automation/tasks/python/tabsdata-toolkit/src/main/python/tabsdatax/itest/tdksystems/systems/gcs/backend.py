@@ -50,6 +50,18 @@ class GcsBackend:
         it = self.client.list_blobs(self.bucket_name, prefix=p, max_results=1)
         return any(True for _ in it)
 
+    def children(self, root: str) -> list[str]:
+        p = normalise_prefix(root)
+        it = self.client.list_blobs(self.bucket_name, prefix=p, delimiter="/")
+        for _ in it:  # exhaust the iterator so `it.prefixes` is populated
+            pass
+        names: list[str] = []
+        for full in it.prefixes:
+            child = full[len(p) :].rstrip("/")
+            if child:
+                names.append(child)
+        return sorted(names)
+
     def clear(self, prefix: str) -> None:
         p = normalise_prefix(prefix)
         blobs = list(self.client.list_blobs(self.bucket_name, prefix=p))

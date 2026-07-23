@@ -13,7 +13,7 @@ import subprocess
 from ...errors import DatagenError
 from ...shell import docker_run, find_free_port
 from .._container import AdminConn, ContainerBase, DomainResult
-from ..base import DomainContext, LoadRequest, _build_identity
+from ..base import DomainContext, LoadRequest, SystemContext, _build_identity
 
 
 class RedpandaSystem(ContainerBase):
@@ -21,6 +21,7 @@ class RedpandaSystem(ContainerBase):
     label = "Redpanda"
     domain_desc = "a topic"
     domain_flag = "topic"
+    max_entity_name_length = 249  # Kafka/Redpanda topic name limit
     supports_sql = False
     kind = "kafka"
 
@@ -222,3 +223,10 @@ class RedpandaSystem(ContainerBase):
             raise DatagenError(f"kafka list topics failed: {exc}") from exc
         # Skip Kafka/Redpanda internal topics (e.g. _schemas, __consumer_offsets).
         return [t for t in md.topics if not t.startswith("_")]
+
+    def list_domain_entities(self, ctx: SystemContext) -> list[str]:
+        # A domain is one topic; its per-entity `<domain>.<table>` topics are
+        # dropped together with it (do_delete removes `<name>` and every
+        # `<name>.*`), so purge must target only the dot-free domain topics —
+        # listing the sub-topics too would double-drop (and race).
+        return [t for t in self.do_list(self._admin_conn(ctx)) if "." not in t]

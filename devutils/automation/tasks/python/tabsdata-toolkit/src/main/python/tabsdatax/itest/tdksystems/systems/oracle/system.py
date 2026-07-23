@@ -19,6 +19,7 @@ class OracleSystem(ContainerBase):
     label = "Oracle Database Free"
     domain_desc = "a user/schema (Oracle treats them as one entity)"
     domain_flag = "database"
+    max_entity_name_length = 128  # Oracle 23ai identifier limit (12.2+)
     supports_sql = True
 
     image = (

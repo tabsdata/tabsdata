@@ -36,6 +36,7 @@ class SaasBase(System):
     domain_is_named = True  # schema domains; salesforce overrides to False
     domain_flag = "schema"  # databricks/snowflake domains are schemas
     # (salesforce clones creds — no entity container — and clears this)
+    max_entity_name_length = 255  # snowflake / databricks schema identifiers
 
     # ---- system lifecycle (account is external: verify, don't provision) ----
 
@@ -86,6 +87,19 @@ class SaasBase(System):
         return self._reachable(
             ctx.meta, f"{self.slug} domain '{ctx.meta.get('SCHEMA', ctx.name)}'"
         )
+
+    def list_domain_entities(self, ctx: SystemContext) -> list[str]:
+        # Schema-domain systems (databricks/snowflake) list the schemas in the
+        # account's database/catalog; the credentials-clone case (salesforce,
+        # `domain_is_named = False`) has no entity container to enumerate.
+        if not self.domain_is_named:
+            return []
+        return self.list_schemas(self.resolve_values(self.settings_from_meta(ctx.meta)))
+
+    def purge_domain_entity(self, ctx: SystemContext, name: str) -> None:
+        if not self.domain_is_named:
+            return
+        self.drop_schema(self.resolve_values(self.settings_from_meta(ctx.meta)), name)
 
     # ---- data plane (SQL against the schema) ----
 
@@ -161,6 +175,12 @@ class SaasBase(System):
         raise NotImplementedError
 
     def drop_schema(self, values: dict[str, str], name: str) -> None:
+        raise NotImplementedError
+
+    def list_schemas(self, values: dict[str, str]) -> list[str]:
+        """Names of the user schemas in the account's database/catalog (the
+        built-in schemas — `information_schema`, `public`, `default` — excluded).
+        Used by `tdx-system purge`. Only schema-domain systems implement it."""
         raise NotImplementedError
 
     def exec_statements(self, ctx: DomainContext, statements: list[str]) -> None:

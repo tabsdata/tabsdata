@@ -12,13 +12,14 @@ Execution REST API, together with a Unity Catalog staging Volume
 from __future__ import annotations
 
 from .._saas import SaasBase
-from ..base import DomainContext, Option
+from ..base import DomainContext, Option, SystemContext
 from . import connection
 
 
 class DatabricksSystem(SaasBase):
     slug = "databricks"
     label = "Databricks"
+    owns_entities = True  # schemata record a schema_owner (see list_owned...)
     ident_quote = "`"  # Databricks quotes identifiers with backticks
     options = (
         Option("HOST", "host"),
@@ -77,6 +78,32 @@ class DatabricksSystem(SaasBase):
             catalog,
             f"DROP SCHEMA IF EXISTS `{catalog}`.`{name}` CASCADE",
         )
+
+    def list_schemas(self, values: dict[str, str]) -> list[str]:
+        host, token, wh_id, catalog = self._resolve(values)
+        self._ensure_running(host, token, wh_id)
+        rows = connection.exec_sql(
+            host, token, wh_id, catalog, f"SHOW SCHEMAS IN `{catalog}`"
+        )
+        names = [r[0] for r in rows if r]
+        return [n for n in names if n.lower() not in ("default", "information_schema")]
+
+    def list_owned_domain_entities(self, ctx: SystemContext) -> list[str]:
+        # Unity Catalog records schema_owner; keep the schemas owned by the
+        # login principal (current_user()).
+        values = self.resolve_values(self.settings_from_meta(ctx.meta))
+        host, token, wh_id, catalog = self._resolve(values)
+        self._ensure_running(host, token, wh_id)
+        rows = connection.exec_sql(
+            host,
+            token,
+            wh_id,
+            catalog,
+            f"SELECT schema_name FROM `{catalog}`.information_schema.schemata "
+            f"WHERE schema_owner = current_user()",
+        )
+        names = [r[0] for r in rows if r]
+        return [n for n in names if n.lower() not in ("default", "information_schema")]
 
     def exec_statements(self, ctx: DomainContext, statements: list[str]) -> None:
         values = self.resolve_values(self.settings_from_meta(ctx.meta))

@@ -17,6 +17,7 @@ class MssqlSystem(ContainerBase):
     label = "Microsoft SQL Server"
     domain_desc = "a database (with a dedicated user that owns it)"
     domain_flag = "schema"
+    max_entity_name_length = 128  # SQL Server sysname identifier limit
     supports_sql = True
     # CREATE DATABASE can't run inside a multi-statement transaction.
     admin_autocommit = True

@@ -118,14 +118,12 @@ def test_s3_lifecycle_through_tdx(stores, fake_s3):
     doc = descriptor.load(store.system_path("store"))
     assert (doc["category"], doc["system"], doc["role"]) == ("cloud", "s3", "sys")
     assert tdx._sys_status(["--sys", "store"]) == 0
-    # Pin the prefix off so BASE_PATH is exactly data/<domain> (the default
-    # prefix, covered separately, would be host-user dependent).
-    assert tdx._domain_create(["--sys", "store", "--domain", "inbox",
-                               "--domain-prefix", "", "-f"]) == 0
+    # Default naming: BASE_PATH is data/d_<user>_<build>_<domain> (`u_0` pinned).
+    assert tdx._domain_create(["--sys", "store", "--domain", "inbox", "-f"]) == 0
     m = descriptor.read_meta(store.domain_path("inbox"))
     assert m["KIND"] == "cloud-domain"
     assert m["STORAGE_TYPE"] == "s3"      # cli.py's cloud loader still finds it
-    assert m["BASE_PATH"] == "data/inbox"
+    assert m["BASE_PATH"] == "data/d_u_0_inbox"
     assert tdx._domain_destroy(["--domain", "inbox"]) == 0
     assert not store.domain_path("inbox").exists()
     assert tdx._sys_destroy(["--sys", "store"]) == 0
@@ -188,20 +186,21 @@ def test_mysql_domain_through_tdx(stores, monkeypatch):
         container="mydb", host="localhost", port="3306", user="root",
         password="rootpw", domain_desc="db")
     descriptor.stamp(str(sysf), name="mydb", started="t")
-    assert tdx._domain_create(["--sys", "mydb", "--domain", "finance",
-                               "--domain-prefix", "", "-f"]) == 0
+    assert tdx._domain_create(["--sys", "mydb", "--domain", "finance", "-f"]) == 0
     m = descriptor.read_meta(store.domain_path("finance"))
-    assert m["KIND"] == "container-domain" and m["DB"] == "finance"
+    assert m["KIND"] == "container-domain" and m["DB"] == "d_u_0_finance"
     assert m["SYS_CONTAINER"] == "mydb"        # back-ref for destroy
-    assert m["SQLALCHEMY_URI"].startswith("mysql+mysqlconnector://finance:")
+    assert m["SQLALCHEMY_URI"].startswith("mysql+mysqlconnector://d_u_0_finance:")
     assert tdx._domain_destroy(["--domain", "finance"]) == 0
     assert not store.domain_path("finance").exists()
 
 
 def test_container_domain_entity_is_prefixed(stores, monkeypatch):
-    """The entity container (DB / user) created in the system carries the
-    DOMAIN_PREFIX; the descriptor's logical name stays the bare domain name and
-    the prefixed name is recorded as EXTERNAL_NAME."""
+    """The entity container (DB / user) created in the system carries the default
+    `d_<user>_<build>_` prefix; the descriptor's logical name stays the bare
+    domain name and the prefixed name is recorded as EXTERNAL_NAME."""
+    monkeypatch.setenv("TD_BUILD_USER", "ci")
+    monkeypatch.setenv("TD_BUILD_NUMBER", "1")
     monkeypatch.setattr(MysqlSystem, "_run_admin_sql",
                         lambda self, admin, statements: None)
     monkeypatch.setattr(MysqlSystem, "_query_admin_names",
@@ -212,14 +211,13 @@ def test_container_domain_entity_is_prefixed(stores, monkeypatch):
         container="mydb", host="localhost", port="3306", user="root",
         password="rootpw", domain_desc="db")
     descriptor.stamp(str(sysf), name="mydb", started="t")
-    assert tdx._domain_create(["--sys", "mydb", "--domain", "finance",
-                               "--domain-prefix", "ci_1_", "-f"]) == 0
+    assert tdx._domain_create(["--sys", "mydb", "--domain", "finance", "-f"]) == 0
     doc = descriptor.load(store.domain_path("finance"))
     assert doc["name"] == "finance"                    # logical name unchanged
-    assert doc["external_name"] == "ci_1_finance"
+    assert doc["external_name"] == "d_ci_1_finance"
     m = descriptor.read_meta(store.domain_path("finance"))
-    assert m["DB"] == "ci_1_finance"                   # the actual database
-    assert m["SQLALCHEMY_URI"].startswith("mysql+mysqlconnector://ci_1_finance:")
+    assert m["DB"] == "d_ci_1_finance"                 # the actual database
+    assert m["SQLALCHEMY_URI"].startswith("mysql+mysqlconnector://d_ci_1_finance:")
 
 
 # ---- snowflake (saas) -----------------------------------------------------
@@ -230,9 +228,8 @@ def test_snowflake_lifecycle_through_tdx(stores, fake_sf):
                      "--warehouse", "wh", "--database", "ANALYTICS", "-f"])
     assert descriptor.load(store.system_path("snow"))["category"] == "saas"
     assert tdx._sys_status(["--sys", "snow"]) == 0
-    assert tdx._domain_create(["--sys", "snow", "--domain", "finance",
-                               "--domain-prefix", "", "-f"]) == 0
-    assert descriptor.read_meta(store.domain_path("finance"))["SCHEMA"] == "finance"
+    assert tdx._domain_create(["--sys", "snow", "--domain", "finance", "-f"]) == 0
+    assert descriptor.read_meta(store.domain_path("finance"))["SCHEMA"] == "d_u_0_finance"
     # pause is container-only — capability flag, surfaced as a clear error.
     with pytest.raises(DatagenError, match="only applies to container"):
         tdx._sys_pause(["--sys", "snow"])
@@ -283,35 +280,35 @@ def test_druid_lifecycle_through_tdx(stores, fake_druid, monkeypatch):
     assert "INTERNAL_PASSWORD" not in descriptor.load(store.system_path("d1"))["exported"]
     assert tdx._sys_status(["--sys", "d1"]) == 0
 
-    # Domain == a datasource; pin the prefix off so the name is exactly "events".
-    assert tdx._domain_create(["--sys", "d1", "--domain", "events",
-                               "--domain-prefix", "", "-f"]) == 0
+    # Domain == a datasource; default naming -> d_<user>_<build>_events (`u_0`).
+    assert tdx._domain_create(["--sys", "d1", "--domain", "events", "-f"]) == 0
     dm = descriptor.read_meta(store.domain_path("events"))
     assert dm["KIND"] == "containers-domain"
-    assert dm["DATASOURCE"] == "events"
+    assert dm["DATASOURCE"] == "d_u_0_events"
     assert dm["OVERLORD_URL"] == "http://localhost:18081"
     assert dm["ROUTER_URL"] == "http://localhost:18888"
     assert dm["USER"] == "admin" and dm["PASSWORD"] == m["PASSWORD"]  # inherited
 
     assert tdx._domain_destroy(["--domain", "events"]) == 0
     # coordinator DELETE, authenticated as the admin user.
-    assert deleted == [("http://localhost:18081", "events", "admin")]
+    assert deleted == [("http://localhost:18081", "d_u_0_events", "admin")]
     assert not store.domain_path("events").exists()
     assert tdx._sys_destroy(["--sys", "d1"]) == 0
     assert not store.system_path("d1").exists()
 
 
-def test_druid_datasource_is_prefixed(stores, fake_druid):
-    """The datasource created carries the DOMAIN_PREFIX; the descriptor's logical
-    name stays bare and the prefixed name is recorded as EXTERNAL_NAME."""
+def test_druid_datasource_is_prefixed(stores, fake_druid, monkeypatch):
+    """The datasource created carries the default `d_<user>_<build>_` prefix; the
+    descriptor's logical name stays bare and the prefixed name is EXTERNAL_NAME."""
+    monkeypatch.setenv("TD_BUILD_USER", "ci")
+    monkeypatch.setenv("TD_BUILD_NUMBER", "1")
     tdx._sys_create(["--type", "druid", "--sys", "d1", "-f"])
-    assert tdx._domain_create(["--sys", "d1", "--domain", "events",
-                               "--domain-prefix", "ci_1_", "-f"]) == 0
+    assert tdx._domain_create(["--sys", "d1", "--domain", "events", "-f"]) == 0
     doc = descriptor.load(store.domain_path("events"))
     assert doc["name"] == "events"                      # logical name unchanged
-    assert doc["external_name"] == "ci_1_events"
+    assert doc["external_name"] == "d_ci_1_events"
     m = descriptor.read_meta(store.domain_path("events"))
-    assert m["DATASOURCE"] == "ci_1_events"             # the actual datasource
+    assert m["DATASOURCE"] == "d_ci_1_events"           # the actual datasource
 
 
 def test_druid_rejects_data_but_accepts_model(stores, fake_druid):

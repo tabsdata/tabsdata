@@ -423,6 +423,16 @@ class ContainerBase(System):
             ok, f"{self.label} at {host}:{port} {'reachable' if ok else 'unreachable'}"
         )
 
+    def list_domain_entities(self, ctx: SystemContext) -> list[str]:
+        # The entity containers a domain create makes (database / schema / topic)
+        # ARE what `do_list` enumerates over the system admin connection — the
+        # same list provision_domain checks for collisions — with system
+        # containers already excluded.
+        return self.do_list(self._admin_conn(ctx))
+
+    def purge_domain_entity(self, ctx: SystemContext, name: str) -> None:
+        self.do_delete(self._admin_conn(ctx), name)
+
     # ==================================================================
     # Data plane (SQL) — run the model's DDL / INSERTs against the domain
     # ==================================================================

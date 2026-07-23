@@ -11,10 +11,11 @@ tmp dirs and files are located with `store.system_path` / `store.domain_path`
 (the same resolution the CLI uses). Data loading (`--model` / `--data`) is
 covered by the integration suite.
 
-By default a domain's external entity is named `<DOMAIN_PREFIX><domain>` (see
-`_resolve_domain_prefix`), which depends on the host user; tests that assert the
-concrete fs path / external name pin `--domain-prefix ""` so the entity name is
-just the domain name. The prefixing itself is covered by its own tests below."""
+By default a domain's external entity is named `d_<user>_<build>_<domain>` (see
+`_default_domain_prefix`); an autouse fixture pins the build identity to `u_0`
+(see conftest), so the default entity name is a deterministic `d_u_0_<domain>`.
+Tests that want a bare, prefix-free entity name pass `--name-in-system <name>`.
+The naming itself is covered by its own tests below."""
 from __future__ import annotations
 
 import json
@@ -148,7 +149,7 @@ def test_domain_create_force_destroys_existing_via_system(stores, fs_root, monke
     # create -f on an existing domain destroys it FIRST (over the system's
     # connection, via _domain_destroy_one), then creates fresh.
     tdx._sys_create(["--type", "fs", "--sys", "a", "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "a", "--domain", "d", "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d", "-f"])
     calls = []
     orig = tdx._domain_destroy_one
     monkeypatch.setattr(
@@ -156,13 +157,13 @@ def test_domain_create_force_destroys_existing_via_system(stores, fs_root, monke
         lambda name, dd, sd: calls.append((name, sd)) or orig(name, dd, sd),
     )
     assert tdx._domain_create(
-        ["--sys", "a", "--domain", "d", "--domain-prefix", "", "-f"]
+        ["--sys", "a", "--domain", "d", "-f"]
     ) == 0
     assert calls == [("d", None)]           # destroyed via the system before recreate
-    assert (fs_root / "d").is_dir()         # and recreated
+    assert (fs_root / "d_u_0_d").is_dir()   # and recreated (default d_ prefix)
     # a fresh create (no existing descriptor) does NOT destroy first.
     calls.clear()
-    tdx._domain_create(["--sys", "a", "--domain", "e", "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "e", "-f"])
     assert calls == []
 
 
@@ -204,19 +205,18 @@ def test_full_fs_lifecycle(stores, fs_root):
                      "--sys-path", str(fs_root), "-f"])
     assert tdx._sys_status(["--sys", "my_fs"]) == 0
 
-    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox",
-                        "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox", "-f"])
     dom = _read(store.domain_path("inbox"))
     assert dom["role"] == "env" and dom["name"] == "inbox"
-    assert (fs_root / "inbox").is_dir()
+    assert (fs_root / "d_u_0_inbox").is_dir()
     dinfo = json.loads(descriptor.info(descriptor.load(store.domain_path("inbox")),
                                        "json"))
-    assert dinfo["BASE_PATH"] == f"{fs_root}/inbox"
+    assert dinfo["BASE_PATH"] == f"{fs_root}/d_u_0_inbox"
     assert tdx._domain_status(["--domain", "inbox"]) == 0
 
     tdx._domain_destroy(["--domain", "inbox"])
     assert not store.domain_path("inbox").exists()
-    assert not (fs_root / "inbox").exists()
+    assert not (fs_root / "d_u_0_inbox").exists()
 
     tdx._sys_destroy(["--sys", "my_fs"])
     assert not store.system_path("my_fs").exists()
@@ -370,8 +370,7 @@ def test_info_defaults_to_json(stores, fs_root, capsys):
     assert tdx._sys_info(["--sys", "my_fs"]) == 0
     obj = json.loads(capsys.readouterr().out)
     assert obj["NAME"] == "my_fs" and obj["TYPE"] == "fs"
-    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox",
-                        "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox", "-f"])
     capsys.readouterr()
     assert tdx._domain_info(["--domain", "inbox"]) == 0
     assert json.loads(capsys.readouterr().out)["NAME"] == "inbox"
@@ -751,14 +750,13 @@ def test_system_meta_from_domain_remaps_container_backrefs():
 def test_domain_recreate_empty_wipes_contents(stores, fs_root, capsys):
     tdx._sys_create(["--type", "fs", "--sys", "a",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "a", "--domain", "inbox",
-                        "--domain-prefix", "", "-f"])
-    stray = fs_root / "inbox" / "stray.txt"
+    tdx._domain_create(["--sys", "a", "--domain", "inbox", "-f"])
+    stray = fs_root / "d_u_0_inbox" / "stray.txt"
     stray.write_text("x")
     capsys.readouterr()
     assert tdx._domain_recreate(["--domain", "inbox"]) == 0
     # fs recreate rmtree+mkdir's the domain dir -> back to clean/empty.
-    assert (fs_root / "inbox").is_dir()
+    assert (fs_root / "d_u_0_inbox").is_dir()
     assert not stray.exists()
     out = capsys.readouterr().out
     assert "recreated domain 'inbox'" in out and "(empty)" in out
@@ -767,25 +765,24 @@ def test_domain_recreate_empty_wipes_contents(stores, fs_root, capsys):
 def test_domain_recreate_replays_recorded_model(stores, fs_root):
     tdx._sys_create(["--type", "fs", "--sys", "a",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "a", "--domain", "inbox",
-                        "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "inbox", "-f"])
     # Record a model (as a --model create would); recreate must preserve it.
     descriptor.stamp(store.domain_path("inbox"), name="inbox", started="t",
                      model="world")
     assert tdx._domain_recreate(["--domain", "inbox"]) == 0
     assert _read(store.domain_path("inbox")).get("model") == "world"
-    assert (fs_root / "inbox").is_dir()
+    assert (fs_root / "d_u_0_inbox").is_dir()
 
 
 def test_domain_recreate_all(stores, fs_root, capsys):
     tdx._sys_create(["--type", "fs", "--sys", "a",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "a", "--domain", "d1", "--domain-prefix", "", "-f"])
-    tdx._domain_create(["--sys", "a", "--domain", "d2", "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d1", "-f"])
+    tdx._domain_create(["--sys", "a", "--domain", "d2", "-f"])
     capsys.readouterr()
     assert tdx._domain_recreate(["--domain", "ALL"]) == 0
     assert "recreated 2/2 domains" in capsys.readouterr().out
-    assert (fs_root / "d1").is_dir() and (fs_root / "d2").is_dir()
+    assert (fs_root / "d_u_0_d1").is_dir() and (fs_root / "d_u_0_d2").is_dir()
 
 
 def test_recreate_reuses_credentials_for_sql(stores, monkeypatch):
@@ -821,12 +818,14 @@ def test_domain_create_stages_all_formats_and_records_entities(
     monkeypatch.setattr(cli.env_check, "check_requirements", lambda: None)
     tdx._sys_create(["--type", "fs", "--sys", "a", "--sys-path", str(fs_root), "-f"])
     assert tdx._domain_create(
-        ["--sys", "a", "--domain", "inbox", "--domain-prefix", "",
+        ["--sys", "a", "--domain", "inbox",
          "--model", "world", "--data", "xs", "-f"]
     ) == 0
-    # the domain is named by --domain verbatim; --model/--data only seed it.
+    # the domain's logical name is `inbox`; its entity dir carries the default
+    # `d_<user>_<build>_` prefix (`u_0` pinned by conftest).
     dom_name = "inbox"
-    dom = fs_root / dom_name
+    external = "d_u_0_inbox"
+    dom = fs_root / external
     assert (dom / "csv" / "wld_city.csv").is_file()
     # JSON is staged as NDJSON (one object per line), not a single array.
     ndjson_file = dom / "ndjson" / "wld_city.ndjson"
@@ -840,7 +839,7 @@ def test_domain_create_stages_all_formats_and_records_entities(
     assert not list(dom.rglob("_entities.json"))
     assert not list(dom.rglob("run-order.txt"))
     attrs = descriptor.attributes(_read(store.domain_path(dom_name)))
-    assert attrs["FOLDER"] == dom_name
+    assert attrs["FOLDER"] == external
     # entities are keyed by each staged file's full path (one per table+format).
     ents = attrs["ENTITIES"]
     assert ents[f"{dom}/csv/wld_city.csv"] == 100
@@ -899,15 +898,15 @@ def test_domain_create_auto_names_and_seeds(
     tdx._sys_create(["--type", "fs", "--sys", "two",
                      "--sys-path", str(fs_root / "two"), "-f"])
     rc = tdx._domain_create(["--auto", "ALL", "--model", "world",
-                             "--data", "xs", "--domain-prefix", "", "-f"])
+                             "--data", "xs", "-f"])
     assert rc == 0
     # each domain is named after its system.
     assert {n for n, _ in tdx._store_entries(store.domain_dir(), "env")} == {
         "one", "two"
     }
     # and each was seeded (data staged in per-format subdirs).
-    assert (fs_root / "one" / "one" / "csv" / "wld_city.csv").is_file()
-    assert (fs_root / "two" / "two" / "parquet" / "wld_city.parquet").is_file()
+    assert (fs_root / "one" / "d_u_0_one" / "csv" / "wld_city.csv").is_file()
+    assert (fs_root / "two" / "d_u_0_two" / "parquet" / "wld_city.parquet").is_file()
 
 
 def test_domain_create_auto_model_is_noop_for_unsupported_system(
@@ -922,13 +921,13 @@ def test_domain_create_auto_model_is_noop_for_unsupported_system(
     monkeypatch.setattr(tdx, "_system_can_seed", lambda name, model, sys_dir: False)
     capsys.readouterr()
     rc = tdx._domain_create(["--auto", "ALL", "--model", "world",
-                             "--data", "xs", "--domain-prefix", "", "-f"])
+                             "--data", "xs", "-f"])
     cap = capsys.readouterr()
     assert rc == 0
     # domain named after the system, no data staged.
     assert store.domain_path("flat").exists()
-    assert (fs_root / "flat" / "flat").is_dir()
-    assert not list((fs_root / "flat" / "flat").rglob("*.csv"))
+    assert (fs_root / "flat" / "d_u_0_flat").is_dir()
+    assert not list((fs_root / "flat" / "d_u_0_flat").rglob("*.csv"))
     # warned that it was created empty.
     assert "flat: model 'world' is not seedable here" in cap.err
     assert "empty (model 'world' not seeded)" in cap.out
@@ -969,13 +968,13 @@ def test_domain_create_from_manifest(stores, fs_root, tmp_path, monkeypatch):
         "- name: inbox\n  sys: mysys\n"
     )
     assert tdx._domain_create(
-        ["--domain-manifest", str(m), "--domain-prefix", "", "-f"]
+        ["--domain-manifest", str(m), "-f"]
     ) == 0
     assert {n for n, _ in tdx._store_entries(store.domain_dir(), "env")} == {
         "orders", "inbox"
     }
-    assert (fs_root / "orders" / "csv" / "wld_city.csv").is_file()
-    assert (fs_root / "inbox").is_dir()
+    assert (fs_root / "d_u_0_orders" / "csv" / "wld_city.csv").is_file()
+    assert (fs_root / "d_u_0_inbox").is_dir()
 
 
 def test_domain_dump_subcommand_round_trips(stores, fs_root, tmp_path, monkeypatch):
@@ -986,9 +985,8 @@ def test_domain_dump_subcommand_round_trips(stores, fs_root, tmp_path, monkeypat
     tdx._sys_create(["--type", "fs", "--sys", "mysys",
                      "--sys-path", str(fs_root), "-f"])
     tdx._domain_create(["--sys", "mysys", "--domain", "orders", "--model", "world",
-                        "--data", "xs", "--domain-prefix", "", "-f"])
-    tdx._domain_create(["--sys", "mysys", "--domain", "inbox",
-                        "--domain-prefix", "", "-f"])
+                        "--data", "xs", "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "inbox", "-f"])
     out = tmp_path / "domains.yaml"
     assert tdx._domain_dump(["--domain-manifest", str(out)]) == 0
     entries = {e["name"]: e for e in manifest.read(str(out))}
@@ -1049,8 +1047,7 @@ def test_sys_destroy_from_manifest_refuses_system_in_use(
     # is left in place.
     tdx._sys_create(["--type", "fs", "--sys", "busy",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "busy", "--domain", "d",
-                        "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "busy", "--domain", "d", "-f"])
     m = tmp_path / "sys.yaml"
     m.write_text("- type: fs\n  name: busy\n")
     capsys.readouterr()
@@ -1068,8 +1065,7 @@ def test_domain_destroy_from_manifest_destroys_and_skips_missing(
     # derived name isn't in the store is warned to stderr and skipped.
     tdx._sys_create(["--type", "fs", "--sys", "mysys",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "mysys", "--domain", "keep",
-                        "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "keep", "-f"])
     m = tmp_path / "domains.yaml"
     m.write_text("- name: keep\n  sys: mysys\n- name: ghost\n  sys: mysys\n")
     capsys.readouterr()
@@ -1123,8 +1119,7 @@ def test_sys_sync_refuses_to_destroy_system_in_use(stores, fs_root, tmp_path, ca
     # not destroyed (reported FAIL); the rest of the sync still runs.
     tdx._sys_create(["--type", "fs", "--sys", "busy",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "busy", "--domain", "d",
-                        "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "busy", "--domain", "d", "-f"])
     m = tmp_path / "sys.yaml"
     m.write_text(f"- type: fs\n  name: other\n  sys-path: {fs_root}/other\n")
     capsys.readouterr()
@@ -1164,23 +1159,21 @@ def test_domain_sync_reconciles_store_to_manifest(
 ):
     tdx._sys_create(["--type", "fs", "--sys", "mysys",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "mysys", "--domain", "keep",
-                        "--domain-prefix", "", "-f"])
-    tdx._domain_create(["--sys", "mysys", "--domain", "gone",
-                        "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "keep", "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "gone", "-f"])
     m = tmp_path / "domains.yaml"
     m.write_text("- name: keep\n  sys: mysys\n- name: new\n  sys: mysys\n")
     capsys.readouterr()
     rc = tdx._domain_create(
-        ["--domain-manifest", str(m), "--sync", "--domain-prefix", "", "-f"]
+        ["--domain-manifest", str(m), "--sync", "-f"]
     )
     out = capsys.readouterr().out
     assert rc == 0
     assert {n for n, _ in tdx._store_entries(store.domain_dir(), "env")} == {
         "keep", "new"
     }
-    assert not (fs_root / "gone").exists()
-    assert (fs_root / "new").is_dir()
+    assert not (fs_root / "d_u_0_gone").exists()
+    assert (fs_root / "d_u_0_new").is_dir()
     assert "created 1/1" in out
     assert "destroyed 1/1" in out
     assert "1 left unchanged (not updated)" in out
@@ -1235,11 +1228,11 @@ def test_domain_meta_via_system_falls_back_without_sys_name():
 def test_domain_destroy_uses_system_and_removes_folder(stores, fs_root):
     tdx._sys_create(["--type", "fs", "--sys", "mysys",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "mysys", "--domain", "d", "--domain-prefix", "", "-f"])
-    assert (fs_root / "d").is_dir()
+    tdx._domain_create(["--sys", "mysys", "--domain", "d", "-f"])
+    assert (fs_root / "d_u_0_d").is_dir()
     tdx._domain_destroy(["--domain", "d"])
     assert not store.domain_path("d").exists()
-    assert not (fs_root / "d").exists()
+    assert not (fs_root / "d_u_0_d").exists()
 
 
 def test_domain_destroy_force_removes_descriptor_on_teardown_failure(
@@ -1247,7 +1240,7 @@ def test_domain_destroy_force_removes_descriptor_on_teardown_failure(
 ):
     tdx._sys_create(["--type", "fs", "--sys", "mysys",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "mysys", "--domain", "d", "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "mysys", "--domain", "d", "-f"])
     assert store.domain_path("d").exists()
 
     class _Boom:
@@ -1291,9 +1284,9 @@ def test_domain_create_single_defaults_name_to_system(stores, fs_root):
     # --sys with no --domain -> domain named after the system.
     tdx._sys_create(["--type", "fs", "--sys", "mysys",
                      "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "mysys", "--domain-prefix", "", "-f"])
+    tdx._domain_create(["--sys", "mysys", "-f"])
     assert store.domain_path("mysys").exists()
-    assert (fs_root / "mysys").is_dir()
+    assert (fs_root / "d_u_0_mysys").is_dir()
 
 
 def test_manifest_batch_reports_per_entry_failure(stores, fs_root, tmp_path, capsys):
@@ -1371,24 +1364,22 @@ def test_azureblob_default_env_prefix_is_az():
     assert settings["ACCOUNT_KEY"].env_var == "AZ__ACCOUNT_KEY"
 
 
-# ---- DOMAIN_PREFIX: the entity container's name in the external system -----
+# ---- external entity-container naming ---------------------------------------
 
-def test_resolve_domain_prefix_precedence(monkeypatch):
-    # --domain-prefix wins verbatim (even empty, meaning "no prefix").
-    assert tdx._resolve_domain_prefix("myrun_") == "myrun_"
-    assert tdx._resolve_domain_prefix("") == ""
-    # else $TD_BUILD_USER / $TD_BUILD_NUMBER ...
+def test_default_domain_prefix(monkeypatch):
+    # The default entity prefix is `d_<user>_<build>_` from $TD_BUILD_USER /
+    # $TD_BUILD_NUMBER ...
     monkeypatch.setenv("TD_BUILD_USER", "ci")
     monkeypatch.setenv("TD_BUILD_NUMBER", "7")
-    assert tdx._resolve_domain_prefix(None) == "ci_7_"
-    # ... each sanitised to identifier-safe tokens.
+    assert tdx._default_domain_prefix() == "d_ci_7_"
+    # ... each token sanitised to identifier-safe form ...
     monkeypatch.setenv("TD_BUILD_USER", "a.b/c")
-    assert tdx._resolve_domain_prefix(None) == "a_b_c_7_"
+    assert tdx._default_domain_prefix() == "d_a_b_c_7_"
     # ... else the OS user + build 0.
     monkeypatch.delenv("TD_BUILD_USER", raising=False)
     monkeypatch.delenv("TD_BUILD_NUMBER", raising=False)
     monkeypatch.setattr(base, "_os_username", lambda: "devx")
-    assert tdx._resolve_domain_prefix(None) == "devx_0_"
+    assert tdx._default_domain_prefix() == "d_devx_0_"
 
 
 def test_ident_token_sanitizes():
@@ -1421,9 +1412,9 @@ def test_redpanda_domain_group_id_is_build_identity(monkeypatch):
     assert "GROUP_ID" in rp.exported_domain_vars
 
 
-def test_domain_prefix_defaults_to_build_identity(stores, fs_root, monkeypatch):
-    # No --domain-prefix -> the entity dir is named <TD_BUILD_USER>_<NUMBER>_<domain>;
-    # the descriptor's logical name stays the bare domain name.
+def test_default_naming_is_d_prefixed(stores, fs_root, monkeypatch):
+    # No --name-in-system -> the entity dir is `d_<user>_<build>_<domain>`; the
+    # descriptor's logical name stays the bare domain name.
     monkeypatch.setenv("TD_BUILD_USER", "ci")
     monkeypatch.setenv("TD_BUILD_NUMBER", "7")
     tdx._sys_create(["--type", "fs", "--sys", "my_fs",
@@ -1431,54 +1422,35 @@ def test_domain_prefix_defaults_to_build_identity(stores, fs_root, monkeypatch):
     tdx._domain_create(["--sys", "my_fs", "--domain", "inbox", "-f"])
     doc = _read(store.domain_path("inbox"))
     assert doc["name"] == "inbox"                       # logical name unchanged
-    assert doc["external_name"] == "ci_7_inbox"
-    assert (fs_root / "ci_7_inbox").is_dir()            # the real entity dir
+    assert doc["external_name"] == "d_ci_7_inbox"
+    assert (fs_root / "d_ci_7_inbox").is_dir()          # the real entity dir
     assert not (fs_root / "inbox").exists()
     info = json.loads(descriptor.info(doc, "json"))
-    assert info["NAME"] == "inbox" and info["EXTERNAL_NAME"] == "ci_7_inbox"
-    assert info["BASE_PATH"] == f"{fs_root}/ci_7_inbox"
+    assert info["NAME"] == "inbox" and info["EXTERNAL_NAME"] == "d_ci_7_inbox"
+    assert info["BASE_PATH"] == f"{fs_root}/d_ci_7_inbox"
 
 
-def test_domain_prefix_falls_back_to_os_user(stores, fs_root, monkeypatch):
+def test_default_naming_falls_back_to_os_user(stores, fs_root, monkeypatch):
     monkeypatch.delenv("TD_BUILD_USER", raising=False)
     monkeypatch.delenv("TD_BUILD_NUMBER", raising=False)
     monkeypatch.setattr(base, "_os_username", lambda: "devx")
     tdx._sys_create(["--type", "fs", "--sys", "my_fs",
                      "--sys-path", str(fs_root), "-f"])
     tdx._domain_create(["--sys", "my_fs", "--domain", "inbox", "-f"])
-    assert _read(store.domain_path("inbox"))["external_name"] == "devx_0_inbox"
-    assert (fs_root / "devx_0_inbox").is_dir()
+    assert _read(store.domain_path("inbox"))["external_name"] == "d_devx_0_inbox"
+    assert (fs_root / "d_devx_0_inbox").is_dir()
 
 
-def test_domain_prefix_explicit_option(stores, fs_root):
-    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
-                     "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox",
-                        "--domain-prefix", "run5_", "-f"])
-    assert _read(store.domain_path("inbox"))["external_name"] == "run5_inbox"
-    assert (fs_root / "run5_inbox").is_dir()
-
-
-def test_name_in_system_overrides_entity_name(stores, fs_root):
-    # --name-in-system names the external entity verbatim and wins over
-    # --domain-prefix (the prefixed name is never created).
+def test_name_in_system_names_entity_verbatim(stores, fs_root):
+    # --name-in-system names the external entity verbatim (no d_ prefix), instead
+    # of the default d_<user>_<build>_<domain>.
     tdx._sys_create(["--type", "fs", "--sys", "my_fs",
                      "--sys-path", str(fs_root), "-f"])
     tdx._domain_create(["--sys", "my_fs", "--domain", "orders",
-                        "--domain-prefix", "ci_7_",
                         "--name-in-system", "raw_orders", "-f"])
     assert _read(store.domain_path("orders"))["external_name"] == "raw_orders"
     assert (fs_root / "raw_orders").is_dir()
-    assert not (fs_root / "ci_7_orders").exists()
-
-
-def test_name_in_system_absent_keeps_default_naming(stores, fs_root):
-    tdx._sys_create(["--type", "fs", "--sys", "my_fs",
-                     "--sys-path", str(fs_root), "-f"])
-    tdx._domain_create(["--sys", "my_fs", "--domain", "inbox",
-                        "--domain-prefix", "ci_7_", "-f"])
-    assert _read(store.domain_path("inbox"))["external_name"] == "ci_7_inbox"
-    assert (fs_root / "ci_7_inbox").is_dir()
+    assert not (fs_root / "d_u_0_orders").exists()
 
 
 def test_name_in_system_reused_on_recreate(stores, fs_root, monkeypatch):
@@ -1512,12 +1484,10 @@ def test_name_in_system_via_manifest_entry_key(stores, fs_root, tmp_path):
     m.write_text(
         "- name: orders\n  sys: mysys\n  name-in-system: raw_orders\n  force: true\n"
     )
-    assert tdx._domain_create(
-        ["--domain-manifest", str(m), "--domain-prefix", "ci_"]
-    ) == 0
+    assert tdx._domain_create(["--domain-manifest", str(m)]) == 0
     assert _read(store.domain_path("orders"))["external_name"] == "raw_orders"
     assert (fs_root / "raw_orders").is_dir()
-    assert not (fs_root / "ci_orders").exists()
+    assert not (fs_root / "d_u_0_orders").exists()
 
 
 def test_recreate_reuses_recorded_external_name(stores, fs_root, monkeypatch):
@@ -1529,13 +1499,13 @@ def test_recreate_reuses_recorded_external_name(stores, fs_root, monkeypatch):
     tdx._sys_create(["--type", "fs", "--sys", "a",
                      "--sys-path", str(fs_root), "-f"])
     tdx._domain_create(["--sys", "a", "--domain", "inbox", "-f"])
-    assert (fs_root / "ci_7_inbox").is_dir()
-    # The build advances; recreate must still target ci_7_inbox.
+    assert (fs_root / "d_ci_7_inbox").is_dir()
+    # The build advances; recreate must still target d_ci_7_inbox.
     monkeypatch.setenv("TD_BUILD_NUMBER", "9")
     assert tdx._domain_recreate(["--domain", "inbox"]) == 0
-    assert (fs_root / "ci_7_inbox").is_dir()
-    assert not (fs_root / "ci_9_inbox").exists()
-    assert _read(store.domain_path("inbox"))["external_name"] == "ci_7_inbox"
+    assert (fs_root / "d_ci_7_inbox").is_dir()
+    assert not (fs_root / "d_ci_9_inbox").exists()
+    assert _read(store.domain_path("inbox"))["external_name"] == "d_ci_7_inbox"
 
 
 # ---- --latch completion markers (waitable background runs) -----------------

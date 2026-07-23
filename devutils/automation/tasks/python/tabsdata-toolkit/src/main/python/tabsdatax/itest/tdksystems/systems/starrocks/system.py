@@ -24,6 +24,7 @@ class StarrocksSystem(ContainerBase):
     label = "StarRocks"
     domain_desc = "a database (with a dedicated user that owns it)"
     domain_flag = "database"
+    max_entity_name_length = 256  # StarRocks database name limit
     supports_sql = True
     uses_file_staging = True
 

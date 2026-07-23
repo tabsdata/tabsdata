@@ -268,6 +268,13 @@ class System(ABC):
     domain_flag: str = ""  # the system's word for its entity container
     # (postgres: schema, fs: folder, bigquery: dataset); labels create output
     # and is stamped as a redundant exported key on the domain descriptor
+    max_entity_name_length: int = 63  # longest entity-container name the system
+    # accepts; a longer create name is trimmed to (max - 4) + `__NN` (see tdx.py
+    # `_fit_entity_name`). 63 is the safe SQL-identifier floor (postgres); bases
+    # / systems with larger limits override.
+    owns_entities: bool = False  # True where the backend records a per-container
+    # owner (snowflake / databricks / bigquery), so `tdx-system purge` can scope
+    # to the login user's own containers via `list_owned_domain_entities`
 
     @property
     def default_env_prefix(self) -> str:
@@ -386,6 +393,39 @@ class System(ABC):
     @abstractmethod
     def domain_status(self, ctx: DomainContext) -> Health:
         """Is the domain reachable?"""
+
+    # ---- purge (descriptor-free domain teardown) ----
+    # `tdx-system purge` reaches into a *system* and drops the domain entity
+    # containers it finds LIVE — with no domain descriptor — so stale domains
+    # left by crashed runs or other developers can be cleaned up. The two hooks
+    # below list and drop those containers over the SYSTEM's own admin
+    # connection (`ctx` is a SystemContext, never a DomainContext).
+
+    def list_domain_entities(self, ctx: SystemContext) -> list[str]:
+        """Names of the domain-level entity containers (databases / schemas /
+        datasets / prefixes / topics …) that currently EXIST in the system,
+        read live over the system's own admin connection — NOT from any domain
+        descriptor. System-internal containers the system never creates as a
+        domain (e.g. `information_schema`, `mysql`, `public`) are excluded.
+        Default: none — a system whose domains have no listable entity container
+        (dev / salesforce / a service credential clone) has nothing to purge."""
+        return []
+
+    def purge_domain_entity(self, ctx: SystemContext, name: str) -> None:
+        """Drop the domain-level entity container `name` (one returned by
+        `list_domain_entities`) over the system's own admin connection — the
+        teardown half of `tdx-system purge`. Default: unsupported (only reached
+        for systems that list entities)."""
+        raise Unsupported(f"{self.slug} does not purge domain entities")
+
+    def list_owned_domain_entities(self, ctx: SystemContext) -> list[str]:
+        """Names of the domain-level entity containers OWNED BY THE LOGIN USER
+        (the credentials in the system descriptor). Only systems that record a
+        per-container owner (`owns_entities = True`: snowflake / databricks /
+        bigquery) implement this — `tdx-system purge` uses it to scope to the
+        login user's own containers on a shared account. Strict: a container
+        whose owner can't be confirmed to be the login user is omitted."""
+        raise Unsupported(f"{self.slug} does not expose entity ownership")
 
     def reset_domain(self, ctx: DomainContext) -> None:
         """Reset the domain's entity container to empty, REUSING its name and

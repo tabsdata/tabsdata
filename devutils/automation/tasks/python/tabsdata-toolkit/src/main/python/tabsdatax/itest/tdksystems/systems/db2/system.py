@@ -44,6 +44,7 @@ class Db2System(ContainerBase):
     label = "IBM Db2 Community"
     domain_desc = "a schema inside the shared 'XP' database"
     domain_flag = "schema"
+    max_entity_name_length = 128  # Db2 schema-name limit
     supports_sql = True
 
     image = (
