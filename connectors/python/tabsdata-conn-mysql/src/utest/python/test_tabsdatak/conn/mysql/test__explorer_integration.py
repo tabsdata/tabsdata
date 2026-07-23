@@ -113,13 +113,13 @@ def test_metadata_lists_seeded_tables(
     # The scan is restricted to the URI-path database, so only the two
     # seeded tables show up -- nothing from mysql/sys/information_schema.
     assert {e.table for e in entities} == {
-        "wld_country",
-        "wld_city",
-        "wld_country_language",
+        "country",
+        "city",
+        "country_language",
     }
 
     # MySQL maps the URI-path database into `database`; `schema` is blank.
-    users = _entity_by_table(entities, "wld_country")
+    users = _entity_by_table(entities, "country")
     assert users.database == domain_mysql_world_xs.database
     assert users.schema == ""
 
@@ -130,7 +130,7 @@ def test_metadata_reflects_columns_and_primary_key(
     system_mysql: MysqlSystem, domain_mysql_world_xs: MysqlDomain
 ):
     conn = _src_conn_from(domain_mysql_world_xs)
-    users = _entity_by_table(MySQLConnectionExplorer().metadata(conn), "wld_city")
+    users = _entity_by_table(MySQLConnectionExplorer().metadata(conn), "city")
 
     by_name = {c.name: c for c in users.columns}
     assert set(by_name) == {"id", "name", "country_code", "district", "population"}
@@ -162,7 +162,7 @@ def test_data_returns_all_rows(
 ):
     conn = _src_conn_from(domain_mysql_world_xs)
     explorer = MySQLConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_city")
+    users = _entity_by_table(explorer.metadata(conn), "city")
 
     rows = explorer.data(conn, users, limit=3)
 
@@ -187,7 +187,7 @@ def test_data_respects_limit(
 ):
     conn = _src_conn_from(domain_mysql_world_xs)
     explorer = MySQLConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
+    users = _entity_by_table(explorer.metadata(conn), "country_language")
 
     rows = explorer.data(conn, users, limit=2)
     assert len(rows) == 2

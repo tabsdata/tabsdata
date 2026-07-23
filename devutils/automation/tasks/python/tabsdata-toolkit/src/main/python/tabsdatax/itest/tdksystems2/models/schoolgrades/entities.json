@@ -1,0 +1,38 @@
+[
+  {
+    "name": "academic_years",
+    "sizeable": true
+  },
+  {
+    "name": "departments",
+    "sizeable": false
+  },
+  {
+    "name": "teachers",
+    "sizeable": true
+  },
+  {
+    "name": "subjects",
+    "sizeable": true
+  },
+  {
+    "name": "classes",
+    "sizeable": true
+  },
+  {
+    "name": "students",
+    "sizeable": true
+  },
+  {
+    "name": "enrollments",
+    "sizeable": true
+  },
+  {
+    "name": "assessments",
+    "sizeable": true
+  },
+  {
+    "name": "grades",
+    "sizeable": true
+  }
+]

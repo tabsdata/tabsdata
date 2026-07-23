@@ -1,0 +1,26 @@
+[
+  {
+    "name": "departments",
+    "sizeable": false
+  },
+  {
+    "name": "employees",
+    "sizeable": true
+  },
+  {
+    "name": "dept_emp",
+    "sizeable": true
+  },
+  {
+    "name": "dept_manager",
+    "sizeable": true
+  },
+  {
+    "name": "titles",
+    "sizeable": true
+  },
+  {
+    "name": "salaries",
+    "sizeable": true
+  }
+]

@@ -5,9 +5,9 @@
 """End-to-end ``Db2ConnectionExplorer`` tests against a real Db2 instance.
 
 The ``db2_world_xs`` domain (provisioned by tdx) seeds the connecting user's
-schema with a ``wld_country`` table (``code`` PK), a ``wld_city`` table
+schema with a ``country`` table (``code`` PK), a ``city`` table
 (``id`` PK, ``name``, ``country_code``, ``district``, ``population``) and a
-``wld_country_language`` table (``country_code`` + ``language`` PK). Db2
+``country_language`` table (``country_code`` + ``language`` PK). Db2
 stores unquoted identifiers upper-cased, but the ibm_db_sa dialect normalizes
 them back to lower-case on reflection, so the catalog reports lower-case
 tables and columns. The owner is passed through ``schema_filter`` as the
@@ -113,14 +113,14 @@ def test_metadata_lists_seeded_tables(
     # The scan is restricted to the connecting user's own schema, so only the
     # three seeded tables show up (names normalized to lower-case).
     assert {e.table for e in entities} == {
-        "wld_country",
-        "wld_city",
-        "wld_country_language",
+        "country",
+        "city",
+        "country_language",
     }
 
     # No `map_entity_fields` override, so the base maps the iterated schema
     # name (the owner) into both `database` and `schema`.
-    users = _entity_by_table(entities, "wld_country")
+    users = _entity_by_table(entities, "country")
     assert users.database == domain_db2_world_xs.db.upper()
     assert users.schema == domain_db2_world_xs.schema.upper()
 
@@ -131,7 +131,7 @@ def test_metadata_reflects_columns_and_primary_key(
     system_db2: Db2System, domain_db2_world_xs: Db2Domain
 ):
     conn = _src_conn_from(domain_db2_world_xs)
-    users = _entity_by_table(Db2ConnectionExplorer().metadata(conn), "wld_city")
+    users = _entity_by_table(Db2ConnectionExplorer().metadata(conn), "city")
 
     by_name = {c.name: c for c in users.columns}
     assert set(by_name) == {"id", "name", "country_code", "district", "population"}
@@ -161,7 +161,7 @@ def test_metadata_reflects_columns_and_primary_key(
 def test_data_returns_all_rows(system_db2: Db2System, domain_db2_world_xs: Db2Domain):
     conn = _src_conn_from(domain_db2_world_xs)
     explorer = Db2ConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_city")
+    users = _entity_by_table(explorer.metadata(conn), "city")
 
     rows = explorer.data(conn, users, limit=3)
 
@@ -184,7 +184,7 @@ def test_data_returns_all_rows(system_db2: Db2System, domain_db2_world_xs: Db2Do
 def test_data_respects_limit(system_db2: Db2System, domain_db2_world_xs: Db2Domain):
     conn = _src_conn_from(domain_db2_world_xs)
     explorer = Db2ConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
+    users = _entity_by_table(explorer.metadata(conn), "country_language")
 
     rows = explorer.data(conn, users, limit=2)
     assert len(rows) == 2

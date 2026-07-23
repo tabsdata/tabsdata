@@ -6,9 +6,9 @@
 Server instance.
 
 The ``mssqlserver_world_xs`` domain (provisioned by tdx) seeds a
-``wld_country`` table (``code`` PK), a ``wld_city`` table (``id`` PK,
+``country`` table (``code`` PK), a ``city`` table (``id`` PK,
 ``name``, ``country_code``, ``district``, ``population``) and a
-``wld_country_language`` table (``country_code`` + ``language`` PK) in the
+``country_language`` table (``country_code`` + ``language`` PK) in the
 default ``dbo`` schema. These tests exercise the catalog introspection
 surface of ``MSSQLServerConnectionExplorer`` -- ``check_connect`` /
 ``metadata`` / ``data`` -- against the live server. The three methods are
@@ -115,14 +115,14 @@ def test_metadata_lists_seeded_tables(
     # Only ``dbo`` holds user tables; sys / INFORMATION_SCHEMA and the fixed
     # database roles are skipped, so exactly the three seeded tables show up.
     assert {e.table for e in entities} == {
-        "wld_country",
-        "wld_city",
-        "wld_country_language",
+        "country",
+        "city",
+        "country_language",
     }
 
     # No `map_entity_fields` override, so the base maps the iterated schema
     # name (``dbo``) into both `database` and `schema`.
-    users = _entity_by_table(entities, "wld_country")
+    users = _entity_by_table(entities, "country")
     assert users.database == "dbo"
     assert users.schema == "dbo"
 
@@ -134,7 +134,7 @@ def test_metadata_reflects_columns_and_primary_key(
     domain_mssqlserver_world_xs: MssqlserverDomain,
 ):
     conn = _src_conn_from(domain_mssqlserver_world_xs)
-    users = _entity_by_table(MSSQLServerConnectionExplorer().metadata(conn), "wld_city")
+    users = _entity_by_table(MSSQLServerConnectionExplorer().metadata(conn), "city")
 
     by_name = {c.name: c for c in users.columns}
     assert set(by_name) == {"id", "name", "country_code", "district", "population"}
@@ -167,7 +167,7 @@ def test_data_returns_all_rows(
 ):
     conn = _src_conn_from(domain_mssqlserver_world_xs)
     explorer = MSSQLServerConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_city")
+    users = _entity_by_table(explorer.metadata(conn), "city")
 
     rows = explorer.data(conn, users, limit=3)
 
@@ -193,7 +193,7 @@ def test_data_respects_limit(
 ):
     conn = _src_conn_from(domain_mssqlserver_world_xs)
     explorer = MSSQLServerConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
+    users = _entity_by_table(explorer.metadata(conn), "country_language")
 
     rows = explorer.data(conn, users, limit=2)
     assert len(rows) == 2

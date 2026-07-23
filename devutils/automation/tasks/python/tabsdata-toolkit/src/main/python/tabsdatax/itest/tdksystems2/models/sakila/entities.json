@@ -1,0 +1,62 @@
+[
+  {
+    "name": "language",
+    "sizeable": false
+  },
+  {
+    "name": "actor",
+    "sizeable": false
+  },
+  {
+    "name": "country",
+    "sizeable": false
+  },
+  {
+    "name": "city",
+    "sizeable": false
+  },
+  {
+    "name": "address",
+    "sizeable": false
+  },
+  {
+    "name": "category",
+    "sizeable": false
+  },
+  {
+    "name": "film",
+    "sizeable": false
+  },
+  {
+    "name": "film_actor",
+    "sizeable": false
+  },
+  {
+    "name": "film_category",
+    "sizeable": false
+  },
+  {
+    "name": "store",
+    "sizeable": false
+  },
+  {
+    "name": "staff",
+    "sizeable": false
+  },
+  {
+    "name": "customer",
+    "sizeable": false
+  },
+  {
+    "name": "inventory",
+    "sizeable": false
+  },
+  {
+    "name": "rental",
+    "sizeable": true
+  },
+  {
+    "name": "payment",
+    "sizeable": false
+  }
+]

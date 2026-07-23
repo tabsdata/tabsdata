@@ -1,0 +1,22 @@
+[
+  {
+    "name": "hubs",
+    "sizeable": true
+  },
+  {
+    "name": "couriers",
+    "sizeable": true
+  },
+  {
+    "name": "customers",
+    "sizeable": true
+  },
+  {
+    "name": "shipments",
+    "sizeable": true
+  },
+  {
+    "name": "tracking_events",
+    "sizeable": true
+  }
+]

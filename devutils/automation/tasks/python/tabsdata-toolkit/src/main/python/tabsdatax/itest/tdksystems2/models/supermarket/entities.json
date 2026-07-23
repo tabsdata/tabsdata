@@ -1,0 +1,26 @@
+[
+  {
+    "name": "suppliers",
+    "sizeable": true
+  },
+  {
+    "name": "categories",
+    "sizeable": false
+  },
+  {
+    "name": "products",
+    "sizeable": true
+  },
+  {
+    "name": "warehouses",
+    "sizeable": true
+  },
+  {
+    "name": "stock",
+    "sizeable": true
+  },
+  {
+    "name": "stock_movements",
+    "sizeable": true
+  }
+]

@@ -25,7 +25,7 @@ class StarrocksSystem(System):
     port: str
     user: str
     password: str
-    sys_path: Path
+    sys_path: Path | None = None  # v2 loads via SQL, not a staging root
 
 
 @dataclass(frozen=True)

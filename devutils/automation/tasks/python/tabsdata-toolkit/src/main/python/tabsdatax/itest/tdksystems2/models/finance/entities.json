@@ -1,0 +1,26 @@
+[
+  {
+    "name": "subscription_plans",
+    "sizeable": false
+  },
+  {
+    "name": "subscription_plan_prices",
+    "sizeable": false
+  },
+  {
+    "name": "customers",
+    "sizeable": false
+  },
+  {
+    "name": "payment_methods",
+    "sizeable": false
+  },
+  {
+    "name": "customer_subscriptions",
+    "sizeable": false
+  },
+  {
+    "name": "customer_subscription_events",
+    "sizeable": false
+  }
+]

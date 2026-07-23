@@ -6,7 +6,7 @@
 
 The ``s3_world_xs`` domain (provisioned by tdx) holds the world dataset laid
 out as ``<base_path>/<format>/<table>.<format>`` -- three tables
-(``wld_country`` / ``wld_city`` / ``wld_country_language``) in three formats
+(``country`` / ``city`` / ``country_language``) in three formats
 (``csv`` / ``ndjson`` / ``parquet``). The explorer talks to S3 directly via
 ``boto3`` (no transporter binary): ``check_connect`` proves auth + bucket
 existence, ``metadata`` lists the objects under ``base_path``, and ``data``
@@ -16,6 +16,7 @@ newline-delimited JSON, parquet via pyarrow range requests).
 
 from __future__ import annotations
 
+import re
 import uuid
 
 import pytest
@@ -35,10 +36,10 @@ from tabsdatax.itest.fixture.backends.s3 import (
 
 pytestmark = pytest.mark.s3
 
-_TABLES = ("wld_country", "wld_city", "wld_country_language")
+_TABLES = ("country", "city", "country_language")
 _FORMATS = ("csv", "ndjson", "parquet")
 
-# The first five wld_city rows (in id order, as stored). ndjson / parquet
+# The first five city rows (in id order, as stored). ndjson / parquet
 # preserve native types; csv comes back with every value as a string.
 _WLD_CITY_HEAD = [
     {
@@ -95,12 +96,26 @@ def _conn_from(cfg: S3Domain) -> S3SrcConn:
     )
 
 
+_TS_RE = re.compile(r"_\d{8}T\d{6}_\d+(?=\.[^.]+$)")
+
+
+def _logical(pattern: str) -> str:
+    """Staged object name with tdx's ``_<timestamp>`` suffix stripped, so a
+    timestamped ``city_20260721T190011_390.csv`` reads back as ``city.csv``."""
+    return _TS_RE.sub("", pattern)
+
+
 def _entity_by_file(
     entities: list[FileStorageEntity], filename: str
 ) -> FileStorageEntity:
-    matches = [e for e in entities if e.file is not None and e.file.pattern == filename]
+    matches = [
+        e
+        for e in entities
+        if e.file is not None and _logical(e.file.pattern) == filename
+    ]
     assert matches, (
-        f"no entity for {filename!r} in {[e.file.pattern for e in entities if e.file]}"
+        f"no entity for {filename!r} in "
+        f"{[_logical(e.file.pattern) for e in entities if e.file]}"
     )
     return matches[0]
 
@@ -152,7 +167,7 @@ def test_metadata_lists_domain_objects(
     assert all(e.last_modified for e in entities)
 
     # Exactly the world dataset: three tables in three formats.
-    assert {e.file.pattern for e in entities} == {
+    assert {_logical(e.file.pattern) for e in entities} == {
         f"{table}.{fmt}" for table in _TABLES for fmt in _FORMATS
     }
 
@@ -161,9 +176,9 @@ def test_metadata_lists_domain_objects(
 @s3_domain("s3_world_xs")
 def test_metadata_sniffs_format(system_s3: S3System, domain_s3_world_xs: S3Domain):
     entities = S3ConnectionExplorer().metadata(_conn_from(domain_s3_world_xs))
-    by_name = {e.file.pattern: e for e in entities}
+    by_name = {_logical(e.file.pattern): e for e in entities}
     for fmt in _FORMATS:
-        assert by_name[f"wld_city.{fmt}"].file.format == fmt
+        assert by_name[f"city.{fmt}"].file.format == fmt
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +194,7 @@ def test_data_returns_first_rows(
 ):
     conn = _conn_from(domain_s3_world_xs)
     explorer = S3ConnectionExplorer()
-    entity = _entity_by_file(explorer.metadata(conn), f"wld_city.{fmt}")
+    entity = _entity_by_file(explorer.metadata(conn), f"city.{fmt}")
 
     rows = explorer.data(conn, entity, limit=5)
 

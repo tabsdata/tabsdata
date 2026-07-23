@@ -1,0 +1,14 @@
+[
+  {
+    "name": "country",
+    "sizeable": false
+  },
+  {
+    "name": "city",
+    "sizeable": true
+  },
+  {
+    "name": "country_language",
+    "sizeable": false
+  }
+]

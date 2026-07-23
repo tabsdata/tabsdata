@@ -1,0 +1,42 @@
+[
+  {
+    "name": "suppliers",
+    "sizeable": true
+  },
+  {
+    "name": "ingredients",
+    "sizeable": true
+  },
+  {
+    "name": "menu_categories",
+    "sizeable": false
+  },
+  {
+    "name": "menu_items",
+    "sizeable": true
+  },
+  {
+    "name": "recipes",
+    "sizeable": true
+  },
+  {
+    "name": "tables",
+    "sizeable": true
+  },
+  {
+    "name": "orders",
+    "sizeable": true
+  },
+  {
+    "name": "order_lines",
+    "sizeable": true
+  },
+  {
+    "name": "purchase_orders",
+    "sizeable": true
+  },
+  {
+    "name": "po_lines",
+    "sizeable": true
+  }
+]

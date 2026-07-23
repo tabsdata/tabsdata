@@ -38,8 +38,9 @@ class MongodbDomain(Domain):
     password: str
     db: str
     uri: str  # credential-less mongodb:// uri; creds supplied as UserPassword
-    sqlalchemy_uri: str
     database: str  # mongodb calls the entity container a database (== db here)
+    # Optional: a mongodb descriptor carries no SQL URI, so it stays unset.
+    sqlalchemy_uri: str | None = None
     model: str | None = None
     data: str | None = None
     entities: dict[str, int] | None = None  # {table: record count}, once loaded

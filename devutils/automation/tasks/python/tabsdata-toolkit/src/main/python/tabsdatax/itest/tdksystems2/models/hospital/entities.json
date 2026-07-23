@@ -1,0 +1,30 @@
+[
+  {
+    "name": "wards",
+    "sizeable": true
+  },
+  {
+    "name": "staff",
+    "sizeable": true
+  },
+  {
+    "name": "patients",
+    "sizeable": true
+  },
+  {
+    "name": "admissions",
+    "sizeable": true
+  },
+  {
+    "name": "appointments",
+    "sizeable": true
+  },
+  {
+    "name": "diagnoses",
+    "sizeable": true
+  },
+  {
+    "name": "prescriptions",
+    "sizeable": true
+  }
+]

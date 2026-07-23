@@ -1,0 +1,22 @@
+[
+  {
+    "name": "full_snapshot",
+    "sizeable": true
+  },
+  {
+    "name": "insup_soft_delete",
+    "sizeable": true
+  },
+  {
+    "name": "insup_no_delete",
+    "sizeable": true
+  },
+  {
+    "name": "cdc_stream",
+    "sizeable": true
+  },
+  {
+    "name": "append_events",
+    "sizeable": true
+  }
+]

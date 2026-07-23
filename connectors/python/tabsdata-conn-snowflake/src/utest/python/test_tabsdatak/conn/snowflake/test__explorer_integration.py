@@ -6,9 +6,9 @@
 Snowflake account.
 
 The ``snowflake_world_xs`` domain (provisioned by tdx) seeds the configured
-schema with a ``wld_country`` table (``code``), a ``wld_city`` table (``id``,
+schema with a ``country`` table (``code``), a ``city`` table (``id``,
 ``name``, ``country_code``, ``district``, ``population``) and a
-``wld_country_language`` table (``country_code`` + ``language``). Snowflake
+``country_language`` table (``country_code`` + ``language``). Snowflake
 treats PK/FK as informational and the seed DDL declares none, so unlike the
 container backends there are no reflected primary keys. These tests exercise
 the catalog introspection surface of ``SnowflakeConnectionExplorer`` --
@@ -110,14 +110,14 @@ def test_metadata_lists_seeded_tables(
     # The scan is restricted to the configured schema, so only the three
     # seeded tables show up.
     assert {e.table for e in entities} == {
-        "wld_country",
-        "wld_city",
-        "wld_country_language",
+        "country",
+        "city",
+        "country_language",
     }
 
     # No `map_entity_fields` override, so the base maps the iterated schema
     # name into both `database` and `schema`.
-    users = _entity_by_table(entities, "wld_country")
+    users = _entity_by_table(entities, "country")
     assert users.schema == conn.schema
 
 
@@ -127,7 +127,7 @@ def test_metadata_reflects_columns(
     system_snowflake: SnowflakeSystem, domain_snowflake_world_xs: SnowflakeDomain
 ):
     conn = _conn_from(domain_snowflake_world_xs)
-    users = _entity_by_table(SnowflakeConnectionExplorer().metadata(conn), "wld_city")
+    users = _entity_by_table(SnowflakeConnectionExplorer().metadata(conn), "city")
 
     by_name = {c.name: c for c in users.columns}
     assert set(by_name) == {"id", "name", "country_code", "district", "population"}
@@ -154,7 +154,7 @@ def test_data_returns_rows(
 ):
     conn = _conn_from(domain_snowflake_world_xs)
     explorer = SnowflakeConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_city")
+    users = _entity_by_table(explorer.metadata(conn), "city")
 
     rows = explorer.data(conn, users, limit=3)
 
@@ -172,7 +172,7 @@ def test_data_respects_limit(
 ):
     conn = _conn_from(domain_snowflake_world_xs)
     explorer = SnowflakeConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
+    users = _entity_by_table(explorer.metadata(conn), "country_language")
 
     rows = explorer.data(conn, users, limit=2)
     assert len(rows) == 2

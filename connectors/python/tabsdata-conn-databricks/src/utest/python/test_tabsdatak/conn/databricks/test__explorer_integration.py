@@ -6,9 +6,9 @@
 Databricks workspace.
 
 The ``databricks_world_xs`` domain (provisioned by tdx) seeds the configured
-Unity Catalog schema with a ``wld_country`` table (``code``), a ``wld_city``
+Unity Catalog schema with a ``country`` table (``code``), a ``city``
 table (``id``, ``name``, ``country_code``, ``district``, ``population``) and a
-``wld_country_language`` table (``country_code`` + ``language``). Databricks
+``country_language`` table (``country_code`` + ``language``). Databricks
 treats PK/FK as informational and the seed DDL declares none, so no column
 reflects as a primary key. These tests exercise the catalog introspection
 surface of ``DatabricksConnectionExplorer`` -- ``check_connect`` /
@@ -107,14 +107,14 @@ def test_metadata_lists_seeded_tables(
     # The scan is pinned to the connection's catalog and restricted to the
     # configured schema, so only the three seeded tables show up.
     assert {e.table for e in entities} == {
-        "wld_country",
-        "wld_city",
-        "wld_country_language",
+        "country",
+        "city",
+        "country_language",
     }
 
     # Unity Catalog's catalog -> schema maps onto the entity's
     # database -> schema.
-    users = _entity_by_table(entities, "wld_country")
+    users = _entity_by_table(entities, "country")
     assert users.database == domain_databricks_world_xs.catalog
     assert users.schema == domain_databricks_world_xs.schema
 
@@ -125,7 +125,7 @@ def test_metadata_reflects_columns(
     system_databricks: DatabricksSystem, domain_databricks_world_xs: DatabricksDomain
 ):
     conn = _conn_from(domain_databricks_world_xs)
-    users = _entity_by_table(DatabricksConnectionExplorer().metadata(conn), "wld_city")
+    users = _entity_by_table(DatabricksConnectionExplorer().metadata(conn), "city")
 
     by_name = {c.name: c for c in users.columns}
     assert set(by_name) == {"id", "name", "country_code", "district", "population"}
@@ -155,7 +155,7 @@ def test_data_returns_rows(
 ):
     conn = _conn_from(domain_databricks_world_xs)
     explorer = DatabricksConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_city")
+    users = _entity_by_table(explorer.metadata(conn), "city")
 
     rows = explorer.data(conn, users, limit=3)
 
@@ -174,7 +174,7 @@ def test_data_respects_limit(
 ):
     conn = _conn_from(domain_databricks_world_xs)
     explorer = DatabricksConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
+    users = _entity_by_table(explorer.metadata(conn), "country_language")
 
     rows = explorer.data(conn, users, limit=2)
     assert len(rows) == 2

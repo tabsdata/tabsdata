@@ -6,9 +6,9 @@
 instance.
 
 The ``oracle_world_xs`` domain (provisioned by tdx) seeds the connecting
-user's schema with a ``wld_country`` table (``code`` PK), a ``wld_city``
+user's schema with a ``country`` table (``code`` PK), a ``city``
 table (``id`` PK, ``name``, ``country_code``, ``district``, ``population``)
-and a ``wld_country_language`` table (``country_code`` + ``language`` PK).
+and a ``country_language`` table (``country_code`` + ``language`` PK).
 Oracle stores unquoted identifiers upper-cased, but the SQLAlchemy oracledb
 dialect normalizes those case-insensitive names back to lower-case on
 reflection -- so the catalog reports lower-case tables and columns. The
@@ -114,14 +114,14 @@ def test_metadata_lists_seeded_tables(
     # Only the connecting user's schema holds tables (names normalized to
     # lower-case), so exactly the three seeded tables show up.
     assert {e.table for e in entities} == {
-        "wld_country",
-        "wld_city",
-        "wld_country_language",
+        "country",
+        "city",
+        "country_language",
     }
 
     # `map_entity_fields` leaves `database` blank and maps the iterated
     # schema name (the owner) into `schema`.
-    users = _entity_by_table(entities, "wld_country")
+    users = _entity_by_table(entities, "country")
     assert users.schema == domain_oracle_world_xs.user
 
 
@@ -132,7 +132,7 @@ def test_metadata_reflects_columns_and_primary_key(
     domain_oracle_world_xs: OracleDomain,
 ):
     conn = _src_conn_from(domain_oracle_world_xs)
-    users = _entity_by_table(OracleConnectionExplorer().metadata(conn), "wld_city")
+    users = _entity_by_table(OracleConnectionExplorer().metadata(conn), "city")
 
     by_name = {c.name: c for c in users.columns}
     assert set(by_name) == {"id", "name", "country_code", "district", "population"}
@@ -165,7 +165,7 @@ def test_data_returns_all_rows(
 ):
     conn = _src_conn_from(domain_oracle_world_xs)
     explorer = OracleConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_city")
+    users = _entity_by_table(explorer.metadata(conn), "city")
 
     rows = explorer.data(conn, users, limit=3)
 
@@ -190,7 +190,7 @@ def test_data_respects_limit(
 ):
     conn = _src_conn_from(domain_oracle_world_xs)
     explorer = OracleConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
+    users = _entity_by_table(explorer.metadata(conn), "country_language")
 
     rows = explorer.data(conn, users, limit=2)
     assert len(rows) == 2

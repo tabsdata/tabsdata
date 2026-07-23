@@ -22,7 +22,7 @@ class DatabricksSystem(System):
     token: str
     warehouse_id: str
     catalog: str
-    volume: str
+    volume: str = ""  # optional — set only when DATABRICKS__VOLUME is configured
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,7 @@ class DatabricksDomain(Domain):
     token: str
     warehouse_id: str
     catalog: str
-    volume: str
+    volume: str = ""  # optional — set only when DATABRICKS__VOLUME is configured
     model: str | None = None
     data: str | None = None
     entities: dict[str, int] | None = None  # {table: record count}, once loaded

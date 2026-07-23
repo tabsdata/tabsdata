@@ -6,9 +6,9 @@
 ClickHouse instance.
 
 The ``clickhouse_world_xs`` domain (provisioned by tdx) seeds the database
-with a ``wld_country`` table, a ``wld_city`` table (``id``, ``name``,
+with a ``country`` table, a ``city`` table (``id``, ``name``,
 ``country_code``, ``district``, ``population``) and a
-``wld_country_language`` table. These tests exercise the catalog
+``country_language`` table. These tests exercise the catalog
 introspection surface of ``ClickHouseConnectionExplorer`` --
 ``check_connect`` / ``metadata`` / ``data`` -- against the live server.
 
@@ -93,14 +93,14 @@ def test_metadata_lists_seeded_tables(
     # The scan is pinned to the configured database, so only the three seeded
     # tables show up.
     assert {e.table for e in entities} == {
-        "wld_country",
-        "wld_city",
-        "wld_country_language",
+        "country",
+        "city",
+        "country_language",
     }
 
     # ClickHouse has no schema level: the database fills `database` and
     # `schema` is left blank.
-    users = _entity_by_table(entities, "wld_country")
+    users = _entity_by_table(entities, "country")
     assert users.database == domain_clickhouse_world_xs.database
     assert users.schema == ""
 
@@ -111,7 +111,7 @@ def test_metadata_reflects_columns(
     system_clickhouse: ClickhouseSystem, domain_clickhouse_world_xs: ClickhouseDomain
 ):
     conn = _conn_from(domain_clickhouse_world_xs)
-    users = _entity_by_table(ClickHouseConnectionExplorer().metadata(conn), "wld_city")
+    users = _entity_by_table(ClickHouseConnectionExplorer().metadata(conn), "city")
 
     by_name = {c.name: c for c in users.columns}
     assert set(by_name) == {"id", "name", "country_code", "district", "population"}
@@ -137,7 +137,7 @@ def test_data_returns_rows(
 ):
     conn = _conn_from(domain_clickhouse_world_xs)
     explorer = ClickHouseConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_city")
+    users = _entity_by_table(explorer.metadata(conn), "city")
 
     rows = explorer.data(conn, users, limit=3)
 
@@ -155,7 +155,7 @@ def test_data_respects_limit(
 ):
     conn = _conn_from(domain_clickhouse_world_xs)
     explorer = ClickHouseConnectionExplorer()
-    users = _entity_by_table(explorer.metadata(conn), "wld_country_language")
+    users = _entity_by_table(explorer.metadata(conn), "country_language")
 
     rows = explorer.data(conn, users, limit=2)
     assert len(rows) == 2

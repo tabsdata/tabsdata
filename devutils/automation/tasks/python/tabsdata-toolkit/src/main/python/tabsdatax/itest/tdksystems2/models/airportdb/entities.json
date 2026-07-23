@@ -1,0 +1,50 @@
+[
+  {
+    "name": "airport",
+    "sizeable": false
+  },
+  {
+    "name": "airport_geo",
+    "sizeable": false
+  },
+  {
+    "name": "airline",
+    "sizeable": false
+  },
+  {
+    "name": "airplane_type",
+    "sizeable": false
+  },
+  {
+    "name": "airplane",
+    "sizeable": false
+  },
+  {
+    "name": "employee",
+    "sizeable": false
+  },
+  {
+    "name": "passenger",
+    "sizeable": true
+  },
+  {
+    "name": "passenger_details",
+    "sizeable": true
+  },
+  {
+    "name": "flight_schedule",
+    "sizeable": true
+  },
+  {
+    "name": "flight",
+    "sizeable": true
+  },
+  {
+    "name": "booking",
+    "sizeable": true
+  },
+  {
+    "name": "weather",
+    "sizeable": false
+  }
+]

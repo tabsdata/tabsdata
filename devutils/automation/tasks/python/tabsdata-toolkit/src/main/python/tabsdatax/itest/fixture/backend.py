@@ -15,8 +15,8 @@ A test declares the backends it needs by name with the per-type decorators
 
 Each decorator emits a ``tabsdata_backend(name, dataclass)`` marker; the
 ``system_<name>`` / ``domain_<name>`` fixtures are generated at plugin import
-from the store (``$TD_BACKENDS_DIR/{systems,domains}/<name>``, populated by
-``tdx-system`` / ``tdx-domain`` before pytest starts). Resolution decrypts the
+from the store (``$TD_BACKENDS_DIR``, populated by ``tdx-system2`` /
+``tdx-domain2`` before pytest starts). Resolution decrypts the
 descriptor with ``$TD_BACKENDS_CRYPTO_KEY``, checks its role + ``system_type``
 match the dataclass, and builds it — each field pulled from the descriptor key
 of the same (upper-cased) name, pydantic coercing the type. Loads are lazy and
@@ -44,19 +44,18 @@ from __future__ import annotations
 
 import dataclasses
 import os
-import subprocess
-from pathlib import Path
 from typing import ClassVar
 
 import pytest
 from pydantic import ValidationError
 
-from ..tdksystems import crypto, descriptor, store
+from ..tdksystems2 import constants, descriptor, store
+from ..tdksystems2.descriptor import DomainInfo, SystemInfo
 from . import operations
 
 SYSTEM = "system"
 DOMAIN = "domain"
-_DESCRIPTOR_ROLE = {SYSTEM: "sys", DOMAIN: "env"}
+_DESCRIPTOR_ROLE = {SYSTEM: constants.ROLE_SYSTEM, DOMAIN: constants.ROLE_DOMAIN}
 
 # skip | fail (default: fail) when a descriptor is absent, per family.
 ON_MISSING_ENV = {
@@ -85,42 +84,44 @@ class System:
 class Domain:
     """Base for a domain fixture dataclass (see :class:`System`).
 
-    Every domain fixture inherits :meth:`changes`, which drives ``tdx-domain
-    changes`` against this domain (by ``name``) through :mod:`.operations` — the
-    shared util all domains use, so applying CDC changes is the same for every
-    backend. It only works for a domain whose model ships a ``changes.py``
-    recipe.
+    Every domain fixture inherits :meth:`create_model` / :meth:`create_data` /
+    :meth:`modify_data`, which drive the matching ``tdx-domain2`` subcommands
+    against this domain (by ``name``) through :mod:`.operations` — the shared
+    util all domains use, so seeding/mutating a domain is the same for every
+    backend. Each returns a :class:`.operations.ChangeReport` (the verb's
+    ``{entity: {insert, update, delete}}`` output). They run against the same
+    store the fixture loaded from, decrypting with the ambient
+    ``$TD_BACKENDS_CRYPTO_KEY`` — nothing else to wire up.
     """
 
     system_type: ClassVar[str]
     name: str
 
-    def changes(
+    def create_model(
+        self, *, model: str, force: bool = False, check: bool = True
+    ) -> operations.ChangeReport:
+        """Install `model`'s schema via ``tdx-domain2 create-model``."""
+        return operations.create_model(self.name, model=model, force=force, check=check)
+
+    def create_data(
+        self, *, size: int = 1, force: bool = False, check: bool = True
+    ) -> operations.ChangeReport:
+        """Load deterministic initial data via ``tdx-domain2 create-data``."""
+        return operations.create_data(self.name, size=size, force=force, check=check)
+
+    def modify_data(
         self,
         *,
-        entities: str | list[str],
-        count: int,
-        ops: str = "mix",
-        rows: int | None = None,
+        entity: str,
+        sets: int,
+        ops: str = "Mix",
         seed: str | int | None = None,
-        latch: str | Path | None = None,
         check: bool = True,
-    ) -> subprocess.CompletedProcess[str]:
-        """Apply deterministic INSERT/UPDATE/DELETE changes to this domain's
-        ``entities`` via ``tdx-domain changes`` (see :func:`.operations.changes`).
-
-        Runs against the same store the fixture loaded from, decrypting with the
-        ambient ``$TD_BACKENDS_CRYPTO_KEY`` — nothing else to wire up. Only
-        works for a domain whose model ships a ``changes.py`` recipe."""
-        return operations.changes(
-            self.name,
-            entities=entities,
-            count=count,
-            ops=ops,
-            rows=rows,
-            seed=seed,
-            latch=latch,
-            check=check,
+    ) -> operations.ChangeReport:
+        """Apply deterministic INSERT/UPDATE/DELETE changes via ``tdx-domain2
+        modify-data`` (``entity`` a name or ``ALL``; ``seed`` ``AUTO`` or int)."""
+        return operations.modify_data(
+            self.name, entity=entity, sets=sets, ops=ops, seed=seed, check=check
         )
 
 
@@ -152,8 +153,8 @@ def load(name: str, cls: type):
     else:
         pytest.fail(f"{cls.__name__} must subclass System or Domain")
 
-    # secret always from $TD_BACKENDS_CRYPTO_KEY; missing / skip re-checked per call.
-    crypto.use_secret_env(None)
+    # The descriptor secret is always $TD_BACKENDS_CRYPTO_KEY (the v2 crypto
+    # reads it directly); missing / skip is re-checked per call.
     if not path.exists():
         if _on_missing(backend_type) == "skip":
             pytest.skip(
@@ -172,19 +173,36 @@ def load(name: str, cls: type):
 
     key = (str(path), cls)
     if key not in _CACHE:
-        doc = descriptor.load(path)
-        if doc.get("role") != _DESCRIPTOR_ROLE[backend_type]:
+        info = descriptor.load(path)
+        if info.role != _DESCRIPTOR_ROLE[backend_type]:
+            pytest.fail(f"{name!r} is a {info.role!r} descriptor, not a {backend_type}")
+        if info.system != system_type:
             pytest.fail(
-                f"{name!r} is a {doc.get('kind')} descriptor, not a {backend_type}"
-            )
-        found = doc.get("system", "")
-        if found != system_type:
-            pytest.fail(
-                f"{name!r} is a {found!r} {backend_type}, but was requested "
+                f"{name!r} is a {info.system!r} {backend_type}, but was requested "
                 f"as {cls.__name__} (system_type {system_type!r})"
             )
-        _CACHE[key] = _construct(cls, descriptor.attributes(doc), name=name)
+        _CACHE[key] = _construct(cls, _attributes(info), name=name)
     return _CACHE[key]
+
+
+def _attributes(info: SystemInfo | DomainInfo) -> dict[str, object]:
+    """The flat ``{KEY: value}`` view the fixture dataclasses map their fields
+    onto: the descriptor's connection ``meta`` (already upper-cased keys), plus
+    the identity fields (``NAME`` and, for a domain, ``MODEL`` / ``DATA`` /
+    ``ENTITIES`` / ``EXTERNAL_NAME`` / ``SYS_NAME``). Values are strings except
+    ``ENTITIES`` (the ``{table: rows}`` mapping)."""
+    attrs: dict[str, object] = dict(info.meta)
+    attrs["NAME"] = info.name
+    if isinstance(info, DomainInfo):
+        if info.model is not None:
+            attrs["MODEL"] = info.model
+        if info.data is not None:
+            attrs["DATA"] = info.data
+        if info.entities:
+            attrs["ENTITIES"] = info.entities
+        attrs["EXTERNAL_NAME"] = info.external_name
+        attrs["SYS_NAME"] = info.sys_name
+    return attrs
 
 
 def _construct(cls, attrs: dict[str, object], *, name: str):

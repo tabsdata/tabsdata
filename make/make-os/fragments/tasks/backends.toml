@@ -195,8 +195,8 @@ script = [
         end
 
         info "🔐 Loading backend systems secrets from 1Password vault '${vault}'..."
-        debug "🚀 tdx-system secrets --get 1p:${vault} --out json"
-        secrets_json = exec tdx-system secrets --get 1p:${vault} --out json
+        debug "🚀 tdx-system secrets --set 1p:${vault} --out json"
+        secrets_json = exec tdx-system secrets --set 1p:${vault} --out json
         if not eq ${secrets_json.code} "0"
             error "🚫 Could not load backend systems secrets from 1Password vault '${vault}' (exit code ${secrets_json.code})."
             error "\n${secrets_json.stderr}"
