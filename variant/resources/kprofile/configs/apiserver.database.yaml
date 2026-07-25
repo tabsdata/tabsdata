@@ -8,8 +8,8 @@ database:
     schema: td_apiserver
     username: td_apiserver
     password: ${{secretAuto:postgres_password}}
-    min_connections: 1
-    max_connections: 10
+    min_connections: 5
+    max_connections: 50
     acquire_timeout: 30
     max_lifetime: 3600
     idle_timeout: 60
