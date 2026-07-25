@@ -23,7 +23,7 @@ mod definitions {
     use crate::dxo::query_filters::{DimensionFilter, TimeWindow, WindowAlign, WindowUnit};
     use crate::types::basic::{
         ByteCount, CollectionId, CollectionName, EpochMs, GroupId, GroupName,
-        LogicalFunctionRunStatus, ProjectId, ProjectName, RowCount, TableVersionCount,
+        LogicalFunctionRunStatus, ProjectId, ProjectName, RowCount, TableId, TableVersionCount,
     };
 
     /// One row of `/inflight`: count of in-flight runs broken out by
@@ -108,12 +108,40 @@ mod definitions {
         pub transactions: i64,
 
         pub table_versions_out: TableVersionCount,
+        /// Distinct logical tables output (all versions of the same table folded
+        /// into one), across every run folded into this node. Unlike
+        /// `table_versions_out` this counts a table even when it only emitted
+        /// NoData versions in the window (no `has_data` filter), and it is NOT
+        /// summable, so the SQL node query leaves it zero and the service layer
+        /// fills it from [`NodeOutputTableRow`] — see
+        /// `td_services::metrics::layers::metrics_response`. Always zero on the
+        /// synthetic (`ExternalSource` / `ExternalDestination` / `Unused`)
+        /// nodes, which are edge-derived and carry no table identity.
+        pub logical_tables_out: TableVersionCount,
         pub row_count_out: RowCount,
         pub data_bytes_out: ByteCount,
 
         pub table_versions_in: TableVersionCount,
         pub row_count_in: RowCount,
         pub data_bytes_in: ByteCount,
+    }
+
+    /// One `(node, logical table)` pair among a node's non-system, non-private
+    /// output LTDVs — the distinct-table listing that backs
+    /// `NodeRow::logical_tables_out`. No `has_data` filter, so a table present
+    /// only via NoData versions is included. Returned at the SQL bucket grain
+    /// (Month for Quarter/Year); the service layer folds to the requested grain
+    /// and counts distinct `table_id` per node, so a table appearing across
+    /// several runs — or several months of a quarter/year — is counted once.
+    #[ta_objects::Dlo]
+    #[derive(sqlx::FromRow, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+    pub struct NodeOutputTableRow {
+        pub bucket: EpochMs,
+        pub project_id: Option<ProjectId>,
+        pub collection_id: Option<CollectionId>,
+        pub group_id: Option<GroupId>,
+        pub status: LogicalFunctionRunStatus,
+        pub table_id: TableId,
     }
 
     #[ta_objects::Dlo]
@@ -139,8 +167,38 @@ mod definitions {
 
         pub fn_runs: i64,
         pub tables: i64,
+        /// Distinct logical tables flowing on this edge (all versions of the
+        /// same table folded into one), across every run folded into it —
+        /// e.g. an edge carrying `orders` v5 and v6 has `tables = 2` but
+        /// `logical_tables = 1`. Unlike `tables` this is NOT summable, so the
+        /// SQL edge query leaves it zero and the service layer fills it from
+        /// [`EdgeTableRow`] — see
+        /// `td_services::metrics::layers::metrics_response`.
+        pub logical_tables: i64,
         pub row_count: RowCount,
         pub data_bytes: ByteCount,
+    }
+
+    /// One `(edge, logical table)` pair among the non-system, non-private
+    /// table-versions flowing on an edge — the distinct-table listing that
+    /// backs `EdgeRow::logical_tables`. Returned at the SQL bucket grain (Month
+    /// for Quarter/Year); the service layer folds to the requested grain and
+    /// counts distinct `table_id` per edge, so a table crossing an edge across
+    /// several runs — or several months of a quarter/year — is counted once.
+    /// The edge identity mirrors [`EdgeRow`]'s fold key
+    /// `(bucket, source_kind, source, target_kind, target, status)`;
+    /// `project_id` rides along for the cross-project visibility filter.
+    #[ta_objects::Dlo]
+    #[derive(sqlx::FromRow, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
+    pub struct EdgeTableRow {
+        pub bucket: EpochMs,
+        pub project_id: Option<ProjectId>,
+        pub source_kind: NodeKind,
+        pub source: Option<String>,
+        pub target_kind: NodeKind,
+        pub target: Option<String>,
+        pub status: LogicalFunctionRunStatus,
+        pub table_id: TableId,
     }
 
     #[ta_objects::Dto]

@@ -61,7 +61,8 @@ use td_objects::dxo::logical::{
     TableDataVersionDBWithNamesIden,
 };
 use td_objects::dxo::metrics::{
-    Dim, EdgeRow, InflightRequest, InflightRow, MetricsRequest, NodeKind, NodeRow,
+    Dim, EdgeRow, EdgeTableRow, InflightRequest, InflightRow, MetricsRequest, NodeKind,
+    NodeOutputTableRow, NodeRow,
 };
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
 use td_objects::dxo::project::ActiveProjectDBIden;
@@ -122,6 +123,39 @@ where
     pub async fn metrics_edges(self, req: &MetricsRequest) -> Result<Vec<EdgeRow>, SqlError> {
         let lateral = lateral_shape(&self.executor);
         let rows = edge_aggregates_query(req, lateral)
+            .build_query_as()
+            .fetch_all(self.executor)
+            .await
+            .map_err(SqlError::on_read::<FunctionRunDBWithNames>)?;
+        Ok(rows)
+    }
+
+    /// Distinct output-table listing backing `NodeRow::logical_tables_out`:
+    /// one row per `(node, table_id)` over producer LFRs' non-system,
+    /// non-private, `has_data` output LTDVs. The service layer folds these to
+    /// the requested bucket grain and counts distinct tables per node.
+    pub async fn metrics_node_output_tables(
+        self,
+        req: &MetricsRequest,
+    ) -> Result<Vec<NodeOutputTableRow>, SqlError> {
+        let rows = node_output_tables_query(req)
+            .build_query_as()
+            .fetch_all(self.executor)
+            .await
+            .map_err(SqlError::on_read::<FunctionRunDBWithNames>)?;
+        Ok(rows)
+    }
+
+    /// Distinct edge-table listing backing `EdgeRow::logical_tables`: one row
+    /// per `(edge, table_id)` over the same four-branch union `metrics_edges`
+    /// aggregates. The service layer folds these to the requested bucket grain
+    /// and counts distinct tables per edge, collapsing versions of one table.
+    pub async fn metrics_edge_tables(
+        self,
+        req: &MetricsRequest,
+    ) -> Result<Vec<EdgeTableRow>, SqlError> {
+        let lateral = lateral_shape(&self.executor);
+        let rows = edge_tables_query(req, lateral)
             .build_query_as()
             .fetch_all(self.executor)
             .await
@@ -263,6 +297,7 @@ where
     let mut stmt = Query::select();
     for col in [
         LogicalTableDataVersionDBIden::Id.into_iden(),
+        LogicalTableDataVersionDBIden::TableId.into_iden(),
         LogicalTableDataVersionDBIden::CollectionId.into_iden(),
         LogicalTableDataVersionDBIden::GroupId.into_iden(),
         LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId.into_iden(),
@@ -503,6 +538,14 @@ fn node_aggregates_query(req: &MetricsRequest, lateral: bool) -> SelectStatement
     stmt.expr_as(
         coalesce_sum((out_alias.clone(), Alias::new("tables_out"))),
         Alias::new("table_versions_out"),
+    );
+    // logical_tables_out is a DISTINCT-table count, which is neither summable
+    // per-LFR nor foldable Month→Quarter/Year, so it can't be computed here.
+    // Project a zero placeholder to satisfy the row decoder; the service layer
+    // fills the real value from `node_output_tables_query`.
+    stmt.expr_as(
+        Func::cast_as(Expr::val(0i64), Alias::new("BIGINT")),
+        Alias::new("logical_tables_out"),
     );
     stmt.expr_as(
         coalesce_sum((out_alias.clone(), Alias::new("rows_out"))),
@@ -898,17 +941,132 @@ fn per_lfr_output_aggregates_subquery(req: &MetricsRequest) -> SelectStatement {
     stmt
 }
 
+/// Distinct `(node-key, table_id)` listing over every producer LFR's own
+/// non-system, non-private output LTDVs — the backing set for
+/// `NodeRow::logical_tables_out`. Unlike `per_lfr_output_aggregates_subquery`
+/// (table_versions_out) this does NOT filter `has_data`, so a table present in
+/// the window only via NoData versions still counts. Same window / user-table /
+/// status / dim scoping as [`node_aggregates_query`], projected at the SQL
+/// bucket grain (Month for Quarter/Year). `SELECT DISTINCT` collapses the many
+/// versions a table accrues across a node's runs into one row; the service
+/// layer folds to the requested grain and counts per node. Node-side only — the
+/// synthetic external/unused nodes are edge-derived and carry no
+/// `logical_tables_out`.
+fn node_output_tables_query(req: &MetricsRequest) -> SelectStatement {
+    let bucket_iden = bucket_column(req.unit);
+    let mut stmt = Query::select();
+    stmt.distinct();
+
+    stmt.expr_as(
+        Expr::col((FunctionRunDBWithNamesIden::Table, bucket_iden)),
+        Alias::new("bucket"),
+    );
+    stmt.expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::ProjectId,
+        )),
+        Alias::new("project_id"),
+    );
+    // Dim-conditional, mirroring the node query: collection_id is only carried
+    // when dim=collection so the service-layer key matches the node's.
+    let collection_id_expr: SimpleExpr = match req.dim {
+        Dim::Collection => Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::CollectionId,
+        )),
+        Dim::Group => Expr::value(Value::String(None)),
+    };
+    stmt.expr_as(collection_id_expr, Alias::new("collection_id"));
+    stmt.expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::GroupId,
+        )),
+        Alias::new("group_id"),
+    );
+    stmt.expr_as(
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Status,
+        )),
+        Alias::new("status"),
+    );
+    stmt.expr_as(
+        Expr::col((
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::TableId,
+        )),
+        Alias::new("table_id"),
+    );
+
+    // No `has_data = TRUE` filter (unlike `per_lfr_output_aggregates_subquery`
+    // which backs table_versions_out): logical_tables_out counts every distinct
+    // table the node's runs declared as output, including tables that only ever
+    // emitted NoData versions in the window.
+    stmt.from(TableDataVersionDBWithNamesIden::Table).join(
+        JoinType::InnerJoin,
+        FunctionRunDBWithNamesIden::Table,
+        Expr::col((
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Id,
+        ))
+        .equals((
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::ProducerLogicalFunctionRunId,
+        )),
+    );
+
+    apply_user_table_filter(&mut stmt, TableDataVersionDBWithNamesIden::Table);
+    join_window_ids(&mut stmt, req.window.start_ms, req.window.end_ms);
+    apply_status_filter(
+        &mut stmt,
+        &req.statuses,
+        (
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::Status,
+        ),
+    );
+    apply_dim_filter(
+        &mut stmt,
+        &req.collections,
+        (
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::CollectionId,
+        ),
+    );
+    apply_dim_filter(
+        &mut stmt,
+        &req.groups,
+        (
+            FunctionRunDBWithNamesIden::Table,
+            FunctionRunDBWithNamesIden::GroupId,
+        ),
+    );
+    stmt
+}
+
 // ---------------------------------------------------------------------------
 // /metrics — edges (UNION ALL of real + synthetic branches)
 // ---------------------------------------------------------------------------
 
-fn edge_aggregates_query(req: &MetricsRequest, lateral: bool) -> SelectStatement {
-    let inner_alias = Alias::new("e").into_iden();
-
+/// The four-branch edge union (real + synthetic-source + egress + unused).
+/// Each row is a `(consumer/producer LFR, source LTDV)` pair carrying the edge
+/// identity, `source_ltdv_id`, that LTDV's `table_id`, and its magnitudes.
+/// Shared by [`edge_aggregates_query`] (aggregates it) and [`edge_tables_query`]
+/// (distinct-lists it).
+fn edge_inner_union(req: &MetricsRequest, lateral: bool) -> SelectStatement {
     let mut inner = edge_real_branch(req, lateral);
     inner.union(UnionType::All, edge_synth_branch(req, lateral));
     inner.union(UnionType::All, edge_egress_branch(req, lateral));
     inner.union(UnionType::All, edge_unused_branch(req, lateral));
+    inner
+}
+
+fn edge_aggregates_query(req: &MetricsRequest, lateral: bool) -> SelectStatement {
+    let inner_alias = Alias::new("e").into_iden();
+
+    let inner = edge_inner_union(req, lateral);
 
     let mut outer = Query::select();
     outer
@@ -932,6 +1090,14 @@ fn edge_aggregates_query(req: &MetricsRequest, lateral: bool) -> SelectStatement
                 Alias::new("source_ltdv_id"),
             ))),
             Alias::new("tables"),
+        )
+        // logical_tables is a DISTINCT-table count, not summable across the
+        // Month→Quarter/Year fold, so it can't be computed here. Project a zero
+        // placeholder to satisfy the row decoder; the service layer fills the
+        // real value from `edge_tables_query`.
+        .expr_as(
+            Func::cast_as(Expr::val(0i64), Alias::new("BIGINT")),
+            Alias::new("logical_tables"),
         )
         .expr_as(
             coalesce_sum((inner_alias.clone(), Alias::new("source_row_count"))),
@@ -972,6 +1138,32 @@ fn edge_aggregates_query(req: &MetricsRequest, lateral: bool) -> SelectStatement
         )
         .order_by((inner_alias, Alias::new("status")), Order::Asc);
 
+    outer
+}
+
+/// Distinct `(edge-key, table_id)` listing backing `EdgeRow::logical_tables`.
+/// Wraps the same [`edge_inner_union`] the aggregator uses, projecting the edge
+/// identity plus `table_id` under `SELECT DISTINCT` so the many versions a table
+/// accrues on an edge collapse to one row. `source_name` / `target_name` are
+/// omitted (functionally dependent on the ids and not part of the edge key);
+/// the service layer folds to the requested grain and counts distinct tables
+/// per edge.
+fn edge_tables_query(req: &MetricsRequest, lateral: bool) -> SelectStatement {
+    let inner_alias = Alias::new("e").into_iden();
+    let inner = edge_inner_union(req, lateral);
+
+    let mut outer = Query::select();
+    outer
+        .distinct()
+        .expr(Expr::col((inner_alias.clone(), Alias::new("bucket"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("project_id"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("source_kind"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("source"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("target_kind"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("target"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("status"))))
+        .expr(Expr::col((inner_alias.clone(), Alias::new("table_id"))))
+        .from_subquery(inner, inner_alias.clone());
     outer
 }
 
@@ -1031,6 +1223,13 @@ fn edge_real_branch(req: &MetricsRequest, lateral: bool) -> SelectStatement {
                 LogicalTableDataVersionDBIden::Id,
             )),
             Alias::new("source_ltdv_id"),
+        )
+        .expr_as(
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
+                LogicalTableDataVersionDBIden::TableId,
+            )),
+            Alias::new("table_id"),
         )
         .expr_as(
             Expr::col((
@@ -1177,6 +1376,13 @@ fn edge_synth_branch(req: &MetricsRequest, lateral: bool) -> SelectStatement {
             LogicalTableDataVersionDBIden::Id,
         )),
         Alias::new("source_ltdv_id"),
+    )
+    .expr_as(
+        Expr::col((
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::TableId,
+        )),
+        Alias::new("table_id"),
     )
     .expr_as(
         Expr::col((
@@ -1348,6 +1554,13 @@ fn edge_egress_branch(req: &MetricsRequest, lateral: bool) -> SelectStatement {
         .expr_as(
             Expr::col((
                 TableDataVersionDBWithNamesIden::Table,
+                LogicalTableDataVersionDBIden::TableId,
+            )),
+            Alias::new("table_id"),
+        )
+        .expr_as(
+            Expr::col((
+                TableDataVersionDBWithNamesIden::Table,
                 TableDataVersionDBWithNamesIden::RowCount,
             )),
             Alias::new("source_row_count"),
@@ -1509,6 +1722,13 @@ fn edge_unused_branch(req: &MetricsRequest, lateral: bool) -> SelectStatement {
             LogicalTableDataVersionDBIden::Id,
         )),
         Alias::new("source_ltdv_id"),
+    )
+    .expr_as(
+        Expr::col((
+            TableDataVersionDBWithNamesIden::Table,
+            LogicalTableDataVersionDBIden::TableId,
+        )),
+        Alias::new("table_id"),
     )
     .expr_as(
         Expr::col((
@@ -2347,6 +2567,27 @@ mod tests {
         Ok(())
     }
 
+    #[td_test::test(db)]
+    async fn test_node_output_tables_lists_distinct_output_table(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let (coll, _lfr, ltdv) = seed_publisher_with_ltdv(&db, p.id, "lot_coll", "lot_fn").await?;
+
+        let req = empty_request(Dim::Collection);
+        let rows = db.metrics().metrics_node_output_tables(&req).await?;
+
+        assert_eq!(
+            rows.len(),
+            1,
+            "one publisher, one output table, got {rows:?}"
+        );
+        assert_eq!(rows[0].collection_id.as_ref(), Some(&coll.id));
+        assert_eq!(rows[0].table_id, ltdv.table_id);
+        assert_eq!(rows[0].status, LogicalFunctionRunStatus::Done);
+        Ok(())
+    }
+
     // ----- /metrics edges ----------------------------------------------
 
     #[td_test::test(db)]
@@ -2476,6 +2717,25 @@ mod tests {
         // output LTDV (not consumer's own 10 — same number here, but
         // attribution is source-side).
         assert_eq!(*e.row_count.as_ref(), 10);
+
+        // The distinct-table listing backing `logical_tables` carries the same
+        // real edge, one row for the producer's logical table.
+        let edge_tables = db.metrics().metrics_edge_tables(&req).await?;
+        let real_tbls: Vec<_> = edge_tables
+            .iter()
+            .filter(|t| t.source_kind == NodeKind::Dim && t.target_kind == NodeKind::Dim)
+            .collect();
+        assert_eq!(
+            real_tbls.len(),
+            1,
+            "one (real edge, table) pair expected, got {edge_tables:?}"
+        );
+        assert_eq!(
+            real_tbls[0].source.as_deref(),
+            Some(producer_coll.id.to_string().as_str())
+        );
+        assert_eq!(real_tbls[0].target, Some(consumer_coll.id.to_string()));
+        assert_eq!(real_tbls[0].table_id, producer_ltdv.table_id);
         Ok(())
     }
 

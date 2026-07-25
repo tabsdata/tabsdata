@@ -13,15 +13,15 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::Buildable;
 use td_objects::dxo::metrics::{
-    EdgeRow, InflightRequest, InflightResponse, MetricsRequest, MetricsResponse, NodeKind, NodeRow,
-    SnapshotRequest, SnapshotResponse,
+    EdgeRow, EdgeTableRow, InflightRequest, InflightResponse, MetricsRequest, MetricsResponse,
+    NodeKind, NodeOutputTableRow, NodeRow, SnapshotRequest, SnapshotResponse,
 };
 use td_objects::dxo::query_filters::{
     MAX_GAP_FILLED_ROWS, TimeWindowError, WindowUnit, expected_buckets,
 };
 use td_objects::types::basic::{
     ByteCount, CollectionId, CollectionName, EpochMs, GroupId, GroupName, LogicalFunctionRunStatus,
-    ProjectId, ProjectName, RowCount, TableVersionCount,
+    ProjectId, ProjectName, RowCount, TableId, TableVersionCount,
 };
 use td_objects::types::visible_projects::VisibleProjects;
 use td_queries::MetricsEntry;
@@ -107,14 +107,23 @@ async fn metrics_response(
 ) -> Result<MetricsResponse, TdError> {
     let mut raw_nodes = conn.metrics().metrics_nodes(req).await?;
     let mut raw_edges = conn.metrics().metrics_edges(req).await?;
+    let mut raw_out_tables = conn.metrics().metrics_node_output_tables(req).await?;
+    let mut raw_edge_tables = conn.metrics().metrics_edge_tables(req).await?;
     // Cross-project (global) reads span every tenant; drop rows for projects
     // the requester cannot view, before synthesizing external nodes from edges
     // (so the synthetic singletons reflect only viewable flow). Scoped reads
     // pass `All` (RLS already filtered).
     raw_nodes.retain(|n| n.project_id.is_none_or(|p| visible.contains(&p)));
     raw_edges.retain(|e| e.project_id.is_none_or(|p| visible.contains(&p)));
+    raw_out_tables.retain(|t| t.project_id.is_none_or(|p| visible.contains(&p)));
+    raw_edge_tables.retain(|t| t.project_id.is_none_or(|p| visible.contains(&p)));
     let mut nodes = fold_to_coarse(raw_nodes, req.unit)?;
-    let edges = fold_to_coarse(raw_edges, req.unit)?;
+    let mut edges = fold_to_coarse(raw_edges, req.unit)?;
+    // Fill the non-summable distinct-table counts from the listings, folding to
+    // the same grain the nodes/edges were folded to (so a table produced across
+    // several runs, or several months of a quarter/year, counts once).
+    fill_logical_tables_out(&mut nodes, raw_out_tables, req.unit)?;
+    fill_logical_tables(&mut edges, raw_edge_tables, req.unit)?;
     nodes.extend(synthesize_nodes_from_edges(&edges)?);
     let buckets = expected_buckets(req.window.start_ms, req.window.end_ms, req.unit);
     let statuses = resolve_status_axis(&req.statuses);
@@ -170,6 +179,9 @@ fn synthesize_nodes_from_edges(edges: &[EdgeRow]) -> Result<Vec<NodeRow>, TdErro
                 fn_runs: 0,
                 transactions: 0,
                 table_versions_out: TableVersionCount::default(),
+                // Synthetic nodes are edge-derived (no table identity), so the
+                // distinct-table count stays zero.
+                logical_tables_out: TableVersionCount::default(),
                 row_count_out: RowCount::default(),
                 data_bytes_out: ByteCount::default(),
                 table_versions_in: TableVersionCount::default(),
@@ -192,6 +204,110 @@ fn synthesize_nodes_from_edges(edges: &[EdgeRow]) -> Result<Vec<NodeRow>, TdErro
         }
     }
     Ok(acc.into_values().collect())
+}
+
+/// Fill `NodeRow::logical_tables_out` from the `(node, table_id)` listing. It's
+/// a distinct-table count, so it can't ride the summing SQL/fold path: instead
+/// the listing rows are folded to the same bucket grain the nodes already carry
+/// (identity for Hour/Day/Week/Month; Month→Quarter/Year otherwise) and the
+/// distinct `table_id`s counted per node — collapsing a table produced across
+/// many runs, or many months of a period, to one. Runs after `fold_to_coarse`
+/// and before the synthetic nodes are appended; only real `Dim` nodes are keyed
+/// (synthetic nodes carry no table identity and keep zero).
+fn fill_logical_tables_out(
+    nodes: &mut [NodeRow],
+    out_tables: Vec<NodeOutputTableRow>,
+    unit: WindowUnit,
+) -> Result<(), TdError> {
+    type Key = (
+        i64,
+        Option<CollectionId>,
+        Option<GroupId>,
+        LogicalFunctionRunStatus,
+    );
+    let coarse = matches!(unit, WindowUnit::Quarter | WindowUnit::Year);
+    let bucket_ms = |b: EpochMs| -> i64 {
+        if coarse {
+            floor_unit_ms(unit.into(), *b)
+        } else {
+            *b
+        }
+    };
+
+    let mut distinct: HashMap<Key, HashSet<TableId>> = HashMap::new();
+    for t in out_tables {
+        distinct
+            .entry((bucket_ms(t.bucket), t.collection_id, t.group_id, t.status))
+            .or_default()
+            .insert(t.table_id);
+    }
+
+    for n in nodes.iter_mut().filter(|n| n.kind == NodeKind::Dim) {
+        let key = (*n.bucket, n.collection_id, n.group_id, n.status);
+        let count = distinct.get(&key).map_or(0, |s| s.len());
+        n.logical_tables_out = TableVersionCount::try_from(count as i64)?;
+    }
+    Ok(())
+}
+
+/// Fill `EdgeRow::logical_tables` from the `(edge, table_id)` listing — the
+/// edge-side counterpart of [`fill_logical_tables_out`]. Same rationale: a
+/// distinct-table count can't ride the summing SQL/fold path, so the listing
+/// rows are folded to the grain the edges already carry and the distinct
+/// `table_id`s counted per edge, collapsing the versions a table accrues on an
+/// edge across many runs (or many months of a period) to one. Keyed on the same
+/// identity as [`EdgeRow`]'s fold key; applies to every edge kind, since
+/// synthetic-endpoint edges carry table identity too. Runs after
+/// `fold_to_coarse` and before gap-fill.
+fn fill_logical_tables(
+    edges: &mut [EdgeRow],
+    edge_tables: Vec<EdgeTableRow>,
+    unit: WindowUnit,
+) -> Result<(), TdError> {
+    type Key = (
+        i64,
+        NodeKind,
+        Option<String>,
+        NodeKind,
+        Option<String>,
+        LogicalFunctionRunStatus,
+    );
+    let coarse = matches!(unit, WindowUnit::Quarter | WindowUnit::Year);
+    let bucket_ms = |b: EpochMs| -> i64 {
+        if coarse {
+            floor_unit_ms(unit.into(), *b)
+        } else {
+            *b
+        }
+    };
+
+    let mut distinct: HashMap<Key, HashSet<TableId>> = HashMap::new();
+    for t in edge_tables {
+        distinct
+            .entry((
+                bucket_ms(t.bucket),
+                t.source_kind,
+                t.source,
+                t.target_kind,
+                t.target,
+                t.status,
+            ))
+            .or_default()
+            .insert(t.table_id);
+    }
+
+    for e in edges.iter_mut() {
+        let key = (
+            *e.bucket,
+            e.source_kind,
+            e.source.clone(),
+            e.target_kind,
+            e.target.clone(),
+            e.status,
+        );
+        e.logical_tables = distinct.get(&key).map_or(0, |s| s.len()) as i64;
+    }
+    Ok(())
 }
 
 /// Status axis for gap-fill: the request filter intersected with
@@ -267,6 +383,9 @@ impl FoldRow for NodeRow {
     fn merge(&mut self, other: Self) -> Result<(), TdError> {
         self.fn_runs += other.fn_runs;
         self.transactions += other.transactions;
+        // `logical_tables_out` is intentionally not merged here: a distinct
+        // count can't be summed across months. It's zero at fold time and
+        // filled afterwards by `fill_logical_tables_out`.
         self.table_versions_out =
             TableVersionCount::try_from(*self.table_versions_out + *other.table_versions_out)?;
         self.row_count_out = RowCount::try_from(*self.row_count_out + *other.row_count_out)?;
@@ -308,6 +427,9 @@ impl FoldRow for EdgeRow {
     fn merge(&mut self, other: Self) -> Result<(), TdError> {
         self.fn_runs += other.fn_runs;
         self.tables += other.tables;
+        // `logical_tables` is intentionally not merged here: a distinct count
+        // can't be summed across months. It's zero at fold time and filled
+        // afterwards by `fill_logical_tables`.
         self.row_count = RowCount::try_from(*self.row_count + *other.row_count)?;
         self.data_bytes = ByteCount::try_from(*self.data_bytes + *other.data_bytes)?;
         Ok(())
@@ -439,6 +561,7 @@ impl GapFillRow for NodeRow {
             fn_runs: 0,
             transactions: 0,
             table_versions_out: TableVersionCount::default(),
+            logical_tables_out: TableVersionCount::default(),
             row_count_out: RowCount::default(),
             data_bytes_out: ByteCount::default(),
             table_versions_in: TableVersionCount::default(),
@@ -496,6 +619,7 @@ impl GapFillRow for EdgeRow {
             status,
             fn_runs: 0,
             tables: 0,
+            logical_tables: 0,
             row_count: RowCount::default(),
             data_bytes: ByteCount::default(),
         })
@@ -550,6 +674,7 @@ mod tests {
             fn_runs,
             transactions: fn_runs,
             table_versions_out: TableVersionCount::try_from(fn_runs).unwrap(),
+            logical_tables_out: TableVersionCount::default(),
             row_count_out: RowCount::try_from(fn_runs * 10).unwrap(),
             data_bytes_out: ByteCount::try_from(fn_runs * 100).unwrap(),
             table_versions_in: TableVersionCount::try_from(0).unwrap(),
@@ -576,6 +701,7 @@ mod tests {
             fn_runs,
             transactions: fn_runs,
             table_versions_out: TableVersionCount::try_from(fn_runs).unwrap(),
+            logical_tables_out: TableVersionCount::default(),
             row_count_out: RowCount::try_from(fn_runs * 10).unwrap(),
             data_bytes_out: ByteCount::try_from(fn_runs * 100).unwrap(),
             table_versions_in: TableVersionCount::try_from(0).unwrap(),
@@ -598,9 +724,138 @@ mod tests {
             status,
             fn_runs,
             tables: fn_runs,
+            logical_tables: fn_runs,
             row_count: RowCount::try_from(fn_runs * 10).unwrap(),
             data_bytes: ByteCount::try_from(fn_runs * 100).unwrap(),
         }
+    }
+
+    fn out_table(
+        bucket_ms: i64,
+        status: LogicalFunctionRunStatus,
+        table_id: &str,
+    ) -> NodeOutputTableRow {
+        NodeOutputTableRow {
+            bucket: EpochMs::try_from(bucket_ms).unwrap(),
+            project_id: Some(fixed_project_id()),
+            collection_id: Some(fixed_collection_id()),
+            group_id: Some(fixed_group_id()),
+            status,
+            table_id: TableId::try_from(table_id).unwrap(),
+        }
+    }
+
+    // Two distinct logical tables, stable ids so the set collapses per table.
+    const TBL_CUSTOMERS: &str = "00000000000000000000000a00";
+    const TBL_ORDERS: &str = "00000000000000000000000b00";
+
+    #[test]
+    fn fill_logical_tables_out_folds_versions_of_a_table_into_one() {
+        // A publisher ran 3× writing customers + orders each fire: the SQL sum
+        // path counts every version, but logical_tables_out is the 2 distinct
+        // tables. (The listing arrives DISTINCT per (node, table) from SQL.)
+        let done = LogicalFunctionRunStatus::Done;
+        let mut nodes = vec![node(JAN_2026, done, 3)];
+        let listing = vec![
+            out_table(JAN_2026, done, TBL_CUSTOMERS),
+            out_table(JAN_2026, done, TBL_ORDERS),
+        ];
+        fill_logical_tables_out(&mut nodes, listing, WindowUnit::Month).unwrap();
+        assert_eq!(*nodes[0].logical_tables_out, 2);
+    }
+
+    #[test]
+    fn fill_logical_tables_out_dedupes_a_table_across_months_of_a_quarter() {
+        // Same table produced in Jan and Feb; under a Quarter window both months
+        // floor to Q1 and the table is counted once.
+        let done = LogicalFunctionRunStatus::Done;
+        let mut nodes = vec![node(Q1_2026, done, 2)];
+        let listing = vec![
+            out_table(JAN_2026, done, TBL_CUSTOMERS),
+            out_table(FEB_2026, done, TBL_CUSTOMERS),
+        ];
+        fill_logical_tables_out(&mut nodes, listing, WindowUnit::Quarter).unwrap();
+        assert_eq!(*nodes[0].logical_tables_out, 1);
+    }
+
+    #[test]
+    fn fill_logical_tables_out_leaves_synthetic_and_unlisted_nodes_zero() {
+        let done = LogicalFunctionRunStatus::Done;
+        let mut nodes = vec![
+            node(JAN_2026, done, 1),
+            synth_source_node(JAN_2026, done, 1),
+        ];
+        // Listing for a different status than either node — no match.
+        let listing = vec![out_table(
+            JAN_2026,
+            LogicalFunctionRunStatus::Failed,
+            TBL_CUSTOMERS,
+        )];
+        fill_logical_tables_out(&mut nodes, listing, WindowUnit::Month).unwrap();
+        assert_eq!(*nodes[0].logical_tables_out, 0);
+        assert_eq!(*nodes[1].logical_tables_out, 0);
+    }
+
+    /// Listing row carrying the identity of the `edge()` helper
+    /// (ExternalSource → Dim "tgt").
+    fn edge_table(
+        bucket_ms: i64,
+        status: LogicalFunctionRunStatus,
+        table_id: &str,
+    ) -> EdgeTableRow {
+        EdgeTableRow {
+            bucket: EpochMs::try_from(bucket_ms).unwrap(),
+            project_id: Some(fixed_project_id()),
+            source_kind: NodeKind::ExternalSource,
+            source: None,
+            target_kind: NodeKind::Dim,
+            target: Some("tgt".to_string()),
+            status,
+            table_id: TableId::try_from(table_id).unwrap(),
+        }
+    }
+
+    #[test]
+    fn fill_logical_tables_folds_versions_of_a_table_into_one() {
+        // The edge carried `orders` v5 and v6 across 3 runs: `tables` counts
+        // every version (3 via the helper), but `logical_tables` is the 2
+        // distinct tables the listing carries.
+        let done = LogicalFunctionRunStatus::Done;
+        let mut edges = vec![edge(JAN_2026, done, 3)];
+        let listing = vec![
+            edge_table(JAN_2026, done, TBL_CUSTOMERS),
+            edge_table(JAN_2026, done, TBL_ORDERS),
+        ];
+        fill_logical_tables(&mut edges, listing, WindowUnit::Month).unwrap();
+        assert_eq!(edges[0].logical_tables, 2);
+    }
+
+    #[test]
+    fn fill_logical_tables_dedupes_a_table_across_months_of_a_quarter() {
+        // Same table flows on the edge in Jan and Feb; under a Quarter window
+        // both months floor to Q1 and the table counts once.
+        let done = LogicalFunctionRunStatus::Done;
+        let mut edges = vec![edge(Q1_2026, done, 2)];
+        let listing = vec![
+            edge_table(JAN_2026, done, TBL_CUSTOMERS),
+            edge_table(FEB_2026, done, TBL_CUSTOMERS),
+        ];
+        fill_logical_tables(&mut edges, listing, WindowUnit::Quarter).unwrap();
+        assert_eq!(edges[0].logical_tables, 1);
+    }
+
+    #[test]
+    fn fill_logical_tables_leaves_unmatched_edges_zero() {
+        let done = LogicalFunctionRunStatus::Done;
+        let mut edges = vec![edge(JAN_2026, done, 1)];
+        // Listing for a different status than the edge — no match.
+        let listing = vec![edge_table(
+            JAN_2026,
+            LogicalFunctionRunStatus::Failed,
+            TBL_CUSTOMERS,
+        )];
+        fill_logical_tables(&mut edges, listing, WindowUnit::Month).unwrap();
+        assert_eq!(edges[0].logical_tables, 0);
     }
 
     #[test]
@@ -808,6 +1063,7 @@ mod tests {
             status: LogicalFunctionRunStatus::Done,
             fn_runs: 2,
             tables: 3,
+            logical_tables: 3,
             row_count: RowCount::try_from(100).unwrap(),
             data_bytes: ByteCount::try_from(500).unwrap(),
         };
@@ -824,6 +1080,7 @@ mod tests {
             status: LogicalFunctionRunStatus::Done,
             fn_runs: 1,
             tables: 1,
+            logical_tables: 1,
             row_count: RowCount::try_from(40).unwrap(),
             data_bytes: ByteCount::try_from(200).unwrap(),
         };
@@ -840,6 +1097,7 @@ mod tests {
             status: LogicalFunctionRunStatus::Done,
             fn_runs: 1,
             tables: 2,
+            logical_tables: 2,
             row_count: RowCount::try_from(10).unwrap(),
             data_bytes: ByteCount::try_from(50).unwrap(),
         };
@@ -885,6 +1143,7 @@ mod tests {
             status: LogicalFunctionRunStatus::Done,
             fn_runs: 1,
             tables: 1,
+            logical_tables: 1,
             row_count: RowCount::try_from(rows).unwrap(),
             data_bytes: ByteCount::try_from(rows * 10).unwrap(),
         };
@@ -937,6 +1196,7 @@ mod tests {
                 fn_runs: 1,
                 transactions: 1,
                 table_versions_out: TableVersionCount::default(),
+                logical_tables_out: TableVersionCount::default(),
                 row_count_out: RowCount::default(),
                 data_bytes_out: ByteCount::default(),
                 table_versions_in: TableVersionCount::default(),
