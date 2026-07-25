@@ -2,7 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::update_status::update_function_run_status;
+use crate::execution::layers::update_status::{
+    abandon_requested_physical_runs, update_function_run_status,
+};
 use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
@@ -13,7 +15,7 @@ use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB}
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::rest_urls::TransactionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{TransactionId, TransactionIdName};
+use td_objects::types::basic::{AtTime, TransactionId, TransactionIdName};
 use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -32,6 +34,7 @@ fn service() {
     layers!(
         // Extract from request.
         from_fn(With::<UpdateRequest<TransactionParam, ()>>::extract::<RequestContext>),
+        from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(With::<UpdateRequest<TransactionParam, ()>>::extract_name::<TransactionParam>),
         // Extract physical_function_run_id. We assume it's correct as the callback is constructed by the server.
         from_fn(With::<TransactionParam>::extract::<TransactionIdName>),
@@ -42,6 +45,8 @@ fn service() {
         from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<TransactionDB>::extract::<TransactionId>),
         from_fn(By::<TransactionId>::fetch_all::<LogicalFunctionRunDB>),
+        // Terminalize the dead attempts of Requested LFRs before re-scheduling.
+        from_fn(abandon_requested_physical_runs),
         // Set recover status (ReScheduled). Dispatch re-mints per LFR; already-run
         // (Bound) LFRs rebind at redirect_pointers_at_finish, not at dispatch.
         from_fn(UpdateLogicalFunctionRunDB::recover),
@@ -88,6 +93,7 @@ mod tests {
                 type_of_val(
                     &With::<UpdateRequest<TransactionParam, ()>>::extract::<RequestContext>,
                 ),
+                type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(
                     &With::<UpdateRequest<TransactionParam, ()>>::extract_name::<TransactionParam>,
                 ),
@@ -100,6 +106,8 @@ mod tests {
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(&With::<TransactionDB>::extract::<TransactionId>),
                 type_of_val(&By::<TransactionId>::fetch_all::<LogicalFunctionRunDB>),
+                // Terminalize the dead attempts of Requested LFRs before re-scheduling.
+                type_of_val(&abandon_requested_physical_runs),
                 // Set recover status
                 type_of_val(&UpdateLogicalFunctionRunDB::recover),
                 // Update function requirements status
@@ -407,6 +415,11 @@ mod tests {
                 .is_ok()
         );
         assert!(
+            recover_transition_for(LogicalFunctionRunStatus::Requested)
+                .await
+                .is_ok()
+        );
+        assert!(
             recover_transition_for(LogicalFunctionRunStatus::Canceled)
                 .await
                 .is_err()
@@ -465,11 +478,6 @@ mod tests {
 
         assert!(
             recover_transition_for(LogicalFunctionRunStatus::Scheduled)
-                .await
-                .is_ok()
-        );
-        assert!(
-            recover_transition_for(LogicalFunctionRunStatus::Requested)
                 .await
                 .is_ok()
         );

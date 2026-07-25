@@ -2,7 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::layers::update_status::update_function_run_status;
+use crate::execution::layers::update_status::{
+    abandon_requested_physical_runs, update_function_run_status,
+};
 use crate::scheduler::layers::request::notify_scheduler;
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
@@ -13,7 +15,7 @@ use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, UpdateLogicalFunctionRunDB};
 use td_objects::rest_urls::ExecutionParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{ExecutionId, ExecutionIdName};
+use td_objects::types::basic::{AtTime, ExecutionId, ExecutionIdName};
 use td_queries::By;
 use td_tower::default_services::TransactionProvider;
 use td_tower::from_fn::from_fn;
@@ -32,6 +34,7 @@ fn service() {
     layers!(
         // Extract from request.
         from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
+        from_fn(With::<RequestContext>::extract::<AtTime>),
         from_fn(With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>),
         // Extract physical_function_run_id. We assume it's correct as the callback is constructed by the server.
         from_fn(With::<ExecutionParam>::extract::<ExecutionIdName>),
@@ -42,6 +45,8 @@ fn service() {
         from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(With::<ExecutionDB>::extract::<ExecutionId>),
         from_fn(By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
+        // Terminalize the dead attempts of Requested LFRs before re-scheduling.
+        from_fn(abandon_requested_physical_runs),
         // Set recover status (ReScheduled). Dispatch re-mints per LFR; already-run
         // (Bound) LFRs rebind at redirect_pointers_at_finish, not at dispatch.
         from_fn(UpdateLogicalFunctionRunDB::recover),
@@ -65,11 +70,13 @@ mod tests {
     use td_error::TdError;
     use td_objects::Buildable;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
-        ProjectId, TableNameDto, TransactionStatus, UserId,
+        PhysicalFunctionRunStatus, ProjectId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
+    use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
     use td_tower::ctx_service::RawOneshot;
 
@@ -86,6 +93,7 @@ mod tests {
             .assert_service::<Scoped<UpdateRequest<ExecutionParam, ()>, ProjectId>, ()>(&[
                 // Extract from request.
                 type_of_val(&With::<UpdateRequest<ExecutionParam, ()>>::extract::<RequestContext>),
+                type_of_val(&With::<RequestContext>::extract::<AtTime>),
                 type_of_val(
                     &With::<UpdateRequest<ExecutionParam, ()>>::extract_name::<ExecutionParam>,
                 ),
@@ -98,6 +106,8 @@ mod tests {
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(&With::<ExecutionDB>::extract::<ExecutionId>),
                 type_of_val(&By::<ExecutionId>::fetch_all::<LogicalFunctionRunDB>),
+                // Terminalize the dead attempts of Requested LFRs before re-scheduling.
+                type_of_val(&abandon_requested_physical_runs),
                 // Set recover status
                 type_of_val(&UpdateLogicalFunctionRunDB::recover),
                 // Update function requirements status
@@ -401,6 +411,11 @@ mod tests {
                 .is_ok()
         );
         assert!(
+            recover_transition_for(LogicalFunctionRunStatus::Requested)
+                .await
+                .is_ok()
+        );
+        assert!(
             recover_transition_for(LogicalFunctionRunStatus::Canceled)
                 .await
                 .is_err()
@@ -463,11 +478,6 @@ mod tests {
                 .is_ok()
         );
         assert!(
-            recover_transition_for(LogicalFunctionRunStatus::Requested)
-                .await
-                .is_ok()
-        );
-        assert!(
             recover_transition_for(LogicalFunctionRunStatus::ReScheduled)
                 .await
                 .is_ok()
@@ -489,5 +499,63 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    /// Recover of an LFR stuck in `Requested` re-schedules it and
+    /// terminalizes the dead attempt: the bound PFR flips to `Failed`
+    /// with `ended_on` + bucket floors set, so late callbacks from it
+    /// drop at the in-flight filter.
+    #[td_test::test(db)]
+    async fn test_recover_execution_requested_abandons_attempt(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let test_executions = vec![TestExecution {
+            expected_status: ExecutionStatus::Running,
+            transactions: vec![TestTransaction {
+                expected_status: TransactionStatus::Running,
+                functions: vec![TestFunction {
+                    collection: CollectionName::try_from("c_0")?,
+                    name: FunctionName::try_from("f_0")?,
+                    dependencies: vec![],
+                    tables: vec![TableNameDto::try_from("t_0")?],
+                    initial_status: LogicalFunctionRunStatus::Requested,
+                    expected_status: LogicalFunctionRunStatus::ReScheduled,
+                }],
+            }],
+        }];
+        test_status_update(db.clone(), p.id, &test_executions, |_, e, _, f, _| {
+            let db = db.clone();
+            let execution = e[&test_executions[0]].id.to_string();
+            let pfr_id = f[&test_executions[0].transactions[0].functions[0]]
+                .id
+                .clone();
+
+            async move {
+                let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(
+                        ExecutionParam::builder()
+                            .execution(ExecutionIdName::from_str(&execution)?)
+                            .build()?,
+                        (),
+                    )
+                    .in_project(p.id);
+                ExecutionRecoverService::with_defaults(db.clone())
+                    .service()
+                    .raw_oneshot(request)
+                    .await?;
+
+                let pfr: PhysicalFunctionRunDB = db
+                    .live()
+                    .fetch_one::<PhysicalFunctionRunDB>(&pfr_id)
+                    .await?;
+                assert_eq!(pfr.status, PhysicalFunctionRunStatus::Failed);
+                assert!(pfr.ended_on.is_some());
+                assert!(pfr.ended_on_hour_ms.is_some());
+                assert!(pfr.ended_on_day_ms.is_some());
+                assert!(pfr.ended_on_week_ms.is_some());
+                assert!(pfr.ended_on_month_ms.is_some());
+                Ok(())
+            }
+        })
+        .await
     }
 }

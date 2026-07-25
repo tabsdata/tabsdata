@@ -10,6 +10,7 @@ use td_error::{TdError, td_error};
 use td_objects::dxo::logical::{
     CommitLogicalFunctionRunDB, LogicalFunctionRunDB, UpdateLogicalFunctionRunDB,
 };
+use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, UpdatePhysicalFunctionRunDB};
 use td_objects::dxo::physical_table_data_version::{
     PhysicalTableDataVersionDB, PhysicalTableDataVersionDBWithNames, UpdateTableDataVersionDB,
 };
@@ -17,8 +18,8 @@ use td_objects::dxo::worker::{CallbackRequest, UpdateWorkerDB, WorkerDB};
 use td_objects::dxo::yaml::WorkerOutput;
 use td_objects::dxo::yaml::function::WrittenTable;
 use td_objects::types::basic::{
-    ExecutionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
-    SchemaChanged, WorkerId,
+    AtTime, ExecutionId, FunctionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus,
+    PhysicalFunctionRunId, PhysicalFunctionRunStatus, SchemaChanged, WorkerId,
 };
 use td_objects::{Buildable, and};
 use td_queries::{ChunkedQueries, LfrEntry, LiveEntry, LtdvEntry};
@@ -61,6 +62,61 @@ pub async fn update_worker_status(
         .update::<_, WorkerDB>(update.deref(), &*worker_id)
         .await?;
 
+    Ok(())
+}
+
+/// Recover of an LFR stuck in `Requested` re-dispatches it, but its
+/// original attempt may still materialize later (a parked queue message
+/// finally spawning a pod). Terminalizing the attempt's in-flight PFR as
+/// `Failed` here makes any late callback from it drop at
+/// `resolve_logical_function_runs` instead of racing the new attempt.
+#[instrument(
+    name = "execution.recover_abandon",
+    skip_all,
+    level = "debug",
+    err(Debug)
+)]
+pub async fn abandon_requested_physical_runs(
+    mut conn: MutRef<DomainConnection<Apiserver>>,
+    at: Ref<AtTime>,
+    logical_function_runs: Ref<Vec<LogicalFunctionRunDB>>,
+) -> Result<(), TdError> {
+    let requested: HashSet<(&ExecutionId, &FunctionId)> = logical_function_runs
+        .iter()
+        .filter(|lfr| lfr.status == LogicalFunctionRunStatus::Requested)
+        .map(|lfr| (&lfr.execution_id, &lfr.function_id))
+        .collect();
+    if requested.is_empty() {
+        return Ok(());
+    }
+
+    let execution_ids: Vec<ExecutionId> = requested
+        .iter()
+        .map(|(execution_id, _)| (*execution_id).clone())
+        .unique()
+        .collect();
+    let physical_function_runs: Vec<PhysicalFunctionRunDB> = conn
+        .fetch_all_chunked::<PhysicalFunctionRunDB, ExecutionId>(&execution_ids)
+        .await?;
+    let abandoned: Vec<PhysicalFunctionRunId> = physical_function_runs
+        .iter()
+        .filter(|pfr| {
+            PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.status)
+                && requested.contains(&(&pfr.execution_id, &pfr.function_id))
+        })
+        .map(|pfr| pfr.id.clone())
+        .collect();
+    if abandoned.is_empty() {
+        return Ok(());
+    }
+
+    let update = UpdatePhysicalFunctionRunDB::failed_at(&at)?;
+    conn.update_chunked::<_, PhysicalFunctionRunDB, _>(&update, &abandoned)
+        .await?;
+    debug!(
+        abandoned_count = abandoned.len(),
+        "execution.recover_abandon: terminalized in-flight PFR(s) of Requested LFR(s)"
+    );
     Ok(())
 }
 
@@ -170,9 +226,14 @@ pub async fn update_function_run_status(
                     LogicalFunctionRunStatus::Failed,
                 ) => Some(Ok(current.id.clone())),
 
-                // Recover status, only for failed function runs, otherwise just no-op.
+                // Recover status: failed / on-hold runs, plus runs stuck in
+                // Requested (dispatched but the worker never spawned, so no
+                // callback will ever arrive — `abandon_requested_physical_runs`
+                // terminalizes the dead attempt). Otherwise just no-op.
                 (
-                    LogicalFunctionRunStatus::Failed | LogicalFunctionRunStatus::OnHold,
+                    LogicalFunctionRunStatus::Failed
+                    | LogicalFunctionRunStatus::OnHold
+                    | LogicalFunctionRunStatus::Requested,
                     LogicalFunctionRunStatus::ReScheduled,
                 ) => Some(Ok(current.id.clone())),
                 (_, LogicalFunctionRunStatus::ReScheduled) => None,

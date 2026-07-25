@@ -13,6 +13,9 @@ mod definitions {
         StageId, StorageVersion, TableVersionCount, TransactionId, Trigger, TriggeredOn, UserId,
         UserName,
     };
+    use chrono::{DateTime, Utc};
+    use td_common::bucket::BucketFloors;
+    use td_error::TdError;
 
     #[ta_objects::Dao]
     #[dao(
@@ -206,6 +209,27 @@ mod definitions {
                 ended_on_day_ms: None,
                 ended_on_week_ms: None,
                 ended_on_month_ms: None,
+                metric_table_versions: None,
+                metric_rows: None,
+                metric_data_bytes: None,
+            })
+        }
+
+        /// Terminalization without a worker callback: recover of a stuck
+        /// `Requested` LFR abandons its in-flight attempt as `Failed` at
+        /// `ended_on`, so late callbacks from it drop at the in-flight
+        /// filter. No metrics (the attempt produced no output).
+        pub fn failed_at(ended_on: &AtTime) -> Result<Self, TdError> {
+            let dt: DateTime<Utc> = ***ended_on;
+            let floors = BucketFloors::from_utc(dt);
+            Ok(Self {
+                started_on: None,
+                ended_on: Some(ended_on.clone()),
+                status: PhysicalFunctionRunStatus::Failed,
+                ended_on_hour_ms: Some(EpochMs::try_from(floors.hour_ms)?),
+                ended_on_day_ms: Some(EpochMs::try_from(floors.day_ms)?),
+                ended_on_week_ms: Some(EpochMs::try_from(floors.week_ms)?),
+                ended_on_month_ms: Some(EpochMs::try_from(floors.month_ms)?),
                 metric_table_versions: None,
                 metric_rows: None,
                 metric_data_bytes: None,

@@ -103,6 +103,7 @@ pub enum ExecutionStatus {
 ///     Scheduled --> Requested
 ///     Requested --> Scheduled
 ///     Requested --> Running
+///     Requested --> ReScheduled
 ///     Scheduled --> OnHold
 ///     Scheduled --> Canceled
 ///     Running --> Done
@@ -255,6 +256,7 @@ pub enum LogicalPointerReason {
 /// ```text
 ///   Requested ─► Dispatched ─► Running ─► Done | Error | Failed
 ///   Failed    ─► Requested                       (operator recover)
+///   Requested | Dispatched | Running ─► Failed   (recover abandons the attempt)
 /// ```
 #[ta_objects::typed_enum]
 #[derive(Eq, PartialEq, Hash, Copy)]
