@@ -37,6 +37,7 @@ import polars as pl
 import pyarrow.parquet as pq
 import pytest
 from sqlalchemy import create_engine, text
+from tenacity import retry, stop_after_delay, wait_fixed
 
 from tabsdatak.conn.postgres import (
     LsnPosition,
@@ -207,16 +208,14 @@ def _create_replication_slot(cfg, slot: str) -> None:
         eng.dispose()
 
 
-def _drop_replication_slot(cfg, slot: str) -> None:
-    """Drop ``slot`` at test teardown. The test's plugin closes its
-    replication connection client-side, but Postgres may not have
-    released the server-side walsender yet, in which case
-    ``pg_drop_replication_slot`` raises ``ObjectInUse``. So we first
-    terminate any backend still attached to the slot, then drop it.
-    No polling is needed: the slot name is unique to this test, so
-    nothing else can be using or recreating it. AUTOCOMMIT because
-    ``pg_drop_replication_slot`` cannot run inside a transaction
-    block."""
+@retry(stop=stop_after_delay(120), wait=wait_fixed(0.5), reraise=True)
+def _terminate_and_drop_slot(cfg, slot: str) -> None:
+    """One terminate-then-drop attempt. Retried for up to two minutes:
+    ``pg_terminate_backend`` only *requests* termination, so the slot may
+    still be ``active`` when ``pg_drop_replication_slot`` runs and raise
+    ``ObjectInUse`` -- any such failure is retried until the walsender
+    releases the slot. AUTOCOMMIT because ``pg_drop_replication_slot``
+    cannot run inside a transaction block."""
     eng = create_engine(
         cfg.uri_with_credentials, isolation_level="AUTOCOMMIT",
     )
@@ -238,6 +237,25 @@ def _drop_replication_slot(cfg, slot: str) -> None:
             ), {"slot": slot})
     finally:
         eng.dispose()
+
+
+def _drop_replication_slot(cfg, slot: str) -> None:
+    """Best-effort drop of ``slot`` at test teardown.
+
+    Teardown must never fail the test: the slot name is unique per test,
+    so a slot left behind is inert (never reused, never contended) and is
+    reclaimed when the disposable test server is periodically destroyed.
+    So retry the drop for up to two minutes, and if it still does not
+    succeed, log and swallow the error."""
+    try:
+        _terminate_and_drop_slot(cfg, slot)
+    except Exception as error:  # noqa: BLE001
+        logger.warning(
+            "Best-effort teardown could not drop replication slot %r: %s; "
+            "leaving it for the disposable test server's periodic cleanup.",
+            slot,
+            error,
+        )
 
 
 def _insert_users(cfg, rows: list[dict]) -> None:
