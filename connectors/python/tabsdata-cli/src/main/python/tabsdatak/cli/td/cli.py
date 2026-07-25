@@ -46,15 +46,18 @@ from tabsdatak.cli.td import (  # noqa: F401
     collection_group,
     connection_group,
     examples_group,
-    exe_group,
     fn_group,
     group_group,
     metrics_group,
     permission_group,
     pin_group,
+    plan_group,
     project_group,
+    run_group,
     table_group,
+    trx_group,
     user_group,
+    worker_group,
 )
 
 CYAN = "[cyan]"

@@ -33,15 +33,18 @@ BUILTIN_GROUPS = {
     "auth",
     "collection",
     "connection",
-    "exe",
     "fn",
     "group",
     "metrics",
     "permission",
     "pin",
+    "plan",
     "project",
+    "run",
     "table",
+    "trx",
     "user",
+    "worker",
 }
 
 

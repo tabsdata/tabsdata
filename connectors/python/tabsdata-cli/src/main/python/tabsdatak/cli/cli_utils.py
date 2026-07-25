@@ -20,7 +20,6 @@ import importlib.util
 import io
 import json
 import os
-import platform
 import re
 import sys
 from contextlib import contextmanager
@@ -46,9 +45,6 @@ def make_console(**kwargs) -> "Console":
     width = None if sys.stdout.isatty() else RENDER_WIDTH
     return Console(width=width, **kwargs)
 
-
-if TYPE_CHECKING:
-    from tabsdatak.sdk.tabsdata_server import Function
 
 CONNECTION_FILE = "connection.json"
 
@@ -302,8 +298,8 @@ def _apply_proj(ctx: click.Context, param, value):
 
     The active project rides on the server connection. The root group seeds it
     from the pinned project; a per-command ``--proj`` overrides it for this
-    invocation. The connection injects the active project into every
-    tenant-scoped request, so commands never thread it any further."""
+    invocation. The connection builds project-scoped paths from it and narrows
+    cross-project listings to it, so commands never thread it any further."""
     if value:
         server = ctx.obj.get("tabsdataserver")
         if server is not None:
@@ -342,8 +338,9 @@ def resolve_all_projects(ctx: click.Context, all_projects: bool) -> bool:
     """Apply ``--all-projects`` for this command and report whether the listing
     spans projects.
 
-    ``--all-projects`` clears the connection's project, overriding any
-    pinned or ``--proj`` project. Even without the flag a listing still spans
+    ``--all-projects`` clears the active project, overriding any pinned or
+    ``--proj`` project — an unset project makes listings span every project
+    the requester can view. Even without the flag a listing still spans
     projects when no project is selected at all (the implicit fallback)."""
     server = ctx.obj.get("tabsdataserver")
     if server is None:
@@ -468,28 +465,6 @@ class MutuallyExclusiveOption(Option):
         return super(MutuallyExclusiveOption, self).handle_parse_result(ctx, opts, args)
 
 
-class CurrentPlatform:
-    """Just a class to get the current platform information in a simple way."""
-
-    def __init__(self):
-        self.platform = platform.system()
-
-    def is_windows(self):
-        return self.platform == "Windows"
-
-    def is_linux(self):
-        return self.platform == "Linux"
-
-    def is_mac(self):
-        return self.platform == "Darwin"
-
-    def is_unix(self):
-        return self.is_linux() or self.is_mac()
-
-
-CURRENT_CLI_PLATFORM = CurrentPlatform()
-
-
 def get_credentials_file_path(ctx: click.Context) -> str:
     """
     Get the path to the credentials file.
@@ -577,12 +552,6 @@ def hint_common_solutions(ctx: click.Context, e: Exception):
             "It seems like you might have an expired session. You can "
             "log in again with 'tdk login'.",
         )
-
-
-def verify_trigger_type(function: Function, type: str):
-    # TODO: Awaiting the information needed to be added to the function information
-    #  endpoint.
-    return True
 
 
 # ---------------------------------------------------------------------------

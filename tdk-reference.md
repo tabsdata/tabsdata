@@ -154,41 +154,54 @@ table delete   --name NAME  [--proj PROJECT] [--col COLLECTION] [-y]
 
 ## Execution
 
+All ids (plan, transaction, run, worker) are globally unique: the id-keyed
+commands never take a project or collection. The four `list` commands always
+span every project you can view (the pinned project does not narrow them);
+every option is a filter, `--proj` included.
+
 ### `tdk plan`
 
 ```
-plan list                 [--proj PROJECT] [--col COLLECTION] [--status S] [--function F] [--last] [--at TS] [--monitor] [-o]
-plan info    --plan PLAN   [--proj PROJECT] [-o]
-plan graph   --plan PLAN   [--proj PROJECT] [-o]      # full execution graph
-plan cancel  --plan PLAN   [--proj PROJECT] [-y]
-plan recover --plan PLAN   [--proj PROJECT] [-y]
-plan monitor --plan PLAN   [--proj PROJECT]
+plan list                 [--proj PROJECT] [--coll COLLECTION] [--fn FUNCTION] [--name PATTERN] [--status S ...]
+                          [--last] [--at TS] [--monitor] [-o]
+plan get     --plan PLAN   [-o]      # plan details + its function runs and workers
+plan graph   --plan PLAN   [-o]      # full execution graph (dot)
+plan cancel  --plan PLAN   [--confirm cancel]
+plan recover --plan PLAN
+plan monitor --plan PLAN
+plan logs    --plan PLAN   [--file FILE]   # pick a worker when several ran
 ```
 
-### `tdk transaction` (alias `trx`)
+### `tdk trx`
 
 ```
-transaction list                [--proj PROJECT] [--col COLLECTION] [--status S] [--plan PLAN] [--last] [--at TS] [--monitor] [-o]
-transaction info    --trx TRX   [--proj PROJECT] [-o]
-transaction cancel  --trx TRX   [--proj PROJECT] [-y]
-transaction recover --trx TRX   [--proj PROJECT] [-y]
-transaction monitor --trx TRX   [--proj PROJECT]
+trx list                [--proj PROJECT] [--coll COLLECTION] [--status S ...] [--plan PLAN] [--plan-name PATTERN]
+                        [--last] [--at TS] [--monitor] [-o]
+trx get     --trx TRX   [-o]      # transaction details + its function runs and workers
+trx cancel  --trx TRX   [--confirm cancel]
+trx recover --trx TRX
+trx monitor --trx TRX
+trx logs    --trx TRX   [--file FILE]   # pick a worker when several ran
 ```
 
 ### `tdk run` *(function runs)*
 
 ```
-run list              [--proj PROJECT] [--col COLLECTION] [--status S] [--plan PLAN] [--function F] [--trx TRX] [-o]
-run info    --run RUN  [--proj PROJECT] [-o]
-run logs    --run RUN  [--proj PROJECT] [--file FILE]
-run replay  --run RUN  [--proj PROJECT] [--col COLLECTION]      # was: exe replay --lfr
+run list              [--proj PROJECT] [--coll COLLECTION] [--status S ...] [--plan PLAN] [--plan-name PATTERN]
+                      [--fn FUNCTION] [--trx TRX] [-o]
+run get     --run RUN  [-o]      # run details + its workers (retries)
+run logs    --run RUN  [--file FILE]   # pick a worker when several ran
+run replay  --run RUN
+run recover --run RUN      # recovers the run's owning transaction
 ```
 
 ### `tdk worker`
 
 ```
-worker list                  [--proj PROJECT] [--col COLLECTION] [--status S] [--plan PLAN] [--function F] [--run RUN] [--trx TRX] [-o]
-worker logs --worker WORKER  [--proj PROJECT] [--file FILE]
+worker list                  [--proj PROJECT] [--coll COLLECTION] [--status S ...] [--plan PLAN] [--plan-name PATTERN]
+                             [--fn FUNCTION] [--run RUN] [--trx TRX] [-o]
+worker logs    --worker WORKER  [--file FILE] [-o]
+worker recover --worker WORKER      # recovers the worker's owning transaction
 ```
 
 ---

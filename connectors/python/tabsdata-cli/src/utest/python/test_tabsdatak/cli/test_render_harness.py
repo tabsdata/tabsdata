@@ -167,14 +167,17 @@ _FN_INFO = {
     "tables": ["t1", "t2"],
 }
 
-# ``exe info`` nests ``collection``/``function`` objects
+# ``plan get`` nests ``collection``/``function`` objects
 # (``execution.collection.name``); the machine payload keeps them as dicts.
 _EXECUTION = {
     "id": "EID_1",
     "name": "plan-a",
+    "project": "proj-a",
     "collection": {"name": "coll-a"},
     "function": {"name": "fn-a"},
     "triggered_on_str": "2026-03-01",
+    "started_on_str": "2026-03-01",
+    "ended_on_str": "2026-03-02",
     "status": "Done",
 }
 
@@ -198,12 +201,19 @@ _METRICS = {
     "end_ms": 2000,
     "nodes": [
         {
-            "collection_id": "C1", "collection_name": "coll-a",
-            "group_id": "G1", "group_name": "grp-a",
+            "collection_id": "C1",
+            "collection_name": "coll-a",
+            "group_id": "G1",
+            "group_name": "grp-a",
             "status": "D",
-            "fn_runs": 2, "transactions": 1,
-            "table_versions_in": 3, "row_count_in": 555, "data_bytes_in": 0,
-            "table_versions_out": 4, "row_count_out": 777, "data_bytes_out": 0,
+            "fn_runs": 2,
+            "transactions": 1,
+            "table_versions_in": 3,
+            "row_count_in": 555,
+            "data_bytes_in": 0,
+            "table_versions_out": 4,
+            "row_count_out": 777,
+            "data_bytes_out": 0,
         },
     ],
     "edges": [],
@@ -213,9 +223,12 @@ _METRICS = {
 _INFLIGHT = {
     "rows": [
         {
-            "collection_id": "C1", "group_id": "G1",
-            "collection_name": "coll-a", "group_name": "grp-a",
-            "status": "R", "count": 42,
+            "collection_id": "C1",
+            "group_id": "G1",
+            "collection_name": "coll-a",
+            "group_name": "grp-a",
+            "status": "R",
+            "count": 42,
         },
     ],
 }
@@ -234,41 +247,79 @@ _PATCHES = [
     },
 ]
 
-# exe list-* return DTO lists: json/yaml emit ``[x._data ...]`` while the inline
-# table view reads nested objects (execution/collection/function/transaction).
-_EXECUTIONS = [{
-    "id": "EID_1", "name": "plan-a",
-    "collection": {"name": "coll-a"}, "function": {"name": "fn-a"},
-    "triggered_on_str": "2026-03-01", "trigger_type": "manual", "status": "Done",
-}]
+# plan/trx/run/worker list return DTO lists: json/yaml emit ``[x._data ...]``
+# while the table view reads nested objects (execution/collection/function/
+# transaction) and the always-present Project column.
+_EXECUTIONS = [
+    {
+        "id": "EID_1",
+        "name": "plan-a",
+        "project": "proj-a",
+        "collection": {"name": "coll-a"},
+        "function": {"name": "fn-a"},
+        "triggered_on_str": "2026-03-01",
+        "trigger_type": "manual",
+        "status": "Done",
+    }
+]
 
-_TRANSACTIONS = [{
-    "id": "TID_1",
-    "execution": {"id": "EID_1"}, "collection": {"name": "coll-a"},
-    "triggered_on_str": "2026-03-01", "triggered_by": "admin", "status": "Done",
-}]
+_TRANSACTIONS = [
+    {
+        "id": "TID_1",
+        "project": "proj-a",
+        "execution": {"id": "EID_1"},
+        "collection": {"name": "coll-a"},
+        "triggered_on_str": "2026-03-01",
+        "triggered_by": "admin",
+        "started_on_str": "2026-03-01",
+        "ended_on_str": "2026-03-02",
+        "status": "Done",
+    }
+]
 
-_FUNCTION_RUNS = [{
-    "id": "FR_1",
-    "collection": {"name": "coll-a"}, "function": {"name": "fn-a"},
-    "execution": {"name": "plan-a", "id": "EID_1"}, "transaction": {"id": "TID_1"},
-    "started_on_str": "2026-03-01", "ended_on_str": "2026-03-02", "status": "Done",
-}]
+_FUNCTION_RUNS = [
+    {
+        "id": "FR_1",
+        "project": "proj-a",
+        "collection": {"name": "coll-a"},
+        "function": {"name": "fn-a"},
+        "execution": {"name": "plan-a", "id": "EID_1"},
+        "transaction": {"id": "TID_1"},
+        "started_on_str": "2026-03-01",
+        "ended_on_str": "2026-03-02",
+        "status": "Done",
+    }
+]
 
-_WORKERS = [{
-    "id": "WK_1",
-    "collection": {"name": "coll-a"}, "function": {"name": "fn-a"},
-    "execution": {"name": "plan-a", "id": "EID_1"}, "transaction": {"id": "TID_1"},
-    "status": "Done",
-}]
+_WORKERS = [
+    {
+        "id": "WK_1",
+        "project": "proj-a",
+        "collection": {"name": "coll-a"},
+        "function": {"name": "fn-a"},
+        "execution": {"name": "plan-a", "id": "EID_1"},
+        "transaction": {"id": "TID_1"},
+        "started_on_str": "2026-03-01",
+        "ended_on_str": "2026-03-02",
+        "status": "Done",
+    }
+]
+
+# ``plan graph``: the machine formats emit the whole response; the table view
+# prints the ``dot`` rendering.
+_GRAPH = {"dot": "digraph plan { a -> b }", "all_functions": ["fn-a"]}
 
 # ``table versions``: json/yaml emit ``[dv._data ...]``; the table reads nested
 # function/execution objects.
-_DATAVERSIONS = [{
-    "id": "DV_1",
-    "function": {"id": "FID_1"}, "execution": {"id": "EID_1"},
-    "created_at_str": "2026-03-01", "status": "C",
-}]
+_DATAVERSIONS = [
+    {
+        "id": "DV_1",
+        "function": {"id": "FID_1"},
+        "execution": {"id": "EID_1"},
+        "created_at_str": "2026-03-01",
+        "status": "C",
+    }
+]
 
 # ``permission list`` builds its payload from DTO *attributes* (not _data):
 # ``--user`` -> [{permission, project} ...]; ``--proj`` -> [{user, permission,
@@ -360,13 +411,90 @@ def _set_fn_info(c: MagicMock) -> None:
     )
 
 
-def _set_exe_info(c: MagicMock) -> None:
-    # ``exe info`` reads ``execution.collection.name`` / ``.function.name``.
+def _set_plan_list(c: MagicMock) -> None:
+    c.list_executions.return_value = [
+        _DTO(
+            _EXECUTIONS[0],
+            collection=_DTO({"name": "coll-a"}),
+            function=_DTO({"name": "fn-a"}),
+        )
+    ]
+
+
+def _set_trx_list(c: MagicMock) -> None:
+    c.list_transactions.return_value = [
+        _DTO(
+            _TRANSACTIONS[0],
+            execution=_DTO({"id": "EID_1"}),
+            collection=_DTO({"name": "coll-a"}),
+        )
+    ]
+
+
+def _set_run_list(c: MagicMock) -> None:
+    c.list_function_runs.return_value = [
+        _DTO(
+            _FUNCTION_RUNS[0],
+            collection=_DTO({"name": "coll-a"}),
+            function=_DTO({"name": "fn-a"}),
+            execution=_DTO({"name": "plan-a", "id": "EID_1"}),
+            transaction=_DTO({"id": "TID_1"}),
+        )
+    ]
+
+
+def _set_worker_list(c: MagicMock) -> None:
+    c.list_workers.return_value = [
+        _DTO(
+            _WORKERS[0],
+            collection=_DTO({"name": "coll-a"}),
+            function=_DTO({"name": "fn-a"}),
+            execution=_DTO({"name": "plan-a", "id": "EID_1"}),
+            transaction=_DTO({"id": "TID_1"}),
+            # the Patch column reads the raw row via `.kwargs`
+            kwargs={
+                "logical_function_run_id": "LFR_1",
+                "function_version_patch_id": "FV_9",
+            },
+        )
+    ]
+
+
+def _set_plan_info(c: MagicMock) -> None:
+    # ``plan get`` reads ``execution.collection.name`` / ``.function.name``
+    # and lists the plan's function runs and workers underneath.
     c.get_execution.return_value = _DTO(
         _EXECUTION,
         collection=_DTO({"name": "coll-a"}),
         function=_DTO({"name": "fn-a"}),
     )
+    _set_run_list(c)
+    _set_worker_list(c)
+
+
+def _set_trx_info(c: MagicMock) -> None:
+    c.get_transaction.return_value = _DTO(
+        _TRANSACTIONS[0],
+        execution=_DTO({"id": "EID_1"}),
+        collection=_DTO({"name": "coll-a"}),
+    )
+    _set_run_list(c)
+    _set_worker_list(c)
+
+
+def _set_run_info(c: MagicMock) -> None:
+    c.get_function_run.return_value = _DTO(
+        _FUNCTION_RUNS[0],
+        collection=_DTO({"name": "coll-a"}),
+        function=_DTO({"name": "fn-a"}),
+        execution=_DTO({"name": "plan-a", "id": "EID_1"}),
+        transaction=_DTO({"id": "TID_1"}),
+    )
+    _set_worker_list(c)
+
+
+def _set_plan_graph(c: MagicMock) -> None:
+    c.get_execution_graph.return_value = _GRAPH
 
 
 def _set_table_list(c: MagicMock) -> None:
@@ -400,45 +528,13 @@ def _set_fn_list_patches(c: MagicMock) -> None:
     c.list_function_patches.return_value = _PATCHES
 
 
-def _set_exe_list_plan(c: MagicMock) -> None:
-    c.list_executions.return_value = [
-        _DTO(_EXECUTIONS[0], collection=_DTO({"name": "coll-a"}),
-             function=_DTO({"name": "fn-a"}))
-    ]
-
-
-def _set_exe_list_trx(c: MagicMock) -> None:
-    c.list_transactions.return_value = [
-        _DTO(_TRANSACTIONS[0], execution=_DTO({"id": "EID_1"}),
-             collection=_DTO({"name": "coll-a"}))
-    ]
-
-
-def _set_exe_list_fn_run(c: MagicMock) -> None:
-    c.list_function_runs.return_value = [
-        _DTO(_FUNCTION_RUNS[0], collection=_DTO({"name": "coll-a"}),
-             function=_DTO({"name": "fn-a"}),
-             execution=_DTO({"name": "plan-a", "id": "EID_1"}),
-             transaction=_DTO({"id": "TID_1"}))
-    ]
-
-
-def _set_exe_list_worker(c: MagicMock) -> None:
-    c.list_workers.return_value = [
-        _DTO(_WORKERS[0], collection=_DTO({"name": "coll-a"}),
-             function=_DTO({"name": "fn-a"}),
-             execution=_DTO({"name": "plan-a", "id": "EID_1"}),
-             transaction=_DTO({"id": "TID_1"}),
-             # the Patch column reads the raw row via `.kwargs`
-             kwargs={"logical_function_run_id": "LFR_1",
-                     "function_version_patch_id": "FV_9"})
-    ]
-
-
 def _set_table_versions(c: MagicMock) -> None:
     c.list_dataversions.return_value = [
-        _DTO(_DATAVERSIONS[0], function=_DTO({"id": "FID_1"}),
-             execution=_DTO({"id": "EID_1"}))
+        _DTO(
+            _DATAVERSIONS[0],
+            function=_DTO({"id": "FID_1"}),
+            execution=_DTO({"id": "EID_1"}),
+        )
     ]
 
 
@@ -452,16 +548,21 @@ def _set_perm_list_project(c: MagicMock) -> None:
 
 CASES: tuple[RenderCase, ...] = (
     RenderCase(
-        "user-list", ["user", "list"], _set_user_list, _USERS,
-        ("alice", "Alice A", "alice@x.io", "True",
-         "bob", "Bob B", "bob@x.io", "False"),
+        "user-list",
+        ["user", "list"],
+        _set_user_list,
+        _USERS,
+        ("alice", "Alice A", "alice@x.io", "True", "bob", "Bob B", "bob@x.io", "False"),
     ),
     RenderCase(
         "user-get", ["user", "get", "-n", "alice"], _set_user_info, _USERS[0],
         ("alice", "Alice A", "alice@x.io", "True"),
     ),
     RenderCase(
-        "group-list", ["group", "list"], _set_group_list, _GROUPS,
+        "group-list",
+        ["group", "list"],
+        _set_group_list,
+        _GROUPS,
         ("grp-a", "GID_A", "first group", "2026-01-01", "admin"),
     ),
     RenderCase(
@@ -470,7 +571,10 @@ CASES: tuple[RenderCase, ...] = (
         ("grp-a", "GID_A", "False", "first group", "2026-01-01", "admin"),
     ),
     RenderCase(
-        "project-list", ["project", "list"], _set_project_list, _PROJECTS,
+        "project-list",
+        ["project", "list"],
+        _set_project_list,
+        _PROJECTS,
         ("proj-a", "PID_A", "first project", "2026-01-02", "admin"),
     ),
     RenderCase(
@@ -478,7 +582,10 @@ CASES: tuple[RenderCase, ...] = (
         _PROJECTS[0], ("proj-a", "PID_A", "first project", "2026-01-02", "admin"),
     ),
     RenderCase(
-        "collection-list", ["collection", "list"], _set_collection_list, _COLLECTIONS,
+        "collection-list",
+        ["collection", "list"],
+        _set_collection_list,
+        _COLLECTIONS,
         ("coll-a", "first collection", "2026-01-03", "admin"),
     ),
     RenderCase(
@@ -488,12 +595,18 @@ CASES: tuple[RenderCase, ...] = (
     RenderCase(
         # ``roles`` renders via beautify_list; assert the distinctive role value
         # ("user" is too generic -- it also appears in the table title).
-        "auth-info", ["auth", "info"], _set_auth_info, _AUTH_INFO,
+        "auth-info",
+        ["auth", "info"],
+        _set_auth_info,
+        _AUTH_INFO,
         ("alice", "alice@x.io", "sys_admin"),
     ),
     RenderCase(
         # raw type "P" is mapped to "Publisher" in the table view.
-        "fn-list", ["fn", "list", "-c", "coll-a"], _set_fn_list, _FUNCTIONS,
+        "fn-list",
+        ["fn", "list", "-c", "coll-a"],
+        _set_fn_list,
+        _FUNCTIONS,
         ("fn-a", "Publisher", "publishes stuff", "2026-02-01", "admin"),
     ),
     RenderCase(
@@ -502,33 +615,98 @@ CASES: tuple[RenderCase, ...] = (
          "dep1", "dep2", "trig1", "t1", "t2"),
     ),
     RenderCase(
-        # exe info builds its table inline (not via render) for the table format,
-        # and only calls render(data=execution._data) for json/yaml.
-        "exe-info", ["exe", "info", "--plan", "EID_1"], _set_exe_info, _EXECUTION,
-        ("plan-a", "coll-a", "fn-a", "2026-03-01", "Done"),
+        # plan get builds its tables inline for the table format and hands a
+        # combined {plan, function_runs, workers} payload to render for json/yaml.
+        "plan-get",
+        ["plan", "get", "--plan", "EID_1"],
+        _set_plan_info,
+        {"plan": _EXECUTION, "function_runs": _FUNCTION_RUNS, "workers": _WORKERS},
+        (
+            "plan-a",
+            "proj-a",
+            "coll-a",
+            "fn-a",
+            "2026-03-01",
+            "Done",
+            "FR_1",
+            "WK_1",
+            "TID_1",
+        ),
     ),
     RenderCase(
-        "table-list", ["table", "list", "-c", "coll-a"], _set_table_list, _TABLES,
+        "trx-get",
+        ["trx", "get", "--trx", "TID_1"],
+        _set_trx_info,
+        {
+            "transaction": _TRANSACTIONS[0],
+            "function_runs": _FUNCTION_RUNS,
+            "workers": _WORKERS,
+        },
+        ("TID_1", "proj-a", "coll-a", "2026-03-01", "admin", "Done", "FR_1", "WK_1"),
+    ),
+    RenderCase(
+        "run-get",
+        ["run", "get", "--run", "FR_1"],
+        _set_run_info,
+        {"function_run": _FUNCTION_RUNS[0], "workers": _WORKERS},
+        (
+            "FR_1",
+            "proj-a",
+            "coll-a",
+            "fn-a",
+            "plan-a",
+            "EID_1",
+            "TID_1",
+            "2026-03-01",
+            "2026-03-02",
+            "Done",
+            "WK_1",
+        ),
+    ),
+    RenderCase(
+        "plan-graph",
+        ["plan", "graph", "--plan", "EID_1"],
+        _set_plan_graph,
+        _GRAPH,
+        ("digraph plan",),
+    ),
+    RenderCase(
+        "table-list",
+        ["table", "list", "-c", "coll-a"],
+        _set_table_list,
+        _TABLES,
         ("tbl-a", "fn-a"),
     ),
     RenderCase(
-        "table-schema", ["table", "schema", "-c", "coll-a", "--name", "tbl-a"],
-        _set_table_schema, _TABLE_SCHEMA, ("id", "Int64", "label", "String"),
+        "table-schema",
+        ["table", "schema", "-c", "coll-a", "--name", "tbl-a"],
+        _set_table_schema,
+        _TABLE_SCHEMA,
+        ("id", "Int64", "label", "String"),
     ),
     RenderCase(
         # table sample's "table" view is just the polars frame's repr, which
         # carries the same rows json/yaml get from ``.to_dicts()``.
-        "table-sample", ["table", "sample", "-c", "coll-a", "--name", "tbl-a"],
-        _set_table_sample, _SAMPLE_ROWS, ("tbl-a", "label", "x", "y"),
+        "table-sample",
+        ["table", "sample", "-c", "coll-a", "--name", "tbl-a"],
+        _set_table_sample,
+        _SAMPLE_ROWS,
+        ("tbl-a", "label", "x", "y"),
     ),
     RenderCase(
         # rows_in/out are 555/777 -- distinctive values that can't be confused
         # with the window bounds (1000/2000) echoed in the summary header.
-        "metrics-show", ["metrics", "show"], _set_metrics_show, _METRICS,
+        "metrics-show",
+        ["metrics", "show"],
+        _set_metrics_show,
+        _METRICS,
         ("coll-a", "grp-a", "555", "777"),
     ),
     RenderCase(
-        "metrics-inflight", ["metrics", "inflight"], _set_metrics_inflight, _INFLIGHT,
+        "metrics-inflight",
+        ["metrics", "inflight"],
+        _set_metrics_inflight,
+        _INFLIGHT,
         ("coll-a", "grp-a", "42"),
     ),
     RenderCase(
@@ -546,37 +724,76 @@ CASES: tuple[RenderCase, ...] = (
         ("PV_2", "PV_1", "second patch", "2024-01-01T00:00:00Z", "published"),
     ),
     RenderCase(
-        # exe list-* emit [x._data ...] for json/yaml and build the table inline.
-        "exe-list-plan", ["exe", "list-plan"], _set_exe_list_plan, _EXECUTIONS,
-        ("EID_1", "plan-a", "coll-a", "fn-a", "2026-03-01", "manual", "Done"),
+        # plan/trx/run/worker list emit [x._data ...] for json/yaml and build
+        # the table inline; the Project column always renders.
+        "plan-list",
+        ["plan", "list"],
+        _set_plan_list,
+        _EXECUTIONS,
+        ("EID_1", "plan-a", "proj-a", "coll-a", "fn-a", "2026-03-01", "manual", "Done"),
     ),
     RenderCase(
-        "exe-list-trx", ["exe", "list-trx"], _set_exe_list_trx, _TRANSACTIONS,
-        ("TID_1", "EID_1", "coll-a", "2026-03-01", "admin", "Done"),
+        "trx-list",
+        ["trx", "list"],
+        _set_trx_list,
+        _TRANSACTIONS,
+        ("TID_1", "EID_1", "proj-a", "coll-a", "2026-03-01", "admin", "Done"),
     ),
     RenderCase(
-        "exe-list-fn-run", ["exe", "list-fn-run"], _set_exe_list_fn_run, _FUNCTION_RUNS,
-        ("FR_1", "coll-a", "fn-a", "plan-a", "EID_1", "TID_1",
-         "2026-03-01", "2026-03-02", "Done"),
+        "run-list",
+        ["run", "list"],
+        _set_run_list,
+        _FUNCTION_RUNS,
+        (
+            "FR_1",
+            "proj-a",
+            "coll-a",
+            "fn-a",
+            "plan-a",
+            "EID_1",
+            "TID_1",
+            "2026-03-01",
+            "2026-03-02",
+            "Done",
+        ),
     ),
     RenderCase(
-        "exe-list-worker", ["exe", "list-worker"], _set_exe_list_worker, _WORKERS,
-        ("WK_1", "coll-a", "fn-a", "plan-a", "EID_1", "TID_1", "Done", "FV_9"),
+        "worker-list",
+        ["worker", "list"],
+        _set_worker_list,
+        _WORKERS,
+        (
+            "WK_1",
+            "proj-a",
+            "coll-a",
+            "fn-a",
+            "plan-a",
+            "EID_1",
+            "TID_1",
+            "Done",
+            "FV_9",
+        ),
     ),
     RenderCase(
-        "table-versions", ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
-        _set_table_versions, _DATAVERSIONS,
+        "table-versions",
+        ["table", "versions", "-c", "coll-a", "--name", "tbl-a"],
+        _set_table_versions,
+        _DATAVERSIONS,
         ("DV_1", "FID_1", "EID_1", "2026-03-01"),
     ),
     RenderCase(
         # payload is built from attributes; a None project is null (json) / "-" (table).
-        "permission-list-user", ["permission", "list", "--user", "alice"],
-        _set_perm_list_user, _PERMS_BY_USER,
+        "permission-list-user",
+        ["permission", "list", "--user", "alice"],
+        _set_perm_list_user,
+        _PERMS_BY_USER,
         ("read_collection", "proj-a", "manage_system"),
     ),
     RenderCase(
-        "permission-list-project", ["permission", "list", "--proj", "proj-a"],
-        _set_perm_list_project, _ACCESS_BY_PROJECT,
+        "permission-list-project",
+        ["permission", "list", "--proj", "proj-a"],
+        _set_perm_list_project,
+        _ACCESS_BY_PROJECT,
         ("alice", "read_collection", "role:reader"),
     ),
 )
@@ -589,7 +806,7 @@ _IDS = [c.id for c in CASES]
 # ---------------------------------------------------------------------------
 
 
-def _invoke(argv: list[str], *, client: MagicMock, tmp_path):
+def _invoke(argv: list[str], *, client: MagicMock, tmp_path, input: str | None = None):
     """Run ``td <argv>`` with ``client`` injected as the server connection."""
 
     def _inject(ctx):
@@ -597,13 +814,14 @@ def _invoke(argv: list[str], *, client: MagicMock, tmp_path):
         # initialise_tabsdata_server_connection; just drop the mock client in.
         ctx.obj["tabsdataserver"] = client
 
-    with patch(
-        "tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject
-    ), patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)):
+    with (
+        patch("tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject),
+        patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)),
+    ):
         # A wide terminal so the rich table never line-wraps a cell -- wrapping
         # is a layout artifact that would break content substring checks; we
         # assert on values, not on where the renderer chooses to break lines.
-        return CliRunner().invoke(cli, argv, env={"COLUMNS": "200"})
+        return CliRunner().invoke(cli, argv, env={"COLUMNS": "200"}, input=input)
 
 
 def _normalize(payload: Any) -> Any:
@@ -676,13 +894,15 @@ def test_json_and_yaml_agree_across_the_matrix(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# ``exe logs`` -- kept out of the matrix.
+# ``worker/run/plan/trx logs`` -- kept out of the matrix.
 #
-# Its payload is not a DTO: the command wraps ``get_worker_log`` output in a
-# text envelope ("Logs from worker '<id>' underneath: ... ***") and hands it to
-# render as ``{"logs": <blob>}`` (table view just echoes the blob). Pinning the
-# exact envelope punctuation would duplicate production formatting and be brittle,
-# so we assert the worker id and log body are *present* in every format instead.
+# Their payload is not a DTO: the command wraps ``get_worker_log`` output in a
+# text envelope ("Worker <id> ...") and hands it to render as ``{"logs":
+# <blob>}`` (table view just echoes the blob). Pinning the exact envelope
+# punctuation would duplicate production formatting and be brittle, so we
+# assert the worker id and log body are *present* in every format instead.
+# The plan/trx/run variants resolve the worker via the picker: a single worker
+# streams directly; several render an indexed listing and prompt for a choice.
 # ---------------------------------------------------------------------------
 
 
@@ -690,21 +910,19 @@ def _set_worker_log(c: MagicMock) -> None:
     c.get_worker_log.return_value = "line-1\nline-2"
 
 
-def test_exe_logs_carries_worker_log_in_every_format(tmp_path):
+def test_worker_logs_carries_worker_log_in_every_format(tmp_path):
     # json / yaml wrap the constructed envelope under a single "logs" key.
     for fmt in ("json", "yaml"):
         client = _client()
         _set_worker_log(client)
         result = _invoke(
-            ["exe", "logs", "--worker", "W1", "-o", fmt],
+            ["worker", "logs", "--worker", "W1", "-o", fmt],
             client=client,
             tmp_path=tmp_path,
         )
         assert result.exit_code == 0, result.output
         payload = (
-            json.loads(result.output)
-            if fmt == "json"
-            else _load_yaml(result.output)
+            json.loads(result.output) if fmt == "json" else _load_yaml(result.output)
         )
         assert set(payload) == {"logs"}, payload
         assert "W1" in payload["logs"]
@@ -714,20 +932,20 @@ def test_exe_logs_carries_worker_log_in_every_format(tmp_path):
     client = _client()
     _set_worker_log(client)
     result = _invoke(
-        ["exe", "logs", "--worker", "W1"], client=client, tmp_path=tmp_path
+        ["worker", "logs", "--worker", "W1"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code == 0, result.output
     assert "W1" in result.output
     assert "line-1" in result.output and "line-2" in result.output
 
 
-def test_exe_logs_file_dash_writes_raw_logs_to_stdout(tmp_path):
+def test_worker_logs_file_dash_writes_raw_logs_to_stdout(tmp_path):
     # ``--file -`` means stdout: the raw log text is emitted, with no "Saving
     # logs to file" chatter and no file literally named "-".
     client = _client()
     _set_worker_log(client)
     result = _invoke(
-        ["exe", "logs", "--worker", "W1", "--file", "-"],
+        ["worker", "logs", "--worker", "W1", "--file", "-"],
         client=client,
         tmp_path=tmp_path,
     )
@@ -737,17 +955,29 @@ def test_exe_logs_file_dash_writes_raw_logs_to_stdout(tmp_path):
     assert "Saving logs to file" not in result.output
 
 
-def _run_client(*workers: tuple[str, str]) -> MagicMock:
-    """Client whose worker list resolves to ``workers`` (in the given order).
+# 26-char all-caps ids, as ``is_valid_id`` requires for ID-based picking.
+_WID_1 = "A" * 25 + "1"
+_WID_2 = "A" * 25 + "2"
 
-    ``latest_workers`` keeps the server order, so the last one passed here is
-    treated as the latest. ``get_worker_log`` echoes the worker id so tests can
-    assert which one was fetched.
-    """
+
+def _picker_client(*workers: tuple[str, str]) -> MagicMock:
+    """Client whose worker list resolves to full worker DTOs (the picker
+    renders the whole workers table). ``get_worker_log`` echoes the worker id
+    so tests can assert which one was fetched."""
     client = _client()
     client.list_workers.return_value = [
         _DTO(
-            {"id": wid, "status": status},
+            {
+                "id": wid,
+                "project": "proj-a",
+                "status": status,
+                "started_on_str": "2026-03-01",
+                "ended_on_str": "2026-03-02",
+            },
+            collection=_DTO({"name": "coll-a"}),
+            function=_DTO({"name": "fn-a"}),
+            execution=_DTO({"name": "plan-a", "id": "EID_1"}),
+            transaction=_DTO({"id": "TID_1"}),
             kwargs={"function_version_patch_id": None},
         )
         for wid, status in workers
@@ -756,49 +986,85 @@ def _run_client(*workers: tuple[str, str]) -> MagicMock:
     return client
 
 
-def test_exe_logs_fn_run_returns_latest_worker(tmp_path):
-    client = _run_client(("WKR20260713.1", "Failed"), ("WKR20260713.2", "Done"))
+def test_run_logs_single_worker_streams_directly(tmp_path):
+    client = _picker_client((_WID_1, "Done"))
     result = _invoke(
-        ["exe", "logs", "--fn-run", "LFR_1"], client=client, tmp_path=tmp_path
+        ["run", "logs", "--run", "LFR_1"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code == 0, result.output
-    # the run's latest worker, and only it
-    assert "log-of-WKR20260713.2" in result.output
-    assert "log-of-WKR20260713.1" not in result.output
+    assert f"log-of-{_WID_1}" in result.output
+    # the run id was pushed into the workers filter
+    sent = client.list_workers.call_args.kwargs["filter"]
+    assert "logical_function_run_id:eq:LFR_1" in sent
 
 
-def test_exe_logs_by_function_name(tmp_path):
-    client = _run_client(("WKR20260713.1", "Failed"), ("WKR20260713.2", "Done"))
+def test_run_logs_multiple_workers_prompts_by_index(tmp_path):
+    client = _picker_client((_WID_1, "Failed"), (_WID_2, "Done"))
     result = _invoke(
-        ["exe", "logs", "--fn", "my_fn", "--coll", "my_coll"],
+        ["run", "logs", "--run", "LFR_1"],
+        client=client,
+        tmp_path=tmp_path,
+        input="2\n",
+    )
+    assert result.exit_code == 0, result.output
+    # both candidates were listed, the chosen one was fetched
+    assert _WID_1 in result.output and _WID_2 in result.output
+    assert f"log-of-{_WID_2}" in result.output
+    assert f"log-of-{_WID_1}" not in result.output
+
+
+def test_plan_logs_multiple_workers_accepts_worker_id(tmp_path):
+    client = _picker_client((_WID_1, "Failed"), (_WID_2, "Done"))
+    result = _invoke(
+        ["plan", "logs", "--plan", "EID_1"],
+        client=client,
+        tmp_path=tmp_path,
+        input=f"{_WID_1}\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert f"log-of-{_WID_1}" in result.output
+    sent = client.list_workers.call_args.kwargs["filter"]
+    assert "execution_id:eq:EID_1" in sent
+
+
+def test_trx_logs_multiple_workers_no_prompt_lists_and_fails(tmp_path):
+    client = _picker_client((_WID_1, "Failed"), (_WID_2, "Done"))
+    result = _invoke(
+        ["--no-prompt", "trx", "logs", "--trx", "TID_1"],
         client=client,
         tmp_path=tmp_path,
     )
-    assert result.exit_code == 0, result.output
-    assert "log-of-WKR20260713.2" in result.output
-    # the function name + collection were pushed into the workers filter
-    sent = client.list_workers.call_args.kwargs["filter"]
-    assert "function:eq:my_fn" in sent and "collection:eq:my_coll" in sent
+    assert result.exit_code != 0
+    # the candidates are still listed, with the direct command to use
+    assert _WID_1 in result.output and _WID_2 in result.output
+    assert "tdk worker logs" in result.output
+    client.get_worker_log.assert_not_called()
 
 
-def test_exe_logs_fn_run_with_no_workers_errors(tmp_path):
-    client = _run_client()
+def test_run_logs_with_no_workers_errors(tmp_path):
+    client = _picker_client()
     result = _invoke(
-        ["exe", "logs", "--fn-run", "LFR_1"], client=client, tmp_path=tmp_path
+        ["run", "logs", "--run", "LFR_1"], client=client, tmp_path=tmp_path
     )
     assert result.exit_code != 0
     assert "no workers yet" in result.output
 
 
-def test_exe_logs_requires_exactly_one_target(tmp_path):
-    neither = _invoke(["exe", "logs"], client=_client(), tmp_path=tmp_path)
-    assert neither.exit_code != 0 and "exactly one" in neither.output
-    both = _invoke(
-        ["exe", "logs", "--fn-run", "LFR_1", "--worker", "WKR20260713.1"],
-        client=_client(),
-        tmp_path=tmp_path,
-    )
-    assert both.exit_code != 0 and "exactly one" in both.output
+def test_list_status_echoes_stay_out_of_machine_output(tmp_path):
+    # run/worker list echo the related plan/trx/run status in table mode only;
+    # with -o json the echo must not pollute stdout (it has to stay parseable).
+    client = _client()
+    _set_run_list(client)
+    _set_worker_list(client)
+    for argv in (
+        ["run", "list", "--plan", "EID_1", "-o", "json"],
+        ["worker", "list", "--trx", "TID_1", "-o", "json"],
+    ):
+        result = _invoke(argv, client=client, tmp_path=tmp_path)
+        assert result.exit_code == 0, result.output
+        json.loads(result.output)
+    client.get_execution.assert_not_called()
+    client.get_transaction.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -821,11 +1087,7 @@ def test_pin_show_renders_pinned_store_offline(tmp_path):
             ["pin", "show", "-o", fmt], client=_client(), tmp_path=tmp_path
         )
         assert result.exit_code == 0, result.output
-        got = (
-            json.loads(result.output)
-            if fmt == "json"
-            else _load_yaml(result.output)
-        )
+        got = json.loads(result.output) if fmt == "json" else _load_yaml(result.output)
         assert got == payload
 
     # the default (table) view prints both pinned values.

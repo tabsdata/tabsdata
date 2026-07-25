@@ -18,7 +18,6 @@ from click.testing import CliRunner
 
 from tabsdatak.cli.td.cli import cli
 
-
 # ---------------------------------------------------------------------------
 # Module-level smoke
 # ---------------------------------------------------------------------------
@@ -39,14 +38,17 @@ def test_top_level_help_lists_expected_subcommands():
     for name in [
         "auth",
         "collection",
-        "exe",
         "fn",
         "group",
         "metrics",
         "pin",
+        "plan",
         "project",
+        "run",
         "table",
+        "trx",
         "user",
+        "worker",
         "info",
         "login",
         "logout",
@@ -67,14 +69,17 @@ def test_top_level_help_lists_expected_subcommands():
     [
         "auth",
         "collection",
-        "exe",
         "fn",
         "group",
         "metrics",
         "pin",
+        "plan",
         "project",
+        "run",
         "table",
+        "trx",
         "user",
+        "worker",
     ],
 )
 def test_subcommand_help_loads_without_error(subcommand):

@@ -586,9 +586,9 @@ def trigger(
         else:
             show_hint(
                 ctx,
-                "You can check the status of the plan with 'tdk exe info "
+                "You can check the status of the plan with 'tdk plan get "
                 f"--plan {execution.id}', or monitor the execution of the function "
-                f"with 'tdk exe monitor --plan {execution.id}'",
+                f"with 'tdk plan monitor --plan {execution.id}'",
             )
 
     except Exception as e:
@@ -678,13 +678,13 @@ def _monitor_execution_or_transaction(
         for fn_run in failed_runs:
             click.echo(f"- {fn_run.id}")
         complete_command = (
-            f"'tdk exe logs --plan {supervised_entity.id}'"
+            f"'tdk plan logs --plan {supervised_entity.id}'"
             if execution
-            else f"'tdk exe logs --trx {supervised_entity.id}'"
+            else f"'tdk trx logs --trx {supervised_entity.id}'"
         )
         show_hint(
             ctx,
-            "You can check their logs with 'tdk exe logs --fn-run <FN-RUN-ID>' or with "
+            "You can check their logs with 'tdk run logs --run <RUN-ID>' or with "
             + complete_command,
         )
     else:
@@ -996,8 +996,8 @@ def patch(
         click.echo(f"Patches fvid:    {record.get('parent_function_version_id')}")
         show_hint(
             ctx,
-            "Replay a finished logical-function-run against the latest patch "
-            "with 'tdk exe replay --coll <coll> --lfr <lfr_id>'.",
+            "Replay a finished function run against the latest patch "
+            "with 'tdk run replay --run <RUN-ID>'.",
             final_empty_line=True,
         )
     except Exception as e:

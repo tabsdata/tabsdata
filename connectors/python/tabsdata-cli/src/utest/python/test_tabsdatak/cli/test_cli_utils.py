@@ -11,7 +11,7 @@ CLI integration suite; here we test what's purely functional:
 
 * ``is_valid_id`` / ``beautify_list`` / ``beautify_time``
 * the temporary ``tdabout`` / ``td_resource`` stand-ins
-* ``MutuallyExclusiveOption`` / ``CurrentPlatform``
+* ``MutuallyExclusiveOption``
 """
 
 from __future__ import annotations
@@ -648,29 +648,6 @@ def test_dynamic_import_wrapper_whose_func_is_a_builtin(tmp_path):
         f"{tmp_path / 'wraps_builtin.py'}::x"
     )
     assert info.func is len
-
-
-# ---------------------------------------------------------------------------
-# CurrentPlatform
-# ---------------------------------------------------------------------------
-
-
-def test_current_platform_exposes_system_name():
-    p = cli_utils.CurrentPlatform()
-    # ``.platform`` returns the underlying ``platform.system()`` output
-    # (e.g. ``"Darwin"``, ``"Linux"``, ``"Windows"``).
-    import platform as _stdlib_platform
-
-    assert p.platform == _stdlib_platform.system()
-
-
-def test_current_platform_predicates_are_mutually_exclusive():
-    p = cli_utils.CurrentPlatform()
-    truths = [p.is_windows(), p.is_linux(), p.is_mac()]
-    # Exactly one of windows/linux/mac is True on a typical host;
-    # ``is_unix()`` overlaps with both linux and mac so it isn't part
-    # of this exclusivity check.
-    assert sum(truths) <= 1
 
 
 # ---------------------------------------------------------------------------

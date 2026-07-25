@@ -13,8 +13,8 @@ contract; this harness pins the *mutation* contract every write command shares:
 * on SDK failure it surfaces a ``click.ClickException`` (non-zero exit) rather
   than a raw traceback.
 
-Delete commands add a fourth: they must not touch the server unless the
-``--confirm delete`` guard word is given.
+Delete commands (and the irreversible plan/trx cancel) add a fourth: they must
+not touch the server unless the ``--confirm`` guard word is given.
 
 Same two seams as the render harness: ``initialise_tabsdata_server_connection``
 is patched to inject a ``MagicMock`` client into ``ctx.obj["tabsdataserver"]``
@@ -56,9 +56,10 @@ def _invoke(argv: list[str], *, client: MagicMock, tmp_path):
     def _inject(ctx):
         ctx.obj["tabsdataserver"] = client
 
-    with patch(
-        "tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject
-    ), patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)):
+    with (
+        patch("tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject),
+        patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)),
+    ):
         return CliRunner().invoke(cli, argv)
 
 
@@ -86,38 +87,51 @@ CASES: tuple[MutCase, ...] = (
     # --- create -----------------------------------------------------------
     MutCase(
         "user-create",
-        ["user", "create", "-n", "u1", "-p", "pw", "-f", "Full Name",
-         "-e", "u1@x.io"],
-        "create_user", ("u1", "pw"),
+        ["user", "create", "-n", "u1", "-p", "pw", "-f", "Full Name", "-e", "u1@x.io"],
+        "create_user",
+        ("u1", "pw"),
         {"full_name": "Full Name", "email": "u1@x.io", "enabled": True},
         "User created successfully",
     ),
     MutCase(
-        "group-create", ["group", "create", "-n", "g1", "--description", "desc"],
-        "create_group", ("g1", "desc"), {}, "Group created successfully",
+        "group-create",
+        ["group", "create", "-n", "g1", "--description", "desc"],
+        "create_group",
+        ("g1", "desc"),
+        {},
+        "Group created successfully",
     ),
     MutCase(
         "project-create",
         ["project", "create", "-n", "p1", "--description", "desc"],
-        "create_project", ("p1", "desc"), {}, "Project created successfully",
+        "create_project",
+        ("p1", "desc"),
+        {},
+        "Project created successfully",
     ),
     # --- update -----------------------------------------------------------
     MutCase(
-        "user-update", ["user", "update", "-n", "u1", "-f", "New Name"],
-        "update_user", ("u1",),
+        "user-update",
+        ["user", "update", "-n", "u1", "-f", "New Name"],
+        "update_user",
+        ("u1",),
         {"full_name": "New Name", "email": None, "password": None, "enabled": None},
         "User updated successfully",
     ),
     MutCase(
         "group-update",
         ["group", "update", "-n", "g1", "--new-name", "g2", "--description", "d"],
-        "update_group", ("g1",), {"new_name": "g2", "new_description": "d"},
+        "update_group",
+        ("g1",),
+        {"new_name": "g2", "new_description": "d"},
         "Group updated successfully",
     ),
     MutCase(
         "project-update",
         ["project", "update", "-n", "p1", "--new-name", "p2", "--description", "d"],
-        "update_project", ("p1",), {"new_name": "p2", "new_description": "d"},
+        "update_project",
+        ("p1",),
+        {"new_name": "p2", "new_description": "d"},
         "Project updated successfully",
     ),
     MutCase(
@@ -130,93 +144,151 @@ CASES: tuple[MutCase, ...] = (
     ),
     # --- fn lifecycle -----------------------------------------------------
     MutCase(
-        "fn-enable", ["fn", "enable", "-n", "f1", "-c", "coll1"],
-        "enable_function", (),
+        "fn-enable",
+        ["fn", "enable", "-n", "f1", "-c", "coll1"],
+        "enable_function",
+        (),
         {"collection_name": "coll1", "function_name": "f1", "enabled": True},
         "Function updated successfully",
     ),
     MutCase(
-        "fn-disable", ["fn", "disable", "-n", "f1", "-c", "coll1"],
-        "enable_function", (),
+        "fn-disable",
+        ["fn", "disable", "-n", "f1", "-c", "coll1"],
+        "enable_function",
+        (),
         {"collection_name": "coll1", "function_name": "f1", "enabled": False},
         "Function updated successfully",
     ),
     MutCase(
         # -d/--detach so it doesn't monitor the (mock) execution in a poll loop.
-        "fn-trigger", ["fn", "trigger", "-n", "f1", "-c", "coll1", "-d"],
-        "trigger_function", ("coll1", "f1"), {"execution_name": None},
+        "fn-trigger",
+        ["fn", "trigger", "-n", "f1", "-c", "coll1", "-d"],
+        "trigger_function",
+        ("coll1", "f1"),
+        {"execution_name": None},
         "Function triggered",
     ),
     # --- permission (CLI level; previously only API-tested) ---------------
     MutCase(
         "permission-grant",
         ["permission", "grant", "-u", "alice", "--permission", "manage_system"],
-        "grant_permission", ("alice", "manage_system", None), {},
+        "grant_permission",
+        ("alice", "manage_system", None),
+        {},
         "Permission granted successfully",
     ),
     MutCase(
         "permission-revoke",
         ["permission", "revoke", "-u", "alice", "--permission", "manage_system"],
-        "revoke_permission", ("alice", "manage_system", None), {},
+        "revoke_permission",
+        ("alice", "manage_system", None),
+        {},
         "Permission revoked successfully",
     ),
-    # --- exe / table (non-delete writes) ----------------------------------
+    # --- plan / trx / run / worker (non-delete writes) --------------------
     MutCase(
-        "exe-cancel-plan", ["exe", "cancel", "--plan", "P1"],
-        "cancel_execution", ("P1",), {}, "Plan canceled successfully",
+        "plan-cancel",
+        ["plan", "cancel", "--plan", "P1", "--confirm", "cancel"],
+        "cancel_execution",
+        ("P1",),
+        {},
+        "Plan canceled successfully",
+        confirm=True,
     ),
     MutCase(
-        "exe-cancel-trx", ["exe", "cancel", "--trx", "T1"],
-        "cancel_transaction", ("T1",), {}, "Transaction canceled successfully",
+        "trx-cancel",
+        ["trx", "cancel", "--trx", "T1", "--confirm", "cancel"],
+        "cancel_transaction",
+        ("T1",),
+        {},
+        "Transaction canceled successfully",
+        confirm=True,
     ),
     MutCase(
-        "exe-recover-plan", ["exe", "recover", "--plan", "P1"],
-        "recover_execution", ("P1",), {}, "Plan recovered successfully",
+        "plan-recover",
+        ["plan", "recover", "--plan", "P1"],
+        "recover_execution",
+        ("P1",),
+        {},
+        "Plan recovered successfully",
     ),
     MutCase(
-        "exe-recover-trx", ["exe", "recover", "--trx", "T1"],
-        "recover_transaction", ("T1",), {}, "Transaction recovered successfully",
+        "trx-recover",
+        ["trx", "recover", "--trx", "T1"],
+        "recover_transaction",
+        ("T1",),
+        {},
+        "Transaction recovered successfully",
     ),
     MutCase(
-        "exe-replay", ["exe", "replay", "--lfr", "LFR1"],
-        "replay_logical_function_run", ("LFR1",), {}, "Replay scheduled",
+        "run-replay",
+        ["run", "replay", "--run", "LFR1"],
+        "replay_logical_function_run",
+        ("LFR1",),
+        {},
+        "Replay scheduled",
     ),
     MutCase(
         "table-download",
         ["table", "download", "-c", "coll1", "--name", "t1", "--file", "out.parquet"],
-        "download_table", ("coll1", "t1", "out.parquet"),
-        {"at": None, "at_trx": None, "version": None}, "Table downloaded successfully",
+        "download_table",
+        ("coll1", "t1", "out.parquet"),
+        {"at": None, "at_trx": None, "version": None},
+        "Table downloaded successfully",
     ),
     # --- delete (confirm-guarded) -----------------------------------------
     MutCase(
-        "user-delete", ["user", "delete", "-n", "u1", "--confirm", "delete"],
-        "delete_user", ("u1",), {}, "User deleted successfully", confirm=True,
+        "user-delete",
+        ["user", "delete", "-n", "u1", "--confirm", "delete"],
+        "delete_user",
+        ("u1",),
+        {},
+        "User deleted successfully",
+        confirm=True,
     ),
     MutCase(
-        "group-delete", ["group", "delete", "-n", "g1", "--confirm", "delete"],
-        "delete_group", ("g1",), {}, "Group deleted successfully", confirm=True,
+        "group-delete",
+        ["group", "delete", "-n", "g1", "--confirm", "delete"],
+        "delete_group",
+        ("g1",),
+        {},
+        "Group deleted successfully",
+        confirm=True,
     ),
     MutCase(
         "project-delete",
         ["project", "delete", "-n", "p1", "--confirm", "delete"],
-        "delete_project", ("p1",), {}, "Project deleted successfully", confirm=True,
+        "delete_project",
+        ("p1",),
+        {},
+        "Project deleted successfully",
+        confirm=True,
     ),
     MutCase(
         "collection-delete",
         ["collection", "delete", "-n", "c1", "--confirm", "delete"],
-        "delete_collection", ("c1",), {}, "Collection deleted successfully",
+        "delete_collection",
+        ("c1",),
+        {},
+        "Collection deleted successfully",
         confirm=True,
     ),
     MutCase(
         "fn-delete",
         ["fn", "delete", "-n", "f1", "-c", "coll1", "--confirm", "delete"],
-        "delete_function", ("coll1", "f1"), {}, "Function deleted successfully",
+        "delete_function",
+        ("coll1", "f1"),
+        {},
+        "Function deleted successfully",
         confirm=True,
     ),
     MutCase(
         "table-delete",
         ["table", "delete", "-n", "t1", "-c", "coll1", "--confirm", "delete"],
-        "delete_table", ("coll1", "t1"), {}, "Table deleted successfully",
+        "delete_table",
+        ("coll1", "t1"),
+        {},
+        "Table deleted successfully",
         confirm=True,
     ),
 )
@@ -265,42 +337,81 @@ def test_delete_requires_confirmation(case: MutCase, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# exe cancel / recover / monitor: exactly one of --plan / --trx is required and
-# they are mutually exclusive. Both guards are enforced before (or without) any
-# server call, so a bad invocation must never reach the SDK.
+# plan / trx / run / worker id-keyed commands: the id option is required, and
+# the usage error fires before (or without) any server call.
 # ---------------------------------------------------------------------------
 
-_PLAN_TRX_METHODS = (
+_ID_KEYED_METHODS = (
     "cancel_execution",
     "cancel_transaction",
     "recover_execution",
     "recover_transaction",
     "get_execution",
     "get_transaction",
+    "get_function_run",
+    "get_worker",
+    "get_worker_log",
+)
+
+_ID_KEYED_ARGVS = (
+    ["plan", "get"],
+    ["plan", "graph"],
+    ["plan", "cancel"],
+    ["plan", "recover"],
+    ["plan", "monitor"],
+    ["plan", "logs"],
+    ["trx", "get"],
+    ["trx", "cancel"],
+    ["trx", "recover"],
+    ["trx", "monitor"],
+    ["trx", "logs"],
+    ["run", "get"],
+    ["run", "logs"],
+    ["run", "recover"],
+    ["worker", "logs"],
+    ["worker", "recover"],
 )
 
 
-@pytest.mark.parametrize("group", ["cancel", "recover", "monitor"])
-def test_exe_dispatch_requires_plan_or_trx(group, tmp_path):
+@pytest.mark.parametrize(
+    "argv", _ID_KEYED_ARGVS, ids=["-".join(a) for a in _ID_KEYED_ARGVS]
+)
+def test_id_keyed_commands_require_their_id(argv, tmp_path):
     client = _client()
-    result = _invoke(["exe", group], client=client, tmp_path=tmp_path)
+    result = _invoke(argv, client=client, tmp_path=tmp_path)
     assert result.exit_code != 0
-    # With neither id given, nothing is dispatched to the server.
-    for method in _PLAN_TRX_METHODS:
+    for method in _ID_KEYED_METHODS:
         assert getattr(client, method).call_count == 0, method
 
 
-@pytest.mark.parametrize("group", ["cancel", "recover", "monitor"])
-def test_exe_dispatch_rejects_plan_and_trx_together(group, tmp_path):
+# ---------------------------------------------------------------------------
+# run/worker recover have no server-side endpoint of their own: the CLI
+# resolves the owning transaction and recovers it, saying so.
+# ---------------------------------------------------------------------------
+
+
+def test_run_recover_resolves_owning_transaction(tmp_path):
     client = _client()
+    client.get_function_run.return_value.transaction.id = "T9"
     result = _invoke(
-        ["exe", group, "--plan", "P1", "--trx", "T1"], client=client, tmp_path=tmp_path
+        ["run", "recover", "--run", "R1"], client=client, tmp_path=tmp_path
     )
-    # MutuallyExclusiveOption turns this into a usage error before the body runs.
-    assert result.exit_code != 0
-    assert "mutually exclusive" in result.output.lower()
-    for method in _PLAN_TRX_METHODS:
-        assert getattr(client, method).call_count == 0, method
+    assert result.exit_code == 0, result.output
+    assert client.get_function_run.call_args == call("R1")
+    assert client.recover_transaction.call_args == call("T9")
+    assert "Recovering transaction 'T9' of function run 'R1'" in result.output
+
+
+def test_worker_recover_resolves_owning_transaction(tmp_path):
+    client = _client()
+    client.get_worker.return_value.transaction.id = "T9"
+    result = _invoke(
+        ["worker", "recover", "--worker", "W1"], client=client, tmp_path=tmp_path
+    )
+    assert result.exit_code == 0, result.output
+    assert client.get_worker.call_args == call("W1")
+    assert client.recover_transaction.call_args == call("T9")
+    assert "Recovering transaction 'T9' of worker 'W1'" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -360,17 +471,36 @@ def test_fn_update_maps_flags_to_update_function(tmp_path):
     client = _client()
     result = _invoke_fn(
         [
-            "fn", "update", "-n", "f1", "-c", "coll1", "--path", "/x.py::f",
-            "--description", "d", "--reset-state", "--reset-stage",
+            "fn",
+            "update",
+            "-n",
+            "f1",
+            "-c",
+            "coll1",
+            "--path",
+            "/x.py::f",
+            "--description",
+            "d",
+            "--reset-state",
+            "--reset-stage",
         ],
         client=client,
         tmp_path=tmp_path,
     )
     assert result.exit_code == 0, result.output
     assert client.update_function.call_args == call(
-        "coll1", "f1", _INFO, _ROOT,
-        description="d", local_packages=None, reuse_tables=False, enabled=True,
-        requirements=None, base_path=None, reset_state=True, reset_stage=True,
+        "coll1",
+        "f1",
+        _INFO,
+        _ROOT,
+        description="d",
+        local_packages=None,
+        reuse_tables=False,
+        enabled=True,
+        requirements=None,
+        base_path=None,
+        reset_state=True,
+        reset_stage=True,
     )
     assert "updated successfully" in result.output
 
@@ -387,8 +517,14 @@ def test_fn_patch_maps_flags_to_patch_function(tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert client.patch_function.call_args == call(
-        "coll1", "f1", _INFO, _ROOT,
-        patch_of="fv1", description="d", local_packages=None, requirements=None,
+        "coll1",
+        "f1",
+        _INFO,
+        _ROOT,
+        patch_of="fv1",
+        description="d",
+        local_packages=None,
+        requirements=None,
     )
     assert "Patch registered successfully" in result.output
 
