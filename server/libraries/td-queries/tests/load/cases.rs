@@ -407,6 +407,18 @@ pub const LOAD_CASES: &[LoadCase] = &[
         family: Family::Metrics,
         status: Status::Implemented,
     },
+    LoadCase {
+        name: "metrics::metrics_node_output_tables",
+        covers: &["Metrics::metrics_node_output_tables"],
+        family: Family::Metrics,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "metrics::metrics_edge_tables",
+        covers: &["Metrics::metrics_edge_tables"],
+        family: Family::Metrics,
+        status: Status::Implemented,
+    },
     // daos/session.rs — session table purge.
     LoadCase {
         name: "sessions::purge",
