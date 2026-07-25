@@ -58,11 +58,14 @@ fn resolve_worker_log_files(target: &WorkerLogTarget) -> Result<Vec<PathBuf>, Lo
     let mut paths = Vec::new();
     for cast in casts.iter() {
         for log_pattern in target.log_patterns.iter() {
+            // `**` matches zero or more directories, so this covers both
+            // flat `log/x.log` files and per-step `log/<step>/x.log` files.
             let pattern = base
                 .clone()
                 .join(format!("{}_{}", target.worker_id, cast))
                 .join(WORK_FOLDER)
                 .join(LOG_FOLDER)
+                .join("**")
                 .join(log_pattern);
             let pattern = pattern.to_str().ok_or(LogBridgeError::EmptyPattern)?;
             for entry in glob::glob(pattern).map_err(|error| LogBridgeError::Glob {
@@ -331,6 +334,35 @@ mod tests_worker_log_files {
         for name in ["err.log", "fn.log", "out.log", "td.log"] {
             assert!(content.contains(name), "missing log content for {name}");
         }
+    }
+
+    #[tokio::test]
+    async fn test_resolve_worker_log_files_in_step_subdirectories() {
+        let temp = tdtestdir!();
+        let workspace = temp.to_string_lossy().to_string();
+        let worker_id = "worker0003";
+        let folder = logs_folder(&temp, WorkerName::Function, worker_id, 1);
+        let step_folder = folder.join("2050-run-function");
+        std::fs::create_dir_all(&step_folder).unwrap();
+        std::fs::write(folder.join("err.log"), "flat").unwrap();
+        std::fs::write(step_folder.join("0.log"), "step").unwrap();
+
+        let target = WorkerLogTarget {
+            worker_id: worker_id.to_string(),
+            worker_kind: WorkerName::Function,
+            log_patterns: vec![format!("*.{LOG_EXTENSION}")],
+            casts: vec![],
+        };
+
+        let paths: Vec<PathBuf> =
+            temp_env::async_with_vars([(WORKSPACE_URI_ENV, Some(workspace.as_str()))], async {
+                resolve_worker_log_files(&target).unwrap()
+            })
+            .await;
+
+        assert_eq!(paths.len(), 2);
+        assert!(paths.iter().any(|p| p.ends_with("err.log")));
+        assert!(paths.iter().any(|p| p.ends_with("2050-run-function/0.log")));
     }
 
     #[tokio::test]

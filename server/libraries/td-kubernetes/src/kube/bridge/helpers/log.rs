@@ -46,6 +46,11 @@ pub fn stream_worker_logs(context: &KubeContext, worker_id: &str, follow: bool) 
                         tokio::time::sleep(LOG_POD_POLL_INTERVAL).await;
                         continue;
                     }
+                    yield Ok(Bytes::from(format!(
+                        "no pod found for worker '{worker_id}': its logs are no \
+                         longer retained (the pod was removed after the job's \
+                         retention window elapsed)\n"
+                    )));
                     return;
                 }
             };
