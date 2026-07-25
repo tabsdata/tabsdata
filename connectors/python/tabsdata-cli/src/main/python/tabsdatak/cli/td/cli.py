@@ -5,6 +5,7 @@
 import os
 import sys
 import textwrap
+from collections.abc import Mapping
 from importlib.metadata import PackageNotFoundError, version
 
 import rich_click as click
@@ -74,8 +75,60 @@ console = make_console()
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
+# Env vars each supported AI agent always sets when it runs a shell; tdk refuses
+# to run inside them (agents must use the Tabsdata MCP server instead).
+_AI_AGENT_ENV_VARS = ("GEMINI_CLI", "CLAUDECODE", "CODEX_THREAD_ID")
+# Escape hatch: set to 1/true/yes to bypass the guard (warns instead of failing).
+_AI_AGENT_BYPASS_ENV_VAR = "TDK_IN_AGENT"
+_AI_AGENT_ERROR_MESSAGE = (
+    "Tabsdata tdk command does not support running within an AI agent, "
+    "use Tabsdata MCP instead"
+)
 
-@click.group(context_settings=CONTEXT_SETTINGS)
+
+def _env_is_truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes"}
+
+
+def detect_ai_agent(env: Mapping[str, str] | None = None) -> str | None:
+    """Return the name of the first AI-agent marker env var that is set (and
+    non-empty), or ``None`` when tdk is not running inside a supported agent."""
+    env = os.environ if env is None else env
+    for var in _AI_AGENT_ENV_VARS:
+        value = env.get(var)
+        if value is not None and value.strip() != "":
+            return var
+    return None
+
+
+def enforce_not_in_ai_agent(env: Mapping[str, str] | None = None) -> None:
+    """Exit if tdk is being run inside a supported AI agent, unless the
+    ``_TDK_IN_AGENT`` escape hatch is set truthy (in which case warn and continue)."""
+    env = os.environ if env is None else env
+    if detect_ai_agent(env) is None:
+        return
+    if _env_is_truthy(env.get(_AI_AGENT_BYPASS_ENV_VAR)):
+        click.echo(
+            f"WARNING: {_AI_AGENT_BYPASS_ENV_VAR} is set -- bypassing the AI-agent "
+            "guard; tdk is not supported within an AI agent, use Tabsdata MCP instead.",
+            err=True,
+        )
+        return
+    click.echo(_AI_AGENT_ERROR_MESSAGE, err=True)
+    raise SystemExit(1)
+
+
+class _AiAgentGuardedGroup(click.RichGroup):
+    """Top-level group that refuses to run inside a supported AI agent. The check
+    runs in ``main`` -- before any argument parsing -- so even ``--help`` and
+    ``--version`` are gated, not just subcommands."""
+
+    def main(self, *args, **kwargs):
+        enforce_not_in_ai_agent()
+        return super().main(*args, **kwargs)
+
+
+@click.group(cls=_AiAgentGuardedGroup, context_settings=CONTEXT_SETTINGS)
 @click.version_option(version=__version__, message="Tabsdata Client %(version)s")
 @click.option(
     "--no-prompt",
@@ -87,7 +140,12 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 )
 @click.pass_context
 def cli(ctx: click.Context, no_prompt: bool):
-    """Main CLI for the Tabsdata system"""
+    """Main CLI for the Tabsdata system.
+
+    tdk does not run inside AI agents; agent should use the Tabsdata MCP server
+    instead. Set the environment variable TDK_IN_AGENT=1 to override this guard
+    (agents should not do this override themselves).
+    """
     try:
         os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
         ctx.obj = {

@@ -53,6 +53,9 @@ Global options
   -h, --help             Show help
       --version          Show version
       --no-prompt        Never prompt; fail if input is required
+
+Note: tdk refuses to run inside AI agents — use the Tabsdata MCP server instead.
+Set TDK_IN_AGENT=1 to override (see Environment).
 ```
 
 ## Common options
@@ -241,4 +244,38 @@ version
 shell
 examples [--dir D] [--guide]
 hints    {on|off}
+```
+
+## Environment
+
+### AI-agent guard
+
+tdk is a human-facing CLI and refuses to run inside an AI agent; agents should
+drive Tabsdata through the **Tabsdata MCP server** instead. On startup — before
+any argument is parsed, so even `tdk --help` / `tdk --version` are covered — tdk
+checks for the marker environment variables that supported agents always set:
+
+| Variable          | Set by      |
+|-------------------|-------------|
+| `CLAUDECODE`      | Claude Code |
+| `GEMINI_CLI`      | Gemini CLI  |
+| `CODEX_THREAD_ID` | Codex       |
+
+If any is present (and non-empty), tdk prints
+
+```
+Tabsdata tdk command does not support running within an AI agent, use Tabsdata MCP instead
+```
+
+to stderr and exits with status `1`.
+
+### `TDK_IN_AGENT`
+
+Escape hatch for the guard above. When set to a truthy value (`1`, `true`, or
+`yes`, case-insensitive) tdk prints a warning to stderr and runs anyway. Use it
+only when you knowingly want to run tdk from within an agent shell — agents
+should not set this override themselves.
+
+```
+TDK_IN_AGENT=1 tdk status
 ```

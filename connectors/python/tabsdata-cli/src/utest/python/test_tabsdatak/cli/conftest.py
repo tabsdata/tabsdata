@@ -6,8 +6,19 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+@pytest.fixture(autouse=True)
+def _neutralize_ai_agent_env(monkeypatch):
+    # The CLI refuses to run inside an AI agent (tabsdatak.cli.td.cli); clear the
+    # agent-marker env vars so the unit suite is hermetic even when it is itself
+    # run from within an agent. Tests that exercise the guard set them explicitly.
+    for var in ("GEMINI_CLI", "CLAUDECODE", "CODEX_THREAD_ID", "TDK_IN_AGENT"):
+        monkeypatch.delenv(var, raising=False)
 
 from test_tabsdatak.bootest import enrich_sys_path
 from test_tabsdatak.cli.bootest import TESTING_RESOURCES_PATH
