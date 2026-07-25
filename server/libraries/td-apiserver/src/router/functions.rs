@@ -29,12 +29,12 @@ mod routes {
         FunctionUpdate, FunctionWithTables,
     };
     use td_objects::dxo::function_upload::FunctionUpload;
-    use td_objects::rest_urls::params::{FunctionAtIdName, FunctionMaybeAtIdName};
+    use td_objects::rest_urls::params::FunctionAtIdName;
     use td_objects::rest_urls::{
         AtTimeParam, CollectionParam, FUNCTION_BUNDLE_DOWNLOAD, FUNCTION_CREATE, FUNCTION_DELETE,
         FUNCTION_ENABLE, FUNCTION_GET, FUNCTION_HISTORY, FUNCTION_LIST, FUNCTION_LIST_BY_COLL,
         FUNCTION_PATCH, FUNCTION_PATCHES, FUNCTION_UPDATE, FUNCTION_UPLOAD, FunctionParam,
-        OptionalAtTimeParam,
+        FunctionVersionIdParam,
     };
     use td_services::function::services::FunctionServices;
     use td_tower::ctx_service::RawOneshot;
@@ -220,19 +220,17 @@ mod routes {
         tag = FUNCTIONS_TAG,
         content_type = "application/octet-stream",
     )]
-    #[doc = "Download the bundle for a function version (current when `at` \
-            is omitted). Only Active or Frozen versions are exposed. The \
-            bundle's id is exposed as a strong `ETag`."]
+    #[doc = "Download the bundle for a function version. Only Active or Frozen \
+            versions are exposed; a version whose function has been deleted is \
+            not found. The bundle's id is exposed as a strong `ETag`."]
     pub async fn download_bundle(
         State(state): State<Arc<FunctionServices>>,
         Extension(context): Extension<RequestContext>,
         Project(project_id): Project,
-        Path(function_param): Path<FunctionParam>,
-        Query(at_param): Query<OptionalAtTimeParam>,
+        Path(function_version_param): Path<FunctionVersionIdParam>,
         if_none_match: Option<TypedHeader<IfNoneMatch>>,
     ) -> Result<DownloadResponse, ErrorStatus> {
-        let request = FunctionMaybeAtIdName::new(function_param, at_param);
-        let request = context.read(request).in_project(project_id);
+        let request = context.read(function_version_param).in_project(project_id);
         let d = state.download_bundle.service().raw_oneshot(request).await?;
         Ok(DownloadResponse::octet_stream(d.stream)
             .attachment(format_args!(

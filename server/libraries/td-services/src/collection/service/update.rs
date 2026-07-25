@@ -248,12 +248,10 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::function_upload::FunctionUpload;
-    use td_objects::rest_urls::params::FunctionMaybeAtIdName;
-    use td_objects::rest_urls::{CollectionParam, FunctionParam, OptionalAtTimeParam};
+    use td_objects::rest_urls::{CollectionParam, FunctionVersionIdParam};
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BasePath, CollectionName, Decorator, Description, FunctionIdName,
-        FunctionName, FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, UserId,
-        UserName,
+        AccessTokenId, AtTime, BasePath, CollectionName, Decorator, Description, FunctionName,
+        FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, UserId, UserName,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -628,15 +626,10 @@ mod tests {
         use crate::function::services::download_bundle::DownloadBundleService;
         use bytes::Bytes;
         use futures::StreamExt;
-        let function_param = FunctionParam::builder()
-            .collection(CollectionIdName::from_str(collection_name.as_str())?)
-            .function(FunctionIdName::from_str("artifact_fn")?)
-            .build()?;
         let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(FunctionMaybeAtIdName::new(
-                function_param,
-                OptionalAtTimeParam { at: None },
-            ))
+            .read(FunctionVersionIdParam {
+                function_version_id: function_after.id.clone(),
+            })
             .in_project(p.id);
         let response = DownloadBundleService::build(&context)
             .service()

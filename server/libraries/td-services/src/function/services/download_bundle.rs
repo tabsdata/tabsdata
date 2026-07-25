@@ -3,16 +3,14 @@
 //
 
 pub use crate::function::layers::download_bundle::BundleDownload;
-use crate::function::layers::download_bundle::{
-    build_bundle_download, resolve_function_with_names,
-};
+use crate::function::layers::download_bundle::{build_bundle_download, resolve_function_version};
 use ta_services::factory::service_factory;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project, Rbac, Scope};
 use td_objects::dxo::crudl::{ReadRequest, RequestContext};
-use td_objects::rest_urls::params::FunctionMaybeAtIdName;
+use td_objects::rest_urls::FunctionVersionIdParam;
 use td_objects::tower_service::with::With;
-use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
+use td_objects::types::basic::FunctionVersionId;
 use td_storage::Storage;
 use td_tower::default_services::ConnectionProvider;
 use td_tower::from_fn::from_fn;
@@ -20,7 +18,7 @@ use td_tower::layers;
 
 #[service_factory(
     name = DownloadBundleService,
-    request = ReadRequest<FunctionMaybeAtIdName>,
+    request = ReadRequest<FunctionVersionIdParam>,
     response = BundleDownload,
     connection = ConnectionProvider,
     scope = "Project",
@@ -29,12 +27,12 @@ use td_tower::layers;
 )]
 fn service() {
     layers!(
-        from_fn(With::<ReadRequest<FunctionMaybeAtIdName>>::extract::<RequestContext>),
-        from_fn(With::<ReadRequest<FunctionMaybeAtIdName>>::extract_name::<FunctionMaybeAtIdName>),
-        from_fn(With::<FunctionMaybeAtIdName>::extract::<CollectionIdName>),
-        from_fn(With::<FunctionMaybeAtIdName>::extract::<FunctionIdName>),
-        from_fn(With::<FunctionMaybeAtIdName>::extract::<Option<AtTime>>),
-        from_fn(resolve_function_with_names),
+        from_fn(With::<ReadRequest<FunctionVersionIdParam>>::extract::<RequestContext>),
+        from_fn(
+            With::<ReadRequest<FunctionVersionIdParam>>::extract_name::<FunctionVersionIdParam>
+        ),
+        from_fn(With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
+        from_fn(resolve_function_version),
         from_fn(Scope::<Project>::set),
         from_fn(Rbac::<Project, DevelopProject>::check),
         from_fn(build_bundle_download),
@@ -55,15 +53,16 @@ mod tests {
     use ta_services::service::TdService;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::InProject;
-    use td_error::TdError;
+    use td_error::{ApiError, TdError};
     use td_objects::Buildable;
     use td_objects::dxo::bundle::BundleDB;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDBBuilder, FunctionRegister};
     use td_objects::dxo::function_upload::FunctionUpload;
-    use td_objects::rest_urls::{CollectionParam, FunctionParam, OptionalAtTimeParam};
+    use td_objects::rest_urls::CollectionParam;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, FunctionVersionId, ProjectId, UserId,
+        AccessTokenId, AtTime, BundleId, CollectionIdName, CollectionName, Decorator,
+        FunctionStatus, FunctionVersionId, ProjectId, UserId,
     };
     use td_queries::LiveEntry;
     use td_queries::test_utils::SeedEntry;
@@ -78,17 +77,15 @@ mod tests {
         DownloadBundleService::with_defaults(db)
             .metadata()
             .await
-            .assert_service::<Scoped<ReadRequest<FunctionMaybeAtIdName>, ProjectId>, BundleDownload>(&[
-                type_of_val(&With::<ReadRequest<FunctionMaybeAtIdName>>::extract::<RequestContext>),
+            .assert_service::<Scoped<ReadRequest<FunctionVersionIdParam>, ProjectId>, BundleDownload>(&[
+                type_of_val(&With::<ReadRequest<FunctionVersionIdParam>>::extract::<RequestContext>),
                 type_of_val(
-                    &With::<ReadRequest<FunctionMaybeAtIdName>>::extract_name::<
-                        FunctionMaybeAtIdName,
+                    &With::<ReadRequest<FunctionVersionIdParam>>::extract_name::<
+                        FunctionVersionIdParam,
                     >,
                 ),
-                type_of_val(&With::<FunctionMaybeAtIdName>::extract::<CollectionIdName>),
-                type_of_val(&With::<FunctionMaybeAtIdName>::extract::<FunctionIdName>),
-                type_of_val(&With::<FunctionMaybeAtIdName>::extract::<Option<AtTime>>),
-                type_of_val(&resolve_function_with_names),
+                type_of_val(&With::<FunctionVersionIdParam>::extract::<FunctionVersionId>),
+                type_of_val(&resolve_function_version),
                 type_of_val(&Scope::<Project>::set),
                 type_of_val(&Rbac::<Project, DevelopProject>::check),
                 type_of_val(&build_bundle_download),
@@ -130,10 +127,6 @@ mod tests {
             .function(&collection, &create_v1)
             .await?;
 
-        // Snapshot time after v1 but before v2 — historic ranked-CTE at this
-        // time must see v1 only.
-        let at_v1 = AtTime::now();
-
         // Upload bundle B and stamp v2 directly: same function_id, fresh
         // version id, later defined_on, bundle B. Going through
         // UpdateFunctionService would drag in trigger/dependency rebuilds
@@ -149,25 +142,19 @@ mod tests {
             .build()?;
         db.scoped(p.id).live().insert(&v2).await?;
 
-        let function_param = FunctionParam::builder()
-            .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-            .function(FunctionIdName::from_str("joaquin")?)
-            .build()?;
         let service = DownloadBundleService::build(&context).service();
 
-        // `at = None` → current() branch → must return v2 (bundle B).
-        // `at = at_v1` → historic() branch → must return v1 (bundle A) since
-        // v2 didn't exist yet at that snapshot.
+        // Each version id resolves to its own bundle, regardless of which one
+        // is current — v1 → bundle A, v2 → bundle B.
         let cases = [
-            (None, &v2, &bundle_b_id, &payload_b),
-            (Some(at_v1), &v1, &bundle_a_id, &payload_a),
+            (&v1, &bundle_a_id, &payload_a),
+            (&v2, &bundle_b_id, &payload_b),
         ];
-        for (at, expected_fn, expected_bundle, expected_payload) in cases {
+        for (expected_fn, expected_bundle, expected_payload) in cases {
             let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(FunctionMaybeAtIdName::new(
-                    function_param.clone(),
-                    OptionalAtTimeParam { at },
-                ))
+                .read(FunctionVersionIdParam {
+                    function_version_id: expected_fn.id.clone(),
+                })
                 .in_project(p.id);
             let response = service.clone().raw_oneshot(download_request).await?;
 
@@ -182,6 +169,42 @@ mod tests {
             }
             assert_eq!(Bytes::from(buf).as_ref(), expected_payload.as_slice());
         }
+
+        // A version whose function has been deleted (status Deleted) is a
+        // tombstone, not a downloadable artifact: not found.
+        let deleted = FunctionDBBuilder::try_from(&v2)?
+            .id(FunctionVersionId::new())
+            .defined_on(AtTime::now())
+            .status(FunctionStatus::Deleted)
+            .build()?;
+        db.scoped(p.id).live().insert(&deleted).await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(FunctionVersionIdParam {
+                function_version_id: deleted.id.clone(),
+            })
+            .in_project(p.id);
+        let err = service
+            .clone()
+            .raw_oneshot(request)
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
+
+        // An unknown version id is likewise not found.
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .read(FunctionVersionIdParam {
+                function_version_id: FunctionVersionId::new(),
+            })
+            .in_project(p.id);
+        let err = service
+            .clone()
+            .raw_oneshot(request)
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
 
         Ok(())
     }
@@ -217,7 +240,8 @@ mod tests {
             .try_runtime_values("rv")?
             .reuse_frozen_tables(false)
             .build()?;
-        db.scoped(p.id)
+        let function = db
+            .scoped(p.id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -236,16 +260,11 @@ mod tests {
             "bundle row must be gone before downloading"
         );
 
-        let function_param = FunctionParam::builder()
-            .collection(CollectionIdName::from_str(&format!("{}", collection.name))?)
-            .function(FunctionIdName::from_str("joaquin")?)
-            .build()?;
         let service = DownloadBundleService::build(&context).service();
         let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .read(FunctionMaybeAtIdName::new(
-                function_param,
-                OptionalAtTimeParam { at: None },
-            ))
+            .read(FunctionVersionIdParam {
+                function_version_id: function.id.clone(),
+            })
             .in_project(p.id);
         let response = service.raw_oneshot(download_request).await?;
         assert_eq!(response.bundle_id, bundle_id);

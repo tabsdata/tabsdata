@@ -3,21 +3,25 @@
 //
 
 use futures::TryStreamExt;
+use std::ops::Deref;
 use sync_wrapper::SyncStream;
 use td_database::domain::{Apiserver, DomainConnection};
-use td_error::TdError;
-use td_objects::and;
+use td_error::{TdError, td_error};
 use td_objects::dxo::bundle::BundleDB;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::types::basic::{
-    AtTime, BundleId, CollectionIdName, FunctionIdName, FunctionName, FunctionVersionId,
-};
+use td_objects::types::basic::{BundleId, FunctionName, FunctionStatus, FunctionVersionId};
 use td_objects::types::stream::BoxedSyncStream;
-use td_queries::{CurrentEntry, HistoricEntry, LiveEntry};
+use td_queries::LiveEntry;
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 use td_tower::extractors::{MutRef, Ref};
+
+#[td_error]
+enum DownloadBundleError {
+    #[error("Function version '{0}' not found")]
+    FunctionVersionNotFound(FunctionVersionId) = 1000,
+}
 
 pub struct BundleDownload {
     pub stream: BoxedSyncStream,
@@ -29,32 +33,23 @@ pub struct BundleDownload {
     pub function_version_id: FunctionVersionId,
 }
 
-/// Resolves the function by `(collection, function)` names. Without `at`
-/// uses the `_current` view; with `at` uses the historic (cross-partition)
-/// scan, since the partition (`FunctionId`) is not known at the call site.
-/// Restricted to Active or Frozen versions.
-pub async fn resolve_function_with_names(
+/// Resolves a function by its version id, restricted to Active or Frozen
+/// versions: a missing version id — or one whose function has been deleted
+/// (status `Deleted`) — surfaces as not found.
+pub async fn resolve_function_version(
     mut conn: MutRef<DomainConnection<Apiserver>>,
-    collection: Ref<CollectionIdName>,
-    function: Ref<FunctionIdName>,
-    at: Ref<Option<AtTime>>,
+    function_version_id: Ref<FunctionVersionId>,
 ) -> Result<FunctionDBWithNames, TdError> {
-    let key = and!(&*collection, &*function);
-    let result = match &*at {
-        Some(at) => {
-            conn.historic(at)
-                .state(FunctionDBWithNames::available())
-                .fetch_one(&key)
-                .await?
-        }
-        None => {
-            conn.current()
-                .state(FunctionDBWithNames::available())
-                .fetch_one(&key)
-                .await?
-        }
-    };
-    Ok(result)
+    let function: Option<FunctionDBWithNames> = conn
+        .live()
+        .fetch_optional::<FunctionDBWithNames>(&*function_version_id)
+        .await?;
+    match function {
+        Some(function) if !matches!(function.status, FunctionStatus::Deleted) => Ok(function),
+        _ => Err(DownloadBundleError::FunctionVersionNotFound(
+            function_version_id.deref().clone(),
+        ))?,
+    }
 }
 
 pub async fn build_bundle_download(
